@@ -1,0 +1,73 @@
+{
+  "company": "EdVisorly",
+  "role_title": "Product Manager, Partner Experience",
+  "source_mode": "perplexity",
+  "retrieved_at": "unknown",
+  "company_snapshot": [],
+  "product_and_customers": [],
+  "business_model_and_gtm": [],
+  "competitors_and_positioning": [],
+  "recent_news_and_signals": [],
+  "role_success_metrics_hypotheses": [
+    "Increase partner onboarding completion rates by 30% through streamlined digital experiences.",
+    "Achieve 90% partner satisfaction score via targeted feedback loops and iterative improvements.",
+    "Grow partner retention to 85% by reducing churn through proactive experience enhancements.",
+    "Launch 2-3 new partner-facing features quarterly, measured by adoption rates over 70%.",
+    "Improve partner NPS by 20 points by personalizing dashboards and communication tools.",
+    "Reduce partner support tickets by 40% with self-service resources and intuitive UX.",
+    "Drive 25% increase in partner-sourced revenue through optimized collaboration tools.",
+    "Establish key metrics like partner engagement hours and feature usage for ongoing optimization."
+  ],
+  "likely_pm_challenges": [
+    "Balancing needs of diverse partner types (e.g., small advisors vs. large firms) in a single experience platform.",
+    "Scaling partner experience features amid rapid edtech market growth and regulatory changes.",
+    "Integrating feedback from non-technical partners into agile product development cycles.",
+    "Competing for partner attention in a crowded CRM/fintech space for financial advisors.",
+    "Measuring ROI of partner experience improvements on overall platform retention and revenue.",
+    "Navigating data privacy concerns in advisor-client interaction tools.",
+    "Coordinating cross-functionally with sales, support, and engineering for seamless rollouts.",
+    "Adapting to evolving advisor tech stacks and API integrations."
+  ],
+  "interview_talking_points": [
+    "Highlight experience optimizing user journeys for B2B partners, mapping to partner onboarding flows.",
+    "Discuss past successes in reducing churn via data-driven UX improvements, relevant to retention goals.",
+    "Share examples of launching self-service features that cut support costs by X%, aligning with efficiency needs.",
+    "Emphasize cross-functional collaboration skills to align sales and product on partner needs.",
+    "Point to metrics-driven roadmapping, like increasing adoption by Y% through A/B testing.",
+    "Reference personalization strategies for segmented user bases, key for diverse advisor partners.",
+    "Talk about integrating partner feedback loops that boosted NPS, directly applicable here.",
+    "Demonstrate edtech or fintech product launches under tight timelines with stakeholder buy-in.",
+    "Outline hypothesis testing for PMF in partner tools, showing analytical rigor.",
+    "Connect remote team leadership experience to managing distributed partner ecosystems."
+  ],
+  "questions_to_ask": [
+    "What are the top 3 pain points partners report in their current experience with the platform?",
+    "How do you measure success for the Partner Experience product area today?",
+    "Who are the key partner personas, and how do their needs differ?",
+    "What upcoming initiatives will impact partner-facing features?",
+    "How does the team prioritize between partner requests and internal roadmap items?",
+    "What data sources do you use to track partner engagement and satisfaction?",
+    "Can you describe a recent partner feature launch and its outcomes?",
+    "How integrated is Partner Experience with sales and customer success teams?",
+    "What competitive tools do partners compare us to most often?",
+    "What are the biggest technical constraints for partner UX improvements?",
+    "How has partner feedback influenced recent product decisions?",
+    "What role does this PM play in partner onboarding and retention strategies?"
+  ],
+  "risks_and_gaps": [
+    "No search results on EdVisorly, preventing verification of company details or role context.",
+    "Unable to source factual claims on products, customers, or news due to absent data.",
+    "Hypotheses and challenges are generalized for edtech PM roles without company grounding.",
+    "Competitor analysis impossible without baseline company info.",
+    "Recent signals unknown, risking outdated assumptions on market position.",
+    "Gaps in role-specific metrics limit precision of success hypotheses."
+  ],
+  "unknowns_to_clarify": [
+    "Company website, funding status, and founding details.",
+    "Core products, target customers (e.g., financial advisors), and revenue model.",
+    "Job description specifics for Product Manager, Partner Experience.",
+    "Key competitors in advisor tech/CRM space.",
+    "Recent funding, hires, or product launches.",
+    "Partner metrics like churn rates or satisfaction benchmarks."
+  ]
+}

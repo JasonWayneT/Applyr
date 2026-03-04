@@ -1,0 +1,151 @@
+```json
+{
+  "company": "Better Collective",
+  "role_title": "Product Manager",
+  "source_mode": "perplexity",
+  "retrieved_at": "2026-03-04",
+  "company_snapshot": [
+    {
+      "claim": "Better Collective is a digital sports media group focused on sports betting content, operating over 2,000 websites in 25+ languages across 100+ countries.",
+      "source": "https://bettercollective.com/about-us/",
+      "confidence": "high"
+    },
+    {
+      "claim": "Founded in 2004 in Copenhagen, Denmark, the company went public on Nasdaq Stockholm and Copenhagen in 2019, with a market cap exceeding €1 billion as of late 2023.",
+      "source": "https://bettercollective.com/investor-relations/",
+      "confidence": "high"
+    },
+    {
+      "claim": "Revenue primarily from affiliate marketing in iGaming and sports betting, with €373.1 million in 2023 revenue, up 13% YoY.",
+      "source": "https://bettercollective.com/press-releases/better-collective-year-end-report-january-december-2023/",
+      "confidence": "high"
+    }
+  ],
+  "product_and_customers": [
+    {
+      "claim": "Core products include sports betting guides, odds comparisons, and editorial content on sites like BettingExpert, HLTV.org (esports), and Action Network (US-focused).",
+      "source": "https://bettercollective.com/our-media/",
+      "confidence": "high"
+    },
+    {
+      "claim": "Targets sports bettors, primarily males 18-45, in regulated markets like US, UK, Nordics, with 800+ million monthly visits across properties.",
+      "source": "https://bettercollective.com/press-releases/better-collective-year-end-report-january-december-2023/",
+      "confidence": "high"
+    },
+    {
+      "claim": "Customers are end-users seeking betting tips and operators via affiliate partnerships generating revenue through tracked referrals.",
+      "source": "https://bettercollective.com/business-model/",
+      "confidence": "high"
+    }
+  ],
+  "business_model_and_gtm": [
+    {
+      "claim": "Affiliate marketing model: Earn commissions from sportsbooks for player referrals; revenue share or CPA structures.",
+      "source": "https://bettercollective.com/business-model/",
+      "confidence": "high"
+    },
+    {
+      "claim": "GTM via organic SEO, content acquisition (e.g., 100+ acquisitions since 2016), and programmatic expansion into new geographies like US post-PASPA.",
+      "source": "https://investors.bettercollective.com/reports-and-presentations/annual-reports/",
+      "confidence": "high"
+    },
+    {
+      "claim": "Focus on regulated markets; recent US growth through acquisitions like OddsChecker and Action Network.",
+      "source": "https://bettercollective.com/press-releases/better-collective-acquires-oddschecker/",
+      "confidence": "high"
+    }
+  ],
+  "competitors_and_positioning": [
+    {
+      "claim": "Competitors include Catena Media, Gambling.com Group, and niche players like OLBG; Better Collective leads in organic traffic and diversification (esports via HLTV).",
+      "source": "https://www.similarweb.com/website/bettercollective.com/#competitors",
+      "confidence": "med"
+    },
+    {
+      "claim": "Positioned as #1 sports betting affiliate globally by traffic, with strong moat in content and SEO.",
+      "source": "https://bettercollective.com/press-releases/better-collective-reports-q4-2023/",
+      "confidence": "high"
+    },
+    {
+      "claim": "Differentiates via vertical integration, owning media properties end-to-end unlike pure affiliate aggregators.",
+      "source": "https://investors.bettercollective.com/company-presentation/",
+      "confidence": "high"
+    }
+  ],
+  "recent_news_and_signals": [
+    {
+      "claim": "Q4 2023 revenue €110.8M (+20% YoY), driven by US expansion; full-year EBITDA margin 28%.",
+      "source": "https://bettercollective.com/press-releases/better-collective-reports-q4-2023/",
+      "date": "2024-02-28",
+      "confidence": "high"
+    },
+    {
+      "claim": "Acquired At The Races in Feb 2024 for £41M, strengthening UK horse racing vertical.",
+      "source": "https://bettercollective.com/press-releases/better-collective-acquires-at-the-races/",
+      "date": "2024-02-01",
+      "confidence": "high"
+    },
+    {
+      "claim": "Launched AI-powered betting tools on Action Network in 2024 amid regulatory scrutiny in iGaming.",
+      "source": "https://www.actionnetwork.com/news/action-network-better-collective-ai",
+      "date": "2024-03-15",
+      "confidence": "med"
+    }
+  ],
+  "role_success_metrics_hypotheses": [
+    "Increase monthly active users (MAU) or traffic by 20-30% through new product features like personalized betting recommendations.",
+    "Improve conversion rates from content to affiliate referrals by 15% via optimized UX/UI experiments.",
+    "Achieve 10% uplift in revenue per user (RPU) in key markets like US by launching market-specific tools.",
+    "Reduce churn in high-value user segments through retention-focused features like loyalty programs.",
+    "Shorten time-to-market for new verticals (e.g., esports betting) from 6 to 3 months via agile prioritization.",
+    "Grow engagement metrics: +25% session duration or pages per session with interactive odds comparators.",
+    "Hit 95%+ uptime for core products during peak events like Super Bowl or World Cup."
+  ],
+  "likely_pm_challenges": [
+    "Navigating strict gambling regulations varying by state/country, requiring compliant product localization.",
+    "Balancing addictive behaviors with responsible gambling features amid increasing scrutiny.",
+    "Competing in SEO-heavy space where Google algorithm changes can impact 70%+ of traffic.",
+    "Integrating acquired properties' tech stacks post-M&A while maintaining product velocity.",
+    "Driving US growth in fragmented state-by-state betting markets with diverse operator partnerships.",
+    "Leveraging AI/ML for personalization without eroding user trust in editorial integrity.",
+    "Scaling products across 25+ languages/markets with localized content and UX needs."
+  ],
+  "interview_talking_points": [
+    "Highlight experience optimizing affiliate conversion funnels, e.g., A/B tests increasing referrals by X%.",
+    "Discuss past launches of regulated consumer products, ensuring compliance in dynamic legal environments.",
+    "Share SEO/product synergy wins, like content-driven features boosting organic traffic 40%.",
+    "Emphasize cross-functional leadership in M&A integrations, aligning acquired teams on product roadmaps.",
+    "Point to data-driven personalization successes using ML for user retention in competitive markets.",
+    "Demonstrate esports/gaming PM experience relevant to HLTV.org expansions.",
+    "Outline agile scaling strategies for global products across multiple languages/geos.",
+    "Reference high-stakes event features (e.g., Super Bowl tools) mirroring sports betting peaks."
+  ],
+  "questions_to_ask": [
+    "What are the top 3 product priorities for the PM in this role over the next 12 months?",
+    "How does the team measure PM success—KPIs like traffic, conversions, or revenue attribution?",
+    "What regulatory changes (e.g., US states) are most impacting current product roadmaps?",
+    "Can you describe a recent product launch and key learnings from it?",
+    "How does Better Collective balance editorial integrity with affiliate monetization in product design?",
+    "What tech stack/tools does the product team use (e.g., Amplitude, Optimizely, custom CMS)?",
+    "How involved is PM in acquisition diligence and post-merger integrations?",
+    "What are the biggest pain points with current odds comparison or personalization features?",
+    "How does the team approach AI/ML in products—guidelines or restrictions?",
+    "Who are the key stakeholders PM collaborates with (e.g., content, engineering, legal)?",
+    "What's the roadmap for expanding into emerging verticals like esports or daily fantasy?"
+  ],
+  "risks_and_gaps": [
+    "Limited 2025-2026 data; recent news may not reflect latest Q1 2026 earnings or regulatory shifts.",
+    "US market dominance assumed but state-specific performance gaps unknown without internal data.",
+    "Competitor traffic rankings from SimilarWeb are estimates; actual affiliate rev share unclear.",
+    "Role-specific details absent—no public JD, so assumptions based on industry PM norms.",
+    "AI adoption level speculative; need confirmation on internal tooling maturity."
+  ],
+  "unknowns_to_clarify": [
+    "Specific KPIs and OKRs for this PM role and team.",
+    "Current state of product tech debt post-recent acquisitions.",
+    "Budget/team size for product initiatives in 2026.",
+    "Level of autonomy for PMs in prioritization vs. top-down directives.",
+    "Details on Jason's experience fit—tailoring requires resume review."
+  ]
+}
+```

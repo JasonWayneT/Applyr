@@ -32,7 +32,7 @@ Zero To Sixty Media
  June 2017 – January 2019
 
 Sterkly Services  
- Product Owner  
+ Product Manager  
  February 2019 – August 2021
 
 Cision  
@@ -473,7 +473,7 @@ This role blended operational ownership and product development. Jason helped au
 
 ### **Sterkly Services (2019–2021)**
 
-Role: Product Owner
+Role: Product Manager
 
 At Sterkly, he operated in a constrained technical environment where delivery continuity depended on removing operational bottlenecks. He facilitated requirement sessions, aligned stakeholders, and worked closely with engineering to maintain forward motion in revenue-generating initiatives. This period reinforced discipline around structured requirements and stakeholder management.
 

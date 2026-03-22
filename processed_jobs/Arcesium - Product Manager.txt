@@ -1,0 +1,19 @@
+# Product Manager (UBOR) at Arcesium
+
+- Support the execution of the UBOR product roadmap, ensuring alignment between strategic priorities, client needs, and delivery timelines.
+- Translate product vision into detailed requirements and specifications, working with stakeholders to gather inputs and communicate direction.
+- Balance customer requests with longer-term product objectives.
+- Partner with Engineering, QA, and Subject Matter Experts to translate specifications into effective design and delivery.
+- Collaborate with Sales and Marketing to ensure product capabilities are clearly positioned and communicated.
+- Represent UBOR in client meetings as appropriate to present roadmap updates, collect feedback, and ensure alignment.
+- Contribute to business case development for product enhancements and R&D investments.
+- Rapidly prototype workflows, user experiences, reporting logic, or automation concepts using AI-assisted coding and modern development tools.
+- Validate product ideas through lightweight prototypes or proof-of-concepts before committing full engineering resources.
+- 3–6 years of product management experience, preferably within SaaS platforms serving asset managers or related financial services sectors.
+- Bachelor’s degree in accounting, finance, engineering, computer science, or a related field preferred.
+- Experience building or supporting financial technology products.
+- Foundational domain knowledge in hedge funds, private credit, private equity, institutional asset management, or related sectors.
+- Hands-on experience with investment accounting (IBOR or ABOR preferred).
+- Demonstrated experience across the product lifecycle, including requirements analysis, planning, delivery support, and post-release feedback.
+- Hands-on experience using generative AI tools to build functional prototypes or proof-of-concepts.
+- Comfort with lightweight scripting, SQL, APIs, or no-code/low-code tools to independently prototype workflows and validate ideas.

@@ -1,0 +1,14 @@
+About Extend:
+Extend is revolutionizing the post-purchase experience for retailers and their customers by providing merchants with AI-driven solutions that enhance customer satisfaction and drive revenue growth.
+
+What You'll Do:
+This role will lead the discovery, definition, and delivery of high-impact product features that drive value for our merchants and their customers.
+- Support Product Strategy: Collaborate with leadership to define the product roadmap.
+- Own Feature Outcomes: Drive the end-to-end product lifecycle for specific features.
+- Decide with Data: Leverage user research, product analytics and A/B testing.
+- Accelerate with AI: Identify opportunities to integrate AI-assisted tools and workflows.
+
+What We’re Looking For:
+- Experience: 4+ years of professional experience in product management.
+- Analytical Prowess: Strong proficiency in using data to tell a story.
+- Technical Literacy: A solid understanding of API integrations, cloud architecture.

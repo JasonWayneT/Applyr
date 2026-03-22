@@ -1,0 +1,13 @@
+About the Role:
+We’re looking for a Product Manager to own products built for our customers, including web portals, mobile applications, APIs, and deep integrations with larger enterprise partners.
+
+What You’ll Do:
+- Own the product strategy and roadmap for advertiser/affiliate-facing products.
+- Lead development of portals, mobile apps, APIs, and integrations.
+- Partner with Sales, Account Management, Business Intelligence, and Engineering.
+- Define product requirements, workflows, and technical constraints.
+
+What We’re Looking For:
+- 3+ years of Product Manager experience building external, customer-facing products.
+- Experience delivering portals, APIs, or platform-style products.
+- Strong understanding of B2B customer needs and enterprise integrations.

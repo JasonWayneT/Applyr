@@ -1,0 +1,7 @@
+# Panorama Education - Product Manager, Platform
+
+As Product Manager for our Platform/SRE (Site Reliability Engineering) squad, you will own the definition and delivery of the foundational platform capabilities that power Panorama's products and teams. This includes shared infrastructure, internal tooling, and platform services that enable teams to build, operate, and scale reliably.
+Requirements:
+- 3+ years of product management experience, ideally working on platform, infrastructure-adjacent, or internal product areas
+- Strong technical fluency and the ability to understand complex systems and architectural tradeoffs
+- Demonstrated ability to define clear scope and success criteria

@@ -1,0 +1,4 @@
+.env
+__pycache__/
+debug_output*.txt
+pipeline_log.txt

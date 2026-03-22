@@ -1,0 +1,16 @@
+Global leader in Alternative Investments has developed and built an Investor Portal which is widely becoming the go to platform for Fund Managers and Investors.
+To continue their expansion, we are looking for a Technical Product Manager who will provide vision and execution of the platform and product.
+This role is fully remote and can be based anywhere in The USA.
+Reporting to and working with the CTO and CEO, we are looking for the following:
+Define and own the strategic roadmap for APIs, SDKs, and integrations.
+Develop long-term vision for how our integrations and platform extend value proposition to partners, clients, and internal teams.
+Prioritize, plan, and drive the delivery of API and integration features — from authentication, authorization, and performance to documentation and versioning.
+Ensure high quality, reliability, scalability, and usability of APIs and SDKs (for internal and external developers).
+Collaborate with engineering and architecture teams to make informed architectural decisions, manage technical debt, and plan for long-term scalability.
+Lead engagements with third-party vendors, partners, and clients to integrate their systems with our platform via APIs/SDKs.
+Identify, evaluate, and execute integrations with external platforms (e.g., CRMs, data platforms, reporting tools, partner systems), including defining requirements, building specs, and managing delivery.
+Serve as a technical liaison between company and external engineering/partner teams — helping with SDK integration guidance, authentication/authorization flows, and performance troubleshooting.
+Work closely with engineering, product, operations, sales, and customer-success teams to align on roadmap, scope, delivery timelines, and launch strategy.
+Work with engineering teams to ensure API documentation, SDK references, sample code, integration guides, and best practices are maintained.
+Qualifications:
+6+ years of product management experience, with prior experience in technical, platform, or integration-focused product roles (APIs, SDKs, third-party integrations).

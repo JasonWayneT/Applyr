@@ -1,0 +1,40 @@
+The single biggest quality problem at Channel Fusion today is that work enters engineering sprints without proper specs. You fix that.
+What You Own
+Requirements & Specifications
+— Translate client needs into detailed technical specs with measurable acceptance criteria. Nothing enters an engineering sprint without your sign-off on spec quality. This is the single biggest lever to reduce defects.
+Scope Decisions
+— You are the person who says "yes, no, or not yet" to client feature requests on your accounts. You assess every request against the bespoke vs. platform classification framework.
+Bespoke vs. Platform Classification
+— For each piece of client work, you determine: Is this a platform feature (one-to-many)? Bespoke with platform potential (build with abstraction)? Pure professional services (separate P&L)? Maintenance (bug fix with regression gate)?
+Client Technical Engagement
+— You're in the room with the client, understanding their business, their data flows, their pain points. You pair with the Forward Deployed Engineer to bridge business requirements and technical implementation.
+Acceptance Criteria & Quality Gates
+— You define what "done" looks like for every piece of work. If a defect ships on your account, you assess whether it reveals a spec gap — and you close it.
+Cross-Functional Coordination
+— You work daily with the CSM (who owns the relationship) and the FDE (who owns the technical implementation). You feed patterns back to the Director of Product for roadmap decisions.
+What You Do NOT Own
+Client relationship and retention
+— Owned by the Customer Success Manager
+Sprint planning and delivery commitments
+— Owned by the Director of Tech Solutions Lab
+Data mapping and integration implementation
+— Owned by the Forward Deployed Engineer
+Product roadmap and strategy
+— Owned by the Director of Product (you inform it, they decide)
+Escalation communication to the client
+— Owned by the CSM (you provide the technical context)
+Qualifications
+Required
+5+ years in Product Management, Solutions Consulting, Solutions Engineering, or Technical Business Analysis in B2B SaaS or enterprise technology
+Demonstrated ability to write technical specifications with measurable acceptance criteria — we will ask you to show examples
+Experience working directly with enterprise clients (not just internal stakeholders) to translate business needs into technical requirements
+Strong understanding of APIs, data integrations, and how enterprise software systems connect — you don't need to write code, but you need to read a data flow diagram and know where things break
+Experience triaging competing priorities across multiple clients or products
+Comfort with ambiguity — this is a greenfield function being built from scratch
+Proven ability to leverage AI for requirements analysis, competitive intelligence gathering, and rapid prototyping of product specs
+Preferred
+Experience in channel marketing, incentive management, partner enablement, or dealer/distributor platforms
+Background at companies that have transitioned from services-heavy to product-led models
+Familiarity with agile/scrum workflows and sprint planning
+Experience with data ecosystem mapping (ETL, data warehousing, client data integrations)
+Understanding of AI/ML product features — Channel Fusion is building an AI reporting and analytics layer

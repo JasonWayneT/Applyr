@@ -1,0 +1,24 @@
+Company: Kin Insurance
+Title: Data Product Manager, Growth Tech
+
+Quick Summary
+Own the “why” behind conversion. Connect data across tools, surface insights, and partner with engineering to ship improvements that drive measurable growth.
+
+The opportunity
+We’re looking for a data-driven Product Manager to help us unlock growth by connecting the dots across our sales and acquisition ecosystem. This role exists to turn fragmented data into clear, actionable insight — and then translate that insight into product improvements that drive conversion.
+You’ll work across five core data sources — site behavior (FullStory), customer segmentation (Twilio Segment), CRM (HubSpot), call performance (Regal), and internal policy and quote data — to understand where we’re winning, where we’re losing, and why. From there, you’ll partner closely with engineering to prioritize and ship solutions that improve outcomes for both our business and our customers.
+
+What You’ll Bring
+- 2–5 years of experience in product management, analytics, or sales operations
+- Advanced SQL skills, including the ability to independently extract, join, and analyze data across multiple sources
+- Experience with BI and data platforms such as Looker and Databricks
+- Familiarity with CRM and sales tooling such as HubSpot
+- Proven ability to synthesize complex, multi-source data into clear insights and prioritized action plans
+- Experience working closely with engineering teams to define, scope, and ship product features
+- Clear and concise communication skills, both written and verbal
+
+Bonus Points
+- Experience with A/B testing or experimentation frameworks
+- Background in InsurTech or FinTech
+
+Salary Range: $119K/yr - $136K/yr

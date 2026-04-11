@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Navigator | Taylor Built</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050505;
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-primary: #00f2fe;
+            --accent-secondary: #4facfe;
+            --text-main: #ffffff;
+            --text-dim: #a0a0a0;
+            --card-hover: rgba(255, 255, 255, 0.07);
+            --danger: #f53d5b;
+            --success: #00e676;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            padding: 1rem 2rem 4rem 2rem;
+            background-image:
+                radial-gradient(circle at 10% 20%, rgba(79, 172, 254, 0.05) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(0, 242, 254, 0.05) 0%, transparent 40%);
+        }
+
+        /* ── Header ── */
+        header { max-width: 1400px; margin: 0 auto 1rem auto; text-align: center; padding-top: 2rem; }
+        h1 {
+            font-family: 'Outfit', sans-serif; font-size: 3.5rem; font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem;
+        }
+        p.subtitle { color: var(--text-dim); font-size: 1.1rem; letter-spacing: 1px; text-transform: uppercase; }
+
+        /* ── Stats Bar ── */
+        .stats-bar { max-width: 900px; margin: 1.5rem auto 0 auto; display: flex; justify-content: center; gap: 2.5rem; flex-wrap: wrap; }
+        .stat-item { text-align: center; }
+        .stat-value {
+            font-family: 'Outfit', sans-serif; font-size: 2rem; font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .stat-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 0.2rem; }
+
+        /* ── Search & Filter ── */
+        .search-container { max-width: 600px; margin: 2rem auto 0 auto; }
+        #jobSearch {
+            width: 100%; padding: 1rem 1.5rem;
+            background: var(--glass-bg); border: 1px solid var(--glass-border);
+            border-radius: 12px; color: white; font-size: 1.1rem;
+            backdrop-filter: blur(10px); transition: all 0.3s ease;
+        }
+        #jobSearch:focus { outline: none; border-color: var(--accent-primary); box-shadow: 0 0 20px rgba(0, 242, 254, 0.15); }
+        #jobSearch::placeholder { color: var(--text-dim); }
+
+        .filter-bar { max-width: 700px; margin: 1rem auto 2rem auto; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+        .filter-btn {
+            background: var(--glass-bg); border: 1px solid var(--glass-border);
+            color: var(--text-dim); padding: 0.4rem 1rem; border-radius: 20px;
+            font-size: 0.8rem; cursor: pointer; transition: all 0.3s ease;
+            text-transform: uppercase; letter-spacing: 1px; font-weight: 600;
+        }
+        .filter-btn:hover, .filter-btn.active {
+            background: rgba(0, 242, 254, 0.15); border-color: var(--accent-primary); color: var(--text-main);
+        }
+
+        /* ── Section & Grid ── */
+        .section-header { max-width: 1400px; margin: 3rem auto 1.5rem auto; display: flex; align-items: center; gap: 1rem; }
+        .section-header h2 { font-family: 'Outfit', sans-serif; font-size: 1.8rem; font-weight: 700; }
+        .section-count { background: var(--glass-bg); padding: 0.2rem 0.8rem; border-radius: 20px; font-size: 0.9rem; color: var(--text-dim); border: 1px solid var(--glass-border); }
+
+        .job-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; max-width: 1400px; margin: 0 auto; }
+
+        /* ── Job Card ── */
+        .job-card {
+            background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 20px;
+            padding: 1.5rem; color: inherit; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            backdrop-filter: blur(10px); display: flex; flex-direction: column;
+            justify-content: space-between; position: relative; overflow: hidden; min-height: 200px;
+        }
+        .job-card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 4px;
+            background: var(--status-color, var(--accent-primary)); opacity: 0.5; transition: opacity 0.3s ease;
+        }
+        .job-card:hover { transform: translateY(-6px); background: var(--card-hover); border-color: rgba(255,255,255,0.2); }
+        .job-card:hover::before { opacity: 1; }
+
+        .company-name { font-weight: 700; font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 0.4rem; }
+        .job-title { font-family: 'Outfit', sans-serif; font-size: 1.2rem; font-weight: 600; margin-bottom: 0.5rem; line-height: 1.3; }
+        .job-score { font-size: 0.72rem; color: var(--text-dim); margin-bottom: 0.4rem; }
+
+        /* ── Date Badges ── */
+        .date-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.8rem; }
+        .date-badge {
+            font-size: 0.68rem; padding: 0.2rem 0.6rem; border-radius: 20px;
+            border: 1px solid; font-weight: 600; white-space: nowrap;
+        }
+        .date-badge.applied { border-color: #4facfe; color: #4facfe; background: rgba(79,172,254,0.08); }
+        .date-badge.rejected { border-color: #ff4444; color: #ff4444; background: rgba(255,68,68,0.08); }
+        .date-badge.scouted { border-color: #a0a0a0; color: #a0a0a0; background: rgba(160,160,160,0.08); }
+
+        /* ── Card Footer ── */
+        .card-footer { display: flex; justify-content: space-between; align-items: center; margin-top: auto; }
+
+        .status-badge {
+            font-size: 0.68rem; color: var(--text-main); font-weight: 700;
+            display: flex; align-items: center; text-transform: uppercase; letter-spacing: 1px;
+            cursor: pointer; padding: 0.3rem 0.6rem; border-radius: 6px;
+            transition: background 0.2s ease;
+        }
+        .status-badge:hover { background: rgba(255,255,255,0.08); }
+
+        .status-dot {
+            width: 8px; height: 8px; background: var(--status-color, #00ff88);
+            border-radius: 50%; margin-right: 8px; box-shadow: 0 0 10px var(--status-color, #00ff88);
+        }
+        .status-dot.pulse { animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+
+        .btn-open {
+            background: rgba(255,255,255,0.1); padding: 0.5rem 1rem; border-radius: 8px;
+            font-size: 0.8rem; font-weight: 600; transition: all 0.3s ease;
+            text-decoration: none; color: inherit;
+        }
+        .job-card:hover .btn-open { background: var(--status-color, var(--accent-primary)); color: #000; }
+
+        .empty-state { max-width: 1400px; margin: 4rem auto; text-align: center; color: var(--text-dim); }
+
+        /* ── Update Modal ── */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px);
+            z-index: 1000; display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+        .modal {
+            background: #0f0f0f; border: 1px solid var(--glass-border); border-radius: 24px;
+            padding: 2rem; width: 100%; max-width: 480px; position: relative;
+            transform: translateY(20px); transition: transform 0.3s ease;
+        }
+        .modal-overlay.open .modal { transform: translateY(0); }
+
+        .modal h3 { font-family: 'Outfit', sans-serif; font-size: 1.4rem; font-weight: 700; margin-bottom: 0.3rem; }
+        .modal .modal-company { font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 1.5rem; }
+        .modal-close {
+            position: absolute; top: 1.2rem; right: 1.2rem; background: none; border: none;
+            color: var(--text-dim); font-size: 1.4rem; cursor: pointer; line-height: 1;
+            transition: color 0.2s;
+        }
+        .modal-close:hover { color: var(--text-main); }
+
+        .modal-field { margin-bottom: 1.2rem; }
+        .modal-field label { display: block; font-size: 0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-weight: 600; margin-bottom: 0.5rem; }
+
+        .modal-field select,
+        .modal-field input[type="date"],
+        .modal-field input[type="text"],
+        .modal-field textarea {
+            width: 100%; padding: 0.75rem 1rem; background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border); border-radius: 10px;
+            color: white; font-size: 0.95rem; font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s ease;
+        }
+        .modal-field select:focus,
+        .modal-field input:focus,
+        .modal-field textarea:focus { outline: none; border-color: var(--accent-primary); }
+        .modal-field textarea { resize: vertical; min-height: 70px; }
+        .modal-field select option { background: #1a1a1a; }
+
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; }
+
+        .modal-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+        .btn-save {
+            flex: 1; padding: 0.8rem; background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border: none; border-radius: 10px; color: #000; font-weight: 700;
+            font-size: 0.9rem; cursor: pointer; transition: opacity 0.2s ease;
+        }
+        .btn-save:hover { opacity: 0.85; }
+        .btn-cancel {
+            flex: 0 0 auto; padding: 0.8rem 1.5rem; background: rgba(255,255,255,0.07);
+            border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-dim);
+            font-size: 0.9rem; cursor: pointer; transition: all 0.2s ease;
+        }
+        .btn-cancel:hover { background: rgba(255,255,255,0.12); color: var(--text-main); }
+
+        .save-feedback {
+            text-align: center; font-size: 0.8rem; color: var(--success);
+            opacity: 0; transition: opacity 0.3s ease; margin-top: 0.5rem;
+        }
+        .save-feedback.visible { opacity: 1; }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 2.5rem; }
+            .job-grid { grid-template-columns: 1fr; }
+            .stats-bar { gap: 1.2rem; }
+            .stat-value { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Taylor Built</h1>
+    <p class="subtitle">Platform PM Command Center</p>
+    <div class="stats-bar" id="statsBar"></div>
+    <div class="search-container">
+        <input type="text" id="jobSearch" placeholder="Filter by company or role..." oninput="renderDashboard()">
+    </div>
+    <div class="filter-bar" id="filterBar"></div>
+</header>
+
+<main id="dashboard"></main>
+
+<!-- Update Modal -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-company" id="modalCompany"></div>
+        <h3 id="modalTitle"></h3>
+
+        <div class="modal-field">
+            <label>Status</label>
+            <select id="modalStatus">
+                <option value="Scouted">Scouted</option>
+                <option value="Drafted">Drafted</option>
+                <option value="Applied">Applied</option>
+                <option value="Interviewing">Interviewing</option>
+                <option value="Offered">Offered</option>
+                <option value="Rejected">Rejected</option>
+                <option value="Archived">Archived</option>
+            </select>
+        </div>
+
+        <div class="modal-field" id="dateAppliedField">
+            <label>Date Applied</label>
+            <input type="date" id="modalDateApplied">
+        </div>
+
+        <div class="modal-field" id="dateRejectedField">
+            <label>Date Rejected</label>
+            <input type="date" id="modalDateRejected">
+        </div>
+
+        <div class="modal-field" id="rejectionReasonField">
+            <label>Rejection Reason</label>
+            <input type="text" id="modalRejectionReason" placeholder="e.g. Ghosted, Failed interview, No fit...">
+        </div>
+
+        <div class="modal-field">
+            <label>Notes</label>
+            <textarea id="modalNotes" placeholder="Any notes about this application..."></textarea>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+            <button class="btn-save" onclick="saveModal()">Save Changes</button>
+        </div>
+        <div class="save-feedback" id="saveFeedback">Saved successfully!</div>
+    </div>
+</div>
+
+<script>
+    const STATUS_COLORS = {
+        Interviewing: "#f53d5b",
+        Offered:      "#00e676",
+        Applied:      "#4facfe",
+        Drafted:      "#00f2fe",
+        Scouted:      "#a0a0a0",
+        Rejected:     "#ff4444",
+        Archived:     "#555555"
+    };
+    const STATUS_PRIORITY = ["Interviewing", "Offered", "Applied", "Drafted", "Scouted", "Rejected", "Archived"];
+    const SERVER_BASE = "http://localhost:5000";
+
+    let jobDatabase = {};
+    let activeFilter = "active";
+    let editingJobKey = null;
+
+    function getStatusBucket(status) {
+        for (const b of STATUS_PRIORITY) { if (status && status.startsWith(b)) return b; }
+        return "Scouted";
+    }
+    function getStatusColor(status) { return STATUS_COLORS[getStatusBucket(status)] || "#a0a0a0"; }
+
+    function formatDate(d) {
+        if (!d) return null;
+        const dt = new Date(d + "T00:00:00");
+        if (isNaN(dt.getTime())) return null;
+        return dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    }
+
+    async function loadDatabase() {
+        try {
+            const r = await fetch(`${SERVER_BASE}/data/job_database.json?t=${Date.now()}`);
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            jobDatabase = await r.json();
+            buildFilterBar();
+            renderDashboard();
+        } catch (err) {
+            document.getElementById('dashboard').innerHTML = `
+                <div class="empty-state">
+                    <p style="font-size:1.2rem; margin-bottom:0.5rem;">Could not load job database</p>
+                    <p style="font-size:0.85rem; color:#555;">
+                        Run: <code style="color:#00f2fe">python server.py</code> from the project root, then reload.
+                    </p>
+                </div>`;
+        }
+    }
+
+    function buildFilterBar() {
+        const counts = {};
+        for (const job of Object.values(jobDatabase)) {
+            const b = getStatusBucket(job.status);
+            counts[b] = (counts[b] || 0) + 1;
+        }
+        let html = `<button class="filter-btn ${activeFilter==='active'?'active':''}" onclick="setFilter('active')">Active</button>`;
+        html += `<button class="filter-btn ${activeFilter==='all'?'active':''}" onclick="setFilter('all')">All</button>`;
+        for (const s of STATUS_PRIORITY) {
+            if (!counts[s]) continue;
+            html += `<button class="filter-btn ${activeFilter===s?'active':''}" onclick="setFilter('${s}')">${s} (${counts[s]})</button>`;
+        }
+        document.getElementById('filterBar').innerHTML = html;
+    }
+
+    function setFilter(f) { activeFilter = f; buildFilterBar(); renderDashboard(); }
+
+    function renderDashboard() {
+        const search = document.getElementById('jobSearch').value.toLowerCase();
+        const groups = {};
+
+        for (const [id, job] of Object.entries(jobDatabase)) {
+            const bucket = getStatusBucket(job.status);
+            if (activeFilter === 'active' && (bucket === 'Rejected' || bucket === 'Archived')) continue;
+            if (activeFilter !== 'all' && activeFilter !== 'active' && bucket !== activeFilter) continue;
+            if (search && !job.company.toLowerCase().includes(search) && !job.title.toLowerCase().includes(search)) continue;
+            if (!groups[bucket]) groups[bucket] = [];
+            groups[bucket].push({ id, ...job });
+        }
+
+        // Stats bar
+        const all = Object.values(jobDatabase);
+        const getBucket = j => getStatusBucket(j.status);
+        document.getElementById('statsBar').innerHTML = `
+            <div class="stat-item"><div class="stat-value">${all.filter(j=>!['Rejected','Archived'].includes(getBucket(j))).length}</div><div class="stat-label">Active</div></div>
+            <div class="stat-item"><div class="stat-value">${all.filter(j=>getBucket(j)==='Drafted').length}</div><div class="stat-label">Drafted</div></div>
+            <div class="stat-item"><div class="stat-value">${all.filter(j=>getBucket(j)==='Applied').length}</div><div class="stat-label">Applied</div></div>
+            <div class="stat-item"><div class="stat-value">${all.filter(j=>getBucket(j)==='Interviewing').length}</div><div class="stat-label">Interviewing</div></div>
+            <div class="stat-item"><div class="stat-value">${all.filter(j=>getBucket(j)==='Rejected').length}</div><div class="stat-label">Rejected</div></div>
+        `;
+
+        let html = '';
+        let hasContent = false;
+
+        for (const status of STATUS_PRIORITY) {
+            const jobs = groups[status];
+            if (!jobs?.length) continue;
+            hasContent = true;
+            const color = STATUS_COLORS[status] || '#a0a0a0';
+            const isPulsing = status === 'Interviewing' || status === 'Offered';
+            let cards = '';
+
+            for (const job of jobs) {
+                const jColor = getStatusColor(job.status);
+                const bucket = getStatusBucket(job.status);
+                const scoreHtml = job.score > 0 ? `<div class="job-score">Fit Score: ${job.score}/100</div>` : '';
+
+                // Date badges
+                let dateBadges = '';
+                if (job.date_scouted) dateBadges += `<span class="date-badge scouted">Scouted ${formatDate(job.date_scouted)}</span>`;
+                if (job.date_applied) dateBadges += `<span class="date-badge applied">Applied ${formatDate(job.date_applied)}</span>`;
+                if (job.date_rejected) dateBadges += `<span class="date-badge rejected">Rejected ${formatDate(job.date_rejected)}</span>`;
+                const dateBadgesHtml = dateBadges ? `<div class="date-badges">${dateBadges}</div>` : '';
+
+                const linkUrl = job.url && job.url !== '#' ? job.url : null;
+                const btnHtml = linkUrl
+                    ? `<a href="${linkUrl}" target="_blank" class="btn-open" onclick="event.stopPropagation()">Open Brief</a>`
+                    : `<span class="btn-open" style="opacity:0.4;cursor:default">No Link</span>`;
+
+                cards += `
+                    <div class="job-card" style="--status-color:${jColor}" onclick="openModal('${job.id.replace(/'/g,"\\'")}')">
+                        <div>
+                            <div class="company-name">${job.company}</div>
+                            <div class="job-title">${job.title}</div>
+                            ${scoreHtml}
+                            ${dateBadgesHtml}
+                        </div>
+                        <div class="card-footer">
+                            <span class="status-badge" title="Click card to update status">
+                                <span class="status-dot ${isPulsing?'pulse':''}"></span>
+                                ${bucket}
+                            </span>
+                            ${btnHtml}
+                        </div>
+                    </div>`;
+            }
+            html += `
+                <div class="status-section">
+                    <div class="section-header"><h2>${status}</h2><span class="section-count">${jobs.length}</span></div>
+                    <div class="job-grid">${cards}</div>
+                </div>`;
+        }
+
+        document.getElementById('dashboard').innerHTML = hasContent
+            ? html
+            : '<div class="empty-state">No jobs match your current filter.</div>';
+    }
+
+    /* ── Modal Logic ── */
+    function openModal(jobKey) {
+        const job = jobDatabase[jobKey];
+        if (!job) return;
+        editingJobKey = jobKey;
+
+        document.getElementById('modalCompany').textContent = job.company;
+        document.getElementById('modalTitle').textContent = job.title;
+        document.getElementById('modalStatus').value = getStatusBucket(job.status);
+        document.getElementById('modalDateApplied').value = job.date_applied || '';
+        document.getElementById('modalDateRejected').value = job.date_rejected || '';
+        document.getElementById('modalRejectionReason').value = job.rejection_reason || '';
+        document.getElementById('modalNotes').value = job.notes || '';
+        document.getElementById('saveFeedback').classList.remove('visible');
+
+        updateModalFieldVisibility();
+        document.getElementById('modalStatus').addEventListener('change', updateModalFieldVisibility);
+        document.getElementById('modalOverlay').classList.add('open');
+    }
+
+    function updateModalFieldVisibility() {
+        const status = document.getElementById('modalStatus').value;
+        const showApplied = ['Applied','Interviewing','Offered','Rejected'].includes(status);
+        const showRejected = status === 'Rejected';
+        document.getElementById('dateAppliedField').style.display = showApplied ? '' : 'none';
+        document.getElementById('dateRejectedField').style.display = showRejected ? '' : 'none';
+        document.getElementById('rejectionReasonField').style.display = showRejected ? '' : 'none';
+    }
+
+    function closeModal() {
+        document.getElementById('modalOverlay').classList.remove('open');
+        editingJobKey = null;
+    }
+
+    async function saveModal() {
+        if (!editingJobKey) return;
+
+        const status = document.getElementById('modalStatus').value;
+        const updates = {
+            status,
+            date_applied: document.getElementById('modalDateApplied').value || null,
+            date_rejected: document.getElementById('modalDateRejected').value || null,
+            rejection_reason: document.getElementById('modalRejectionReason').value || null,
+            notes: document.getElementById('modalNotes').value || null,
+        };
+
+        // Auto-stamp today if transitioning to Applied/Rejected with no date
+        if (status === 'Applied' && !updates.date_applied) {
+            updates.date_applied = new Date().toISOString().split('T')[0];
+        }
+        if (status === 'Rejected' && !updates.date_rejected) {
+            updates.date_rejected = new Date().toISOString().split('T')[0];
+        }
+
+        try {
+            const res = await fetch(`${SERVER_BASE}/api/jobs/${encodeURIComponent(editingJobKey)}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
+
+            if (!res.ok) throw new Error('Server error');
+
+            // Update local copy
+            Object.assign(jobDatabase[editingJobKey], updates);
+
+            document.getElementById('saveFeedback').classList.add('visible');
+            buildFilterBar();
+            renderDashboard();
+
+            setTimeout(() => {
+                document.getElementById('saveFeedback').classList.remove('visible');
+                closeModal();
+            }, 1200);
+
+        } catch (err) {
+            alert(`Save failed. Is server.py running?\n\nRun: python server.py`);
+        }
+    }
+
+    // Close modal on overlay click
+    document.getElementById('modalOverlay').addEventListener('click', e => {
+        if (e.target === document.getElementById('modalOverlay')) closeModal();
+    });
+
+    // Escape key closes modal
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    loadDatabase();
+</script>
+
+</body>
+</html>

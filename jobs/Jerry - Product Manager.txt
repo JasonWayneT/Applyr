@@ -1,0 +1,17 @@
+Company: Jerry
+Title: Product Manager, Insurance (Core Product)
+Full description (Extracted Summary):
+Jerry.ai is hiring for a Product Manager, Insurance (Core Product). This is a technical, "full-stack" product position focused on the company's insurance quoting engine.
+
+Responsibilities:
+- Drive Carrier Integrations: Own the end-to-end process of launching new insurance carrier partners and products, managing technical integrations.
+- Optimize Marketplace Performance: Improve the quoting system's logic, eligibility rules, and coverage matching.
+- Own the Funnel: Diagnose where customers drop off and implement technical or UX solutions.
+- Ensure Data Accuracy: Maintain the integrity of underwriting inputs to ensure the prices displayed are accurate.
+- Median quote latency between 5–15 seconds to ensure a reliable and "instant" user experience.
+
+Qualifications:
+- 2+ years of experience in technical product management, management consulting, or data analytics.
+- Technical Aptitude: Ability to dive deep into API documentation, understand rating logic, and manage complex backend technical performance.
+- Marketplace Mindset: Strong understanding of how technical performance (latency, accuracy) directly impacts consumer behavior.
+- Data-Driven: Proficiency in SQL/analysis.

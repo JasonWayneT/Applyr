@@ -1,0 +1,20 @@
+Company: Stitch Fix
+Title: Product Manager, Supply Chain & Operations Systems
+
+About the Role
+In this role, you will...
+- Own product strategy and execution across fulfillment platform and logistics capabilities.
+- Build a deep understanding of Stitch Fix’s operations, architecture, data flows, and system dependencies.
+- Partner closely with Operations, Client Experience, and Client Support stakeholders.
+- Apply first-principles thinking to solve complex, ambiguous problems.
+- Work closely with Engineering, Data Science, and Analytics to deliver solutions that are technically sound, financially rigorous, and operationally effective.
+- Identify opportunities to leverage AI, automation, and agentic workflows.
+
+We’re Excited About You Because…
+- You have 7+ years of experience leading product strategy and execution for complex, system-heavy products, platforms, or workflows.
+- You are a first-principles thinker.
+- You are an exceptional communicator.
+- You are quantitatively strong and comfortable working backwards from financial outcomes.
+- You are technically fluent enough to quickly build a working model of architecture, data flows, APIs, and dependencies.
+- You are a systems thinker.
+- You have experience building, improving, or modernizing complex systems.

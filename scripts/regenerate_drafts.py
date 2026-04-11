@@ -1,28 +1,57 @@
+"""
+Regenerate drafts for all jobs currently in 'Drafted' status.
+Reads dynamically from job_database.json instead of a hardcoded list.
+"""
 import os
-from drafting_engine import load_file, run_drafting_engine
+import json
+from utils import load_file, DB_FILE, WORK_EXP_FILE, JOBS_DIR
+from drafting_engine import run_drafting_engine
 
-WORK_EXP_FILE = "data/workExperience.md"
 
 def main():
     work_exp = load_file(WORK_EXP_FILE)
-    jobs = [
-        "Arcesium - Product Manager", 
-        "CentralReach - Product Manager", 
-        "InStride Health - Product Manager", 
-        "Machinify - Product Manager", 
-        "Tailscale - Product Manager"
-    ]
-    for job in jobs:
-        print(f"\n--- Regenerating {job} ---")
-        jd_path = f"processed_jobs/{job}.txt"
-        if not os.path.exists(jd_path):
-            jd_path = f"jobs/{job}.txt"
-            
-        if os.path.exists(jd_path):
+    if not work_exp:
+        print("CRITICAL: Could not load workExperience.md")
+        return
+
+    if not os.path.exists(DB_FILE):
+        print(f"Database not found: {DB_FILE}")
+        return
+
+    with open(DB_FILE, 'r') as f:
+        db = json.load(f)
+
+    # Find all 'Drafted' jobs that have JD files
+    drafted_jobs = {k: v for k, v in db.items()
+                    if v['status'].startswith('Drafted')}
+
+    if not drafted_jobs:
+        print("No drafted jobs found to regenerate.")
+        return
+
+    print(f"Found {len(drafted_jobs)} drafted jobs to regenerate.")
+
+    for job_id, job in drafted_jobs.items():
+        company_name = job['company']
+        print(f"\n--- Regenerating {company_name} ---")
+
+        # Try to find the JD file
+        folder_path = job.get('folder_path', '')
+        jd_path = os.path.join(folder_path, "Original_JD.txt") if folder_path else None
+
+        if not jd_path or not os.path.exists(jd_path):
+            # Fallback: check jobs/ directory
+            for f in os.listdir(JOBS_DIR):
+                if company_name.lower() in f.lower():
+                    jd_path = os.path.join(JOBS_DIR, f)
+                    break
+
+        if jd_path and os.path.exists(jd_path):
             jd_text = load_file(jd_path)
-            run_drafting_engine(job, jd_text, work_exp, {})
+            run_drafting_engine(company_name, jd_text, work_exp, {})
         else:
-            print(f"Could not find JD for {job}")
+            print(f"Could not find JD for {company_name}")
+
 
 if __name__ == "__main__":
     main()

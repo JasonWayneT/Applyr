@@ -9,26 +9,25 @@ linkedin.com/in/redacted-linkedin-slug
 
 # **PRODUCT MANAGER – PLATFORM & REVENUE SYSTEMS (B2B SAAS)**
 
-Platform-focused Product Manager with 6+ years of experience owning and stabilizing revenue-bearing B2B SaaS systems in technically complex, legacy environments. Specialized in platform reliability, data integrity initiatives, migration strategy, and disciplined cross-functional execution during periods of organizational change and resource constraint.
+Product Manager with 6+ years of experience owning complex B2B SaaS platforms (~$40M ARR). Specialized in defining product strategy for platform modernization, reducing high-impact churn drivers, and leading cross-functional teams through data-intensive migration and stabilization initiatives.
 
-Proven track record operating as the product lead for a $40M ARR legacy platform, reducing major churn drivers through architectural simplification, implementing structured capacity planning, and enabling voluntary migrations during platform sunset.
+Proven track record defining and executing roadmaps for revenue-bearing legacy systems, prioritizing high-risk stability initiatives, and leading architectural simplifications that eliminate systemic data integrity failures.
 
-Strong partner to Engineering, DevOps, DBA, CX, Legal, and GTM teams. Operates comfortably at the intersection of business and system architecture.
+Strong partner to Engineering, DevOps, DBA, CX, Legal, and GTM teams. Operates comfortably at the intersection of business strategy and platform architecture.
 
 ---
 
-# **CORE STRENGTHS**
+# **CORE EXPERTISE**
 
 Platform Strategy & Stabilization  
 Data Integrity & Ingestion Systems  
 Legacy System Modernization  
 Migration Tooling & Sunset Planning  
-Churn Reduction Initiatives  
-Security Backlog Prioritization  
+Stakeholder Management & Alignment  
 Capacity Planning & Roadmap Discipline  
-Cross-Functional Stakeholder Alignment  
+Data-Driven Decision Making  
 Technical-Business Translation  
-Operational Risk Management
+Agile / Scrum Methodology
 
 ---
 
@@ -37,9 +36,9 @@ Operational Risk Management
 ## **CISION**
 
 Product Owner → Product Manager (Functional Scope)  
-September 2021 – 2025 | Remote
+September 2021 – January 2026 | Full Remote
 
-Owned roadmap and delivery for Legacy C3 and CPRE, a revenue-bearing B2B SaaS platform generating approximately $40M in annual recurring revenue across \~3,500 active accounts and \~25,000 users. Operated during a multi-year legacy transition while the organization migrated customers to newer platforms.
+Defined and executed the product roadmap for Legacy C3 and CPRE, a revenue-bearing B2B SaaS platform generating approximately $40M in annual recurring revenue across ~3,500 active accounts and ~25,000 users. Directed platform strategy during a multi-year transition while the organization migrated customers to newer systems.
 
 ### **Platform Ownership & Scope**
 
@@ -60,15 +59,15 @@ Owned roadmap and delivery for Legacy C3 and CPRE, a revenue-bearing B2B SaaS pl
 
 ---
 
-### **Bellwether Initiative – Data Integrity & Churn Driver Elimination**
+### **Project Bellwether – Data Strategy & Churn Driver Elimination**
 
 Identified and resolved the largest documented product-driven churn driver: stale contact data.
 
 * Investigated legacy ETL pipelines and identified 30–40% contact data drop-off between GPOD and C3.  
-* Proposed architectural bypass of opaque legacy systems in favor of direct integration with GPOD.  
+* Defined architectural remediation strategy to bypass opaque legacy systems in favor of direct integration with GPOD.  
 * Led proof-of-concept development and production rollout of “Bellwether,” a simplified ingestion and delta-update system.  
-* Eliminated data drop-off and removed the primary stale-data complaint affecting database customers.  
-* Improved competitive data freshness relative to industry competitors.
+* Eliminated data drop-off and removed the primary stale-data complaint, restoring customer trust in base data quality.  
+* Improved competitive data freshness relative to industry peers.
 
 ---
 
@@ -122,15 +121,15 @@ The initiative was executive-driven and later discontinued due to unfavorable ec
 
 ---
 
-### **Capacity Planning & Product Discipline**
+### **Roadmap Prioritization & Product Discipline**
 
 Evolved from reactive execution to structured prioritization leadership.
 
-* Implemented PTO-adjusted capacity modeling.  
-* Introduced T-shirt sizing with uncertainty bands for epics.  
-* Allocated capacity across security, stability, migration, and planned initiatives.  
-* Established initiative-stream filter to enforce disciplined “no” decisions.  
-* Reduced roadmap overcommitment over tenure.
+* Implemented PTO-adjusted capacity modeling to prevent team burnout.  
+* Introduced T-shirt sizing with uncertainty bands for evidence-based epic estimation.  
+* Prioritized capacity across security, stability, migration, and growth-driving initiatives.  
+* Defined initiative-stream filters to enforce disciplined prioritization and "no" decisions.  
+* Reduced roadmap overcommitment and stabilized delivery cadences over tenure.
 
 ---
 
@@ -159,7 +158,7 @@ February 2019 – August 2021 | San Diego, CA (Hybrid)
 ## **ZERO TO SIXTY MEDIA**
 
 Product Owner  
-June 2017 – January 2019 | San Diego, CA
+June 2017 – January 2019 | San Diego, CA (On-site)
 
 * Automated manual onboarding and fulfillment workflows, increasing onboarding throughput by \~40%.  
 * Co-developed internal product automating Salesforce onboarding processes.  
@@ -170,13 +169,7 @@ June 2017 – January 2019 | San Diego, CA
 
 # **TECHNICAL ENVIRONMENT**
 
-SQL (200+ customer databases)  
-RabbitMQ-based ingestion systems  
-Delta ingestion pipelines  
-DT Search indexing systems  
-Jira & Confluence  
-Cross-functional PI planning frameworks  
-Security remediation workflows
+SQL, RabbitMQ, Kafka (Architecture Exposure), ETL pipelines, DT Search indexing systems, Jira & Confluence, Cross-functional PI planning, Security remediation frameworks.
 
 ---
 

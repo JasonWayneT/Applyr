@@ -1,0 +1,29 @@
+Company: InformData
+Title: Product Manager, Criminal Operations
+
+The Product Manager for Criminal Operations at InformData leads the development of innovative criminal data products. The role focuses on creating solutions that inform and grow the business, aligning product vision and strategy with company goals.
+
+Key Responsibilities
+- Define the product vision, strategy, and roadmap to meet company objectives.
+- Manage product backlogs, user stories, and acceptance criteria.
+- Coordinate cross-functional teams (engineering, design, marketing, sales) to ensure timely product delivery.
+- Establish and track success metrics and KPIs; use data to guide decisions and optimize outcomes.
+- Plan and execute product launches, including post-launch monitoring.
+- Communicate product progress, risks, and decisions to stakeholders and leadership.
+- Serve as a subject matter expert on Criminal Operations, creating and prioritizing user stories and features.
+- Leverage qualitative and quantitative data to measure results and inform the product roadmap.
+- Own product development end-to-end, including business models and strategic projects.
+- Lead cross-functional teams to deliver solutions that are valuable, viable, usable, and feasible.
+
+Minimum Qualifications
+- Experience with Atlassian products (Jira, Confluence), DOMO or similar analytics tools, HubSpot.
+- 5+ years in product management within technology or criminal-related industries.
+- 10+ years in analytical business roles or equivalent education.
+- Excellent communication and writing skills; favoring clear, concise language.
+- Strong data analysis skills; comfortable working with data sources and presenting recommendations.
+- Understanding of technical concepts such as unique identifiers, APIs, ETLs.
+- Technical proficiency with tools like Jira and Domo (or equivalents).
+
+Preferred Qualifications
+- 7+ years experience as a Product Manager, with 4+ years managing Customer Data Platforms or Data Services.
+- Deep knowledge of customer data integration, identity resolution, and competitive landscape.

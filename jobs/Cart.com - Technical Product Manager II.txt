@@ -1,0 +1,17 @@
+Company: Cart.com
+Title: Technical Product Manager II
+Full description (Extracted Summary):
+Cart.com is seeking a Technical Product Manager II to drive product discovery, definition, and delivery across its fulfillment and operational platform. This role operates at the intersection of operations, engineering, and data.
+
+Responsibilities:
+- End-to-End Ownership: Manage the full product lifecycle for fulfillment and operational initiatives.
+- Workflow Analysis: Analyze and map fulfillment and warehouse workflows to identify friction points.
+- Data-Driven Decision Making: Utilize SQL and operational data to explore trends and build business cases.
+- Cross-Functional Collaboration: Partner with Operations, Engineering, and Data teams to prioritize improvements across Order Management Systems (OMS), Warehouse Management Systems (WMS), and Transportation Management Systems (TMS) workflows.
+- Structured Discovery: Conduct stakeholder interviews, process observations, and experiment designs.
+- AI Integration: Actively leverage AI tools across the product lifecycle.
+
+Requirements:
+- 3–6 years of experience in product management, product operations, or a closely related field.
+- Hands-on SQL proficiency is required.
+- Tooling: Fluency in using AI tools to assist in various stages of the product lifecycle.

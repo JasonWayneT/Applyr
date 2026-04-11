@@ -21,18 +21,29 @@ When the user runs the `/evaluate` command, you should act as the Job-Fit Decisi
 
 4. **Draft Materials (For YES decisions only):**
    For every job that scores a YES (>= 72), create a new directory inside `submissions/` named after the company (e.g., `submissions/art_of_problem_solving/`).
+   Extract the `Source URL` from the first line of the original JD file.
+   Save this URL and Score into `submissions/[company]/metadata.json`.
    Copy the original JD text into `submissions/[company]/Original_JD.txt`.
-   Use your own generation capabilities to write a highly tailored `Resume.md` and `CoverLetter.md` using the precise HTML styling formats found in `data/Resume_Style_Reference.md` and `data/Cover_Letter_Reference.md`.
+   Use your own generation capabilities to write a highly tailored `Resume.md` and `CoverLetter.md`.
    Save these drafted markdown files directly to the submission folder.
 
-5. **Generate PDFs:**
-   Once the markdown files are saved, run the terminal command `python scripts/manual_pdf_gen.py` to convert all new markdown drafts into clean PDFs.
+5. **Generate PDFs & Intel:**
+   Once drafting is complete:
+   - Run `python scripts/manual_pdf_gen.py`.
+   - Run `python scripts/research-engine.py "[Company]" "Product Manager"` (if research not already present).
+   - Run `python scripts/generate_cheat_sheet.py "[Company]"`.
 
-6. **The Pipeline Loop (Target: 5 Applications):**
-   After clearing the queue, check the total number of drafted application folders sitting inside the `submissions/` directory.
-   - If the total number of folders is **less than 5**, you MUST automatically run the `/scout` workflow again to pull fresh jobs, and then repeat this `/evaluate` process.
-   - Continue this loop continuously until there are exactly 5 ready-to-go application folders in the `submissions/` directory OR until you run out of qualifying LinkedIn opportunities posted in the last 7 days.
-   - Once the count hits 5, stop the loop and notify the user that the pipeline is full.
+6. **Database Persistence:**
+   For every processed job, update `data/job_database.json`:
+   - Set status to `Drafted` for YES decisions.
+   - Set status to `Rejected` for NO decisions.
+   - Update score and folder path fields.
 
-7. **Cleanup:**
-   Delete the processed `.txt` files from the `jobs/` directory to keep the queue clean for the next run.
+7. **The Pipeline Loop (Target: 5 Applications):**
+   After clearing the queue, check the total number of application folders in `submissions/`.
+   - If < 5, run `/scout` and repeat.
+   - If >= 5, stop and notify user.
+
+8. **Cleanup & Dashboard:**
+   - Delete processed `.txt` files from `jobs/`.
+   - Run `python scripts/generate_navigator.py`.

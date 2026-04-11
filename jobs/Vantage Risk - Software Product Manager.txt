@@ -1,0 +1,16 @@
+Company: Vantage Risk Companies
+Title: Software Product Manager
+Full description (Extracted Summary):
+Reports to the Chief Data Officer. Manage software products and data assets to derive value from data and enable the company to "see risk differently."
+
+Responsibilities:
+- Lifecycle Management: Drive execution across discovery, requirements, roadmap, and launch.
+- Requirement Translation: Translate business needs into detailed technical requirements.
+- Collaboration: Work with end-users, engineering, UX, and QA.
+- Methodology: Apply and promote Agile best practices.
+
+Candidate Profile:
+- Education: CS degree or equivalent.
+- Experience: Minimum 5 years in software product management.
+- Skills: Passion for data and analytics. Curios, thrifty, and resourceful.
+- Base Salary: $175,000 – $200,000.

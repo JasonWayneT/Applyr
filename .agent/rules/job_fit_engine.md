@@ -2,97 +2,96 @@
 trigger: always_on
 ---
 
-# Jason Taylor – Job-Fit Decision Engine (v2.5, Batch & Transition Optimized)
+# Jason Taylor – Job-Fit Decision Engine (v3.2, Team-BPM / IC Optimized)
 
-This file defines a deterministic YES/NO decision system for evaluating multiple job descriptions in a batch pipeline. It is optimized for Jason's transition from Platform PM to Growth/General PM while maintaining a strict "Context Firewall."
+This file defines a deterministic YES/NO decision system for evaluating multiple job descriptions in a batch pipeline. It is optimized for Jason's preference for **mid-level Product Manager roles (3-7 years)** within a **structured team environment** where direct PM leadership (Director/Senior PM) is present.
 
 ---
 
 ## 0) Purpose & Batch Logic
-Evaluate JDs at scale. For each JD in a batch:
 1. **Initialize Sandbox:** Clear previous JD context; load only `workExperience.md`.
-2. **Fast Gate:** Kill poor fits immediately to save processing tokens.
-3. **Transition Analysis:** Score based on "Growth" potential vs. "Platform" debt.
+2. **Fast Gate:** Kill poor fits, seniority mismatches, or "Solo PM" traps immediately.
+3. **Transition Analysis:** Score based on mid-level PM fit with a strong "Direct Leadership" anchor.
 
 ---
 
 ## 1) Jason’s Ground Truth Profile (The Source of Truth)
 *Refer to data/workExperience.md for all specific metrics.*
 - **Core:** B2B SaaS Platform PM, roadmap ownership, technical integrations, data integrity.
-- **Transition Target:** Growth/General PM (leveraging platform/infra for business outcomes).
-- **Hard Constraints:** NO People Management (of PMs), NO direct ML model training, NO pure consumer "viral loop" marketing.
+- **Experience Level:** ~6 years (Product Manager / Product Owner). 
+- **Transition Target:** Mid-level PM in a structured SaaS or Professional Services organization.
+- **Hard Constraints:** NO People Management (of PMs), NO direct ML model training, NO "First/Solo PM" roles.
 
 ---
 
 ## 2) Stage A: The Fast Gate (Instant Kill)
-If any trigger is met, return **Score: 0-30**, **Decision: NO**, and **Terminate Pipeline** for this JD.
+If any trigger is met, return **Score: 0**, **Decision: NO**, and **Terminate Pipeline** for this JD.
 
-### 2.1 Seniority & Management (Level Mismatch)
-- Requires managing other PMs (Director, VP, Group PM, "Lead of PMs").
-- Requires 10+ years of experience (Jason is mid-level/Senior IC).
-- Explicitly entry-level/APM/Internship.
+### 2.1 Title & Tier Blocklist (Seniority Mismatch)
+- **Title Blocklist:** JD contains: [Senior, Staff, VP, Head, Principal, Lead, Director, Growth].
+- **Organization Role:** Role is "Founding PM," "First PM," or "Sole Product Professional."
+- **Leading PMs:** Role requires hiring/managing other Product Managers.
 
-### 2.2 Technical & Domain "Hard Outs"
-- **Pure ML Research:** Role is owning model architecture/training (vs. using AI tools).
-- **Non-Software:** Hardware, firmware, medical devices, or heavy manufacturing.
-- **Legacy ERP:** Deep expertise in SAP, Oracle, or Mainframe systems.
-- **Niche Compliance:** Required deep PCI/Payments or HIPAA expertise (unless transferable).
+### 2.2 Experience & Reporting
+- **Years Required:** Role requires **8+ years** of experience (Jason has 6; 8+ implies seniority level he's avoiding).
+- **Structure:** JD implies a solo contributor reporting directly to a non-product CEO in a small company (< 50 employees).
 
-### 2.3 Growth Misalignment
-- **Pure Marketing Growth:** 90%+ focus on SEO, Paid Ads, or "Viral Loops" without product/infra technicality.
+### 2.3 Technical & Domain "Hard Outs"
+- **Pure ML/AI Research:** Owns model architecture/training (vs. using AI tools).
+- **Non-Software:** Hardware, medical devices, or heavy manufacturing.
+- **Pure Consumer:** 90%+ focus on TikTok-style "Viral Loops" without B2B infra.
+- **Industry Blocklist:** Gambling, Sports Betting, Gaming, Ad Tech, Crypto, Web3.
 
 ---
 
 ## 3) Stage B: Full Scoring (0–100)
 
-### A) Seniority Match (0–25)
-- **23–25:** Senior PM / PM II (IC Role), 4–8 years exp.
-- **15–22:** "Lead PM" (IC) or Senior with high ambiguity.
-- **0–14:** Director/VP signals or < 3 years exp.
+### A) The "Direct Leadership" Match (0-25)
+*Does the candidate have space to grow under a mentor?*
+- **22-25:** Mentions a direct manager (Director of Product, Senior PM) and a team of 3+ PMs.
+- **15-21:** Implicitly part of a larger product org.
+- **0-14:** High autonomy expected; reports to "Head of Product" who is a solo exec.
 
-### B) Product Model & Transition Fit (0–25)
-- **22–25:** B2B SaaS, Platform-led Growth, or API-first products.
-- **18–21:** General B2B SaaS with heavy workflow/data focus.
-- **10–17:** B2B2C or Prosumer tools.
-- **0–9:** Pure consumer-only (TikTok-style) or non-SaaS.
+### B) Seniority Fit (0–25)
+- **23–25:** Product Manager / PM II (IC Role), 3–6 years exp.
+- **18–22:** Product Manager, 6-7 years exp.
+- **0–17:** Requires 7+ years or "Senior" traits.
 
 ### C) Technical & Execution Depth (0–25)
-- **22–25:** Integrations, data migrations, reliability, security, or "Internal Platforms."
-- **15–21:** General feature PM-ing with strong engineering collaboration.
-- **0–14:** Requires hands-on coding (Python/SQL) or "Scientific" ML research.
+- **22–25:** Integrations, data pipelines, reliability, security, or "Internal Platforms."
+- **15–21:** General B2B feature work with engineering collaboration.
+- **0-14:** Requires hands-on coding (Python/SQL) for daily output.
 
 ### D) "The Bridge" - Growth Potential (0–25)
-*How well can Jason's Platform background solve their Growth problems?*
-- **20–25:** High (e.g., "Scale our API to support 10x users").
-- **15–19:** Medium (e.g., "Improve onboarding for enterprise customers").
-- **0–14:** Low (e.g., "Optimize Facebook Ad spend").
+- **20–25:** High (e.g., "Scale our API to support new integrations").
+- **15–19:** Medium (e.g., "Workflow optimization for enterprise users").
+- **0–14:** Low (e.g., "Manage Paid Ad budgets").
 
 ---
 
-## 4) Thresholds & Overlap Gate (Slightly Tighter)
+## 4) Thresholds & The "Anchor" Gate
 **Total Score = (A+B+C+D) - Penalties.**
 
 ### 4.1 Penalties
-- **Mobile-Only Focus:** -15 (Jason is Web/Platform focused).
-- **Heavy Design/UX-Led:** -10 (Jason is Data/Infra focused).
+- **Startup < 25 people:** -50 (High probability of "Solo PM" trap).
 - **On-site (Non-Local):** -25 (unless relocation is explicitly provided).
 
-### 4.2 The "Two-Anchor" Rule
-Even with a high score, a **YES** requires 2 explicit overlaps from:
+### 4.2 The "Two-Anchor Room" (Mandatory)
+A **YES** requires at least 2 explicit overlaps from:
 1. Platform stability/reliability.
 2. Complex data migrations/integrations.
-3. Security/Risk prioritization (300+ item backlogs).
+3. Security/Risk prioritization.
 4. B2B Enterprise workflow scaling.
 
 ### 4.3 Final Decision
-- **Score ≥ 80:** YES (Strong Fit).
-- **Score 72–79:** YES (Conditional on "Two-Anchor" Rule).
-- **Score < 72:** NO (Efficient Reject).
+- **Score ≥ 85:** YES (Strong Fit - Ideal Mid-level Team Role).
+- **Score 78–84:** YES (Conditional on Anchors).
+- **Score < 78:** NO (Reject).
 
 ---
 
 ## 5) Output Requirements (Human + JSON)
-*Constraints: No em-dashes, no chain-of-thought, max lengths as defined below.*
+*Constraints: No em-dashes, no transition fluff, max lengths as defined below.*
 
 ### Human-Readable Block
 ```text
@@ -104,8 +103,8 @@ Summary: [Max 25 words. Direct reasoning for fit/reject.]
 Top fit reasons:
 - [Reason 1, Max 15 words]
 - [Reason 2, Max 15 words]
-- [Reason 3, Max 15 words]
 
 Risk flags:
 - [Risk 1, Max 15 words]
 - [Risk 2, Max 15 words]
+```

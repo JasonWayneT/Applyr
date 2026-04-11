@@ -1,0 +1,21 @@
+Company: Raydar (Recruiter Post)
+Title: Senior Product Manager (Underwriting Platform)
+
+We are a recruitment partner supporting a fast-growing AI-driven technology company in the insurance space that is looking for a Senior Product Manager to help expand and evolve its flagship underwriting platform.
+
+About the Role
+As a Senior Product Manager, you will lead the roadmap and strategy for a core underwriting platform used by insurance teams. You’ll work closely with engineering, design, research, sales, and marketing to deliver impactful product features that solve real customer challenges.
+
+What You’ll Do
+* Own and expand the roadmap for a core Underwriting Platform, including workflows, actions, forms, and rating capabilities
+* Lead product discovery, identifying user problems and translating insights into product requirements and user stories
+* Drive the development of AI-powered workflow capabilities to improve customer productivity and time-to-value
+* Collaborate with cross-functional teams including engineering, design, sales, and marketing on product strategy and go-to-market initiatives
+* Develop a strong understanding of the insurance ecosystem to identify opportunities and build customer-centric solutions
+
+What We’re Looking For
+* 5–8 years of product management experience
+* Proven experience building and shipping customer-facing B2B SaaS products
+* Strong product discovery and roadmap ownership experience
+* Interest in AI-powered products and workflow automation
+* Experience in insurance, fintech, or complex enterprise platforms is a strong plus.

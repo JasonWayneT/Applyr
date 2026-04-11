@@ -1,0 +1,25 @@
+Company: Priority
+Title: Product Manager (ERP/Cloud Solutions)
+
+About the Role
+Act as a point of contact across banking and treasury products.
+Contribute to the evolution of orchestration capabilities, including decisioning across payment rails.
+Document routing logic, tradeoffs (speed, cost, risk), and support prioritization of enhancements.
+Track customer pain points and requests; drive investigation, file detailed bugs, and ensure resolution.
+Prioritize backlog across new features, bugs, and customer requests while balancing technical debt and customer impact.
+Evaluate internal capabilities and external vendor solutions.
+
+What Success Looks Like:
+- Delivery of high-impact API enhancements.
+- Reduction in customer-reported issues.
+- Clear, well-defined product requirements.
+- Strong collaboration with engineering, compliance, and business stakeholders.
+
+Candidate Requirements:
+- Experience in product management, preferably within fintech, banking, or payments.
+- Familiarity with payment systems such as RTP, FedNow, push-to-card, or wires.
+- Experience working with APIs and understanding concepts such as idempotency.
+- Strong communication skills.
+- Ability to navigate ambiguity and make pragmatic, well-reasoned decisions.
+
+Compensation: $92,000 - $125,000.

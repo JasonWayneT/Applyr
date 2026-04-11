@@ -37,7 +37,7 @@ Sterkly Services
 
 Cision  
  Product Owner → Product Manager (functionally)  
- September 2021 – 2025
+ September 2021 – January 2026
 
 Primary ownership at Cision:  
  • Legacy C3  
@@ -479,7 +479,7 @@ At Sterkly, he operated in a constrained technical environment where delivery co
 
 ---
 
-### **Cision (2021–2025)**
+### **Cision (2021–2026)**
 
 Role: Product Owner → Product Manager (functional scope)
 

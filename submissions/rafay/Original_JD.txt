@@ -1,0 +1,21 @@
+Company: Rafay
+Title: Product Manager (GPU PaaS & Cloud-Native Automation)
+
+ABOUT THE ROLE
+Product Managers at Rafay have the opportunity to define the future of our GPU PaaS and Cloud-Native Automation platform, empowering cloud providers and enterprise platform teams to securely deliver self-service AI and cloud-native applications at scale.
+
+WHAT YOU WILL BE DOING
+* Clearly articulate customer challenges and advocate for their needs internally
+* Collaborate with third-party partners and vendors to deliver seamless, first-class user experiences for customers
+* Translate customer requirements into product direction and champion the roadmap with engineering
+* Embrace rapid iteration, seek continuous feedback, and drive progress toward Rafay’s vision
+* Lead enablement sessions and create content to promote new features internally and externally
+
+WHAT WE WANT TO SEE
+* 4+ years of experience in product management
+* Experience in B2B SaaS and/or developer tools preferred
+* Strong technical foundation with the ability to quickly ramp on new technologies
+* Skilled at delivering clear, effective technical presentations
+* Self-driven, pragmatic, and comfortable operating independently
+* Growth-oriented and receptive to feedback
+* Strong bias for action

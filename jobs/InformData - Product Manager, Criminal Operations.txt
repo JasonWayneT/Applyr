@@ -1,0 +1,44 @@
+Company: InformData
+Title: Product Manager, Criminal Operations
+
+The Product Manager for Criminal Operations at InformData leads the development of innovative criminal data products. The role focuses on creating solutions that inform and grow the business, aligning product vision and strategy with company goals.
+
+Key Responsibilities
+- Define the product vision, strategy, and roadmap to meet company objectives.
+- Manage product backlogs, user stories, and acceptance criteria.
+- Coordinate cross-functional teams (engineering, design, marketing, sales) to ensure timely product delivery.
+- Establish and track success metrics and KPIs; use data to guide decisions and optimize outcomes.
+- Plan and execute product launches, including post-launch monitoring.
+- Communicate product progress, risks, and decisions to stakeholders and leadership.
+- Represent the product in customer discussions, executive briefings, and sales engagements.
+- Monitor product performance metrics and drive continuous improvement.
+- Serve as a subject matter expert on Criminal Operations, creating and prioritizing user stories and features.
+- Understand customer needs to set priorities and deliver best-in-class experiences.
+- Identify new products and features based on customer feedback.
+- Leverage qualitative and quantitative data to measure results and inform the product roadmap.
+- Own product development end-to-end, including business models and strategic projects.
+- Lead cross-functional teams to deliver solutions that are valuable, viable, usable, and feasible.
+
+Minimum Qualifications
+- Experience with Atlassian products (Jira, Confluence), DOMO or similar analytics tools, HubSpot.
+- 3+ years in criminal background screening services.
+- 5+ years in product management within technology or criminal-related industries.
+- 10+ years in analytical business roles or equivalent education.
+- Experience working in Agile/Scrum environments.
+- Excellent communication and writing skills; favoring clear, concise language.
+- Strong data analysis skills; comfortable working with data sources and presenting recommendations.
+- Direct engagement with customers for discovery, demos, feedback, and executive conversations.
+- Demonstrated ability to write business and product requirements, build roadmaps, and manage launches.
+- Creative, strategic thinker with a track record of innovative problem-solving.
+- Ability to thrive in fast-paced and ambiguous environments.
+- Experience managing complex IT projects and delivering results.
+- Understanding of technical concepts such as unique identifiers, APIs, ETLs.
+- Self-motivated and able to take initiative in uncertain situations.
+- Technical proficiency with tools like Jira and Domo (or equivalents).
+
+Preferred Qualifications
+- Bachelor’s degree in Mathematics, Data Analysis, Computer Science, Engineering, or related field.
+- 7+ years experience as a Product Manager, with 4+ years managing Customer Data Platforms or Data Services.
+- Expertise in building alignment and influencing stakeholders at a near-executive level.
+- Proven leadership of cross-functional teams in iterative development environments.
+- Deep knowledge of customer data integration, identity resolution, and competitive landscape.

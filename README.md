@@ -1,47 +1,55 @@
-# JobHuntAgent
-Using the new JobAgent v2.5 is simple and fully automated. Here is your step-by-step guide to running the batch pipeline:
+# JobAgent (v6.0)
 
-1. Drop Job Descriptions into the jobs/ Folder
-Instead of pasting job descriptions into a chat interface one by one, you now process them in bulk.
+A locally-hosted, privacy-first, automated job scouting and application generation platform. JobAgent connects to job boards automatically, filters out noisy roles using deterministic rules, and lines up high-fit opportunities for automated matching based on your strictly verified career history.
 
-Save any Job Description you want to apply for as a plain text file (
+---
 
-.txt
-).
-Name the file after the company (e.g., Stripe.txt, OpenAI.txt).
-Place these 
+## 🚀 Quick Start Guide
 
-.txt
- files directly into the jobs/ folder in your project directory.
-Note: I have already created two test files in there (
+### 1. Installation
+Ensure you have Node.js installed on your machine.
+Open your terminal in the JobAgent folder and install dependencies:
 
-Acme_Corp.txt
- and 
+```bash
+npm install
+```
 
-Globex_Corp.txt
-) that you can use to see how the system handles a "Pass" versus a "Fail" before adding your own!
+### 2. Starting the Platform
+We use a single command to spin up the entire Full-Stack system (both the React Frontend and the Express/Node Backend concurrently):
 
-2. Run the Batch Pipeline
-Open your terminal, ensure you are in the JobAgent project directory (c:\Users\Jason\Desktop\Jason\Projects\AntiGravity Projects\JobAgent), and run the following command:
+```bash
+npm run dev
+```
 
-bash
-python scripts/batch_pipeline.py
-3. What Happens Next (The Automation)
-Once you hit enter, the agent takes over:
+Once running, open your web browser and go to: **[http://localhost:5173](http://localhost:5173)**
 
-The Context Firewall: It loads your workExperience.md fresh for the first JD.
-The Gatekeeper: It scores the JD. If it scores below 72 or hits a Hard Disqualifier (like requiring you to manage PMs), it will print a rejection reason to your terminal and immediately skip to the next file.
-Research & Drafting: If it passes the gatekeeper, the system will automatically:
-Call Perplexity to research the company.
-Use the "Bridge Logic" to confidently translate your Platform wins into Growth outcomes.
-Run the Hallucination Guard to ensure no fake metrics slipped in.
-Render the final assets as ATS-Optimized PDFs.
-4. Collect Your Ready-to-Send Applications
-When the script finishes running through all the text files in the jobs/ folder, you will find your final, tailored applications organized automatically.
+---
 
-Navigate to the submissions/ folder. For every job that passed, there will be a new folder named after the company containing:
+## 🛠️ How to Use JobAgent (The Workflow)
 
-[Date]_Resume.pdf (Single-column, ATS-optimized)
-[Date]_CoverLetter.pdf
-The markdown versions and the raw Perplexity research packet, just in case you want to review them.
-That's it! Let me know if you want to run a test batch together right now.
+### Step 1: Configure Your "Source of Truth"
+Before scouting for jobs, you need to tell the AI who you are. Open the app and navigate to the **"My profile"** tab on the bottom left.
+1. **Identity:** Fill out your name, contact info, and portfolio links. This maps directly to your future resume headers. (Auto-saves as you type).
+2. **Experience:** Paste your raw career history in markdown format here. This directly edits your `data/workExperience.md` file. The AI is strictly forced to use this context so it cannot "hallucinate" fake metrics. **You must click the "Save & Sync AI" button here to persist changes.**
+3. **Preferences (The Gatekeeper):** Configure your salary targets and, most importantly, your **Title and Industry Blocklists**. By default, add terms like `senior`, `director`, or `web3`. The backend scout will automatically throw away jobs containing these words, saving you time and API costs.
+
+### Step 2: Run the Scout Automation
+Navigate to the **"Sync Activity"** tab in the sidebar.
+1. Click the **"Trigger Manual Sync"** button.
+2. JobAgent's backend Node.js server will wake up, connect to the external job scraper database, and begin iterating through listed roles.
+3. Watch the Live Terminal: The frontend polls the backend every 3 seconds. You will see colored logs appearing as the scout automatically rejects Senior roles (Yellow `WARN`) and passes mid-level "High-Fit" roles (Blue `INFO`).
+
+### Step 3: Review the Catch
+Once the background sync completes, navigate to the **"Today"** or **"All jobs"** views.
+Here, you will see the interactive dashboard of every job that successfully passed your deterministic gate checks. You can select them to open the slide-out detail panel and prepare them for tracking.
+
+---
+
+## 📂 Where Does My Data Live?
+JobAgent is a **Zero-Knowledge, Local-Only Architecture**. Your data never leaves your computer invisibly.
+
+- **Your Settings & Logs:** Are stored purely locally in the `jobagent.sqlite` file located in the root directory.
+- **Your Resume Data:** Is stored physically in `data/workExperience.md`.
+- **The Raw Job Market:** Arrives via the `openpostings` database schema attached directly to our local SQLite instance.
+
+*Note: If the application ever shows a red banner saying "Cannot connect to server", ensure your terminal hasn't crashed and `npm run dev` is still actively running!*

@@ -4,3 +4,24 @@ debug_output*.txt
 pipeline_log.txt
 *.pdf
 scratch/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Vite
+.vite/
+
+# Database
+jobagent.sqlite
+
+# OS and IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Build artifacts
+*.zip
+*.log

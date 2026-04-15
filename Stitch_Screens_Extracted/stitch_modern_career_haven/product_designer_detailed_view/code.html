@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Job Detail - The Mindful Pursuit</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed-variant": "#874b37",
+                        "inverse-on-surface": "#9d9d9a",
+                        "tertiary": "#605f5a",
+                        "primary-container": "#d4e8d1",
+                        "on-secondary": "#fff7f5",
+                        "on-tertiary-container": "#62615b",
+                        "primary": "#526452",
+                        "surface-container-high": "#e8e9e4",
+                        "on-tertiary-fixed": "#4f4f4a",
+                        "secondary-fixed": "#ffdbd0",
+                        "primary-fixed-dim": "#c6dac3",
+                        "on-primary-container": "#455645",
+                        "background": "#faf9f6",
+                        "surface-dim": "#d9dbd6",
+                        "secondary-dim": "#7d4330",
+                        "tertiary-fixed-dim": "#f1eee7",
+                        "tertiary-fixed": "#fdffda",
+                        "outline-variant": "#b0b3ae",
+                        "on-error": "#fff7f6",
+                        "inverse-surface": "#0d0f0d",
+                        "primary-dim": "#465746",
+                        "tertiary-container": "#fdffda",
+                        "on-primary": "#ebfee7",
+                        "surface-container-highest": "#e1e3de",
+                        "tertiary-dim": "#54534e",
+                        "on-secondary-container": "#7c422e",
+                        "secondary-container": "#ffdbd0",
+                        "on-primary-fixed-variant": "#4f604e",
+                        "surface-variant": "#e1e3de",
+                        "primary-fixed": "#d4e8d1",
+                        "secondary": "#8b4f3a",
+                        "on-tertiary": "#fcf9f2",
+                        "surface-container": "#eeeeea",
+                        "surface-container-lowest": "#ffffff",
+                        "on-tertiary-fixed-variant": "#6c6b66",
+                        "surface-container-low": "#f4f4f0",
+                        "on-secondary-fixed": "#65301e",
+                        "outline": "#797b78",
+                        "secondary-fixed-dim": "#ffc8b7",
+                        "on-surface": "#303330",
+                        "on-error-container": "#6e1400",
+                        "inverse-primary": "#ebffe7",
+                        "surface-bright": "#faf9f6",
+                        "error-container": "#fd795a",
+                        "on-surface-variant": "#5d605c",
+                        "surface": "#faf9f6",
+                        "surface-tint": "#526452",
+                        "on-primary-fixed": "#334333",
+                        "error-dim": "#791903",
+                        "error": "#a73b21",
+                        "on-background": "#303330"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "fontFamily": {
+                        "headline": ["Manrope"],
+                        "body": ["Inter"],
+                        "label": ["Inter"]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #faf9f6;
+        }
+        h1, h2, h3, .brand-font {
+            font-family: 'Manrope', sans-serif;
+        }
+        .glass-nav {
+            background: rgba(250, 249, 246, 0.8);
+            backdrop-filter: blur(24px);
+        }
+        .editorial-shadow {
+            box-shadow: 0px 12px 32px rgba(48, 51, 48, 0.06);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface">
+<!-- TopNavBar (Shared Component) -->
+<header class="fixed top-0 w-full z-40 bg-[#faf9f6]/80 backdrop-blur-xl flex items-center justify-between px-8 h-16 shadow-[0px_12px_32px_rgba(48,51,48,0.06)]">
+<div class="flex items-center gap-8">
+<span class="text-xl font-bold tracking-tight text-[#526452] dark:text-[#7D8C7B]">The Mindful Pursuit</span>
+<div class="hidden md:flex gap-6">
+<a class="text-[#526452] font-semibold text-sm font-manrope" href="#">Dashboard</a>
+<a class="text-stone-500 hover:bg-stone-100 transition-colors px-3 py-1 rounded-lg text-sm font-manrope" href="#">Job Board</a>
+<a class="text-stone-500 hover:bg-stone-100 transition-colors px-3 py-1 rounded-lg text-sm font-manrope" href="#">Applications</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-[#526452] hover:bg-stone-100 transition-colors rounded-full active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="p-2 text-[#526452] hover:bg-stone-100 transition-colors rounded-full active:scale-95 duration-200">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<img alt="User profile avatar" class="w-8 h-8 rounded-full ml-2 border-2 border-primary-container" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAyt-Mf5gHcPdWdQTRM5io7wIEfMiWXEgW8xWpk5rKgnnuhJHNld6DbcFfyPeRG3eLKVsl1py0wTH3Q6yQG6fcoivpyQzq5AIxjBAsZyUWh1la7j9adSqWAtEyenEncj26BHLI7kfX7olSA76-wNK1g0twF-saw-yyZsG4-R8BXDqSU1EVPODHMHuXSTRh2qO97CylWKQVAIZFBXLd85-2LnAGQeWc9Pjr2vTLyT8fAV2C-VTTwhxbKABfrL41jDTIq3PlOh_BbcpE"/>
+</div>
+</header>
+<main class="pt-24 pb-16 px-8 max-w-7xl mx-auto flex flex-col lg:flex-row gap-12">
+<!-- Main Content Area: Job Details -->
+<div class="flex-1 space-y-12">
+<!-- Hero Header -->
+<section class="space-y-6">
+<div class="flex items-center gap-4 text-on-surface-variant mb-4">
+<button class="flex items-center gap-2 hover:text-primary transition-colors text-sm font-medium">
+<span class="material-symbols-outlined text-sm">arrow_back</span>
+                        Back to Applications
+                    </button>
+</div>
+<div class="flex items-start justify-between">
+<div class="space-y-2">
+<h1 class="text-5xl font-extrabold tracking-tight text-on-surface leading-tight">Senior Product Designer</h1>
+<div class="flex items-center gap-4 text-on-surface-variant font-medium">
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-lg">domain</span> Lumina Creative Studio</span>
+<span class="w-1.5 h-1.5 rounded-full bg-outline-variant/30"></span>
+<span class="flex items-center gap-1.5"><span class="material-symbols-outlined text-lg">location_on</span> Oslo, Norway (Remote Friendly)</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl editorial-shadow">
+<img alt="Lumina Creative Studio Logo" class="w-16 h-16 rounded-lg" data-alt="minimalist logo design with geometric shapes and soft pastel colors on a clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5U7gx0tvCrDkjsPJYRUbr_C6QwZvR-5SVkfQNPZ5sWSIRnCSAn6jGV5-FyciHHdEmYklgMr-Pg5UBTczxdWoppKs2Ci1c8rVD1sQPhU1_XtkNTfrVmpJyqJ9KfS0d0Os6pYZ-z093wc46cLGii5ZDdcqtICVXOLYFZdky5RDAFo487LUXW_KidT-pJypJi0RdHZZywvp36HuPldEq-HG8PDU6FfGB3VBp191NwtMI4eNhATl2n6sZZkq3WVTX3ACk4cPnNd6pthQ"/>
+</div>
+</div>
+<div class="flex flex-wrap gap-3">
+<span class="bg-primary-container text-on-primary-container px-4 py-1.5 rounded-full text-sm font-medium">Design</span>
+<span class="bg-surface-container-high text-on-surface-variant px-4 py-1.5 rounded-full text-sm font-medium">Full-time</span>
+<span class="bg-surface-container-high text-on-surface-variant px-4 py-1.5 rounded-full text-sm font-medium">$120k - $160k</span>
+</div>
+</section>
+<!-- Editorial Sections -->
+<div class="grid grid-cols-1 md:grid-cols-5 gap-12">
+<div class="md:col-span-3 space-y-10">
+<!-- Description -->
+<article class="space-y-4">
+<h2 class="text-2xl font-bold text-on-surface">The Opportunity</h2>
+<p class="text-on-surface-variant leading-relaxed text-lg">
+                            We are looking for a Senior Product Designer who believes that technology should be as beautiful as it is functional. At Lumina, we are rebuilding the creative suite for the next generation of digital artists. You will lead the design of our core canvas experience, ensuring that complex tools feel intuitive and weightless.
+                        </p>
+<p class="text-on-surface-variant leading-relaxed text-lg">
+                            This isn't just about moving pixels; it's about defining the ergonomics of digital creation. You'll work closely with engineers and artists to prototype, test, and ship features that will be used by millions.
+                        </p>
+</article>
+<!-- Requirements -->
+<article class="space-y-6">
+<h2 class="text-2xl font-bold text-on-surface">Your Experience</h2>
+<ul class="space-y-4">
+<li class="flex gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface-variant text-lg">6+ years of experience designing complex SaaS platforms or creative tools.</span>
+</li>
+<li class="flex gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface-variant text-lg">A portfolio that demonstrates a deep understanding of visual hierarchy, motion, and typography.</span>
+</li>
+<li class="flex gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface-variant text-lg">Proficiency with modern design stacks (Figma, Framer, Webflow).</span>
+</li>
+<li class="flex gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="check_circle" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-on-surface-variant text-lg">A "sanctuary-first" approach to UX—avoiding clutter and prioritizing focus.</span>
+</li>
+</ul>
+</article>
+<!-- Benefits -->
+<article class="bg-surface-container-low p-8 rounded-xl space-y-6">
+<h2 class="text-2xl font-bold text-on-surface">Why You'll Love It Here</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+<div class="space-y-1">
+<span class="font-bold text-primary block">Wellbeing First</span>
+<p class="text-on-surface-variant text-sm leading-snug">$2,000 annual mental health and wellness stipend.</p>
+</div>
+<div class="space-y-1">
+<span class="font-bold text-primary block">Work Anywhere</span>
+<p class="text-on-surface-variant text-sm leading-snug">Fully remote team with optional studio access in Oslo.</p>
+</div>
+<div class="space-y-1">
+<span class="font-bold text-primary block">Equipment Fund</span>
+<p class="text-on-surface-variant text-sm leading-snug">Full home office setup including the latest Apple gear.</p>
+</div>
+<div class="space-y-1">
+<span class="font-bold text-primary block">Growth</span>
+<p class="text-on-surface-variant text-sm leading-snug">Equity options and unlimited learning budget.</p>
+</div>
+</div>
+</article>
+</div>
+<!-- Side Info (Asymmetric Column) -->
+<div class="md:col-span-2 space-y-8">
+<!-- Company Card -->
+<section class="bg-surface-container-lowest p-6 rounded-xl editorial-shadow border border-outline-variant/10">
+<h3 class="text-xl font-bold text-on-surface mb-4">About the Studio</h3>
+<div class="aspect-video w-full rounded-lg bg-surface-container-high mb-4 overflow-hidden">
+<img alt="Modern Studio Office" class="w-full h-full object-cover" data-alt="ultra-modern minimalist design office with warm wood accents, large windows overlooking a foggy forest, soft natural light" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB7HNJFpj58ckGFifq_TSfhKLWA0U0FAtfq-vcRt0XgdVim8Mt8LyYOn4qx2KOxBzzUaEV0Kmh7LY-YIOK7PDnes2Izpui-hlJcYT7eGc3iDzxkPX_yKOGM-Uzhjl4wpFShxgCt9hAv3ELAXA-LY4DMVCpipWWeq4ihElT_GU-o-3A9FVo6pY4tnEa0DvGkKKLwakM2i846cyRmIWI-jUT97tUWdKUa4HQWOwred0LRGExetibCpMTJf_jhLqELGhXRGm_tDlMXe5s"/>
+</div>
+<p class="text-on-surface-variant text-sm leading-relaxed mb-4">
+                            Lumina is a venture-backed design collective dedicated to building software that feels like an extension of the human hand.
+                        </p>
+<a class="text-primary font-bold text-sm flex items-center gap-1 hover:underline" href="#">
+                            Visit Studio Website <span class="material-symbols-outlined text-sm">open_in_new</span>
+</a>
+</section>
+<!-- Application Tracker (The Actionable Sidebar) -->
+<section class="sticky top-24 bg-surface-container-low p-8 rounded-xl editorial-shadow space-y-8">
+<div>
+<h3 class="text-lg font-bold text-on-surface mb-2">Application Status</h3>
+<div class="inline-flex items-center gap-2 bg-secondary-container text-on-secondary-container px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                                Interviewing
+                            </div>
+</div>
+<!-- Status Timeline -->
+<div class="space-y-6 relative">
+<div class="absolute left-3 top-2 bottom-2 w-px bg-outline-variant/30"></div>
+<div class="flex gap-4 relative">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-white text-[16px]">check</span>
+</div>
+<div class="space-y-0.5">
+<p class="text-sm font-bold text-on-surface">Applied</p>
+<p class="text-xs text-on-surface-variant">October 12, 2023</p>
+</div>
+</div>
+<div class="flex gap-4 relative">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center z-10">
+<span class="material-symbols-outlined text-white text-[16px]">check</span>
+</div>
+<div class="space-y-0.5">
+<p class="text-sm font-bold text-on-surface">Screening Call</p>
+<p class="text-xs text-on-surface-variant">October 18, 2023</p>
+</div>
+</div>
+<div class="flex gap-4 relative">
+<div class="w-6 h-6 rounded-full bg-secondary flex items-center justify-center z-10 ring-4 ring-secondary-container/50">
+<span class="material-symbols-outlined text-white text-[16px]">record_voice_over</span>
+</div>
+<div class="space-y-0.5">
+<p class="text-sm font-bold text-on-surface">Portfolio Review</p>
+<p class="text-xs text-secondary font-medium">Scheduled for Oct 25</p>
+</div>
+</div>
+<div class="flex gap-4 relative">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest border border-outline-variant flex items-center justify-center z-10">
+</div>
+<div class="space-y-0.5 opacity-50">
+<p class="text-sm font-bold text-on-surface">Final Interview</p>
+<p class="text-xs text-on-surface-variant">TBD</p>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="space-y-3 pt-4">
+<button class="w-full py-4 bg-gradient-to-r from-primary to-primary-dim text-on-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity active:scale-[0.98] duration-200">
+<span class="material-symbols-outlined" data-icon="update">update</span>
+                                Update Status
+                            </button>
+<button class="w-full py-4 bg-surface-container-high text-primary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-colors active:scale-[0.98] duration-200">
+<span class="material-symbols-outlined" data-icon="note_add">note_add</span>
+                                Add Private Note
+                            </button>
+</div>
+<!-- Quick Note Display -->
+<div class="p-4 bg-surface-container-highest/30 rounded-lg border border-outline-variant/10">
+<div class="flex items-center justify-between mb-2">
+<span class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant">Last Note</span>
+<span class="text-[10px] text-on-surface-variant">2 days ago</span>
+</div>
+<p class="text-xs text-on-surface-variant italic">"Need to emphasize the mobile-first redesign of the 2022 project during the review."</p>
+</div>
+</section>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB (Suppressed on Details according to rules, but including for context if requested visually) -->
+<!-- Suppressed per instructions: "You MUST suppress the FAB on Settings, Profile, Details, and Transactional screens." -->
+</body></html>

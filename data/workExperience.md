@@ -10,7 +10,7 @@ Jason Taylor is a Product Manager with 6+ years of experience in B2B SaaS enviro
 
 He specializes in:
 
-• Revenue-bearing legacy platforms  
+• Revenue-bearing legacy platforms   123
  • Platform stability and reliability  
  • Data quality and ingestion systems  
  • Migration tooling and sunset planning  

@@ -32,7 +32,7 @@ Zero To Sixty Media | San Diego, CA | Full-Time | June 2017 – January 2019
 * Analyzed fulfillment and vendor workflows to improve margin, implementing system improvements that saved approximately $8,500 per quarter.
 
 <h2 style="margin: 8px 0 4px 0; padding: 0; font-size: 12pt;"><strong>EDUCATION</strong></h2>
-Bachelor of Arts in Communication | San Diego State University
+Bachelor of Arts in Communication | National University
 
 <h2 style="margin: 8px 0 4px 0; padding: 0; font-size: 12pt;"><strong>SKILLS</strong></h2>
 Workflow Analysis, Platform Modernization, Data Integrity, Technical Requirements (PRD), SQL, Roadmap Execution, Jira/Confluence, API Integration, Agile/Scrum, Operational Systems (OMS/WMS/TMS familiarity).

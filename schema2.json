@@ -1,0 +1,38 @@
+[
+  {
+    "sql": "CREATE TABLE companies (\r\n\tid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\r\n\tcompany_name TEXT NOT NULL,\r\n\turl_string TEXT NOT NULL,\r\n\tATS_name TEXT NOT NULL\r\n)"
+  },
+  {
+    "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+  },
+  {
+    "sql": "CREATE TABLE applications (\r\n\tid INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\r\n\tcompany_id INTEGER NOT NULL,\r\n\tposition_name TEXT NOT NULL,\r\n\tapplication_date INTEGER NOT NULL,\r\n\tstatus TEXT\r\n)"
+  },
+  {
+    "sql": "CREATE TABLE PersonalInformation (\r\n\tfirst_name TEXT NOT NULL,\r\n\tmiddle_name TEXT NOT NULL,\r\n\tlast_name TEXT NOT NULL,\r\n\temail TEXT NOT NULL,\r\n\tphone_number TEXT NOT NULL,\r\n\taddress TEXT NOT NULL,\r\n\tlinkedin_url TEXT NOT NULL,\r\n\tgithub_url TEXT NOT NULL,\r\n\tportfolio_url TEXT NOT NULL,\r\n\tresume_file_path TEXT NOT NULL,\r\n\tprojects_portfolio_file_path TEXT NOT NULL,\r\n\tcertifications_folder_path TEXT NOT NULL,\r\n\tethnicity TEXT NOT NULL,\r\n\tgender TEXT NOT NULL,\r\n\tage INTEGER NOT NULL,\r\n\tveteran_status TEXT NOT NULL,\r\n\tdisability_status TEXT NOT NULL,\r\n\teducation_level TEXT NOT NULL\r\n, years_of_experience INTEGER)"
+  },
+  {
+    "sql": "CREATE TABLE Postings (\n      id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      company_name TEXT NOT NULL,\n      position_name TEXT NOT NULL,\n      job_posting_url TEXT NOT NULL UNIQUE,\n      posting_date TEXT\n    , last_seen_epoch INTEGER)"
+  },
+  {
+    "sql": "CREATE TABLE state_location_index (\n      id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      location_type TEXT NOT NULL CHECK (location_type IN ('city', 'county')),\n      state_usps TEXT NOT NULL,\n      state_geoid TEXT,\n      location_geoid TEXT NOT NULL,\n      ansicode TEXT,\n      location_name TEXT NOT NULL,\n      search_location_name TEXT NOT NULL,\n      normalized_location_name TEXT NOT NULL,\n      normalized_search_location_name TEXT NOT NULL,\n      lsad_code TEXT,\n      funcstat TEXT,\n      aland INTEGER,\n      awater INTEGER,\n      aland_sqmi REAL,\n      awater_sqmi REAL,\n      intptlat REAL,\n      intptlong REAL,\n      source_file TEXT NOT NULL,\n      created_at TEXT NOT NULL DEFAULT (datetime('now')),\n      UNIQUE(location_type, location_geoid)\n    )"
+  },
+  {
+    "sql": "CREATE TABLE job_industry_categories (\n      id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      industry_key TEXT NOT NULL UNIQUE,\n      industry_label TEXT NOT NULL,\n      priority INTEGER NOT NULL,\n      created_at TEXT NOT NULL DEFAULT (datetime('now'))\n    )"
+  },
+  {
+    "sql": "CREATE TABLE job_position_industry (\n      id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      job_title TEXT NOT NULL,\n      normalized_job_title TEXT NOT NULL UNIQUE,\n      industry_key TEXT NOT NULL,\n      industry_label TEXT NOT NULL,\n      matched_rules TEXT NOT NULL,\n      confidence_score REAL NOT NULL,\n      rule_version TEXT NOT NULL DEFAULT 'rule_bootstrap_v4',\n      created_at TEXT NOT NULL DEFAULT (datetime('now')),\n      updated_at TEXT NOT NULL DEFAULT (datetime('now')),\n      FOREIGN KEY (industry_key) REFERENCES job_industry_categories(industry_key)\n    )"
+  },
+  {
+    "sql": "CREATE TABLE application_attribution (\n      application_id INTEGER NOT NULL PRIMARY KEY,\n      applied_by_type TEXT NOT NULL,\n      applied_by_label TEXT NOT NULL,\n      created_at TEXT NOT NULL DEFAULT (datetime('now')),\n      updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n    )"
+  },
+  {
+    "sql": "CREATE TABLE posting_application_state (\n      job_posting_url TEXT NOT NULL PRIMARY KEY,\n      applied INTEGER NOT NULL DEFAULT 0,\n      applied_by_type TEXT NOT NULL,\n      applied_by_label TEXT NOT NULL,\n      applied_at_epoch INTEGER,\n      last_application_id INTEGER,\n      updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n    , ignored INTEGER NOT NULL DEFAULT 0, ignored_at_epoch INTEGER, ignored_by_label TEXT NOT NULL DEFAULT '')"
+  },
+  {
+    "sql": "CREATE TABLE McpSettings (\n      id INTEGER NOT NULL PRIMARY KEY CHECK (id = 1),\n      enabled INTEGER NOT NULL DEFAULT 0,\n      preferred_agent_name TEXT NOT NULL DEFAULT 'OpenPostings Agent',\n      agent_login_email TEXT NOT NULL DEFAULT '',\n      mfa_login_email TEXT NOT NULL DEFAULT '',\n      mfa_login_notes TEXT NOT NULL DEFAULT '',\n      dry_run_only INTEGER NOT NULL DEFAULT 1,\n      require_final_approval INTEGER NOT NULL DEFAULT 1,\n      max_applications_per_run INTEGER NOT NULL DEFAULT 10,\n      preferred_search TEXT NOT NULL DEFAULT '',\n      preferred_remote TEXT NOT NULL DEFAULT 'all',\n      preferred_industries TEXT NOT NULL DEFAULT '[]',\n      preferred_states TEXT NOT NULL DEFAULT '[]',\n      preferred_counties TEXT NOT NULL DEFAULT '[]',\n      instructions_for_agent TEXT NOT NULL DEFAULT '',\n      created_at TEXT NOT NULL DEFAULT (datetime('now')),\n      updated_at TEXT NOT NULL DEFAULT (datetime('now'))\n    , agent_login_password TEXT NOT NULL DEFAULT '')"
+  },
+  {
+    "sql": "CREATE TABLE lost_and_found(rootpgno INTEGER, pgno INTEGER, nfield INTEGER, id INTEGER, c0, c1, c2, c3, c4, c5)"
+  }
+]

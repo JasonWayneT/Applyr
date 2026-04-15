@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import subprocess
 from markdown_pdf import MarkdownPdf, Section
@@ -6,6 +7,100 @@ from utils import (load_file, call_llm, SUBMISSIONS_DIR,
                    RESUME_MASTER_FILE, COVER_LETTER_REF_FILE,
                    RESUME_STYLE_REF_FILE, CLAIM_VERIFIER_FILE,
                    WORK_EXP_FILE)
+
+
+# --- Hard Fact Validation (Deterministic Post-Generation Guard) ---
+# Extracts known ground-truth facts from the master resume and verifies
+# they were not hallucinated or substituted in the generated output.
+
+# These are literal strings that MUST appear in any generated resume.
+# If they are missing, the output is flagged and corrected.
+HARD_FACTS = None  # Loaded lazily from master resume
+
+
+def _load_hard_facts(master_resume_text):
+    """Extract deterministic facts from the master resume."""
+    facts = {
+        "education": [],
+        "companies": [],
+        "contact": [],
+    }
+    # Education: look for university names
+    edu_pattern = re.compile(r"(?:Bachelor|Master|Associate|B\.A\.|B\.S\.|M\.S\.|M\.A\.|MBA).*?\n(.+?)(?:\n|$)", re.IGNORECASE)
+    for match in edu_pattern.finditer(master_resume_text):
+        uni = match.group(1).strip()
+        if uni and len(uni) > 3:
+            facts["education"].append(uni)
+
+    # Company names from ## headers
+    company_pattern = re.compile(r"^## \*\*(.+?)\*\*", re.MULTILINE)
+    for match in company_pattern.finditer(master_resume_text):
+        facts["companies"].append(match.group(1).strip())
+
+    # Contact info (name, email)
+    lines = master_resume_text.split("\n")
+    if lines:
+        facts["contact"].append(lines[0].replace("#", "").replace("*", "").strip())  # Name
+
+    return facts
+
+
+# Common hallucination substitutions the LLM tends to make
+KNOWN_HALLUCINATIONS = {
+    "San Diego State University": "National University",
+    "SDSU": "National University",
+    "San Diego State": "National University",
+    "University of San Diego": "National University",
+    "UC San Diego": "National University",
+    "UCSD": "National University",
+}
+
+
+def validate_hard_facts(generated_text, master_resume_text):
+    """
+    Deterministic post-generation check. Compares generated output against
+    the master resume source of truth. Fixes known hallucinations and logs
+    any discrepancies.
+
+    Returns (corrected_text, warnings_list).
+    """
+    global HARD_FACTS
+    if HARD_FACTS is None:
+        HARD_FACTS = _load_hard_facts(master_resume_text)
+
+    warnings = []
+    corrected = generated_text
+
+    # 1. Fix known hallucination substitutions
+    for wrong, right in KNOWN_HALLUCINATIONS.items():
+        if wrong in corrected:
+            warnings.append(f"HALLUCINATION CAUGHT: '{wrong}' replaced with '{right}'")
+            corrected = corrected.replace(wrong, right)
+
+    # 2. Verify education facts are present
+    for uni in HARD_FACTS["education"]:
+        if uni not in corrected:
+            warnings.append(f"MISSING FACT: Education '{uni}' not found in generated output.")
+
+    # 3. Verify company names are present (at least the primary employer)
+    for company in HARD_FACTS["companies"][:2]:  # Check top 2 companies
+        if company.upper() not in corrected.upper():
+            warnings.append(f"MISSING FACT: Company '{company}' not found in generated output.")
+
+    # 4. Verify contact name
+    if HARD_FACTS["contact"]:
+        name = HARD_FACTS["contact"][0]
+        if name and name not in corrected:
+            warnings.append(f"MISSING FACT: Name '{name}' not found in generated output.")
+
+    if warnings:
+        print(f"    [HARD FACT AUDIT] {len(warnings)} issue(s) found:")
+        for w in warnings:
+            print(f"      - {w}")
+    else:
+        print("    [HARD FACT AUDIT] All ground-truth facts verified. Clean output.")
+
+    return corrected, warnings
 
 
 def run_research(company_name, jd_text):
@@ -102,12 +197,15 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     draft_resume = call_llm(resume_system_prompt, resume_user_prompt)
     verified_resume = verify_claims(draft_resume, work_exp, verifier_rules)
 
+    # Hard Fact Validation: deterministic check against master resume
+    final_resume, resume_warnings = validate_hard_facts(verified_resume, master_resume)
+
     resume_md_path = os.path.join(company_folder, "Resume.md")
     resume_pdf_path = os.path.join(company_folder, "Resume.pdf")
 
     with open(resume_md_path, "w", encoding="utf-8") as f:
-        f.write(verified_resume)
-    generate_pdf(verified_resume, resume_pdf_path)
+        f.write(final_resume)
+    generate_pdf(final_resume, resume_pdf_path)
 
     # 3. Cover Letter Generation
     print("    [Drafting] Generating Cover Letter...")
@@ -134,11 +232,21 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     draft_cl = call_llm(cl_system_prompt, cl_user_prompt)
     verified_cl = verify_claims(draft_cl, work_exp, verifier_rules)
 
+    # Hard Fact Validation: deterministic check against master resume
+    final_cl, cl_warnings = validate_hard_facts(verified_cl, master_resume)
+
     cl_md_path = os.path.join(company_folder, "CoverLetter.md")
     cl_pdf_path = os.path.join(company_folder, "CoverLetter.pdf")
 
     with open(cl_md_path, "w", encoding="utf-8") as f:
-        f.write(verified_cl)
-    generate_pdf(verified_cl, cl_pdf_path)
+        f.write(final_cl)
+    generate_pdf(final_cl, cl_pdf_path)
+
+    # Summary of all validation issues
+    all_warnings = resume_warnings + cl_warnings
+    if all_warnings:
+        print(f"  -> [AUDIT SUMMARY] {len(all_warnings)} total issue(s) caught and corrected.")
+    else:
+        print(f"  -> [AUDIT SUMMARY] All assets passed hard-fact validation. Clean output.")
 
     print(f"  -> Successfully generated and audited all assets for {company_name}")

@@ -1,0 +1,244 @@
+@import "tailwindcss";
+
+@theme {
+  /* ===== THE SANCTUARY — Design Tokens ===== */
+
+  /* --- Primary (Sage Green) --- */
+  --color-primary: #526452;
+  --color-primary-dim: #465746;
+  --color-primary-container: #d4e8d1;
+  --color-on-primary: #ebfee7;
+  --color-on-primary-container: #455645;
+
+  /* --- Secondary (Terracotta) --- */
+  --color-secondary: #8b4f3a;
+  --color-secondary-dim: #7d4330;
+  --color-secondary-container: #ffdbd0;
+  --color-on-secondary: #fff7f5;
+  --color-on-secondary-container: #7c422e;
+
+  /* --- Tertiary (Warm Stone) --- */
+  --color-tertiary: #605f5a;
+  --color-tertiary-dim: #54534e;
+  --color-tertiary-container: #fdffda;
+  --color-on-tertiary-container: #62615b;
+
+  /* --- Surfaces (The Paper Stack) --- */
+  --color-surface: #faf9f6;
+  --color-surface-dim: #d9dbd6;
+  --color-surface-bright: #faf9f6;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f4f4f0;
+  --color-surface-container: #eeeeea;
+  --color-surface-container-high: #e8e9e4;
+  --color-surface-container-highest: #e1e3de;
+  --color-surface-variant: #e1e3de;
+  --color-surface-tint: #526452;
+  --color-background: #faf9f6;
+
+  /* --- On Surfaces (Text) --- */
+  --color-on-surface: #303330;
+  --color-on-surface-variant: #5d605c;
+  --color-on-background: #303330;
+
+  /* --- Outline --- */
+  --color-outline: #797b78;
+  --color-outline-variant: #b0b3ae;
+
+  /* --- Error (Clay Red) --- */
+  --color-error: #a73b21;
+  --color-error-dim: #791903;
+  --color-error-container: #fd795a;
+  --color-on-error: #fff7f6;
+  --color-on-error-container: #6e1400;
+
+  /* --- Inverse --- */
+  --color-inverse-surface: #0d0f0d;
+  --color-inverse-on-surface: #9d9d9a;
+  --color-inverse-primary: #ebffe7;
+
+  /* --- Status Chips (Sanctuary Palette) --- */
+  --color-status-backlog-bg: #e1e3de;
+  --color-status-backlog-text: #5d605c;
+  --color-status-applied-bg: #d4e8d1;
+  --color-status-applied-text: #455645;
+  --color-status-recruiter-bg: #eeeeea;
+  --color-status-recruiter-text: #5d605c;
+  --color-status-core-bg: #ffdbd0;
+  --color-status-core-text: #7c422e;
+  --color-status-offer-bg: #d4e8d1;
+  --color-status-offer-text: #334333;
+  --color-status-closed-bg: #e1e3de;
+  --color-status-closed-text: #5d605c;
+
+  /* --- Typography --- */
+  --font-headline: "Manrope", sans-serif;
+  --font-body: "Inter", sans-serif;
+  --font-label: "Inter", sans-serif;
+  --font-sans: "Inter", sans-serif;
+
+  /* --- Border Radius (Soft & Approachable) --- */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+  --radius-full: 9999px;
+}
+
+/* --- Material Symbols --- */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* --- Base Layer --- */
+@layer base {
+  body {
+    @apply bg-surface text-on-surface antialiased;
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, .font-headline {
+    font-family: var(--font-headline);
+  }
+}
+
+/* --- Component Classes --- */
+@layer components {
+  /* Editorial Shadow (ghostly, organic) */
+  .editorial-shadow {
+    box-shadow: 0px 12px 32px rgba(48, 51, 48, 0.06);
+  }
+
+  /* Glass Nav */
+  .glass-nav {
+    background: rgba(250, 249, 246, 0.8);
+    backdrop-filter: blur(24px);
+  }
+
+  /* Sanctuary Buttons */
+  .btn-primary {
+    @apply bg-gradient-to-br from-primary to-primary-dim text-on-primary font-semibold px-5 py-2.5 rounded-xl;
+    @apply hover:opacity-90 active:scale-[0.98] transition-all duration-200;
+  }
+
+  .btn-secondary {
+    @apply bg-surface-container-high text-primary font-semibold px-5 py-2.5 rounded-xl;
+    @apply hover:bg-surface-container-highest active:scale-[0.98] transition-all duration-200;
+  }
+
+  .btn-ghost {
+    @apply text-primary font-medium text-sm hover:underline transition-colors;
+  }
+
+  .btn-fab {
+    @apply bg-secondary text-on-secondary rounded-full shadow-xl shadow-secondary/20;
+    @apply hover:scale-105 active:scale-95 transition-all;
+  }
+
+  /* Sanctuary Cards (No borders, tonal separation) */
+  .card-sanctuary {
+    @apply bg-surface-container-lowest rounded-2xl p-6;
+    box-shadow: 0px 12px 32px rgba(48, 51, 48, 0.06);
+  }
+
+  .card-sanctuary:hover {
+    @apply shadow-lg;
+    border-color: rgba(176, 179, 174, 0.1);
+  }
+
+  /* Status Chips */
+  .chip {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold;
+  }
+
+  .chip-backlog {
+    @apply bg-status-backlog-bg text-status-backlog-text;
+  }
+
+  .chip-applied {
+    @apply bg-status-applied-bg text-status-applied-text;
+  }
+
+  .chip-recruiter-screen {
+    @apply bg-status-recruiter-bg text-status-recruiter-text;
+  }
+
+  .chip-core-interviews {
+    @apply bg-status-core-bg text-status-core-text;
+  }
+
+  .chip-offer {
+    @apply bg-status-offer-bg text-status-offer-text;
+  }
+
+  .chip-closed {
+    @apply bg-status-closed-bg text-status-closed-text;
+  }
+
+  /* Badges */
+  .badge {
+    @apply text-[10px] font-bold px-2 py-0.5 rounded-full inline-block;
+  }
+
+  .badge-primary {
+    @apply bg-primary-container text-on-primary-container;
+  }
+
+  .badge-secondary {
+    @apply bg-secondary-container text-on-secondary-container;
+  }
+
+  /* Inputs */
+  .input-sanctuary {
+    @apply bg-surface-container-low border-none rounded-xl px-4 py-2.5 text-sm;
+    @apply focus:ring-1 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all;
+    font-family: var(--font-body);
+    color: var(--color-on-surface);
+  }
+
+  .input-sanctuary::placeholder {
+    color: var(--color-outline);
+  }
+
+  /* Scrollbar Styling */
+  .sanctuary-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .sanctuary-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sanctuary-scrollbar::-webkit-scrollbar-thumb {
+    background: #e1e3de;
+    border-radius: 10px;
+  }
+
+  /* No scrollbar utility */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Slide in animation */
+  @keyframes slideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  .animate-slide-in {
+    animation: slideIn 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-slide-up {
+    animation: slideUp 400ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fadeIn 300ms ease-out;
+  }
+}

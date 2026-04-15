@@ -32,7 +32,7 @@ Zero To Sixty Media | San Diego, CA | Full-Time | June 2017 – January 2019
 * Analyzed fulfillment and vendor data to improve margins, implementing system improvements that saved approximately $34,000 annually.
 
 <h2 style="margin: 8px 0 4px 0; padding: 0; font-size: 12pt;"><strong>EDUCATION</strong></h2>
-Bachelor of Arts in Communication | San Diego State University
+Bachelor of Arts in Communication | National University
 
 <h2 style="margin: 8px 0 4px 0; padding: 0; font-size: 12pt;"><strong>SKILLS</strong></h2>
 Revenue Infrastructure, technical Integrations, Data Integrity, Platform Stabilization, Roadmap Prioritization, SQL, API Management, Microservices, Agile/Scrum, Analytics & Optimization.

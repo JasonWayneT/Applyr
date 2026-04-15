@@ -1,0 +1,127 @@
+import React from 'react';
+import { Job } from '../types/job';
+
+interface AllJobsViewProps {
+  jobs: Job[];
+  onJobClick: (job: Job) => void;
+}
+
+const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
+  const groups = [
+    { title: 'Needs your attention', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
+    { title: 'Waiting for contact', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
+    { title: 'Initial screening', statuses: ['Recruiter Screen'], chipClass: 'chip-recruiter-screen', icon: 'hourglass_top' },
+    { title: 'Active gauntlet', statuses: ['Core Interviews'], chipClass: 'chip-core-interviews', icon: 'record_voice_over' },
+    { title: 'In conversation', statuses: ['Offer and Negotiation'], chipClass: 'chip-offer', icon: 'handshake' },
+    { title: 'Terminal', statuses: ['Closed'], chipClass: 'chip-closed', icon: 'archive' },
+  ];
+
+  const getStatusChip = (status: Job['status']) => {
+    switch (status) {
+      case 'Backlog': return <span className="chip chip-backlog"><span className="w-1.5 h-1.5 rounded-full bg-primary"></span>Backlog</span>;
+      case 'Applied': return <span className="chip chip-applied"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Applied</span>;
+      case 'Recruiter Screen': return <span className="chip chip-recruiter-screen"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Recruiter Screen</span>;
+      case 'Core Interviews': return <span className="chip chip-core-interviews"><span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>Core Interviews</span>;
+      case 'Offer and Negotiation': return <span className="chip chip-offer"><span className="w-1.5 h-1.5 rounded-full bg-primary"></span>Offer</span>;
+      case 'Closed': return <span className="chip chip-closed"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Closed</span>;
+      default: return null;
+    }
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Applications</h1>
+          <p className="text-on-surface-variant mt-1">Track your career journeys with clarity.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
+            <input
+              type="text"
+              placeholder="Search company or role..."
+              className="input-sanctuary rounded-full pl-10 pr-4 py-2 w-56 text-sm"
+            />
+          </div>
+          <div className="flex bg-surface-container-low p-1 rounded-xl">
+            {['All', 'Active', 'Interviewing', 'Closed'].map(f => (
+              <button key={f} className={`px-4 py-1.5 text-xs rounded-lg font-medium transition-colors ${f === 'All' ? 'bg-surface-container-lowest text-on-surface editorial-shadow' : 'text-on-surface-variant hover:text-on-surface'}`}>
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Grouped List */}
+      <div className="space-y-10">
+        {groups.map(group => {
+          const filteredJobs = jobs.filter(j => group.statuses.includes(j.status));
+          if (filteredJobs.length === 0 && group.title !== 'Closed') return null;
+
+          return (
+            <div key={group.title}>
+              <div className="flex items-center gap-2 mb-4 px-2">
+                <span className="material-symbols-outlined text-on-surface-variant text-base">{group.icon}</span>
+                <h3 className="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-widest">
+                  {group.title}
+                </h3>
+                <span className="bg-surface-container-high text-on-surface-variant px-2 py-0.5 rounded-full text-[10px] font-bold">
+                  {filteredJobs.length}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {filteredJobs.map(job => (
+                  <div
+                    key={job.id}
+                    onClick={() => onJobClick(job)}
+                    className="group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between editorial-shadow hover:shadow-lg transition-all border border-transparent hover:border-outline-variant/10 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
+                      <div className="w-12 h-12 bg-surface-container rounded-xl flex items-center justify-center font-headline font-bold text-primary shrink-0">
+                        {job.company.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-bold text-on-surface truncate">{job.company}</span>
+                          {getStatusChip(job.status)}
+                        </div>
+                        <p className="text-sm text-on-surface-variant truncate mt-0.5">{job.title}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-6 shrink-0">
+                      <div className="text-right hidden lg:block">
+                        <span className={`text-sm font-bold ${job.score && job.score >= 80 ? 'text-primary' : 'text-on-surface-variant'}`}>
+                          {job.score || '—'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {job.status === 'Backlog' ? (
+                          <button className="btn-primary text-xs py-1.5 px-4 rounded-lg">Review</button>
+                        ) : job.status === 'Core Interviews' ? (
+                          <button className="btn-secondary text-xs py-1.5 px-4 rounded-lg">Cheat sheet</button>
+                        ) : (
+                          <button className="btn-secondary text-xs py-1.5 px-4 rounded-lg">Details</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {group.title === 'Closed' && filteredJobs.length === 0 && (
+                  <div className="p-8 text-center text-sm text-on-surface-variant bg-surface-container-lowest rounded-2xl editorial-shadow">
+                    No closed applications yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default AllJobsView;

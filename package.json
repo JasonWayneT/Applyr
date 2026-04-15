@@ -1,0 +1,54 @@
+{
+  "name": "jobagent",
+  "version": "1.0.0",
+  "description": "Using the new JobAgent v2.5 is simple and fully automated. Here is your step-by-step guide to running the batch pipeline:",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:client": "vite",
+    "dev:server": "tsx watch server/index.ts",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JasonWayneT/JobHuntAgent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/JasonWayneT/JobHuntAgent/issues"
+  },
+  "homepage": "https://github.com/JasonWayneT/JobHuntAgent#readme",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "concurrently": "^9.2.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "papaparse": "^5.5.3",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.4.27",
+    "nodemon": "^3.1.14",
+    "postcss": "^8.5.9",
+    "tailwindcss": "^4.2.2",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.8"
+  }
+}

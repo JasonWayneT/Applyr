@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Job } from '../types/job';
 import StatusChip from '../components/StatusChip';
 
@@ -8,6 +8,26 @@ interface AllJobsViewProps {
 }
 
 const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilter, setActiveFilter] = useState('All');
+
+  const processedJobs = jobs.filter(job => {
+    // 1. Filter by status
+    if (activeFilter === 'Active' && job.status === 'Closed') return false;
+    if (activeFilter === 'Interviewing' && !['Recruiter Screen', 'Core Interviews'].includes(job.status)) return false;
+    if (activeFilter === 'Closed' && job.status !== 'Closed') return false;
+
+    // 2. Filter by search term
+    if (searchTerm.trim() !== '') {
+      const term = searchTerm.toLowerCase();
+      const matchCompany = job.company.toLowerCase().includes(term);
+      const matchTitle = job.title.toLowerCase().includes(term);
+      if (!matchCompany && !matchTitle) return false;
+    }
+
+    return true;
+  });
+
   const groups = [
     { title: 'Needs your attention', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
     { title: 'Waiting for contact', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
@@ -31,12 +51,18 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
             <input
               type="text"
               placeholder="Search company or role..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="input-sanctuary rounded-full pl-10 pr-4 py-2 w-56 text-sm"
             />
           </div>
           <div className="flex bg-surface-container-low p-1 rounded-xl">
             {['All', 'Active', 'Interviewing', 'Closed'].map(f => (
-              <button key={f} className={`px-4 py-1.5 text-xs rounded-lg font-medium transition-colors ${f === 'All' ? 'bg-surface-container-lowest text-on-surface editorial-shadow' : 'text-on-surface-variant hover:text-on-surface'}`}>
+              <button 
+                key={f} 
+                onClick={() => setActiveFilter(f)}
+                className={`px-4 py-1.5 text-xs rounded-lg font-medium transition-colors ${f === activeFilter ? 'bg-surface-container-lowest text-on-surface editorial-shadow' : 'text-on-surface-variant hover:text-on-surface'}`}
+              >
                 {f}
               </button>
             ))}
@@ -47,8 +73,14 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
       {/* Grouped List */}
       <div className="space-y-10">
         {groups.map(group => {
-          const filteredJobs = jobs.filter(j => group.statuses.includes(j.status));
-          if (filteredJobs.length === 0 && group.title !== 'Closed') return null;
+          const filteredJobs = processedJobs.filter(j => group.statuses.includes(j.status));
+          
+          if (filteredJobs.length === 0) {
+              if (group.title !== 'Closed') return null;
+              // If it's Closed, only show the empty bucket if we are explicitly filtering for Closed
+              if (activeFilter !== 'Closed' && activeFilter !== 'All') return null;
+              if (activeFilter === 'All' && searchTerm.trim() !== '') return null;
+          }
 
           return (
             <div key={group.title}>

@@ -59,14 +59,7 @@ function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-16 glass-nav flex items-center justify-between px-8 z-40 editorial-shadow shrink-0">
           <div className="flex items-center gap-4 flex-1">
-            <div className="max-w-md w-full relative">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-xl">search</span>
-              <input
-                className="input-sanctuary w-full rounded-full py-2 pl-11 pr-4"
-                placeholder="Search applications, companies..."
-                type="text"
-              />
-            </div>
+            {/* Future global search or action bar can go here */}
           </div>
           <div className="flex items-center gap-3">
             <button className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors active:scale-95">

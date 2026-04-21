@@ -15,12 +15,18 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
   const screenings = jobs.filter(j => j.status === 'Recruiter Screen');
   const offers = jobs.filter(j => j.status === 'Offer and Negotiation');
 
+  const getBarHeight = (count: number, total: number) => {
+    if (count === 0) return '4px';
+    const percentage = (count / Math.max(total, 1)) * 100;
+    return `${Math.max(12, percentage)}%`;
+  };
+
   const statusCounts = [
-    { label: 'Backlog', count: backlogs.length, height: `${Math.max(20, (backlogs.length / Math.max(jobs.length, 1)) * 100)}%` },
-    { label: 'Applied', count: applied.length, height: `${Math.max(20, (applied.length / Math.max(jobs.length, 1)) * 100)}%` },
-    { label: 'Screening', count: screenings.length, height: `${Math.max(20, (screenings.length / Math.max(jobs.length, 1)) * 100)}%` },
-    { label: 'Interviews', count: interviews.length, height: `${Math.max(20, (interviews.length / Math.max(jobs.length, 1)) * 100)}%` },
-    { label: 'Offers', count: offers.length, height: `${Math.max(15, (offers.length / Math.max(jobs.length, 1)) * 100)}%` },
+    { label: 'Backlog', count: backlogs.length, height: getBarHeight(backlogs.length, jobs.length) },
+    { label: 'Applied', count: applied.length, height: getBarHeight(applied.length, jobs.length) },
+    { label: 'Screening', count: screenings.length, height: getBarHeight(screenings.length, jobs.length) },
+    { label: 'Interviews', count: interviews.length, height: getBarHeight(interviews.length, jobs.length) },
+    { label: 'Offers', count: offers.length, height: getBarHeight(offers.length, jobs.length) },
   ];
 
   return (
@@ -55,8 +61,10 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
             {statusCounts.map((item, i) => (
               <div
                 key={item.label}
-                className={`flex-1 rounded-t-2xl transition-all duration-500 hover:opacity-80 relative group ${
-                  i === 2 ? 'bg-primary' : i === 4 ? 'bg-secondary-container' : 'bg-primary-container/50'
+                className={`flex-1 rounded-t-lg transition-all duration-500 hover:opacity-80 relative group ${
+                  item.count === 0 
+                    ? 'bg-outline-variant/20' 
+                    : i === 2 ? 'bg-primary' : i === 4 ? 'bg-secondary-container' : 'bg-primary-container/50'
                 }`}
                 style={{ height: item.height }}
               >

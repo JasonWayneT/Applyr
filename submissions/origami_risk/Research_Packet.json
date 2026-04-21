@@ -1,0 +1,11 @@
+{
+  "error": "Unable to complete request",
+  "reason": "Conflicting instructions",
+  "details": "The query contains a 'Research Packet Contract' that requests Markdown output with specific formatting and structure, but the system instructions explicitly require JSON-only output for corporate intelligence requests. These requirements are mutually exclusive.",
+  "resolution_options": [
+    "Clarify whether output should be JSON (per system instructions) or Markdown (per Research Packet Contract)",
+    "Provide the research in JSON format with contract modules as keys",
+    "Resubmit with unified output format requirements"
+  ],
+  "note": "The search results provided contain limited information for a comprehensive Module A-F analysis. Additional research would be needed for complete coverage of company DNA, market positioning, organizational structure, and culture assessment."
+}

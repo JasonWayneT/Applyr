@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Voltus is the leading DER technology platform and virtual power plant operator, connecting distributed energy resources to electricity markets to deliver less expensive, more reliable, and more sustainable electricity. They hire teammates who are bright, gritty, and good, with a genuine passion for a cleaner energy future.[1][2]",
+      "Observed": "Focus on helping commercial and industrial customers generate cash by maximizing the value of their flexible load, distributed generation, energy storage, energy efficiency, and electric vehicle resources in energy markets. Strong track record managing 5.8 gigawatts of DERs and executing over 7,500 dispatches.[2]"
+    },
+    "Problem Space": "Voltus solves the pain of grid instability and high energy costs by enabling demand response: reducing energy use during peak demand to prevent blackouts, while allowing clients to earn money and save costs through 60 different programs optimizing energy usage and financial returns.[2]",
+    "Business Model": "Revenue from managing virtual power plants and DERs, monetizing customer resources in wholesale energy markets via dispatch signals, offers, optimization, performance calculation, and settlements. Growth stage: Rapidly growing (managing 5.8 GW DERs), fully distributed/remote company. Financial health: Offers competitive pay ($120k-$135k base for PM role +10% bonus + equity), benefits like unlimited PTO, 12-week parental leave, 401(k) matching.[2][4][9]",
+    "Founding Story": "No specific founding details or key inflection points found in search results."
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly named in results. Voltus differentiates as leading DER platform and VPP operator simplifying complex market participation for customers.[1][2]",
+    "Macro Trends": "Evolving North American wholesale electricity markets (e.g., capacity accreditation, aggregation, battery participation, eligibility frameworks, performance incentives). Regulatory shifts in demand side resource policy, distribution utilities, and energy markets. AI disruption not mentioned; focus on grid stability via demand response.[1][2]"
+  },
+  "Module C": {
+    "Financials/Funding": "No recent funding rounds or earnings in 90-day window (post-Jan 2026) found.",
+    "Organizational Shifts": "Rapid growth indicated by new roles like Sales Productivity Specialist to capitalize on expansion; no layoffs or specific leadership changes noted.[1]",
+    "Product/Partnership News": "Active hiring for Product Manager roles (Market Platform, Onboarding & Enrollment, Platform); no new launches or M&A in recent window.[1][2][3]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product Manager - Market Platform: Own product outcomes for customer participation in electricity markets (dispatch signals, offers submission/optimization, performance calculation/settlement). Develop/prioritize outcomes, collaborate with engineering, formulate investment theses, own roadmap/vision/metrics, validate hypotheses.",
+      "Hidden Success Signals": "Technical leadership, strong communication, distill qualitative/quantitative info into decisions, self-starter managing multiple streams, comfortable with specs/engineers. Align with business/regulatory strategy, operationally viable solutions.",
+      "Required vs Preferred": "Required: 2-3 years PM or product-building experience, strong written/verbal communication, technical acumen, self-starter. Preferred: Ability to manage workstreams, validate market/user/system assumptions (inferred from responsibilities).[1][4]"
+    },
+    "Hierarchy": "Collaborate with engineering manager(s), product/design teams, stakeholders across organization (Energy Markets, Regulatory Affairs). No full org chart found.[1]",
+    "Hiring Manager Profile": "No specific hiring manager identified."
+  },
+  "Module E": {
+    "Sentiment Analysis": "Limited data; Indeed page exists for careers/employment insights but no specific Glassdoor/Reddit/Blind quotes. Positive on growth and remote work.[5]",
+    "Operational Style": "Fully remote/distributed company, workday aligns with US time zones. High autonomy, competitive benefits (unlimited PTO, parental leave, health/401k).[1][6][8][9]"
+  },
+  "Module F": {
+    "Priority Mapping": "No direct details on Jason Taylor's experience available. Voltus priorities (market platform optimization, dispatch/settlement systems, regulatory alignment, user needs in energy markets) could bridge to expertise in **Platform** (product roadmaps/tech acumen), **Data Integrity** (hypothesis validation, metrics/performance calculation), **Revenue Systems** (maximizing financial returns from DERs/markets).[1][2]"
+  }
+}

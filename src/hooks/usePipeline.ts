@@ -8,75 +8,96 @@ export const usePipeline = () => {
   const [result, setResult] = useState<{ score: number; passed: boolean } | null>(null);
 
   const [stages, setStages] = useState<Stage[]>([
-    { id: 'gate',     label: 'Deterministic Gate',    status: 'pending' },
-    { id: 'fit',      label: 'Evaluating fit',         status: 'pending' },
-    { id: 'research', label: 'Researching company',    status: 'pending' },
-    { id: 'resume',   label: 'Building resume',        status: 'pending' },
-    { id: 'cover',    label: 'Writing cover letter',   status: 'pending' },
+    { id: 'gate',     label: 'Deterministic Gate',  status: 'pending' },
+    { id: 'fit',      label: 'Evaluating fit',       status: 'pending' },
+    { id: 'research', label: 'Researching company',  status: 'pending' },
+    { id: 'resume',   label: 'Building resume',      status: 'pending' },
+    { id: 'cover',    label: 'Writing cover letter', status: 'pending' },
   ]);
 
-  const updateStage = (id: string, status: StageStatus, summary?: string) => {
+  const updateStage = useCallback((id: string, status: StageStatus, summary?: string) => {
     setStages(prev => prev.map(s => s.id === id ? { ...s, status, summary } : s));
-  };
+  }, []);
 
-  const runPipeline = useCallback(async (company: string, jd: string, url?: string) => {
+  const runPipeline = useCallback(async (company: string, jd: string, url?: string): Promise<{ score: number; passed: boolean } | undefined> => {
     setIsRunning(true);
     setIsRejected(false);
     setResult(null);
     setStages(prev => prev.map(s => ({ ...s, status: 'pending', summary: undefined })));
 
-    const lowerJd = jd.toLowerCase();
+    return new Promise((resolve) => {
+      const evtSource = new EventSource(
+        api(`/api/evaluate?company=${encodeURIComponent(company)}&url=${encodeURIComponent(url ?? '')}`),
+      );
 
-    // --- STAGE 0: Deterministic Gate (blocklist pulled from server config) ---
-    updateStage('gate', 'running');
-    await new Promise(r => setTimeout(r, 800));
+      // POST the JD body via fetch first, then stream via SSE
+      // (SSE is GET-only — we use a two-step approach: POST to queue, then GET to stream)
+      fetch(api('/api/evaluate'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company, jd, url }),
+      }).then(async (res) => {
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
 
-    let titleBlocklist: string[] = [];
-    try {
-      const configRes = await fetch(api('/api/config'));
-      const config = await configRes.json();
-      titleBlocklist = config.titleBlocklist ?? [];
-    } catch {
-      // Fallback: empty list means nothing is blocked — fail safe, not fail closed
-      console.warn('Could not load gate config from server. Gate will pass all titles.');
-    }
+        if (!reader) {
+          setIsRunning(false);
+          setIsRejected(true);
+          resolve(undefined);
+          return;
+        }
 
-    const hasBlockedTerm = titleBlocklist.some(term => lowerJd.includes(term));
-    if (hasBlockedTerm) {
-      const matched = titleBlocklist.find(term => lowerJd.includes(term));
-      updateStage('gate', 'error', `Auto-rejected: Contains blocked term "${matched}".`);
-      setIsRunning(false);
-      setIsRejected(true);
-      return;
-    }
-    updateStage('gate', 'done', 'Title check passed. No seniority mismatch found.');
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-    // --- STAGE 1: Evaluating Fit ---
-    updateStage('fit', 'running');
-    await new Promise(r => setTimeout(r, 2000));
-    const mockScore = 85;
-    updateStage('fit', 'done', `Score: ${mockScore}. High alignment with data integrity and technical integrations.`);
+          buffer += decoder.decode(value, { stream: true });
+          const blocks = buffer.split('\n\n');
+          buffer = blocks.pop() ?? '';
 
-    // --- STAGE 2: Researching Company ---
-    updateStage('research', 'running');
-    await new Promise(r => setTimeout(r, 1500));
-    updateStage('research', 'done', 'Founding story and market position retrieved.');
+          for (const block of blocks) {
+            if (!block.startsWith('event:')) continue;
+            const lines = block.split('\n');
+            const eventName = lines[0].replace('event: ', '').trim();
+            const dataLine = lines.find(l => l.startsWith('data:'));
+            if (!dataLine) continue;
 
-    // --- STAGE 3: Building Resume ---
-    updateStage('resume', 'running');
-    await new Promise(r => setTimeout(r, 2000));
-    updateStage('resume', 'done', `Added: 'Stabilized $40M ARR revenue-bearing systems' to top-level summary.`);
+            try {
+              const payload = JSON.parse(dataLine.replace('data: ', ''));
 
-    // --- STAGE 4: Writing Cover Letter ---
-    updateStage('cover', 'running');
-    await new Promise(r => setTimeout(r, 1800));
-    updateStage('cover', 'done', `Narrative: Connecting Cision platform experience to ${company}'s current growth stage.`);
+              if (eventName === 'stage') {
+                updateStage(payload.id, payload.status, payload.summary);
+                if (payload.status === 'error') {
+                  setIsRunning(false);
+                  setIsRejected(true);
+                  resolve(undefined);
+                  return;
+                }
+              } else if (eventName === 'done') {
+                const finalResult = { score: payload.score ?? 0, passed: payload.passed ?? false };
+                setIsRunning(false);
+                setResult(finalResult);
+                resolve(finalResult);
+                return;
+              }
+            } catch {
+              // Non-JSON line — ignore
+            }
+          }
+        }
 
-    setIsRunning(false);
-    const finalResult = { score: mockScore, passed: true };
-    setResult(finalResult);
-    return finalResult;
-  }, []);
+        // Stream ended without a 'done' event
+        setIsRunning(false);
+        resolve(undefined);
+      }).catch((err) => {
+        console.error('Pipeline fetch error:', err);
+        setIsRunning(false);
+        setIsRejected(true);
+        resolve(undefined);
+      });
+    });
+  }, [updateStage]);
 
   const resetPipeline = useCallback(() => {
     setIsRunning(false);

@@ -1,0 +1,42 @@
+{
+  "target_role": "Product Manager",
+  "search_terms": "Product Manager NOT Senior NOT Lead NOT Director",
+  "location_preference": "Remote, United States",
+  "experience_range": {
+    "min": 3,
+    "max": 7,
+    "total_years_observed": 6
+  },
+  "blocked_industries": [
+    "Gambling",
+    "Sports Betting",
+    "Gaming",
+    "Ad Tech",
+    "Crypto",
+    "Web3"
+  ],
+  "blocked_titles": [
+    "Senior",
+    "Staff",
+    "VP",
+    "Head",
+    "Principal",
+    "Lead",
+    "Director",
+    "Growth",
+    "Founding",
+    "First"
+  ],
+  "required_anchors": [
+    "Platform stability/reliability",
+    "Complex data migrations/integrations",
+    "Security/Risk prioritization",
+    "B2B Enterprise workflow scaling"
+  ],
+  "preferences": {
+    "no_people_management": true,
+    "no_zero_to_one": true,
+    "structured_team_required": true,
+    "max_company_size_penalty_threshold": 50
+  }
+}

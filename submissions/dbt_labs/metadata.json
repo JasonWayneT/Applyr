@@ -1,0 +1,18 @@
+{
+  "company": "dbt Labs",
+  "title": "Product Manager - Fusion",
+  "url": "https://www.linkedin.com/jobs/view/4402059113/",
+  "score": 87,
+  "status": "Backlog",
+  "scouted_date": "2026-04-20",
+  "fit_summary": "Strong technical platform match. Fusion engine alignment with Bellwether-style architectural modernization.",
+  "top_fit_reasons": [
+    "Fusion engine is a core platform layer",
+    "Focus on data platform/SQL technical depth",
+    "Mid-level IC role matching 3-7 year profile"
+  ],
+  "risk_flags": [
+    "Requires high technical literacy in developer tools",
+    "Post-merger integration (Fivetran) may shift roadmap priorities"
+  ]
+}

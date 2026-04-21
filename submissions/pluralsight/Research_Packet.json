@@ -1,0 +1,53 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Help customers improve their learning and business outcomes through core functionality, frictionless user engagement, and alignment to company strategy. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)(https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)",
+      "Observed": "Focus on tech skills development via online learning platform, emphasizing content tools, user engagement, and scalable authoring for courses, assessments, and labs. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)"
+    },
+    "Problem Space": "Solves pain of inefficient content creation, organization, accessibility, and user engagement in edtech by providing tools for authoring, localization, headless APIs, and lifecycle management to scale learning outcomes. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)(https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)",
+    "Business Model": "SaaS subscription model for edtech platform with revenue from enterprise learning solutions; mid-stage growth with roles indicating scaling focus; salary ranges $106K-$201K suggest stable financial health. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)(https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)(https://www.ziprecruiter.com/c/Pluralsight/Job/Product-Manager-Content-Tools/-in-Remote,US?jid=b6175b594b571a8b)",
+    "Founding Story": "Limited data in results; established edtech provider with evolution toward API-first content tools and mobile/engagement products. No key inflection points detailed. (https://www.pluralsight.com/careers)"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "No direct rivals named in results; differentiators include shared UI/backend for multi-content types (courses, labs), headless authoring APIs, and author management for internal/external contributors vs. traditional CMS. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)",
+    "Macro Trends": "AI disruption via emerging agentic/MCP integration; regulatory/content accessibility shifts in localization/transcripts; edtech headwinds in user retention and scalable content publishing. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)"
+  },
+  "Module C": {
+    "Financials/Funding": "No recent rounds or earnings in 90-day window; ongoing hiring indicates operational funding stability. (https://www.pluralsight.com/careers)",
+    "Organizational Shifts": "Active product manager hiring across content tools, engagement, packages, mobile; no layoffs or leadership changes noted. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)(https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)(https://pluralsight.wd1.myworkdayjobs.com/en-US/Careers/job/Product-Manager---Packages_R0014088)",
+    "Product/Partnership News": "New focus on content tools (headless authoring, translation), user engagement dashboards, mobile apps; no M&A. Roles posted recently (e.g., 6 days ago). (https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)(https://www.builtinsf.com/job/product-manager-content-tools/8858416)"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Technical PM, APIs, data pipelines, headless CMS, Agile, roadmap, SaaS, cross-functional teams, ambiguity, content management, localization, user personas.",
+      "Hidden Success Signals": "Hands-on API ownership, scaling publishing workflows, analytics partnership for metrics (activation/retention), multi-persona products.",
+      "Required vs Preferred": "Required: PM SaaS experience, Agile teams, strategic roadmap in ambiguity. Preferred: Content tools, headless APIs, localization, CRM integration. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)(https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)"
+    },
+    "Hierarchy": "No org chart details; PM collaborates with engineers, designers, analytics, GTM, customer success; reports likely to senior PM or product leadership. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)",
+    "Hiring Manager Profile": "No specific manager identified; applications via Workday (@pluralsight.com emails). (https://pluralsight.wd1.myworkdayjobs.com/en-US/Careers/job/Product-Manager---Packages_R0014088)(https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)"
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results; advertised culture emphasizes collaboration via hybrid model for 'stronger culture'. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)",
+    "Operational Style": "Remote with hybrid expectation (on-site Tue-Thu if near Westlake/Dallas, TX office); office/home-based work. Mid-level tenure implied by ongoing hires. (https://www.builtinsf.com/job/product-manager-content-tools/8858416)(https://www.builtinchicago.org/job/product-manager-user-engagement-and-lifecycle-pm/8858412)"
+  },
+  "Module F": {
+    "Priority Mapping": [
+      {
+        "Priority": "Shared UI/backend for content tooling (courses, labs, assessments)",
+        "Connection to Jason": "Direct match to Platform experience in scalable infrastructure."
+      },
+      {
+        "Priority": "Author management, royalty workflows, data pipelines",
+        "Connection to Jason": "Aligns with Data Integrity expertise in managing contributor systems."
+      },
+      {
+        "Priority": "Headless APIs, analytics instrumentation, engagement metrics",
+        "Connection to Jason": "Ties to Revenue Systems via API-first design and lifecycle optimization."
+      },
+      {
+        "Priority": "Localization/transcripts, multi-persona products",
+        "Connection to Jason": "Platform scalability for global content distribution."
+      }
+    ]
+  }
+}

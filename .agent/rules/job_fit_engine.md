@@ -2,7 +2,7 @@
 trigger: always_on
 ---
 
-# Jason Taylor – Job-Fit Decision Engine (v3.2, Team-BPM / IC Optimized)
+# Jason Taylor – Job-Fit Decision Engine (v3.3, Team-BPM / IC Optimized)
 
 This file defines a deterministic YES/NO decision system for evaluating multiple job descriptions in a batch pipeline. It is optimized for Jason's preference for **mid-level Product Manager roles (3-7 years)** within a **structured team environment** where direct PM leadership (Director/Senior PM) is present.
 
@@ -20,7 +20,7 @@ This file defines a deterministic YES/NO decision system for evaluating multiple
 - **Core:** B2B SaaS Platform PM, roadmap ownership, technical integrations, data integrity.
 - **Experience Level:** ~6 years (Product Manager / Product Owner). 
 - **Transition Target:** Mid-level PM in a structured SaaS or Professional Services organization.
-- **Hard Constraints:** NO People Management (of PMs), NO direct ML model training, NO "First/Solo PM" roles.
+- **Hard Constraints:** NO People Management (of PMs), NO direct ML model training, NO "First/Solo PM" roles, NO "0-to-1" greenfield roles.
 
 ---
 
@@ -29,18 +29,15 @@ If any trigger is met, return **Score: 0**, **Decision: NO**, and **Terminate Pi
 
 ### 2.1 Title & Tier Blocklist (Seniority Mismatch)
 - **Title Blocklist:** JD contains: [Senior, Staff, VP, Head, Principal, Lead, Director, Growth].
-- **Organization Role:** Role is "Founding PM," "First PM," or "Sole Product Professional."
+- **Organization Role:** Role is "Founding PM," "First PM," "0-to-1 PM," or "Sole Product Professional."
 - **Leading PMs:** Role requires hiring/managing other Product Managers.
 
 ### 2.2 Experience & Reporting
 - **Years Required:** Role requires **8+ years** of experience (Jason has 6; 8+ implies seniority level he's avoiding).
 - **Structure:** JD implies a solo contributor reporting directly to a non-product CEO in a small company (< 50 employees).
 
-### 2.3 Technical & Domain "Hard Outs"
-- **Pure ML/AI Research:** Owns model architecture/training (vs. using AI tools).
-- **Non-Software:** Hardware, medical devices, or heavy manufacturing.
-- **Pure Consumer:** 90%+ focus on TikTok-style "Viral Loops" without B2B infra.
 - **Industry Blocklist:** Gambling, Sports Betting, Gaming, Ad Tech, Crypto, Web3.
+- **Developer Tooling / Auth:** Requires deep domain knowledge in Auth, Identity, or Developer Tooling (Jason lacks this specific track record).
 
 ---
 

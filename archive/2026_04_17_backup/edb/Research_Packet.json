@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "EDB helps enterprises build the future with trust, speed, and sovereignty, defining the era of sovereign AI. They partner with NVIDIA, Red Hat, and Supermicro for sovereign AI solutions delivering up to 3x faster AI deployment and 5x ROI. They believe the best products are built by the best people.[3]",
+      "Observed": "Focus on Postgres-based data and AI platform for transactional, analytical, and AI workloads, emphasizing remote work opportunities.[1][6]"
+    },
+    "Problem Space": "EDB solves the pain of organizations needing to harness Postgres for transactional, analytical, and AI applications with sovereignty, speed, and trust in data management.[6]",
+    "Business Model": "Provides a data and AI platform based on Postgres; backed by Bain Capital Private Equity, indicating private equity growth stage with active hiring in product, support, and AI roles. Financial health appears stable with recent job postings.[2][3]",
+    "Founding Story": "Limited details in results; EDB specializes in Postgres ecosystem with evolution into AI platforms, award-winning products, and strategic alliances.[3]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Not explicitly identified in results. EDB differentiates via Postgres-native data/AI platform enabling sovereign AI, contrasting general cloud databases.[3][6]",
+    "Macro Trends": "Rise of sovereign AI amid regulatory shifts for data control; AI disruption with focus on generative and agentic AI integration in databases.[3][4][5]"
+  },
+  "Module C": {
+    "Financials/Funding": "Backed by Bain Capital Private Equity; no specific recent rounds or earnings in 90-day window detailed.[2]",
+    "Organizational Shifts": "Active hiring including Product Marketing Manager - AI (3 days ago), Support Engineer II (4 days ago), Senior Analyst Payroll - Temporary (9 days ago), indicating growth in AI and operations.[2]",
+    "Product/Partnership News": "Ecosystem alliances with NVIDIA, Red Hat, Supermicro for sovereign AI; emphasis on EDB Postgres AI as award-winning product. No specific new launches or M&A in results.[3]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product Manager – Platform: 3+ years experience as product manager or related role on software products. Staff Product Manager-Generative & Agentic AI: Drive strategy for generative AI and agentic systems, define product roadmap.[1][4][5][6]",
+      "Hidden Success Signals": "Focus on platform and AI products suggests need for experience in software platforms, data/AI strategy.",
+      "Required vs Preferred": "Required: 3+ years PM experience on software. Preferred: AI, Postgres, or data platform expertise implied.[1]"
+    },
+    "Hierarchy": "Not detailed in results.",
+    "Hiring Manager Profile": "Not identified in results."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results.",
+    "Operational Style": "Remote positions available in United States, including Product Manager – Platform.[1]"
+  },
+  "Module F": {
+    "Priority Mapping": "EDB priorities: Sovereign AI platform on Postgres, generative/agentic AI strategy. Connections to Jason's experience: Platform (direct match to Product Manager – Platform role), Data Integrity (Postgres data platform), Revenue Systems (growth-stage hiring under PE backing).[1][3][6]"
+  }
+}

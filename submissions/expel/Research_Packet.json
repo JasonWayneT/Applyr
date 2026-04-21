@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Expel provides managed detection and response (MDR) services focused on making customers safer through security platform integrations, platform monetization, and specialized offerings like managed phishing. They emphasize customer-obsessed mindsets, building trust across teams, and translating security knowledge into impactful roadmaps.[1][2][5]",
+      "Observed": "Prioritizes security expertise in product management, cross-functional collaboration (Engineering, Sales, Customer Success, Finance), and remote work flexibility with strong benefits like unlimited PTO and parental leave.[1][2][7]"
+    },
+    "Problem Space": "Expel solves cybersecurity pain points by offering MDR services that handle threat detection, integrations with security tools, platform access/monetization, and managed email security, reducing customer burden in complex security landscapes.[1][2][5]",
+    "Business Model": "SaaS-based MDR with revenue from seat-based, consumption-based, or hybrid pricing models; focuses on automated provisioning, billing, and value metrics tracking. Mid-growth stage with competitive salaries ($114K-$166K base + equity/bonus). Financial health appears stable with active hiring.[1][2][6]",
+    "Founding Story": "Limited details available in results; Expel operates as an established MDR provider with ongoing product expansion in integrations, monetization, and phishing services. No key historical inflection points specified.[7]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly named; differentiators include deep integrations with security tools, automated commercial engines for pricing/provisioning, and customer-centric roadmaps informed by market/competitive signals.[1][2]",
+    "Macro Trends": "Security tool landscape evolution, AI disruption implied in threat detection needs; regulatory shifts and industry headwinds not detailed. Emphasis on SaaS operations, data integration, and consumption-based models amid growing cybersecurity demands.[1][2]"
+  },
+  "Module C": {
+    "Financials/Funding": "No recent funding rounds or earnings in 90-day window; salary transparency indicates financial stability ($114,300-$165,700 base + bonus/equity).[1][2][6]",
+    "Organizational Shifts": "Active hiring for multiple PM roles (Integrations, Platform & Monetization, others); no layoffs or leadership changes noted. Remote positions suggest growth.[7]",
+    "Product/Partnership News": "Open roles highlight new focus on Integrations (security tool landscape), Platform & Monetization (pricing automation), and Managed Phishing; no specific launches or M&A in results.[1][2][5]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product roadmap ownership, integrations, security experience, customer input, cross-functional collaboration, pricing models, SaaS provisioning, threat detection.",
+      "Hidden Success Signals": "Security industry experience preferred, ability to influence business metrics, build engineer trust, resolve revenue leakage; curious/tenacious mindset for maximum impact.",
+      "Required vs Preferred": "Required: 2-4 years PM or relevant (e.g., pricing analyst), communication skills, PM processes. Preferred: Security background, SaaS operations exposure.[1][2][5]"
+    },
+    "Hierarchy": "PM roles report to Director of Product Management (e.g., for MDR/Phishing); cross-functional teams include Engineering, UX, Sales, Finance, Customer Success.[5][7]",
+    "Hiring Manager Profile": "Not identified; recruiter as initial POC, followed by hiring manager interview (45-60 min).[7]"
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results; advertised culture promotes unlimited PTO, 24 weeks parental leave, work flexibility, transparent pay, and team collaboration.[1][2][7]",
+    "Operational Style": "Fully remote across US, hybrid not mentioned; strong benefits suggest high employee support. Tenure not specified.[1][6][7]"
+  },
+  "Module F": {
+    "Priority Mapping": "Expel's priorities in **Platform** (integrations, provisioning engine[1][2]), **Data Integrity** (usage logs, metering, analytics[2]), and **Revenue Systems** (monetization, pricing models, revenue leakage remediation[2]) directly align with Jason's experience. For Integrations PM, his platform expertise maps to owning security tool roadmaps; for Monetization, revenue systems experience fits commercial engine building.[1][2]"
+  }
+}

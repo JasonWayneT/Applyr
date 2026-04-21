@@ -1,0 +1,18 @@
+{
+  "company": "Dexcom",
+  "title": "Product Manager (Clinical Product)",
+  "url": "User Provided",
+  "score": 82,
+  "status": "Backlog",
+  "scouted_date": "2026-04-20",
+  "fit_summary": "Strong match for platform shared services and data integrity. Regulated environment (GDPR/HIPAA) aligns with Cision security/licensing experience.",
+  "top_fit_reasons": [
+    "Platform shared services focus",
+    "API modernization/Interoperability (FHIR/HL7)",
+    "Scalable data pipeline management"
+  ],
+  "risk_flags": [
+    "Upper end of year experience (asks for 5-10)",
+    "MedTech is a new domain (requires technical literacy ramp)"
+  ]
+}

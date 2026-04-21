@@ -1,6 +1,6 @@
 <div style="font-size: 11pt; line-height: 1.15;">
 
-<h1 style="margin: 0; padding: 0;"><strong>Jason Taylor</strong></h1>
+<h1 style="margin: 0; padding: 0; font-size: 16pt;"><strong>Jason Taylor</strong></h1>
 San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug
 
 <h2 style="margin: 8px 0 4px 0; padding: 0; font-size: 12pt;"><strong>PROFESSIONAL SUMMARY</strong></h2>
@@ -22,9 +22,6 @@ Company | Location | Type | Dates
 
 <h2 style="margin: 8px 0 4px 0; padding: 0; font-size: 12pt;"><strong>EDUCATION</strong></h2>
 [Education details]
-
-<h2 style="margin: 8px 0 4px 0; padding: 0; font-size: 12pt;"><strong>SKILLS</strong></h2>
-[Skills list]
 
 </div>
 

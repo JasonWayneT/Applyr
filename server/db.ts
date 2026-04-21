@@ -4,11 +4,10 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '../jobagent.sqlite');
-const OPENPOSTINGS_DB_PATH = path.join(__dirname, '../openpostings_temp/OpenPostings-main/jobs.db');
 
 export const db = new Database(DB_PATH);
 
-// Initialize main schema
+// Initialize schema — idempotent, safe to run on every boot
 db.exec(`
   CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
@@ -18,6 +17,10 @@ db.exec(`
     score INTEGER,
     status TEXT DEFAULT 'Backlog',
     summary TEXT,
+    salary_range TEXT,
+    recruiter_name TEXT,
+    recruiter_url TEXT,
+    source_site TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -36,15 +39,12 @@ db.exec(`
   );
 `);
 
-// Attach OpenPostings DB for reference
-try {
-  db.exec(`ATTACH DATABASE '${OPENPOSTINGS_DB_PATH}' AS openpostings`);
-  console.log('Successfully attached OpenPostings DB');
-} catch (err) {
-  console.error('Warning: Could not attach OpenPostings DB. Scout logic will be limited.', err);
-}
-
-export const logActivity = (level: 'INFO' | 'WARN' | 'ERROR', source: string, message: string, meta?: any) => {
-  const stmt = db.prepare('INSERT INTO activity_log (level, source, message, meta) VALUES (?, ?, ?, ?)');
-  stmt.run(level, source, message, meta ? JSON.stringify(meta) : null);
+export const logActivity = (
+  level: 'INFO' | 'WARN' | 'ERROR',
+  source: string,
+  message: string,
+  meta?: any
+) => {
+  db.prepare('INSERT INTO activity_log (level, source, message, meta) VALUES (?, ?, ?, ?)')
+    .run(level, source, message, meta ? JSON.stringify(meta) : null);
 };

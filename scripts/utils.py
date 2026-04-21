@@ -73,7 +73,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             return response.text.strip()
         except Exception as e:
             err = str(e).lower()
-            if any(k in err for k in ["retrydelay", "429", "quota", "exhausted"]):
+            if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
                 wait = 45 * (attempt + 1)
                 print(f"  -> Rate limit hit. Waiting {wait}s (retry {attempt+1}/{max_retries})...")
                 time.sleep(wait)

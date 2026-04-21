@@ -1,0 +1,19 @@
+{
+  "error": "Unable to complete request",
+  "reason": "Insufficient data in search results",
+  "details": {
+    "issue_1": "The search results provided contain generic Product Manager job descriptions and listings from various job boards (Indeed, Built In, ZipRecruiter, Monster), but do NOT include specific information about a particular company named 'Built In' as an employer or its organizational structure.",
+    "issue_2": "The Research Packet Contract requires deep intelligence across 6 modules (Company DNA, Market & Competitors, Recent Intelligence, Role & Org Chart, Culture & Reality Check, and The Intersection). The search results only provide fragmented job description content—insufficient to construct modules A, B, C, D, E, or F.",
+    "issue_3": "No data available on: Built In's founding story, mission/values, business model, financials, competitors, recent organizational changes, leadership team, hiring manager profiles, or employee sentiment (Glassdoor/Blind/Reddit).",
+    "issue_4": "The search results do not contain URLs or details specific to Built In as a company—only job postings that reference Built In as a job board platform.",
+    "missing_modules": {
+      "Module_A_Company_DNA": "Not found in search results",
+      "Module_B_Market_Competitors": "Not found in search results",
+      "Module_C_Recent_Intelligence": "Not found in search results",
+      "Module_D_Role_OrgChart": "Partial job description only; no org chart or hiring manager data",
+      "Module_E_Culture_Reality": "Not found in search results",
+      "Module_F_Bridge_Intersection": "Cannot construct without Modules A-E"
+    }
+  },
+  "recommendation": "To fulfill the Research Packet Contract, conduct targeted searches for: (1) Built In company overview, funding, and leadership; (2) Built In Glassdoor/Blind reviews; (3) Built In recent news and organizational changes; (4) The specific Product Manager role posting with full job description and hiring manager details; (5) Built In's competitive landscape and market position."
+}

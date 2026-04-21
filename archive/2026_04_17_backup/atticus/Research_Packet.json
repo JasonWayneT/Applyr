@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Atticus makes it easy for sick or injured people in crisis to get life-changing aid from the legal system or government, connecting people with disabilities to government benefits and victims of accidents, misconduct, and violence to insurance compensation. Demonstrated commitment to doing good and helping people is a qualification for roles.[1][4]",
+      "Observed": "Helped hundreds of thousands access over $10B in aid with 17,000+ five-star reviews; focus on building world-class client experience for clients and lawyers.[1][5]"
+    },
+    "Problem Space": "16 million Americans face legal or government crises yearly but most don't get help; Atticus solves this by connecting them to benefits and compensation.[1]",
+    "Business Model": "Two-sided marketplace platform matching clients to law firms based on case, geography, preferences; revenue likely from law firm partnerships or network fees (inferred from matching framework and interviews with partner firms). Growth stage: Established startup (6 years, $10B+ aid distributed). Financial health: Strong impact metrics, no specific funding details in results.[1][4]",
+    "Founding Story": "In last six years, became leading platform in disability benefits and insurance compensation space; key inflection: scaled to hundreds of thousands helped and $10B aid.[1]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Not identified in results; Atticus differentiates as leading platform in client-lawyer matching for disabilities/accidents with data-driven personalization and multi-vertical support.[1]",
+    "Macro Trends": "Not detailed; potential headwinds include regulatory shifts in legal aid/government benefits or AI disruption in matching/personalization (inferred from data science and model-driven features).[1]"
+  },
+  "Module C": {
+    "Financials/Funding": "No recent rounds or earnings in 90-day window (results up to Feb 2026 job post); salary range $144,300-$201,600 indicates solid funding.[2]",
+    "Organizational Shifts": "No layoffs, hiring surges, or leadership changes noted; active hiring including Product Designer (7 days ago).[3]",
+    "Product/Partnership News": "No new launches or M&A in 90-day window; focus on improving client-law firm matching framework with Data Science.[1]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product vision, roadmap, data analysis, two-sided marketplace, model-driven decision making, personalization, user interviews (clients/lawyers), experiments, wireframes.",
+      "Hidden Success Signals": "Mastery of data platforms, own analysis, great reviews from cross-functional teams, instill product culture, speak to tradeoffs.",
+      "Required vs Preferred": "Required: 3+ years PM experience at scale, product vision/strategy success, best practices from high-performing org, communication skills, data mastery, commitment to helping people. Preferred (Bonus): Early-stage startup, complex consumer/B2B/two-sided marketplace.[1][4]"
+    },
+    "Hierarchy": "PM coordinates with Design, Engineering, Data Science, stakeholders/senior leadership; owns metrics at company level. Team structure: Cross-departmental Product/Design/Engineering for client/lawyer experience.[1][5]",
+    "Hiring Manager Profile": "Not identified in results."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data; positive internal: 17,000+ five-star client reviews, emphasis on great culture via retreats/offsites.[1]",
+    "Operational Style": "Fully remote with quarterly LA travel (company-paid) plus offsites/retreats for in-person interaction; high emphasis on culture-building.[1][4]"
+  },
+  "Module F": {
+    "Priority Mapping": "No specific Jason Taylor experience provided; mapping to role priorities: Client-law firm matching framework and data platform align with **Platform** expertise; call center/case data optimization with **Data Integrity**; business model mastery and metrics ownership with **Revenue Systems** (inferred fit).[1]"
+  }
+}

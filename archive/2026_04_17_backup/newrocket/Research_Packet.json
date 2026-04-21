@@ -1,0 +1,36 @@
+{
+  "ModuleA": {
+    "CoreMissionValues": {
+      "Stated": "NewRocket is an elite ServiceNow partner providing careers and remote job opportunities with a collaborative team focused on advanced technology, talented design and development teams, team-building events, and a well-balanced work environment. They offer a beautiful office in San Diego, CA and are 100% remote friendly.[5][6][8]",
+      "Observed": "Limited public information available; emphasis on collaboration and remote work appears consistent across career pages.[5][6]"
+    },
+    "ProblemSpace": "No specific pain points detailed in available sources; as a ServiceNow partner, likely solves enterprise workflow automation and IT service management challenges through ServiceNow implementations.[6][8]",
+    "BusinessModel": "Operates as an elite ServiceNow partner, likely generating revenue through consulting, implementation services, and custom development for ServiceNow platforms. Growth stage and financial health not publicly detailed in sources.[5][6][8]",
+    "FoundingStory": "No founding story or key inflection points found in available search results."
+  },
+  "ModuleB": {
+    "Big3Competitors": "No direct competitors or differentiators explicitly listed. As a ServiceNow partner, potential rivals include other ServiceNow partners like Accenture, Deloitte, or Infosys, but not confirmed for NewRocket.[6][8]",
+    "MacroTrends": "No specific industry headwinds mentioned; ServiceNow ecosystem faces AI disruption and regulatory shifts in enterprise software, but not detailed for NewRocket.[2]"
+  },
+  "ModuleC": {
+    "FinancialsFunding": "No recent funding rounds, earnings, or financial data available within 90-day window or otherwise in search results.",
+    "OrganizationalShifts": "No information on layoffs, hiring surges, or leadership changes found.",
+    "ProductPartnershipNews": "Active hiring for roles like Product Manager, Agentic AI, indicating product expansion into AI. Partnership with ServiceNow as an elite partner.[7][6][8]"
+  },
+  "ModuleD": {
+    "JDAnalysis": {
+      "Keywords": "Product Manager, Agentic AI, remote United States. Related generic PM roles emphasize Agile, product ownership, customer relationships, backlog management, Jira, user stories, risk management.[1][7]",
+      "HiddenSuccessSignals": "Servant leadership, problem-solving in dynamic environments, Agile ceremonies, CSPO certification required in similar roles.[1]",
+      "RequiredVsPreferred": "No specific JD for NewRocket's Product Manager found; generic requirements include 3+ years experience, Agile knowledge. Preferred: Atlassian suite, certifications like CSPO (required in similar).[1][7]"
+    },
+    "Hierarchy": "No org chart or reporting lines available.",
+    "HiringManagerProfile": "No hiring manager details or profiles found."
+  },
+  "ModuleE": {
+    "SentimentAnalysis": "No Glassdoor, Reddit, or Blind reviews found in search results.",
+    "OperationalStyle": "100% remote friendly with office in San Diego, CA. Collaborative team with team-building events.[5]"
+  },
+  "ModuleF": {
+    "PriorityMapping": "No major priorities identified in sources to map to Jason's experience (Platform, Data Integrity, Revenue Systems). Potential alignment with ServiceNow platform expertise and Agentic AI product management.[7][6]"
+  }
+}

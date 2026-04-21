@@ -1,0 +1,72 @@
+{
+  "error": "Unable to complete research packet",
+  "reason": "Insufficient search results for comprehensive analysis",
+  "details": {
+    "module_a_company_dna": {
+      "status": "Partial",
+      "findings": {
+        "core_mission": "Award-winning entrepreneur-led insurance brokerage firm delivering Commercial and embedded insurance solutions",
+        "business_model": "Insurance brokerage with embedded distribution strategy through MIS (Mainstreet Insurance Solutions) division",
+        "problem_space": "Advisor tooling, carrier connectivity, and embedded insurance distribution",
+        "data_gaps": [
+          "Stated vs. observed values not available",
+          "Financial health/revenue streams not in search results",
+          "Founding story and key inflection points missing"
+        ]
+      }
+    },
+    "module_b_market_competitors": {
+      "status": "Not found",
+      "data_gaps": [
+        "No competitor information in search results",
+        "No macro trends or industry headwinds identified",
+        "No differentiation strategy articulated"
+      ]
+    },
+    "module_c_recent_intelligence": {
+      "status": "Not found",
+      "data_gaps": [
+        "No recent funding or earnings data",
+        "No organizational changes, layoffs, or hiring patterns",
+        "No product launches or M&A activity mentioned"
+      ]
+    },
+    "module_d_role_org_chart": {
+      "status": "Partial",
+      "findings": {
+        "positions_identified": [
+          "Salesforce Product Manager - Personal Lines (Stratus platform)",
+          "Technical Product Manager - Ratings & Lead Integrations",
+          "Product Manager - Medicare",
+          "Technical Product Manager (general)"
+        ],
+        "salary_range": "USD 90,000 - 120,000",
+        "employment_type": "Full-time, On-site and Remote options",
+        "key_requirements": [
+          "4+ years product management experience",
+          "2+ years owning Salesforce-based platform in B2B/enterprise",
+          "CRM workflows and integration patterns expertise",
+          "Insurance/insurtech industry background preferred"
+        ],
+        "data_gaps": [
+          "Hiring manager profiles not available",
+          "Reporting lines unclear",
+          "Team structure not documented"
+        ]
+      }
+    },
+    "module_e_culture_reality_check": {
+      "status": "Not found",
+      "data_gaps": [
+        "No Glassdoor/Blind/Reddit sentiment data",
+        "No employee tenure information",
+        "No remote/hybrid operational reality documented"
+      ]
+    },
+    "module_f_intersection_bridge": {
+      "status": "Not applicable",
+      "reason": "Jason Taylor's experience profile not provided in query; cannot map priorities to candidate background"
+    }
+  },
+  "recommendation": "Search results contain only job postings and basic company information. To complete the Research Packet Contract (v2.0), additional sources needed: company financials, leadership profiles, recent news, employee reviews, and competitor analysis. Current data insufficient for strategic career asset analysis."
+}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Job } from '../types/job';
+import StatusChip from '../components/StatusChip';
 
 interface AllJobsViewProps {
   jobs: Job[];
@@ -15,18 +16,6 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
     { title: 'In conversation', statuses: ['Offer and Negotiation'], chipClass: 'chip-offer', icon: 'handshake' },
     { title: 'Terminal', statuses: ['Closed'], chipClass: 'chip-closed', icon: 'archive' },
   ];
-
-  const getStatusChip = (status: Job['status']) => {
-    switch (status) {
-      case 'Backlog': return <span className="chip chip-backlog"><span className="w-1.5 h-1.5 rounded-full bg-primary"></span>Backlog</span>;
-      case 'Applied': return <span className="chip chip-applied"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Applied</span>;
-      case 'Recruiter Screen': return <span className="chip chip-recruiter-screen"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Recruiter Screen</span>;
-      case 'Core Interviews': return <span className="chip chip-core-interviews"><span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>Core Interviews</span>;
-      case 'Offer and Negotiation': return <span className="chip chip-offer"><span className="w-1.5 h-1.5 rounded-full bg-primary"></span>Offer</span>;
-      case 'Closed': return <span className="chip chip-closed"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Closed</span>;
-      default: return null;
-    }
-  };
 
   return (
     <div className="space-y-8">
@@ -86,7 +75,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-base font-bold text-on-surface truncate">{job.company}</span>
-                          {getStatusChip(job.status)}
+                        <StatusChip status={job.status} />
                         </div>
                         <p className="text-sm text-on-surface-variant truncate mt-0.5">{job.title}</p>
                       </div>

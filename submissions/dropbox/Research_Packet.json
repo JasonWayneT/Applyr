@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Dropbox envisions and builds the future of work, making it more intuitive and joyful. Product managers are strategic thinkers, advocates for users, using data, research, strategy, and empathy to guide teams toward transformative products.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager]",
+      "Observed": "Focus on AI-powered experiences for file organization, sharing, collaboration, universal search, agentic workflows, automation, and AI productivity tools to remain relevant.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager]"
+    },
+    "Problem Space": "Dropbox solves pain points in file finding, organization, sharing, and collaboration for core users, enhanced by AI to make work more efficient and intuitive.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager]",
+    "Business Model": "Subscription-based with core file storage and sync business exceeding $2B; expanding into AI, growth, sharing/virality. Compensation indicates mature stage with high equity. Virtual First company, remote in US Zones 2/3. Salary range $148k-$201k base + equity for PM role.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager][https://www.levels.fyi/companies/dropbox/salaries/product-manager][https://www.builtinboston.com/job/senior-product-manager-growth/8841215]",
+    "Founding Story": "No specific founding inflection points in results; established platform-agnostic company serving hundreds of millions globally.[https://www.dropbox.jobs/en/jobs/]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Not explicitly listed; inferred rivals in cloud storage/collaboration include Google Drive, Microsoft OneDrive, Box. Dropbox differentiates via AI-powered Dash/Core experiences, universal search, agentic workflows, sharing/virality across web/mobile/desktop.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager][https://weloveproduct.co/jobs/staff-product-manager-dropbox-sv8ckg]",
+    "Macro Trends": "AI disruption in productivity tooling (universal search, agentic workflows, automation, chat/assistance); expansion beyond core file storage into growth initiatives, pricing/packaging.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager][https://www.builtinboston.com/job/senior-product-manager-growth/8841215]"
+  },
+  "Module C": {
+    "Financials/Funding": "Core file storage/sync business over $2B; mature public company with high PM compensation up to $740k total (median $343k-$385k). No recent rounds/earnings in 90-day window.[https://www.levels.fyi/companies/dropbox/salaries/product-manager][https://www.builtinboston.com/job/senior-product-manager-growth/8841215]",
+    "Organizational Shifts": "No layoffs, hiring surges, or leadership changes in results.",
+    "Product/Partnership News": "No new launches or M&A in 90-day window; focus on AI Dash in Core, web experience, growth, sharing/virality.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Own features/experiments end-to-end, PRDs, cross-functional execution (Eng/Design), prioritize roadmap, customer understanding (research/marketing), ship results, AI expertise (search, workflows, automation, chat).[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager]",
+      "Hidden Success Signals": "Balance tradeoffs, forecast impact, navigate challenges/dependencies, clear stakeholder communication, expertise in AI productivity tooling.",
+      "Required vs Preferred": "Required: PM experience implied; Preferred: Knowledge in universal search/agentic workflows/AI tools. Remote US Zones 2/3.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager]"
+    },
+    "Hierarchy": "PM on Dash in Core team reports to product leadership; broader team includes Eng, Design, Marketing, Research, CX. Product team spans full lifecycle.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager][https://www.dropbox.jobs/en/teams/product/]",
+    "Hiring Manager Profile": "Not identified in results."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results.",
+    "Operational Style": "Virtual First company; remote US (Zones 2/3). High employee compensation suggests competitive tenure.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager][https://www.levels.fyi/companies/dropbox/salaries/product-manager]"
+  },
+  "Module F": {
+    "Priority Mapping": "No direct Jason Taylor experience details provided. AI-powered experiences/roadmaps align with Platform expertise; customer value/execution with Data Integrity; business goals/prioritization with Revenue Systems.[https://jobs.accel.com/companies/dropbox/jobs/54933154-product-manager]"
+  }
+}

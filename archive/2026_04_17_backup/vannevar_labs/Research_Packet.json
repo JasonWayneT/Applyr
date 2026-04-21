@@ -1,0 +1,39 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Vannevar Labs builds new defense capabilities for modern conflict, combining top engineering talent with decades of mission experience to deliver state-of-the-art technology to those who need it. They focus on building AI to deter adversaries and next-generation defense software for public servants keeping the country safe, believing in public service and improving government technology.[1][2][7]",
+      "Observed": "Emphasis on mission-driven work in defense tech, with remote-friendly operations and benefits supporting employee well-being in high-stakes environments.[1]"
+    },
+    "Problem Space": "Vannevar addresses the pain of outdated technology in government and defense, enabling modern conflict deterrence through AI and advanced software for public servants facing adversaries.[1][2][7]",
+    "Business Model": "Growth-stage defense technology company with revenue likely from government contracts; raised $91.5M total funding including Series B $75M (2023), Series A $12M (2021), and earlier rounds. Key investors: Felicis, Costanoa Ventures, Point72 Ventures, General Catalyst.[1]",
+    "Founding Story": "Limited details available; founded prior to 2021 Series A funding. CEO Eric Ransom leads; key inflection: Series B in Jan 2023 scaling defense AI capabilities.[1]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly named in sources; as a defense AI/software firm, potential competitors include Anduril, Palantir, or Shield AI (inferred from sector). Vannevar differentiates via focus on foundational platform capabilities, data collection, and agent tools for mission-critical defense applications.[1][2][4]",
+    "Macro Trends": "AI disruption in defense, regulatory shifts in government tech procurement, and need for rapid deployment of state-of-the-art tools amid modern conflicts.[1][2][7]"
+  },
+  "Module C": {
+    "Financials/Funding": "Last funding: Series B $75M on 2023-01-18; prior Series A $12M (2021-08-25), Series Unknown (2022-11-30). Total ~$91.5M. No updates in 90-day window (post-Jan 2026).[1]",
+    "Organizational Shifts": "No recent layoffs, hiring surges, or leadership changes reported in available data.[1][5][7]",
+    "Product/Partnership News": "Active hiring for Product Manager - Data Collection and Staff Technical Product Manager roles, indicating focus on data collection, agent tool calling, and platform evolution. No new launches or M&A in 90-day window.[4][5][6]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Staff Technical Product Manager: Define/evolve platform capabilities, systems reasoning, cross-org initiatives, PRDs/specs, authorization systems, high ownership.[1][6]",
+      "Hidden Success Signals": "Drive resolution of structural problems, build alignment without authority, identify risks early, stay through delivery.[1]",
+      "Required vs Preferred": {
+        "Required": "Staff-level TPM/engineer-PM experience; strong systems reasoning (distributed systems, identity/auth); success shaping tech direction cross-teams; credible communicator; high ownership in ambiguity.[1]",
+        "Preferred": "Platform/infra/security background; policy/auth systems; multi-tenant/regulated env; decentralized ownership experience.[1]"
+      }
+    },
+    "Hierarchy": "Reports likely to Head of Product (inferred from Senior PM role working directly with them); spans multiple engineering orgs, partners with Eng Managers, aligns with design/mission stakeholders.[1][2]",
+    "Hiring Manager Profile": "Not specified; CEO Eric Ransom oversees; Head of Product referenced for PM roles but no background/details found.[1][2]"
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results; advertised as mission-driven, remote-friendly with strong benefits (unlimited PTO, 401k match, parental leave).[1]",
+    "Operational Style": "Remote-first (US), with WeWork access; high-ownership culture in ambiguous defense tech environment; company-wide off time.[1][4][5]"
+  },
+  "Module F": {
+    "Priority Mapping": "Vannevar priorities (platform primitives, auth systems, cross-team alignment, data collection) map to Jason's experience: Platform (direct match to platform architecture/TPM), Data Integrity (via systems reasoning/auth in regulated env), Revenue Systems (less direct, but high-ownership driving initiatives aligns with revenue-impacting structural coherence).[1][4]"
+  }
+}

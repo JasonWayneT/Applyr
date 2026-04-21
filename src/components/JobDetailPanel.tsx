@@ -1,21 +1,67 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Job } from '../types/job';
+import { api } from '../lib/api';
+import StatusChip from './StatusChip';
+
+interface JobFile {
+  name: string;
+}
 
 interface JobDetailPanelProps {
   job: Job | null;
   onClose: () => void;
+  onStatusChange?: (id: string, newStatus: string) => void;
 }
 
-const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose }) => {
+const STATUS_PROGRESSIONS: Partial<Record<Job['status'], { label: string; next: string; icon: string }>> = {
+  'Backlog':           { label: 'Mark as Applied',     next: 'Applied',              icon: 'mark_email_read' },
+  'Applied':           { label: 'Got a Recruiter Call', next: 'Recruiter Screen',    icon: 'phone_in_talk' },
+  'Recruiter Screen':  { label: 'Moving to Interviews', next: 'Core Interviews',     icon: 'record_voice_over' },
+  'Core Interviews':   { label: 'Offer Received!',      next: 'Offer and Negotiation', icon: 'celebration' },
+};
+
+const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusChange }) => {
+  const [files, setFiles] = useState<JobFile[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+
+  useEffect(() => {
+    if (!job) return;
+    setLoadingFiles(true);
+    fetch(api(`/api/jobs/${job.id}/files`))
+      .then(r => r.json())
+      .then(data => setFiles(data.files ?? []))
+      .catch(() => setFiles([]))
+      .finally(() => setLoadingFiles(false));
+  }, [job?.id]);
+
   if (!job) return null;
 
   const timelineSteps = [
-    { label: 'Backlog', date: 'Logged', done: true, active: job.status === 'Backlog' },
-    { label: 'Applied', date: job.status !== 'Backlog' ? 'Submitted' : 'Pending', done: job.status !== 'Backlog', active: job.status === 'Applied' },
-    { label: 'Recruiter Screen', date: ['Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(job.status) ? (job.status === 'Recruiter Screen' ? 'Active' : 'Passed') : 'TBD', done: ['Core Interviews', 'Offer and Negotiation'].includes(job.status), active: job.status === 'Recruiter Screen' },
-    { label: 'Core Interviews', date: ['Core Interviews', 'Offer and Negotiation'].includes(job.status) ? (job.status === 'Core Interviews' ? 'Active' : 'Passed') : 'TBD', done: job.status === 'Offer and Negotiation', active: job.status === 'Core Interviews' },
-    { label: 'Offer', date: job.status === 'Offer and Negotiation' ? 'Received!' : 'TBD', done: job.status === 'Offer and Negotiation', active: job.status === 'Offer and Negotiation' },
+    { label: 'Backlog',            done: true,                                                                          active: job.status === 'Backlog' },
+    { label: 'Applied',            done: ['Applied','Recruiter Screen','Core Interviews','Offer and Negotiation'].includes(job.status), active: job.status === 'Applied' },
+    { label: 'Recruiter Screen',   done: ['Core Interviews','Offer and Negotiation'].includes(job.status),              active: job.status === 'Recruiter Screen' },
+    { label: 'Core Interviews',    done: job.status === 'Offer and Negotiation',                                        active: job.status === 'Core Interviews' },
+    { label: 'Offer',              done: job.status === 'Offer and Negotiation',                                        active: job.status === 'Offer and Negotiation' },
   ];
+
+  const progression = STATUS_PROGRESSIONS[job.status];
+
+  const updateStatus = async (newStatus: string) => {
+    await fetch(api(`/api/jobs/${job.id}/status`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus }),
+    });
+    onStatusChange?.(job.id, newStatus);
+    onClose();
+  };
+
+  const fileIcon = (name: string) => {
+    if (name.endsWith('.pdf')) return 'picture_as_pdf';
+    if (name.endsWith('.md'))  return 'description';
+    if (name.endsWith('.json')) return 'data_object';
+    return 'insert_drive_file';
+  };
 
   return (
     <>
@@ -23,7 +69,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose }) => {
       <div
         className="fixed inset-0 bg-on-surface/20 backdrop-blur-[2px] z-40 transition-opacity animate-fade-in"
         onClick={onClose}
-      ></div>
+      />
 
       {/* Panel */}
       <div className="fixed right-0 top-0 h-full w-[520px] bg-surface z-50 editorial-shadow animate-slide-in overflow-hidden">
@@ -42,11 +88,10 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose }) => {
                   {job.company}
                 </span>
               </div>
-              {job.score && (
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="badge badge-primary text-xs">Score: {job.score}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 mt-3">
+                <StatusChip status={job.status} long />
+                {job.score && <span className="badge badge-primary text-xs">Score: {job.score}</span>}
+              </div>
             </div>
             <div className="w-14 h-14 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary text-xl">
               {job.company.charAt(0).toUpperCase()}
@@ -55,23 +100,22 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose }) => {
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-8 sanctuary-scrollbar">
-            {/* Application Status Timeline */}
+            {/* Timeline */}
             <section className="bg-surface-container-low p-6 rounded-2xl">
               <h3 className="text-lg font-headline font-bold text-on-surface mb-4">Application Status</h3>
               <div className="space-y-5 relative">
-                <div className="absolute left-3 top-3 bottom-3 w-px bg-outline-variant/30"></div>
+                <div className="absolute left-3 top-3 bottom-3 w-px bg-outline-variant/30" />
                 {timelineSteps.map((step, i) => (
                   <div key={i} className="flex gap-4 relative">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center z-10 shrink-0 ${
                       step.active ? 'bg-secondary ring-4 ring-secondary-container/50' :
-                      step.done ? 'bg-primary' :
+                      step.done  ? 'bg-primary' :
                       'bg-surface-container-highest border border-outline-variant'
                     }`}>
                       {step.done && <span className="material-symbols-outlined text-white text-[14px]">check</span>}
                     </div>
                     <div className={step.done ? '' : 'opacity-50'}>
                       <p className="text-sm font-bold text-on-surface">{step.label}</p>
-                      <p className={`text-xs ${step.active ? 'text-secondary font-medium' : 'text-on-surface-variant'}`}>{step.date}</p>
                     </div>
                   </div>
                 ))}
@@ -91,52 +135,64 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose }) => {
             {/* Application Assets */}
             <section>
               <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Your Assets</h3>
-              <div className="space-y-2">
-                {['Resume.pdf', 'CoverLetter.pdf', 'Interview_Cheat_Sheet.pdf'].map(asset => (
-                  <div key={asset} className="flex items-center justify-between p-4 bg-surface-container-lowest rounded-xl hover:bg-surface-container-low cursor-pointer transition-colors group">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-primary-container rounded-lg">
-                        <span className="material-symbols-outlined text-primary text-base">description</span>
+              {loadingFiles ? (
+                <p className="text-xs text-on-surface-variant animate-pulse">Loading files...</p>
+              ) : files.length === 0 ? (
+                <p className="text-xs text-on-surface-variant italic">No files generated yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {files.map(file => (
+                    <a
+                      key={file.name}
+                      href={api(`/api/jobs/${job.id}/files/${encodeURIComponent(file.name)}`)}
+                      download={file.name}
+                      className="flex items-center justify-between p-4 bg-surface-container-lowest rounded-xl hover:bg-surface-container-low cursor-pointer transition-colors group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary-container rounded-lg">
+                          <span className="material-symbols-outlined text-primary text-base">{fileIcon(file.name)}</span>
+                        </div>
+                        <span className="text-sm text-on-surface group-hover:text-primary transition-colors">{file.name}</span>
                       </div>
-                      <span className="text-sm text-on-surface group-hover:text-primary transition-colors">{asset}</span>
-                    </div>
-                    <span className="material-symbols-outlined text-on-surface-variant text-base">download</span>
-                  </div>
-                ))}
-              </div>
+                      <span className="material-symbols-outlined text-on-surface-variant text-base">download</span>
+                    </a>
+                  ))}
+                </div>
+              )}
             </section>
 
-            {/* Notes */}
-            <section>
-              <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Private Notes</h3>
-              <textarea
-                placeholder="Add notes about this role, recruiter contact, comp details..."
-                className="input-sanctuary w-full rounded-xl p-4 min-h-[120px] resize-none text-sm"
-              ></textarea>
-            </section>
-
-            {/* Job Link */}
+            {/* Apply CTA */}
             {job.url && (
               <a
                 href={job.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-primary font-bold text-sm hover:underline"
+                className="flex items-center justify-center gap-2 bg-primary text-on-primary hover:opacity-90 font-bold text-lg py-4 px-6 rounded-2xl transition-all shadow-md w-full"
               >
-                View Original Posting
-                <span className="material-symbols-outlined text-sm">open_in_new</span>
+                <span className="material-symbols-outlined">rocket_launch</span>
+                Open Application URL
               </a>
             )}
           </div>
 
           {/* Footer Actions */}
           <div className="p-6 flex items-center justify-between border-t border-outline-variant/10">
-            <button className="text-xs text-error hover:text-error-dim transition-colors font-medium">
-              Remove from pipeline
+            <button
+              onClick={() => updateStatus('Closed')}
+              className="text-xs text-error hover:text-error-dim transition-colors font-medium"
+            >
+              Close & Archive
             </button>
-            <button className="btn-primary text-sm">
-              Update Status
-            </button>
+
+            {progression && (
+              <button
+                onClick={() => updateStatus(progression.next)}
+                className="btn-primary text-sm flex items-center gap-2"
+              >
+                <span className="material-symbols-outlined text-sm">{progression.icon}</span>
+                {progression.label}
+              </button>
+            )}
           </div>
         </div>
       </div>

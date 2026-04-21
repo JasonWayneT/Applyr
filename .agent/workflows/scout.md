@@ -12,7 +12,8 @@ Whenever the user runs the `/scout` command (or when triggered automatically by 
 
 ## Execution Steps: to Execute:
 
-1. Invoke the `browser_subagent` tool with the following task instructions:
-   "Navigate to LinkedIn Jobs. Search for 'Product Manager NOT Senior'. Set Location to either 'Remote, United States' OR 'San Diego, CA'. Apply the 'Past week' filter for date posted. Apply the 'Mid-Senior level' filter for experience. Browse the results. For each qualifying software/platform product management role, first check the file `C:\Users\Jason\Desktop\Jason\Projects\AntiGravity Projects\JobAgent\data\scouted_jobs_log.txt` to see if the company/role was already processed. If it is in the log, skip it. If it is new, copy the full job description text. Save the text into a new file in the `jobs/` directory named `jobs/[Company Name] - Product Manager.txt`. IMPORTANT: Ensure the very first line of this file is 'URL: [The direct LinkedIn Job URL]'. Then, append the '[Company Name] - Product Manager' string to the `data/scouted_jobs_log.txt` file. Do this until you have 3-4 NEW jobs."
+1. Read the search terms, location, and target role from `data/candidate_preferences.json`.
+2. Invoke the `browser_subagent` tool with the following task instructions:
+   "Navigate to LinkedIn Jobs. Use the 'search_terms' and 'location_preference' found in `data/candidate_preferences.json`. Apply the 'Past week' filter for date posted. Browse the results. For each qualifying role, first check the file `data/scouted_jobs_log.txt` to see if the company/role was already processed. If it is in the log, skip it. If it is new, copy the full job description text. Save the text into a new file in the `jobs/` directory named `jobs/[Company Name] - [Role Title].txt`. IMPORTANT: Ensure the very first line of this file is 'URL: [The direct LinkedIn Job URL]'. Then, append the '[Company Name] - [Role Title]' string to the `data/scouted_jobs_log.txt` file. Do this until you have 3-4 NEW jobs."
 2. Wait for the browser subagent to complete.
 3. Notify the user of the jobs that were successfully downloaded and ask if they'd like to run the batch pipeline.

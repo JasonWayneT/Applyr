@@ -1,0 +1,15 @@
+URL: https://www.linkedin.com/jobs/view/4402004003/
+
+Origami Risk is looking for a Product Manager to join our Platform team. You will be responsible for defining and delivering the product roadmap for our core platform services. You will work closely with engineering and other product teams to ensure the platform scales to meet the needs of our diverse customer base.
+
+Responsibilities:
+- Define and communicate the product vision and roadmap for platform services.
+- Gather and prioritize product requirements based on customer feedback and market trends.
+- Collaborate with engineering to deliver high-quality platform features.
+- Manage the full product lifecycle from discovery to launch.
+
+Qualifications:
+- 5+ years of software product management experience.
+- Strong technical background and understanding of platform services (APIs, data models, etc.).
+- Excellent communication and collaboration skills.
+- Experience in B2B SaaS environments is preferred.

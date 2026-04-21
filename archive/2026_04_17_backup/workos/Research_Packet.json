@@ -1,0 +1,43 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "WorkOS builds modern developer tools and APIs that make it easy for companies to become Enterprise Ready, powering authentication, identity, authorization, and other critical infrastructure for developers to securely scale products to large organizations. As AI reshapes software, WorkOS is at the frontier of Human and Agent Authentication, Identity, and Access Control.[1]",
+      "Observed": "Focus on developer-first infrastructure for enterprise features like SSO, Directory Sync, RBAC, and user management, enabling SaaS apps to be 'enterprise ready' from day one.[2][7]"
+    },
+    "Problem Space": "WorkOS solves the pain of integrating complex enterprise features (e.g., SSO, identity management) for B2B SaaS companies targeting large organizations, providing easy-to-use APIs, SDKs, and admin portals to accelerate scaling without building from scratch.[1][2][7]",
+    "Business Model": {
+      "Revenue Streams": "B2B SaaS model targeting enterprise customers with developer tools and APIs for authentication and identity; offers hosted Admin Portal for IT admins.[1][7]",
+      "Growth Stage": "High-growth startup, recently raised $100M Series C at $2B valuation (prior to 2026), powering features for AI companies like OpenAI, Cursor, Perplexity.[1]",
+      "Current Financial Health": "Strong funding position from Series C led by Meritech and Sapphire; active hiring including Product Manager role posted April 13, 2026.[1][3]"
+    },
+    "Founding Story": "Key inflection: Recent $100M Series C at $2B valuation, expanding into AI-driven authentication for humans and agents; powers fastest-growing AI and software companies.[1]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly named in sources; WorkOS differentiates as developer-first platform for enterprise readiness (SSO, Directory Sync, RBAC) with easy APIs, SDKs, and Admin Portal, targeting B2B SaaS vs. traditional enterprise tools.[1][2][7]",
+    "Macro Trends": "AI disruption reshaping software, creating needs for Human/Agent Authentication, Identity, and Access Control; regulatory shifts in enterprise security and scaling SaaS to large orgs.[1]"
+  },
+  "Module C": {
+    "Financials/Funding": "Recent $100M Series C at $2B valuation (pre-2026), led by Meritech, Sapphire, with Greenoaks, Craft, Abstract, Audacious; active job postings indicate ongoing growth.[1][3]",
+    "Organizational Shifts": "Hiring surges: Open roles include Product Manager, Product Designer, Developer Advocate, Engineering Manager; 7 jobs listed.[6][8]",
+    "Product/Partnership News": "Powers enterprise features for OpenAI, Cursor, Perplexity, Vercel, Plaid; focus on AI authentication innovations.[1]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Own product areas end-to-end (discovery, design, engineering, launch); customer talks, prioritization, metrics, cross-functional (eng/design/marketing/GTM); 0-to-1 launches.[1]",
+      "Hidden Success Signals": "Autonomy rare at most companies; bias to action, decisions without perfect info; defend prioritization; contribute to strategy/roadmap.[1]",
+      "Required vs Preferred": {
+        "Must-haves": "B2B SaaS exp (developer/enterprise buyer); deep domain in auth/identity/developer tooling or strong dev-facing products; real 0-to-1 exp; customer obsession; bias to action; cross-functional collab.[1]",
+        "Nice-to-haves": "Pricing/packaging exp; PLG/developer-first GTM background.[1]"
+      }
+    },
+    "Hierarchy": "Engineering managers own product areas (strategy, roadmap, execution), blending technical/product leadership; tight coordination with CEO weekly, leadership group for roadmaps/hiring; Product Managers own end-to-end areas with eng/design partners.[1][2]",
+    "Hiring Manager Profile": "Not identifiable from sources."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in sources.",
+    "Operational Style": "Remote (US-based, SF/NYC plus); travel ~1x/month for meetings; emphasizes personal/familial well-being benefits.[1][4][8]"
+  },
+  "Module F": {
+    "Priority Mapping": "No specific Jason Taylor experience details provided; JD priorities (B2B SaaS, auth/identity/developer tools, 0-to-1 product ownership, customer-driven iteration) align generally with Platform (developer APIs), Data Integrity (secure auth/identity), Revenue Systems (pricing/packaging nice-to-have, enterprise scaling).[1]"
+  }
+}

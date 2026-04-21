@@ -19,8 +19,9 @@ Before any output is finalized, you must run this check:
 If you detect any of the following, you MUST rewrite the sentence to be accurate or flag it for the user:
 - **Seniority Inflation:** Claiming "Director," "Head of," or "People Management."
 - **Metric Fabrication:** Inventing percentages or dollar amounts not found in `workExperience.md`.
-- **Tool Hallucination:** Claiming proficiency in a tool (e.g., Snowflake, Tableau) just because it was in the JD, if it isn't in Jason's history.
-- **Domain Theft:** Claiming deep regulatory or industry expertise (e.g., "Expert in HIPAA") if Jason has only "worked in a regulated environment."
+- **Tool Hallucination:** Do not claim proficiency or use names of tools/standards (e.g., Snowflake, Tableau, FHIR, HL7, Docker) unless they are in `workExperience.md`.
+- **"Lite" Proficiency Trap:** Strictly forbidden to claim "Literacy," "Familiarity," "Awareness," or "Functional knowledge" of a tool just to match a JD if it isn't in his history. If it's not a hard skill in the source, it doesn't exist.
+- **Domain/Jargon Theft:** Do not "borrow" industry-specific jargon (e.g., "HIPAA," "SOC2," "FHIR") to sound like a domain expert. Use Jason's actual terminology (e.g., "Regulated Environment," "Security Compliance").
 
 ## 3) Output Protocol
 If a claim fails verification, provide the output in this format:
@@ -32,6 +33,8 @@ If a claim fails verification, provide the output in this format:
 Do not use these phrases unless explicitly supported by data:
 - "Led a team of..."
 - "Expert in [Industry X]..."
+- "Familiar with [Tool X]..."
+- "[Standard Y] Literacy/Awareness..."
 - "Fully responsible for P&L..."
 - "Shipped AI/ML models..."
 

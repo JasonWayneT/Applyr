@@ -1,0 +1,134 @@
+{
+  "research_packet": {
+    "company": "Snapdocs",
+    "position": "Product Manager",
+    "research_date": "2026-04-15",
+    "modules": {
+      "module_a_company_dna": {
+        "core_mission": {
+          "stated": "Snapdocs is transforming the U.S. mortgage market by replacing archaic, paper-based workflows with fully digitized experiences. The platform powers 20% of all real estate closings in the country.[3]",
+          "observed": "The company operates as a workflow automation and AI-driven platform connecting lenders, settlement teams, notaries, and investors to eliminate friction and reduce risk in real estate closings.[3]"
+        },
+        "problem_space": "The U.S. mortgage market is a $14 trillion economy that still relies heavily on fax machines, overnight shipping, and manual workflows.[3] Snapdocs solves this by automating manual, costly workflows through AI-based automation and digitized processes.[2]",
+        "business_model": {
+          "revenue_streams": "Platform-based SaaS serving the mortgage and real estate closing industry. Products include eClosing workflows, Notary Connect (notary scheduling and network management), and eVault for secure eNote storage.[6]",
+          "growth_stage": "Scale-up company backed by Sequoia, Y Combinator, and F-Prime.[3] Currently expanding into new verticals and building AI-first automation.[3]",
+          "financial_health": "No recent earnings data available in search results, but company is actively hiring across multiple product management levels, indicating growth phase.[1][2][3][4]"
+        },
+        "founding_story": {
+          "founded": "2014[7]",
+          "key_inflection_points": "Company has grown to power 20% of all real estate closings in the U.S.[3] Currently in significant expansion phase supporting fully digital notarizations and AI-first automation.[3]"
+        }
+      },
+      "module_b_market_competitors": {
+        "market_position": "Snapdocs operates in the legal tech and real estate technology space, specifically in mortgage closing automation and notary services.[3]",
+        "big_3_competitors": "Search results do not provide explicit competitor analysis or identification of direct rivals.",
+        "macro_trends": [
+          "Industry shift from paper-based to fully digital workflows in real estate closings[3]",
+          "AI disruption: Snapdocs is building AI-first automation to transform how products work[3]",
+          "Vertical expansion: Company is expanding beyond mortgage into adjacent verticals[3]",
+          "Regulatory evolution: Support for fully digital notarizations represents regulatory acceptance of digital processes[3]"
+        ],
+        "differentiator": "Snapdocs' scale (20% market share of U.S. real estate closings) and AI-driven automation approach position it as a market leader in digitizing mortgage workflows.[3]"
+      },
+      "module_c_recent_intelligence": {
+        "financials_funding": "No recent funding round data in search results. Company backed by Sequoia, Y Combinator, and F-Prime.[3]",
+        "organizational_shifts": {
+          "hiring_activity": "Active hiring surge across multiple product management levels: Principal Product Manager, Senior Product Manager, and Product Manager roles posted.[1][2][3][4]",
+          "expansion_signals": "Significant expansion into new verticals, fully digital notarizations, and AI-first automation indicates organizational growth.[3]"
+        },
+        "product_partnership_news": "Company is launching AI-based automation products that leverage AI to automate manual, costly workflows.[2] Expanding Notary Connect product with new vertical opportunities.[4]"
+      },
+      "module_d_role_org_chart": {
+        "jd_analysis": {
+          "open_positions": [
+            {
+              "title": "Principal Product Manager",
+              "salary_range": "$170,000 - $230,000 (NY, CA, WA, MA); $148,800 - $201,300 (other locations)[1]",
+              "key_responsibilities": "Own significant portion of Snapdocs product suite and revenue. Develop product strategy and roadmap documentation. Lead cross-functional teams (engineering, design, go-to-market, analytics). Mentor Associate Product Manager.[1]",
+              "required_experience": "5+ years product experience in B2B SaaS[1]",
+              "hidden_success_signals": "High-performing creative problem solver with track record for delivering high-quality, timely results. Entrepreneurial mindset.[1]"
+            },
+            {
+              "title": "Senior Product Manager (AI Automation)",
+              "salary_range": "Not specified in search results[2]",
+              "key_responsibilities": "Own strategic product goals for AI-based automation products. Develop vision and roadmap. Collaborate with design and engineering. Set hypotheses, build, measure, and learn. Keep stakeholders informed.[2]",
+              "required_experience": "5+ years in Product Manager role in enterprise B2B platform OR 2+ years as Management Consultant[2]",
+              "preferred_experience": "AI/ML-based products experience. Mortgage or financial services background.[2]",
+              "hidden_success_signals": "Strong technical understanding and acumen. Go-getter mentality. Deep customer empathy and curiosity.[2]"
+            },
+            {
+              "title": "Product Manager, Notary Connect",
+              "salary_range": "$122,500 - $175,000 per year[4]",
+              "key_responsibilities": "Own roadmap, discovery, and delivery for Notary Connect. Drive automation strategy to reduce manual coordination. Lead product expansion into new verticals. Own communication and documentation. Contribute to pricing, packaging, and go-to-market decisions.[3][4]",
+              "required_experience": "3–5 years combined experience in product management and management consulting, with at least 1–2 years in PM role[3][4]",
+              "preferred_experience": "Startup/scale-up experience (Series C or earlier). Experience in financial services, real estate, legal tech, automotive, or regulated industries. Vertical SaaS or two-sided marketplace experience.[3]",
+              "hidden_success_signals": "Analytical rigor. Track record of owning outcomes (business results, not just feature delivery). Strong writing skills for executive-ready documentation.[3][4]"
+            }
+          ],
+          "reporting_structure": "Product Managers report to Director of Product Management.[3] Associate Product Manager reports to Principal Product Manager.[1]",
+          "team_structure": "Cross-functional teams spanning engineering, design, operations, customer success, and go-to-market.[3][4]"
+        },
+        "hiring_manager_profile": "Search results do not provide specific hiring manager background or published content.",
+        "organizational_context": "Snapdocs PMs operate as general managers, working directly with customers and internal teams to drive business strategy.[3][4]"
+      },
+      "module_e_culture_reality_check": {
+        "sentiment_analysis": {
+          "glassdoor_data": "Search results do not include Glassdoor reviews or ratings.",
+          "reddit_blind_data": "No sentiment data available in search results.",
+          "note": "Culture assessment incomplete due to search result limitations."
+        },
+        "operational_style": {
+          "remote_hybrid": "Product Manager, Notary Connect role is listed as remote, USA-based.[4]",
+          "work_environment": "PMs operate with high autonomy as general managers. Startup/scale-up environment with comfort operating independently and building from scratch.[3][4]",
+          "employee_tenure": "No tenure data available in search results."
+        },
+        "organizational_maturity": "Company demonstrates scale-up characteristics: backed by top-tier VCs, 20% market share, expanding into new verticals, and building AI-first products.[3]"
+      },
+      "module_f_intersection_bridge": {
+        "priority_mapping": [
+          {
+            "company_priority": "AI-first automation and digital transformation of mortgage workflows",
+            "connection_to_candidate": "Requires deep understanding of platform architecture, data integrity in financial transactions, and revenue impact of automation. Aligns with experience in complex systems and data-driven decision making.[2][3]"
+          },
+          {
+            "company_priority": "Scaling from 20% market share to market dominance",
+            "connection_to_candidate": "Demands revenue systems thinking, go-to-market strategy development, and ability to own business outcomes. Direct alignment with revenue growth accountability.[3][4]"
+          },
+          {
+            "company_priority": "Vertical expansion beyond mortgage into adjacent markets",
+            "connection_to_candidate": "Requires analytical rigor to structure ambiguous problems, synthesize market signals, and drive prioritization. Platform thinking essential for multi-vertical strategy.[4]"
+          },
+          {
+            "company_priority": "Cross-functional coordination across lenders, settlement teams, notaries, and investors",
+            "connection_to_candidate": "Demands data integrity focus and ability to manage complex stakeholder ecosystems. Two-sided marketplace experience valuable.[3]"
+          },
+          {
+            "company_priority": "Building products that reduce manual, error-prone processes",
+            "connection_to_candidate": "Requires understanding of operational efficiency, data quality, and systems thinking. Revenue impact through cost reduction and risk mitigation.[2]"
+          }
+        ],
+        "strategic_fit_assessment": "Snapdocs is seeking PMs who can operate as general managers with strong analytical rigor, ownership mentality, and ability to drive business outcomes. The company prioritizes platform thinking, data-driven decision making, and revenue accountability—all core to the role's success in a scale-up environment.[1][2][3][4]"
+      }
+    },
+    "data_sources": {
+      "company_careers": "https://www.snapdocs.com/careers[5]",
+      "job_boards": [
+        "https://jobs.freestyle.vc/companies/snapdocs/jobs/33053767-principal-product-manager[1]",
+        "https://jobs.freestyle.vc/companies/snapdocs/jobs/37974710-senior-product-manager[2]",
+        "https://jobs.ashbyhq.com/snapdocs/3c48a8f3-7ffe-4540-84fe-ae39af866417[3]",
+        "https://remotive.com/remote/jobs/product/product-manager-notary-connect-4347583[4]",
+        "https://www.remoterocketship.com/us/company/snapdocs-2/jobs/product-manager-notary-connect-united-states-remote/[6]"
+      ],
+      "company_info": "https://www.indeed.com/cmp/Snapdocs-2[7]"
+    },
+    "research_gaps": [
+      "Specific competitor analysis and market positioning details",
+      "Recent funding round information and financial metrics",
+      "Glassdoor/Blind/Reddit sentiment data on company culture",
+      "Detailed organizational chart and hiring manager profiles",
+      "Recent product launches or partnership announcements beyond AI automation",
+      "Employee tenure and retention metrics"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "AI-Powered Recruitment Marketing Platform that uses data and AI to place job ads in front of the right people at the right time, optimize spending, engage candidates 24/7, and provide real-time insights.[1][2]",
+      "Observed": "Focus on automating workflows, managing job postings, recruitment media, and delivering optimal returns via AI-driven prediction and analytics dashboards.[4]"
+    },
+    "Problem Space": "Solves the pain of inefficient recruitment marketing by dynamically optimizing talent funnels across online channels, saving recruiter time, and ensuring budget efficiency in attracting relevant candidates.[1][2][4]",
+    "Business Model": "SaaS platform for recruitment marketing with AI optimization; revenue from subscriptions or usage-based services for direct employers and partners like Jobvite. Growth stage appears mid-stage with established integrations; no specific financial health details available in results.[1][2][4]",
+    "Founding Story": "No key inflection points or founding details found in provided search results."
+  },
+  "Module B": {
+    "The Big 3 Competitors": "No direct rivals explicitly named in results. Joveo's differentiator is AI-led integration for recruitment marketing, dynamic optimization across channels, and real-time insights, partnering with ATS like Jobvite.[2]",
+    "Macro Trends": "No specific industry headwinds like regulatory shifts or AI disruption detailed in results."
+  },
+  "Module C": {
+    "Financials/Funding": "No recent funding rounds or earnings in 90-day window mentioned.",
+    "Organizational Shifts": "No layoffs, hiring surges, or leadership changes noted.",
+    "Product/Partnership News": "Partnership with Jobvite for integrated recruitment marketing; AI CMS for personalized career sites and landing pages.[2][3]"
+  },
+  "Module D": {
+    "JD Analysis": "No Product Manager job description found in results. Current openings include Director of Solutions, Product Designer, Software Development Engineer, Customer Success roles.[6]",
+    "Hierarchy": "No reporting lines or team structure details available.",
+    "Hiring Manager Profile": "No hiring manager information identified."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor, Reddit, or Blind data in results. Levels.fyi mentions salaries and benefits but no detailed sentiment.[7]",
+    "Operational Style": "No details on remote/hybrid or employee tenure."
+  },
+  "Module F": {
+    "Priority Mapping": "Company priorities include AI-driven recruitment optimization, data insights, and platform integrations.[1][2][4] Direct connections to Jason's experience: **Platform** (SaaS recruitment platform matches platform expertise); **Data Integrity** (relies on data science for predictions and analytics); **Revenue Systems** (optimizes recruitment media budget for ROI, aligning with revenue systems).[4]"
+  }
+}

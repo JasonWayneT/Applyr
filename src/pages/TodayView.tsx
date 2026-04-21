@@ -1,5 +1,6 @@
 import React from 'react';
 import { Job } from '../types/job';
+import StatusChip from '../components/StatusChip';
 
 interface TodayViewProps {
   jobs: Job[];
@@ -21,17 +22,6 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
     { label: 'Interviews', count: interviews.length, height: `${Math.max(20, (interviews.length / Math.max(jobs.length, 1)) * 100)}%` },
     { label: 'Offers', count: offers.length, height: `${Math.max(15, (offers.length / Math.max(jobs.length, 1)) * 100)}%` },
   ];
-
-  const getStatusChip = (status: string) => {
-    switch (status) {
-      case 'Backlog': return <span className="chip chip-backlog"><span className="w-1.5 h-1.5 rounded-full bg-primary"></span>Backlog</span>;
-      case 'Applied': return <span className="chip chip-applied"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Applied</span>;
-      case 'Recruiter Screen': return <span className="chip chip-recruiter-screen"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Screening</span>;
-      case 'Core Interviews': return <span className="chip chip-core-interviews"><span className="w-1.5 h-1.5 rounded-full bg-secondary"></span>Interviewing</span>;
-      case 'Offer and Negotiation': return <span className="chip chip-offer"><span className="w-1.5 h-1.5 rounded-full bg-primary"></span>Offer</span>;
-      default: return <span className="chip chip-closed"><span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>Closed</span>;
-    }
-  };
 
   return (
     <div className="space-y-10">
@@ -135,7 +125,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
                     </div>
                   )}
                   <div className="min-w-[130px]">
-                    {getStatusChip(job.status)}
+                  <StatusChip status={job.status} />
                   </div>
                   <button className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors">
                     <span className="material-symbols-outlined">more_vert</span>

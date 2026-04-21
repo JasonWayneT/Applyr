@@ -1,0 +1,23 @@
+{
+  "error": "Unable to complete request",
+  "reason": "Insufficient search results for comprehensive research packet",
+  "details": {
+    "search_results_limitation": "The provided search results contain only job posting information for Panorama Education positions. They lack the depth required to complete the Research Packet Contract modules.",
+    "missing_critical_data": {
+      "module_a_company_dna": "No information on founding story, stated vs. observed values, financial health, or business model details",
+      "module_b_market_competitors": "No competitive landscape, macro trends, or industry analysis provided",
+      "module_c_recent_intelligence": "No funding rounds, earnings, organizational changes, or recent product news in results",
+      "module_d_role_org_chart": "Minimal JD analysis possible; no hiring manager profile, reporting lines, or team structure data",
+      "module_e_culture_reality_check": "No Glassdoor, Reddit, Blind, or employee sentiment data available",
+      "module_f_intersection_bridge": "Cannot map priorities without comprehensive company and role context"
+    },
+    "available_data_from_search": {
+      "position": "Product Manager, Platform",
+      "location": "Remote USA",
+      "requirements": "5+ years product management experience, ideally EdTech or B2B SaaS, bachelor's degree in CS/business or related field",
+      "company_description": "Fast-growing technology company focused on helping educators; building interconnected platform for schools and districts",
+      "job_posting_sources": [2, 3, 4, 5, 6, 7]
+    },
+    "recommendation": "To deliver a complete Research Packet following the contract specifications, conduct additional searches for: (1) Panorama Education company history and financials, (2) competitive analysis in EdTech, (3) recent news/funding/organizational changes, (4) Glassdoor/Blind reviews, (5) hiring manager LinkedIn profiles, (6) product roadmap and recent launches"
+  }
+}

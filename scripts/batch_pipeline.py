@@ -2,15 +2,15 @@ import os
 import json
 import glob
 import time
+import argparse
+import sys
 from datetime import datetime
-from utils import load_file, call_llm, JOBS_DIR, DATA_DIR, WORK_EXP_FILE, FIT_ENGINE_FILE
+from utils import load_file, call_llm, JOBS_DIR, WORK_EXP_FILE, FIT_ENGINE_FILE
+from drafting_engine import run_drafting_engine
+from generate_cheat_sheet import generate_cheat_sheet
 
 
 def evaluate_job_fit(jd_text, work_exp_text, job_fit_rules):
-    """
-    Stage 1: Job Fit Gatekeeper (Context Firewalled)
-    The LLM memory is fresh for this evaluation. Only the current JD and Ground Truth are passed.
-    """
     prompt = f"""
     You are the JobAgent Job-Fit Decision Engine.
     
@@ -51,7 +51,6 @@ def evaluate_job_fit(jd_text, work_exp_text, job_fit_rules):
         return None
 
     try:
-        # Clean up code blocks if present
         output = result
         if output.startswith("```json"):
             output = output[7:-3].strip()
@@ -59,16 +58,65 @@ def evaluate_job_fit(jd_text, work_exp_text, job_fit_rules):
             output = output[3:-3].strip()
         return json.loads(output)
     except json.JSONDecodeError as e:
-        print(f"  -> Failed to parse LLM JSON output: {e}")
+        print(json.dumps({"stage": "fit", "status": "error", "summary": f"Failed to parse LLM JSON: {e}"}))
         return None
 
+def process_single(company, url, jd_text):
+    print(json.dumps({"id": "fit", "status": "running", "summary": f"Evaluating '{company}'..."}))
+    
+    work_exp = load_file(WORK_EXP_FILE)
+    fit_rules = load_file(FIT_ENGINE_FILE)
+
+    if not jd_text:
+        # Fallback to checking the jobs folder
+        jd_path = os.path.join(JOBS_DIR, f"{company}.txt")
+        if os.path.exists(jd_path):
+            jd_text = load_file(jd_path)
+            
+    if not jd_text:
+        print(json.dumps({"id": "fit", "status": "error", "summary": "No JD text provided or found."}))
+        return
+
+    result = evaluate_job_fit(jd_text, work_exp, fit_rules)
+    if not result:
+        print(json.dumps({"id": "fit", "status": "error", "summary": "Evaluation failed."}))
+        return
+
+    score = result.get("Score", 0)
+    decision = result.get("Decision", "NO")
+    summary = result.get("Summary", "")
+    
+    if decision == "NO" or score < 72:
+        print(json.dumps({"id": "fit", "status": "done", "summary": f"Rejected (Score: {score}). {summary}"}))
+        print(json.dumps({"score": score, "passed": False}))
+        return
+
+    print(json.dumps({"id": "fit", "status": "done", "summary": f"Passed (Score: {score}). {summary}"}))
+    
+    # 2. Start drafting
+    print(json.dumps({"id": "research", "status": "running", "summary": "Extracting intelligence..."}))
+    
+    # We hijack stdout briefly because run_drafting_engine prints raw text to stdout
+    # In a real SSE stream we'd wrap it better, but for now we just let it interleave
+    try:
+        run_drafting_engine(company, jd_text, work_exp, result)
+        print(json.dumps({"id": "resume", "status": "done", "summary": "ATS-Optimized PDF Generated"}))
+        print(json.dumps({"id": "cover", "status": "done", "summary": "PDF Generated"}))
+    except Exception as e:
+        print(json.dumps({"id": "resume", "status": "error", "summary": f"Drafting failed: {e}"}))
+        
+    try:
+        generate_cheat_sheet(company)
+    except Exception as e:
+        pass
+        
+    print(json.dumps({"score": score, "passed": True}))
 
 def process_batch():
     print("====================================")
     print(" JobAgent v3.2 Batch Pipeline Sync  ")
     print("====================================")
 
-    # Context Firewall Reset: Read Source of Truth (and cache it for the loop run)
     work_exp = load_file(WORK_EXP_FILE)
     fit_rules = load_file(FIT_ENGINE_FILE)
 
@@ -76,7 +124,6 @@ def process_batch():
         print("CRITICAL ERROR: Source of Truth or Fit Rules missing. Aborting.")
         return
 
-    # Find jobs to process
     job_files = glob.glob(os.path.join(JOBS_DIR, "*.txt"))
     if not job_files:
         print(f"No job description files (.txt) found in {JOBS_DIR}/ directory.")
@@ -95,7 +142,6 @@ def process_batch():
             print(f"  -> Skipping. File {filename} seems empty or too short.")
             continue
 
-        # Stage 1: Evaluate
         print("  -> Evaluating fit against v3.2 Rubric...")
         result = evaluate_job_fit(jd_text, work_exp, fit_rules)
 
@@ -108,17 +154,34 @@ def process_batch():
         print(f"  -> Result: {decision} (Score: {score})")
         print(f"  -> Summary: {result.get('Summary')}")
 
-        # Hard stop if < 72
         if decision == "NO" or score < 72:
             print(f"  -> [GATEKEEPER REJECT] JD scored below 72 or triggered hard stop. Moving to next.")
             continue
 
-        # If YES: Log the pass (drafting is handled by the /evaluate workflow)
-        print(f"  -> [GATEKEEPER PASS] Score: {score}. Ready for drafting via /evaluate workflow.")
-
-        # "Flush" wait to ensure no API rate limit or cross-pollution
+        print(f"  -> [GATEKEEPER PASS] Score: {score}. Running drafting engine...")
+        run_drafting_engine(company_name, jd_text, work_exp, result)
+        try:
+            generate_cheat_sheet(company_name)
+        except Exception as e:
+            pass
+            
         print("  -> Sleeping for 15 seconds to respect rate limits...")
         time.sleep(15)
 
 if __name__ == "__main__":
-    process_batch()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', choices=['batch', 'single'], default='batch')
+    parser.add_argument('--company', type=str, help='Company name for single mode')
+    parser.add_argument('--url', type=str, help='URL for single mode')
+    
+    args = parser.parse_args()
+    
+    if args.mode == 'single':
+        # the Node server passes JD via stdin for robust parsing
+        jd_input = ""
+        if not sys.stdin.isatty():
+            jd_input = sys.stdin.read().strip()
+            
+        process_single(args.company, args.url, jd_input)
+    else:
+        process_batch()

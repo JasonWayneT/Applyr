@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import JDInputForm from '../components/JDInputForm';
 import BulkUploadForm, { ParsedJob } from '../components/BulkUploadForm';
+import LiveScoutForm from '../components/LiveScoutForm';
+
 import PipelineTracker from '../components/PipelineTracker';
 import { usePipeline } from '../hooks/usePipeline';
 
@@ -9,7 +11,7 @@ const FindNewJobsView: React.FC = () => {
   const [resetKey, setResetKey] = useState(0);
   const [isAdded, setIsAdded] = useState(false);
 
-  const [inputMode, setInputMode] = useState<'single' | 'bulk'>('single');
+  const [inputMode, setInputMode] = useState<'single' | 'bulk' | 'scout'>('single');
   const [batchProgress, setBatchProgress] = useState<{current: number, total: number, passed: number} | null>(null);
 
   const handleBatchRun = async (jobs: ParsedJob[]) => {
@@ -77,6 +79,13 @@ const FindNewJobsView: React.FC = () => {
           >
             CSV Bulk Upload
           </button>
+          <button
+            onClick={() => setInputMode('scout')}
+            disabled={isRunning || batchProgress !== null}
+            className={`px-4 py-1.5 text-sm rounded-lg transition-colors font-medium ${inputMode === 'scout' ? 'bg-surface-container-lowest text-on-surface editorial-shadow' : 'text-on-surface-variant hover:text-on-surface'} disabled:opacity-50`}
+          >
+            Live Scout
+          </button>
         </div>
       </div>
 
@@ -85,8 +94,10 @@ const FindNewJobsView: React.FC = () => {
         <div className="space-y-6">
           {inputMode === 'single' ? (
             <JDInputForm key={resetKey} onRun={runPipeline} isLoading={isRunning} />
-          ) : (
+          ) : inputMode === 'bulk' ? (
             <BulkUploadForm key={`bulk-${resetKey}`} onBatchRun={handleBatchRun} isLoading={batchProgress !== null} />
+          ) : (
+            <LiveScoutForm />
           )}
         </div>
 

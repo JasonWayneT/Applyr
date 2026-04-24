@@ -214,7 +214,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           { label: 'Total Active', value: activeJobs.length, icon: 'trending_up' },
           { label: 'Screening', value: screenings.length, icon: 'hourglass_top' },
           { label: 'Interviewing', value: interviews.length, icon: 'record_voice_over', accent: true },
-          { label: 'Response Rate', value: jobs.length > 0 ? `${Math.round((interviews.length + offers.length) / jobs.length * 100)}%` : '0%', icon: 'insights', accent: true },
+          { label: 'Response Rate', value: jobs.length > 0 ? `${Math.round((screenings.length + interviews.length + offers.length) / jobs.length * 100)}%` : '0%', icon: 'insights', accent: true },
         ].map(stat => (
           <div key={stat.label} className="bg-surface-container-lowest rounded-2xl p-6 editorial-shadow">
             <div className="flex items-center justify-between mb-3">

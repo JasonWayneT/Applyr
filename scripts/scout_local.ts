@@ -1,8 +1,13 @@
-import { chromium, BrowserContext, Page } from 'playwright';
+import { chromium } from 'playwright-extra';
+import stealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { BrowserContext, Page } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
+
+// Use stealth plugin
+chromium.use(stealthPlugin());
 
 // Constants
 const DB_PATH = 'jobagent.sqlite';

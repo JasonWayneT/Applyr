@@ -1,0 +1,47 @@
+# Technical Product Manager, Ratings & Lead Integrations
+**The Baldwin Group** • United States (Remote)
+
+## About the job
+The Baldwin Group is an award-winning entrepreneur-led and inspired firm that takes a holistic and tailored approach to insurance and risk management.
+
+### About The Role
+MIS (Mainstreet Insurance Solutions) is looking for a Technical Product Manager to own the technical lifecycle of our Ratings and Lead Integration platforms. This role is a "bridge" position: you will work directly with our insurance carrier partners to integrate their rating engines and lead-generation APIs into our ecosystem, while ensuring our internal data pipelines remain robust and reliable.
+
+You will be responsible for defining technical requirements, managing the roadmap for rating engine integrations, and collaborating with cross-functional teams to deliver scalable, high-performance solutions. This role requires a blend of product thinking, technical curiosity, and strong partner management skills.
+
+### What You'll Own
+*   **Roadmap Strategy & Execution:** Own the roadmap for carrier ratings and lead integrations, prioritizing features and integrations that drive business value and platform scalability.
+*   **Technical Requirements:** Translate complex business needs into clear, actionable technical specifications (API documentation review, data mapping, field validation) for our engineering teams.
+*   **Partner Management:** Act as the primary point of contact for carrier technical teams and distribution partner engineering counterparts during integration projects.
+*   **Data Integrity & Reliability:** Monitor integration health and data quality, ensuring that lead data and rating results flow accurately through our systems.
+*   **Cross-Platform Collaboration:** Work closely with our Quoting, Lead Management, and CRM product managers to ensure a seamless end-to-end experience for our agents and partners.
+*   **Stakeholder Communication:** Represent the platform in business reviews and leadership updates, connecting technical delivery to business outcomes like quote volume, conversion rates, and partner onboarding velocity.
+*   **Risk Mitigation:** Identify and escalate integration risks, data quality issues, and platform reliability concerns with appropriate context and recommended remediation paths.
+
+### Required Experience (What We're Looking For)
+*   4+ years of product management experience, with a strong technical foundation — you have worked directly with engineering teams on API-driven products and are comfortable reading API documentation, reviewing integration specs, and participating in technical design discussions.
+*   Hands-on experience managing API integrations, including defining requirements, overseeing implementation, and troubleshooting issues across partner or third-party systems.
+*   Experience owning a high-volume data ingestion or lead management platform, with an understanding of data quality, routing logic, and pipeline reliability.
+*   Demonstrated ability to write clear, unambiguous product requirements — PRDs, user stories, acceptance criteria — for technically complex features.
+*   Strong analytical mindset with the ability to monitor platform performance metrics, diagnose issues, and drive resolution across engineering and partner teams.
+*   Excellent communication skills — able to engage credibly with engineers on technical details and with business leadership on strategic priorities.
+
+### Preferred Experience
+*   Background in insurance technology, insurtech, fintech, or a similarly regulated, data-intensive industry.
+*   Familiarity with insurance rating concepts — carrier appetite, underwriting data inputs, real-time quoting, or comparative rating platforms.
+*   Experience working with middleware or integration layers (e.g., MuleSoft, MuleSoft-equivalent, iPaaS platforms) and understanding how data flows across connected systems.
+*   Exposure to embedded distribution models, partner API programs, or B2B2C technology platforms.
+*   Experience with CSV or flat-file data exchange workflows, field mapping, and data validation in an enterprise context.
+*   Familiarity with data pipeline concepts, lead scoring, or CRM integration patterns.
+
+### Who Thrives Here
+*   You naturally gravitate toward the technical details — you ask about the data model, the error handling, the edge cases — and you use that depth to make better product decisions.
+*   You can hold a conversation with a carrier's engineering team in the morning and present a roadmap to business leadership in the afternoon.
+*   You treat integrations as products — not just plumbing — and you think about reliability, documentation, and partner experience as seriously as features.
+*   You're energized by complexity and volume: thousands of daily transactions, dozens of carrier connections, and a growing partner ecosystem excite rather than overwhelm you.
+*   You collaborate generously with peers and see roadmap alignment as a shared responsibility, not someone else's problem.
+
+### About MIS & The Baldwin Group
+Mainstreet Insurance Solutions (MIS) is the embedded insurance platform of The Baldwin Group, one of the fastest-growing insurance distribution companies in the U.S. MIS enables mortgage lenders, servicers, and real estate partners to offer home and auto insurance seamlessly within their customer journeys — powered by a proprietary technology stack built for scale.
+
+Our product and technology organization builds and operates six integrated platforms spanning ratings, quoting, lead management, CRM, digital experience, and telephony. We're executing an ambitious 2026 roadmap across carrier expansion, partner onboarding, automation, and digital self-service — and this role sits at the technical core of that effort.

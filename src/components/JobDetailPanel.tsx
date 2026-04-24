@@ -23,9 +23,21 @@ const STATUS_PROGRESSIONS: Partial<Record<Job['status'], { label: string; next: 
 const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusChange }) => {
   const [files, setFiles] = useState<JobFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
+  const [showClosureForm, setShowClosureForm] = useState(false);
+  const [closureData, setClosureData] = useState<{
+    stage: string;
+    type: 'Ghosted' | 'Rejected' | 'Withdrawn' | 'Other';
+    notes: string;
+  }>({
+    stage: job?.status || 'Backlog',
+    type: 'Rejected',
+    notes: ''
+  });
+  const [interviewDate, setInterviewDate] = useState(job?.interview_date || '');
 
   useEffect(() => {
     if (!job) return;
+    setInterviewDate(job.interview_date || '');
     setLoadingFiles(true);
     fetch(api(`/api/jobs/${job.id}/files`))
       .then(r => r.json())
@@ -46,11 +58,20 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
   const progression = STATUS_PROGRESSIONS[job.status];
 
-  const updateStatus = async (newStatus: string) => {
+  const handleDateChange = async (date: string) => {
+    setInterviewDate(date);
+    await fetch(api(`/api/jobs/${job.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ interview_date: date }),
+    });
+  };
+
+  const updateStatus = async (newStatus: string, payload: any = {}) => {
     await fetch(api(`/api/jobs/${job.id}/status`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
+      body: JSON.stringify({ status: newStatus, ...payload }),
     });
     onStatusChange?.(job.id, newStatus);
     onClose();
@@ -122,6 +143,31 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
               </div>
             </section>
 
+            {/* Schedule Interview */}
+            <section className="bg-primary/5 p-6 rounded-2xl border border-primary/10">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="material-symbols-outlined text-primary">calendar_month</span>
+                <h3 className="text-lg font-headline font-bold text-on-surface">Interview Schedule</h3>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Date & Time</label>
+                  <input 
+                    type="datetime-local"
+                    value={interviewDate}
+                    onChange={(e) => handleDateChange(e.target.value)}
+                    className="input-sanctuary w-full text-sm rounded-xl py-2.5 px-4"
+                  />
+                </div>
+                {interviewDate && (
+                  <p className="text-[11px] text-primary font-medium flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">notifications_active</span>
+                    Scheduled for {new Date(interviewDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                  </p>
+                )}
+              </div>
+            </section>
+
             {/* Match Summary */}
             {job.summary && (
               <section>
@@ -176,22 +222,90 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
           </div>
 
           {/* Footer Actions */}
-          <div className="p-6 flex items-center justify-between border-t border-outline-variant/10">
-            <button
-              onClick={() => updateStatus('Closed')}
-              className="text-xs text-error hover:text-error-dim transition-colors font-medium"
-            >
-              Close & Archive
-            </button>
+          <div className="p-6 border-t border-outline-variant/10">
+            {showClosureForm ? (
+              <div className="space-y-4 animate-fade-in">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Last Stage</label>
+                    <select 
+                      value={closureData.stage}
+                      onChange={e => setClosureData({...closureData, stage: e.target.value})}
+                      className="input-sanctuary w-full text-xs rounded-lg py-2"
+                    >
+                      {['Backlog', 'Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Outcome</label>
+                    <div className="flex gap-1">
+                      {(['Rejected', 'Ghosted'] as const).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setClosureData({...closureData, type: t})}
+                          className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${
+                            closureData.type === t 
+                              ? 'bg-error-container text-on-error-container' 
+                              : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Notes (Optional)</label>
+                  <input 
+                    type="text"
+                    placeholder="e.g. Compensation mismatch, Role closed..."
+                    value={closureData.notes}
+                    onChange={e => setClosureData({...closureData, notes: e.target.value})}
+                    className="input-sanctuary w-full text-xs rounded-lg py-2"
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setShowClosureForm(false)}
+                    className="flex-1 py-2.5 text-xs font-bold text-on-surface-variant hover:text-on-surface transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => updateStatus('Closed', {
+                      rejection_stage: closureData.stage,
+                      rejection_type: closureData.type,
+                      outcome_notes: closureData.notes
+                    })}
+                    className="flex-1 py-2.5 bg-error text-on-error rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition-all"
+                  >
+                    Confirm Closure
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setShowClosureForm(true)}
+                  className="text-xs text-error hover:text-error-dim transition-colors font-medium flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-sm">archive</span>
+                  Close & Archive
+                </button>
 
-            {progression && (
-              <button
-                onClick={() => updateStatus(progression.next)}
-                className="btn-primary text-sm flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-sm">{progression.icon}</span>
-                {progression.label}
-              </button>
+                {progression && (
+                  <button
+                    onClick={() => updateStatus(progression.next)}
+                    className="btn-primary text-sm flex items-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-sm">{progression.icon}</span>
+                    {progression.label}
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>

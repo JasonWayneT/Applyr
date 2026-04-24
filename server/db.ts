@@ -21,6 +21,10 @@ db.exec(`
     recruiter_name TEXT,
     recruiter_url TEXT,
     source_site TEXT,
+    rejection_stage TEXT,
+    rejection_type TEXT,
+    outcome_notes TEXT,
+    interview_date DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 

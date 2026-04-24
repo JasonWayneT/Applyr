@@ -11,7 +11,11 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
   const backlogs = jobs.filter(j => j.status === 'Backlog');
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => !['Closed'].includes(j.status));
-  const interviews = jobs.filter(j => j.status === 'Core Interviews');
+  const interviews = jobs
+    .filter(j => j.interview_date && !['Closed'].includes(j.status))
+    .sort((a, b) => new Date(a.interview_date!).getTime() - new Date(b.interview_date!).getTime());
+  
+  const nextInterview = interviews.find(j => new Date(j.interview_date!).getTime() > Date.now()) || interviews[0];
   const screenings = jobs.filter(j => j.status === 'Recruiter Screen');
   const offers = jobs.filter(j => j.status === 'Offer and Negotiation');
 
@@ -85,17 +89,25 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
 
         {/* Next Interview / Quick Stats */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          {interviews.length > 0 ? (
-            <div className="bg-primary text-on-primary rounded-[2rem] p-8 flex-1 flex flex-col justify-between shadow-xl shadow-primary/10">
+          {nextInterview ? (
+            <div className="bg-primary text-on-primary rounded-[2rem] p-8 flex-1 flex flex-col justify-between shadow-xl shadow-primary/10 transition-all hover:-translate-y-1">
               <div>
                 <span className="material-symbols-outlined text-4xl mb-4" style={{ fontVariationSettings: "'FILL' 1" }}>calendar_today</span>
                 <h3 className="text-xl font-headline font-bold mb-2">Next Interview</h3>
-                <p className="text-on-primary/80 text-sm mb-6">{interviews[0].title} at {interviews[0].company}</p>
+                <p className="text-on-primary/80 text-sm mb-6">{nextInterview.title} at {nextInterview.company}</p>
                 <div className="bg-on-primary/10 backdrop-blur-md rounded-2xl p-4 border border-on-primary/5">
                   <p className="text-xs font-bold uppercase tracking-widest opacity-60">Scheduled</p>
-                  <p className="text-lg font-bold">Check calendar</p>
+                  <p className="text-lg font-bold">
+                    {new Date(nextInterview.interview_date!).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
                 </div>
               </div>
+              <button 
+                onClick={() => onJobClick(nextInterview)}
+                className="mt-6 flex items-center justify-center gap-2 bg-on-primary text-primary font-bold py-3 rounded-xl hover:bg-on-primary-container transition-colors"
+              >
+                Prep for Interview
+              </button>
             </div>
           ) : (
             <div className="bg-surface-container-lowest rounded-[2rem] p-8 flex-1 flex flex-col justify-center items-center editorial-shadow text-center">
@@ -145,6 +157,51 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
               <div className="bg-surface-container-lowest rounded-3xl p-12 text-center editorial-shadow">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 mb-3">work_outline</span>
                 <p className="text-on-surface-variant">No active applications yet. Start your journey.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Upcoming Interviews Schedule */}
+        <div className="lg:col-span-12 mt-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-2xl font-headline font-bold text-on-surface">Upcoming Interviews</h3>
+            <div className="flex gap-2">
+              <span className="badge bg-secondary/10 text-secondary text-xs">{interviews.length} Scheduled</span>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {interviews.map(job => (
+              <div 
+                key={job.id}
+                onClick={() => onJobClick(job)}
+                className="bg-surface-container-lowest p-6 rounded-3xl editorial-shadow border border-outline-variant/10 hover:border-primary/20 transition-all cursor-pointer group"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary">
+                    {job.company.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Date</p>
+                    <p className="text-sm font-bold text-on-surface">
+                      {new Date(job.interview_date!).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                </div>
+                <h4 className="font-bold text-on-surface group-hover:text-primary transition-colors">{job.company}</h4>
+                <p className="text-xs text-on-surface-variant mb-4">{job.title}</p>
+                <div className="flex items-center gap-2 pt-4 border-t border-outline-variant/5">
+                  <span className="material-symbols-outlined text-sm text-secondary">schedule</span>
+                  <span className="text-xs font-bold text-secondary">
+                    {new Date(job.interview_date!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {interviews.length === 0 && (
+              <div className="col-span-full py-12 bg-surface-container-low/30 border border-dashed border-outline-variant/20 rounded-3xl text-center">
+                <p className="text-on-surface-variant text-sm">No future interviews scheduled.</p>
               </div>
             )}
           </div>

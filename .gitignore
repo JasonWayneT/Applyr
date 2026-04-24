@@ -25,3 +25,7 @@ jobagent.sqlite
 # Build artifacts
 *.zip
 *.log
+
+# Browser and Cache
+data/browser_context/
+.tempmediaStorage/

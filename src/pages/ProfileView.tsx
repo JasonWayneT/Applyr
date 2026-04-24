@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../lib/api';
 
-type Tab = 'Identity' | 'Experience' | 'Preferences' | 'Security';
+type Tab = 'Identity' | 'Experience' | 'Preferences' | 'Analytics' | 'Security';
 
 interface ProfileData {
   name: string;
@@ -33,6 +33,12 @@ const ProfileView: React.FC = () => {
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [stats, setStats] = useState<{
+    total: number;
+    byStatus: {status: string, count: number}[];
+    byRejectionStage: {rejection_stage: string, count: number}[];
+    byRejectionType: {rejection_type: string, count: number}[];
+  } | null>(null);
 
   // Debounce timers
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -40,19 +46,22 @@ const ProfileView: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [profileRes, prefRes, expRes] = await Promise.all([
+        const [profileRes, prefRes, expRes, statsRes] = await Promise.all([
           fetch(api('/api/profile/identity')),
           fetch(api('/api/profile/preferences')),
           fetch(api('/api/experience')),
+          fetch(api('/api/jobs/stats')),
         ]);
-        const [profileData, prefData, expData] = await Promise.all([
+        const [profileData, prefData, expData, statsData] = await Promise.all([
           profileRes.json(),
           prefRes.json(),
           expRes.json(),
+          statsRes.json(),
         ]);
         if (profileData.name) setProfile(profileData);
         if (prefData.minSalary) setPreferences(prefData);
         setExperience(expData.content ?? '');
+        if (!statsData.error) setStats(statsData);
       } catch {
         setLoadError('Could not connect to the local server. Make sure `npm run dev:server` is running.');
       }
@@ -136,7 +145,7 @@ const ProfileView: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex gap-8 border-b border-outline-variant/20">
-        {(['Identity', 'Experience', 'Preferences', 'Security'] as Tab[]).map((tab) => (
+        {(['Identity', 'Experience', 'Preferences', 'Analytics', 'Security'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -290,6 +299,101 @@ const ProfileView: React.FC = () => {
                   className="input-sanctuary w-full h-20 rounded-xl px-4 py-3 text-xs resize-none"
                   placeholder="Crypto, Gambling, Web3..."
                 />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'Analytics' && stats && (
+          <div className="space-y-8 animate-fade-in">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-surface-container-lowest p-5 rounded-2xl editorial-shadow border border-outline-variant/10">
+                <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Total Leads</p>
+                <p className="text-3xl font-headline font-extrabold text-primary">{stats.total}</p>
+              </div>
+              <div className="bg-surface-container-lowest p-5 rounded-2xl editorial-shadow border border-outline-variant/10 text-error">
+                <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Rejected</p>
+                <p className="text-3xl font-headline font-extrabold">{stats.byRejectionType.find(t => t.rejection_type === 'Rejected')?.count || 0}</p>
+              </div>
+              <div className="bg-surface-container-lowest p-5 rounded-2xl editorial-shadow border border-outline-variant/10 text-on-surface-variant">
+                <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Ghosted</p>
+                <p className="text-3xl font-headline font-extrabold">{stats.byRejectionType.find(t => t.rejection_type === 'Ghosted')?.count || 0}</p>
+              </div>
+              <div className="bg-surface-container-lowest p-5 rounded-2xl editorial-shadow border border-outline-variant/20 bg-primary/5">
+                <p className="text-[10px] font-bold text-primary uppercase tracking-widest mb-1">Interview Rate</p>
+                <p className="text-3xl font-headline font-extrabold text-primary">
+                  {Math.round(((stats.byStatus.find(s => s.status === 'Core Interviews')?.count || 0) / (stats.total || 1)) * 100)}%
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Funnel Visualization */}
+              <div className="bg-surface-container-lowest p-8 rounded-3xl editorial-shadow">
+                <h3 className="text-sm font-headline font-bold text-on-surface mb-6">Application Funnel</h3>
+                <div className="space-y-4">
+                  {[
+                    { label: 'Backlog', status: 'Backlog', color: 'bg-outline-variant' },
+                    { label: 'Applied', status: 'Applied', color: 'bg-primary-container' },
+                    { label: 'Screening', status: 'Recruiter Screen', color: 'bg-secondary' },
+                    { label: 'Interviews', status: 'Core Interviews', color: 'bg-primary' },
+                    { label: 'Offers', status: 'Offer and Negotiation', color: 'bg-tertiary' },
+                  ].map((stage, i) => {
+                    const count = stats.byStatus.find(s => s.status === stage.status)?.count || 0;
+                    const percentage = Math.max(10, (count / (stats.total || 1)) * 100);
+                    return (
+                      <div key={stage.label} className="relative group">
+                        <div className="flex justify-between items-center mb-1.5 px-1">
+                          <span className="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">{stage.label}</span>
+                          <span className="text-xs font-mono font-bold text-on-surface">{count}</span>
+                        </div>
+                        <div className="h-8 w-full bg-surface-container rounded-lg overflow-hidden flex">
+                          <div 
+                            className={`h-full ${stage.color} transition-all duration-1000 ease-out flex items-center px-3`}
+                            style={{ width: `${percentage}%` }}
+                          >
+                            {percentage > 15 && <div className="w-1 h-1 rounded-full bg-white/50" />}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Dropoff Heatmap */}
+              <div className="bg-surface-container-lowest p-8 rounded-3xl editorial-shadow">
+                <h3 className="text-sm font-headline font-bold text-on-surface mb-6">Dropoff Patterns (Closed/Archived)</h3>
+                <div className="space-y-4">
+                  {['Backlog', 'Applied', 'Recruiter Screen', 'Core Interviews'].map(stage => {
+                    const count = stats.byRejectionStage.find(s => s.rejection_stage === stage)?.count || 0;
+                    const max = Math.max(...stats.byRejectionStage.map(s => s.count), 1);
+                    const weight = (count / max) * 100;
+                    return (
+                      <div key={stage} className="flex items-center gap-4">
+                        <div className="w-24 text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter text-right">{stage}</div>
+                        <div className="flex-1 h-2 bg-surface-container rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-error/40 rounded-full" 
+                            style={{ width: `${weight}%` }}
+                          />
+                        </div>
+                        <div className="w-8 text-xs font-mono font-bold text-on-surface">{count}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-8 p-4 bg-surface-container-low rounded-xl">
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    <span className="font-bold text-error">Insight:</span> Most applications are stalling at the <strong>{
+                      [...stats.byRejectionStage].sort((a,b) => b.count - a.count)[0]?.rejection_stage || 'N/A'
+                    }</strong> phase. Consider refining your {
+                      ([...stats.byRejectionStage].sort((a,b) => b.count - a.count)[0]?.rejection_stage === 'Applied' ? 'Resume' : 'Interview prep')
+                    }.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

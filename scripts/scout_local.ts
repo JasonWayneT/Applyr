@@ -127,8 +127,10 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
     console.log('[LOG] Scouting Built In (National Index)...');
     const searchUrl = 'https://builtin.com/jobs/remote/product?days_since_posted=7';
     
-    await page.goto(searchUrl);
-    await humanWait(4000, 6000);
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    await humanWait(2000, 4000);
+    await page.waitForSelector('.job-card', { timeout: 10000 }).catch(() => {});
     
     const jobs: ScrapedJob[] = [];
     const jobCards = await page.$$('.job-card'); 

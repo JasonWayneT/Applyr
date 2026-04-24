@@ -58,6 +58,25 @@ app.get('/api/jobs', (_req, res) => {
   }
 });
 
+// API: Get job statistics for analytics
+app.get('/api/jobs/stats', (_req, res) => {
+  try {
+    const total = db.prepare('SELECT COUNT(*) as count FROM jobs').get() as any;
+    const byStatus = db.prepare('SELECT status, COUNT(*) as count FROM jobs GROUP BY status').all();
+    const byRejectionStage = db.prepare("SELECT rejection_stage, COUNT(*) as count FROM jobs WHERE status = 'Closed' GROUP BY rejection_stage").all();
+    const byRejectionType = db.prepare("SELECT rejection_type, COUNT(*) as count FROM jobs WHERE status = 'Closed' GROUP BY rejection_type").all();
+
+    res.json({
+      total: total.count,
+      byStatus,
+      byRejectionStage,
+      byRejectionType
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
 // API: Update Job Status + physically move submission folder
 app.patch('/api/jobs/:id/status', (req, res) => {
   try {
@@ -81,13 +100,48 @@ app.patch('/api/jobs/:id/status', (req, res) => {
       fs.renameSync(archivePath, activePath);
     }
 
-    db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run(status, id);
+    db.prepare(`
+      UPDATE jobs 
+      SET status = ?, 
+          rejection_stage = COALESCE(?, rejection_stage),
+          rejection_type = COALESCE(?, rejection_type),
+          outcome_notes = COALESCE(?, outcome_notes)
+      WHERE id = ?
+    `).run(
+      status, 
+      status === 'Closed' ? (req.body.rejection_stage || job.status) : null,
+      status === 'Closed' ? req.body.rejection_type : null,
+      status === 'Closed' ? req.body.outcome_notes : null,
+      id
+    );
     logActivity('INFO', 'System', `Job "${job.company}" status changed to ${status}`);
 
     res.json({ success: true, status });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update job status' });
+  }
+});
+
+// API: Update Job Details (generic)
+app.patch('/api/jobs/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    
+    // Build dynamic update query
+    const keys = Object.keys(updates).filter(k => k !== 'id');
+    if (keys.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    
+    const setClause = keys.map(k => `${k} = ?`).join(', ');
+    const values = keys.map(k => updates[k]);
+    
+    db.prepare(`UPDATE jobs SET ${setClause} WHERE id = ?`).run(...values, id);
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update job details' });
   }
 });
 

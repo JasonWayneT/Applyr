@@ -5,20 +5,34 @@ import time
 import argparse
 import sys
 from datetime import datetime
-from utils import load_file, call_llm, JOBS_DIR, WORK_EXP_FILE, FIT_ENGINE_FILE
+from utils import (
+    load_file, call_llm, JOBS_DIR,
+    WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
+    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS
+)
 from drafting_engine import run_drafting_engine
 from generate_cheat_sheet import generate_cheat_sheet
 
 
-def evaluate_job_fit(jd_text, work_exp_text, job_fit_rules):
+def passes_jd_keyword_gate(jd_text: str) -> bool:
+    """Zero-token pre-filter. Rejects JDs that have no relevant keywords."""
+    lower = jd_text.lower()
+    return any(kw in lower for kw in JD_REQUIRED_KEYWORDS)
+
+
+def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules):
+    """Uses condensed summary (not full workExperience) to minimize token cost."""
+    # Truncate JD — first 1500 chars contain ~90% of signal for scoring
+    truncated_jd = jd_text[:SCORING_JD_MAX_CHARS] if len(jd_text) > SCORING_JD_MAX_CHARS else jd_text
+
     prompt = f"""
     You are the JobAgent Job-Fit Decision Engine.
     
     GROUND TRUTH (Jason Taylor's Profile):
-    {work_exp_text}
+    {work_exp_summary}
     
-    JOB DESCRIPTION:
-    {jd_text}
+    JOB DESCRIPTION (first {SCORING_JD_MAX_CHARS} chars):
+    {truncated_jd}
     
     RULES & SCORING PROTOCOL:
     {job_fit_rules}
@@ -63,21 +77,27 @@ def evaluate_job_fit(jd_text, work_exp_text, job_fit_rules):
 
 def process_single(company, url, jd_text):
     print(json.dumps({"id": "fit", "status": "running", "summary": f"Evaluating '{company}'..."}))
-    
-    work_exp = load_file(WORK_EXP_FILE)
+
     fit_rules = load_file(FIT_ENGINE_FILE)
 
     if not jd_text:
-        # Fallback to checking the jobs folder
         jd_path = os.path.join(JOBS_DIR, f"{company}.txt")
         if os.path.exists(jd_path):
             jd_text = load_file(jd_path)
-            
+
     if not jd_text:
         print(json.dumps({"id": "fit", "status": "error", "summary": "No JD text provided or found."}))
         return
 
-    result = evaluate_job_fit(jd_text, work_exp, fit_rules)
+    # Zero-token keyword gate before any LLM call
+    if not passes_jd_keyword_gate(jd_text):
+        print(json.dumps({"id": "fit", "status": "done", "summary": "Rejected (keyword gate: no relevant signals found)."}))
+        print(json.dumps({"score": 0, "passed": False}))
+        return
+
+    # Scoring uses condensed summary — full workExperience loaded only on YES
+    work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE)
+    result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules)
     if not result:
         print(json.dumps({"id": "fit", "status": "error", "summary": "Evaluation failed."}))
         return
@@ -92,14 +112,15 @@ def process_single(company, url, jd_text):
         return
 
     print(json.dumps({"id": "fit", "status": "done", "summary": f"Passed (Score: {score}). {summary}"}))
-    
+
+    # Load FULL work experience only now that we have a YES decision
+    work_exp_full = load_file(WORK_EXP_FILE)
+
     # 2. Start drafting
     print(json.dumps({"id": "research", "status": "running", "summary": "Extracting intelligence..."}))
-    
-    # We hijack stdout briefly because run_drafting_engine prints raw text to stdout
-    # In a real SSE stream we'd wrap it better, but for now we just let it interleave
+
     try:
-        run_drafting_engine(company, jd_text, work_exp, result)
+        run_drafting_engine(company, jd_text, work_exp_full, result)
         print(json.dumps({"id": "resume", "status": "done", "summary": "ATS-Optimized PDF Generated"}))
         print(json.dumps({"id": "cover", "status": "done", "summary": "PDF Generated"}))
     except Exception as e:
@@ -117,11 +138,12 @@ def process_batch():
     print(" JobAgent v3.2 Batch Pipeline Sync  ")
     print("====================================")
 
-    work_exp = load_file(WORK_EXP_FILE)
+    # Scoring uses condensed summary; full file loaded only on YES
+    work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE)
     fit_rules = load_file(FIT_ENGINE_FILE)
 
-    if not work_exp or not fit_rules:
-        print("CRITICAL ERROR: Source of Truth or Fit Rules missing. Aborting.")
+    if not work_exp_summary or not fit_rules:
+        print("CRITICAL ERROR: workExperience_summary.md or Fit Rules missing. Aborting.")
         return
 
     job_files = glob.glob(os.path.join(JOBS_DIR, "*.txt"))
@@ -142,8 +164,13 @@ def process_batch():
             print(f"  -> Skipping. File {filename} seems empty or too short.")
             continue
 
-        print("  -> Evaluating fit against v3.2 Rubric...")
-        result = evaluate_job_fit(jd_text, work_exp, fit_rules)
+        # Zero-token keyword gate
+        if not passes_jd_keyword_gate(jd_text):
+            print(f"  -> Skipping. JD failed keyword pre-filter (no relevant signals).")
+            continue
+
+        print(f"  -> Evaluating fit against v3.2 Rubric...")
+        result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules)
 
         if not result:
             print("  -> Evaluation failed due to an error.")
@@ -158,8 +185,10 @@ def process_batch():
             print(f"  -> [GATEKEEPER REJECT] JD scored below 72 or triggered hard stop. Moving to next.")
             continue
 
+        # Load full work experience only for YES decisions
+        work_exp_full = load_file(WORK_EXP_FILE)
         print(f"  -> [GATEKEEPER PASS] Score: {score}. Running drafting engine...")
-        run_drafting_engine(company_name, jd_text, work_exp, result)
+        run_drafting_engine(company_name, jd_text, work_exp_full, result)
         try:
             generate_cheat_sheet(company_name)
         except Exception as e:

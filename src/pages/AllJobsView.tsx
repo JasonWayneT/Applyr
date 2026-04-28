@@ -13,7 +13,8 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
 
   const processedJobs = jobs.filter(job => {
     // 1. Filter by status
-    if (activeFilter === 'Active' && job.status === 'Closed') return false;
+    if (activeFilter === 'Active' && ['Closed', 'New', 'Backlog'].includes(job.status)) return false;
+    if (activeFilter === 'Backlog' && !['New', 'Backlog'].includes(job.status)) return false;
     if (activeFilter === 'Interviewing' && !['Recruiter Screen', 'Core Interviews'].includes(job.status)) return false;
     if (activeFilter === 'Closed' && job.status !== 'Closed') return false;
 
@@ -29,6 +30,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
   });
 
   const groups = [
+    { title: 'New from scout', statuses: ['New'], chipClass: 'chip-new', icon: 'fiber_new' },
     { title: 'Needs your attention', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
     { title: 'Waiting for contact', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
     { title: 'Initial screening', statuses: ['Recruiter Screen'], chipClass: 'chip-recruiter-screen', icon: 'hourglass_top' },
@@ -57,7 +59,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
             />
           </div>
           <div className="flex bg-surface-container-low p-1 rounded-xl">
-            {['All', 'Active', 'Interviewing', 'Closed'].map(f => (
+            {['All', 'Backlog', 'Active', 'Interviewing', 'Closed'].map(f => (
               <button 
                 key={f} 
                 onClick={() => setActiveFilter(f)}

@@ -8,13 +8,13 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
-  const newJobsCount = jobs.filter(j => j.status === 'Backlog').length;
+  const newJobsCount = jobs.filter(j => j.status === 'New' || j.status === 'Backlog').length;
 
   const mainNav = [
     { name: 'Dashboard', icon: 'grid_view' },
     { name: 'Applications', icon: 'view_kanban' },
-    { name: 'Find new jobs', icon: 'search' },
-    { name: 'Sync Activity', icon: 'bar_chart' },
+    { name: 'Scout', icon: 'radar' },
+    { name: 'Add Job', icon: 'post_add' },
   ];
 
   return (
@@ -60,7 +60,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
 
       {/* Add New Job Button */}
       <button
-        onClick={() => setActiveTab('Find new jobs')}
+        onClick={() => setActiveTab('Add Job')}
         className="mt-4 bg-secondary text-on-secondary py-3 px-4 rounded-xl font-headline font-bold text-sm shadow-lg shadow-secondary/20 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2"
       >
         <span className="material-symbols-outlined text-sm">add</span>

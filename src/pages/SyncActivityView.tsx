@@ -50,8 +50,8 @@ const SyncActivityView: React.FC = () => {
     <div className="space-y-8 pb-10">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Sync Activity</h1>
-          <p className="text-on-surface-variant mt-1">Real-time visibility into the Scout background engine.</p>
+          <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Scout</h1>
+          <p className="text-on-surface-variant mt-1">Discover new roles across 6 sources. Real-time visibility into each run.</p>
         </div>
         <button
           onClick={triggerSync}
@@ -59,7 +59,7 @@ const SyncActivityView: React.FC = () => {
           className="btn-primary flex items-center gap-2"
         >
           <span className={`material-symbols-outlined text-base ${isSyncing ? 'animate-spin' : ''}`}>sync</span>
-          {isSyncing ? 'Starting Sync...' : 'Trigger Manual Sync'}
+          {isSyncing ? 'Scouting...' : 'Run Scout'}
         </button>
       </div>
 

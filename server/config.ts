@@ -9,3 +9,6 @@ export const TITLE_BLOCKLIST = [
 export const INDUSTRY_BLOCKLIST_DEFAULT = [
   'gambling', 'sports betting', 'gaming', 'ad tech', 'crypto', 'web3',
 ];
+
+// Days window for the scout freshness gate (applied to all sources)
+export const SCOUT_FRESHNESS_DAYS = 7;

@@ -6,6 +6,7 @@ import FindNewJobsView from './pages/FindNewJobsView';
 import SyncActivityView from './pages/SyncActivityView';
 import ProfileView from './pages/ProfileView';
 import JobDetailPanel from './components/JobDetailPanel';
+import NotificationPanel from './components/NotificationPanel';
 import { Job } from './types/job';
 import { api } from './lib/api';
 
@@ -13,6 +14,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -35,9 +37,9 @@ function App() {
         return <TodayView jobs={jobs} onJobClick={setSelectedJob} />;
       case 'Applications':
         return <AllJobsView jobs={jobs} onJobClick={setSelectedJob} />;
-      case 'Find new jobs':
+      case 'Add Job':
         return <FindNewJobsView />;
-      case 'Sync Activity':
+      case 'Scout':
         return <SyncActivityView />;
       case 'My profile':
         return <ProfileView />;
@@ -62,9 +64,22 @@ function App() {
             {/* Future global search or action bar can go here */}
           </div>
           <div className="flex items-center gap-3">
-            <button className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors active:scale-95">
+            <button
+              onClick={() => setIsNotifOpen(prev => !prev)}
+              className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors active:scale-95 relative"
+            >
               <span className="material-symbols-outlined">notifications</span>
+              {jobs.filter(j => j.status === 'New' || j.status === 'Backlog').length > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-secondary rounded-full" />
+              )}
             </button>
+            <NotificationPanel
+              jobs={jobs}
+              isOpen={isNotifOpen}
+              onClose={() => setIsNotifOpen(false)}
+              onJobClick={(job) => { setSelectedJob(job); setIsNotifOpen(false); }}
+              onNavigate={(tab) => { setActiveTab(tab); setIsNotifOpen(false); }}
+            />
             <button
               onClick={() => setActiveTab('My profile')}
               className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors active:scale-95"

@@ -70,6 +70,8 @@
   --color-status-offer-text: #334333;
   --color-status-closed-bg: #e1e3de;
   --color-status-closed-text: #5d605c;
+  --color-status-new-bg: #d0e8f2;
+  --color-status-new-text: #1a4c6b;
 
   /* --- Typography --- */
   --font-headline: "Manrope", sans-serif;
@@ -150,6 +152,10 @@
   /* Status Chips */
   .chip {
     @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold;
+  }
+
+  .chip-new {
+    @apply bg-status-new-bg text-status-new-text;
   }
 
   .chip-backlog {

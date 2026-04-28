@@ -11,4 +11,9 @@ This file is to track ideas and enhancements that we want to implement in the fu
 - [ ] **Smart Silent Period Tracking:** Re-implement logic tracking how many days a company has been "silent" after an application, hooking it to actual DB timestamps.
 - [ ] **Last Mile Handheld Apply:** Add functionality to pre-fill application forms or copy specific role assets to the clipboard when the "Apply" link is clicked.
 - [ ] **Granular Interview Tracking:** Expand the "In Conversation" status into sub-stages (Recruiter, Manager, Case Study, Panel) with tailored preparation guides for each.
-
+- [ ] **Cloud Migration (1:1 Multi-Device Sync):** 
+    - [ ] **Universal Database (Turso):** Migrate from local SQLite to Turso for live sync between desktop, laptop, and cloud.
+    - [ ] **Cloud Hosting (Railway):** Deploy the dashboard and pipeline server to Railway for "always-on" access.
+    - [ ] **Authentication Layer:** Secure the dashboard with a password/token for private remote access.
+    - [ ] **Cloud Persistence:** Configure Railway Volumes to preserve the `archive/` and `submissions/` folders.
+    - [ ] **Hybrid Scouting:** Maintain local scouting (desktop) for IP/cookie safety while syncing results to the cloud DB.

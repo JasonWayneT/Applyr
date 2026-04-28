@@ -21,6 +21,7 @@ SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
 ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive")
 
 WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
+WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")
 DB_FILE = os.path.join(DATA_DIR, "job_database.json")
 FIT_ENGINE_FILE = os.path.join(RULES_DIR, "job_fit_engine.md")
 CLAIM_VERIFIER_FILE = os.path.join(RULES_DIR, "claim_verifier.md")
@@ -32,6 +33,12 @@ NAVIGATOR_FILE = os.path.join(PROJECT_ROOT, "Job_Navigator.html")
 
 # Default LLM model for the pipeline
 DEFAULT_MODEL = "gemini-2.5-flash"
+
+# Max JD characters to send to LLM for scoring (token budget gate)
+SCORING_JD_MAX_CHARS = 1500
+
+# Keywords that must appear in a JD for it to pass the pre-filter (0 tokens)
+JD_REQUIRED_KEYWORDS = ['saas', 'b2b', 'platform', 'integration', 'enterprise', 'api', 'product manager', 'product owner']
 
 
 def load_file(filepath):

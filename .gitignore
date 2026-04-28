@@ -29,3 +29,6 @@ jobagent.sqlite
 # Browser and Cache
 data/browser_context/
 .tempmediaStorage/
+
+# External dependencies (local only)
+OpenPostings-extracted/

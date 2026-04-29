@@ -8,7 +8,7 @@ interface TodayViewProps {
 }
 
 const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
-  const backlogs = jobs.filter(j => j.status === 'Backlog');
+  const backlogs = jobs.filter(j => j.status === 'Backlog' || j.status === 'New');
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => !['Closed'].includes(j.status));
   const interviews = jobs
@@ -147,6 +147,18 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
                   <div className="min-w-[130px]">
                   <StatusChip status={job.status} />
                   </div>
+                  {job.url && (
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-secondary transition-colors"
+                      title="Open original job posting"
+                    >
+                      <span className="material-symbols-outlined">link</span>
+                    </a>
+                  )}
                   <button className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors">
                     <span className="material-symbols-outlined">more_vert</span>
                   </button>

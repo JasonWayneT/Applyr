@@ -27,6 +27,8 @@ export const runScoutSync = async () => {
           logActivity('INFO', 'Scout', `Match Found: ${line.replace('[FOUND]', '').trim()}`);
         } else if (line.startsWith('[ACTION]')) {
           logActivity('WARN', 'Scout', `USER ACTION: ${line.replace('[ACTION]', '').trim()}`);
+        } else if (line.startsWith('[REJECT]')) {
+          logActivity('INFO', 'Scout', `Skipped: ${line.replace('[REJECT]', '').trim()}`);
         } else if (line.startsWith('[DONE]')) {
           logActivity('INFO', 'Scout', 'Sync completed. Check your dashboard for new matches.');
         } else if (line.trim()) {

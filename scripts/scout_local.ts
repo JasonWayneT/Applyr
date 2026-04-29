@@ -171,13 +171,25 @@ const scoutOpenPostings = async (): Promise<ScrapedJob[]> => {
                     const title   = String(p.position_name || '').trim();
 
                     if (!jobUrl || !company || !title) continue;
-                    if (!passesTitleBlocklist(title)) continue;
-                    if (!isJobNewByUrl(jobUrl)) continue;
-                    if (!isJobNewByCompanyTitle(company, title)) continue;
+                    if (!passesTitleBlocklist(title)) {
+                        console.log(`[REJECT] ${title} at ${company} (OpenPostings) - Title Blocklist`);
+                        continue;
+                    }
+                    if (!isJobNewByUrl(jobUrl)) {
+                        console.log(`[REJECT] ${title} at ${company} (OpenPostings) - URL already exists`);
+                        continue;
+                    }
+                    if (!isJobNewByCompanyTitle(company, title)) {
+                        console.log(`[REJECT] ${title} at ${company} (OpenPostings) - Company/Title already exists`);
+                        continue;
+                    }
 
                     // 7-day freshness gate on last_seen_epoch
                     const epoch = Number(p.last_seen_epoch || 0);
-                    if (epoch && epoch < FRESHNESS_CUTOFF_EPOCH) continue;
+                    if (epoch && epoch < FRESHNESS_CUTOFF_EPOCH) {
+                        console.log(`[REJECT] ${title} at ${company} (OpenPostings) - Stale (Past 7 days)`);
+                        continue;
+                    }
 
                     jobs.push({ company, title, url: jobUrl, description: '', source: 'OpenPostings' });
                     console.log(`[FOUND] ${title} at ${company} (OpenPostings)`);
@@ -243,9 +255,18 @@ const scoutLinkedIn = async (page: Page): Promise<ScrapedJob[]> => {
                     const company = (await page.textContent('.jobs-unified-top-card__company-name') || '').trim();
 
                     if (!url || !title || !company) continue;
-                    if (!passesTitleBlocklist(title)) continue;
-                    if (!isJobNewByUrl(url)) continue;
-                    if (!isJobNewByCompanyTitle(company, title)) continue;
+                    if (!passesTitleBlocklist(title)) {
+                        console.log(`[REJECT] ${title} at ${company} (LinkedIn) - Title Blocklist`);
+                        continue;
+                    }
+                    if (!isJobNewByUrl(url)) {
+                        console.log(`[REJECT] ${title} at ${company} (LinkedIn) - URL already exists`);
+                        continue;
+                    }
+                    if (!isJobNewByCompanyTitle(company, title)) {
+                        console.log(`[REJECT] ${title} at ${company} (LinkedIn) - Company/Title already exists`);
+                        continue;
+                    }
 
                     const desc     = (await page.textContent('#job-details') || '').slice(0, 1500);
                     const salary   = desc.match(/\$[\d,]+ ?[-–] ?\$[\d,]+/)?.[0];
@@ -291,9 +312,18 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
                 const url     = relUrl ? `https://builtin.com${relUrl}` : '';
 
                 if (!url || !title || !company) continue;
-                if (!passesTitleBlocklist(title)) continue;
-                if (!isJobNewByUrl(url)) continue;
-                if (!isJobNewByCompanyTitle(company, title)) continue;
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Built In) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(url)) {
+                    console.log(`[REJECT] ${title} at ${company} (Built In) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Built In) - Company/Title already exists`);
+                    continue;
+                }
 
                 jobs.push({ company, title, url, description: '', source: 'Built In' });
                 console.log(`[FOUND] ${title} at ${company} (Built In)`);
@@ -328,10 +358,22 @@ const scoutRemotive = async (): Promise<ScrapedJob[]> => {
             const pubDate = p.publication_date ? new Date(p.publication_date) : null;
 
             if (!title || !company || !url) continue;
-            if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) continue;
-            if (!passesTitleBlocklist(title)) continue;
-            if (!isJobNewByUrl(url)) continue;
-            if (!isJobNewByCompanyTitle(company, title)) continue;
+            if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                console.log(`[REJECT] ${title} at ${company} (Remotive) - Stale`);
+                continue;
+            }
+            if (!passesTitleBlocklist(title)) {
+                console.log(`[REJECT] ${title} at ${company} (Remotive) - Title Blocklist`);
+                continue;
+            }
+            if (!isJobNewByUrl(url)) {
+                console.log(`[REJECT] ${title} at ${company} (Remotive) - URL already exists`);
+                continue;
+            }
+            if (!isJobNewByCompanyTitle(company, title)) {
+                console.log(`[REJECT] ${title} at ${company} (Remotive) - Company/Title already exists`);
+                continue;
+            }
 
             jobs.push({
                 company, title, url,
@@ -374,10 +416,22 @@ const scoutRemoteOK = async (): Promise<ScrapedJob[]> => {
             const epoch   = Number(p.epoch || 0);
 
             if (!title || !company || !url) continue;
-            if (epoch && epoch < FRESHNESS_CUTOFF_EPOCH) continue;
-            if (!passesTitleBlocklist(title)) continue;
-            if (!isJobNewByUrl(url)) continue;
-            if (!isJobNewByCompanyTitle(company, title)) continue;
+            if (epoch && epoch < FRESHNESS_CUTOFF_EPOCH) {
+                console.log(`[REJECT] ${title} at ${company} (RemoteOK) - Stale`);
+                continue;
+            }
+            if (!passesTitleBlocklist(title)) {
+                console.log(`[REJECT] ${title} at ${company} (RemoteOK) - Title Blocklist`);
+                continue;
+            }
+            if (!isJobNewByUrl(url)) {
+                console.log(`[REJECT] ${title} at ${company} (RemoteOK) - URL already exists`);
+                continue;
+            }
+            if (!isJobNewByCompanyTitle(company, title)) {
+                console.log(`[REJECT] ${title} at ${company} (RemoteOK) - Company/Title already exists`);
+                continue;
+            }
 
             jobs.push({
                 company, title, url,
@@ -430,11 +484,23 @@ const scoutWWR = async (): Promise<ScrapedJob[]> => {
             if (!title || !url) continue;
             if (pubDate) {
                 const d = new Date(pubDate);
-                if (d.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) continue;
+                if (d.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                    console.log(`[REJECT] ${title} at ${company} (WWR) - Stale`);
+                    continue;
+                }
             }
-            if (!passesTitleBlocklist(title)) continue;
-            if (!isJobNewByUrl(url)) continue;
-            if (!isJobNewByCompanyTitle(company, title)) continue;
+            if (!passesTitleBlocklist(title)) {
+                console.log(`[REJECT] ${title} at ${company} (WWR) - Title Blocklist`);
+                continue;
+            }
+            if (!isJobNewByUrl(url)) {
+                console.log(`[REJECT] ${title} at ${company} (WWR) - URL already exists`);
+                continue;
+            }
+            if (!isJobNewByCompanyTitle(company, title)) {
+                console.log(`[REJECT] ${title} at ${company} (WWR) - Company/Title already exists`);
+                continue;
+            }
 
             jobs.push({ company, title, url, description: '', source: 'WWR' });
             console.log(`[FOUND] ${title} at ${company} (WWR)`);

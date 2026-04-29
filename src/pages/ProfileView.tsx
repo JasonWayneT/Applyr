@@ -341,7 +341,9 @@ const ProfileView: React.FC = () => {
                     { label: 'Interviews', status: 'Core Interviews', color: 'bg-primary' },
                     { label: 'Offers', status: 'Offer and Negotiation', color: 'bg-tertiary' },
                   ].map((stage, i) => {
-                    const count = stats.byStatus.find(s => s.status === stage.status)?.count || 0;
+                    const count = stage.status === 'Backlog'
+                      ? (stats.byStatus.find(s => s.status === 'Backlog')?.count || 0) + (stats.byStatus.find(s => s.status === 'New')?.count || 0)
+                      : stats.byStatus.find(s => s.status === stage.status)?.count || 0;
                     const percentage = Math.max(10, (count / (stats.total || 1)) * 100);
                     return (
                       <div key={stage.label} className="relative group">
@@ -368,8 +370,10 @@ const ProfileView: React.FC = () => {
                 <h3 className="text-sm font-headline font-bold text-on-surface mb-6">Dropoff Patterns (Closed/Archived)</h3>
                 <div className="space-y-4">
                   {['Backlog', 'Applied', 'Recruiter Screen', 'Core Interviews'].map(stage => {
-                    const count = stats.byRejectionStage.find(s => s.rejection_stage === stage)?.count || 0;
-                    const max = Math.max(...stats.byRejectionStage.map(s => s.count), 1);
+                    const count = stage === 'Backlog'
+                      ? (stats.byRejectionStage.find(s => s.rejection_stage === 'Backlog')?.count || 0) + (stats.byRejectionStage.find(s => s.rejection_stage === 'New')?.count || 0)
+                      : stats.byRejectionStage.find(s => s.rejection_stage === stage)?.count || 0;
+                    const max = Math.max(...stats.byRejectionStage.filter(s => s.rejection_stage).map(s => s.count), 1);
                     const weight = (count / max) * 100;
                     return (
                       <div key={stage} className="flex items-center gap-4">
@@ -386,13 +390,17 @@ const ProfileView: React.FC = () => {
                   })}
                 </div>
                 <div className="mt-8 p-4 bg-surface-container-low rounded-xl">
-                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                    <span className="font-bold text-error">Insight:</span> Most applications are stalling at the <strong>{
-                      [...stats.byRejectionStage].sort((a,b) => b.count - a.count)[0]?.rejection_stage || 'N/A'
-                    }</strong> phase. Consider refining your {
-                      ([...stats.byRejectionStage].sort((a,b) => b.count - a.count)[0]?.rejection_stage === 'Applied' ? 'Resume' : 'Interview prep')
-                    }.
-                  </p>
+                  {(() => {
+                    const validStages = stats.byRejectionStage.filter(s => s.rejection_stage);
+                    const topStage = validStages.sort((a,b) => b.count - a.count)[0]?.rejection_stage || 'N/A';
+                    return (
+                      <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                        <span className="font-bold text-error">Insight:</span> Most applications are stalling at the <strong>{topStage}</strong> phase. Consider refining your {
+                          topStage === 'Applied' ? 'Resume' : 'Interview prep'
+                        }.
+                      </p>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

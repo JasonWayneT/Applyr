@@ -122,6 +122,18 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
+                        {job.url && (
+                          <a
+                            href={job.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-secondary/10 text-on-surface-variant hover:text-secondary transition-colors"
+                            title="Open original job posting"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">link</span>
+                          </a>
+                        )}
                         {job.status === 'Backlog' ? (
                           <button className="btn-primary text-xs py-1.5 px-4 rounded-lg">Review</button>
                         ) : job.status === 'Core Interviews' ? (

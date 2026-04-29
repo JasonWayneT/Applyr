@@ -180,14 +180,31 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
             {/* Application Assets */}
             <section>
-              <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Your Assets</h3>
+              <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Your Assets & Links</h3>
               {loadingFiles ? (
                 <p className="text-xs text-on-surface-variant animate-pulse">Loading files...</p>
-              ) : files.length === 0 ? (
-                <p className="text-xs text-on-surface-variant italic">No files generated yet.</p>
               ) : (
                 <div className="space-y-2">
-                  {files.map(file => (
+                  {/* Original Job URL */}
+                  {job.url && (
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-4 bg-surface-container-lowest rounded-xl hover:bg-surface-container-low cursor-pointer transition-colors group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-secondary-container rounded-lg">
+                          <span className="material-symbols-outlined text-secondary text-base">link</span>
+                        </div>
+                        <span className="text-sm text-on-surface group-hover:text-secondary transition-colors">Original Job Posting</span>
+                      </div>
+                      <span className="material-symbols-outlined text-on-surface-variant text-base">open_in_new</span>
+                    </a>
+                  )}
+
+                  {/* PDF Assets Only */}
+                  {files.filter(f => f.name.endsWith('.pdf')).map(file => (
                     <a
                       key={file.name}
                       href={api(`/api/jobs/${job.id}/files/${encodeURIComponent(file.name)}`)}
@@ -203,22 +220,15 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                       <span className="material-symbols-outlined text-on-surface-variant text-base">download</span>
                     </a>
                   ))}
+                  
+                  {files.filter(f => f.name.endsWith('.pdf')).length === 0 && (
+                    <p className="text-xs text-on-surface-variant italic px-2 pt-2">No PDF assets generated yet.</p>
+                  )}
                 </div>
               )}
             </section>
 
-            {/* Apply CTA */}
-            {job.url && (
-              <a
-                href={job.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 bg-primary text-on-primary hover:opacity-90 font-bold text-lg py-4 px-6 rounded-2xl transition-all shadow-md w-full"
-              >
-                <span className="material-symbols-outlined">rocket_launch</span>
-                Open Application URL
-              </a>
-            )}
+
           </div>
 
           {/* Footer Actions */}

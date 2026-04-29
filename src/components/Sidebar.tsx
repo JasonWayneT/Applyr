@@ -58,14 +58,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
         ))}
       </nav>
 
-      {/* Add New Job Button */}
-      <button
-        onClick={() => setActiveTab('Add Job')}
-        className="mt-4 bg-secondary text-on-secondary py-3 px-4 rounded-xl font-headline font-bold text-sm shadow-lg shadow-secondary/20 hover:opacity-90 active:scale-95 transition-all flex items-center justify-center gap-2"
-      >
-        <span className="material-symbols-outlined text-sm">add</span>
-        Add New Job
-      </button>
+
 
       {/* Footer */}
       <div className="mt-6 space-y-1">

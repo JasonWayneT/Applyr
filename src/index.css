@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  /* ===== THE SANCTUARY — Design Tokens ===== */
+  /* ===== APPLYR — Design Tokens ===== */
 
   /* --- Primary (Sage Green) --- */
   --color-primary: #526452;
@@ -57,7 +57,7 @@
   --color-inverse-on-surface: #9d9d9a;
   --color-inverse-primary: #ebffe7;
 
-  /* --- Status Chips (Sanctuary Palette) --- */
+  /* --- Status Chips (Applyr Palette) --- */
   --color-status-backlog-bg: #e1e3de;
   --color-status-backlog-text: #5d605c;
   --color-status-applied-bg: #d4e8d1;
@@ -72,6 +72,8 @@
   --color-status-closed-text: #5d605c;
   --color-status-new-bg: #d0e8f2;
   --color-status-new-text: #1a4c6b;
+  --color-status-drafted-bg: #fff0d4;
+  --color-status-drafted-text: #7b4f00;
 
   /* --- Typography --- */
   --font-headline: "Manrope", sans-serif;
@@ -118,7 +120,7 @@
     backdrop-filter: blur(24px);
   }
 
-  /* Sanctuary Buttons */
+  /* Applyr Buttons */
   .btn-primary {
     @apply bg-gradient-to-br from-primary to-primary-dim text-on-primary font-semibold px-5 py-2.5 rounded-xl;
     @apply hover:opacity-90 active:scale-[0.98] transition-all duration-200;
@@ -138,13 +140,13 @@
     @apply hover:scale-105 active:scale-95 transition-all;
   }
 
-  /* Sanctuary Cards (No borders, tonal separation) */
-  .card-sanctuary {
+  /* Applyr Cards (No borders, tonal separation) */
+  .card-applyr {
     @apply bg-surface-container-lowest rounded-2xl p-6;
     box-shadow: 0px 12px 32px rgba(48, 51, 48, 0.06);
   }
 
-  .card-sanctuary:hover {
+  .card-applyr:hover {
     @apply shadow-lg;
     border-color: rgba(176, 179, 174, 0.1);
   }
@@ -181,6 +183,9 @@
   .chip-closed {
     @apply bg-status-closed-bg text-status-closed-text;
   }
+  .chip-drafted {
+    @apply bg-status-drafted-bg text-status-drafted-text;
+  }
 
   /* Badges */
   .badge {
@@ -196,25 +201,25 @@
   }
 
   /* Inputs */
-  .input-sanctuary {
+  .input-applyr {
     @apply bg-surface-container-low border-none rounded-xl px-4 py-2.5 text-sm;
     @apply focus:ring-1 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all;
     font-family: var(--font-body);
     color: var(--color-on-surface);
   }
 
-  .input-sanctuary::placeholder {
+  .input-applyr::placeholder {
     color: var(--color-outline);
   }
 
   /* Scrollbar Styling */
-  .sanctuary-scrollbar::-webkit-scrollbar {
+  .applyr-scrollbar::-webkit-scrollbar {
     width: 4px;
   }
-  .sanctuary-scrollbar::-webkit-scrollbar-track {
+  .applyr-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
-  .sanctuary-scrollbar::-webkit-scrollbar-thumb {
+  .applyr-scrollbar::-webkit-scrollbar-thumb {
     background: #e1e3de;
     border-radius: 10px;
   }

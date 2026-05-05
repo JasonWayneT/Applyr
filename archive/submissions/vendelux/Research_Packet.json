@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Vendelux event intelligence helps businesses meet more customers at in-person events. Transforming how companies discover, evaluate, and maximize the impact of events. Provides the system of record for event marketing, giving teams data and insights for smarter decisions.[1][3]",
+      "Observed": "Focus on data-driven event optimization for marketers, emphasizing pipeline and brand impact through AI and analytics.[3][6]"
+    },
+    "Problem Space": "Event marketers drive pipeline and brand but events are one of the least optimized and most opaque marketing channels. Vendelux solves this with data and insights.[3]",
+    "Business Model": "B2B SaaS platform for event intelligence and marketing optimization. Revenue from SaaS subscriptions. Growth stage: Series A or earlier startup environment. Financial health: 819 employees, hiring actively (25 open positions).[1][8]",
+    "Founding Story": "No specific founding details or inflection points found in available sources."
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly identified in sources. Vendelux differentiates through event-specific intelligence, data/AI systems, and optimization for in-person events vs. opaque channels.[1][3]",
+    "Macro Trends": "AI disruption in marketing tech; data privacy regulations (GDPR, CCPA) impacting data-driven SaaS; rise of event marketing post-pandemic for pipeline generation.[1][6]"
+  },
+  "Module C": {
+    "Financials/Funding": "No recent funding rounds or earnings in 90-day window (since ~Feb 2026). Active hiring across 25 positions suggests growth.[8]",
+    "Organizational Shifts": "No layoffs, hiring surges, or leadership changes reported in sources.",
+    "Product/Partnership News": "No new launches or M&A in 90-day window. Product Manager role posted but removed Apr 22, 2026; Technical PM-Data role active (posted ~6 days ago).[1][6]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product roadmap ownership, feedback synthesis, requirements definition, AI prototypes/wireframes (Figma, v0), engineering collaboration, UAT, metrics analysis, data privacy (GDPR/CCPA), B2B SaaS, startup (Series A/earlier).[1][2]",
+      "Hidden Success Signals": "Data-driven curiosity, simple UX delivery, stakeholder influence, tools (Figma, Linear/JIRA, v0), 5+ years PM with 2+ B2B SaaS, SQL/debugging for technical variant.[1][6]",
+      "Required vs Preferred": "Required: 5+ years PM (2+ B2B SaaS), startup experience, data metrics, privacy knowledge, comms skills, tools. Preferred: Technical depth (data modeling, ETL, AI, SQL) for Data PM variant.[1][6]"
+    },
+    "Hierarchy": "Onsite NYC HQ role blending product/project/technical PM. Works with engineering, data/AI, analytics, GTM teams. No full org chart found.[1][6]",
+    "Hiring Manager Profile": "No specific hiring manager identified."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in sources.",
+    "Operational Style": "Hybrid/onsite NYC HQ required. Fast-paced early-stage startup environment.[1][6]"
+  },
+  "Module F": {
+    "Priority Mapping": "No specific Jason Taylor experience details provided. General bridges: Product roadmap/metrics align with Platform experience; data privacy/ETL/AI with Data Integrity; B2B SaaS delivery/feedback with Revenue Systems.[1][6]"
+  }
+}

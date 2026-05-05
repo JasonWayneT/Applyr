@@ -129,7 +129,7 @@ const BulkUploadForm: React.FC<BulkUploadFormProps> = ({ onBatchRun, isLoading }
             </button>
           </div>
 
-          <div className="max-h-[300px] overflow-y-auto space-y-2 border-y border-outline-variant/10 py-4 sanctuary-scrollbar">
+          <div className="max-h-[300px] overflow-y-auto space-y-2 border-y border-outline-variant/10 py-4 applyr-scrollbar">
              {parsedJobs.slice(0, 5).map((job, idx) => (
                 <div key={idx} className="flex gap-4 p-3 bg-surface-container-low rounded-xl">
                   <div className="w-[120px] font-bold text-sm truncate text-on-surface">{job.company}</div>

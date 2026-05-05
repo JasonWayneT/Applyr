@@ -4,6 +4,8 @@
 export const TITLE_BLOCKLIST = [
   'senior', 'staff', 'vp', 'head', 'principal', 'lead product manager',
   'director', 'growth', 'founding', 'manager of',
+  'assistant', 'coordinator', 'intern', 'associate', 'junior',
+  'analyst', 'engineer', 'developer', 'designer', 'marketer',
 ];
 
 export const INDUSTRY_BLOCKLIST_DEFAULT = [

@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+import AdmZip from 'adm-zip';
 import { db, logActivity } from './db.js';
 import { runScoutSync } from './scout.js';
 import { TITLE_BLOCKLIST, INDUSTRY_BLOCKLIST_DEFAULT } from './config.js';
@@ -26,6 +28,61 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// ---------------------------------------------------------------------------
+// System Status
+// ---------------------------------------------------------------------------
+app.get('/api/system-status', (_req, res) => {
+  try {
+    const status = db.prepare('SELECT * FROM system_status WHERE id = ?').get('global');
+    res.json(status || { status: 'idle', current_item: 'No active pipeline run' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch system status' });
+  }
+});
+
+app.post('/api/system-status', (req, res) => {
+  try {
+    const { status, current_item, items_completed, items_total } = req.body;
+    db.prepare(`
+      UPDATE system_status
+      SET status = COALESCE(?, status),
+          current_item = COALESCE(?, current_item),
+          items_completed = COALESCE(?, items_completed),
+          items_total = COALESCE(?, items_total),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = 'global'
+    `).run(status || null, current_item || null, items_completed ?? null, items_total ?? null);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update system status' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ATS Pipeline
+// ---------------------------------------------------------------------------
+app.get('/api/ats-pipeline', (_req, res) => {
+  try {
+    const pipelinePath = path.join(__dirname, '../career-ops-main/data/pipeline.md');
+    if (!fs.existsSync(pipelinePath)) {
+      return res.json({ jobs: [] });
+    }
+    const content = fs.readFileSync(pipelinePath, 'utf-8');
+    const lines = content.split('\n').filter(l => l.startsWith('- [ ]'));
+    const jobs = lines.map(l => {
+      const parts = l.replace('- [ ]', '').trim().split('|').map(s => s.trim());
+      return {
+        url: parts[0] || '',
+        company: parts[1] || 'Unknown',
+        title: parts[2] || 'Product Role'
+      };
+    });
+    res.json({ jobs });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch ATS pipeline' });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Config
@@ -55,6 +112,25 @@ app.get('/api/jobs', (_req, res) => {
     res.json(jobs);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch jobs' });
+  }
+});
+
+// API: Add a new job manually
+app.post('/api/jobs', (req, res) => {
+  try {
+    const { id, company, title, url, score, summary, status } = req.body;
+    if (!company || !title) return res.status(400).json({ error: 'company and title are required' });
+
+    db.prepare(`
+      INSERT INTO jobs (id, company, title, url, score, status, summary, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `).run(id || Math.random().toString(36).substring(7), company, title, url || null, score || null, status || 'Drafted', summary || null);
+
+    logActivity('INFO', 'System', `Manually added job "${company}" to drafted.`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to add job' });
   }
 });
 
@@ -90,9 +166,9 @@ app.patch('/api/jobs/:id/status', (req, res) => {
     const activePath = path.join(SUBMISSION_DIR, companySlug);
     const archivePath = path.join(ARCHIVE_DIR, companySlug);
 
-    // Only "Backlog" is considered active workspace — everything else is archived
-    const isNowArchived = status !== 'Backlog';
-    const wasArchived = job.status !== 'Backlog';
+    // "Backlog" and "Drafted" are considered active workspace — everything else is archived
+    const isNowArchived = !['Backlog', 'Drafted'].includes(status);
+    const wasArchived = !['Backlog', 'Drafted'].includes(job.status);
 
     if (isNowArchived && !wasArchived && fs.existsSync(activePath)) {
       fs.renameSync(activePath, archivePath);
@@ -152,7 +228,7 @@ app.get('/api/jobs/:id/files', (req, res) => {
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const folderPath = job.status === 'Backlog'
+    const folderPath = ['Backlog', 'Drafted'].includes(job.status)
       ? path.join(SUBMISSION_DIR, companySlug)
       : path.join(ARCHIVE_DIR, companySlug);
 
@@ -175,7 +251,7 @@ app.get('/api/jobs/:id/files/:filename', (req, res) => {
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const folder = job.status === 'Backlog' ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const folder = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
     const filePath = path.join(folder, companySlug, req.params.filename);
 
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
@@ -186,12 +262,49 @@ app.get('/api/jobs/:id/files/:filename', (req, res) => {
   }
 });
 
+// API: Download all PDFs as a ZIP
+app.get('/api/jobs/:id/download-all', (req, res) => {
+  try {
+    const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(req.params.id) as any;
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const folder = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const folderPath = path.join(folder, companySlug);
+
+    if (!fs.existsSync(folderPath)) return res.status(404).json({ error: 'No files found' });
+
+    const zip = new AdmZip();
+    const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.pdf'));
+
+    if (files.length === 0) return res.status(404).json({ error: 'No PDF assets generated yet' });
+
+    // Place files inside a folder named after the company for easier browsing
+    const zipFolderName = job.company.replace(/[^a-z0-9 ]+/gi, '').trim();
+    files.forEach(file => {
+      zip.addLocalFile(path.join(folderPath, file), zipFolderName);
+    });
+
+    const zipName = `${companySlug}_assets.zip`;
+    const buffer = zip.toBuffer();
+
+    res.set('Content-Type', 'application/zip');
+    res.set('Content-Disposition', `attachment; filename=${zipName}`);
+    res.send(buffer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create ZIP' });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Pipeline: Run drafting engine for a single JD
 // ---------------------------------------------------------------------------
 app.post('/api/evaluate', (req, res) => {
   const { company, jd, url } = req.body;
   if (!company || !jd) return res.status(400).json({ error: 'company and jd are required' });
+
+  db.prepare(`UPDATE system_status SET status = 'drafting', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Generating tailored assets for ${company}`);
 
   // Set up SSE stream
   res.setHeader('Content-Type', 'text/event-stream');
@@ -203,7 +316,6 @@ app.post('/api/evaluate', (req, res) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  const { spawn } = require('child_process');
   const scriptPath = path.join(__dirname, '../scripts/batch_pipeline.py');
 
   send('stage', { id: 'gate', status: 'running' });
@@ -212,6 +324,9 @@ app.post('/api/evaluate', (req, res) => {
     cwd: path.join(__dirname, '..'),
     env: { ...process.env }
   });
+
+  proc.stdin.write(jd);
+  proc.stdin.end();
 
   let buffer = '';
   proc.stdout.on('data', (chunk: Buffer) => {
@@ -238,6 +353,7 @@ app.post('/api/evaluate', (req, res) => {
     send('done', { exitCode: code, passed: code === 0 });
     res.end();
     logActivity(code === 0 ? 'INFO' : 'ERROR', 'Pipeline', `Evaluation for "${company}" exited with code ${code}`);
+    db.prepare(`UPDATE system_status SET status = 'completed', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Completed asset generation for ${company}`);
   });
 });
 

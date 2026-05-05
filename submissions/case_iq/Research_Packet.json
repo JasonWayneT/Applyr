@@ -1,0 +1,64 @@
+{
+  "error": "Unable to complete research packet",
+  "reason": "Insufficient data in search results",
+  "details": {
+    "module_a_company_dna": {
+      "status": "Partial",
+      "findings": {
+        "core_mission": "Case IQ (formerly i-Sight) is a leading provider of investigative case management software for ethics, compliance, HR, fraud, and corporate security[3]",
+        "problem_space": "Organizations need solutions to prevent and detect fraud, corruption, conflicts of interest, and other economic crimes through digital transformation of compliance risk management[1]",
+        "business_model": "SaaS platform with integrated spend monitoring and workflow automation[1]",
+        "founding_story": "Founded in 1999[3]",
+        "financial_health": "Not available in search results"
+      }
+    },
+    "module_b_market_competitors": {
+      "status": "Not found",
+      "note": "Search results do not contain competitor analysis or macro trend information"
+    },
+    "module_c_recent_intelligence": {
+      "status": "Minimal",
+      "findings": {
+        "hiring_activity": "Multiple open positions including Product Owner, Product Analyst, Manager DevOps Engineering, Manager Software Development[5]",
+        "recent_news": "Not available in search results"
+      }
+    },
+    "module_d_role_org_chart": {
+      "status": "Partial",
+      "findings": {
+        "position_title": "Product Owner (Remote, Canada-based)",
+        "salary_range": "$80,000-$90,000 CAD annually[3][6]",
+        "key_requirements": [
+          "3+ years as Product Owner, Business Analyst, or Technical Product Owner in SaaS[4]",
+          "Strong written and verbal communication skills[1]",
+          "Experience with Jira, Slack, Asana, Zoom, GoogleDocs, Confluence[1]"
+        ],
+        "reporting_structure": "Not available in search results",
+        "hiring_manager_profile": "Not available in search results"
+      }
+    },
+    "module_e_culture_reality_check": {
+      "status": "Minimal",
+      "findings": {
+        "glassdoor_rating": "3.0 on November 9, 2023[3]",
+        "work_environment": "Remote within flexible work environment spanning US and Canada[1]",
+        "benefits": "Company-paid benefits, RRSP/401k matching, stock options, half-day Fridays in summer[1]",
+        "sentiment_data": "Limited; only one Glassdoor review date found"
+      }
+    },
+    "module_f_intersection_bridge": {
+      "status": "Cannot complete",
+      "reason": "Jason Taylor's experience profile not provided in query"
+    }
+  },
+  "search_limitations": [
+    "No detailed company financials or recent funding rounds",
+    "No organizational hierarchy or team structure data",
+    "No hiring manager background information",
+    "Limited sentiment analysis (only one dated Glassdoor entry)",
+    "No competitor landscape data",
+    "No recent news or product launches (90-day window)",
+    "No information on Jason Taylor's background for intersection analysis"
+  ],
+  "recommendation": "Conduct additional targeted searches for: Case IQ funding history, leadership team bios, recent press releases, Glassdoor reviews, Blind discussions, and LinkedIn organizational data to complete modules B, C, E, and F."
+}

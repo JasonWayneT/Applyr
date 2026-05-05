@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "We keep customers protected and prepared, no matter what life may bring. By building great products, we provide the tools, support and services our customers need to stay protected.[3]",
+      "Observed": "Focus on designing, developing and delivering products that leverage new technologies and meet evolving customer needs in insurance and protection.[3]"
+    },
+    "Problem Space": "Allstate solves the pain of customers needing protection and preparation for life's uncertainties through innovative products and services that set industry standards.[3]",
+    "Business Model": "Primary revenue from insurance premiums and protection plans; mature public company with product transformation focus; salary data indicates established compensation structure ($160K-$211K for Product Managers).[1][2]",
+    "Founding Story": "Limited recent data available; established insurance leader emphasizing product evolution with new technologies.[3]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly listed in results; Allstate differentiates through digital product innovation in container workloads, M365, and design products for customer protection.[4][5][6]",
+    "Macro Trends": "Evolving customer needs, new technologies in insurance, digital transformation (e.g., container workloads, M365).[4][5][6]"
+  },
+  "Module C": {
+    "Financials/Funding": "No specific 90-day funding or earnings data; mature company with competitive PM salaries ($125K-$207K).[2]",
+    "Organizational Shifts": "No recent layoffs, hiring surges, or leadership changes noted; active hiring for multiple Product Manager roles.[6]",
+    "Product/Partnership News": "Openings for Digital Product Manager (Container Workloads), Digital Product Manager (Design Product), Product Management Expert; focus on product lifecycle, roadmaps, and portfolio expansion.[4][5][6]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product roadmap execution, prioritizing features, defining/delivering/overseeing product lifecycle, container workloads, M365, design product.[4][5]",
+      "Hidden Success Signals": "Strategic thinking, creativity for customer needs; technical product management expertise.[3][6]",
+      "Required vs Preferred": "Required: Product lifecycle management, roadmap crafting; Preferred: Technical domains like containers/M365.[4][5]"
+    },
+    "Hierarchy": "Limited data; Product Managers oversee multiple products within expanding portfolio, likely reporting to product leadership.[4]",
+    "Hiring Manager Profile": "No specific profiles found in results."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind sentiment data in results; salary reports indicate competitive pay ($160K-$211K median $178K).[1]",
+    "Operational Style": "No details on remote/hybrid or tenure; multiple digital PM roles suggest tech-focused environment.[4][5][6]"
+  },
+  "Module F": {
+    "Priority Mapping": "Product roadmap execution and lifecycle management align with Platform experience; technical products (containers, M365) connect to Data Integrity; customer protection innovations link to Revenue Systems via protection plans revenue.[3][4][5]"
+  }
+}

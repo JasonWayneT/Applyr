@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "PlayStation's core mission is to be 'The Best Place to Play,' focusing on upholding passion, innovation, and inclusivity while curating experiences at the intersection of hardware, digital services, and gamer emotional connection.[3] Safety team builds foundational systems for safe and well player experiences across the ecosystem.[1]",
+      "Observed": "Emphasis on safety, live services, identity, and lifecycle management to support player retention, engagement, and secure access, integrating with game studios, engineering, legal, and global partners.[1][2][4][5]"
+    },
+    "Problem Space": "PlayStation solves pains around online safety harms in gaming, secure player identity and access, live service retention/engagement, and platform tools for game studios, enabling safe, frictionless experiences for hundreds of millions of monthly players amid regulatory and competitive pressures.[1][5]",
+    "Business Model": "Revenue from hardware (consoles, VR), digital services (PlayStation Plus, Network), live service games, and lifecycle campaigns for retention/monetization. Operates as mature growth stage under Sony Interactive Entertainment with global studios and publishing.[2][3][4]",
+    "Founding Story": "No specific founding inflection points detailed in results; evolved as Sony Interactive Entertainment focusing on console gaming ecosystem expansion to digital/live services and safety features.[3]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly named; competitive landscape monitored for social strategy, live services, industry trends, player motivations across genres (e.g., Xbox, Nintendo implied via gaming context). PlayStation differentiates via integrated safety tech, live service tools, and studio ecosystem support.[1][2][6]",
+    "Macro Trends": "Regulatory shifts in online safety, AI/ML integration for safety/features, live service operations growth, privacy/security vs. convenience balance, and global collaboration needs (e.g., travel to Japan/UK).[1][5]"
+  },
+  "Module C": {
+    "Financials/Funding": "No recent 90-day financial rounds or earnings specified in results.",
+    "Organizational Shifts": "No layoffs, hiring surges, or leadership changes in 90-day window noted.",
+    "Product/Partnership News": "No new launches or M&A in 90-day window detailed; ongoing focus on safety features, identity platform, lifecycle programs.[1][4][5]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product management (5+ years), online safety regulations, AI/ML/APIs/data models/experimentation, cross-functional with Legal/Policy/Engineering/Design, roadmap/prioritization, customer data/feedback, competitive landscape.[1]",
+      "Hidden Success Signals": "Hands-on driving initiatives impacting KPIs, global travel willingness, balancing security/privacy/convenience, studio collaboration for live ops.[1][2][6]",
+      "Required vs Preferred": "Required: 5+ years PM, safety regs knowledge, AI/ML experience, cross-functional drive. Preferred: Travel ability, live service ops, studio tools familiarity.[1][6]"
+    },
+    "Hierarchy": "Product Manager reports into Directors/Heads (e.g., Director of Product Management under Head of Product for Live Services); matrixed with studios, engineering, legal, marketing.[2][4]",
+    "Hiring Manager Profile": "Not specified; for lifecycle roles under Director of Product Management.[4]"
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results.",
+    "Operational Style": "Hybrid (San Mateo/San Diego), Remote options; global collaboration requiring travel to Japan/UK; detail-oriented, data-driven with cross-functional teams.[1][2]"
+  },
+  "Module F": {
+    "Priority Mapping": "Online safety features/regs → Jason's Data Integrity experience for harm prevention/reactive response. Cross-functional initiatives/AI/ML → Platform expertise. Roadmap/KPIs/live ops → Revenue Systems for retention/monetization. Competitive landscape → Strategic platform alignment.[1][2][4]"
+  }
+}

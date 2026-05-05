@@ -1,0 +1,40 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Ryan is a dynamic, rapidly expanding tax services firm serving the world's most respected Global 5000 companies, with a global award-winning culture, flexible work environment, generous paid time off, world-class benefits, and rapid growth opportunities.[6][7]",
+      "Observed": "Focus on innovative work environment and accelerated growth for high performers in tax services.[6]"
+    },
+    "Problem Space": "Ryan solves pain points in corporate tax compliance (indirect tax, property tax, etc.) for businesses from SMBs to large multinationals by providing a product platform of data-heavy software applications backed by expert tax professionals.[1]",
+    "Business Model": {
+      "Revenue Streams": "Tax services firm with software products for tax compliance, serving Global 5000 companies.[6]",
+      "Growth Stage": "Post-IPO (2020-12) with $160M equity, rapidly expanding.[3][6]",
+      "Current Financial Health": "Post-IPO status indicates established public company with ongoing hiring and product development.[3]"
+    },
+    "Founding Story": "No specific founding details or key inflection points found in search results."
+  },
+  "Module B": {
+    "The Big 3 Competitors": "No direct rivals or differentiators explicitly identified in results.",
+    "Macro Trends": "No industry headwinds like regulatory shifts or AI disruption detailed, though role emphasizes modern AI tooling (LLMs, copilots).[1]"
+  },
+  "Module C": {
+    "Financials/Funding": "Post-IPO equity of $160M in December 2020; no recent rounds (within 90 days of May 2026) specified.[3]",
+    "Organizational Shifts": "No layoffs, hiring surges, or leadership changes in 90-day window reported.",
+    "Product/Partnership News": "No new launches or M&A in recent 90 days; focus on developing product platform for tax software.[1]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Product strategy, roadmaps, MVP scope, data-driven insights, Agile, user stories, platform capabilities, scalable services, APIs, AI tooling (LLMs, copilots), corporate tax experience a plus.",
+      "Hidden Success Signals": "Bias for action, guiding decisions with incomplete data, balancing long-term bets with quick wins, extreme attention to detail, proactive results delivery, superior communication.",
+      "Required vs Preferred": "Required: Bachelor’s degree (Business Admin, IS, Finance, CS), 3+ years PM/business analyst, Agile experience. Preferred: Corporate tax experience, platform management, AI proficiency.[1][2]"
+    },
+    "Hierarchy": "Works with Senior Managers and Directors of Product, engineering, UX, development, QA teams; direct interaction with business stakeholders and sales.[1]",
+    "Hiring Manager Profile": "No specific hiring manager background, content, or priorities identified."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor, Reddit, or Blind data available in results.",
+    "Operational Style": "Remote position with standard indoor environment, occasional long sitting, regular interaction via email/phone/in-person, up to 10% travel; flexible work environment advertised.[1][7]"
+  },
+  "Module F": {
+    "Priority Mapping": "Limited Jason Taylor experience details provided; role priorities like platform development, data-driven insights, and revenue-impacting tax software align potentially with Platform, Data Integrity, Revenue Systems if Jason has relevant PM experience in these areas (e.g., scalable platforms, data analysis).[1]"
+  }
+}

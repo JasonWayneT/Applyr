@@ -1,0 +1,20 @@
+URL: https://www.linkedin.com/jobs/view/4408039582/
+Storm2 - Product Manager (Payments SaaS)
+Storm2 is hiring on behalf of a high-growth SaaS company in the payments space.
+About the Role:
+Product Manager sit at the intersection of customer empathy and product execution. Own execution across the payment product suite.
+What You’ll Do:
+- Own execution across the payment product suite (writing tickets, driving QA).
+- Talk directly to merchants and partners.
+- Translate merchant needs into product requirements.
+- Analyze usage data for prioritization.
+- Build lightweight prototypes using AI and modern tooling.
+- Bridge gap between Product, Engineering, Sales, and CS.
+Who You Are:
+- 6+ years in a customer-facing payments role (Product, Implementation, Solutions Engineering).
+- Deep understanding of payment processing (gateways, ACH, tokenization).
+- Experience writing detailed tickets and acceptance criteria.
+- Comfort with AI tooling.
+- Self-starter.
+Salary: $125,000–$150,000.
+Remote US.

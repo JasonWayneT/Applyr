@@ -15,6 +15,7 @@ interface JobDetailPanelProps {
 
 const STATUS_PROGRESSIONS: Partial<Record<Job['status'], { label: string; next: string; icon: string }>> = {
   'Backlog':           { label: 'Mark as Applied',     next: 'Applied',              icon: 'mark_email_read' },
+  'Drafted':           { label: 'Mark as Applied',     next: 'Applied',              icon: 'mark_email_read' },
   'Applied':           { label: 'Got a Recruiter Call', next: 'Recruiter Screen',    icon: 'phone_in_talk' },
   'Recruiter Screen':  { label: 'Moving to Interviews', next: 'Core Interviews',     icon: 'record_voice_over' },
   'Core Interviews':   { label: 'Offer Received!',      next: 'Offer and Negotiation', icon: 'celebration' },
@@ -49,7 +50,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
   if (!job) return null;
 
   const timelineSteps = [
-    { label: 'Backlog',            done: true,                                                                          active: job.status === 'Backlog' },
+    { label: 'Backlog',            done: true,                                                                          active: job.status === 'Backlog' || job.status === 'Drafted' },
     { label: 'Applied',            done: ['Applied','Recruiter Screen','Core Interviews','Offer and Negotiation'].includes(job.status), active: job.status === 'Applied' },
     { label: 'Recruiter Screen',   done: ['Core Interviews','Offer and Negotiation'].includes(job.status),              active: job.status === 'Recruiter Screen' },
     { label: 'Core Interviews',    done: job.status === 'Offer and Negotiation',                                        active: job.status === 'Core Interviews' },
@@ -120,7 +121,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-8 sanctuary-scrollbar">
+          <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-8 applyr-scrollbar">
             {/* Timeline */}
             <section className="bg-surface-container-low p-6 rounded-2xl">
               <h3 className="text-lg font-headline font-bold text-on-surface mb-4">Application Status</h3>
@@ -156,7 +157,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     type="datetime-local"
                     value={interviewDate}
                     onChange={(e) => handleDateChange(e.target.value)}
-                    className="input-sanctuary w-full text-sm rounded-xl py-2.5 px-4"
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4"
                   />
                 </div>
                 {interviewDate && (
@@ -241,7 +242,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     <select 
                       value={closureData.stage}
                       onChange={e => setClosureData({...closureData, stage: e.target.value})}
-                      className="input-sanctuary w-full text-xs rounded-lg py-2"
+                      className="input-applyr w-full text-xs rounded-lg py-2"
                     >
                       {['Backlog', 'Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].map(s => (
                         <option key={s} value={s}>{s}</option>
@@ -274,7 +275,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     placeholder="e.g. Compensation mismatch, Role closed..."
                     value={closureData.notes}
                     onChange={e => setClosureData({...closureData, notes: e.target.value})}
-                    className="input-sanctuary w-full text-xs rounded-lg py-2"
+                    className="input-applyr w-full text-xs rounded-lg py-2"
                   />
                 </div>
                 <div className="flex gap-3 pt-2">

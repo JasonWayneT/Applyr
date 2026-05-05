@@ -1,0 +1,19 @@
+Company: Peach
+About the job
+
+About Peach:
+Peach is a modern loan management and servicing platform empowering lenders to launch and scale new lending programs. We provide a fully integrated, configurable system of record with API-first architecture, enabling lenders to bring products to market quickly while maintaining full compliance and operational efficiency.
+
+About The Role:
+We’re looking for a Product Manager to lead the next generation of financial products and features at Peach. This is a cross-functional role focused on building and scaling lending capabilities within servicing, collections, and compliance workflows. 
+
+What You'll Do:
+Translate operational workflows and lender pain points into clear feature requirements and measurable outcomes.
+Lead cross-functional teams (engineering, data, operations, legal/compliance) to design, build, and ship features.
+Work closely with legal and compliance teams to ensure all solutions meet regulatory, audit, and explainability standards.
+
+Qualifications:
+5+ years of Product Management experience, ideally in fintech, credit, lending, payments, or similar regulated domains.
+Track record of leading cross-functional teams and shipping in regulated environments.
+Excellent written and verbal communication skills across technical and business audiences.
+The pay range for this role is 130,000 - 145,000 USD per year (Remote)

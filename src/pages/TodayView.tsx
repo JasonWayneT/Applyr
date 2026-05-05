@@ -1,6 +1,7 @@
 import React from 'react';
 import { Job } from '../types/job';
 import StatusChip from '../components/StatusChip';
+import { api } from '../lib/api';
 
 interface TodayViewProps {
   jobs: Job[];
@@ -41,7 +42,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           Good morning, Jason.
         </h1>
         <p className="text-on-surface-variant text-lg">
-          You have <span className="text-secondary font-bold">{activeJobs.length} active applications</span> in progress. Take a deep breath.
+          You have <span className="text-secondary font-bold">{activeJobs.length} active applications</span> in progress. Let's keep the momentum going.
         </p>
       </section>
 
@@ -54,7 +55,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
               <h3 className="text-xl font-headline font-bold text-on-surface">Application Progress</h3>
               <p className="text-sm text-on-surface-variant">Your journey this month</p>
             </div>
-            <select className="input-sanctuary rounded-lg text-xs font-bold py-1 pl-3 pr-8">
+            <select className="input-applyr rounded-lg text-xs font-bold py-1 pl-3 pr-8">
               <option>Last 30 Days</option>
               <option>Last Quarter</option>
             </select>
@@ -122,7 +123,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
         <div className="lg:col-span-12 mt-2">
           <h3 className="text-2xl font-headline font-bold text-on-surface mb-6">Active Applications</h3>
           <div className="space-y-4">
-            {activeJobs.slice(0, 8).map(job => (
+            {activeJobs.slice(0, 20).map(job => (
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
@@ -147,6 +148,17 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
                   <div className="min-w-[130px]">
                   <StatusChip status={job.status} />
                   </div>
+                  {['Drafted', 'Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(job.status) && (
+                    <a
+                      href={api(`/api/jobs/${job.id}/download-all`)}
+                      download={`${job.company.toLowerCase()}_assets.zip`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-primary-container transition-colors"
+                      title="Download all PDF assets (Resume + Cover Letter)"
+                    >
+                      <span className="material-symbols-outlined">download</span>
+                    </a>
+                  )}
                   {job.url && (
                     <a
                       href={job.url}

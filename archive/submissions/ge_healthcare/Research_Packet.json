@@ -1,0 +1,82 @@
+{
+  "status": "incomplete_research",
+  "reason": "Insufficient search results for comprehensive Research Packet Contract analysis",
+  "available_data": {
+    "module_a_company_dna": {
+      "status": "limited",
+      "findings": {
+        "core_mission": "Not found in search results",
+        "problem_space": "Medical device and healthcare technology solutions",
+        "business_model": "Product-based (imaging, diagnostic cardiology, digital platforms) with services and consumables revenue streams",
+        "founding_story": "Not found in search results"
+      },
+      "sources": []
+    },
+    "module_b_market_competitors": {
+      "status": "not_found",
+      "findings": "Search results do not contain competitive analysis, market trends, or industry positioning information"
+    },
+    "module_c_recent_intelligence": {
+      "status": "not_found",
+      "findings": "No financial data, funding rounds, organizational changes, or recent product news available in search results"
+    },
+    "module_d_role_org_chart": {
+      "status": "partial",
+      "findings": {
+        "available_positions": [
+          "Sr. Product Manager - Imaging Digital",
+          "Principal Product Manager - Data Fabric (Bellevue, WA)",
+          "Clinical Product Manager roles"
+        ],
+        "jd_analysis_example": {
+          "position": "Sr. Product Manager - Imaging Digital (Diagnostic Cardiology focus)",
+          "key_requirements": [
+            "Bachelor's in Engineering, Computer Science, or related field",
+            "15+ years progressive medical devices experience",
+            "10+ years in Services, Program Management, installed base management",
+            "5+ years process improvement and program management",
+            "Lean basics knowledge",
+            "Digital transformation navigation skills"
+          ],
+          "hidden_success_signals": [
+            "Lifecycle management expertise",
+            "Cross-functional team leadership",
+            "Service/consumables revenue growth focus",
+            "Global operational execution"
+          ],
+          "reporting_structure": "Reports to Executive - PCS Lifecycle Activation & Growth; dotted line to General Manager – Diagnostic Cardiology"
+        },
+        "sources": ["https://www.indeed.com/q-ge-healthcare-clinical-product-manager-jobs.html"]
+      }
+    },
+    "module_e_culture_reality_check": {
+      "status": "minimal",
+      "findings": {
+        "glassdoor_presence": "59 global product manager roles and 11 Product Manager roles listed",
+        "sentiment_data": "Not available in search results",
+        "operational_style": "Not found in search results"
+      },
+      "sources": [
+        "https://www.glassdoor.com/Jobs/GE-HealthCare-global-product-manager-Jobs-EI_IE4112.0,13_KO14,36.htm",
+        "https://www.glassdoor.com/Jobs/GE-HealthCare-Product-Manager-Jobs-EI_IE4112.0,13_KO14,29.htm"
+      ]
+    },
+    "module_f_bridge_intersection": {
+      "status": "not_determinable",
+      "reason": "Insufficient information about Jason Taylor's experience profile and GE Healthcare's strategic priorities"
+    }
+  },
+  "data_gaps": [
+    "Company mission statement and core values",
+    "Competitive landscape and market positioning",
+    "Recent financial performance and funding activity",
+    "Organizational structure and leadership team",
+    "Glassdoor/Blind sentiment analysis",
+    "Remote/hybrid work policies",
+    "Employee retention and tenure data",
+    "Recent product launches or M&A activity",
+    "Hiring manager profiles and priorities",
+    "Macro industry trends affecting GE Healthcare"
+  ],
+  "recommendation": "Search results are limited to job posting aggregators and career pages. To complete the Research Packet Contract, additional searches are needed targeting: GE Healthcare investor relations, company news, leadership profiles, employee reviews on Glassdoor/Blind, industry analysis reports, and specific hiring manager information."
+}

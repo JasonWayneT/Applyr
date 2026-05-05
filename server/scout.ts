@@ -8,6 +8,7 @@ const SCRIPTS_DIR = path.join(__dirname, '../scripts');
 
 export const runScoutSync = async () => {
   logActivity('INFO', 'Scout', 'Unified local sync triggered. Starting Playwright engine...');
+  db.prepare(`UPDATE system_status SET status = 'scout_running', current_item = 'Crawling and scanning direct job feeds...', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
 
   try {
     const scoutProcess = spawn('npx', ['tsx', 'scripts/scout_local.ts'], {
@@ -47,6 +48,39 @@ export const runScoutSync = async () => {
 
     scoutProcess.on('close', (code) => {
       logActivity('INFO', 'Scout', `Scout engine process exited with code ${code}`);
+      
+      if (code === 0) {
+        logActivity('INFO', 'Scout', 'Starting URL backfill crawl for any missing job URLs...');
+        const backfillProcess = spawn('npx', ['tsx', 'scripts/backfill_urls.ts'], {
+          cwd: path.join(__dirname, '..'),
+          shell: true
+        });
+
+        backfillProcess.stdout.on('data', (data) => {
+          const output = data.toString().trim();
+          if (!output) return;
+          const lines = output.split('\n');
+          for (const line of lines) {
+            logActivity('INFO', 'Crawler', line.trim());
+          }
+        });
+
+        backfillProcess.stderr.on('data', (data) => {
+          const error = data.toString().trim();
+          if (error && !error.includes('DeprecationWarning')) {
+            logActivity('ERROR', 'Crawler', `Engine Error: ${error}`);
+          }
+        });
+
+        backfillProcess.on('close', (bfCode) => {
+          logActivity('INFO', 'Crawler', `URL backfill process exited with code ${bfCode}`);
+          logActivity('INFO', 'Scout', 'Sync and crawl fully completed. Check your dashboard for new matches.');
+          db.prepare(`UPDATE system_status SET status = 'completed', current_item = 'Completed sync and crawl. Check dashboard for new matches.', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
+        });
+      } else {
+        logActivity('ERROR', 'Scout', 'Scout failed, skipping URL backfill crawl.');
+        db.prepare(`UPDATE system_status SET status = 'idle', current_item = 'No active pipeline run', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
+      }
     });
 
   } catch (err) {

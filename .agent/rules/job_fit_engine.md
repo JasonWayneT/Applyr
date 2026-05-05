@@ -28,16 +28,23 @@ This file defines a deterministic YES/NO decision system for evaluating multiple
 If any trigger is met, return **Score: 0**, **Decision: NO**, and **Terminate Pipeline** for this JD.
 
 ### 2.1 Title & Tier Blocklist (Seniority Mismatch)
-- **Title Blocklist:** JD contains: [Senior, Staff, VP, Head, Principal, Lead, Director, Growth].
+- **Title Blocklist:** JD contains: [Senior, Staff, VP, Head, Principal, Lead, Director, Growth, Assistant, Coordinator, Intern, Associate, Junior, Analyst, Engineer, Developer, Designer, Marketer, Founder].
 - **Organization Role:** Role is "Founding PM," "First PM," "0-to-1 PM," or "Sole Product Professional."
 - **Leading PMs:** Role requires hiring/managing other Product Managers.
 
-### 2.2 Experience & Reporting
+### 2.2 Compensation & Project Roles
+- **Low Salary:** Total compensation is < $70k/year (or equivalent).
+- **Project/Gig:** Role is explicitly a "Project-based," "Gig," or "Short-term contract" for a minor task (not a full PM engagement).
+
+### 2.3 Experience & Reporting
 - **Years Required:** Role requires **8+ years** of experience (Jason has 6; 8+ implies seniority level he's avoiding).
 - **Structure:** JD implies a solo contributor reporting directly to a non-product CEO in a small company (< 50 employees).
 
-- **Industry Blocklist:** Gambling, Sports Betting, Gaming, Ad Tech, Crypto, Web3.
+- **Industry Blocklist:** Gambling, Sports Betting, Gaming, Ad Tech, Crypto, Web3, Autonomous Vehicles, Automotive, Autonomy, Robotics.
 - **Developer Tooling / Auth:** Requires deep domain knowledge in Auth, Identity, or Developer Tooling (Jason lacks this specific track record).
+- **Location Gate:** Role must be based in the **United States** (Remote US is fine). Reject any roles that are explicitly "EMEA Only," "UK Only," "Global (Non-US)," "Anywhere in the World," "Israel," "Tel Aviv," "Canada," "Europe," require residency outside the US, or list a set of approved states that explicitly excludes California (CA).
+- **Language Gate:** The JD must be primarily written in **English**. Reject any JDs in Japanese, Spanish, etc.
+- **Seniority Gate:** Reject roles looking for "Former Founders" or "Ex-Founders" as these are too senior.
 
 ---
 

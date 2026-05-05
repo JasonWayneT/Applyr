@@ -15,7 +15,7 @@ db.exec(`
     title TEXT NOT NULL,
     url TEXT UNIQUE,
     score INTEGER,
-    status TEXT DEFAULT 'Backlog',
+    status TEXT DEFAULT 'Drafted',
     summary TEXT,
     salary_range TEXT,
     recruiter_name TEXT,
@@ -41,6 +41,19 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS system_status (
+    id TEXT PRIMARY KEY,
+    process_type TEXT,
+    status TEXT,
+    current_item TEXT,
+    items_completed INTEGER DEFAULT 0,
+    items_total INTEGER DEFAULT 0,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
+  INSERT OR IGNORE INTO system_status (id, process_type, status, current_item)
+  VALUES ('global', 'all', 'idle', 'No active pipeline run');
 `);
 
 export const logActivity = (

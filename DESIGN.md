@@ -1,9 +1,9 @@
-# Design System Document: The Mindful Pursuit
+# Design System Document: Applyr
 
 ## 1. Overview & Creative North Star
-**Creative North Star: "The Curated Sanctuary"**
+**Creative North Star: "Applyr — The Strategic Pipeline"**
 
-Job hunting is inherently high-stress. This design system rejects the frantic, "hustle-culture" dashboard aesthetic in favor of a serene, editorial experience. We are not building a database; we are building a sanctuary. 
+Job hunting is inherently high-stress. This design system rejects the frantic, "hustle-culture" dashboard aesthetic in favor of a serene, editorial experience. We are not building a database; we are building a high-impact mission control for your career. 
 
 To achieve this, we move beyond the "template" look by embracing **Intentional Asymmetry** and **Soft Minimalism**. By utilizing generous whitespace and shifting away from rigid containers, we allow the user’s focus to breathe. The system leverages a "High-End Editorial" feel where typography carries the weight of the brand, and UI elements exist as soft, physical layers rather than flat digital boxes.
 

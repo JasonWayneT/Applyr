@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "We keep customers protected and prepared, no matter what life may bring. By building great products, we provide the tools, support and services our customers need to stay protected.[5]",
+      "Observed": "Focus on product transformation leveraging new technologies to meet evolving customer needs in insurance.[5]"
+    },
+    "Problem Space": "Allstate solves pain points in insurance by offering home, auto, accident and health insurance, and specialty products through agents and direct to consumers, addressing evolving customer needs for protection and preparation.[3][5]",
+    "Business Model": "Revenue from insurance premiums across distribution channels including independent agents and direct sales. Mature public company (part of Allstate Corporation) with focus on profitability, compliance, and growth in state-specific programs.[3]",
+    "Founding Story": "Limited data in results; Allstate Corporation is established insurer with National General integration for innovative insurance solutions.[3]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Not specified in results. Differentiators include innovative drive, state-specific product management for compliance and profitability, and digital modernization of core systems.[3][4]",
+    "Macro Trends": "Evolving customer needs, digital transformation in policy administration, regulatory compliance in insurance rates/forms, and technology leverage like AI/container workloads implied in product roles.[4][6][7]"
+  },
+  "Module C": {
+    "Financials/Funding": "No recent funding rounds (mature corp). Product Manager salaries: $160K-$211K (Levels.fyi), median $170K-$178K total comp; Indeed avg $125,550, range $125K-$207K.[1][2]",
+    "Organizational Shifts": "No specific layoffs/hiring surges/leadership changes in 90-day window noted.",
+    "Product/Partnership News": "Open roles in digital product management for Policy Administration system modernization, M365, Container Workloads; National General part of Allstate.[3][4][7]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Drive revenue/profitability, analyze market trends, product roadmap execution, compliance with regulations, team leadership, digital enhancements, policy administration.[3][4][6]",
+      "Hidden Success Signals": "Strategic results-driven, cross-functional collaboration, data analysis for profitability/retention, brand championing.",
+      "Required vs Preferred": "Required: Strategic thinking, team leadership, market analysis. Preferred: Insurance domain knowledge, digital product experience.[3][4]"
+    },
+    "Hierarchy": "Product Manager or Associate Manager leads team, collaborates with Project Implementation, Product Management, Sales; reports implied to senior strategies.[3]",
+    "Hiring Manager Profile": "No specific profiles found in results."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results; career site promotes flexible opportunities and product innovation.[8]",
+    "Operational Style": "Northbrook, IL office (hybrid implied); 579 open jobs suggest hiring activity.[2][3]"
+  },
+  "Module F": {
+    "Priority Mapping": "Product roadmap/prioritization → Jason's Platform experience; Data performance analysis/integrity → Data Integrity expertise; Revenue/profitability systems → Revenue Systems background; Digital modernization/compliance → Platform/Data strengths.[3][4][6]"
+  }
+}

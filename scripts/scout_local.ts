@@ -21,6 +21,8 @@ const DB = new Database(DB_PATH);
 const TITLE_BLOCKLIST = [
     'senior', 'staff', 'vp', 'head', 'principal', 'lead product manager',
     'director', 'growth', 'founding', 'manager of',
+    'assistant', 'coordinator', 'intern', 'associate', 'junior',
+    'analyst', 'engineer', 'developer', 'designer', 'marketer',
 ];
 
 interface ScrapedJob {
@@ -170,12 +172,12 @@ const scoutOpenPostings = async (): Promise<ScrapedJob[]> => {
                     const company = String(p.company_name || '').trim();
                     const title   = String(p.position_name || '').trim();
 
-                    if (!jobUrl || !company || !title) continue;
+                    if (!company || !title) continue;
                     if (!passesTitleBlocklist(title)) {
                         console.log(`[REJECT] ${title} at ${company} (OpenPostings) - Title Blocklist`);
                         continue;
                     }
-                    if (!isJobNewByUrl(jobUrl)) {
+                    if (jobUrl && !isJobNewByUrl(jobUrl)) {
                         console.log(`[REJECT] ${title} at ${company} (OpenPostings) - URL already exists`);
                         continue;
                     }
@@ -242,7 +244,7 @@ const scoutLinkedIn = async (page: Page): Promise<ScrapedJob[]> => {
             console.log(`[LOG] LinkedIn: ${cards.length} cards for "${decodeURIComponent(term)}"`);
 
             for (const card of cards) {
-                if (jobs.length >= 25) break;
+                if (jobs.length >= 50) break;
                 try {
                     await card.scrollIntoViewIfNeeded();
                     await humanWait(1000, 2000);
@@ -295,20 +297,22 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
     const jobs: ScrapedJob[] = [];
 
     try {
-        await page.goto('https://builtin.com/jobs/remote/product?days_since_posted=7', { waitUntil: 'domcontentloaded' });
+        // Targeted product-management category for higher precision
+        await page.goto('https://builtin.com/jobs/remote/product-management?days_since_posted=7', { waitUntil: 'domcontentloaded' });
         await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
         await humanWait(2000, 4000);
-        await page.waitForSelector('.job-card', { timeout: 10000 }).catch(() => {});
+        await page.waitForSelector('.job-item', { timeout: 10000 }).catch(() => {});
 
-        const cards = await page.$$('.job-card');
+        const cards = await page.$$('.job-item');
         console.log(`[LOG] Built In: ${cards.length} cards found.`);
 
         for (const card of cards) {
-            if (jobs.length >= 20) break;
+            if (jobs.length >= 30) break;
             try {
-                const title   = (await card.$eval('.title',         el => el.textContent).catch(() => '')).trim();
-                const company = (await card.$eval('.company-title', el => el.textContent).catch(() => '')).trim();
-                const relUrl  = await card.$eval('a.job-row-link', el => el.getAttribute('href')).catch(() => '');
+                // Modern selectors based on utility-first and descriptive classes
+                const title   = (await card.$eval('.card-alias-after-overlay', el => el.textContent).catch(() => '')).trim();
+                const company = (await card.$eval('a[href^="/company/"]',       el => el.textContent).catch(() => '')).trim();
+                const relUrl  = await card.$eval('a.card-alias-after-overlay', el => el.getAttribute('href')).catch(() => '');
                 const url     = relUrl ? `https://builtin.com${relUrl}` : '';
 
                 if (!url || !title || !company) continue;
@@ -331,6 +335,53 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
         }
     } catch (err) {
         console.log(`[LOG] Built In scrape failed: ${err}`);
+    }
+
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
+// Source C2: Levels.fyi (Playwright crawler)
+// ---------------------------------------------------------------------------
+
+const scoutLevelsFyi = async (page: Page): Promise<ScrapedJob[]> => {
+    console.log('[LOG] Levels.fyi: Scouting...');
+    const jobs: ScrapedJob[] = [];
+
+    try {
+        await page.goto('https://www.levels.fyi/jobs?jobId=1', { waitUntil: 'domcontentloaded' });
+        await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+        await humanWait(2000, 4000);
+
+        // Simple scraper trying to grab job items/rows
+        const cards = await page.$$('a[href*="/jobs/"]');
+        console.log(`[LOG] Levels.fyi: ${cards.length} anchor links found.`);
+
+        for (const card of cards) {
+            if (jobs.length >= 10) break;
+            try {
+                const url = (await card.getAttribute('href')) || '';
+                const fullUrl = url.startsWith('http') ? url : `https://www.levels.fyi${url}`;
+
+                // Just fetch context/title if we can
+                const text = (await card.textContent() || '').trim();
+                if (!text || !fullUrl) continue;
+
+                // Extract company and title if possible, or fallback
+                const parts = text.split('\n').map(p => p.trim()).filter(Boolean);
+                const title = parts[0] || 'Product Manager';
+                const company = parts[1] || 'Levels.fyi Candidate';
+
+                if (!passesTitleBlocklist(title)) continue;
+                if (!isJobNewByUrl(fullUrl)) continue;
+                if (!isJobNewByCompanyTitle(company, title)) continue;
+
+                jobs.push({ company, title, url: fullUrl, description: '', source: 'Levels.fyi' });
+                console.log(`[FOUND] ${title} at ${company} (Levels.fyi)`);
+            } catch { /* skip */ }
+        }
+    } catch (err) {
+        console.log(`[LOG] Levels.fyi scrape failed: ${err}`);
     }
 
     return jobs;
@@ -532,7 +583,7 @@ const scoutWWR = async (): Promise<ScrapedJob[]> => {
     healthLog.push(opResult.health, remotiveResult.health, remoteOkResult.health, wwrResult.health);
     const apiJobs = [...opResult.jobs, ...remotiveResult.jobs, ...remoteOkResult.jobs, ...wwrResult.jobs];
 
-    // --- Phase 2: Browser sources (LinkedIn + BuiltIn) run sequentially ---
+    // --- Phase 2: Browser sources (LinkedIn + BuiltIn + Levels.fyi) run sequentially ---
     let browserJobs: ScrapedJob[] = [];
     try {
         const context = await chromium.launchPersistentContext(CONTEXT_DIR, {
@@ -548,13 +599,17 @@ const scoutWWR = async (): Promise<ScrapedJob[]> => {
         const biResult = await runWithHealth('BuiltIn', () => scoutBuiltIn(page));
         healthLog.push(biResult.health);
 
-        browserJobs = [...liResult.jobs, ...biResult.jobs];
+        const lvResult = await runWithHealth('Levels.fyi', () => scoutLevelsFyi(page));
+        healthLog.push(lvResult.health);
+
+        browserJobs = [...liResult.jobs, ...biResult.jobs, ...lvResult.jobs];
         await context.close();
     } catch (err) {
-        console.log(`[WARN] Browser init failed. Skipping LinkedIn + BuiltIn: ${err}`);
+        console.log(`[WARN] Browser init failed. Skipping LinkedIn + BuiltIn + Levels.fyi: ${err}`);
         healthLog.push(
             { name: 'LinkedIn', status: 'skipped', found: 0, durationMs: 0, error: String(err) },
             { name: 'BuiltIn', status: 'skipped', found: 0, durationMs: 0, error: String(err) },
+            { name: 'Levels.fyi', status: 'skipped', found: 0, durationMs: 0, error: String(err) },
         );
     }
 
@@ -563,6 +618,7 @@ const scoutWWR = async (): Promise<ScrapedJob[]> => {
 
     const seenUrls = new Set<string>();
     const uniqueJobs = allJobs.filter(j => {
+        if (!j.url) return true; // Don't dedupe missing URLs here
         if (seenUrls.has(j.url)) return false;
         seenUrls.add(j.url);
         return true;
@@ -576,7 +632,7 @@ const scoutWWR = async (): Promise<ScrapedJob[]> => {
     let saved = 0;
     for (const job of uniqueJobs) {
         try {
-            insert.run(randomUUID(), job.company, job.title, job.url,
+            insert.run(randomUUID(), job.company, job.title, job.url || null,
                 job.salary_range || null, job.recruiter_name || null,
                 job.recruiter_url || null, job.source);
             saved++;

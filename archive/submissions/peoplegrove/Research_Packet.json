@@ -1,0 +1,54 @@
+{
+  "ModuleA": {
+    "CoreMissionValues": {
+      "Stated": "Help higher education institutions strengthen outcomes for alumni and students by streamlining workflows, increasing engagement, and enabling scalable program growth. Core values include empathy, collaboration, and user-centric thinking.[4][2]",
+      "Observed": "Focus on client-driven product initiatives, workflow and engagement tools for mission-critical programs like alumni relations and clinical experiential learning.[4][1]"
+    },
+    "ProblemSpace": "Higher education institutions face challenges in managing alumni relations, clinical experiential learning, and student workforce outcomes, needing tools to streamline workflows, boost engagement, and scale programs for fields like Nursing, Allied Health, Engineering, and Social Work.[1][4]",
+    "BusinessModel": {
+      "RevenueStreams": "B2B SaaS delivering workflow and engagement tools to higher education institutions.[2][4]",
+      "GrowthStage": "Rapidly growing.[2][4]",
+      "FinancialHealth": "No specific financial data available in sources."
+    },
+    "FoundingStory": "No key inflection points or detailed founding history found in available sources."
+  },
+  "ModuleB": {
+    "Big3Competitors": "Direct rivals not explicitly named in sources. PeopleGrove differentiates through client-driven enhancements for higher education workflows, user-centric SaaS platform integrity, and focus on measurable outcomes like alumni engagement and experiential learning.[1][2][4]",
+    "MacroTrends": "No specific industry headwinds like regulatory shifts or AI disruption detailed in sources. General edtech trends implied in higher education SaaS growth."
+  },
+  "ModuleC": {
+    "FinancialsFunding": "No recent funding rounds or earnings results in 90-day window found.",
+    "OrganizationalShifts": "No layoffs, hiring surges, or leadership changes mentioned.",
+    "ProductPartnershipNews": "No new launches or M&A activity in 90-day window identified. Active hiring for product roles indicates growth focus.[6][9]"
+  },
+  "ModuleD": {
+    "JDAnalysis": {
+      "Keywords": "Product roadmap, user research, KPIs, A/B tests, customer discovery, product requirements, B2B SaaS, analytics, cross-functional collaboration, ambiguity navigation.[1][2][3]",
+      "HiddenSuccessSignals": "Executive alignment, scalable solutions, balancing short-term client needs with long-term platform integrity, documentation of decisions/trade-offs.[2][3]",
+      "Required": "2-5 years B2B SaaS PM experience, customer discovery, analytical thinking, data-driven decisions, cross-functional work with Engineering/Design, communication skills.[2][3][5]",
+      "Preferred": "Higher education/workforce outcomes experience, product analytics tools familiarity.[2][3]"
+    },
+    "Hierarchy": "No specific reporting lines or team structure detailed. Collaborates with product/company leadership, Customer Success, Sales, Engineering, Design.[1][2][3]",
+    "HiringManagerProfile": "No identifiable hiring manager background, content, or priorities found."
+  },
+  "ModuleE": {
+    "SentimentAnalysis": "Strong team culture emphasized: empathy, collaboration, user-centric. No Glassdoor/Reddit/Blind data available in sources.[2][3]",
+    "OperationalStyle": "Remote-first across US, occasional travel for offsites/customer research. Comfortable with largely remote team.[1][2][3]"
+  },
+  "ModuleF": {
+    "PriorityMapping": [
+      {
+        "Priority": "Platform integrity and scalable product improvements",
+        "JasonConnection": "Direct match to Jason's Platform experience."
+      },
+      {
+        "Priority": "Data-informed decisions via KPIs, A/B tests, analytics",
+        "JasonConnection": "Aligns with Jason's Data Integrity expertise."
+      },
+      {
+        "Priority": "Client-driven revenue-impacting features and growth opportunities",
+        "JasonConnection": "Connects to Jason's Revenue Systems background."
+      }
+    ]
+  }
+}

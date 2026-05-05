@@ -1,0 +1,42 @@
+About PeopleGrove 
+PeopleGrove is a rapidly growing SaaS company delivering workflow and engagement tools to higher education institutions. We support mission-critical programs including alumni relations management and clinical experiential learning. Our mission is to help institutions strengthen outcomes for alumni and students by streamlining workflows, increasing engagement, and enabling scalable program growth. 
+
+We’re deeply product-led in how we work, prioritizing cross-functional collaboration, continuous validation, and building products that solve real problems. Our teams are distributed across the United States and India, and we move quickly with high ownership and low bureaucracy. 
+
+About the Role
+We’re looking for a Product Manager to lead client-driven product initiatives while owning and evolving key modules within the PeopleGrove platform. This role requires strong discovery skills, structured thinking, and the ability to translate customer input into scalable product improvements. 
+
+You’ll partner closely with Engineering, Design, Sales, and Customer Success to ensure client needs are deeply understood and thoughtfully incorporated into our product direction, not simply executed at face value.
+
+This role is not just about managing a backlog. It is about understanding the real problem, prioritizing intentionally, and shipping high-quality solutions that create lasting value. 
+What You’ll Own
+Client request intake and synthesis: Partner with Customer Success and Sales to understand incoming client requests, ask thoughtful follow-up questions, and identify patterns across feedback. 
+Problem framing and discovery: Translate feature requests into clear problem statements through structured conversations, research, and analysis before proposing solutions. 
+Strategic product ownership: Become the product expert for assigned product areas by understanding workflows, user behavior, technical considerations, and business impact. 
+Roadmap and prioritization: Build and maintain focus-area roadmaps, prioritizing work based on user value, company strategy, and measurable outcomes. 
+End-to-end delivery: Work closely with Engineering and Design from concept through requirements, build, launch, and iteration. 
+Stakeholder alignment: Lead productive discussions and ensure decisions are documented and aligned across teams. 
+Key Responsibilities
+Develop a deep understanding of users and how they interact with your modules. 
+Identify themes across client requests and convert them into scalable product opportunities. 
+Define clear product requirements and success metrics. 
+Balance short-term client needs with long-term platform integrity. 
+Maintain clear documentation of product decisions, trade-offs, and rationale to ensure transparency and continuity across teams. 
+Contribute to improving product discovery and intake processes across the team. 
+Partner with Engineering to ensure solutions are scalable, maintainable, and technically sound. 
+What Success Looks Like (First 6–12 Months)
+Client requests are evaluated using a structured intake and prioritization framework. 
+Clear ownership and roadmaps are established for assigned modules. 
+Stakeholders report improved clarity and alignment in product decisions 
+At least one meaningful client-driven initiative has shipped with measurable impact. 
+You demonstrate growing independence in leading discovery and prioritization conversations. 
+Qualifications
+2 to 5 years of product management experience in B2B SaaS or a similar environment. 
+Demonstrated ability to conduct customer discovery and translate insights into clear product requirements. 
+Strong analytical thinking and comfort using data to inform decisions. 
+Experience working cross-functionally with Engineering and Design. 
+Strong written and verbal communication skills. 
+Comfortable navigating ambiguity and competing stakeholder priorities. 
+Bonus Qualifications
+Experience in higher education, workforce outcomes, or related industries. 
+Familiarity with product analytics tools. 

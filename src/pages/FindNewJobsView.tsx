@@ -25,6 +25,19 @@ const FindNewJobsView: React.FC = () => {
       if (res && res.passed) {
         localPassed += 1;
         setBatchProgress(prev => prev ? { ...prev, passed: localPassed } : null);
+        
+        // Save to DB
+        await fetch(api('/api/jobs'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            company: res.company || jobs[i].company,
+            title: res.title || 'Product Manager',
+            url: res.url || jobs[i].url,
+            score: res.score,
+            summary: res.summary
+          })
+        });
       }
 
       // Artificial delay between jobs
@@ -46,6 +59,20 @@ const FindNewJobsView: React.FC = () => {
     let timeout: NodeJS.Timeout;
     if (inputMode === 'single' && result && result.passed && !isRunning && !isAdded) {
       setIsAdded(true);
+      
+      // Save to DB
+      fetch(api('/api/jobs'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: result.company,
+          title: result.title,
+          url: result.url,
+          score: result.score,
+          summary: result.summary
+        })
+      });
+
       timeout = setTimeout(() => {
         resetPipeline();
         setResetKey(prev => prev + 1);

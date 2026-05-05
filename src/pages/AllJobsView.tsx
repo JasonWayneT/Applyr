@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Job } from '../types/job';
 import StatusChip from '../components/StatusChip';
+import { api } from '../lib/api';
 
 interface AllJobsViewProps {
   jobs: Job[];
@@ -32,6 +33,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
   const groups = [
     { title: 'New from scout', statuses: ['New'], chipClass: 'chip-new', icon: 'fiber_new' },
     { title: 'Needs your attention', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
+    { title: 'Ready to Apply', statuses: ['Drafted'], chipClass: 'chip-drafted', icon: 'description' },
     { title: 'Waiting for contact', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
     { title: 'Initial screening', statuses: ['Recruiter Screen'], chipClass: 'chip-recruiter-screen', icon: 'hourglass_top' },
     { title: 'Active gauntlet', statuses: ['Core Interviews'], chipClass: 'chip-core-interviews', icon: 'record_voice_over' },
@@ -55,7 +57,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
               placeholder="Search company or role..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-sanctuary rounded-full pl-10 pr-4 py-2 w-56 text-sm"
+              className="input-applyr rounded-full pl-10 pr-4 py-2 w-56 text-sm"
             />
           </div>
           <div className="flex bg-surface-container-low p-1 rounded-xl">
@@ -122,6 +124,17 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
+                        {['Drafted', 'Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(job.status) && (
+                          <a
+                            href={api(`/api/jobs/${job.id}/download-all`)}
+                            download={`${job.company.toLowerCase()}_assets.zip`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                            title="Download all PDF assets (ZIP)"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">download</span>
+                          </a>
+                        )}
                         {job.url && (
                           <a
                             href={job.url}

@@ -32,13 +32,13 @@ RESUME_STYLE_REF_FILE = os.path.join(DATA_DIR, "Resume_Style_Reference.md")
 NAVIGATOR_FILE = os.path.join(PROJECT_ROOT, "Job_Navigator.html")
 
 # Default LLM model for the pipeline
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-flash-latest"
 
 # Max JD characters to send to LLM for scoring (token budget gate)
 SCORING_JD_MAX_CHARS = 1500
 
 # Keywords that must appear in a JD for it to pass the pre-filter (0 tokens)
-JD_REQUIRED_KEYWORDS = ['saas', 'b2b', 'platform', 'integration', 'enterprise', 'api', 'product manager', 'product owner']
+JD_REQUIRED_KEYWORDS = ['saas', 'b2b', 'platform', 'integration', 'enterprise', 'api', 'product', 'software', 'agile', 'roadmap', 'stakeholder']
 
 
 def load_file(filepath):
@@ -52,13 +52,15 @@ def load_file(filepath):
 
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
-             response_mime_type=None, tools=None, max_retries=3):
+             response_mime_type=None, tools=None, max_retries=5):
     """
     Centralized LLM call with rate-limit retry and exponential backoff.
     Returns the stripped text response or empty string on failure.
     """
     if model is None:
         model = DEFAULT_MODEL
+    
+    print(f"    [LLM] Calling {model} (Prompt length: {len(user_prompt)})...")
 
     for attempt in range(max_retries):
         try:
@@ -77,14 +79,22 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
                 contents=user_prompt,
                 config=config
             )
-            return response.text.strip()
+            text = (response.text or "").strip()
+            if not text:
+                reason = "N/A"
+                if response.candidates:
+                    reason = response.candidates[0].finish_reason
+                print(f"    [LLM Warning] Empty response from {model}. Reason: {reason}")
+            return text
         except Exception as e:
             err = str(e).lower()
             if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
-                wait = 45 * (attempt + 1)
+                wait = 60 * (attempt + 1)
                 print(f"  -> Rate limit hit. Waiting {wait}s (retry {attempt+1}/{max_retries})...")
                 time.sleep(wait)
             else:
                 print(f"LLM Error: {e}")
-                return ""
+                if attempt < max_retries - 1:
+                    print(f"  -> Retrying ({attempt+2}/{max_retries})...")
+                    time.sleep(5)
     return ""

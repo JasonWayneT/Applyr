@@ -76,7 +76,7 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules):
         return None
 
 def process_single(company, url, jd_text):
-    print(json.dumps({"id": "fit", "status": "running", "summary": f"Evaluating '{company}'..."}))
+    print(json.dumps({"id": "gate", "status": "running", "summary": "Checking keyword signals..."}))
 
     fit_rules = load_file(FIT_ENGINE_FILE)
 
@@ -86,14 +86,17 @@ def process_single(company, url, jd_text):
             jd_text = load_file(jd_path)
 
     if not jd_text:
-        print(json.dumps({"id": "fit", "status": "error", "summary": "No JD text provided or found."}))
+        print(json.dumps({"id": "gate", "status": "error", "summary": "No JD text provided or found."}))
         return
 
     # Zero-token keyword gate before any LLM call
     if not passes_jd_keyword_gate(jd_text):
-        print(json.dumps({"id": "fit", "status": "done", "summary": "Rejected (keyword gate: no relevant signals found)."}))
+        print(json.dumps({"id": "gate", "status": "done", "summary": "Rejected (keyword gate: no relevant signals found)."}))
         print(json.dumps({"score": 0, "passed": False}))
         return
+
+    print(json.dumps({"id": "gate", "status": "done", "summary": "Signals detected."}))
+    print(json.dumps({"id": "fit", "status": "running", "summary": f"Evaluating '{company}'..."}))
 
     # Scoring uses condensed summary — full workExperience loaded only on YES
     work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE)
@@ -131,7 +134,14 @@ def process_single(company, url, jd_text):
     except Exception as e:
         pass
         
-    print(json.dumps({"score": score, "passed": True}))
+    print(json.dumps({
+        "score": score, 
+        "passed": True, 
+        "company": company, 
+        "title": result.get("Title", "Product Manager"), # Fit engine might return title
+        "url": url,
+        "summary": summary
+    }))
 
 def process_batch():
     print("====================================")

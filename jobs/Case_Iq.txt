@@ -1,0 +1,345 @@
+URL: https://weworkremotely.com/remote-jobs/case-iq-product-owner
+
+Find Jobs
+Community
+Career Services
+About
+Sign in
+Post a job
+All jobs
+Product
+Product Owner
+Product Owner
+
+Posted 21 hours ago
+
+Apply now
+AI Auto-Apply
+Save job
+
+Case IQ helps organizations protect their employees, culture, and business through software for uncovering, investigating, and preventing fraud, ethics, harassment, discrimination, and security incidents. Our customers include large enterprises that rely on Case IQ to manage high volumes of sensitive cases and reduce financial and brand risk.
+
+
+
+
+
+
+
+
+
+
+We are hiring a Product Owner to own the delivery backlog for our core products. You will partner with Product Managers who own product strategy and roadmap outcomes, and with Engineering teams who own solution design and execution. Your focus is to translate product intent into clear, testable work, keep the backlog healthy and enable predictable delivery of customer value.
+
+
+
+
+
+
+
+
+
+
+
+What You'll Do: 
+
+
+
+
+
+Own and continuously refine the team backlog to maximize delivered value within roadmap guardrails.
+
+
+Translate product goals and customer problems into well-formed epics and user stories with clear acceptance criteria and supporting context (happy and alternate requirements).
+
+
+Lead backlog refinement with Engineering and ensure stories meet a shared Definition of Ready before sprint commitment.
+
+
+Be the day-to-day requirements decision-maker for the team: answer questions quickly, clarify scope, and make pragmatic tradeoffs to keep delivery moving.
+
+
+Partner with Engineering and QA to define testable acceptance criteria and validate completed work, accepting/rejecting stories based on agreed criteria.
+
+
+Support sprint planning and sprint reviews by presenting priorities, context, and acceptance criteria, ensuring completed work is demonstrable and aligns with intended outcomes.
+
+
+Coordinate Stakeholder Input and triage intake (Support/CS escalations, customer feedback, technical debt requests) into the backlog with appropriate context and priority rationale, shielding the engineering team from unplanned work.
+
+
+Collaborate with Product Management on discovery and evidence gathering (customer calls, workflow observation, support data) and provide inputs that inform roadmap decisions.
+
+
+Contribute to release readiness by partnering with QA to assess quality risks, outstanding defects and release confidence, as well as supplying scope summaries, release notes inputs, and enablement details for international teams as needed.
+
+
+
+
+
+
+
+
+
+
+
+Where You’ll Own:
+
+
+
+
+You are empowered to:
+
+
+
+
+
+Order and re-order the workstream backlog within roadmap guardrails and agreed priorities.
+
+
+Define acceptance criteria and determine whether a story meets “done” for product intent.
+
+
+Make day-to-day scope tradeoffs within a sprint when new information emerges (while keeping the PM informed).
+
+
+
+
+
+You will escalate to the Product Manager when:
+
+
+
+
+
+A decision materially changes roadmap priority, customer commitments, or commercial implications.
+
+
+Tradeoffs involve cross-team dependencies, significant schedule impact, or major scope changes.
+
+
+Requests touch pricing/packaging, contractual commitments, or high-risk compliance considerations.
+
+
+
+
+
+
+
+
+
+
+
+What Success Looks Like:
+
+
+
+
+
+Engineering has a consistently “ready” backlog (typically 1–2 sprints ahead) with clear acceptance criteria and minimal churn due to unclear requirements.
+
+
+Sprint outcomes are more predictable because stories are well-scoped, understood, and testable.
+
+
+Stakeholders trust the backlog: priorities are transparent, rationale is documented, and intake is triaged consistently.
+
+
+Shipped work solves the intended customer problem with fewer avoidable defects and less rework caused by ambiguity.
+
+
+
+
+
+
+
+
+
+
+
+Who We're Looking For:
+
+
+
+
+
+3+ years of experience as a Product Owner, Business Analyst, Technical Product Owner, or similar delivery-focused product role in a SaaS environment.
+
+
+Demonstrated ability to write high-quality user stories and acceptance criteria and to decompose epics into incremental deliverables.
+
+
+Experience partnering closely with engineering teams (Agile/Scrum/Kanban) and operating in a fast feedback loop.
+
+
+Comfort interfacing directly with enterprise customers to understand workflows and validate requirements.
+
+
+Strong communication and stakeholder management skills; able to facilitate tradeoffs and document decisions.
+
+
+Working knowledge of analytics/telemetry concepts (instrumentation needs, adoption metrics) sufficient to specify requirements and interpret signals.
+
+
+Maintain a high standard of security awareness, ensuring data protection, compliance with company policies, and adherence to industry standards in all aspects of work.
+
+
+
+
+
+
+
+
+
+
+
+Assets (Nice to Have): 
+
+
+
+
+
+Experience with investigations, case management, compliance, ethics, HR, or security incident workflows.
+
+
+Data/BI experience (e.g., defining reporting requirements, partnering on dashboards).
+
+
+Experience working on multi-tenant SaaS platforms, migrations, integrations, or reporting engines.
+
+
+Exposure to GRC marketplaces/ecosystems.
+
+
+
+
+
+
+
+
+
+
+
+Perks and Benefits
+
+
+
+
+
+Remote-first with a flexible work environment (team spans the US and Canada).
+
+
+Competitive company-paid benefits starting day 1.
+
+
+Generous professional development budget.
+
+
+RRSP/401k matching program.
+
+
+Half-day Fridays in the summer.
+
+
+
+
+
+ 
+
+
+
+
+Selected candidates will be contacted through BambooHR (please check your junk mail).
+
+
+
+
+ 
+
+
+
+
+Case IQ is an equal opportunity employer. All qualified applicants are given consideration regardless of race, religion, color, gender, sex, age, sexual orientation, gender identity, national origin, marital status, citizenship status, disability, veteran status, or any other protected class as provided in applicable employment laws. If you have a disability or special need that requires accommodation, please contact us at hr@caseiq.com.
+
+Case Iq 
+View company
+
+Jobs posted: 1
+
+About the job
+Posted on
+21 hours ago
+Apply before
+May 30th, 2026
+Job type
+ Full-Time
+Category
+Product
+Region
+Anywhere in the World
+Apply now
+or
+Auto-Apply with AI
+
+No forms. Just smart, optimized applications.
+
+Related Jobs
+Remote Product jobs→
+Head of Community
+
+Jan 28
+
+The Tech Tribe 
+
+Sydney, Australia 
+
+Featured
+
+Full-Time
+
+Anywhere in the World
+
+Senior WordPress Developer
+
+Jan 20
+
+WPForms 
+
+West Palm Beach, Florida, United States 
+
+Featured
+
+Full-Time
+
+Anywhere in the World
+
+Head of Product
+
+Dec 26
+
+Toggl 
+
+Tallinn, Estonia 
+
+Featured
+
+ Top 100
+
+Full-Time
+
+$100,000 or more USD
+
+Anywhere in the World
+
+
+
+Top 100 Companies
+Blog
+Remote Hiring Guide
+FAQ
+Events
+RSS
+
+40,103 Remote jobs posted
+
+© 2026 We Work Remotely
+Contact SupportTermsGuidelinesPrivacyWhy Choose WWR?

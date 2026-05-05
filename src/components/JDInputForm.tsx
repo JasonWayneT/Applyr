@@ -27,7 +27,7 @@ const JDInputForm: React.FC<JDInputFormProps> = ({ onRun, isLoading }) => {
           onChange={(e) => setCompany(e.target.value)}
           placeholder="e.g. Stripe, Airbnb, etc."
           disabled={isLoading}
-          className="input-sanctuary w-full rounded-xl"
+          className="input-applyr w-full rounded-xl"
         />
       </div>
 
@@ -39,7 +39,7 @@ const JDInputForm: React.FC<JDInputFormProps> = ({ onRun, isLoading }) => {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://company.com/careers/pm"
           disabled={isLoading}
-          className="input-sanctuary w-full rounded-xl"
+          className="input-applyr w-full rounded-xl"
         />
       </div>
 
@@ -50,7 +50,7 @@ const JDInputForm: React.FC<JDInputFormProps> = ({ onRun, isLoading }) => {
           onChange={(e) => setJd(e.target.value)}
           placeholder="Paste the full job description here..."
           disabled={isLoading}
-          className="input-sanctuary w-full h-[320px] rounded-xl p-4 resize-none"
+          className="input-applyr w-full h-[320px] rounded-xl p-4 resize-none"
         />
       </div>
 

@@ -77,6 +77,14 @@ def validate_hard_facts(generated_text, master_resume_text):
             warnings.append(f"HALLUCINATION CAUGHT: '{wrong}' replaced with '{right}'")
             corrected = corrected.replace(wrong, right)
 
+    # 1b. Automatically strip Skills and Technical Environment sections
+    corrected = re.sub(
+        r'(?:<h2[^>]*>\s*<strong>\s*(?:SKILLS|TECHNICAL).*?</h2>|##\s*(?:Skills|Technical Environment).*?)([\s\S]*?)(?=<h2[^>]*>|##\s*Education|</div>|$)',
+        '',
+        corrected,
+        flags=re.IGNORECASE
+    )
+
     # 2. Verify education facts are present
     for uni in HARD_FACTS["education"]:
         if uni not in corrected:
@@ -134,7 +142,11 @@ def verify_claims(draft_text, work_exp, claim_verifier_rules):
     Perform the verification. If high-risk flags exist, rewrite the sentence to be accurate.
     Return ONLY the final corrected markdown text. Do not output 'FAILED CLAIM' unless explicitly asked, just fix it in the final output directly to ensure the pipeline can proceed automatically with corrected text.
     """
-    return call_llm(system_prompt, user_prompt)
+    result = call_llm(system_prompt, user_prompt)
+    if not result:
+        print("    [Audit Warning] Claim Verifier returned empty. Using original draft.")
+        return draft_text
+    return result
 
 
 def generate_pdf(markdown_text, output_path):
@@ -169,8 +181,15 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
 
     # 2. Bridge Logic & Resume Generation
     print("    [Drafting] Applying 'Bridge Logic' (Platform -> Growth) to Resume...")
-    resume_system_prompt = "You are an expert ATS Resume Writer translating Platform PM experience to Growth/General PM outcomes. You must output raw HTML/Markdown strictly matching the style guide."
-    resume_user_prompt = f"""
+    resume_prompt = {
+        "role": "You are a professional resume writer for Jason Taylor. "
+                "Your goal is to create a high-impact, ONE-PAGE technical resume that matches the style reference template exactly. "
+                "STRICT CONSTRAINT: The resume MUST have exactly these three headers: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, and EDUCATION. No other headers are allowed. "
+                "The PROFESSIONAL SUMMARY must be exactly 1-2 concise lines to save space. Do not include Skills or Technical Environment sections. "
+                "Do not use company-specific terms like GPOD or Bellwether without explaining what that is. "
+                "The entire resume MUST fit on a single page. Do not exceed 3,200 characters. "
+                "Use the provided work experience faithfully. Do not hallucinate tools or seniority.",
+        "content": f"""
     Transform the MASTER RESUME to match the JOB DESCRIPTION while strictly adhering to the BRIDGE LOGIC.
     
     BRIDGE LOGIC RULES:
@@ -194,7 +213,11 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     
     Output strictly the translated Markdown resume with the HTML formatting tags. No preamble.
     """
-    draft_resume = call_llm(resume_system_prompt, resume_user_prompt)
+    }
+    draft_resume = call_llm(resume_prompt["role"], resume_prompt["content"])
+    if not draft_resume:
+        print(f"  [ERROR] LLM returned empty resume for {company_name}. Skipping save.")
+        return
     verified_resume = verify_claims(draft_resume, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
@@ -205,12 +228,18 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
 
     with open(resume_md_path, "w", encoding="utf-8") as f:
         f.write(final_resume)
+    print(f"    [Drafting] Saved Resume.md ({len(final_resume)} chars)")
     generate_pdf(final_resume, resume_pdf_path)
 
     # 3. Cover Letter Generation
     print("    [Drafting] Generating Cover Letter...")
-    cl_system_prompt = "You are Jason Taylor writing a compelling, direct cover letter. You must output raw HTML/Markdown strictly matching the style guide."
-    cl_user_prompt = f"""
+    cl_prompt = {
+        "role": "You are a professional cover letter writer for Jason Taylor. "
+                "Your goal is to write a concise, one-page cover letter. "
+                "STRICT CONSTRAINT: The entire letter must be under 1,800 characters to fit on one page with headers. "
+                "Do not use company-specific terms like GPOD or Bellwether without explaining what that is. "
+                "Directly address the job requirements using Jason's actual experience.",
+        "content": f"""
     Write a 250-400 word Cover Letter based on the JOB DESCRIPTION and RESEARCH PACKET.
     
     STYLE:
@@ -229,7 +258,11 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     
     Output strictly the markdown cover letter with HTML formatting tags. No preamble.
     """
-    draft_cl = call_llm(cl_system_prompt, cl_user_prompt)
+    }
+    draft_cl = call_llm(cl_prompt["role"], cl_prompt["content"])
+    if not draft_cl:
+        print(f"  [ERROR] LLM returned empty cover letter for {company_name}. Skipping save.")
+        return
     verified_cl = verify_claims(draft_cl, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
@@ -240,6 +273,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
 
     with open(cl_md_path, "w", encoding="utf-8") as f:
         f.write(final_cl)
+    print(f"    [Drafting] Saved CoverLetter.md ({len(final_cl)} chars)")
     generate_pdf(final_cl, cl_pdf_path)
 
     # Summary of all validation issues

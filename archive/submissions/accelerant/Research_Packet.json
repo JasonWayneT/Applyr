@@ -1,0 +1,36 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Accelerant is a risk exchange for specialty insurance that connects specialty underwriters with risk capital providers (insurers, reinsurers, institutional investors) using data, analytics, and AI to make the exchange smarter, faster, and more transparent. They position as a SaaS-style partner focused on efficiency, transparency, and profitable growth for specialty insurance firms, working exclusively with MGAs and Program Administrators in a transparent, responsive, collaborative manner.[1][3][4]",
+      "Observed": "Emphasis on AI-powered tools for internal operations and customer platform, scaling automation across enterprise functions like Actuarial, Finance, Legal, Ops, Risk & Compliance, Underwriting.[1]"
+    },
+    "Problem Space": "Solves pain in specialty insurance by reducing manual processes through AI and workflow automation, improving risk exchange efficiency, transparency, and speed between underwriters and capital providers.[1][4]",
+    "Business Model": "Platform-based risk exchange transacting premiums (e.g., $4.2B in 2025); SaaS-style for specialty insurance; growth stage post-IPO (NYSE: ARX), founded 2018, 228 employees, offices in Atlanta, New York, Hyderabad.[1][3]",
+    "Founding Story": "Founded in 2018; key inflection: public listing on NYSE as ARX, scaling to $4.2B premiums in 2025, shift from prototyping to enterprise AI OS production.[1][3]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "Direct rivals not explicitly named in results; Accelerant differentiates via AI/data-driven risk exchange platform for specialty insurance, unlike traditional program carriers, focusing on tech-fueled efficiency for MGAs/Program Administrators.[3][4]",
+    "Macro Trends": "AI disruption in insurance for automation of manual workflows; regulatory shifts and data-rich domains leveraging ML/AI for commercial products.[1][2]"
+  },
+  "Module C": {
+    "Financials/Funding": "Transacted $4.2B in premiums on Accelerant Risk Exchange in 2025; NYSE-listed (ARX), indicating post-IPO financial health.[1]",
+    "Organizational Shifts": "No specific layoffs, hiring surges, or leadership changes in 90-day window (results limited).[1][3]",
+    "Product/Partnership News": "Building AI-powered enterprise OS for internal functions, feeder to customer-facing platform; past prototyping phase, now scaling.[1]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Technical Product Manager – Applied AI: Own enterprise AI roadmap, build AI-powered hub (agents, dashboards, workflow automation), prototype with low/no-code/AI tools (e.g., Claude Managed Agents, Replit), build-vs-buy decisions, drive adoption/change management. Product Manager – Insurer Experience: 5+ years PM in commercial products, data-rich domains, ML/AI background.[1][2]",
+      "Hidden Success Signals": "Defend/ship against backlog ranked by time saved/pain eliminated; lead vendor evaluations/negotiations; focus on actual adoption via education/documentation (harder than shipping).[1]",
+      "Required vs Preferred": "Required: Partner with business teams on automation, own roadmap/backlog, build/integrate AI tools, drive adoption. Preferred: Experience in data/ML/AI, low/no-code prototyping, vendor management.[1][2]"
+    },
+    "Hierarchy": "Limited info; role partners with Business teams across Actuarial, Finance, Legal, Ops, Risk & Compliance, Underwriting; owns central AI hub integrating enterprise-wide.[1]",
+    "Hiring Manager Profile": "No specific profile found in results."
+  },
+  "Module E": {
+    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results; advertised as transparent, responsive, collaborative.[3]",
+    "Operational Style": "Remote opportunities (e.g., US remote roles); employee tenure not specified.[2][4]"
+  },
+  "Module F": {
+    "Priority Mapping": "Enterprise AI roadmap/automation of manual grind (Actuarial, Finance, etc.): Connects to Jason's **Platform** experience for building/scaling AI hubs/workflows. Build-vs-buy/vendor integration: Aligns with **Data Integrity** for clean data/AI platform integration. Drive adoption/scaling proven solutions: Maps to **Revenue Systems** via efficient risk exchange/premium transaction optimization ($4.2B scale).[1]"
+  }
+}

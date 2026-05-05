@@ -188,7 +188,7 @@ const ProfileView: React.FC = () => {
                     setProfile(next);
                     debouncedSave('identity', next);
                   }}
-                  className="input-sanctuary w-full rounded-xl"
+                  className="input-applyr w-full rounded-xl"
                 />
               </div>
             ))}
@@ -223,7 +223,7 @@ const ProfileView: React.FC = () => {
             <textarea
               value={experience}
               onChange={(e) => { setExperience(e.target.value); setExperienceDirty(true); }}
-              className="w-full h-[600px] bg-surface p-6 text-[13px] font-mono leading-relaxed text-on-surface focus:outline-none sanctuary-scrollbar resize-none"
+              className="w-full h-[600px] bg-surface p-6 text-[13px] font-mono leading-relaxed text-on-surface focus:outline-none applyr-scrollbar resize-none"
               spellCheck={false}
             />
           </div>
@@ -245,7 +245,7 @@ const ProfileView: React.FC = () => {
                       setPreferences(next);
                       debouncedSave('preferences', next);
                     }}
-                    className="input-sanctuary w-full rounded-xl pl-8"
+                    className="input-applyr w-full rounded-xl pl-8"
                   />
                 </div>
               </div>
@@ -282,7 +282,7 @@ const ProfileView: React.FC = () => {
                     setPreferences(next);
                     debouncedSave('preferences', next);
                   }}
-                  className="input-sanctuary w-full h-20 rounded-xl px-4 py-3 text-xs resize-none"
+                  className="input-applyr w-full h-20 rounded-xl px-4 py-3 text-xs resize-none"
                   placeholder="Senior, VP, Director, Lead..."
                 />
                 <p className="text-[10px] text-on-surface-variant mt-1.5 italic">Comma separated. Auto-saves 1 second after you stop typing.</p>
@@ -296,7 +296,7 @@ const ProfileView: React.FC = () => {
                     setPreferences(next);
                     debouncedSave('preferences', next);
                   }}
-                  className="input-sanctuary w-full h-20 rounded-xl px-4 py-3 text-xs resize-none"
+                  className="input-applyr w-full h-20 rounded-xl px-4 py-3 text-xs resize-none"
                   placeholder="Crypto, Gambling, Web3..."
                 />
               </div>

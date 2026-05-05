@@ -5,7 +5,14 @@ import { api } from '../lib/api';
 export const usePipeline = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [isRejected, setIsRejected] = useState(false);
-  const [result, setResult] = useState<{ score: number; passed: boolean } | null>(null);
+  const [result, setResult] = useState<{ 
+    score: number; 
+    passed: boolean;
+    company?: string;
+    title?: string;
+    url?: string;
+    summary?: string;
+  } | null>(null);
 
   const [stages, setStages] = useState<Stage[]>([
     { id: 'gate',     label: 'Deterministic Gate',  status: 'pending' },
@@ -75,7 +82,14 @@ export const usePipeline = () => {
                   return;
                 }
               } else if (eventName === 'done') {
-                const finalResult = { score: payload.score ?? 0, passed: payload.passed ?? false };
+                const finalResult = { 
+                  score: payload.score ?? 0, 
+                  passed: payload.passed ?? false,
+                  company: payload.company,
+                  title: payload.title,
+                  url: payload.url,
+                  summary: payload.summary
+                };
                 setIsRunning(false);
                 setResult(finalResult);
                 resolve(finalResult);

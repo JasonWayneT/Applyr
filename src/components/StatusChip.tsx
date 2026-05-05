@@ -10,6 +10,7 @@ const STATUS_CONFIG: Record<Status, { chipClass: string; dotClass: string; label
   'Recruiter Screen':    { chipClass: 'chip chip-recruiter-screen',  dotClass: 'bg-on-surface-variant', label: 'Screening' },
   'Core Interviews':     { chipClass: 'chip chip-core-interviews',   dotClass: 'bg-secondary',          label: 'Interviewing' },
   'Offer and Negotiation': { chipClass: 'chip chip-offer',          dotClass: 'bg-primary',            label: 'Offer' },
+  'Drafted':              { chipClass: 'chip chip-drafted',          dotClass: 'bg-primary',            label: 'Ready to Apply' },
   'Closed':              { chipClass: 'chip chip-closed',            dotClass: 'bg-on-surface-variant', label: 'Closed' },
 };
 

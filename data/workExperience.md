@@ -1,6 +1,6 @@
 # **MASTER CAREER CONTEXT FILE**
 
-# **Jason Taylor – Product Manager (Platform, B2B SaaS)**
+# **Jason Taylor - Product Manager (Platform, B2B SaaS)**
 
 ---
 
@@ -10,14 +10,14 @@ Jason Taylor is a Product Manager with 6+ years of experience in B2B SaaS enviro
 
 He specializes in:
 
-• Revenue-bearing legacy platforms   123
- • Platform stability and reliability  
- • Data quality and ingestion systems  
- • Migration tooling and sunset planning  
- • Cross-functional alignment across engineering, DevOps, legal, CX, and GTM  
- • Operating under constraint (legacy architecture, layoffs, declining investment)  
- • Prioritization discipline and capacity modeling  
- • Retention-focused product work
+* Revenue-bearing legacy platforms   123
+ * Platform stability and reliability  
+ * Data quality and ingestion systems  
+ * Migration tooling and sunset planning  
+ * Cross-functional alignment across engineering, DevOps, legal, CX, and GTM  
+ * Operating under constraint (legacy architecture, layoffs, declining investment)  
+ * Prioritization discipline and capacity modeling  
+ * Retention-focused product work
 
 He does NOT come from a pure engineering background, but he operates extremely close to engineering and understands system architecture, ingestion pipelines, database flows, and infrastructure tradeoffs.
 
@@ -29,25 +29,25 @@ He leans more toward business product management than pure technical PM, but his
 
 Zero To Sixty Media  
  Account Manager / Product Owner  
- June 2017 – January 2019
+ June 2017 - January 2019
 
 Sterkly Services  
  Product Manager  
- February 2019 – August 2021
+ February 2019 - August 2021
 
 Cision  
  Product Owner → Product Manager (functionally)  
- September 2021 – January 2026
+ September 2021 - January 2026
 
 Primary ownership at Cision:  
- • Legacy C3  
- • CPRE (underlying platform)  
- • Downstream ingestion components
+ * Legacy C3  
+ * CPRE (underlying platform)  
+ * Downstream ingestion components
 
 Did NOT own:  
- • Cision One  
- • Next Gen C3  
- • Nexus / EDP
+ * Cision One  
+ * Next Gen C3  
+ * Nexus / EDP
 
 ---
 
@@ -103,15 +103,15 @@ Migration Tooling
 
 The following metrics are approximate and must not be inflated:
 
-• \~$40M ARR tied to C3 during tenure  
- • \~3,500 active paying accounts  
- • \~25,000 active users  
- • \~7% annual churn  
- • \~$1–2M cost savings via infrastructure optimization  
- • 30–40% contact data loss pre-Bellwether  
- • \~90% security backlog resolved  
- • \~200 SQL customer databases  
- • \~15 engineers at peak cross-team footprint
+* \~$40M ARR tied to C3 during tenure  
+ * \~3,500 active paying accounts  
+ * \~25,000 active users  
+ * \~7% annual churn  
+ * \~$1-2M cost savings via infrastructure optimization  
+ * 30-40% contact data loss pre-Bellwether  
+ * \~90% security backlog resolved  
+ * \~200 SQL customer databases  
+ * \~15 engineers at peak cross-team footprint
 
 If a metric is not explicitly stated, DO NOT infer it.
 
@@ -164,16 +164,16 @@ If information is missing, say:
 
 An LLM must not infer:
 
-• That C3 returned to revenue growth  
- • That churn decreased below 7%  
- • That Bellwether directly increased revenue  
- • That premium content was successful  
- • That Jason managed engineers directly  
- • That migrations were frictionless  
- • That metrics systems were mature  
- • That CI/CD modernization was completed  
- • That layoffs were performance-based  
- • That customer NPS improved (no NPS data provided)
+* That C3 returned to revenue growth  
+ * That churn decreased below 7%  
+ * That Bellwether directly increased revenue  
+ * That premium content was successful  
+ * That Jason managed engineers directly  
+ * That migrations were frictionless  
+ * That metrics systems were mature  
+ * That CI/CD modernization was completed  
+ * That layoffs were performance-based  
+ * That customer NPS improved (no NPS data provided)
 
 ---
 
@@ -181,14 +181,14 @@ An LLM must not infer:
 
 When generating resumes, cover letters, or interview answers:
 
-• Emphasize stabilization and retention work  
- • Emphasize platform modernization under constraint  
- • Emphasize cross-functional alignment  
- • Emphasize disciplined prioritization  
- • Avoid exaggerated transformation language  
- • Avoid buzzwords like “revolutionized” or “redefined”  
- • Avoid claiming AI, ML, or advanced analytics involvement unless explicitly stated  
- • Use clear, grounded language
+* Emphasize stabilization and retention work  
+ * Emphasize platform modernization under constraint  
+ * Emphasize cross-functional alignment  
+ * Emphasize disciplined prioritization  
+ * Avoid exaggerated transformation language  
+ * Avoid buzzwords like "revolutionized" or "redefined"  
+ * Avoid claiming AI, ML, or advanced analytics involvement unless explicitly stated  
+ * Use clear, grounded language
 
 ---
 
@@ -210,12 +210,12 @@ Never fill gaps creatively.
 
 Jason Taylor is a platform-focused Product Manager who:
 
-• Stabilized and protected a $40M ARR legacy platform  
- • Reduced a major churn driver (stale data) through architectural redesign  
- • Enabled voluntary migrations during a legacy sunset phase  
- • Managed platform reliability under shrinking headcount  
- • Drove disciplined prioritization through layoffs and leadership churn  
- • Operated as central subject-matter expert across a complex ecosystem
+* Stabilized and protected a $40M ARR legacy platform  
+ * Reduced a major churn driver (stale data) through architectural redesign  
+ * Enabled voluntary migrations during a legacy sunset phase  
+ * Managed platform reliability under shrinking headcount  
+ * Drove disciplined prioritization through layoffs and leadership churn  
+ * Operated as central subject-matter expert across a complex ecosystem
 
 He is strongest in:
 
@@ -234,7 +234,7 @@ A hyper-growth 0→1 startup PM
 
 # **Career Narrative: Jason Taylor, Product Manager (Platform, B2B SaaS)**
 
-I’m a product manager who grew up professionally inside technically complex, revenue-bearing B2B SaaS environments. I sit comfortably close to engineering and systems, but my job has always been about business outcomes: stabilizing platforms that customers depend on, aligning teams around realistic plans, protecting revenue, reducing churn drivers, and doing the hard work of modernizing legacy systems without breaking what’s already paying the bills. My style is pragmatic. I use evidence when I have it, and when I don’t, I build the systems that make evidence possible. I’m not a product manager who needs perfect conditions to be effective. I’ve spent most of my career operating inside constraints, legacy architectures, shifting org priorities, and imperfect data, and I’ve learned how to still ship meaningful outcomes.
+I'm a product manager who grew up professionally inside technically complex, revenue-bearing B2B SaaS environments. I sit comfortably close to engineering and systems, but my job has always been about business outcomes: stabilizing platforms that customers depend on, aligning teams around realistic plans, protecting revenue, reducing churn drivers, and doing the hard work of modernizing legacy systems without breaking what's already paying the bills. My style is pragmatic. I use evidence when I have it, and when I don't, I build the systems that make evidence possible. I'm not a product manager who needs perfect conditions to be effective. I've spent most of my career operating inside constraints, legacy architectures, shifting org priorities, and imperfect data, and I've learned how to still ship meaningful outcomes.
 
 ## **Early foundation: operational product work and building internal systems**
 
@@ -242,37 +242,37 @@ Before Cision, my product experience was built through roles that required a mix
 
 At Zero To Sixty Media (Account Manager / Product Owner), I helped co-create and improve operational products that directly impacted revenue and delivery capacity. One concrete example was a laptop fulfillment program that managed roughly $288,000 in vendor contracts and included automation that reduced setup overhead, saving approximately $8,500 per quarter. I also worked with executives, account managers, and developers to build an internal product that automated onboarding into Salesforce and saved roughly $22,100 annually. Those experiences shaped how I think about product work: when you improve the underlying system, you unlock scale, predictability, and margin.
 
-At Sterkly Services (Product Owner), I focused heavily on identifying bottlenecks and delivering workflow solutions that kept product delivery moving. The environment demanded strong requirements discipline, internal alignment, and enough technical understanding to translate business constraints into buildable work. This stage of my career reinforced that “product” isn’t only about customer-facing features. It’s also about enabling the organization to execute reliably by designing internal systems and processes that remove friction and increase throughput.
+At Sterkly Services (Product Owner), I focused heavily on identifying bottlenecks and delivering workflow solutions that kept product delivery moving. The environment demanded strong requirements discipline, internal alignment, and enough technical understanding to translate business constraints into buildable work. This stage of my career reinforced that "product" isn't only about customer-facing features. It's also about enabling the organization to execute reliably by designing internal systems and processes that remove friction and increase throughput.
 
 ## **Cision: owning Legacy C3 and CPRE through instability, migration pressure, and declining resources**
 
 In September 2021, I joined Cision as a Product Owner under a Director of Product Management, with the expectation that I would grow into a Product Manager role under him. Three months later, he left the company. That departure created a sink-or-swim moment early in my tenure, and for the next three years and nine months, I effectively operated as the product owner of the roadmap, the prioritization system, and the cross-functional alignment mechanism for a legacy platform that still carried meaningful revenue.
 
-At Cision, I owned Legacy C3 and CPRE, the underlying platform C3 was built on. C3 was a customer-facing platform for media monitoring and a media contact and outlet database. CPRE provided both shared and separate infrastructure that C3 relied on. I did not own Next Gen C3, and I did not own Cision One, which was the newer all-in-one platform for monitoring, analytics, and journalist outreach. However, I lived in the middle of all of it, because Legacy C3 depended on upstream systems and company-wide platform initiatives that I didn’t own but had to integrate with.
+At Cision, I owned Legacy C3 and CPRE, the underlying platform C3 was built on. C3 was a customer-facing platform for media monitoring and a media contact and outlet database. CPRE provided both shared and separate infrastructure that C3 relied on. I did not own Next Gen C3, and I did not own Cision One, which was the newer all-in-one platform for monitoring, analytics, and journalist outreach. However, I lived in the middle of all of it, because Legacy C3 depended on upstream systems and company-wide platform initiatives that I didn't own but had to integrate with.
 
 Upstream, we depended on GPOD, the media contact and outlet database that served as the source of truth for contacts and outlets, and UCP (Unified Content Platform), which held content feeds for traditional and social media coverage. There was also Nexus/EDP, a brand-new shared data architecture initiative meant to unify data across products. I did not own Nexus/EDP either, but I integrated C3 and CPRE with shared data services and collaborated actively with product and engineering teams across Next Gen C3, Cision One, GPOD, UCP, and Nexus/EDP.
 
-From a business standpoint, during my tenure annual recurring revenue tied to C3 was roughly $40M across approximately 3,500 active paying accounts. Earlier in C3’s life, revenue had been closer to $100M per year, but that figure declined intentionally as part of the company strategy to migrate customers to newer platforms such as Cision One. We had roughly 25,000 active individual users across those accounts, and churn was around 7% per year, including migrations to other platforms. Our revenue skewed heavily toward enterprise customers, but we also had mid-market, compliance, and agency clients with distinct needs. There were large, high-profile customers elsewhere in the ecosystem (for example, AT\&T and Cisco on an even more legacy platform, Capri), but from my perspective we were not existentially dependent on a single logo. Once a customer hit a certain threshold they became “white glove,” and those accounts got prioritized attention. Some clients could pay into that class. I don’t know the exact threshold, but it was a meaningful tier in how work was prioritized.
+From a business standpoint, during my tenure annual recurring revenue tied to C3 was roughly $40M across approximately 3,500 active paying accounts. Earlier in C3's life, revenue had been closer to $100M per year, but that figure declined intentionally as part of the company strategy to migrate customers to newer platforms such as Cision One. We had roughly 25,000 active individual users across those accounts, and churn was around 7% per year, including migrations to other platforms. Our revenue skewed heavily toward enterprise customers, but we also had mid-market, compliance, and agency clients with distinct needs. There were large, high-profile customers elsewhere in the ecosystem (for example, AT\&T and Cisco on an even more legacy platform, Capri), but from my perspective we were not existentially dependent on a single logo. Once a customer hit a certain threshold they became "white glove," and those accounts got prioritized attention. Some clients could pay into that class. I don't know the exact threshold, but it was a meaningful tier in how work was prioritized.
 
-The platform context matters because C3 was considered legacy, and it was supposed to sunset almost five years before I left. The company had already attempted to migrate customers from Next Gen C3 to Cision One before I arrived, and that effort led to churn and customer dissatisfaction. Forced migrations resulted in lost revenue. I was hired shortly after that failure, and I stepped into a holding pattern where the business still relied on C3’s revenue, but the strategic intent was to move customers elsewhere. That created a very specific product challenge: the “right” work often wasn’t new features. It was stability, retention, modernization in targeted ways, and migration enablement that didn’t recreate the forced-migration disaster.
+The platform context matters because C3 was considered legacy, and it was supposed to sunset almost five years before I left. The company had already attempted to migrate customers from Next Gen C3 to Cision One before I arrived, and that effort led to churn and customer dissatisfaction. Forced migrations resulted in lost revenue. I was hired shortly after that failure, and I stepped into a holding pattern where the business still relied on C3's revenue, but the strategic intent was to move customers elsewhere. That created a very specific product challenge: the "right" work often wasn't new features. It was stability, retention, modernization in targeted ways, and migration enablement that didn't recreate the forced-migration disaster.
 
 ## **Team footprint and how it changed over time**
 
-Engineering resourcing shifted dramatically. I started with a single team of about eight engineers. We later expanded to two teams of roughly five engineers each, and at peak we had three teams, roughly 5, 5, and 3 engineers, about 13–14 engineers total. Later, as C3 remained “legacy” and resources tightened, we consolidated back down to one team, and at one point we were down to roughly six engineers. Near the end, we absorbed the Next Gen C3 team, which brought in around five engineers. I primarily worked with their engineering manager, but in practice I partnered with that group too. In addition, there was a separate migration tooling team of about six people including QA. So right before I left, the practical reality was around 15 engineers across roughly three teams: my core team of about six, the absorbed Next Gen C3 team of about five, and the migration tooling team of about six including QA.
+Engineering resourcing shifted dramatically. I started with a single team of about eight engineers. We later expanded to two teams of roughly five engineers each, and at peak we had three teams, roughly 5, 5, and 3 engineers, about 13-14 engineers total. Later, as C3 remained "legacy" and resources tightened, we consolidated back down to one team, and at one point we were down to roughly six engineers. Near the end, we absorbed the Next Gen C3 team, which brought in around five engineers. I primarily worked with their engineering manager, but in practice I partnered with that group too. In addition, there was a separate migration tooling team of about six people including QA. So right before I left, the practical reality was around 15 engineers across roughly three teams: my core team of about six, the absorbed Next Gen C3 team of about five, and the migration tooling team of about six including QA.
 
-I didn’t manage these engineers directly, but I was their product counterpart and worked with them tightly, particularly on roadmap planning, prioritization, and execution. I also worked closely with DevOps and DBA teams through dedicated stakeholders from each group, especially for quarterly planning and prioritization.
+I didn't manage these engineers directly, but I was their product counterpart and worked with them tightly, particularly on roadmap planning, prioritization, and execution. I also worked closely with DevOps and DBA teams through dedicated stakeholders from each group, especially for quarterly planning and prioritization.
 
 ## **What the platform actually did: media database \+ media monitoring, supported by CPRE**
 
 The C3 and CPRE combination supported two major customer-facing product areas. The first was the media outlet and contact database, functionally similar to a CRM for journalists and influencers. Customers used it to search for journalists and outlets, build and manage media lists, conduct outreach, and maintain relationships. The second was media monitoring across print, online news, broadcast (radio and TV), podcasts, and blogs. That monitoring relied on content coming from UCP as the unified source of truth.
 
-CPRE provided the underlying infrastructure, and the environment was heavily legacy. Stability work and careful modernization were non-negotiable if we wanted to keep customers whole. That’s the baseline context for everything else I did: I wasn’t managing a greenfield product with a clean architecture. I was managing a critical revenue platform built on aging infrastructure, while the business strategy was trying to move customers away from it, while layoffs and leadership churn were constant, while customer support capacity was gradually stripped away.
+CPRE provided the underlying infrastructure, and the environment was heavily legacy. Stability work and careful modernization were non-negotiable if we wanted to keep customers whole. That's the baseline context for everything else I did: I wasn't managing a greenfield product with a clean architecture. I was managing a critical revenue platform built on aging infrastructure, while the business strategy was trying to move customers away from it, while layoffs and leadership churn were constant, while customer support capacity was gradually stripped away.
 
 ## **Stability, security, and cost control as retention work**
 
-Platform stability became one of my core responsibilities and was tightly linked to customer retention. Scope included customer-reported bugs, database and infrastructure improvements, prevention of feature outages, and security risk reduction. We maintained a visible list of security issues and worked through roughly 90% of the security backlog. The work started with the highest-priority vulnerabilities. This mattered because when you’re running a platform with legacy components and declining investment, customers don’t forgive outages or obvious security issues. Stability and security were trust work.
+Platform stability became one of my core responsibilities and was tightly linked to customer retention. Scope included customer-reported bugs, database and infrastructure improvements, prevention of feature outages, and security risk reduction. We maintained a visible list of security issues and worked through roughly 90% of the security backlog. The work started with the highest-priority vulnerabilities. This mattered because when you're running a platform with legacy components and declining investment, customers don't forgive outages or obvious security issues. Stability and security were trust work.
 
-Cost control was also part of the platform health story. Across roughly 3,500 accounts, our initiatives contributed to cost savings in the range of $1–2M through infrastructure optimization, stability improvements, and reduction of waste. That included things like eliminating dead accounts and stale data, consolidating resources, and building monitoring in places where we previously operated blind.
+Cost control was also part of the platform health story. Across roughly 3,500 accounts, our initiatives contributed to cost savings in the range of $1-2M through infrastructure optimization, stability improvements, and reduction of waste. That included things like eliminating dead accounts and stale data, consolidating resources, and building monitoring in places where we previously operated blind.
 
 A concrete example of stability pain was DT Search, the indexing component used to index customer news content. We stored customer news in DB tables, indexed it with DT Search, and re-indexed constantly as new content arrived. A recurring outage pattern was DT Search storage exhaustion. When re-indexing ran out of storage, DT Search could corrupt the entire index, which meant a feature outage for every customer attached to that index server. We implemented a two-part solution: monitoring and alerts around storage usage, and removal of dead accounts that were consuming storage and providing no value. That dead account cleanup required legal partnership to confirm service license agreement compliance. Combining monitoring with cleanup significantly reduced outages tied to DT Search capacity problems.
 
@@ -284,11 +284,11 @@ Separately, as a company we were centralizing content ingestion into UCP. C3 and
 
 ## **Premium content: execution ownership inside an executive-level strategy bet**
 
-One significant thread during my tenure was premium content enablement. The organization pursued high-value sources such as LexisNexis, The New York Times, Dow Jones/Factiva, Bloomberg, and The Washington Post. I wasn’t the strategy owner, and I wasn’t the one pushing for it. It was handed down from executives and content licensing leadership. My role was execution: work with providers to understand licensing and compliance requirements, translate those requirements into stories and specs, and ensure C3 and CPRE enforced provider-specific rules correctly.
+One significant thread during my tenure was premium content enablement. The organization pursued high-value sources such as LexisNexis, The New York Times, Dow Jones/Factiva, Bloomberg, and The Washington Post. I wasn't the strategy owner, and I wasn't the one pushing for it. It was handed down from executives and content licensing leadership. My role was execution: work with providers to understand licensing and compliance requirements, translate those requirements into stories and specs, and ensure C3 and CPRE enforced provider-specific rules correctly.
 
 One example is full-text retention policies. For sources like The New York Times, the contract might allow full articles to be accessible for 30 days, after which we were required to expire the full text and show only a snippet. That requires product logic, workflows, and enforcement. Beyond compliance, speed mattered. Once a contract was signed, the goal was to ingest and monetize quickly.
 
-In hindsight, premium content did not pay off. I don’t know the precise revenue generated, but it became clear the revenue did not cover the costs, so most offerings were discontinued. In at least one case, the organization expected exclusivity that did not materialize, which led to a legal dispute between Cision and Dow Jones/Factiva that became public. I don’t know the final outcome, but the partnership and content were discontinued. Strategically, I didn’t see customer demand for exclusivity. Customers consistently told us they cared about not losing coverage, they wanted their mentions wherever they appeared. They didn’t seem motivated by “only Cision has it.” If it had been my call, I would have invested those dollars into the widest and most reliable coverage and fastest ingest, because that maps directly to their job-to-be-done.
+In hindsight, premium content did not pay off. I don't know the precise revenue generated, but it became clear the revenue did not cover the costs, so most offerings were discontinued. In at least one case, the organization expected exclusivity that did not materialize, which led to a legal dispute between Cision and Dow Jones/Factiva that became public. I don't know the final outcome, but the partnership and content were discontinued. Strategically, I didn't see customer demand for exclusivity. Customers consistently told us they cared about not losing coverage, they wanted their mentions wherever they appeared. They didn't seem motivated by "only Cision has it." If it had been my call, I would have invested those dollars into the widest and most reliable coverage and fastest ingest, because that maps directly to their job-to-be-done.
 
 ## **Customer retention and support when the support org disappeared**
 
@@ -296,25 +296,25 @@ As C3 was treated as legacy, dedicated support resources were gradually reduced.
 
 To handle that reality, we built a structured ticket prioritization system in Jira. Tickets were scored based on criteria like revenue impact, frequency, and severity, producing a priority order. We also had a dedicated CX channel for high-risk, upset, or churn-threat accounts that we treated as P2 tickets. They were scored but automatically put at the front of the queue to protect revenue.
 
-We also ran a critical save program for migrations. These were customers likely to churn if they didn’t move to a newer platform to access capabilities C3 couldn’t provide. The migration tooling supported voluntary migration, and the first phase prioritized these critical save accounts. I don’t have an exact count, but it represented roughly 10% of total accounts, and they were migrated as they came up for renewal. Overall, we estimate around 700 accounts were migrated using the tooling, and the system was ready to support broader voluntary migrations beyond that.
+We also ran a critical save program for migrations. These were customers likely to churn if they didn't move to a newer platform to access capabilities C3 couldn't provide. The migration tooling supported voluntary migration, and the first phase prioritized these critical save accounts. I don't have an exact count, but it represented roughly 10% of total accounts, and they were migrated as they came up for renewal. Overall, we estimate around 700 accounts were migrated using the tooling, and the system was ready to support broader voluntary migrations beyond that.
 
 ## **UVPM: customer metric gaps and the reality of legacy prioritization**
 
 One of the key customer metrics in C3 was UVPM (Unique Visitors Per Month), which customers used as a proxy for reach. When I joined, we only supported desktop UVPM, despite the industry shift to mobile-first readership. Customers increasingly demanded mobile UVPM, and lack of it was a retention risk.
 
-I prioritized implementing a mobile UVPM solution as accurately as we could within the limitations of our data and architecture. It wasn’t the final unified approach, but it was good enough to satisfy many customers who were at risk of churning. The longer-term plan was to integrate UVPM directly from GPOD, using GPOD as the source of truth so both desktop and mobile UVPM could be kept current and consistent via Bellwether-style integration. I scoped that next step, but it wasn’t completed before I left.
+I prioritized implementing a mobile UVPM solution as accurately as we could within the limitations of our data and architecture. It wasn't the final unified approach, but it was good enough to satisfy many customers who were at risk of churning. The longer-term plan was to integrate UVPM directly from GPOD, using GPOD as the source of truth so both desktop and mobile UVPM could be kept current and consistent via Bellwether-style integration. I scoped that next step, but it wasn't completed before I left.
 
-This sits inside a larger truth: the question I often had to answer wasn’t “how do you convince people to prioritize stability over features,” because stability was always urgent on a legacy platform. The harder question was “how do you get feature work prioritized at all.” For Bellwether and mobile UVPM, I made the case using customer and sales evidence: Voice of the Customer reports, closed-lost analysis, Salesforce, and support feedback. I argued that certain features were actually retention work and therefore justified even on a platform that was “supposed to go away.”
+This sits inside a larger truth: the question I often had to answer wasn't "how do you convince people to prioritize stability over features," because stability was always urgent on a legacy platform. The harder question was "how do you get feature work prioritized at all." For Bellwether and mobile UVPM, I made the case using customer and sales evidence: Voice of the Customer reports, closed-lost analysis, Salesforce, and support feedback. I argued that certain features were actually retention work and therefore justified even on a platform that was "supposed to go away."
 
 ## **Bellwether: the biggest win, and why it mattered**
 
-Bellwether was one of the most impactful initiatives I led, and it directly addressed the largest customer complaint: “You have the biggest media database in the industry, but your data is stale.” Voice of Customer reports, closed-lost analysis, support tickets, and direct conversations reinforced the same theme. Many customers were choosing competitors with smaller but fresher databases. This was the biggest product-driven churn driver.
+Bellwether was one of the most impactful initiatives I led, and it directly addressed the largest customer complaint: "You have the biggest media database in the industry, but your data is stale." Voice of Customer reports, closed-lost analysis, support tickets, and direct conversations reinforced the same theme. Many customers were choosing competitors with smaller but fresher databases. This was the biggest product-driven churn driver.
 
-The investigation into the contact data path revealed the core problem: records passed through numerous legacy databases and ETL processes before arriving in C3, and we were losing data at multiple points. We didn’t always know where or why because subject matter experts for older systems were gone and documentation was incomplete. We observed roughly 30–40% of data being dropped between the source and C3.
+The investigation into the contact data path revealed the core problem: records passed through numerous legacy databases and ETL processes before arriving in C3, and we were losing data at multiple points. We didn't always know where or why because subject matter experts for older systems were gone and documentation was incomplete. We observed roughly 30-40% of data being dropped between the source and C3.
 
 Instead of trying to repair every piece of legacy plumbing, I proposed bypassing the legacy chain entirely and listening directly to GPOD, the upstream source of truth. We built a hackathon proof-of-concept that subscribed to messages from GPOD, transformed them into a C3-compatible format, and updated the C3 database. The proof-of-concept performed well and secured buy-in to build a production solution.
 
-The full Bellwether implementation did a one-time full sync to repair and refresh data, then processed deltas to keep the database current. This eliminated the 30–40% drop-off and removed the main mechanism causing stale data. From the customer standpoint, Bellwether delivered a 100% reduction in stale-contact complaints tied to that pipeline. I can’t quantify retained revenue specifically due to Bellwether, but I can say confidently it addressed the largest churn driver and became one of the biggest wins for the platform.
+The full Bellwether implementation did a one-time full sync to repair and refresh data, then processed deltas to keep the database current. This eliminated the 30-40% drop-off and removed the main mechanism causing stale data. From the customer standpoint, Bellwether delivered a 100% reduction in stale-contact complaints tied to that pipeline. I can't quantify retained revenue specifically due to Bellwether, but I can say confidently it addressed the largest churn driver and became one of the biggest wins for the platform.
 
 The trade-off was not functional risk. It was knowledge concentration. The system was intentionally simpler and more transparent than the old ETL chain, but by the time I left, I estimated only about two engineers deeply understood the internals. I mitigated this through cross-training and knowledge sharing, but the risk remained that specialized knowledge was held by too few people. The failure scenario would be data not making it into customer databases or not scaling with increased volume, but the design was straightforward enough that failure would come from discrete bugs rather than systemic opacity. Convincing the organization to bypass old architecture was ultimately successful, because the company agreed a simpler, transparent solution was far better than continuing to rely on a complex, unowned pipeline no one could explain.
 
@@ -360,7 +360,7 @@ This phased approach allowed us to learn operationally, reduce risk, and refine 
 
 ## **Critical Save Program**
 
-In parallel, we operated a “critical save” program. These were customers identified as high churn risk if they remained on C3 due to feature gaps or strategic misalignment.
+In parallel, we operated a "critical save" program. These were customers identified as high churn risk if they remained on C3 due to feature gaps or strategic misalignment.
 
 Rather than pushing all customers toward migration, we prioritized those accounts where migration was clearly aligned with customer value and retention. These customers were typically addressed at renewal time and treated with heightened coordination between Product, CX, and Account Management.
 
@@ -396,38 +396,38 @@ Despite that, I experienced relatively little cross-functional conflict, largely
 
 ## **Measurement gaps, tool fragmentation, and the push toward better visibility**
 
-One of my biggest frustrations was the lack of robust metrics. The organization struggled with basic questions like “How much money are we making?” or “What does the P\&L look like?” We had multiple Salesforce instances and fragmented data, and we cycled through three different tools trying to gain integrated churn and migration visibility. Right before I left, we were integrating the third tool. I could see active user counts declining steadily over the four-year period, but tying outcomes cleanly to revenue retention was difficult because the measurement foundation wasn’t strong.
+One of my biggest frustrations was the lack of robust metrics. The organization struggled with basic questions like "How much money are we making?" or "What does the P\&L look like?" We had multiple Salesforce instances and fragmented data, and we cycled through three different tools trying to gain integrated churn and migration visibility. Right before I left, we were integrating the third tool. I could see active user counts declining steadily over the four-year period, but tying outcomes cleanly to revenue retention was difficult because the measurement foundation wasn't strong.
 
-This is where my product instincts matured: if the organization can’t answer basic questions, a priority has to be building the systems that make those answers possible. I initiated discussions about improving metrics and vendor tooling, which led to shifting away from existing tools toward new ones that could offer better visibility. That work was in progress when I left.
+This is where my product instincts matured: if the organization can't answer basic questions, a priority has to be building the systems that make those answers possible. I initiated discussions about improving metrics and vendor tooling, which led to shifting away from existing tools toward new ones that could offer better visibility. That work was in progress when I left.
 
 ## **How I think about prioritization: discipline learned the hard way**
 
-My development at Cision wasn’t just technical or operational. It was judgment. Early on, I believed getting things done was enough. I was reactive, not strong at capacity planning, and not disciplined at saying no. That helped me learn systems quickly, but it led to overcommitment and pushed my team past capacity. I burned the team out. Even if they didn’t blame me, I learned the lesson: product leadership requires disciplined scope control.
+My development at Cision wasn't just technical or operational. It was judgment. Early on, I believed getting things done was enough. I was reactive, not strong at capacity planning, and not disciplined at saying no. That helped me learn systems quickly, but it led to overcommitment and pushed my team past capacity. I burned the team out. Even if they didn't blame me, I learned the lesson: product leadership requires disciplined scope control.
 
 Over time, I became much more deliberate. We built structured capacity planning based on workdays per engineer per quarter, factoring PTO, converting to hours, and using T-shirt sizing plus uncertainty (VUCA-style) to estimate low and high ranges per epic. We allocated capacity deliberately across customer issues, unplanned work, and planned initiatives.
 
-We also created a consistent prioritization filter. We effectively had three initiative streams at any time, and if a request didn’t fall into one of them, it was an easy no. If it did, we still assessed urgency, impact, and time-to-value. Security is a good example: a pen test generated \~300 issues, and sales wanted everything fixed immediately. We couldn’t spend a full quarter doing nothing else. We prioritized by severity, chunked work across time, and resolved roughly 90% over about a year.
+We also created a consistent prioritization filter. We effectively had three initiative streams at any time, and if a request didn't fall into one of them, it was an easy no. If it did, we still assessed urgency, impact, and time-to-value. Security is a good example: a pen test generated \~300 issues, and sales wanted everything fixed immediately. We couldn't spend a full quarter doing nothing else. We prioritized by severity, chunked work across time, and resolved roughly 90% over about a year.
 
 ## **What breaks without me: the SME gap**
 
-C3 can continue without me in terms of execution, but the biggest gap is subject matter expertise. In product, I was the last person with deep historical context of C3. On the engineering side, there were strong engineers, but many hadn’t worked on C3 directly for a long time, or were newer and knew only fragments. I’d estimate three people had fragmented domain knowledge, while I was a generalist across the entire platform.
+C3 can continue without me in terms of execution, but the biggest gap is subject matter expertise. In product, I was the last person with deep historical context of C3. On the engineering side, there were strong engineers, but many hadn't worked on C3 directly for a long time, or were newer and knew only fragments. I'd estimate three people had fragmented domain knowledge, while I was a generalist across the entire platform.
 
-Toward the end of my tenure, a large portion of my time went into supporting others: answering ad hoc questions from customer support, CX, sales, and account management; triaging bug tickets; troubleshooting provisioning issues; and writing documentation so others could resolve common cases without me. Now that I’m gone, I don’t know where that volume of questions goes. Engineers don’t have the time for it, and there isn’t an orchestrator role that replaces what I did. The roadmap exists and can be executed, but what’s missing is the central SME who can answer unusual questions quickly, guide configuration decisions, and triage weird issues.
+Toward the end of my tenure, a large portion of my time went into supporting others: answering ad hoc questions from customer support, CX, sales, and account management; triaging bug tickets; troubleshooting provisioning issues; and writing documentation so others could resolve common cases without me. Now that I'm gone, I don't know where that volume of questions goes. Engineers don't have the time for it, and there isn't an orchestrator role that replaces what I did. The roadmap exists and can be executed, but what's missing is the central SME who can answer unusual questions quickly, guide configuration decisions, and triage weird issues.
 
 ## **Overall impact: why my work mattered**
 
-Across ownership of C3 and CPRE, my work was about keeping a legacy but revenue-critical platform viable while resources shrank and the company’s priorities shifted. I focused on stabilizing the platform, reducing churn drivers, and protecting revenue through structured triage, targeted migrations, and major improvements in data quality. I integrated the platform into upstream sources of truth like GPOD and UCP rather than recreating silos. I drove modernization selectively with high-leverage projects like Bellwether, migration tooling, content pipeline consolidation, and stability programs that reduced outages. That combination allowed C3 to remain valuable through the transition toward Cision One and the longer-term Nexus/EDP architecture.
+Across ownership of C3 and CPRE, my work was about keeping a legacy but revenue-critical platform viable while resources shrank and the company's priorities shifted. I focused on stabilizing the platform, reducing churn drivers, and protecting revenue through structured triage, targeted migrations, and major improvements in data quality. I integrated the platform into upstream sources of truth like GPOD and UCP rather than recreating silos. I drove modernization selectively with high-leverage projects like Bellwether, migration tooling, content pipeline consolidation, and stability programs that reduced outages. That combination allowed C3 to remain valuable through the transition toward Cision One and the longer-term Nexus/EDP architecture.
 
 ---
 
-If you want to make this even more “LLM friendly,” the next best step is to add a short front-matter section that explicitly defines:
+If you want to make this even more "LLM friendly," the next best step is to add a short front-matter section that explicitly defines:
 
-• Your role identity and strengths (in plain language)  
-• A timeline of employers \+ dates (even if high level)  
-• A “vocabulary map” (what C3, CPRE, GPOD, UCP, Bellwether mean)  
-• A “do not infer” list (things you don’t want an LLM to assume)
+* Your role identity and strengths (in plain language)  
+* A timeline of employers \+ dates (even if high level)  
+* A "vocabulary map" (what C3, CPRE, GPOD, UCP, Bellwether mean)  
+* A "do not infer" list (things you don't want an LLM to assume)
 
-Say the word and I’ll append that on top, still in narrative style, so it becomes a clean “context file” you can paste into any model.
+Say the word and I'll append that on top, still in narrative style, so it becomes a clean "context file" you can paste into any model.
 
 ## **I. Core Identity and Professional Orientation**
 
@@ -455,7 +455,7 @@ He is strongest in environments where:
 
 * Cross-functional friction exists
 
-He operates close to engineering and understands ingestion pipelines, indexing systems, data flow architecture, ETL failure modes, and infrastructure risk. However, his role has always been product leadership — defining what should be built, why it matters, how it should be prioritized, and how risk should be managed.
+He operates close to engineering and understands ingestion pipelines, indexing systems, data flow architecture, ETL failure modes, and infrastructure risk. However, his role has always been product leadership - defining what should be built, why it matters, how it should be prioritized, and how risk should be managed.
 
 He is disciplined about not claiming what cannot be proven. He avoids inflating metrics and does not assume attribution without evidence.
 
@@ -463,7 +463,7 @@ He is disciplined about not claiming what cannot be proven. He avoids inflating 
 
 ## **II. Career Timeline Overview**
 
-### **Zero To Sixty Media (2017–2019)**
+### **Zero To Sixty Media (2017-2019)**
 
 Role: Account Manager / Product Owner
 
@@ -471,7 +471,7 @@ This role blended operational ownership and product development. Jason helped au
 
 ---
 
-### **Sterkly Services (2019–2021)**
+### **Sterkly Services (2019-2021)**
 
 Role: Product Manager
 
@@ -479,7 +479,7 @@ At Sterkly, he operated in a constrained technical environment where delivery co
 
 ---
 
-### **Cision (2021–2026)**
+### **Cision (2021-2026)**
 
 Role: Product Owner → Product Manager (functional scope)
 
@@ -530,7 +530,7 @@ However, he was responsible for integrating C3 and CPRE with GPOD and UCP, and f
  Central ingestion platform for media coverage feeds.
 
 **Nexus / EDP**  
- Long-term architectural initiative to unify data across Cision’s ecosystem.
+ Long-term architectural initiative to unify data across Cision's ecosystem.
 
 ---
 
@@ -548,11 +548,11 @@ During his tenure:
 
 * Engineering footprint fluctuated between \~6 and \~15 engineers
 
-Earlier in C3’s lifecycle, ARR had been higher (closer to \~$100M), but that decline was part of strategic migration efforts to newer platforms.
+Earlier in C3's lifecycle, ARR had been higher (closer to \~$100M), but that decline was part of strategic migration efforts to newer platforms.
 
 C3 was officially a legacy platform and had been expected to sunset years earlier. It was no longer actively sold. However, it remained revenue-bearing and strategically important during transition.
 
-Jason’s mandate was not growth. It was:
+Jason's mandate was not growth. It was:
 
 * Stabilize
 
@@ -598,7 +598,7 @@ Response:
 
 * Implement storage monitoring and alerting
 
-* Remove “dead accounts” consuming index capacity (with legal validation)
+* Remove "dead accounts" consuming index capacity (with legal validation)
 
 * Improve operational visibility
 
@@ -626,7 +626,7 @@ Jason resisted pressure to halt roadmap work entirely for security remediation, 
 
 The largest churn driver was stale contact data.
 
-Investigation revealed 30–40% data drop-off between GPOD and C3 due to layered legacy ETL pipelines.
+Investigation revealed 30-40% data drop-off between GPOD and C3 due to layered legacy ETL pipelines.
 
 Instead of patching each layer, Jason proposed architectural bypass:
 
@@ -646,7 +646,7 @@ Important constraints:
 
 * Knowledge concentration risk existed
 
-* Not a full system rewrite — targeted architectural bypass
+* Not a full system rewrite - targeted architectural bypass
 
 Bellwether materially improved data trust.
 
@@ -742,7 +742,7 @@ Later, he implemented:
 
 * Allocation across buckets (security, stability, migration, planned work)
 
-* Structured “initiative stream” filters
+* Structured "initiative stream" filters
 
 He matured into a disciplined prioritizer.
 
@@ -802,9 +802,9 @@ When using this context:
 
 6. Do not inflate scope.
 
-7. If uncertain, state: “Insufficient data provided.”
+7. If uncertain, state: "Insufficient data provided."
 
-8. Avoid exaggerated verbs like “revolutionized” or “transformed.”
+8. Avoid exaggerated verbs like "revolutionized" or "transformed."
 
 ---
 

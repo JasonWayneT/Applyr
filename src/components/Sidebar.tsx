@@ -8,7 +8,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
-  const newJobsCount = jobs.filter(j => j.status === 'New' || j.status === 'Backlog').length;
+  const newJobsCount = jobs.filter(j => ['New', 'Backlog', 'Drafted'].includes(j.status)).length;
 
   const mainNav = [
     { name: 'Dashboard', icon: 'grid_view' },
@@ -25,7 +25,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
           <span className="material-symbols-outlined text-on-primary text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>spa</span>
         </div>
         <div>
-          <h2 className="text-lg font-bold text-primary font-headline tracking-tight leading-tight">The Sanctuary</h2>
+          <h2 className="text-lg font-bold text-primary font-headline tracking-tight leading-tight">Applyr</h2>
           <p className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Curated Job Search</p>
         </div>
       </div>

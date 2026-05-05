@@ -15,6 +15,7 @@ Before running this engine, you **MUST** read:
 If any trigger is met, return **Score: 0**, **Decision: NO**, and Terminate.
 
 ### 1.1 Seniority & Title Blocklist
+- **Industry Blocklist:** Gambling, Sports Betting, Ad Tech, Crypto, Web3, Autonomous Vehicles, Automotive, Autonomy, Robotics.
 - **Rule:** If the JD title contains any terms from `blocked_titles` in `candidate_preferences.json`.
 - **Rule:** If the role is explicitly "Founding," "First," or "Solo" (unless allowed in preferences).
 - **Rule:** If the role requires management of other people in that same function (unless allowed).

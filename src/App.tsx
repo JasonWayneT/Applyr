@@ -69,7 +69,7 @@ function App() {
               className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors active:scale-95 relative"
             >
               <span className="material-symbols-outlined">notifications</span>
-              {jobs.filter(j => j.status === 'New' || j.status === 'Backlog').length > 0 && (
+              {jobs.filter(j => ['New', 'Backlog', 'Drafted'].includes(j.status)).length > 0 && (
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-secondary rounded-full" />
               )}
             </button>
@@ -93,7 +93,7 @@ function App() {
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto px-8 pt-8 pb-12 sanctuary-scrollbar">
+        <main className="flex-1 overflow-y-auto px-8 pt-8 pb-12 applyr-scrollbar">
           <div className="max-w-7xl mx-auto">
             {renderPage()}
           </div>

@@ -101,7 +101,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
           <span className="text-[10px] text-on-surface-variant">{notifications.length} active</span>
         </div>
 
-        <div className="max-h-[400px] overflow-y-auto sanctuary-scrollbar">
+        <div className="max-h-[400px] overflow-y-auto applyr-scrollbar">
           {notifications.length === 0 ? (
             <div className="py-12 text-center">
               <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 mb-2 block">notifications_off</span>

@@ -1,0 +1,75 @@
+URL: https://jobs.ashbyhq.com/yeet/3a836bc7-d46f-42f6-8eeb-ff9b8b9bfee3
+
+YEET
+
+Product Manager
+Location
+
+Chicago
+
+Employment Type
+
+Full time
+
+Location Type
+
+On-site
+
+Department
+
+Product
+
+Overview
+Application
+About yeet
+
+yeet is built by a tight-knit group of systems, observability, and kernel nerds who refuse to accept “mystery outages” as normal. We’re a small, high-impact team with domain expertise in Linux, eBPF, performance instrumentation, and developer tooling.
+
+We move fast, ship often, and take deep ownership. If you enjoy operating close to the metal, building tools that real engineers lean on during 3 AM incident sprints, and solving hard problems with minimal overhead, you’ll feel right at home here.
+
+About the role
+
+We’re looking for a Product Manager to help define and shape the future of real-time, on-demand observability platform for Linux clusters.
+
+This isn’t a backlog-maintenance role, it’s about working directly with founders, engineers, and customers to figure out what matters most and why.
+
+You’ll help yeet carve out its place in the observability ecosystem by identifying the gaps incumbents can’t fill and ensuring our roadmap reflects the problems real teams face when they’re under pressure. This role is equal parts discovery, prioritization, and storytelling: Figuring out what’s worth building, aligning the team around it, and making sure the end result actually delivers value in the wild.
+
+If you love turning deep technical complexity into clarity and impact, you’ll thrive here.
+
+About you
+
+You have experience managing technical products and a strong intuition for what makes a great developer experience.
+
+You can dive into details like VMs vs. Containers vs. Kubernetes deployments and use that context to guide product decisions.
+
+You’ve worked closely with engineers before and can translate between deep technical detail and clear product direction.
+
+You have a background in computer science or engineering (formal degree or equivalent hands-on experience) and can engage meaningfully with system-level concepts.
+
+You’re an analytics whiz and are comfortable creating dashboards, defining metrics, and using data to measure success and inform trade-offs.
+
+You’re motivated by helping teams ship faster, stay reliable, and reduce operational burden.
+
+You care deeply about usability, reducing friction, simplifying workflows, and making powerful tools feel effortless.
+
+Nice To Haves
+
+Familiarity with modern observability stacks (OpenTelemetry, Grafana, Prometheus, Datadog, etc.).
+
+Exposure to low-level Linux concepts (syscalls, networking, BPF) or at least curiosity about how systems work under the hood.
+
+Prior experience at a fast-moving startup, where you balanced customer needs with limited resources.
+
+Strong storytelling skills: You can turn technical complexity into a crisp, compelling narrative for customers, teammates, and investors.
+
+Experience working with designers on usability research, making sure developer tools aren’t just functional, but actually intuitive and enjoyable to use.
+
+Familiarity with pricing & packaging strategy for technical products.
+
+You’ve been in the trenches with incident management or ops teams and understand the real pain of “3 a.m. pages.”
+
+Apply for this Job
+Powered by 
+
+Privacy PolicySecurityVulnerability Disclosure

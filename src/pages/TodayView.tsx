@@ -26,7 +26,8 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
   }, []);
   const backlogs = jobs.filter(j => j.status === 'Backlog' || j.status === 'New');
   const applied = jobs.filter(j => j.status === 'Applied');
-  const activeJobs = jobs.filter(j => !['Closed'].includes(j.status));
+  const activeJobs = jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status));
+  const pipelineJobs = jobs.filter(j => ['New', 'Backlog'].includes(j.status) && j.has_assets);
   const interviews = jobs
     .filter(j => j.interview_date && !['Closed'].includes(j.status))
     .sort((a, b) => new Date(a.interview_date!).getTime() - new Date(b.interview_date!).getTime());
@@ -57,7 +58,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           {getGreeting()}{firstName ? `, ${firstName}` : ''}.
         </h1>
         <p className="text-on-surface-variant text-lg">
-          You have <span className="text-secondary font-bold">{activeJobs.length} active applications</span> in progress. Let's keep the momentum going.
+          You have <span className="text-secondary font-bold">{activeJobs.length} submitted applications</span> in progress. Let's keep the momentum going.
         </p>
       </section>
 
@@ -130,8 +131,77 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           )}
         </div>
 
-        {/* Active Applications List */}
+        {/* Ready to Apply Pipeline List */}
         <div className="lg:col-span-12 mt-2">
+          <h3 className="text-2xl font-headline font-bold text-on-surface mb-6">Ready to Apply</h3>
+          <div className="space-y-4">
+            {pipelineJobs.slice(0, 10).map(job => (
+              <div
+                key={job.id}
+                onClick={() => onJobClick(job)}
+                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 editorial-shadow hover:shadow-lg transition-all border border-transparent hover:border-outline-variant/10 cursor-pointer"
+              >
+                <div className="flex items-center gap-4 flex-1">
+                  <div className="w-14 h-14 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary text-lg">
+                    {job.company.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h4 className="font-bold text-lg text-on-surface">{job.company}</h4>
+                      {job.status === 'New' && (
+                        <span className="bg-primary text-on-primary text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          New
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-on-surface-variant">{job.title}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-8">
+                  {job.score && (
+                    <div className="hidden lg:block">
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Fit Score</p>
+                      <p className={`text-sm font-bold ${job.score >= 80 ? 'text-primary' : 'text-on-surface-variant'}`}>{job.score}</p>
+                    </div>
+                  )}
+                  <div className="min-w-[130px]">
+                  <StatusChip status={job.status} hasAssets={job.has_assets} />
+                  </div>
+                  <a
+                    href={api(`/api/jobs/${job.id}/download-all`)}
+                    download={`${job.company.toLowerCase()}_assets.zip`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-primary-container transition-colors"
+                    title="Download all PDF assets (Resume + Cover Letter)"
+                  >
+                    <span className="material-symbols-outlined">download</span>
+                  </a>
+                  {job.url && (
+                    <a
+                      href={job.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-secondary transition-colors"
+                      title="Open original job posting"
+                    >
+                      <span className="material-symbols-outlined">link</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+            {pipelineJobs.length === 0 && (
+              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center editorial-shadow">
+                <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 mb-3">check_circle</span>
+                <p className="text-on-surface-variant">All caught up — no jobs waiting to be applied to.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Active Applications List */}
+        <div className="lg:col-span-12 mt-8">
           <h3 className="text-2xl font-headline font-bold text-on-surface mb-6">Active Applications</h3>
           <div className="space-y-4">
             {activeJobs.slice(0, 20).map(job => (
@@ -157,19 +227,17 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
                     </div>
                   )}
                   <div className="min-w-[130px]">
-                  <StatusChip status={job.status} />
+                  <StatusChip status={job.status} hasAssets={job.has_assets} />
                   </div>
-                  {['Drafted', 'Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(job.status) && (
-                    <a
-                      href={api(`/api/jobs/${job.id}/download-all`)}
-                      download={`${job.company.toLowerCase()}_assets.zip`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-primary-container transition-colors"
-                      title="Download all PDF assets (Resume + Cover Letter)"
-                    >
-                      <span className="material-symbols-outlined">download</span>
-                    </a>
-                  )}
+                  <a
+                    href={api(`/api/jobs/${job.id}/download-all`)}
+                    download={`${job.company.toLowerCase()}_assets.zip`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-primary-container transition-colors"
+                    title="Download all PDF assets (Resume + Cover Letter)"
+                  >
+                    <span className="material-symbols-outlined">download</span>
+                  </a>
                   {job.url && (
                     <a
                       href={job.url}

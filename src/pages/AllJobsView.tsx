@@ -14,9 +14,10 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
 
   const processedJobs = jobs.filter(job => {
     // 1. Filter by status
-    if (activeFilter === 'Active' && ['Closed', 'New', 'Backlog'].includes(job.status)) return false;
+    if (job.status === 'Drafted') return false; // Completely hidden from views
+    if (activeFilter === 'Active' && job.status !== 'Applied') return false;
     if (activeFilter === 'Backlog' && !['New', 'Backlog'].includes(job.status)) return false;
-    if (activeFilter === 'Interviewing' && !['Recruiter Screen', 'Core Interviews'].includes(job.status)) return false;
+    if (activeFilter === 'Interviewing' && !['Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(job.status)) return false;
     if (activeFilter === 'Closed' && job.status !== 'Closed') return false;
 
     // 2. Filter by search term
@@ -32,8 +33,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
 
   const groups = [
     { title: 'New from scout', statuses: ['New'], chipClass: 'chip-new', icon: 'fiber_new' },
-    { title: 'Needs your attention', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
-    { title: 'Ready to Apply', statuses: ['Drafted'], chipClass: 'chip-drafted', icon: 'description' },
+    { title: 'Ready to Apply', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
     { title: 'Waiting for contact', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
     { title: 'Initial screening', statuses: ['Recruiter Screen'], chipClass: 'chip-recruiter-screen', icon: 'hourglass_top' },
     { title: 'Active gauntlet', statuses: ['Core Interviews'], chipClass: 'chip-core-interviews', icon: 'record_voice_over' },

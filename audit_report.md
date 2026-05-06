@@ -1,33 +1,36 @@
 # Drafting Audit Report
 
 ### ACCELERANT
-- [CRITICAL] Resume is empty or too short.
-- [CRITICAL] Cover Letter is empty or too short.
+- [ERROR] Folder missing.
 
 ### VENDELUX
-- [WARNING] Cover Letter length (4077 chars) might exceed 1 page.
 - [CRITICAL] Resume is empty or too short.
+- [CRITICAL] Cover Letter is empty or too short.
 
 ### PLAYSTATION
-- [CRITICAL] Resume is empty or too short.
+- [ERROR] Folder missing.
 
 ### ALLSTATE
-- [WARNING] Cover Letter length (2660 chars) might exceed 1 page.
+- [OK] Initial scan passed.
 
 ### 2U
-- [WARNING] Cover Letter length (2656 chars) might exceed 1 page.
+- [OK] Initial scan passed.
 
 ### ONEDIGITAL_HEALTH
-- [WARNING] Cover Letter length (2616 chars) might exceed 1 page.
+- [ERROR] Folder missing.
 
 ### RYAN
-- [WARNING] Cover Letter length (2534 chars) might exceed 1 page.
+- [ERROR] Folder missing.
 
 ### GE_HEALTHCARE
-- [WARNING] Cover Letter length (2790 chars) might exceed 1 page.
+- [CRITICAL] Resume is empty or too short.
+- [CRITICAL] Cover Letter is empty or too short.
 
-
+### TORC_ROBOTICS
+- [ERROR] Folder missing.
 
 ### PEOPLEGROVE
-- [CRITICAL] Cover Letter is empty or too short.
-
+- [ERROR] Folder missing.
+
+### WESTERN_GOVERNORS_UNIVERSITY
+- [ERROR] Folder missing.

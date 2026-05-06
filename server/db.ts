@@ -52,6 +52,13 @@ db.exec(`
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS stale_jobs (
+    url TEXT PRIMARY KEY,
+    company TEXT,
+    title TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   INSERT OR IGNORE INTO system_status (id, process_type, status, current_item)
   VALUES ('global', 'all', 'idle', 'No active pipeline run');
 `);

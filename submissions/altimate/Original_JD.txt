@@ -1,0 +1,83 @@
+URL: https://jobs.ashbyhq.com/altimate/801b90de-1bf2-4c44-b913-8be403a7b64a
+
+Product Manager
+Location
+
+Sunnyvale Office
+
+Employment Type
+
+Full time
+
+Department
+
+Product
+
+Compensation
+Base Salary $150K – $250K • Offers Equity
+Overview
+Application
+Why Join Us
+
+Altimate AI is at the forefront of the AI-driven data revolution, solving one of the biggest pain points in modern enterprise analytics—an overwhelming volume of data work and a shortage of skilled data professionals to manage it. Our mission: Automate and accelerate data operations, allowing data teams to focus on driving business outcomes faster.
+
+With our flagship product, DataPilot, and our pioneering DataMates technology, we’re leading the charge in “agentic AI” for data teams. Think of this as virtual teammates embedded inside popular workflows —like the VSCode extension loved by thousands across 50+ countries—taking care of everything from data documentation to performance optimization. Users have given raving reviews about how it’s “an essential tool” and “game-changing for their data workflows.” This extension is just the tip of the iceberg, a tangible example of how we integrate seamlessly into tools teams already use. Fortune 1000 companies are our paying customers, and 100s of enterprise companies are active users of our free product offering.
+
+Backed by top-tier investors and guided by Silicon Valley veterans who have scaled companies from startup to IPO, we have the vision, resources, and momentum to reshape how data teams operate.
+
+Read more about us:
+
+VentureBeat: How agentic AI could improve enterprise data operations
+
+What Users Are Saying About Our VSCode Extension (one of many powerful tools in our platform)
+
+Your Impact
+
+As customer requests are pouring in for additional functionality with datamates, we are expanding our product team to take our Datamates platform to the next level. You will help expand and scale the capabilities of the DataPilot platform by envisioning, scoping, and launching next-gen functionality.
+
+What makes this opportunity special:
+
+Native GenAI product management experience: The industry is dividing into two camps: those who've built native GenAI products and those who've merely added GenAI features to existing products. Which camp do you want to be in?
+
+First row seat in early-stage rocket ship: We are experiencing rapid growth that will explode in 2025, leading to experience and skills growth that only an early-stage high growth startup like ours can offer.
+
+Direct collaboration with founders: Become an integral part of our decision-making process, working directly with founders to shape both engineering initiatives and go-to-market strategies.
+
+Accelerated career trajectory: Join as a product manager at an early stage. As we scale, you can lead a team, shape strategy, and influence the entire industry.
+
+What You’ll Do
+
+Define product strategy and roadmap: Identify key use cases by interacting closely with our customers and users, and define the product strategy and roadmap
+
+Shaper user experience: Collaborate with UX designers to transform your product vision into intuitive interfaces specifically designed for native GenAI functionality, setting new standards for user interaction.
+
+Build amazing functionality: Work alongside our world-class engineering team to build groundbreaking products that exceed customer expectations and push the boundaries of what's possible.
+
+Champion user needs: We have thousands of companies using our product - interact with them closely to become the voice of all these users inside the company
+
+Enable sales success: Work closely with our sales and support teams to provide air cover during pre-sales and post-sales stages for our key enterprise customers
+
+Collaborate with marketing: Collaborate with marketing to deliver industry-leading messaging, positioning, pricing, and lead-generation strategy
+
+Who You Are
+
+Proven Data Product Experience: Minimum of 5+ years in enterprise product management, with a track record of successfully developing and launching technical products for data engineers.
+
+Technical Expertise:
+
+Deep understanding of data stack concepts including ELT pipelines, data warehousing, data quality frameworks, and workload orchestration
+
+Hands-on experience with contemporary modern data stack technologies such as dbt, Snowflake, Spark, Fivetran, Airflow
+
+Strong foundation in AI technologies, including LLM frameworks, RAG architectures, and AI evaluation methodologies
+
+Exceptional Leadership Skills: Demonstrated ability to influence and align cross-functional teams toward common objectives through collaboration and persuasion rather than formal authority.
+
+Strategic Problem Solver: Strong analytical and creative thinking capabilities, with proven success in navigating ambiguity and developing innovative solutions to complex customer challenges.
+
+Startup DNA: Previous experience in Series A or B-stage startups, demonstrating the ability to excel in fast-paced, dynamic environments where adaptability is key.
+
+Apply for this Job
+Powered by 
+
+Privacy PolicySecurityVulnerability Disclosure

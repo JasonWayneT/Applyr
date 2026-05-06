@@ -79,6 +79,16 @@ If a border is required for accessibility (e.g., in a high-density table), use t
 - **Interviewing:** Background `secondary_container`; Text `on_secondary_container`.
 - **Rejected/Closed:** Background `surface_variant`; Text `on_surface_variant`.
 
+### Document Editor Workspace
+- **Layout:** A balanced dual-pane split-screen. The left side houses the compiled PDF preview using the browser's native engine inside an iframe. The right side contains the rich text editor.
+- **Visuals:** Follows the "No-Line" Rule. Pane separation is done with a subtle shift from `surface-container-lowest` on the left to `surface-container-low` on the right.
+- **The AI Panel:** A soft, high-focus container using `surface-container-high` with a semi-transparent background to isolate AI prompts from manual word processing.
+
+### Dashboard Pipeline Paradigm
+The dashboard enforces a strict separation between pipeline jobs and active applications:
+- **Ready to Apply:** The pre-submission pipeline. Displays `New` (unseen, with a primary badge) and `Backlog` (seen) jobs that have PDF assets ready. Prompts actionable next steps. `Drafted` jobs (assets generating) remain hidden to avoid clutter.
+- **Active Applications:** The engagement tracker. Displays `Applied`, `Recruiter Screen`, `Core Interviews`, and `Offer and Negotiation` statuses. Focuses on jobs waiting for external response.
+
 ---
 
 ## 6. Do's and Don'ts

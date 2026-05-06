@@ -72,10 +72,12 @@ const runWithHealth = async (
 // ---------------------------------------------------------------------------
 
 const isJobNewByUrl = (url: string): boolean =>
-    !DB.prepare('SELECT id FROM jobs WHERE url = ?').get(url);
+    !DB.prepare('SELECT id FROM jobs WHERE url = ?').get(url) &&
+    !DB.prepare('SELECT url FROM stale_jobs WHERE url = ?').get(url);
 
 const isJobNewByCompanyTitle = (company: string, title: string): boolean =>
-    !DB.prepare('SELECT id FROM jobs WHERE LOWER(company) = LOWER(?) AND LOWER(title) = LOWER(?)').get(company, title);
+    !DB.prepare('SELECT id FROM jobs WHERE LOWER(company) = LOWER(?) AND LOWER(title) = LOWER(?)').get(company, title) &&
+    !DB.prepare('SELECT url FROM stale_jobs WHERE LOWER(company) = LOWER(?) AND LOWER(title) = LOWER(?)').get(company, title);
 
 const passesTitleBlocklist = (title: string): boolean => {
     const lower = title.toLowerCase();

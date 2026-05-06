@@ -9,6 +9,7 @@ import JobDetailPanel from './components/JobDetailPanel';
 import NotificationPanel from './components/NotificationPanel';
 import { Job } from './types/job';
 import { api } from './lib/api';
+import TuningLogView from './pages/TuningLogView';
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -51,6 +52,8 @@ function App() {
         return <SyncActivityView />;
       case 'My profile':
         return <ProfileView />;
+      case 'Tuning Log':
+        return <TuningLogView jobs={jobs} onJobClick={setSelectedJob} />;
       default:
         return (
           <div className="flex items-center justify-center h-64 text-on-surface-variant text-sm">

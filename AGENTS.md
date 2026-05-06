@@ -35,6 +35,10 @@ Every change must be reflected across all three layers:
 
 Every code change must cite at least one requirement ID (`FR-*`, `NFR-*`, `BUG-*`, etc.) in the task description and implementation summary.
 
+## GitHub & Release Notes Rule
+
+When pushing changes to GitHub, agents MUST generate and append a Firefox-style release note to `PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md` before or immediately after the push. All significant changes (New, Fixed, Changed, Developer) must be documented following the established template.
+
 ## Prohibited behavior
 
 Agents must not:

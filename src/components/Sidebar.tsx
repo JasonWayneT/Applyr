@@ -15,6 +15,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     { name: 'Applications', icon: 'view_kanban' },
     { name: 'Scout', icon: 'radar' },
     { name: 'Add Job', icon: 'post_add' },
+    { name: 'Tuning Log', icon: 'tune' },
   ];
 
   return (

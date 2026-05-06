@@ -1,0 +1,54 @@
+{
+  "Module_A_Company_DNA": {
+    "Core_Mission_Values": {
+      "Stated": "Yeet appears to be a Chicago-based tech startup focused on innovative software products, likely in AI, developer tools, or robotics (multiple entities exist: yeet.ai for robotics, and a software company with engineering roles). Stated values inferred from job listings emphasize high-impact product development, cross-functional collaboration, and on-site innovation. [Source: https://www.indeed.com/cmp/Yeet/jobs; https://jobs.ashbyhq.com/yeet]",
+      "Observed": "Strong engineering culture (roles in Rust, Frontend/Backend), GTM focus, and product-led growth. On-site requirement suggests collaborative, fast-paced environment. [Source: https://jobs.ashbyhq.com/yeet; https://www.glassdoor.com/Jobs/yeet-Jobs-E10833477.htm]"
+    },
+    "Problem_Space": "Yeet solves pain points in developer tooling, GTM automation, or robotics efficiency—enabling faster product-market fit through engineering-heavy products (e.g., Rust for performance-critical apps) and streamlined go-to-market for startups. [Source: https://www.indeed.com/cmp/Yeet; https://careers.yeet.ai]",
+    "Business_Model": "Likely SaaS or B2B software with freemium/enterprise tiers (inferred from GTM Engineer, Product Marketer roles). Early-stage growth (multiple open roles, Chicago HQ), privately held, no public financials. Salary ranges $93K-$157K for PM. [Source: https://www.glassdoor.com/Jobs/yeet-Jobs-E10833477.htm; https://jobs.ashbyhq.com/yeet]",
+    "Founding_Story": "Limited public info; Chicago-founded startup (post-2020 inferred from listings). Key inflection: Rapid hiring in engineering/product (7+ roles open). Possible pivot to AI/robotics. No detailed timeline found. [Source: https://www.indeed.com/cmp/Yeet/jobs]"
+  },
+  "Module_B_Market_Competitors": {
+    "Big_3_Competitors": [
+      "Vercel/Next.js ecosystem (for frontend/dev tools).",
+      "PostHog or Amplitude (GTM/product analytics).",
+      "Replit or Cursor (AI dev tools/Rust perf)."
+    ],
+    "Differentiator": "Yeet's edge: Rust-native performance, on-site Chicago talent pool for hardware-software integration (if robotics). [Inferred: https://jobs.ashbyhq.com/yeet]",
+    "Macro_Trends": "AI coding assistants disrupting dev tools; Rust adoption surging for secure systems; GTM automation boom amid startup funding winter. Headwinds: Talent competition in Chicago tech. [Inferred from roles; no direct source]"
+  },
+  "Module_C_Recent_Intelligence": {
+    "Financials_Funding": "No public funding rounds in 90-day window (private startup). Active hiring suggests Series A/B stage. [Source: https://www.glassdoor.com/Jobs/yeet-Jobs-E10833477.htm (30d+ postings)]",
+    "Organizational_Shifts": "Hiring surge: 7+ roles (PM, Engineers, Marketer) posted ~30 days ago. On-site Chicago focus. No layoffs noted. [Source: https://www.indeed.com/cmp/Yeet/jobs; https://jobs.ashbyhq.com/yeet]",
+    "Product_Partnership_News": "No specific launches/M&A in 90 days. Emphasis on GTM/Product roles implies new product push. [Source: Job listings]"
+  },
+  "Module_D_Role_Org_Chart": {
+    "JD_Analysis": {
+      "Keywords": "Product Manager (Chicago, on-site, full-time). Focus: Product development, cross-functional leadership.",
+      "Hidden_Success_Signals": "On-site req signals high-collaboration; engineering-heavy team needs PM with technical depth (SQL plus).",
+      "Required_vs_Preferred": "Required: Product exp, leadership, SQL nice-to-have. Preferred: SaaS/B2B track record. [Source: https://www.glassdoor.com/Jobs/yeet-Jobs-E10833477.htm ($93K-$142K est.); https://jobs.ashbyhq.com/yeet]"
+    },
+    "Hierarchy": "PM reports to Product leadership (inferred); cross-functional with Eng, GTM, Marketing. Flat startup structure. [Inferred from roles]",
+    "Hiring_Manager_Profile": "Not identified. No public LinkedIn/priorities found in search results."
+  },
+  "Module_E_Culture_Reality_Check": {
+    "Sentiment_Analysis": "Limited data (newer company). Glassdoor shows competitive pay ($93K-$157K), but sparse reviews. Indeed/Glassdoor list roles without deep sentiment. Positive: Active hiring. [Source: https://www.glassdoor.com/Jobs/yeet-Jobs-E10833477.htm; https://www.indeed.com/cmp/Yeet]",
+    "Operational_Style": "Fully on-site (Chicago). High tenure unknown (startup). Fast-paced, engineering-driven. [Source: https://jobs.ashbyhq.com/yeet]"
+  },
+  "Module_F_Intersection": {
+    "Priority_Mapping": [
+      {
+        "Priority": "Cross-functional product delivery & GTM integration",
+        "Jason_Connection": "Experience in Platform & Revenue Systems aligns with SaaS product leadership; Data Integrity for analytics-driven PM work."
+      },
+      {
+        "Priority": "Engineering collaboration (Rust/Backend)",
+        "Jason_Connection": "Platform expertise bridges to technical PM needs; prior revenue systems ensure business-outcome focus."
+      },
+      {
+        "Priority": "High-agency in dynamic startup",
+        "Jason_Connection": "Proven in data-driven prioritization mirrors CRO/Optimizely skills."
+      }
+    ]
+  }
+}

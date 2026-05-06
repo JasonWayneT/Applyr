@@ -8,13 +8,30 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 |---|---|---|---|---|
 | `FR-001` | `BMAD-SRC-001` | `FEAT-001` | `server/scout.ts` | implemented |
 | `FR-002` | `BMAD-SRC-001` | `FEAT-001` | `scripts/openpostings.py` | implemented |
+| `FR-003` | `BMAD-SRC-001` | `FEAT-001` | `scripts/openpostings.py` | implemented |
 | `FR-006` | `BMAD-SRC-005` | `FEAT-002` | `scripts/batch_pipeline.py` | implemented |
 | `FR-007` | `BMAD-SRC-005` | `FEAT-002` | `scripts/batch_pipeline.py` | implemented |
+| `FR-008` | `BMAD-SRC-005` | `FEAT-002` | `scripts/batch_pipeline.py` | implemented |
+| `FR-009` | `BMAD-SRC-004` | `FEAT-002` | `scripts/batch_pipeline.py` | implemented |
 | `FR-011` | `BMAD-SRC-007` | `FEAT-003` | `scripts/research-engine.py` | implemented |
+| `FR-012` | `BMAD-SRC-007` | `FEAT-003` | `scripts/research-engine.py` | implemented |
 | `FR-014` | `BMAD-SRC-004` | `FEAT-004` | `scripts/drafting_engine.py` | implemented |
+| `FR-015` | `BMAD-SRC-006` | `FEAT-004` | `scripts/drafting_engine.py` | implemented |
+| `FR-016` | `BMAD-SRC-004` | `FEAT-004` | `scripts/drafting_engine.py` | implemented |
 | `FR-019` | `BMAD-SRC-006` | `FEAT-005` | `scripts/drafting_engine.py` | implemented |
+| `FR-020` | `BMAD-SRC-006` | `FEAT-005` | `scripts/drafting_engine.py` | implemented |
 | `FR-023` | `BMAD-SRC-003` | `FEAT-006` | `server/index.ts` | implemented |
 | `FR-024` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/SyncActivityView.tsx` | implemented |
+| `FR-025` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/MyProfileView.tsx` | implemented |
+| `FR-026` | `BMAD-SRC-003` | `FEAT-006` | `src/components/DocumentEditor.tsx` | implemented |
+| `FR-027` | `BMAD-SRC-001` | `FEAT-006` | `scripts/compile_single.py` | implemented |
+| `FR-028` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
+| `FR-029` | `BMAD-SRC-004` | `FEAT-006` | `src/components/DocumentEditor.tsx` | implemented |
+| `FR-030` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
+| `FR-031` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
+| `FR-032` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
+| `FR-033` | `BMAD-SRC-003` | `FEAT-006` | `server/index.ts` | implemented |
+| `FR-034` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/TodayView.tsx` | implemented |
 
 ## Coverage checklist
 

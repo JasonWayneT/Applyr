@@ -1,0 +1,137 @@
+{
+  "research_packet": {
+    "company": "Secureframe",
+    "target_role": "Product Manager",
+    "research_date": "2026-05-05",
+    "modules": {
+      "module_a_company_dna": {
+        "core_mission": {
+          "stated": "Build trust. Unlock growth. Get compliant, mitigate risk, and build trust with customers using automation backed by world-class experts.",
+          "source": "https://secureframe.com"
+        },
+        "problem_space": "Secureframe solves security compliance automation for B2B SaaS companies. The core pain point is the manual, time-intensive process of achieving and maintaining compliance certifications (SOC 2, ISO 27001, etc.) and managing security audits. The platform automates evidence collection, audit preparation, and compliance tracking.",
+        "business_model": {
+          "revenue_streams": "SaaS subscription model for compliance automation platform",
+          "growth_stage": "Early-stage startup (Series C or earlier based on job posting language)",
+          "financial_health": "Not publicly disclosed in search results"
+        },
+        "founding_story": "Information not available in provided search results"
+      },
+      "module_b_market_and_competitors": {
+        "market_position": "Security compliance automation market for SaaS companies",
+        "big_3_competitors": "Not explicitly identified in search results",
+        "macro_trends": [
+          "Increasing regulatory requirements for data security and compliance",
+          "Growing demand for automated compliance solutions in SaaS sector",
+          "Shift toward continuous compliance vs. point-in-time audits"
+        ],
+        "differentiator": "Automation backed by world-class experts; focus on compliance acceleration",
+        "sources": [
+          "https://secureframe.com",
+          "https://jobs.lever.co/secureframe/b585f876-ac0c-4800-9a96-4b61cd34e020"
+        ]
+      },
+      "module_c_recent_intelligence": {
+        "financials_funding": "No recent funding announcements found in search results",
+        "organizational_shifts": {
+          "hiring_activity": "Active hiring across multiple departments: Sales, Customer Success, Marketing, Engineering, Product Management",
+          "open_positions": [
+            "Product Marketing Manager (US/Canada, fully remote)",
+            "Senior Product Manager (B2B SaaS focus)",
+            "Software Engineer",
+            "Senior Federal Compliance Manager"
+          ]
+        },
+        "product_partnership_news": "No specific recent launches or M&A activity found in search results",
+        "sources": [
+          "https://jobs.lever.co/secureframe",
+          "https://secureframe.com/careers"
+        ]
+      },
+      "module_d_role_and_org_chart": {
+        "jd_analysis": {
+          "role_title": "Senior Product Manager",
+          "key_requirements": [
+            "5+ years of product management experience",
+            "B2B SaaS company background (preferred)",
+            "Builder mindset with strong product taste",
+            "Track record of shipping products"
+          ],
+          "core_responsibilities": [
+            "Own products from conception to launch",
+            "Responsible for development and business success of Secureframe services",
+            "Define vision for product capabilities",
+            "Anticipate emerging threats and market opportunities",
+            "Cross-functional collaboration"
+          ],
+          "hidden_success_signals": [
+            "Early-stage startup experience valued",
+            "Security/compliance domain expertise preferred",
+            "Ability to operate in fast-paced environment",
+            "Subject matter expertise development"
+          ]
+        },
+        "hierarchy": "Not fully mapped in search results; Product Management team exists but specific reporting structure unclear",
+        "hiring_manager_profile": "Not identified in search results",
+        "sources": [
+          "https://tealhq.com/job/senior-product-manager_7ea1ac85d4fc90f869654b070f682f81b0546",
+          "https://remotestack.in/jobs/product-manager-secureframe-2c142c0e-8019-4e01-8e9e-b3ae2c9a89f8",
+          "https://remoteleaf.com/company/secureframe/senior-product-manager-united-states/"
+        ]
+      },
+      "module_e_culture_and_reality_check": {
+        "operational_style": {
+          "remote_status": "Fully remote (US and Canada for Product Marketing role)",
+          "team_structure": "Cross-functional collaboration emphasized (Sales, Product, Partner Management, Customer Success, Marketing)"
+        },
+        "benefits_package": [
+          "Medical, dental, and vision benefits",
+          "Flexible PTO",
+          "401(k)",
+          "Paid family leave",
+          "Ground floor opportunity as early team member"
+        ],
+        "culture_signals": "Execution-focused, iteration-oriented, internally-motivated learning culture",
+        "sentiment_analysis": "No Glassdoor/Reddit/Blind data available in search results",
+        "sources": [
+          "https://jobs.lever.co/secureframe/b585f876-ac0c-4800-9a96-4b61cd34e020"
+        ]
+      },
+      "module_f_intersection_bridge": {
+        "priority_mapping": [
+          {
+            "company_priority": "Product launches and go-to-market strategy",
+            "connection_to_candidate": "Requires ability to drive cross-functional initiatives, manage dependencies, and execute launches—core product management competency"
+          },
+          {
+            "company_priority": "Security compliance automation expertise",
+            "connection_to_candidate": "Domain knowledge in security/compliance space is preferred; opportunity to develop deep subject matter expertise"
+          },
+          {
+            "company_priority": "Sales enablement and customer success alignment",
+            "connection_to_candidate": "Product managers must understand revenue impact and customer needs; requires strong cross-functional communication"
+          },
+          {
+            "company_priority": "Early-stage scaling (Series C or earlier)",
+            "connection_to_candidate": "Opportunity to shape product strategy and organizational impact; requires builder mentality and ownership mindset"
+          },
+          {
+            "company_priority": "Rapid iteration and execution",
+            "connection_to_candidate": "Fast-paced environment rewards product managers who can balance strategic thinking with tactical execution"
+          }
+        ]
+      }
+    },
+    "data_quality_notes": {
+      "gaps": [
+        "Specific funding round details not available",
+        "Competitor analysis incomplete",
+        "Hiring manager identity not identified",
+        "Employee sentiment data (Glassdoor/Blind) not available",
+        "Detailed org chart not available",
+        "Founding story and key inflection points not found"
+      ],
+      "confidence_level": "Medium - Core role requirements and company positioning clear; strategic context and culture assessment limited by available data"
+    }
+  }
+}

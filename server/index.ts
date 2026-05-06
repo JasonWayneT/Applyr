@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { spawn } from 'child_process';
+import { spawn, exec } from 'child_process';
 import { randomUUID } from 'crypto';
 import AdmZip from 'adm-zip';
 import { db, logActivity } from './db.js';
@@ -116,8 +116,26 @@ app.get('/api/logs', (_req, res) => {
 // ---------------------------------------------------------------------------
 app.get('/api/jobs', (_req, res) => {
   try {
-    const jobs = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all();
-    res.json(jobs);
+    const jobs = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as any[];
+    
+    // Enrich jobs with has_assets flag
+    const enrichedJobs = jobs.map(job => {
+      let has_assets = false;
+      const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const activePath = path.join(SUBMISSION_DIR, companySlug);
+      
+      if (fs.existsSync(activePath)) {
+        try {
+          const files = fs.readdirSync(activePath);
+          has_assets = files.some(file => file.toLowerCase().endsWith('.pdf'));
+        } catch (e) {
+          // Directory might be inaccessible
+        }
+      }
+      return { ...job, has_assets };
+    });
+    
+    res.json(enrichedJobs);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch jobs' });
   }
@@ -173,6 +191,25 @@ app.patch('/api/jobs/:id/status', (req, res) => {
     const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     const activePath = path.join(SUBMISSION_DIR, companySlug);
     const archivePath = path.join(ARCHIVE_DIR, companySlug);
+
+    if (status === 'No Longer Available') {
+      const fullJob = db.prepare('SELECT company, title, url FROM jobs WHERE id = ?').get(id) as any;
+      if (fullJob && fullJob.url) {
+        db.prepare('INSERT OR IGNORE INTO stale_jobs (url, company, title) VALUES (?, ?, ?)')
+          .run(fullJob.url, fullJob.company, fullJob.title);
+      }
+      
+      if (fs.existsSync(activePath)) {
+        fs.rmSync(activePath, { recursive: true, force: true });
+      }
+      if (fs.existsSync(archivePath)) {
+        fs.rmSync(archivePath, { recursive: true, force: true });
+      }
+
+      db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
+      logActivity('INFO', 'System', `Job "${job.company}" marked No Longer Available and completely deleted.`);
+      return res.json({ success: true, deleted: true });
+    }
 
     // "Backlog" and "Drafted" are considered active workspace — everything else is archived
     const isNowArchived = !['Backlog', 'Drafted'].includes(status);
@@ -269,6 +306,97 @@ app.get('/api/jobs/:id/files/:filename', (req, res) => {
     res.sendFile(filePath);
   } catch (err) {
     res.status(500).json({ error: 'Failed to serve file' });
+  }
+});
+
+// API: Save/Update document and re-compile to PDF
+app.put('/api/jobs/:id/files/:filename', (req, res) => {
+  try {
+    const { id, filename } = req.params;
+    const { text } = req.body;
+
+    if (text === undefined) return res.status(400).json({ error: 'Text content is required' });
+
+    const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(id) as any;
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const folder = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(folder, companySlug, safeFilename);
+
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+
+    // Write edited content to Markdown file
+    fs.writeFileSync(filePath, text, 'utf8');
+
+    // If it's a markdown file, compile the corresponding PDF automatically
+    if (safeFilename.endsWith('.md')) {
+      const pdfFilename = safeFilename.replace('.md', '.pdf');
+      const pdfPath = path.join(folder, companySlug, pdfFilename);
+      
+      const compileScript = path.join(__dirname, '../scripts/compile_single.py');
+      
+      exec(`python "${compileScript}" "${filePath}" "${pdfPath}"`, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Compilation error: ${stderr || error.message}`);
+          logActivity('ERROR', 'System', `Failed to compile PDF for "${job.company}": ${stderr || error.message}`);
+          return res.status(500).json({ error: 'Document saved but PDF compilation failed' });
+        }
+        logActivity('INFO', 'System', `Successfully compiled PDF for "${job.company}"`);
+        res.json({ success: true, compiled: true });
+      });
+    } else {
+      res.json({ success: true, compiled: false });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save file' });
+  }
+});
+
+// API: Process AI-Assisted document edit via Python GenAI helper
+app.post('/api/jobs/:id/ai-rewrite', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { instruction, text } = req.body;
+
+    if (!instruction || !text) return res.status(400).json({ error: 'Instruction and text are required' });
+
+    // Define temp paths in the scratch/ folder
+    const scratchDir = path.join(__dirname, '../scratch');
+    if (!fs.existsSync(scratchDir)) {
+      fs.mkdirSync(scratchDir, { recursive: true });
+    }
+
+    const instrFile = path.join(scratchDir, `instr_${id}.tmp`);
+    const textFile = path.join(scratchDir, `text_${id}.tmp`);
+
+    // Write contents to temporary files
+    fs.writeFileSync(instrFile, instruction, 'utf8');
+    fs.writeFileSync(textFile, text, 'utf8');
+
+    const rewriteScript = path.join(__dirname, '../scripts/ai_rewrite.py');
+
+    exec(`python "${rewriteScript}" "${instrFile}" "${textFile}"`, (error, stdout, stderr) => {
+      // Clean up temp files in the background
+      try {
+        if (fs.existsSync(instrFile)) fs.unlinkSync(instrFile);
+        if (fs.existsSync(textFile)) fs.unlinkSync(textFile);
+      } catch (cleanErr) {
+        console.error('Failed to clean up temp files:', cleanErr);
+      }
+
+      if (error) {
+        console.error(`AI rewrite error: ${stderr || error.message}`);
+        return res.status(500).json({ error: 'AI rewrite execution failed' });
+      }
+
+      res.json({ text: stdout.trim() });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to execute AI rewrite' });
   }
 });
 

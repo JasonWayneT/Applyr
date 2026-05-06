@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Jason\\\\Desktop\\\\Jason\\\\Resource\\\\Code Projects\\\\JobAgent\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)"
+    ]
+  }
+}

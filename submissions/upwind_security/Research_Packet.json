@@ -1,0 +1,174 @@
+{
+  "research_packet": {
+    "company": "Upwind Security",
+    "position": "Product Manager",
+    "research_date": "2026-05-05",
+    "modules": {
+      "module_a_company_dna": {
+        "core_mission": {
+          "stated": "Revolutionize cloud infrastructure security through runtime-powered CNAPP (Cloud-Native Application Protection Platform)",
+          "observed": "Combine cloud security posture management with real-time runtime context and protection to enable accurate prioritization and fast response",
+          "source": "https://www.upwind.io"
+        },
+        "problem_space": "Organizations struggle with cloud infrastructure visibility and security posture management. Traditional approaches lack real-time context, forcing security teams to waste time on low-priority alerts while missing critical risks in hybrid cloud environments.",
+        "business_model": {
+          "revenue_streams": "SaaS-based cloud security platform (CNAPP)",
+          "growth_stage": "Hypergrowth (actively hiring across multiple functions)",
+          "financial_health": "Well-funded (backed by Greylock, evidenced by job board presence)",
+          "source": "https://jobs.greylock.com/jobs/upwind-security"
+        },
+        "founding_story": {
+          "status": "Israeli-founded company",
+          "headquarters": "Tel Aviv",
+          "note": "Specific founding inflection points not available in search results",
+          "source": "https://www.upwind.io/careers/co/tel-aviv/E9.960/head-of-brand"
+        }
+      },
+      "module_b_market_competitors": {
+        "market_position": "Cloud-Native Application Protection Platform (CNAPP) space",
+        "key_differentiator": "Runtime-powered approach combining security posture with real-time context and protection",
+        "big_3_competitors": {
+          "status": "Not explicitly identified in search results",
+          "note": "Implied competitors in CNAPP/cloud security space include traditional CSPM and runtime security vendors"
+        },
+        "macro_trends": {
+          "ai_era": "Positioning as 'Cloud Security for the AI and Realtime Era'",
+          "hybrid_cloud": "Growing adoption of hybrid cloud infrastructure requiring comprehensive coverage",
+          "real_time_protection": "Shift from reactive to real-time security posture management",
+          "source": "https://www.upwind.io"
+        }
+      },
+      "module_c_recent_intelligence": {
+        "hiring_activity": {
+          "status": "Active hypergrowth hiring phase",
+          "open_positions": [
+            "Product Manager (Tel Aviv, Full-time)",
+            "Head of Brand (Tel Aviv)",
+            "AI Engineer (Tel Aviv and Belfast)",
+            "AI Lead (Tel Aviv)",
+            "Senior Customer Advocacy Manager",
+            "Enterprise Account Executives (multiple regions)"
+          ],
+          "source": "https://www.upwind.io/careers"
+        },
+        "organizational_expansion": {
+          "geographic_presence": "Tel Aviv (HQ), Belfast (Northern Ireland), Ohio Valley, Chicago",
+          "team_growth": "Expanding product, research, sales, and marketing functions",
+          "source": "https://jobs.greylock.com/jobs/upwind-security"
+        },
+        "funding": {
+          "investor": "Greylock Partners",
+          "status": "Venture-backed",
+          "source": "https://jobs.greylock.com/jobs/upwind-security"
+        },
+        "product_evolution": "Recent focus on real-time protection capabilities and AI-era positioning"
+      },
+      "module_d_role_org_chart": {
+        "jd_analysis": {
+          "title": "Product Manager",
+          "location": "Tel Aviv",
+          "employment_type": "Full-time",
+          "key_requirements": [
+            "Experience managing products in cloud security or infrastructure space",
+            "Ability to work with technical teams and understand developer/operator workflows",
+            "Product strategy and roadmap development",
+            "Cross-functional collaboration"
+          ],
+          "hidden_success_signals": [
+            "Understanding of runtime security concepts",
+            "Familiarity with CNAPP market dynamics",
+            "Experience in hypergrowth environments",
+            "Ability to balance security and developer experience"
+          ],
+          "source": "https://www.upwind.io/careers/co/tel-aviv/BA.04B/product-manager/all/"
+        },
+        "reporting_structure": {
+          "status": "Not explicitly detailed in search results",
+          "note": "Likely reports to VP/Head of Product (not identified)"
+        },
+        "team_structure": {
+          "product_team": "Multiple product managers indicated",
+          "cross_functional_partners": "Engineering, Sales, Marketing, Customer Success",
+          "source": "https://www.upwind.io/careers/co/tel-aviv/BA.04B/product-manager/all/"
+        },
+        "hiring_manager_profile": {
+          "status": "Not identified in search results",
+          "recommendation": "Requires direct outreach or LinkedIn research"
+        }
+      },
+      "module_e_culture_reality_check": {
+        "sentiment_analysis": {
+          "status": "Limited data in search results",
+          "note": "No Glassdoor, Blind, or Reddit sentiment data available in provided search results",
+          "recommendation": "Direct research needed on Glassdoor, Blind, and Reddit for employee perspectives"
+        },
+        "operational_style": {
+          "headquarters": "Tel Aviv-based with distributed team",
+          "remote_options": "Multiple remote positions advertised (Belfast, Ohio Valley, Chicago)",
+          "work_model": "Hybrid/Remote-friendly (evidenced by geographic distribution)",
+          "source": "https://www.remoterocketship.com/us/company/upwind-io/"
+        },
+        "growth_culture": {
+          "hiring_velocity": "Rapid expansion across functions",
+          "career_trajectory": "Hypergrowth environment suggests accelerated advancement opportunities",
+          "source": "https://www.upwind.io/careers"
+        }
+      },
+      "module_f_intersection_bridge": {
+        "priority_mapping": {
+          "priority_1_real_time_security": {
+            "company_focus": "Runtime-powered CNAPP with real-time protection",
+            "jason_connection": "Data Integrity - Real-time data accuracy and context are critical for security decisions",
+            "relevance": "High - Core product differentiator"
+          },
+          "priority_2_cloud_infrastructure_visibility": {
+            "company_focus": "Comprehensive coverage and visibility across hybrid cloud",
+            "jason_connection": "Platform - Understanding multi-cloud/hybrid infrastructure platforms",
+            "relevance": "High - Foundational to product value"
+          },
+          "priority_3_developer_operator_experience": {
+            "company_focus": "Enabling security teams to prioritize accurately and respond fast",
+            "jason_connection": "Revenue Systems - Reducing friction in security workflows drives adoption and retention",
+            "relevance": "Medium-High - Product-market fit depends on UX"
+          },
+          "priority_4_hypergrowth_scaling": {
+            "company_focus": "Rapid hiring and geographic expansion",
+            "jason_connection": "Platform - Scaling product organization and processes during growth",
+            "relevance": "Medium - Organizational challenge"
+          },
+          "priority_5_market_positioning": {
+            "company_focus": "Establishing brand in competitive CNAPP space",
+            "jason_connection": "Revenue Systems - Product positioning directly impacts sales enablement and GTM",
+            "relevance": "Medium - Strategic importance"
+          }
+        },
+        "strategic_fit_assessment": {
+          "strengths": [
+            "Clear product-market opportunity in growing CNAPP space",
+            "Well-funded with venture backing",
+            "Technical product requiring deep domain expertise",
+            "Hypergrowth environment with clear expansion trajectory"
+          ],
+          "considerations": [
+            "Competitive market with established players",
+            "Requires deep cloud security domain knowledge",
+            "Israeli-founded company may have cultural/operational differences",
+            "Limited public sentiment data available"
+          ]
+        }
+      }
+    },
+    "data_quality_assessment": {
+      "completeness": "Moderate - Core company and role information available; limited organizational depth",
+      "gaps": [
+        "Specific competitor analysis",
+        "Financial metrics and funding round details",
+        "Employee sentiment and culture reviews",
+        "Hiring manager background and priorities",
+        "Detailed org chart and reporting structure",
+        "Recent product launches or partnership announcements"
+      ],
+      "recommendation": "Conduct supplementary research on Crunchbase, LinkedIn, Glassdoor, and direct outreach to hiring manager"
+    }
+  }
+}

@@ -15,6 +15,7 @@ function App() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -24,12 +25,19 @@ function App() {
         setJobs(data);
       } catch (err) {
         console.error('Failed to fetch jobs in App.tsx:', err);
+      } finally {
+        setIsLoaded(true);
       }
     };
     fetchJobs();
     const interval = setInterval(fetchJobs, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleStatusChange = (id: string, newStatus: string) => {
+    setJobs(prev => prev.map(j => j.id === id ? { ...j, status: newStatus as Job['status'] } : j));
+    setSelectedJob(null);
+  };
 
   const renderPage = () => {
     switch (activeTab) {
@@ -95,7 +103,12 @@ function App() {
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto px-8 pt-8 pb-12 applyr-scrollbar">
           <div className="max-w-7xl mx-auto">
-            {renderPage()}
+            {isLoaded ? renderPage() : (
+              <div className="flex items-center justify-center h-64 text-on-surface-variant text-sm gap-2">
+                <span className="material-symbols-outlined animate-spin">progress_activity</span>
+                Loading...
+              </div>
+            )}
           </div>
         </main>
       </div>
@@ -104,6 +117,7 @@ function App() {
       <JobDetailPanel
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
+        onStatusChange={handleStatusChange}
       />
     </div>
   );

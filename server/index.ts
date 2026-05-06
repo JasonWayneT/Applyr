@@ -5,10 +5,18 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import AdmZip from 'adm-zip';
 import { db, logActivity } from './db.js';
 import { runScoutSync } from './scout.js';
 import { TITLE_BLOCKLIST, INDUSTRY_BLOCKLIST_DEFAULT } from './config.js';
+
+// Allowlist of columns that may be updated via the generic PATCH endpoint
+const ALLOWED_JOB_FIELDS = new Set([
+  'title', 'company', 'url', 'score', 'summary', 'status',
+  'salary_range', 'recruiter_name', 'recruiter_url', 'source_site',
+  'rejection_stage', 'rejection_type', 'outcome_notes', 'interview_date',
+]);
 
 dotenv.config();
 
@@ -124,7 +132,7 @@ app.post('/api/jobs', (req, res) => {
     db.prepare(`
       INSERT INTO jobs (id, company, title, url, score, status, summary, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(id || Math.random().toString(36).substring(7), company, title, url || null, score || null, status || 'Drafted', summary || null);
+    `).run(id || randomUUID(), company, title, url || null, score || null, status || 'Drafted', summary || null);
 
     logActivity('INFO', 'System', `Manually added job "${company}" to drafted.`);
     res.json({ success: true });
@@ -205,9 +213,9 @@ app.patch('/api/jobs/:id', (req, res) => {
     const { id } = req.params;
     const updates = req.body;
     
-    // Build dynamic update query
-    const keys = Object.keys(updates).filter(k => k !== 'id');
-    if (keys.length === 0) return res.status(400).json({ error: 'No fields to update' });
+    // Build dynamic update query — only permit known safe columns (#1 SQL injection prevention)
+    const keys = Object.keys(updates).filter(k => k !== 'id' && ALLOWED_JOB_FIELDS.has(k));
+    if (keys.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
     
     const setClause = keys.map(k => `${k} = ?`).join(', ');
     const values = keys.map(k => updates[k]);
@@ -252,7 +260,9 @@ app.get('/api/jobs/:id/files/:filename', (req, res) => {
 
     const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
     const folder = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
-    const filePath = path.join(folder, companySlug, req.params.filename);
+    // path.basename strips any directory traversal (e.g. ../../etc/passwd → passwd)
+    const safeFilename = path.basename(req.params.filename);
+    const filePath = path.join(folder, companySlug, safeFilename);
 
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
@@ -289,7 +299,7 @@ app.get('/api/jobs/:id/download-all', (req, res) => {
     const buffer = zip.toBuffer();
 
     res.set('Content-Type', 'application/zip');
-    res.set('Content-Disposition', `attachment; filename=${zipName}`);
+    res.set('Content-Disposition', `attachment; filename="${zipName}"`);
     res.send(buffer);
   } catch (err) {
     console.error(err);

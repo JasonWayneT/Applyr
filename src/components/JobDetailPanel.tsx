@@ -35,10 +35,14 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
     notes: ''
   });
   const [interviewDate, setInterviewDate] = useState(job?.interview_date || '');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (!job) return;
     setInterviewDate(job.interview_date || '');
+    setShowClosureForm(false);
+    setClosureData({ stage: job.status, type: 'Rejected', notes: '' });
+    setErrorMsg(null);
     setLoadingFiles(true);
     fetch(api(`/api/jobs/${job.id}/files`))
       .then(r => r.json())
@@ -61,21 +65,33 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
   const handleDateChange = async (date: string) => {
     setInterviewDate(date);
-    await fetch(api(`/api/jobs/${job.id}`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ interview_date: date }),
-    });
+    setErrorMsg(null);
+    try {
+      const res = await fetch(api(`/api/jobs/${job.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interview_date: date }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setErrorMsg('Failed to save interview date. Check that the server is running.');
+    }
   };
 
   const updateStatus = async (newStatus: string, payload: any = {}) => {
-    await fetch(api(`/api/jobs/${job.id}/status`), {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus, ...payload }),
-    });
-    onStatusChange?.(job.id, newStatus);
-    onClose();
+    setErrorMsg(null);
+    try {
+      const res = await fetch(api(`/api/jobs/${job.id}/status`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus, ...payload }),
+      });
+      if (!res.ok) throw new Error();
+      onStatusChange?.(job.id, newStatus);
+      onClose();
+    } catch {
+      setErrorMsg('Failed to update status. Please try again.');
+    }
   };
 
   const fileIcon = (name: string) => {
@@ -234,6 +250,12 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
           {/* Footer Actions */}
           <div className="p-6 border-t border-outline-variant/10">
+            {errorMsg && (
+              <p className="text-xs text-error flex items-center gap-1.5 mb-3">
+                <span className="material-symbols-outlined text-sm">error</span>
+                {errorMsg}
+              </p>
+            )}
             {showClosureForm ? (
               <div className="space-y-4 animate-fade-in">
                 <div className="grid grid-cols-2 gap-4">

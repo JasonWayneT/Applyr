@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Job } from '../types/job';
 import StatusChip from '../components/StatusChip';
 import { api } from '../lib/api';
@@ -8,7 +8,22 @@ interface TodayViewProps {
   onJobClick: (job: Job) => void;
 }
 
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
 const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
+  const [firstName, setFirstName] = useState('');
+
+  useEffect(() => {
+    fetch(api('/api/profile/identity'))
+      .then(r => r.json())
+      .then(data => { if (data?.name) setFirstName(data.name.trim().split(' ')[0]); })
+      .catch(() => {});
+  }, []);
   const backlogs = jobs.filter(j => j.status === 'Backlog' || j.status === 'New');
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => !['Closed'].includes(j.status));
@@ -39,7 +54,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
       {/* Welcome Header */}
       <section className="mb-2">
         <h1 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight mb-2">
-          Good morning, Jason.
+          {getGreeting()}{firstName ? `, ${firstName}` : ''}.
         </h1>
         <p className="text-on-surface-variant text-lg">
           You have <span className="text-secondary font-bold">{activeJobs.length} active applications</span> in progress. Let's keep the momentum going.
@@ -55,10 +70,6 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
               <h3 className="text-xl font-headline font-bold text-on-surface">Application Progress</h3>
               <p className="text-sm text-on-surface-variant">Your journey this month</p>
             </div>
-            <select className="input-applyr rounded-lg text-xs font-bold py-1 pl-3 pr-8">
-              <option>Last 30 Days</option>
-              <option>Last Quarter</option>
-            </select>
           </div>
 
           {/* Bar Chart */}
@@ -171,9 +182,6 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
                       <span className="material-symbols-outlined">link</span>
                     </a>
                   )}
-                  <button className="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors">
-                    <span className="material-symbols-outlined">more_vert</span>
-                  </button>
                 </div>
               </div>
             ))}

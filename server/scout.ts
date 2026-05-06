@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPTS_DIR = path.join(__dirname, '../scripts');
 
-export const runScoutSync = async () => {
+export const runScoutSync = () => {
   logActivity('INFO', 'Scout', 'Unified local sync triggered. Starting Playwright engine...');
   db.prepare(`UPDATE system_status SET status = 'scout_running', current_item = 'Crawling and scanning direct job feeds...', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
 

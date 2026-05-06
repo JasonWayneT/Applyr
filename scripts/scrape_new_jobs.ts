@@ -3,11 +3,14 @@ import stealth from 'puppeteer-extra-plugin-stealth';
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 chromium.use(stealth());
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 async function run() {
-  const db = new Database('jobagent.sqlite');
+  const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
   const jobs = db.prepare("SELECT id, company, title, url FROM jobs WHERE status = 'New'").all() as any[];
 
   if (jobs.length === 0) {
@@ -51,7 +54,7 @@ async function run() {
       if (text && text.length > 200) {
         // Write the JD text to jobs/[Company].txt
         const companyFilename = job.company.replace(/[^a-z0-9]+/gi, '_').trim();
-        const jdPath = path.join('jobs', `${companyFilename}.txt`);
+        const jdPath = path.join('jobs', `${companyFilename}_${job.id.slice(0, 8)}.txt`);
         fs.writeFileSync(jdPath, `URL: ${job.url}\n\n${text}`, 'utf-8');
         console.log(`  -> Saved ${jdPath} (${text.length} chars)`);
 

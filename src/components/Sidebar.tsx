@@ -74,7 +74,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
         </button>
         <div className="px-4 pt-3">
           <p className="text-[10px] text-on-surface-variant">Active applications</p>
-          <p className="text-sm font-bold text-primary mt-0.5">{jobs.length} open</p>
+          <p className="text-sm font-bold text-primary mt-0.5">
+            {jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status)).length} open
+          </p>
         </div>
       </div>
     </aside>

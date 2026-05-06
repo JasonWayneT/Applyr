@@ -6,7 +6,7 @@ import argparse
 import sys
 from datetime import datetime
 from utils import (
-    load_file, call_llm, JOBS_DIR,
+    load_file, call_llm, JOBS_DIR, PROJECT_ROOT,
     WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
     SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS
 )
@@ -144,6 +144,7 @@ def process_single(company, url, jd_text):
     }))
 
 def process_batch():
+    import sqlite3
     print("====================================")
     print(" JobAgent v3.2 Batch Pipeline Sync  ")
     print("====================================")
@@ -163,11 +164,43 @@ def process_batch():
 
     print(f"Found {len(job_files)} jobs in batch queue.")
 
+    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_exists = os.path.exists(db_path)
+
     for filepath in job_files:
         filename = os.path.basename(filepath)
-        company_name = filename.replace(".txt", "").strip()
+        name_part = filename.replace(".txt", "").strip()
+
+        job_id_prefix = None
+        company_name = name_part
+        if "_" in name_part:
+            parts = name_part.rsplit("_", 1)
+            if len(parts[1]) == 8:
+                company_name = parts[0]
+                job_id_prefix = parts[1]
 
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Processing: {company_name}")
+        
+        status_to_check = None
+        if db_exists:
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                if job_id_prefix:
+                    cursor.execute("SELECT status FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                else:
+                    cursor.execute("SELECT status FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                row = cursor.fetchone()
+                if row:
+                    status_to_check = row[0]
+                conn.close()
+            except Exception as e:
+                print(f"  -> Error querying database: {e}")
+
+        if status_to_check and status_to_check not in ['New', 'Drafted']:
+            print(f"  -> Skipping. Already evaluated (status: {status_to_check}).")
+            continue
+
         jd_text = load_file(filepath)
 
         if len(jd_text.strip()) < 100:
@@ -177,6 +210,30 @@ def process_batch():
         # Zero-token keyword gate
         if not passes_jd_keyword_gate(jd_text):
             print(f"  -> Skipping. JD failed keyword pre-filter (no relevant signals).")
+            if db_exists:
+                try:
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    if job_id_prefix:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                    else:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                    row = cursor.fetchone()
+                    if row:
+                        url, company, title = row
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO stale_jobs (url, company, title) VALUES (?, ?, ?)",
+                            (url, company, title)
+                        )
+                        if job_id_prefix:
+                            cursor.execute("DELETE FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                        else:
+                            cursor.execute("DELETE FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                        conn.commit()
+                        print(f"  -> Added to 'stale_jobs' and deleted from 'jobs' (Failed Keyword Gate) to avoid clutter.")
+                    conn.close()
+                except Exception as e:
+                    print(f"  -> Error handling keyword gate db update: {e}")
             continue
 
         print(f"  -> Evaluating fit against v3.2 Rubric...")
@@ -192,7 +249,31 @@ def process_batch():
         print(f"  -> Summary: {result.get('Summary')}")
 
         if decision == "NO" or score < 72:
-            print(f"  -> [GATEKEEPER REJECT] JD scored below 72 or triggered hard stop. Moving to next.")
+            print(f"  -> [GATEKEEPER REJECT] JD scored below 72 or triggered hard stop.")
+            if db_exists:
+                try:
+                    conn = sqlite3.connect(db_path)
+                    cursor = conn.cursor()
+                    if job_id_prefix:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                    else:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                    row = cursor.fetchone()
+                    if row:
+                        url, company, title = row
+                        cursor.execute(
+                            "INSERT OR IGNORE INTO stale_jobs (url, company, title) VALUES (?, ?, ?)",
+                            (url, company, title)
+                        )
+                        if job_id_prefix:
+                            cursor.execute("DELETE FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                        else:
+                            cursor.execute("DELETE FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                        conn.commit()
+                        print(f"  -> Added to 'stale_jobs' and deleted from 'jobs' (Low Score) to avoid clutter.")
+                    conn.close()
+                except Exception as e:
+                    print(f"  -> Error handling low score db update: {e}")
             continue
 
         # Load full work experience only for YES decisions
@@ -203,6 +284,26 @@ def process_batch():
             generate_cheat_sheet(company_name)
         except Exception as e:
             pass
+
+        if db_exists:
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                if job_id_prefix:
+                    cursor.execute(
+                        "UPDATE jobs SET status = 'Backlog', score = ?, summary = ? WHERE id LIKE ?",
+                        (score, result.get("Summary", ""), f"{job_id_prefix}%")
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE jobs SET status = 'Backlog', score = ?, summary = ? WHERE LOWER(company) = LOWER(?)",
+                        (score, result.get("Summary", ""), company_name)
+                    )
+                conn.commit()
+                conn.close()
+                print(f"  -> Database status updated to 'Backlog' (Ready to Apply) with score {score}.")
+            except Exception as e:
+                print(f"  -> Error updating database: {e}")
             
         print("  -> Sleeping for 15 seconds to respect rate limits...")
         time.sleep(15)

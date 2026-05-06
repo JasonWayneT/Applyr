@@ -34,6 +34,27 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 5.2
+Applyr Release
+May 6, 2026
+
+Version 5.2, first offered to local users on May 6, 2026
+
+Previous
+Applyr 5.1
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **End-to-End Background Sync (FR-035):** Fully automated the background sync pipeline. After scouting completes, the system now automatically scrapes full descriptions (`scrape_new_jobs.ts`), evaluates fit via the Gemini fit engine (`batch_pipeline.py`), and drafts tailored resumes/cover letters directly in the background. Passed jobs instantly appear on the dashboard under "Ready to Apply"!
+
+Fixed
+- **Gatekeeper Queue Cleanup:** Prevented "New" status clutter and stat inflation by registering non-matching or low-scoring scouted jobs in the `stale_jobs` table (to prevent re-crawling) and then completely deleting them from the primary `jobs` table.
+
+Developer
+- **Integrated Database Control in Batch Pipeline:** Modified `batch_pipeline.py` to connect directly to `jobagent.sqlite` using standard python `sqlite3` to dynamically fetch job status for idempotent skips, and write back evaluation results (Backlog/Closed status, score, fit summary) automatically.
+
 ### 5.1
 Applyr Release
 May 6, 2026

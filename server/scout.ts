@@ -74,8 +74,58 @@ export const runScoutSync = () => {
 
         backfillProcess.on('close', (bfCode) => {
           logActivity('INFO', 'Crawler', `URL backfill process exited with code ${bfCode}`);
-          logActivity('INFO', 'Scout', 'Sync and crawl fully completed. Check your dashboard for new matches.');
-          db.prepare(`UPDATE system_status SET status = 'completed', current_item = 'Completed sync and crawl. Check dashboard for new matches.', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
+          
+          logActivity('INFO', 'Scout', 'Starting job description crawling for new postings...');
+          db.prepare(`UPDATE system_status SET status = 'scout_running', current_item = 'Scraping job descriptions for new postings...', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
+
+          const scrapeProcess = spawn('npx', ['tsx', 'scripts/scrape_new_jobs.ts'], {
+            cwd: path.join(__dirname, '..'),
+            shell: true
+          });
+
+          scrapeProcess.stdout.on('data', (data) => {
+            const lines = data.toString().trim().split('\n');
+            for (const line of lines) {
+              if (line.trim()) logActivity('INFO', 'Scraper', line.trim());
+            }
+          });
+
+          scrapeProcess.stderr.on('data', (data) => {
+            const error = data.toString().trim();
+            if (error && !error.includes('DeprecationWarning')) {
+              logActivity('ERROR', 'Scraper', `Engine Error: ${error}`);
+            }
+          });
+
+          scrapeProcess.on('close', (scrapeCode) => {
+            logActivity('INFO', 'Scraper', `Job description scraper exited with code ${scrapeCode}`);
+            
+            logActivity('INFO', 'Scout', 'Evaluating fit and auto-generating assets...');
+            db.prepare(`UPDATE system_status SET status = 'scout_running', current_item = 'Evaluating fit and generating PDF assets...', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
+
+            const evalProcess = spawn('python', ['scripts/batch_pipeline.py', '--mode', 'batch'], {
+              cwd: path.join(__dirname, '..'),
+              shell: true
+            });
+
+            evalProcess.stdout.on('data', (data) => {
+              const lines = data.toString().trim().split('\n');
+              for (const line of lines) {
+                if (line.trim()) logActivity('INFO', 'Pipeline', line.trim());
+              }
+            });
+
+            evalProcess.stderr.on('data', (data) => {
+              const error = data.toString().trim();
+              if (error) logActivity('ERROR', 'Pipeline', `Engine Error: ${error}`);
+            });
+
+            evalProcess.on('close', (evalCode) => {
+              logActivity('INFO', 'Pipeline', `Evaluation pipeline exited with code ${evalCode}`);
+              logActivity('INFO', 'Scout', 'End-to-end background sync fully completed. Matches and assets are ready on your dashboard.');
+              db.prepare(`UPDATE system_status SET status = 'completed', current_item = 'Completed end-to-end sync. Check your dashboard for new matched roles!', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
+            });
+          });
         });
       } else {
         logActivity('ERROR', 'Scout', 'Scout failed, skipping URL backfill crawl.');

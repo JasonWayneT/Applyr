@@ -32,6 +32,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-032` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
 | `FR-033` | `BMAD-SRC-003` | `FEAT-006` | `server/index.ts` | implemented |
 | `FR-034` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/TodayView.tsx` | implemented |
+| `FR-035` | `BMAD-SRC-005` | `FEAT-002` | `server/scout.ts`, `scripts/batch_pipeline.py` | implemented |
 
 ## Coverage checklist
 

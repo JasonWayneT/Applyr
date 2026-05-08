@@ -22,7 +22,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-020` | `BMAD-SRC-006` | `FEAT-005` | `scripts/drafting_engine.py` | implemented |
 | `FR-023` | `BMAD-SRC-003` | `FEAT-006` | `server/index.ts` | implemented |
 | `FR-024` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/SyncActivityView.tsx` | implemented |
-| `FR-025` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/MyProfileView.tsx` | implemented |
+| `FR-025` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/ProfileView.tsx` | implemented |
 | `FR-026` | `BMAD-SRC-003` | `FEAT-006` | `src/components/DocumentEditor.tsx` | implemented |
 | `FR-027` | `BMAD-SRC-001` | `FEAT-006` | `scripts/compile_single.py` | implemented |
 | `FR-028` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
@@ -33,6 +33,11 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-033` | `BMAD-SRC-003` | `FEAT-006` | `server/index.ts` | implemented |
 | `FR-034` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/TodayView.tsx` | implemented |
 | `FR-035` | `BMAD-SRC-005` | `FEAT-002` | `server/scout.ts`, `scripts/batch_pipeline.py` | implemented |
+| `FR-036` | User Request | `FEAT-005` | `scripts/style_compliance_guard.py` | implemented |
+| `FR-037` | User Request | `FEAT-006` | `server/index.ts` | implemented |
+| `FR-038` | User Request | `FEAT-005` | `scripts/style_compliance_guard.py` | implemented |
+| `FR-039` | User Request | `FEAT-002` | `scripts/utils.py`, `scripts/batch_pipeline.py` | implemented |
+| `DATA-001` | User Request | `FEAT-005` | `data/workExperience.md` | implemented |
 
 ## Coverage checklist
 

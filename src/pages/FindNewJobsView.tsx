@@ -4,6 +4,7 @@ import BulkUploadForm, { ParsedJob } from '../components/BulkUploadForm';
 
 import PipelineTracker from '../components/PipelineTracker';
 import { usePipeline } from '../hooks/usePipeline';
+import { api } from '../lib/api';
 
 const FindNewJobsView: React.FC = () => {
   const { stages, runPipeline, resetPipeline, isRunning, isRejected, result } = usePipeline();

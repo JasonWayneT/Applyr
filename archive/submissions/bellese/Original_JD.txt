@@ -1,0 +1,99 @@
+Bellese is a mission-driven Digital Services Company committed to pioneering innovative technology solutions in civic healthcare. Our dedication lies in making a meaningful impact on public health outcomes. 
+ 
+Driven by service design, we strive to know the “Why” to understand the healthcare journey for patients, caregivers, providers, payers, and policymakers. Our goal is to design and build solutions that reduce confusion, provide clarity, support decision making, and streamline the process so that we and our partners can focus on providing better health outcomes by improving patient care and reducing costs and burden.
+
+The Team you will be joining:
+HQR
+
+Our team is charged with maintaining and improving the software at the Centers for Medicare and Medicaid Services (CMS) that supports the Hospital Quality Reporting program. Thousands of hospitals across the country depend on these systems to submit quality measure data that reflects the care beneficiaries receive in their facility.  Our teams will continuously strive to modernize these systems, while improving them in ways that reduce provider burden and minimize costs to CMS.  We do this through HCD and Service design practices, product thinking, and skilled engineering.  At Bellese, we’re relentlessly focused on enabling and empowering providers to focus on improving the quality and safety of patient care.
+
+As a Product Manager I:
+
+Bellese Technologies is looking for an experienced Product Manager 1 to support delivery and evolving product strategy on one of our distributed teams that support a federal agency client.
+
+As a Product Manager at Bellese, you are a trusted, emerging leader — growing your technical product competencies, deepening your consulting instincts, and developing the cross-functional and stakeholder skills that define high-performing PMs in our environment. With the support of your manager and more senior peers, you contribute meaningfully to product direction on your workstream, build relationships with clients and team members, and take increasing ownership of discovery, requirements, and delivery outcomes over time.
+
+The ideal candidate brings 2 or more years of product management experience in a cross-functional agile environment, ideally in the public sector, professional services, or a highly regulated industry. To succeed in this role, you must have a genuine commitment to user-centered thinking, a consulting mindset that finds opportunity in every engagement, and the communication and relationship-building skills to earn trust in a complex stakeholder environment. You are a proactive self-starter who is comfortable taking early ownership while remaining humble, collaborative, and flexible. If you're passionate about improving lives through digital products and services — and about growing into a more senior and impactful product leader — Bellese is the right place for you.
+
+Required Qualifications
+Bachelor’s degree or equivalent work experience 
+
+Minimum of 2+ years applicable related experience managing scrum teams  
+
+Experience as a Scrum Master within a software development environment 
+
+Experience with Agile methodologies  
+
+Experience with Atlassian Jira/Confluence 
+
+Excellent command of written and spoken English.   
+
+Ability to obtain and maintain a Public Trust; residing in the United States
+
+Knowledge of agile frameworks and principles and the ability to coach and mentor peers as needed
+
+Knowledge of the requirements management cycle with excellence in defining, writing and testing requirements, acceptance criteria and definition of done
+
+Relationship building skills in large, complex stakeholder environments
+
+Communication skills across business, technical and creative stakeholders
+
+Proven ability driving progress in ambiguous environments
+
+Prior experience in a client-facing consulting or contracting role
+
+Management of complex systems and lower environments 
+
+Identify risks and implement mitigation techniques in a timely manner
+
+Serve as a trusted partner and advise customers on team’s product vision and roadmap
+
+Experience deriving accurate business value to stakeholders and managing tradeoffs
+
+Preferred Qualifications
+Health Care Industry and/or CMS experience 
+
+Experience on multiple Scrum teams in a variety of different contexts (different team sizes, different organizations, different cultures, co-located vs. distributed, etc.) 
+
+Some knowledge of development environments, platforms, and technologies including Salesforce, Java, general web development and cloud technology 
+
+Experience with software DevSecOps/DevOps pipeline processes and tools 
+
+Excellent oral and written communication skills, with an ability to communicate complex technical topics to management and non-technical audiences 
+
+Prior experience in a client-facing consulting or contracting role
+
+Works well as a team member in a fast-paced and often time-sensitive environment 
+
+Formal training in a variety of agile delivery frameworks, including SAFe
+
+Experience in a rapidly growing small business or startup environment
+
+Prior professional services, government, or federal consulting experience
+
+Experience building digital healthcare technology products and services
+
+Experience working in the public sector or a highly regulated industry
+
+Familiarity with accessibility requirements
+
+Familiarity with healthcare data standards, regulations, and systems — such as CMS programs, FHIR, eCQMs, or value-based care initiatives
+
+Familiarity with ATO processes, FedRAMP, or other federal compliance frameworks
+
+Experience with quality reporting, payment models, or public-facing healthcare transparency programs
+
+Familiarity in agile delivery frameworks, including SAFe
+
+Familiarity with accessibility requirements, including Section 508 and WCAG standards
+
+2+ years working on a remote team
+
+
+
+
+Security Clearance Requirements
+US Citizenship or Green Card only - we do not offer Sponsorship
+US Residency for at least the past 3 years
+Able to meet the requirements to hold a position of Public Trust, including successful completion of a US Government background investigation
+Disclaimer: Medical or recreational marijuana use is considered illegal at the federal level, regardless of state laws allowing such, and may affect your ability to obtain Public Trust. See article

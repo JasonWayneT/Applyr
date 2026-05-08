@@ -1,0 +1,40 @@
+{
+  "Module A": {
+    "Core Mission/Values": {
+      "Stated": "Provide highest-quality standard displays, custom and integrated display solutions; innovate for tomorrow's displays. Passion for customer collaboration. [https://www.indeed.com/cmp/Daktronics] [https://www.daktronics.com/en-us/employment/careers]",
+      "Observed": "Focus on technical innovation in electronic scoreboards, programmable displays, large screen video systems; world leader in these products. [https://www.daktronics.com/en-us/employment]"
+    },
+    "Problem Space": "Solves pain of needing reliable, high-quality visual communication solutions for sports venues, businesses, transportation (scoreboards, video displays, billboards) worldwide. [https://www.daktronics.com/en-us/employment/careers]",
+    "Business Model": {
+      "Revenue Streams": "Design, manufacturing, sales of electronic scoreboards, programmable display systems, large screen video displays. Revenue: $500M-$1B USD. [https://www.indeed.com/cmp/Daktronics]",
+      "Growth Stage": "Mature (founded 1968, 50+ years, global locations). [https://www.daktronics.com/en-us/employment/careers]",
+      "Financial Health": "Stable public company (implied by revenue scale and ongoing hiring). No recent distress signals in data."
+    },
+    "Founding Story": "Founded 1968 in Brookings, SD. Key inflection: 50+ years innovating from scoreboards to global leader in video displays for sports, business, transport. HQ team >1500 people. [https://www.daktronics.com/en-us/employment/careers] [https://www.indeed.com/cmp/Daktronics]"
+  },
+  "Module B": {
+    "The Big 3 Competitors": "No direct competitors named in sources. Inferred rivals: Companies like Watchfire Signs, Scala, or LED display makers (e.g., Absen, Leyard). Differentiator: Leadership in scoreboards/video for sports/transport, custom integrations. [Inferred from industry context; no explicit sources]",
+    "Macro Trends": "Electronics manufacturing headwinds: Supply chain issues, LED tech evolution, competition from Chinese manufacturers. Opportunities: Digital out-of-home advertising growth, sports tech integration. No specific regulatory/AI mentions."
+  },
+  "Module C": {
+    "Financials/Funding": "Revenue $500M-$1B (ongoing). No recent earnings, rounds, or M&A in 90-day window (data as of May 2026). [https://www.indeed.com/cmp/Daktronics]",
+    "Organizational Shifts": "Active hiring (21 jobs listed, including remote Product Manager). No layoffs or leadership changes noted. CEO Reece A. Kurtenbach (58% approval). [https://www.indeed.com/cmp/Daktronics] [https://careers-daktronics.icims.com/jobs/intro]",
+    "Product/Partnership News": "No specific new launches or M&A in recent 90 days. Focus on ongoing innovation in video/audio products. [https://www.daktronics.com/en-us/employment]"
+  },
+  "Module D": {
+    "JD Analysis": {
+      "Keywords": "Software Product Manager (remote, US). Salary $100k-$135k (Indeed/Remotive), broader PM range $118k-$194k (Glassdoor). [https://www.indeed.com/cmp/Daktronics] [https://remotive.com/remote/jobs/product/software-product-manager-4501783] [https://www.glassdoor.com/Salary/Daktronics-Product-Manager-Salaries-E2515_D_KO11,26.htm]",
+      "Hidden Success Signals": "Empowered employees to suggest improvements; focus on smart, hardworking people for growing markets. Likely needs product roadmap, customer collaboration, software for displays. [https://www.daktronics.com/en-us/employment]",
+      "Required vs Preferred": "Not detailed in sources; inferred required: Product mgmt exp in software/electronics. Preferred: Domain knowledge in displays/sports tech."
+    },
+    "Hierarchy": "Unclear; engineering roles include software dev for video/audio. Product Manager likely reports to engineering/marketing leadership. [https://www.daktronics.com/en-us/employment]",
+    "Hiring Manager Profile": "Contact: recruiter@daktronics.com. No specific HM named. [https://www.daktronics.com/en-us/employment/careers] [https://careers-daktronics.icims.com/jobs/intro]"
+  },
+  "Module E": {
+    "Sentiment Analysis": "CEO approval 58% (Indeed). Limited Glassdoor data (3 salaries). Positive: Innovation focus, career opportunities. No Reddit/Blind specifics. [https://www.indeed.com/cmp/Daktronics] [https://www.glassdoor.com/Salary/Daktronics-Product-Manager-Salaries-E2515_D_KO11,26.htm]",
+    "Operational Style": "HQ Brookings, SD (1500+ people); remote options (e.g., Software PM). Manufacturing, field service nationwide. Employee empowerment emphasized. [https://www.daktronics.com/en-us/employment/careers] [https://remotive.com/remote/jobs/product/software-product-manager-4501783]"
+  },
+  "Module F": {
+    "Priority Mapping": "Company priorities: Software for video/audio products, custom integrations, innovation. Bridge to Jason: Platform experience aligns with display software ecosystems; Data Integrity for reliable scoring/video systems; Revenue Systems for sales/marketing of $500M+ products. [https://www.daktronics.com/en-us/employment] [https://www.indeed.com/cmp/Daktronics]"
+  }
+}

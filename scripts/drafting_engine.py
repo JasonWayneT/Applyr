@@ -2,11 +2,11 @@ import os
 import re
 import json
 import subprocess
-from markdown_pdf import MarkdownPdf, Section
 from utils import (load_file, call_llm, SUBMISSIONS_DIR,
                    RESUME_MASTER_FILE, COVER_LETTER_REF_FILE,
                    RESUME_STYLE_REF_FILE, CLAIM_VERIFIER_FILE,
-                   WORK_EXP_FILE)
+                   WORK_EXP_FILE, RESUME_BEST_PRACTICES,
+                   CL_BEST_PRACTICES)
 
 
 # --- Hard Fact Validation (Deterministic Post-Generation Guard) ---
@@ -26,11 +26,8 @@ def _load_hard_facts(master_resume_text):
         "contact": [],
     }
     # Education: look for university names
-    edu_pattern = re.compile(r"(?:Bachelor|Master|Associate|B\.A\.|B\.S\.|M\.S\.|M\.A\.|MBA).*?\n(.+?)(?:\n|$)", re.IGNORECASE)
-    for match in edu_pattern.finditer(master_resume_text):
-        uni = match.group(1).strip()
-        if uni and len(uni) > 3:
-            facts["education"].append(uni)
+    if "national university" in master_resume_text.lower():
+        facts["education"].append("National University")
 
     # Company names from ## headers
     company_pattern = re.compile(r"^## \*\*(.+?)\*\*", re.MULTILINE)
@@ -77,9 +74,9 @@ def validate_hard_facts(generated_text, master_resume_text):
             warnings.append(f"HALLUCINATION CAUGHT: '{wrong}' replaced with '{right}'")
             corrected = corrected.replace(wrong, right)
 
-    # 1b. Automatically strip Skills and Technical Environment sections
+    # 1b. Automatically strip Skills and Technical Environment sections safely
     corrected = re.sub(
-        r'(?:<h2[^>]*>\s*<strong>\s*(?:SKILLS|TECHNICAL).*?</h2>|##\s*(?:Skills|Technical Environment).*?)([\s\S]*?)(?=<h2[^>]*>|##\s*Education|</div>|$)',
+        r'(?:<h2[^>]*>\s*<strong>\s*(?:SKILLS|TECHNICAL).*?</h2>|##\s*(?:Skills|Technical Environment|Core Expertise).*?)([\s\S]*?)(?=<h2[^>]*>|##|###|</div>|$)',
         '',
         corrected,
         flags=re.IGNORECASE
@@ -112,13 +109,17 @@ def validate_hard_facts(generated_text, master_resume_text):
 
 
 def run_research(company_name, jd_text):
+    folder = os.path.join(SUBMISSIONS_DIR, company_name.lower().replace(" ", "_"))
+    packet_path = os.path.join(folder, "Research_Packet.json")
+    if os.path.exists(packet_path):
+        print(f"    [Research] Found cached intelligence for {company_name}. Using local packet.")
+        return load_file(packet_path)
+
     print(f"    [Research] Pulling Perplexity intelligence for {company_name}...")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         subprocess.run(["python", os.path.join(script_dir, "research-engine.py"),
                         company_name, "Product Manager"], check=True)
-        folder = os.path.join(SUBMISSIONS_DIR, company_name.lower().replace(" ", "_"))
-        packet_path = os.path.join(folder, "Research_Packet.json")
         if os.path.exists(packet_path):
             return load_file(packet_path)
     except Exception as e:
@@ -149,12 +150,14 @@ def verify_claims(draft_text, work_exp, claim_verifier_rules):
     return result
 
 
-def generate_pdf(markdown_text, output_path):
-    # Enforces Single-Column, ATS-Optimized typography
-    pdf = MarkdownPdf(toc_level=0)
-    pdf.add_section(Section(markdown_text))
-    pdf.save(output_path)
-    print(f"    [Export] Saved ATS-Optimized PDF: {output_path}")
+def generate_pdf(md_path, output_path):
+    # Enforces Single-Column, ATS-Optimized typography using Playwright
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        subprocess.run(["python", os.path.join(script_dir, "compile_single.py"), md_path, output_path], check=True)
+        print(f"    [Export] Saved ATS-Optimized PDF: {output_path}")
+    except Exception as e:
+        print(f"    [Export Error] Failed to generate PDF: {e}")
 
 
 def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
@@ -177,6 +180,8 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     master_resume = load_file(RESUME_MASTER_FILE)
     resume_style = load_file(RESUME_STYLE_REF_FILE)
     cl_style = load_file(COVER_LETTER_REF_FILE)
+    resume_best_practices = load_file(RESUME_BEST_PRACTICES)
+    cl_best_practices = load_file(CL_BEST_PRACTICES)
     verifier_rules = load_file(CLAIM_VERIFIER_FILE)
 
     # 2. Bridge Logic & Resume Generation
@@ -197,9 +202,13 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     Example: "Reduced API latency by 40%" -> "Improved system responsiveness to support 10x user scaling and retention."
     Example: "Resolved 300+ security vulnerabilities" -> "Mitigated enterprise risk to unblock GTM expansion."
     
-    STYLE GUIDE:
-    You MUST output the resume wrapped in the exact HTML `<div style="font-size: 11pt; line-height: 1.15;">` and use the exact HTML `<h>` tags specified in this template exactly. Do not use standard markdown `#` for headers.
+    STYLE & STRATEGY GUIDE:
+    Write pure, standard Markdown (using `#`, `##`, `*`, etc.). DO NOT output any raw HTML tags or `<div...>` wrappers. The system will convert your standard Markdown into the final styled PDF automatically.
     
+    You MUST strictly follow these best practices for conversion and impact:
+    {resume_best_practices}
+
+    You MUST strictly match the layout and structural formatting of this template:
     {resume_style}
     
     GROUND TRUTH:
@@ -211,7 +220,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     JOB DESCRIPTION:
     {jd_text}
     
-    Output strictly the translated Markdown resume with the HTML formatting tags. No preamble.
+    Output strictly the translated standard Markdown resume. No preamble.
     """
     }
     draft_resume = call_llm(resume_prompt["role"], resume_prompt["content"])
@@ -228,8 +237,25 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
 
     with open(resume_md_path, "w", encoding="utf-8") as f:
         f.write(final_resume)
-    print(f"    [Drafting] Saved Resume.md ({len(final_resume)} chars)")
-    generate_pdf(final_resume, resume_pdf_path)
+    
+    # Run the compliance guard on the saved Resume.md
+    from style_compliance_guard import run_guard
+    run_guard(resume_md_path)
+    
+    # Run the structural QA Checklist
+    from quality_checker import check_resume
+    qa_passed, qa_msg = check_resume(resume_md_path)
+    if not qa_passed:
+        print(f"    [QA AUDIT FAIL] Resume: {qa_msg}")
+    else:
+        print(f"    [QA AUDIT PASS] Resume: {qa_msg}")
+    
+    # Read the audited resume content to compile the PDF
+    with open(resume_md_path, "r", encoding="utf-8") as f:
+        final_resume = f.read()
+
+    print(f"    [Drafting] Saved and validated Resume.md ({len(final_resume)} chars)")
+    generate_pdf(resume_md_path, resume_pdf_path)
 
     # 3. Cover Letter Generation
     print("    [Drafting] Generating Cover Letter...")
@@ -242,9 +268,13 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
         "content": f"""
     Write a 250-400 word Cover Letter based on the JOB DESCRIPTION and RESEARCH PACKET.
     
-    STYLE:
-    You MUST output the cover letter wrapped in the exact HTML `<div style="font-size: 11pt; line-height: 1.15;">` and use the exact HTML header and 'Sincerely' sign-off specified in this template exactly.
+    STYLE & STRATEGY GUIDE:
+    Write pure, standard Markdown. DO NOT output any raw HTML tags.
     
+    You MUST strictly follow these best practices for cover letter writing:
+    {cl_best_practices}
+
+    You MUST strictly match the structural format and signature style of this template:
     {cl_style}
     
     GROUND TRUTH:
@@ -256,7 +286,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     RESEARCH:
     {research_json}
     
-    Output strictly the markdown cover letter with HTML formatting tags. No preamble.
+    Output strictly the standard markdown cover letter. No preamble.
     """
     }
     draft_cl = call_llm(cl_prompt["role"], cl_prompt["content"])
@@ -273,8 +303,25 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
 
     with open(cl_md_path, "w", encoding="utf-8") as f:
         f.write(final_cl)
-    print(f"    [Drafting] Saved CoverLetter.md ({len(final_cl)} chars)")
-    generate_pdf(final_cl, cl_pdf_path)
+        
+    # Run the compliance guard on the saved CoverLetter.md
+    from style_compliance_guard import run_guard
+    run_guard(cl_md_path)
+    
+    # Run the structural QA Checklist & Auto-Repair
+    from quality_checker import check_and_repair_cover_letter
+    qa_passed, qa_msg = check_and_repair_cover_letter(cl_md_path)
+    if not qa_passed:
+        print(f"    [QA AUDIT FAIL] Cover Letter: {qa_msg}")
+    else:
+        print(f"    [QA AUDIT PASS] Cover Letter: {qa_msg}")
+    
+    # Read the audited cover letter content to compile the PDF
+    with open(cl_md_path, "r", encoding="utf-8") as f:
+        final_cl = f.read()
+
+    print(f"    [Drafting] Saved and validated CoverLetter.md ({len(final_cl)} chars)")
+    generate_pdf(cl_md_path, cl_pdf_path)
 
     # Summary of all validation issues
     all_warnings = resume_warnings + cl_warnings

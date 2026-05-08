@@ -1,0 +1,222 @@
+{
+  "research_packet": {
+    "company": "SpotOn",
+    "research_date": "2026-05-08",
+    "position_analyzed": "Product Manager (Payments)",
+    "module_a_company_dna": {
+      "core_mission": {
+        "stated": "Providing comprehensive, cloud-based technology to accept payments, boost revenue, streamline operations, and create exceptional guest experiences for local businesses",
+        "source": "https://www.spoton.com/careers/"
+      },
+      "problem_space": "SpotOn solves fragmented payment and operational challenges for hospitality businesses (restaurants, bars, quick-service establishments). They consolidate payment processing, merchant funding, dashboard management, and guest experience tools into a unified platform targeting 15 million users.",
+      "business_model": {
+        "revenue_streams": [
+          "Payment processing fees",
+          "Software subscription/SaaS",
+          "Value-added services (loyalty, reporting, integrations)"
+        ],
+        "growth_stage": "Mature growth-stage fintech (Series funding history suggests post-Series C/D valuation company)",
+        "financial_health_indicators": "Actively hiring across multiple product roles; maintaining hybrid office presence in major markets (NYC, Chicago); backed by Andreessen Horowitz (a16z)"
+      },
+      "founding_story": "Not explicitly detailed in search results, but company positions itself as 'one of the leading software and payment companies in the U.S.' with established market presence and 24/7 support infrastructure"
+    },
+    "module_b_market_competitors": {
+      "competitive_landscape": {
+        "direct_competitors": [
+          "Square/Block (payments + POS)",
+          "Toast (restaurant software + payments)",
+          "Clover (Fiserv-owned POS + payments)",
+          "Lightspeed (hospitality-focused POS)"
+        ],
+        "spoton_differentiator": "Hospitality-first ecosystem combining payments, dashboard analytics, and merchant funding with emphasis on reliability, compliance, and merchant satisfaction metrics"
+      },
+      "macro_trends": [
+        "Regulatory complexity: PCI DSS compliance, network rules adherence, payment processor consolidation",
+        "Merchant expectations: Real-time funding transparency, reduced operational friction, revenue optimization",
+        "Technology shift: Card-present to card-not-present acceptance, digital wallets, contactless payments",
+        "Market consolidation: Larger fintech platforms acquiring specialized payment providers"
+      ],
+      "source": "https://www.builtinnyc.com/job/product-manager-payments/9142742"
+    },
+    "module_c_recent_intelligence": {
+      "financials_funding": {
+        "status": "Active hiring and expansion phase",
+        "indicator": "Multiple open PM roles across payments, dashboard, and product implementation",
+        "source": "https://www.spoton.com/careers/"
+      },
+      "organizational_shifts": {
+        "hiring_activity": "Surge in product management hiring (Payments PM, Dashboard PM, Product Implementation roles open)",
+        "locations": "Expanding presence in NYC (hybrid), Chicago (hybrid), and remote-capable roles",
+        "team_structure": "Cross-functional teams spanning engineering, design, operations, GTM, risk, compliance, security"
+      },
+      "product_partnership_news": {
+        "recent_focus": "End-to-end payments experience expansion (card-present, card-not-present, routing optimization)",
+        "external_partnerships": "Active evaluation of processors, acquirers, gateways for new capabilities and cost optimization",
+        "source": "https://www.indeed.com/q-product-manager-spoton-jobs.html"
+      }
+    },
+    "module_d_role_org_chart": {
+      "jd_analysis_payments_pm": {
+        "seniority_level": "Senior (5+ years PM experience required, 3+ in payments/fintech)",
+        "salary_range": "$180,000 - $225,000 annually",
+        "employment_type": "Full-time, Hybrid (NYC location)",
+        "key_responsibilities": [
+          "Own end-to-end payments product roadmap",
+          "Define payment media acceptance strategy (chip, contactless, digital wallets, ecommerce tokens)",
+          "Monitor and improve KPIs: authorization rates, chargebacks, declines, disputes, latency, reconciliation accuracy",
+          "Partner with risk, compliance, security on PCI DSS adherence",
+          "Lead cross-functional alignment and decision-making",
+          "Conduct discovery with external payment partners"
+        ],
+        "hidden_success_signals": [
+          "Data-driven experimentation mindset",
+          "Ability to explain complex payment concepts to technical and non-technical audiences",
+          "Experience with B2B merchant customer discovery",
+          "Comfort managing high-stakes, regulated domain",
+          "Bias toward action in fast-paced environment"
+        ],
+        "required_vs_preferred": {
+          "required": [
+            "5+ years product management",
+            "3+ years payments/fintech focus",
+            "Demonstrated product leadership",
+            "Strong analytical skills with payment datasets",
+            "Complex technical product shipping experience"
+          ],
+          "preferred": [
+            "Hospitality industry knowledge",
+            "Payment network/processor relationships",
+            "Interchange optimization experience",
+            "Merchant funding/remittance workflow expertise"
+          ]
+        },
+        "source": "https://www.builtinnyc.com/job/product-manager-payments/9142742"
+      },
+      "compensation_package": {
+        "base_salary": "$180,000 - $225,000",
+        "equity": "Company stock plan included",
+        "benefits": [
+          "Health insurance",
+          "Dental insurance",
+          "Vision insurance",
+          "Tuition reimbursement",
+          "Cell phone reimbursement"
+        ],
+        "source": "https://www.indeed.com/q-product-manager-spoton-jobs.html"
+      },
+      "reporting_structure": {
+        "role_scope": "Primary product point of contact for payments across SpotOn",
+        "cross_functional_partners": "Engineering, Design, Operations, GTM, Risk, Compliance, Security, External Partners",
+        "team_influence": "Mentor and influence adjacent product teams on payment best practices and platform standards",
+        "note": "Specific hiring manager name not disclosed in public postings"
+      },
+      "related_open_roles": {
+        "product_manager_dashboard": {
+          "location": "Chicago, Illinois (Hybrid)",
+          "salary": "$150,000 - $185,000",
+          "focus": "Merchant Dashboard - central control center for restaurant operators",
+          "source": "https://jobs.a16z.com/jobs/spoton"
+        },
+        "associate_manager_product_implementation": {
+          "location": "Royal Oak, Michigan (Remote-eligible)",
+          "focus": "Day-to-day operations and team support",
+          "source": "https://www.spoton.com/careers/"
+        }
+      }
+    },
+    "module_e_culture_reality_check": {
+      "sentiment_analysis": {
+        "data_sources_available": [
+          "Glassdoor (not directly quoted in search results)",
+          "Blind (not directly quoted in search results)",
+          "Reddit (not directly quoted in search results)"
+        ],
+        "advertised_culture": "Culture of accountability, urgency, ownership; high-growth, fast-paced environment; 24/7 support mentality; helping local businesses succeed",
+        "operational_reality": {
+          "work_arrangement": "Hybrid model (NYC, Chicago offices with remote flexibility)",
+          "team_tenure": "Not disclosed in public materials",
+          "growth_trajectory": "Rapid expansion phase based on hiring volume"
+        }
+      },
+      "operational_style": {
+        "decision_making": "Data-driven experimentation; cross-functional alignment required",
+        "pace": "Fast-paced, high-growth environment with bias toward action",
+        "regulatory_environment": "High-stakes, highly regulated domain requiring compliance rigor",
+        "merchant_focus": "Customer-centric approach with emphasis on merchant satisfaction and discovery"
+      },
+      "note": "Limited public sentiment data available; recommend Glassdoor/Blind/LinkedIn review for employee perspectives"
+    },
+    "module_f_intersection_bridge": {
+      "priority_mapping_for_candidate": {
+        "priority_1_payments_strategy_execution": {
+          "spoton_need": "Own end-to-end payments roadmap across card-present/card-not-present, define acceptance strategies, optimize authorization rates and merchant funding",
+          "jason_connection": "Platform expertise: Building scalable payment systems; Data Integrity: Ensuring reconciliation accuracy and funding transparency; Revenue Systems: Optimizing interchange, routing, and merchant payouts",
+          "relevance_score": "CRITICAL"
+        },
+        "priority_2_cross_functional_leadership": {
+          "spoton_need": "Rally engineering, design, operations, GTM, risk, compliance around shared vision; facilitate pragmatic decision-making under ambiguity",
+          "jason_connection": "Platform: Coordinating complex technical dependencies; Data Integrity: Ensuring consistent metrics and KPIs across teams; Revenue Systems: Aligning incentives across payment, funding, and GTM functions",
+          "relevance_score": "CRITICAL"
+        },
+        "priority_3_regulatory_compliance": {
+          "spoton_need": "Ensure PCI DSS adherence, network rules compliance, risk management in high-stakes domain",
+          "jason_connection": "Data Integrity: Maintaining compliance standards and audit trails; Platform: Building systems that enforce regulatory requirements",
+          "relevance_score": "HIGH"
+        },
+        "priority_4_merchant_satisfaction_metrics": {
+          "spoton_need": "Monitor authorization rates, chargebacks, disputes, latency, reconciliation accuracy; conduct merchant discovery and feedback sessions",
+          "jason_connection": "Data Integrity: Defining and tracking KPIs; Revenue Systems: Understanding merchant pain points and optimizing for their success",
+          "relevance_score": "HIGH"
+        },
+        "priority_5_external_partnership_evaluation": {
+          "spoton_need": "Lead discovery with processors, acquirers, gateways for new capabilities and cost optimization",
+          "jason_connection": "Platform: Evaluating third-party integrations; Revenue Systems: Optimizing cost structure and payment capabilities",
+          "relevance_score": "MEDIUM"
+        }
+      },
+      "candidate_fit_assessment": {
+        "strengths_alignment": [
+          "Senior-level PM role requires 5+ years experience and demonstrated leadership",
+          "Payments/fintech domain expertise directly transferable",
+          "Cross-functional coordination mirrors platform complexity",
+          "Data-driven decision-making aligns with analytics mindset",
+          "Merchant-centric approach mirrors B2B customer focus"
+        ],
+        "growth_opportunities": [
+          "Deep dive into hospitality-specific payment workflows",
+          "Regulatory/compliance domain expertise development",
+          "Payment network relationships and processor partnerships",
+          "Interchange optimization and merchant funding mechanics"
+        ],
+        "potential_challenges": [
+          "High-stakes regulatory environment requires compliance rigor",
+          "Fast-paced environment demands rapid decision-making",
+          "Complex payment domain requires technical depth",
+          "Merchant satisfaction metrics require operational excellence"
+        ]
+      }
+    },
+    "research_summary": {
+      "company_stage": "Growth-stage fintech with established market presence, backed by a16z",
+      "hiring_momentum": "Active expansion in product leadership roles across payments, dashboard, and implementation",
+      "role_criticality": "Payments PM is core strategic role owning end-to-end payment experience for hospitality ecosystem",
+      "market_position": "Competing against Square/Block, Toast, Clover with differentiation in hospitality focus and merchant funding transparency",
+      "key_success_factors": [
+        "Payment performance optimization (authorization rates, latency, reconciliation)",
+        "Merchant satisfaction and funding accuracy",
+        "Regulatory compliance and risk management",
+        "Cross-functional leadership and stakeholder alignment",
+        "Data-driven experimentation and continuous improvement"
+      ]
+    },
+    "sources_cited": [
+      "https://www.builtinnyc.com/job/product-manager-payments/9142742",
+      "https://www.indeed.com/q-product-manager-spoton-jobs.html",
+      "https://jobs.a16z.com/jobs/spoton",
+      "https://startup.jobs/product-manager-spoton-product-7073464",
+      "https://www.spoton.com/careers/",
+      "https://builtin.com/job/product-manager-dashboard/9216650",
+      "https://www.spoton.com/careers/sales/"
+    ]
+  }
+}

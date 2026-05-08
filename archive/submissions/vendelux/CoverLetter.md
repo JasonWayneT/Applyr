@@ -1,22 +1,35 @@
-<div style="font-size: 11pt; line-height: 1.15;">
+# JASON TAYLOR
 
-<h1 style="margin: 0 0 8px 0; padding: 0; text-align: left; font-size: 16pt;"><strong>Jason Taylor</strong></h1>
-<div style="text-align: left; margin-bottom: 20px;">
 San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug
-</div>
 
-Dear Hiring Manager,
+Jason Taylor
+San Diego, CA
+[REDACTED_EMAIL]
+[REDACTED_PHONE]
 
-As a platform-focused Product Manager with over six years of experience in B2B SaaS, I have spent my career stabilizing and maintaining data-intensive systems that support revenue. I am drawn to Vendelux because of your mission to bring transparency to event marketing. My background in managing complex data ingestion pipelines, legacy platform modernization, and cross-functional alignment makes me a strong fit to own the core systems and integrations that power your platform.
+May 5, 2026
 
-At Cision, I managed the C3 platform and CPRE infrastructure, where I was responsible for the product roadmap and cross-functional alignment for a $40M ARR ecosystem. I operate at the intersection of business and engineering, having driven initiatives like "Bellwether"—an architectural bypass of legacy ETL pipelines that addressed a primary churn driver by improving data freshness. I am experienced in working with SQL and debugging complex system issues, which allows me to partner effectively with engineering teams to ship reliable solutions. My approach is pragmatic: I prioritize stability and data quality as foundational product features, ensuring that internal operations teams have the reliable tools they need to succeed.
+Hiring Team
+Vendelux
 
-I thrive in environments where I can translate technical constraints into clear product roadmaps. Whether it is resolving a 90% security backlog or consolidating fragmented content ingestion into a unified source of truth, I focus on reducing manual friction and improving system reliability. I understand the nuances of operating in complex environments and am eager to apply my experience in data architecture and platform ownership to help Vendelux scale its event intelligence capabilities.
+**RE: Technical Product Manager - Platform & Data Infrastructure**
 
-I am interested in the opportunity to contribute to the Vendelux team and would welcome the chance to discuss how my experience in platform stability and data-intensive product management aligns with your goals for the core platform. Thank you for your time and consideration.
+Dear Vendelux Team,
+
+I am writing to express my interest in the Technical Product Manager position at Vendelux. Having spent the last four years owning the infrastructure and data integrity for a $40M ARR platform at Cision, I have a deep appreciation for the "system of record" challenge Vendelux is solving for the event marketing space. I am particularly excited about your focus on technical excellence-treating uptime and data integrity as product features-and your mission to turn opaque data into a scalable growth channel.
+
+At Cision, I owned the Core B2B SaaS Platform and Core Platform Infrastructure platforms. These were mature, data-intensive systems that required a high level of technical oversight. One of my most significant accomplishments was leading **Platform Data Remediation**. I diagnosed a major data integrity failure where 30-40% of contact data was being dropped between our source of truth and our customer-facing app due to fragile legacy ETL pipelines. I orchestrated an architectural bypass, shifting from opaque legacy plumbing to a direct integration that restored customer trust and eliminated our largest churn driver. This experience in simplifying complex data flows and ensuring reliability is exactly what I hope to bring to the Vendelux platform.
+
+My background aligns with the core pillars of this role:
+
+* **Platform & Infrastructure Ownership**: I owned the Core Platform Infrastructure infrastructure end-to-end, managing everything from storage-related outages in our indexing servers (DT Search) to quarterly PI planning for teams of 15+ engineers. I understand that for a platform like Vendelux, reliability is the foundation of the customer experience.
+* **Integrations & Data Logic**: I have extensive experience managing API-driven integrations and complex data attribution logic. At Cision, I managed the integration of premium content providers and worked with engineering to modernize our event-streaming architecture (transitioning from RabbitMQ toward Kafka).
+* **Cross-Functional Execution**: I am a "ship, not just spec" product manager. I operate comfortably in SQL and spend as much time with engineering and DBAs as I do with business stakeholders. I thrive in Series A environments where everyone is a builder and the focus is on speed and quality.
+
+Vendelux’s backing by FirstMark and your team’s pedigree from top-tier firms like ZoomInfo and Bain indicate a high-performance culture that I am eager to join. I am confident that my experience in stabilizing and modernizing high-revenue platform systems under constraint will allow me to contribute immediately to Vendelux's growth.
+
+Thank you for your consideration. I look forward to the possibility of discussing how I can help scale the core systems that power Vendelux.
 
 Sincerely,
 
 Jason Taylor
-
-</div>

@@ -445,6 +445,8 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
               jobId={job.id}
               filename={editingFile}
               initialValue={editingContent}
+              jobTitle={job.title}
+              jobCompany={job.company}
               onSaveSuccess={() => {
                 setPdfReloadKey(prev => prev + 1);
               }}

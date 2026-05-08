@@ -9,6 +9,8 @@ interface DocumentEditorProps {
   initialValue: string;
   onSaveSuccess: () => void;
   onClose: () => void;
+  jobTitle?: string;
+  jobCompany?: string;
 }
 
 const DocumentEditor: React.FC<DocumentEditorProps> = ({
@@ -17,6 +19,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   initialValue,
   onSaveSuccess,
   onClose,
+  jobTitle,
+  jobCompany,
 }) => {
   const editorRef = useRef<Editor>(null);
   const [aiInstruction, setAiInstruction] = useState('');
@@ -109,7 +113,9 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         <div>
           <h3 className="text-sm font-headline font-extrabold text-on-surface flex items-center gap-2">
             <span className="material-symbols-outlined text-primary text-base">edit_note</span>
-            Editing {filename}
+            Editing {filename} {jobCompany && jobTitle && (
+              <span className="text-primary font-normal">for <strong className="font-extrabold text-secondary">{jobCompany}</strong> ({jobTitle})</span>
+            )}
           </h3>
           <p className="text-[10px] text-on-surface-variant uppercase tracking-widest mt-0.5 font-bold">
             Applyr Rich-Text Workspace

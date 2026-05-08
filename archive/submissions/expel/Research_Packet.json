@@ -1,36 +1,168 @@
 {
-  "Module A": {
-    "Core Mission/Values": {
-      "Stated": "Expel provides managed detection and response (MDR) services focused on making customers safer through security platform integrations, platform monetization, and specialized offerings like managed phishing. They emphasize customer-obsessed mindsets, building trust across teams, and translating security knowledge into impactful roadmaps.[1][2][5]",
-      "Observed": "Prioritizes security expertise in product management, cross-functional collaboration (Engineering, Sales, Customer Success, Finance), and remote work flexibility with strong benefits like unlimited PTO and parental leave.[1][2][7]"
+  "research_packet": {
+    "company": "Expel",
+    "position": "Product Manager, Integrations",
+    "research_date": "2026-05-08",
+    "modules": {
+      "module_a_company_dna": {
+        "core_mission": {
+          "stated": "Expel provides managed detection and response (MDR) and security operations services to help organizations detect and respond to cyber threats",
+          "observed": "Security operations platform company focused on integrations and platform monetization as growth vectors",
+          "sources": ["https://expel.com/about/careers/"]
+        },
+        "problem_space": "Organizations struggle to effectively manage multiple security tools (EDR, SIEM, firewalls) and lack operational capacity to detect/respond to threats in real-time. Expel solves fragmented security stack integration and threat response automation.",
+        "business_model": {
+          "revenue_streams": "SaaS-based managed security services with platform monetization components",
+          "growth_stage": "Growth-stage (backed by CapitalG, actively hiring across product, sales, and engineering)",
+          "hiring_intensity": "Active expansion - multiple PM roles open (Integrations, Platform & Monetization, GTM roles)",
+          "sources": ["https://careers.capitalg.com/jobs/expel", "https://expel.com/about/careers/"]
+        },
+        "founding_story": "Security operations company with focus on detection and response; currently emphasizing platform architecture and integration capabilities as strategic priorities",
+        "sources": ["https://expel.com/about/careers/"]
+      },
+      "module_b_market_competitors": {
+        "market_context": "Managed Detection and Response (MDR) market experiencing rapid consolidation and feature expansion",
+        "big_3_competitors": {
+          "competitor_1": "CrowdStrike - endpoint detection and response leader",
+          "competitor_2": "Microsoft Defender - integrated security platform with SIEM capabilities",
+          "competitor_3": "Palo Alto Networks - comprehensive security platform with multiple acquisition-driven capabilities",
+          "expel_differentiator": "Focus on human-led threat response combined with platform integrations; emphasis on customer security stack integration rather than replacing tools"
+        },
+        "macro_trends": [
+          "Consolidation of security tools into unified platforms",
+          "Regulatory pressure (compliance requirements driving SIEM adoption)",
+          "AI/ML disruption in threat detection automation",
+          "Cloud-native security requirements (AWS, Azure, GCP adoption)"
+        ],
+        "sources": ["https://jobgether.com/offer/69cd2c145bd3b40540a4b7f1-product-manager-integrations"]
+      },
+      "module_c_recent_intelligence": {
+        "funding_backing": "CapitalG (Google's growth equity fund) - indicates significant capital and strategic alignment with cloud/platform priorities",
+        "organizational_signals": {
+          "hiring_surge": "Multiple open PM roles (Integrations, Platform & Monetization) suggests expansion phase",
+          "team_structure": "Dedicated product teams by domain (Integrations, Platform/Monetization, GTM Systems)",
+          "location_strategy": "Remote-first with Herndon, VA as secondary hub"
+        },
+        "product_focus_areas": [
+          "Integration architecture and ecosystem expansion",
+          "Platform monetization and SaaS operations",
+          "GTM systems and sales enablement"
+        ],
+        "sources": ["https://careers.capitalg.com/jobs/expel", "https://www.indeed.com/cmp/Expel-1", "https://expel.com/about/careers/"]
+      },
+      "module_d_role_org_chart": {
+        "jd_analysis": {
+          "title": "Product Manager, Integrations",
+          "seniority_level": "Senior (5-10 years experience expected despite 2-4 year requirement)",
+          "salary_range": "$114,300 - $165,700 USD + bonus + equity",
+          "location": "Remote (Poland, Ireland, US eligible)",
+          "key_responsibilities": [
+            "Own end-to-end integration lifecycle (vision to execution)",
+            "Build customer-informed roadmap",
+            "Establish cross-functional relationships (Engineering, UX, Sales, Customer Success)",
+            "Articulate feature value to stakeholders",
+            "Collaborate with Product Marketing"
+          ],
+          "required_skills": [
+            "2-4 years product management experience",
+            "Security industry background (strongly preferred)",
+            "Familiarity with EDR, SIEM, firewall products",
+            "Cloud platform knowledge (AWS, Azure, GCP)",
+            "Strong written/verbal communication",
+            "User story writing capability"
+          ],
+          "hidden_success_signals": [
+            "Customer-obsessed mindset with deep 'why' questioning",
+            "Ability to build cross-functional trust",
+            "Experience with security operations tools",
+            "SIEM technology expertise (highly desired)",
+            "gRPC and API integration knowledge"
+          ],
+          "sources": ["https://jobgether.com/offer/69cd2c145bd3b40540a4b7f1-product-manager-integrations"]
+        },
+        "reporting_structure": {
+          "likely_reporting": "VP of Product or Head of Product (inferred from PM team structure)",
+          "peer_teams": "Product Manager - Platform & Monetization, Senior GTM Systems Analyst",
+          "cross_functional_partners": "Engineering, UX, Sales, Customer Success, Product Marketing"
+        },
+        "hiring_manager_profile": "Not publicly available in search results; recommend LinkedIn research on Expel product leadership",
+        "sources": ["https://expel.com/about/careers/"]
+      },
+      "module_e_culture_reality_check": {
+        "sentiment_analysis": {
+          "data_available": "Limited public sentiment data in provided search results",
+          "recommendation": "Conduct Glassdoor, Blind, Reddit deep-dive for employee perspectives",
+          "compensation_transparency": "Expel explicitly states 'We believe in paying transparently and equitably' - positive signal"
+        },
+        "operational_style": {
+          "work_location": "Remote-first with flexibility",
+          "benefits_package": [
+            "Unlimited PTO (modeled and encouraged)",
+            "Up to 24 weeks parental leave",
+            "Excellent health benefits",
+            "Work location flexibility"
+          ],
+          "hiring_process": [
+            "15-30 min recruiter screen",
+            "45-60 min hiring manager conversation",
+            "Additional rounds (not specified)"
+          ]
+        },
+        "employee_tenure_signals": "Active hiring suggests growth phase; benefits package suggests retention focus",
+        "sources": ["https://jobgether.com/offer/69cd2c145bd3b40540a4b7f1-product-manager-integrations", "https://expel.com/about/careers/"]
+      },
+      "module_f_intersection_bridge": {
+        "priority_mapping": {
+          "priority_1_integration_architecture": {
+            "company_need": "Own end-to-end integration lifecycle; establish integration roadmap; manage API/gRPC architecture",
+            "jason_connection": "Platform architecture expertise directly applicable; data integrity concerns in multi-tool environments",
+            "relevance_score": "CRITICAL"
+          },
+          "priority_2_revenue_systems": {
+            "company_need": "Platform monetization role exists alongside integrations; SaaS operations focus",
+            "jason_connection": "Revenue systems and data integrity expertise transfers to platform monetization strategy",
+            "relevance_score": "HIGH"
+          },
+          "priority_3_data_integrity": {
+            "company_need": "Security tools (SIEM, EDR, firewalls) require reliable data flow; integration quality critical",
+            "jason_connection": "Data integrity background essential for security integrations where data accuracy = threat detection accuracy",
+            "relevance_score": "CRITICAL"
+          },
+          "priority_4_cross_functional_execution": {
+            "company_need": "Build trust across Engineering, Security Operations, Sales, Customer Success, UX",
+            "jason_connection": "Platform and revenue systems work requires similar cross-functional coordination",
+            "relevance_score": "HIGH"
+          },
+          "priority_5_customer_obsession": {
+            "company_need": "Customer-informed roadmap; deep 'why' questioning; voice of features to stakeholders",
+            "jason_connection": "Platform and revenue work requires deep customer understanding of operational workflows",
+            "relevance_score": "HIGH"
+          }
+        },
+        "strategic_fit_assessment": "STRONG - Expel's integration focus aligns with platform architecture expertise; security domain requires data integrity mindset; monetization angle connects to revenue systems background",
+        "key_differentiators_for_application": [
+          "Emphasize platform architecture and integration design experience",
+          "Highlight data integrity work in multi-system environments",
+          "Demonstrate customer-obsessed approach to roadmap prioritization",
+          "Show cross-functional execution in complex technical environments",
+          "Connect revenue systems experience to platform monetization strategy"
+        ]
+      }
     },
-    "Problem Space": "Expel solves cybersecurity pain points by offering MDR services that handle threat detection, integrations with security tools, platform access/monetization, and managed email security, reducing customer burden in complex security landscapes.[1][2][5]",
-    "Business Model": "SaaS-based MDR with revenue from seat-based, consumption-based, or hybrid pricing models; focuses on automated provisioning, billing, and value metrics tracking. Mid-growth stage with competitive salaries ($114K-$166K base + equity/bonus). Financial health appears stable with active hiring.[1][2][6]",
-    "Founding Story": "Limited details available in results; Expel operates as an established MDR provider with ongoing product expansion in integrations, monetization, and phishing services. No key historical inflection points specified.[7]"
-  },
-  "Module B": {
-    "The Big 3 Competitors": "Direct rivals not explicitly named; differentiators include deep integrations with security tools, automated commercial engines for pricing/provisioning, and customer-centric roadmaps informed by market/competitive signals.[1][2]",
-    "Macro Trends": "Security tool landscape evolution, AI disruption implied in threat detection needs; regulatory shifts and industry headwinds not detailed. Emphasis on SaaS operations, data integration, and consumption-based models amid growing cybersecurity demands.[1][2]"
-  },
-  "Module C": {
-    "Financials/Funding": "No recent funding rounds or earnings in 90-day window; salary transparency indicates financial stability ($114,300-$165,700 base + bonus/equity).[1][2][6]",
-    "Organizational Shifts": "Active hiring for multiple PM roles (Integrations, Platform & Monetization, others); no layoffs or leadership changes noted. Remote positions suggest growth.[7]",
-    "Product/Partnership News": "Open roles highlight new focus on Integrations (security tool landscape), Platform & Monetization (pricing automation), and Managed Phishing; no specific launches or M&A in results.[1][2][5]"
-  },
-  "Module D": {
-    "JD Analysis": {
-      "Keywords": "Product roadmap ownership, integrations, security experience, customer input, cross-functional collaboration, pricing models, SaaS provisioning, threat detection.",
-      "Hidden Success Signals": "Security industry experience preferred, ability to influence business metrics, build engineer trust, resolve revenue leakage; curious/tenacious mindset for maximum impact.",
-      "Required vs Preferred": "Required: 2-4 years PM or relevant (e.g., pricing analyst), communication skills, PM processes. Preferred: Security background, SaaS operations exposure.[1][2][5]"
-    },
-    "Hierarchy": "PM roles report to Director of Product Management (e.g., for MDR/Phishing); cross-functional teams include Engineering, UX, Sales, Finance, Customer Success.[5][7]",
-    "Hiring Manager Profile": "Not identified; recruiter as initial POC, followed by hiring manager interview (45-60 min).[7]"
-  },
-  "Module E": {
-    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results; advertised culture promotes unlimited PTO, 24 weeks parental leave, work flexibility, transparent pay, and team collaboration.[1][2][7]",
-    "Operational Style": "Fully remote across US, hybrid not mentioned; strong benefits suggest high employee support. Tenure not specified.[1][6][7]"
-  },
-  "Module F": {
-    "Priority Mapping": "Expel's priorities in **Platform** (integrations, provisioning engine[1][2]), **Data Integrity** (usage logs, metering, analytics[2]), and **Revenue Systems** (monetization, pricing models, revenue leakage remediation[2]) directly align with Jason's experience. For Integrations PM, his platform expertise maps to owning security tool roadmaps; for Monetization, revenue systems experience fits commercial engine building.[1][2]"
+    "research_gaps": [
+      "Hiring manager background and published priorities",
+      "Detailed org chart and team size",
+      "Recent funding round details and valuation",
+      "Employee sentiment (Glassdoor/Blind/Reddit)",
+      "Specific product roadmap details",
+      "Customer base composition and retention metrics"
+    ],
+    "recommended_next_steps": [
+      "LinkedIn research on Expel product leadership team",
+      "Glassdoor/Blind review for employee sentiment",
+      "Customer case studies on Expel website",
+      "Security industry analyst reports (Gartner, Forrester) on MDR market",
+      "Competitive analysis of integration capabilities vs. CrowdStrike, Palo Alto"
+    ]
   }
 }

@@ -1,53 +1,48 @@
 {
-  "ModuleA": {
-    "CoreMissionValues": {
-      "Stated": "Help higher education institutions strengthen outcomes for alumni and students by streamlining workflows, increasing engagement, and enabling scalable program growth. Core values include empathy, collaboration, and user-centric thinking.[4][2]",
-      "Observed": "Focus on client-driven product initiatives, workflow and engagement tools for mission-critical programs like alumni relations and clinical experiential learning.[4][1]"
+  "Module_A_Company_DNA": {
+    "Core_Mission_Values": {
+      "Stated": "PeopleGrove's mission is to help institutions strengthen outcomes for alumni and students by streamlining workflows, increasing engagement, and enabling scalable program growth. Core values include empathy, collaboration, and user-centric thinking. [Source: https://www.workingnomads.com/jobs/senior-product-manager-new-markets-peoplegrove-1549203; https://jobs.lever.co/peoplegrove/3b4a0026-c90c-497e-b09b-0d70310f9298]",
+      "Observed": "Focus on B2B SaaS for higher education, emphasizing alumni relations, clinical experiential learning, and workflow tools. Strong emphasis on rapid product iteration and customer-driven enhancements. [Source: https://www.peoplegrove.com/about/careers/; https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f]"
     },
-    "ProblemSpace": "Higher education institutions face challenges in managing alumni relations, clinical experiential learning, and student workforce outcomes, needing tools to streamline workflows, boost engagement, and scale programs for fields like Nursing, Allied Health, Engineering, and Social Work.[1][4]",
-    "BusinessModel": {
-      "RevenueStreams": "B2B SaaS delivering workflow and engagement tools to higher education institutions.[2][4]",
-      "GrowthStage": "Rapidly growing.[2][4]",
-      "FinancialHealth": "No specific financial data available in sources."
+    "Problem_Space": "PeopleGrove solves pain points in higher education institutions by providing workflow and engagement tools for mission-critical programs like alumni relations management and clinical experiential learning. It streamlines operations, boosts engagement, and scales programs to improve student and alumni outcomes. [Source: https://www.workingnomads.com/jobs/senior-product-manager-new-markets-peoplegrove-1549203; https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f]",
+    "Business_Model": "B2B SaaS delivering workflow and engagement tools to higher education institutions. Revenue from subscriptions/software licensing. Rapidly growing stage, remote-first with US focus. Financial health not publicly detailed, but active hiring indicates growth. [Source: https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f; https://www.peoplegrove.com/about/careers/]",
+    "Founding_Story": "Limited public details available from search results. PeopleGrove is a rapidly growing SaaS company focused on higher ed tools; key inflection likely around expanding from core alumni tools to clinical learning and new markets. [Source: https://www.workingnomads.com/jobs/senior-product-manager-new-markets-peoplegrove-1549203]"
+  },
+  "Module_B_Market_Competitors": {
+    "Big_3_Competitors": "Direct rivals not explicitly named in results; likely include platforms like Handshake (career/alumni engagement), Symplicity (higher ed workflows), or Clinician Nexus (clinical experiential learning). Differentiators: Focus on scalable engagement, workflow streamlining, and data-driven outcomes for alumni/student programs. [Inferred from context: https://www.workingnomads.com/jobs/senior-product-manager-new-markets-peoplegrove-1549203; https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f]",
+    "Macro_Trends": "Higher ed facing AI disruption in personalized learning/engagement, regulatory shifts in student outcomes tracking, and pressure for alumni retention/monetization amid enrollment declines. Growth in experiential learning (e.g., clinical placements). [Inferred from role focus: https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f]"
+  },
+  "Module_C_Recent_Intelligence": {
+    "Financials_Funding": "No specific recent rounds or earnings in 90-day window (post-Feb 2026) from results. Active job postings suggest ongoing investment in growth. [Source: Multiple job listings, e.g., https://jobs.lever.co/peoplegrove/3b4a0026-c90c-497e-b09b-0d70310f9298]",
+    "Organizational_Shifts": "Hiring surges evident from multiple open PM roles (Lead PM, Core Product PM, Senior PM New Markets). Remote-first with occasional travel. No layoffs or leadership changes noted. [Source: https://www.peoplegrove.com/about/careers/; https://jobs.reachcapital.com/companies/peoplegrove/jobs/55563067-lead-product-manager]",
+    "Product_Partnership_News": "Focus on new features, market expansion (e.g., new segments like clinical education), and platform enhancements. No specific M&A or launches in recent window. [Source: https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f; https://www.workingnomads.com/jobs/senior-product-manager-new-markets-peoplegrove-1549203]"
+  },
+  "Module_D_Role_Org_Chart": {
+    "JD_Analysis": {
+      "Keywords": "Product roadmap, user research (quant/qual), metrics/KPIs/A/B tests, cross-functional collaboration (Eng, Design, CS, Sales), customer discovery, B2B SaaS, growth/activation/retention, SQL/analytics.",
+      "Hidden_Success_Signals": "Bias toward action, ruthless prioritization (impact/ROI), ownership from concept to launch, high velocity shipping, independence in ambiguity.",
+      "Required_vs_Preferred": "Required: 2-6+ years PM exp in B2B SaaS, customer discovery, analytics, cross-functional work. Preferred: Growth PM exp, SQL, higher ed/alumni experience, new market launches. [Sources: All JDs, e.g., https://builtin.com/job/product-manager/6780056; https://remoteleaf.com/company/peoplegrove/product-manager-core-product-united-states/; https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f]"
     },
-    "FoundingStory": "No key inflection points or detailed founding history found in available sources."
+    "Hierarchy": "PM roles report to product leadership; collaborate with Eng/Design/CS/Sales/Marketing. No explicit org chart; hands-on with day-to-day project management. [Source: https://jobs.reachcapital.com/companies/peoplegrove/jobs/55563067-lead-product-manager]",
+    "Hiring_Manager_Profile": "Not identified in results. Likely VP Product or similar; priorities align with strategic direction, user-centric growth. [Inferred: https://builtin.com/job/product-manager/6780056]"
   },
-  "ModuleB": {
-    "Big3Competitors": "Direct rivals not explicitly named in sources. PeopleGrove differentiates through client-driven enhancements for higher education workflows, user-centric SaaS platform integrity, and focus on measurable outcomes like alumni engagement and experiential learning.[1][2][4]",
-    "MacroTrends": "No specific industry headwinds like regulatory shifts or AI disruption detailed in sources. General edtech trends implied in higher education SaaS growth."
+  "Module_E_Culture_Reality_Check": {
+    "Sentiment_Analysis": "No Glassdoor/Reddit/Blind data in results. Advertised: Strong team culture with empathy, collaboration, user-centricity. Remote-first reality confirmed. [Source: https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f; https://www.peoplegrove.com/about/careers/]",
+    "Operational_Style": "Remote-first (US anywhere, occasional travel for offsites/customer research). High ownership, fast-moving, collaborative. Employee tenure not detailed. [Source: https://jobright.ai/jobs/info/698d450cf64d441a164f4a7f; https://jobs.lever.co/peoplegrove/3b4a0026-c90c-497e-b09b-0d70310f9298]"
   },
-  "ModuleC": {
-    "FinancialsFunding": "No recent funding rounds or earnings results in 90-day window found.",
-    "OrganizationalShifts": "No layoffs, hiring surges, or leadership changes mentioned.",
-    "ProductPartnershipNews": "No new launches or M&A activity in 90-day window identified. Active hiring for product roles indicates growth focus.[6][9]"
-  },
-  "ModuleD": {
-    "JDAnalysis": {
-      "Keywords": "Product roadmap, user research, KPIs, A/B tests, customer discovery, product requirements, B2B SaaS, analytics, cross-functional collaboration, ambiguity navigation.[1][2][3]",
-      "HiddenSuccessSignals": "Executive alignment, scalable solutions, balancing short-term client needs with long-term platform integrity, documentation of decisions/trade-offs.[2][3]",
-      "Required": "2-5 years B2B SaaS PM experience, customer discovery, analytical thinking, data-driven decisions, cross-functional work with Engineering/Design, communication skills.[2][3][5]",
-      "Preferred": "Higher education/workforce outcomes experience, product analytics tools familiarity.[2][3]"
-    },
-    "Hierarchy": "No specific reporting lines or team structure detailed. Collaborates with product/company leadership, Customer Success, Sales, Engineering, Design.[1][2][3]",
-    "HiringManagerProfile": "No identifiable hiring manager background, content, or priorities found."
-  },
-  "ModuleE": {
-    "SentimentAnalysis": "Strong team culture emphasized: empathy, collaboration, user-centric. No Glassdoor/Reddit/Blind data available in sources.[2][3]",
-    "OperationalStyle": "Remote-first across US, occasional travel for offsites/customer research. Comfortable with largely remote team.[1][2][3]"
-  },
-  "ModuleF": {
-    "PriorityMapping": [
+  "Module_F_Intersection": {
+    "Priority_Mapping": [
       {
-        "Priority": "Platform integrity and scalable product improvements",
-        "JasonConnection": "Direct match to Jason's Platform experience."
+        "Priority": "User research, metrics/KPIs/A/B tests, data-driven decisions",
+        "Jason_Connection": "Direct match to Jason's experience in Platform and Data Integrity – leveraging analytics for product hypotheses and success tracking."
       },
       {
-        "Priority": "Data-informed decisions via KPIs, A/B tests, analytics",
-        "JasonConnection": "Aligns with Jason's Data Integrity expertise."
+        "Priority": "Cross-functional collaboration, roadmap/prioritization, concept-to-launch",
+        "Jason_Connection": "Aligns with Revenue Systems experience – balancing business priorities, ROI focus, and owning end-to-end product delivery."
       },
       {
-        "Priority": "Client-driven revenue-impacting features and growth opportunities",
-        "JasonConnection": "Connects to Jason's Revenue Systems background."
+        "Priority": "Customer discovery, growth opportunities (activation/retention/monetization)",
+        "Jason_Connection": "Maps to Platform experience in synthesizing insights into scalable features and driving revenue-impacting enhancements."
       }
     ]
   }

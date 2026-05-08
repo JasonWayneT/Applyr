@@ -3,6 +3,7 @@ Shared utilities for the JobAgent pipeline.
 Centralizes file I/O, LLM calls with retry logic, and path constants.
 """
 import os
+import sys
 import time
 from dotenv import load_dotenv
 from google import genai
@@ -29,10 +30,12 @@ RESEARCH_CONTRACT_FILE = os.path.join(RULES_DIR, "Research_Packet_Contract.md")
 RESUME_MASTER_FILE = os.path.join(DATA_DIR, "Resume.md")
 COVER_LETTER_REF_FILE = os.path.join(DATA_DIR, "Cover_Letter_Reference.md")
 RESUME_STYLE_REF_FILE = os.path.join(DATA_DIR, "Resume_Style_Reference.md")
-NAVIGATOR_FILE = os.path.join(PROJECT_ROOT, "Job_Navigator.html")
+RESUME_BEST_PRACTICES = os.path.join(DATA_DIR, "resume-conversion-best-practices.md")
+CL_BEST_PRACTICES = os.path.join(DATA_DIR, "cover-letter-conversion-best-practices.md")
+CANDIDATE_PREFERENCES_FILE = os.path.join(DATA_DIR, "candidate_preferences.json")
 
 # Default LLM model for the pipeline
-DEFAULT_MODEL = "gemini-flash-latest"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 # Max JD characters to send to LLM for scoring (token budget gate)
 SCORING_JD_MAX_CHARS = 1500
@@ -41,13 +44,25 @@ SCORING_JD_MAX_CHARS = 1500
 JD_REQUIRED_KEYWORDS = ['saas', 'b2b', 'platform', 'integration', 'enterprise', 'api', 'product', 'software', 'agile', 'roadmap', 'stakeholder']
 
 
+def load_candidate_preferences():
+    """Reads data/candidate_preferences.json dynamically. Returns dict or empty dict on failure."""
+    import json
+    try:
+        if os.path.exists(CANDIDATE_PREFERENCES_FILE):
+            with open(CANDIDATE_PREFERENCES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"Error loading candidate preferences: {e}", file=sys.stderr)
+    return {}
+
+
 def load_file(filepath):
     """Read a text file safely. Returns empty string on failure."""
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        print(f"Error reading {filepath}: {e}")
+        print(f"Error reading {filepath}: {e}", file=sys.stderr)
         return ""
 
 
@@ -60,7 +75,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
     if model is None:
         model = DEFAULT_MODEL
     
-    print(f"    [LLM] Calling {model} (Prompt length: {len(user_prompt)})...")
+    print(f"    [LLM] Calling {model} (Prompt length: {len(user_prompt)})...", file=sys.stderr)
 
     for attempt in range(max_retries):
         try:
@@ -84,17 +99,17 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
                 reason = "N/A"
                 if response.candidates:
                     reason = response.candidates[0].finish_reason
-                print(f"    [LLM Warning] Empty response from {model}. Reason: {reason}")
+                print(f"    [LLM Warning] Empty response from {model}. Reason: {reason}", file=sys.stderr)
             return text
         except Exception as e:
             err = str(e).lower()
             if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
                 wait = 60 * (attempt + 1)
-                print(f"  -> Rate limit hit. Waiting {wait}s (retry {attempt+1}/{max_retries})...")
+                print(f"  -> Rate limit hit. Waiting {wait}s (retry {attempt+1}/{max_retries})...", file=sys.stderr)
                 time.sleep(wait)
             else:
-                print(f"LLM Error: {e}")
+                print(f"LLM Error: {e}", file=sys.stderr)
                 if attempt < max_retries - 1:
-                    print(f"  -> Retrying ({attempt+2}/{max_retries})...")
+                    print(f"  -> Retrying ({attempt+2}/{max_retries})...", file=sys.stderr)
                     time.sleep(5)
     return ""

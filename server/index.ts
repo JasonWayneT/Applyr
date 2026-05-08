@@ -335,15 +335,16 @@ app.put('/api/jobs/:id/files/:filename', (req, res) => {
       const pdfFilename = safeFilename.replace('.md', '.pdf');
       const pdfPath = path.join(folder, companySlug, pdfFilename);
       
+      const guardScript = path.join(__dirname, '../scripts/style_compliance_guard.py');
       const compileScript = path.join(__dirname, '../scripts/compile_single.py');
       
-      exec(`python "${compileScript}" "${filePath}" "${pdfPath}"`, (error, stdout, stderr) => {
+      exec(`python "${guardScript}" "${filePath}" && python "${compileScript}" "${filePath}" "${pdfPath}"`, (error, stdout, stderr) => {
         if (error) {
           console.error(`Compilation error: ${stderr || error.message}`);
-          logActivity('ERROR', 'System', `Failed to compile PDF for "${job.company}": ${stderr || error.message}`);
-          return res.status(500).json({ error: 'Document saved but PDF compilation failed' });
+          logActivity('ERROR', 'System', `Failed to validate and compile PDF for "${job.company}": ${stderr || error.message}`);
+          return res.status(500).json({ error: 'Document saved but validation or compilation failed' });
         }
-        logActivity('INFO', 'System', `Successfully compiled PDF for "${job.company}"`);
+        logActivity('INFO', 'System', `Successfully validated and compiled PDF for "${job.company}"`);
         res.json({ success: true, compiled: true });
       });
     } else {
@@ -520,6 +521,102 @@ app.post('/api/profile/:key', (req, res) => {
 // ---------------------------------------------------------------------------
 // Work Experience
 // ---------------------------------------------------------------------------
+function codifyExperienceAndAssignIDs(markdown: string): string {
+  const lines = markdown.split('\n');
+  let currentSection = '';
+  let inVocabularyTable = false;
+  let inMetricsTable = false;
+  let nextVocId = 12;
+  let nextMetId = 13;
+  let nextAccCision = 106;
+  let nextAccSterkly = 203;
+  let nextAccZero = 303;
+
+  // Scan existing IDs to avoid collisions
+  lines.forEach(line => {
+    const vocMatch = line.match(/VOC-(\d+)/i);
+    if (vocMatch) {
+      const num = parseInt(vocMatch[1], 10);
+      if (num >= nextVocId) nextVocId = num + 1;
+    }
+    const metMatch = line.match(/MET-(\d+)/i);
+    if (metMatch) {
+      const num = parseInt(metMatch[1], 10);
+      if (num >= nextMetId) nextMetId = num + 1;
+    }
+    const accMatch = line.match(/ACC-(\d+)/i);
+    if (accMatch) {
+      const num = parseInt(accMatch[1], 10);
+      if (num >= 100 && num < 200 && num >= nextAccCision) nextAccCision = num + 1;
+      if (num >= 200 && num < 300 && num >= nextAccSterkly) nextAccSterkly = num + 1;
+      if (num >= 300 && num < 400 && num >= nextAccZero) nextAccZero = num + 1;
+    }
+  });
+
+  const processedLines = lines.map(line => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('## Section 3:')) {
+      inVocabularyTable = true;
+      inMetricsTable = false;
+    } else if (trimmed.startsWith('## Section 4:')) {
+      inVocabularyTable = false;
+      inMetricsTable = true;
+    } else if (trimmed.startsWith('## Section 5:') || trimmed.startsWith('### 5.1')) {
+      inVocabularyTable = false;
+      inMetricsTable = false;
+      currentSection = '5.1';
+    } else if (trimmed.startsWith('### 5.2')) {
+      currentSection = '5.2';
+    } else if (trimmed.startsWith('### 5.3')) {
+      currentSection = '5.3';
+    } else if (trimmed.startsWith('## Section 6:')) {
+      currentSection = '';
+    }
+
+    // Process Vocabulary Table rows
+    if (inVocabularyTable && trimmed.startsWith('|') && !trimmed.includes('Fact ID') && !trimmed.includes(':---')) {
+      const cells = line.split('|').map(c => c.trim());
+      if (cells.length >= 2 && cells[1] === '') {
+        cells[1] = `**VOC-${String(nextVocId++).padStart(2, '0')}**`;
+        return cells.join(' | ').trim();
+      }
+    }
+
+    // Process Metrics Table rows
+    if (inMetricsTable && trimmed.startsWith('|') && !trimmed.includes('Fact ID') && !trimmed.includes(':---')) {
+      const cells = line.split('|').map(c => c.trim());
+      if (cells.length >= 2 && cells[1] === '') {
+        cells[1] = `**MET-${String(nextMetId++).padStart(2, '0')}**`;
+        return cells.join(' | ').trim();
+      }
+    }
+
+    // Process Accomplishment bullets
+    if (trimmed.startsWith('*') && !trimmed.includes('DO NOT claim') && !trimmed.includes('*   **Context & Constraints**') && !trimmed.includes('*   **Owned Systems**') && !trimmed.includes('*   **Unowned Systems**')) {
+      const content = trimmed.replace(/^\*\s*/, '').trim();
+      if (content.startsWith('**') && !content.includes('[ACC-')) {
+        let assignedId = '';
+        if (currentSection === '5.1') {
+          assignedId = `ACC-${nextAccCision++}`;
+        } else if (currentSection === '5.2') {
+          assignedId = `ACC-${nextAccSterkly++}`;
+        } else if (currentSection === '5.3') {
+          assignedId = `ACC-${nextAccZero++}`;
+        }
+
+        if (assignedId) {
+          const newContent = content.replace(/^\*\*([^*]+)\*\*/, `**[${assignedId}] $1**`);
+          return `*   ${newContent}`;
+        }
+      }
+    }
+
+    return line;
+  });
+
+  return processedLines.join('\n');
+}
+
 app.get('/api/experience', (_req, res) => {
   try {
     if (!fs.existsSync(WORK_EXPERIENCE_PATH)) {
@@ -534,9 +631,10 @@ app.get('/api/experience', (_req, res) => {
 app.post('/api/experience', (req, res) => {
   try {
     const { content } = req.body;
-    fs.writeFileSync(WORK_EXPERIENCE_PATH, content, 'utf-8');
-    logActivity('INFO', 'System', 'workExperience.md updated by user.');
-    res.json({ success: true });
+    const codifiedContent = codifyExperienceAndAssignIDs(content);
+    fs.writeFileSync(WORK_EXPERIENCE_PATH, codifiedContent, 'utf-8');
+    logActivity('INFO', 'System', 'workExperience.md updated and automatically codified under SDD with sequential IDs by user.');
+    res.json({ success: true, content: codifiedContent });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save experience file' });
   }

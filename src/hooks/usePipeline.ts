@@ -26,7 +26,14 @@ export const usePipeline = () => {
     setStages(prev => prev.map(s => s.id === id ? { ...s, status, summary } : s));
   }, []);
 
-  const runPipeline = useCallback(async (company: string, jd: string, url?: string): Promise<{ score: number; passed: boolean } | undefined> => {
+  const runPipeline = useCallback(async (company: string, jd: string, url?: string): Promise<{ 
+    score: number; 
+    passed: boolean;
+    company?: string;
+    title?: string;
+    url?: string;
+    summary?: string;
+  } | undefined> => {
     setIsRunning(true);
     setIsRejected(false);
     setResult(null);

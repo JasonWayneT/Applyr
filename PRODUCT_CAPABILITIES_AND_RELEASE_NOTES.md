@@ -34,6 +34,72 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 5.5
+Applyr Release
+May 7, 2026
+
+Version 5.5, first offered to local users on May 7, 2026
+
+Previous
+Applyr 5.4
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Auto-Merging & Duplicate Resolution Utility:** Implemented a background duplicate audit and resolution strategy across active and archived submission directories. It resolved five major directory collisions (Allstate, Expel, GE Healthcare, PeopleGrove, and Ryan) by analyzing SQLite database status, merging files to preserve the largest and most complete copies, and storing safe pre-deletion backups in `scratch/folder_backups/`.
+- **Peach Asset Customization & Tailoring:** Generated and compiled high-fidelity, compliant PDF assets (Resume and Cover Letter) tailored for Peach's modern API-first loan management system-of-record, perfectly aligning technical ingestion experience with corporate compliance.
+
+Fixed
+- **Multi-Folder OS Collisions:** Resolved duplicate active and archived submission folder states that previously threw Windows `fs.renameSync` EEXIST errors when users updated job statuses in the UI, fully unblocking the status update workflow.
+
+Changed
+- **Bulk Application Clearing:** Automatically cleared and archived all remaining folders in the active `submissions/` directory (Carefull, SpotOn, and Bellese) while updating their database statuses to `Applied`.
+
+---
+
+### 5.4
+Applyr Release
+May 7, 2026
+
+Version 5.4, first offered to local users on May 7, 2026
+
+Previous
+Applyr 5.3
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Job Name & Company on Editor Workspace:** Renders the active job title and target company inline inside the WYSIWYG PDF editor's top bar (e.g. `Editing Resume.md for Secureframe (Product Manager – Platform Trust & Security)`), providing clear candidate context during edits.
+- **Line-by-Line Section Stripper & Contact Normalizer:** Refactored the Style Compliance Guard (`style_compliance_guard.py`) to process documents line-by-line rather than using complex multiline regexes. This completely prevents vertical whitespace deletion, line merging, and format corruption while aggressively stripping skills/expertise blocks and formatting contact lines.
+
+Fixed
+- **Tagline Hyphenation & Corrupted Characters:** Fixed an empty string replacement bug that caused hyphens to be inserted between every character in the tagline block during compilation. Unescaped backslash parentheses `\( \)` are now successfully converted to professional round brackets.
+
+---
+
+### 5.3
+Applyr Release
+May 7, 2026
+
+Version 5.3, first offered to local users on May 7, 2026
+
+Previous
+Applyr 5.2
+
+Next
+Applyr 5.4
+
+New
+- **Triple Redundancy Style Compliance Guard (FR-036):** Introduced a state-of-the-art formatting auditor and auto-correction script (`style_compliance_guard.py`). It guarantees perfect HTML single-page resume structures across three distinct checkpoints: immediate post-generation cleanup, pre-compilation text capacity compaction (automatic company bullet trimming and dynamic inline font-size scaling), and save-time interception.
+
+Fixed
+- **AI Rewrite Log Pollution & Escaped Characters:** Completely eliminated the `[LLM] Calling...` prefix from ruining saved documents by redirecting all Python utility and LLM logging to `sys.stderr`. Updated the system prompt in `ai_rewrite.py` to prevent Gemini from converting HTML style elements to raw Markdown headings or injecting backslash-escaped characters.
+
+Developer
+- **Visual Compliance Enforcement on Save:** Connected the compliance guard directly to the Express server's file PUT route and Python's drafting engine, ensuring that all manual edits, AI rewrites, or background pipeline compilations are automatically verified and polished for single-page style compliance.
+
 ### 5.2
 Applyr Release
 May 6, 2026

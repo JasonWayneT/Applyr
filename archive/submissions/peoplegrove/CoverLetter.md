@@ -1,22 +1,35 @@
-<div style="font-size: 11pt; line-height: 1.15;">
+# JASON TAYLOR
 
-<h1 style="margin: 0 0 8px 0; padding: 0; text-align: left; font-size: 16pt;"><strong>Jason Taylor</strong></h1>
-<div style="text-align: left; margin-bottom: 20px;">
 San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug
-</div>
 
-Dear Hiring Manager,
+Jason Taylor
+San Diego, CA
+[REDACTED_EMAIL]
+[REDACTED_PHONE]
 
-As a platform-focused Product Manager with over six years of experience in B2B SaaS, I have spent my career stabilizing and maintaining data-intensive systems that support revenue. I am drawn to Peoplegrove because of your mission to deliver best-in-class product experiences. My background in managing complex data ingestion pipelines, legacy platform modernization, and cross-functional alignment makes me a strong fit to own the core systems and integrations that power your platform.
+May 5, 2026
 
-At Cision, I managed the C3 platform and CPRE infrastructure, where I was responsible for the product roadmap and cross-functional alignment for a $40M ARR ecosystem. I operate at the intersection of business and engineering, having driven initiatives like "Bellwether"—an architectural bypass of legacy ETL pipelines that addressed a primary churn driver by improving data freshness. I am experienced in working with SQL and debugging complex system issues, which allows me to partner effectively with engineering teams to ship reliable solutions. My approach is pragmatic: I prioritize stability and data quality as foundational product features, ensuring that internal operations teams have the reliable tools they need to succeed.
+Hiring Team
+PeopleGrove
 
-I thrive in environments where I can translate technical constraints into clear product roadmaps. Whether it is resolving a 90% security backlog or consolidating fragmented content ingestion into a unified source of truth, I focus on reducing manual friction and improving system reliability. I understand the nuances of operating in complex environments and am eager to apply my experience in data architecture and platform ownership to help Peoplegrove scale its event intelligence capabilities.
+**RE: Product Manager - Client-Driven Initiatives**
 
-I am interested in the opportunity to contribute to the Peoplegrove team and would welcome the chance to discuss how my experience in platform stability and data-intensive product management aligns with your goals for the core platform. Thank you for your time and consideration.
+Dear PeopleGrove Hiring Team,
+
+I am writing to express my strong interest in the Product Manager position at PeopleGrove. Having spent the last six years leading client-driven product initiatives and managing core platform modules for high-growth B2B SaaS companies, I am particularly drawn to PeopleGrove’s mission-critical work in higher education. I am a product manager who excels at structured thinking, discovery, and translating diverse customer input into scalable product improvements.
+
+In my most recent role as a Product Manager at Cision, I was responsible for a $40M ARR enterprise platform (Core B2B SaaS Platform/Core Platform Infrastructure) serving 3,500 accounts. My primary focus was the synthesis of complex client needs into actionable roadmaps. One of my proudest achievements was **Platform Data Remediation**, which began with a discovery phase into customer complaints regarding data freshness. I identified a 30-40% data drop-off in our legacy ETL pipelines and orchestrated an architectural bypass that directly integrated our app with our source of truth. This initiative eliminated our largest product-driven churn driver and proved that deeply understanding the "real problem" is the key to creating lasting value.
+
+My experience aligns directly with the "What You’ll Own" pillars for this role:
+
+* **Client Request Synthesis & Problem Framing**: I have a long track record of partnering with Sales and Customer Success to understand the themes behind incoming requests. At Cision, I established a structured intake framework that allowed us to evaluate requests based on user value, technical effort, and business impact, rather than simply executing feature requests at face value.
+* **Strategic Product Ownership**: I owned the roadmap for our Core Platform Infrastructure infrastructure and core media monitoring modules. I am comfortable navigating ambiguity and competing stakeholder priorities to ensure that our platform remained stable and reliable while we continued to innovate.
+* **End-to-End Delivery**: I have extensive experience working closely with Engineering and Design from concept through launch. I am a Certified Scrum Master who values documentation and clear communication to ensure transparency and alignment across distributed teams (including teams in the US and abroad).
+
+PeopleGrove’s product-led culture and your commitment to helping institutions strengthen outcomes for alumni and students resonate with my professional values. I am a high-ownership, low-bureaucracy product manager who is eager to bring my expertise in structured discovery and platform leadership to your team.
+
+Thank you for your consideration. I look forward to the opportunity to discuss how I can help PeopleGrove continue to ship high-quality solutions for your clients.
 
 Sincerely,
 
 Jason Taylor
-
-</div>

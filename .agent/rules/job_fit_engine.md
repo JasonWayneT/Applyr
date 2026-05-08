@@ -2,74 +2,60 @@
 trigger: always_on
 ---
 
-# Jason Taylor – Job-Fit Decision Engine (v3.3, Team-BPM / IC Optimized)
+# Dynamic Job-Fit Decision Engine (v4.0)
 
-This file defines a deterministic YES/NO decision system for evaluating multiple job descriptions in a batch pipeline. It is optimized for Jason's preference for **mid-level Product Manager roles (3-7 years)** within a **structured team environment** where direct PM leadership (Director/Senior PM) is present.
+This file defines a deterministic YES/NO decision system for evaluating job descriptions. It dynamically leverages the target specifications, experience ranges, blocklists, and anchors defined in the injected **Candidate Preferences JSON**.
 
 ---
 
 ## 0) Purpose & Batch Logic
-1. **Initialize Sandbox:** Clear previous JD context; load only `workExperience.md`.
-2. **Fast Gate:** Kill poor fits, seniority mismatches, or "Solo PM" traps immediately.
-3. **Transition Analysis:** Score based on mid-level PM fit with a strong "Direct Leadership" anchor.
+1. **Initialize Sandbox:** Clear previous JD context; load only `workExperience.md` (Ground Truth) and `Candidate Preferences` (Targets).
+2. **Fast Gate:** Kill poor fits, seniority mismatches, blocked industries, or solo traps instantly using criteria from `Candidate Preferences`.
+3. **Transition Analysis & Scoring:** Score based on alignment with the Candidate's profile, experiences, and anchors.
 
 ---
 
-## 1) Jason’s Ground Truth Profile (The Source of Truth)
-*Refer to data/workExperience.md for all specific metrics.*
-- **Core:** B2B SaaS Platform PM, roadmap ownership, technical integrations, data integrity.
-- **Experience Level:** ~6 years (Product Manager / Product Owner). 
-- **Transition Target:** Mid-level PM in a structured SaaS or Professional Services organization.
-- **Hard Constraints:** NO People Management (of PMs), NO direct ML model training, NO "First/Solo PM" roles, NO "0-to-1" greenfield roles.
+## 1) Ground Truth Profile & Preferences
+Evaluate the candidate using:
+- **Ground Truth (`workExperience.md`):** The candidate's actual metrics, roles, and historical timeline.
+- **Candidate Preferences (Injected JSON):** The explicit parameters for the target role, experience limits, blocklists, and key focus anchors.
 
 ---
 
 ## 2) Stage A: The Fast Gate (Instant Kill)
-If any trigger is met, return **Score: 0**, **Decision: NO**, and **Terminate Pipeline** for this JD.
+If any of the following triggers are met, return **Score: 0**, **Decision: NO**, and **Terminate Pipeline** for this JD.
 
-### 2.1 Title & Tier Blocklist (Seniority Mismatch)
-- **Title Blocklist:** JD contains: [Senior, Staff, VP, Head, Principal, Lead, Director, Growth, Assistant, Coordinator, Intern, Associate, Junior, Analyst, Engineer, Developer, Designer, Marketer, Founder].
-- **Organization Role:** Role is "Founding PM," "First PM," "0-to-1 PM," or "Sole Product Professional."
-- **Leading PMs:** Role requires hiring/managing other Product Managers.
+### 2.1 Title & Tier Blocklist
+- **Blocked Titles:** Reject if the JD title contains any terms found in `blocked_titles` from the Candidate Preferences.
+- **Organization Role:** Reject if the role is explicitly "Founding," "First," "0-to-1," or "Sole" product professional unless permitted by preferences.
+- **Management Constraints:** Reject if the role requires hiring or managing other people in that same function when forbidden by `preferences.no_people_management`.
 
-### 2.2 Compensation & Project Roles
-- **Low Salary:** Total compensation is < $70k/year (or equivalent).
-- **Project/Gig:** Role is explicitly a "Project-based," "Gig," or "Short-term contract" for a minor task (not a full PM engagement).
-
-### 2.3 Experience & Reporting
-- **Years Required:** Role requires **8+ years** of experience (Jason has 6; 8+ implies seniority level he's avoiding).
-- **Structure:** JD implies a solo contributor reporting directly to a non-product CEO in a small company (< 50 employees).
-
-- **Industry Blocklist:** Gambling, Sports Betting, Gaming, Ad Tech, Crypto, Web3, Autonomous Vehicles, Automotive, Autonomy, Robotics.
-- **Developer Tooling / Auth:** Requires deep domain knowledge in Auth, Identity, or Developer Tooling (Jason lacks this specific track record).
-- **Location Gate:** Role must be based in the **United States** (Remote US is fine). Reject any roles that are explicitly "EMEA Only," "UK Only," "Global (Non-US)," "Anywhere in the World," "Israel," "Tel Aviv," "Canada," "Europe," require residency outside the US, or list a set of approved states that explicitly excludes California (CA).
-- **Language Gate:** The JD must be primarily written in **English**. Reject any JDs in Japanese, Spanish, etc.
-- **Seniority Gate:** Reject roles looking for "Former Founders" or "Ex-Founders" as these are too senior.
+### 2.2 Experience & Constraints
+- **Years Required:** Reject if required years of experience exceeds `experience_range.max` in Candidate Preferences.
+- **Blocked Industries:** Reject if the company operates in any of the `blocked_industries` listed in Candidate Preferences.
+- **Domain Gate:** Reject if the role requires domain expertise explicitly marked as a "Soft Blocker" in the candidate's history (e.g., hands-on ML model training, Developer Auth) unless allowed.
 
 ---
 
 ## 3) Stage B: Full Scoring (0–100)
 
-### A) The "Direct Leadership" Match (0-25)
-*Does the candidate have space to grow under a mentor?*
-- **22-25:** Mentions a direct manager (Director of Product, Senior PM) and a team of 3+ PMs.
-- **15-21:** Implicitly part of a larger product org.
-- **0-14:** High autonomy expected; reports to "Head of Product" who is a solo exec.
+### A) Organizational Maturity (0-25)
+*Does the candidate have a function-specific leader/mentor and team structure?*
+- **22-25:** Perfect alignment with `preferences.structured_team_required` (mentions direct manager and a team).
+- **15-21:** Implicitly part of a larger functional org.
+- **0-14:** Solo trap (e.g., reports directly to a non-functional executive in a tiny startup).
 
-### B) Seniority Fit (0–25)
-- **23–25:** Product Manager / PM II (IC Role), 3–6 years exp.
-- **18–22:** Product Manager, 6-7 years exp.
-- **0–17:** Requires 7+ years or "Senior" traits.
+### B) Seniority & Tenure Fit (0–25)
+- **23-25:** High overlap with `experience_range` (within min and max targets).
+- **0-17:** Demands experience outside the target bounds or requires senior-level traits.
 
 ### C) Technical & Execution Depth (0–25)
-- **22–25:** Integrations, data pipelines, reliability, security, or "Internal Platforms."
-- **15–21:** General B2B feature work with engineering collaboration.
-- **0-14:** Requires hands-on coding (Python/SQL) for daily output.
+- **22-25:** High technical overlap with the `required_anchors` listed in preferences.
+- **0-14:** Requires deep daily coding or non-relevant daily activities.
 
-### D) "The Bridge" - Growth Potential (0–25)
-- **20–25:** High (e.g., "Scale our API to support new integrations").
-- **15–19:** Medium (e.g., "Workflow optimization for enterprise users").
-- **0–14:** Low (e.g., "Manage Paid Ad budgets").
+### D) The "Bridge" Alignment (0–25)
+- **20-25:** High alignment between the company's pain space and the candidate's core historical wins.
+- **0-14:** Low-impact or unrelated daily focus.
 
 ---
 
@@ -77,20 +63,15 @@ If any trigger is met, return **Score: 0**, **Decision: NO**, and **Terminate Pi
 **Total Score = (A+B+C+D) - Penalties.**
 
 ### 4.1 Penalties
-- **Startup < 25 people:** -50 (High probability of "Solo PM" trap).
-- **On-site (Non-Local):** -25 (unless relocation is explicitly provided).
+- **Small Startup:** Apply a -50 penalty if the company size is below `preferences.max_company_size_penalty_threshold` and has high risk of solo/founding trap.
 
 ### 4.2 The "Two-Anchor Room" (Mandatory)
-A **YES** requires at least 2 explicit overlaps from:
-1. Platform stability/reliability.
-2. Complex data migrations/integrations.
-3. Security/Risk prioritization.
-4. B2B Enterprise workflow scaling.
+A **YES** decision requires at least **2 explicit overlaps** between the job description responsibilities and the `required_anchors` list in the Candidate Preferences.
 
 ### 4.3 Final Decision
-- **Score ≥ 85:** YES (Strong Fit - Ideal Mid-level Team Role).
-- **Score 78–84:** YES (Conditional on Anchors).
-- **Score < 78:** NO (Reject).
+- **Score ≥ 85:** YES (Strong Fit).
+- **Score 75–84:** YES (Conditional on Anchors).
+- **Score < 75:** NO (Reject).
 
 ---
 

@@ -1,0 +1,49 @@
+{
+  "Module_A_Company_DNA": {
+    "Core_Mission_Values": {
+      "Stated": "Bellese focuses on public healthcare systems serving millions of Americans, emphasizing human-centered design, engineering, and product management for growth. [https://www.bellese.io/careers]",
+      "Observed": "Building AI call handling platforms for healthcare and supporting federal agency clients with product strategy in distributed teams. [https://remotive.com/remote/jobs/product/product-manager-i-4579321] [https://www.jobleads.com/us/job/product-manager-i--united-states--e4f5aea11b8cf8ce3697476c16e3756df]"
+    },
+    "Problem_Space": "Addresses pain in healthcare call handling and data-intensive systems by modernizing AI platforms for efficient operations in public sector healthcare, particularly for federal agencies. [https://www.remoterocketship.com/us/company/bellese-technologies/jobs/product-manager-united-states-remote/] [https://dailyremote.com/remote-job/senior-product-manager-analytics-data-platforms-4899023]",
+    "Business_Model": "Likely government contracts/services for federal healthcare clients; growth stage appears early-scaling with active hiring; financial health not publicly detailed but offers competitive salaries ($93,500-$128,000) and benefits like 401(k), healthcare. [https://remotive.com/remote/jobs/product/product-manager-i-4579321] [https://www.bellese.io/careers]",
+    "Founding_Story": "Limited public info; operates as Bellese Technologies, LLC, concentrated in public healthcare systems with recent job postings indicating expansion. No key inflection points found in search results."
+  },
+  "Module_B_Market_Competitors": {
+    "Big_3_Competitors": "Not explicitly identified in results; potential rivals in AI healthcare call handling and public sector platforms include general healthcare tech like Nuance (AI voice) or public health SaaS providers. Bellese differentiates via federal agency focus and distributed agile teams. [https://www.jobleads.com/us/job/product-manager-i--united-states--e4f5aea11b8cf8ce3697476c16e3756df] [https://www.remoterocketship.com/us/company/bellese-technologies/jobs/product-manager-united-states-remote/]",
+    "Macro_Trends": "AI disruption in healthcare call handling; regulatory shifts in public sector data platforms and modernization of data-intensive healthcare systems. [https://dailyremote.com/remote-job/senior-product-manager-analytics-data-platforms-4899023] [https://www.remoterocketship.com/us/company/bellese-technologies/jobs/product-manager-united-states-remote/]"
+  },
+  "Module_C_Recent_Intelligence": {
+    "Financials_Funding": "No recent funding rounds or earnings in 90-day window; active hiring suggests stable operations. [https://remotive.com/remote/jobs/product/product-manager-i-4579321] (posted 'YDay')",
+    "Organizational_Shifts": "Hiring surges: Product Manager I, Senior Product Manager roles posted recently, indicating growth. [https://remotive.com/remote/jobs/product/product-manager-i-4579321] [https://builtin.com/job/senior-product/7777683]",
+    "Product_Partnership_News": "Focus on AI call handling platform for healthcare and analytics/data platforms; no new launches or M&A in results. [https://www.remoterocketship.com/us/company/bellese-technologies/jobs/product-manager-united-states-remote/] [https://dailyremote.com/remote-job/senior-product-manager-analytics-data-platforms-4899023]"
+  },
+  "Module_D_Role_Org_Chart": {
+    "JD_Analysis": {
+      "Keywords": "Product management in cross-functional agile environment, public sector preferred, support delivery and evolving product strategy for distributed teams, AI call handling platform, healthcare. [https://jobs.lever.co/bellese/b2a74141-b7dd-4fc3-ab98-21221bce86d8] [https://www.woodyjobs.com/product/191242-product-manager-i-bellese-technologies]",
+      "Hidden_Success_Signals": "2+ years PM experience; ideal public sector/professional services background. [https://jobs.lever.co/bellese/b2a74141-b7dd-4fc3-ab98-21221bce86d8]",
+      "Required_vs_Preferred": "Required: 2+ years PM in agile; Preferred: Public sector experience. [https://jobs.lever.co/bellese/b2a74141-b7dd-4fc3-ab98-21221bce86d8]"
+    },
+    "Hierarchy": "Not detailed; supports federal agency client, likely reports to senior PM or product leadership in distributed team. [https://www.jobleads.com/us/job/product-manager-i--united-states--e4f5aea11b8cf8ce3697476c16e3756df]",
+    "Hiring_Manager_Profile": "No specific profile found in results."
+  },
+  "Module_E_Culture_Reality_Check": {
+    "Sentiment_Analysis": "No Glassdoor/Reddit/Blind data in results; advertised as remote-friendly with competitive comp, 401(k), healthcare. [https://www.bellese.io/careers] [https://remotive.com/remote/jobs/product/product-manager-i-4579321]",
+    "Operational_Style": "Fully remote (USA location); growth-focused with interest in talented people in product management. Employee tenure not available. [https://remotive.com/remote/jobs/product/product-manager-i-4579321] [https://www.bellese.io/careers]"
+  },
+  "Module_F_Intersection": {
+    "Priority_Mapping": [
+      {
+        "Priority": "Evolving product strategy for federal agency AI call handling platform",
+        "Jason_Connection": "Platform experience aligns directly."
+      },
+      {
+        "Priority": "Cross-functional agile delivery in healthcare data systems",
+        "Jason_Connection": "Data Integrity expertise matches modernization needs."
+      },
+      {
+        "Priority": "Day-to-day operations and enhancement of healthcare platforms",
+        "Jason_Connection": "Revenue Systems background supports public sector growth strategies."
+      }
+    ]
+  }
+}

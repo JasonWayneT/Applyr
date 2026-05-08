@@ -47,7 +47,7 @@ async function run() {
         await new Promise(r => setTimeout(r, 5000));
 
         console.log('  [ATS] Triggering full sync...');
-        await fetch(`http://localhost:${OPENPOSTINGS_PORT}/sync/ats`, { method: 'POST' }).catch((e) => console.log('Sync trigger failed:', e.message));
+        await fetch(`http://localhost:${OPENPOSTINGS_PORT}/sync/ats`, { method: 'POST' }).catch((e: any) => console.log('Sync trigger failed:', e.message));
 
         // Wait for sync to finalize
         console.log('  [ATS] Waiting for sync to complete (polling status)...');
@@ -61,7 +61,7 @@ async function run() {
                     break;
                 }
                 console.log(`  [ATS] Syncing... ${s.progress?.current || 0}/${s.progress?.total || 0} (${s.progress?.company_name || ''})`);
-            } catch (e) {
+            } catch (e: any) {
                 console.log('Status check failed, server might be busy or crashed.');
                 break;
             }
@@ -95,7 +95,7 @@ async function run() {
 
                     jobs.push({ company, title, url: jobUrl, source: 'OpenPostings' });
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.log(`  [Query] Error for "${term}":`, e.message);
             }
         }
@@ -112,14 +112,14 @@ async function run() {
                 insert.run(randomUUID(), job.company, job.title, job.url, job.source);
                 saved++;
                 console.log(`    + Saved: ${job.title} at ${job.company}`);
-            } catch (e) {
+            } catch (e: any) {
                 // Duplicate URL or other error
             }
         }
 
         console.log(`[DONE] ${saved} new roles added to jobagent.sqlite.`);
 
-    } catch (e) {
+    } catch (e: any) {
         console.error('[ERROR]', e);
     } finally {
         if (proc) {

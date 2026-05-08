@@ -8,26 +8,41 @@ from datetime import datetime
 from utils import (
     load_file, call_llm, JOBS_DIR, PROJECT_ROOT,
     WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
-    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS
+    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS, load_candidate_preferences
 )
 from drafting_engine import run_drafting_engine
 from generate_cheat_sheet import generate_cheat_sheet
 
 
-def passes_jd_keyword_gate(jd_text: str) -> bool:
-    """Zero-token pre-filter. Rejects JDs that have no relevant keywords."""
+def passes_jd_keyword_gate(jd_text: str, prefs: dict = None) -> bool:
+    """Zero-token pre-filter. Rejects JDs that have no relevant keywords or hit blocked titles."""
     lower = jd_text.lower()
+    
+    # 1. Blocked Titles Check (First 200 chars are typically the title/header)
+    if prefs and "blocked_titles" in prefs:
+        title_chunk = lower[:200]
+        for blocked in prefs["blocked_titles"]:
+            if blocked.lower() in title_chunk:
+                print(f"    [ZERO-TOKEN REJECT] Title chunk contains blocked keyword: '{blocked}'", file=sys.stderr)
+                return False
+
+    # 2. Required Keywords Check
     return any(kw in lower for kw in JD_REQUIRED_KEYWORDS)
 
 
-def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules):
-    """Uses condensed summary (not full workExperience) to minimize token cost."""
+def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
+    """Uses condensed summary and dynamic candidate preferences to minimize token cost."""
     # Truncate JD — first 1500 chars contain ~90% of signal for scoring
     truncated_jd = jd_text[:SCORING_JD_MAX_CHARS] if len(jd_text) > SCORING_JD_MAX_CHARS else jd_text
+
+    prefs_str = json.dumps(prefs, indent=2) if prefs else "{}"
 
     prompt = f"""
     You are the JobAgent Job-Fit Decision Engine.
     
+    CANDIDATE PREFERENCES:
+    {prefs_str}
+
     GROUND TRUTH (Jason Taylor's Profile):
     {work_exp_summary}
     
@@ -38,9 +53,9 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules):
     {job_fit_rules}
     
     Process the above JOB DESCRIPTION using the strictly defined RULES & SCORING PROTOCOL. 
-    First, check the Fast Gate (Hard Disqualifiers). If disqualified, return a score < 30 and Decision: NO.
+    First, check the Fast Gate (Hard Disqualifiers) based on the CANDIDATE PREFERENCES. If disqualified, return a score < 30 and Decision: NO.
     Next, apply the 100-point scoring criteria.
-    Apply the Two-Anchor rule.
+    Apply the Two-Anchor rule using the anchors defined in CANDIDATE PREFERENCES.
     
     Return the response ONLY in a valid JSON object format precisely matching this schema:
     {{
@@ -79,6 +94,7 @@ def process_single(company, url, jd_text):
     print(json.dumps({"id": "gate", "status": "running", "summary": "Checking keyword signals..."}))
 
     fit_rules = load_file(FIT_ENGINE_FILE)
+    prefs = load_candidate_preferences()
 
     if not jd_text:
         jd_path = os.path.join(JOBS_DIR, f"{company}.txt")
@@ -90,8 +106,8 @@ def process_single(company, url, jd_text):
         return
 
     # Zero-token keyword gate before any LLM call
-    if not passes_jd_keyword_gate(jd_text):
-        print(json.dumps({"id": "gate", "status": "done", "summary": "Rejected (keyword gate: no relevant signals found)."}))
+    if not passes_jd_keyword_gate(jd_text, prefs):
+        print(json.dumps({"id": "gate", "status": "done", "summary": "Rejected (keyword/title gate: blocked or no relevant signals)."}))
         print(json.dumps({"score": 0, "passed": False}))
         return
 
@@ -100,7 +116,7 @@ def process_single(company, url, jd_text):
 
     # Scoring uses condensed summary — full workExperience loaded only on YES
     work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE)
-    result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules)
+    result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
     if not result:
         print(json.dumps({"id": "fit", "status": "error", "summary": "Evaluation failed."}))
         return
@@ -152,6 +168,7 @@ def process_batch():
     # Scoring uses condensed summary; full file loaded only on YES
     work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE)
     fit_rules = load_file(FIT_ENGINE_FILE)
+    prefs = load_candidate_preferences()
 
     if not work_exp_summary or not fit_rules:
         print("CRITICAL ERROR: workExperience_summary.md or Fit Rules missing. Aborting.")
@@ -208,7 +225,7 @@ def process_batch():
             continue
 
         # Zero-token keyword gate
-        if not passes_jd_keyword_gate(jd_text):
+        if not passes_jd_keyword_gate(jd_text, prefs):
             print(f"  -> Skipping. JD failed keyword pre-filter (no relevant signals).")
             if db_exists:
                 try:
@@ -237,7 +254,7 @@ def process_batch():
             continue
 
         print(f"  -> Evaluating fit against v3.2 Rubric...")
-        result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules)
+        result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
 
         if not result:
             print("  -> Evaluation failed due to an error.")

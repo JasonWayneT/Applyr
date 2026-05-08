@@ -6,7 +6,7 @@ Platform-focused Product Manager. 6+ years in B2B SaaS. NOT a growth PM, consume
 ## Employers
 - **Zero To Sixty Media** (2017–2019): Account Manager / Product Owner — internal tooling, Salesforce automation, vendor contracts.
 - **Sterkly Services** (2019–2021): Product Manager — delivery continuity, requirements, stakeholder alignment.
-- **Cision** (2021–2026): Product Owner → Product Manager — owned Legacy C3 (media monitoring/contact DB) and CPRE (underlying infra). ~$40M ARR, ~3,500 accounts, ~25,000 users. Reported into Director of Product.
+- **Cision** (2021–2026): Product Owner → Product Manager — owned Core B2B SaaS Platform (media monitoring/contact DB) and Core Platform Infrastructure (underlying infra). ~$40M ARR, ~3,500 accounts, ~25,000 users. Reported into Director of Product.
 
 ## Core Strengths
 - Platform stability and reliability (legacy B2B SaaS)
@@ -17,7 +17,7 @@ Platform-focused Product Manager. 6+ years in B2B SaaS. NOT a growth PM, consume
 - Disciplined capacity planning and prioritization under constraint
 
 ## Key Wins (Grounded Metrics Only)
-- **Bellwether**: Architectural bypass of legacy ETL eliminated 30–40% data drop-off between GPOD and C3. Removed the primary stale-data churn driver.
+- **Platform Data Remediation**: Architectural bypass of legacy ETL eliminated 30–40% data drop-off between Centralized Contact Database and Core B2B SaaS Platform. Removed the primary stale-data churn driver.
 - **DT Search**: Added monitoring + dead-account cleanup to eliminate indexing outage pattern.
 - **Security backlog**: Resolved ~90% of ~300 pen test findings over ~1 year using severity-based phased approach.
 - **Migration tooling**: Built phased voluntary migration system. Critical-save accounts transitioned at renewal. No forced migrations.
@@ -30,7 +30,7 @@ Platform-focused Product Manager. 6+ years in B2B SaaS. NOT a growth PM, consume
 - No "0-to-1" greenfield founding PM work
 - No growth/consumer UX domain expertise
 - No confirmed migration totals
-- No quantified revenue retention from Bellwether
+- No quantified revenue retention from Platform Data Remediation
 - No Kafka migration completion
 - No Nexus/EDP ownership
 

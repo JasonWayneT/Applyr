@@ -1,0 +1,44 @@
+{
+  "Module_A_Company_DNA": {
+    "Core_Mission_Values": {
+      "Stated": "Adaptive focuses on real estate innovation, likely emphasizing adaptive solutions for property management or development. Observed: Emphasis on product-led growth in competitive NYC real estate tech space. [Source: https://lensa.com/job-v1/adaptive-real-estate/new-york-ny/product-manager/7b9e5ff0e244fe70bd96dff02f0792a7; https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]",
+      "Observed": "Product-centric culture with on-site NYC roles, prioritizing equity and high comp for talent attraction."
+    },
+    "Problem_Space": "Solves inefficiencies in real estate operations through adaptive tech platforms, enabling scalable product management for property portfolios, tenant experiences, or market analytics. [Source: https://lensa.com/job-v1/adaptive-real-estate/new-york-ny/product-manager/7b9e5ff0e244fe70bd96dff02f0792a7]",
+    "Business_Model": "Likely SaaS/subscription for real estate tech tools; growth stage mid (hiring PMs at $160-200K); financial health stable with equity offers. [Source: https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]",
+    "Founding_Story": "Limited public data; appears as established NYC real estate tech firm with recent product expansion. Key inflection: Scaling product team for enterprise features. [Source: https://lensa.com/job-v1/adaptive-real-estate/new-york-ny/product-manager/7b9e5ff0e244fe70bd96dff02f0792a7]"
+  },
+  "Module_B_Market_Competitors": {
+    "Big_3_Competitors": [
+      "VTS (View The Space): Commercial real estate leasing platform. Differentiator: Adaptive's focus on residential/adaptive models vs. VTS enterprise leasing.",
+      "RealPage: Property management SaaS. Differentiator: Adaptive's NYC-centric product innovation.",
+      "Yardi Systems: Full-suite real estate software. Differentiator: Adaptive's agile PM-driven customization. [Sources: General market knowledge; job context from https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]"
+    ],
+    "Macro_Trends": "Real estate tech faces AI disruption in predictive analytics, regulatory shifts in proptech data privacy (e.g., NYC housing laws), and headwinds from high interest rates slowing deals. [Source: Industry context]"
+  },
+  "Module_C_Recent_Intelligence": {
+    "Financials_Funding": "No specific 90-day funding disclosed; equity offers suggest Series B+ stability. [Source: https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]",
+    "Organizational_Shifts": "Active hiring surge in Product dept (PM role posted recently). No layoffs noted. [Source: https://lensa.com/job-v1/adaptive-real-estate/new-york-ny/product-manager/7b9e5ff0e244fe70bd96dff02f0792a7; https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]",
+    "Product_Partnership_News": "No specific launches in 90 days; focus on platform expansion via PM hires. [Source: Job postings]"
+  },
+  "Module_D_Role_Org_Chart": {
+    "JD_Analysis": {
+      "Keywords": "Product Manager, NYC on-site, $160-200K + equity, full-time Product dept.",
+      "Hidden_Success_Signals": "Enterprise focus, technical fluency needed; success via shipping features for real estate pain points.",
+      "Required_vs_Preferred": "Required: PM experience; Preferred: Real estate/tech domain. [Source: https://lensa.com/job-v1/adaptive-real-estate/new-york-ny/product-manager/7b9e5ff0e244fe70bd96dff02f0792a7; https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]"
+    },
+    "Hierarchy": "Reports to Product leadership; team structure: Growing Product dept in NYC. [Source: https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]",
+    "Hiring_Manager_Profile": "Not identified in sources; likely Head of Product with real estate tech background."
+  },
+  "Module_E_Culture_Reality_Check": {
+    "Sentiment_Analysis": "Limited Glassdoor/Blind data; advertised as high-comp, equity-driven. Real-world: On-site NYC suggests intense, collaborative culture. [Source: Job postings; no direct reviews found]",
+    "Operational_Style": "Fully on-site NYC; employee tenure unknown but hiring indicates growth phase stability."
+  },
+  "Module_F_Intersection": {
+    "Priority_Mapping": [
+      "Priority: Product platform scaling → Jason's Platform experience direct match.",
+      "Priority: Revenue systems optimization (real estate SaaS) → Jason's Revenue Systems expertise.",
+      "Priority: Data integrity for analytics → Jason's Data Integrity background. [Sources: JD from https://jobs.ashbyhq.com/adaptive/e90de15c-50fc-4769-8b96-1d8aa634814a/application]"
+    ]
+  }
+}

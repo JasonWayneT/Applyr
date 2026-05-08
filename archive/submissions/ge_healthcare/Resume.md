@@ -1,38 +1,53 @@
-<div style="font-size: 11pt; line-height: 1.25;">
+# JASON TAYLOR
 
-<h1 style="margin: 0; padding: 0; font-size: 16pt;"><strong>Jason Taylor</strong></h1>
 San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug
 
-<h2 style="margin: 12px 0 6px 0; padding: 0; font-size: 12pt;"><strong>PROFESSIONAL SUMMARY</strong></h2>
-High-impact Product Manager with 6+ years of experience specializing in platform stability, legacy system modernization, and B2B SaaS optimization. Proven success driving complex technical roadmaps, aligning engineering squads with business objectives, and optimizing data integrity and internal workflows to maximize enterprise value.
+## PRODUCT MANAGER - PLATFORM & DIGITAL SYSTEMS (HEALTHCARE IT ALIGNED)
 
-<h2 style="margin: 12px 0 6px 0; padding: 0; font-size: 12pt;"><strong>PROFESSIONAL EXPERIENCE</strong></h2>
+Product Manager with 6+ years of experience owning complex B2B SaaS platforms ($40M ARR). Specialized in managing product lifecycles for technical platform ecosystems, driving integration strategy between disparate data systems, and leading cross-functional teams through stabilization and modernization initiatives in regulated environments.
 
-<h3 style="margin: 6px 0 2px 0; padding: 0; font-size: 11pt;"><strong>Product Manager</strong></h3>
-Cision | September 2021 - January 2026
+Proven track record defining and executing roadmaps for mission-critical software products, managing external vendor partnerships, and translating clinical/business requirements into scalable technical solutions. Operates comfortably at the intersection of system architecture, data integrity, and strategic portfolio alignment.
 
-* Managed product strategy and roadmap for Legacy C3 and CPRE platforms, serving over 3,500 active accounts and generating $40M ARR.
-* Spearheaded the "Bellwether" initiative, an architectural bypass directly integrating GPOD with C3 to eliminate 30-40% contact data loss.
-* Designed and executed voluntary, phased migration tooling to support safe, retention-focused transitions to newer platforms.
-* Guided cross-functional alignment across 15+ software engineers, DBAs, and DevOps to reduce a 300-item security backlog by 90%.
-* Supervised the secure ingestion and indexing of premium content data partners such as LexisNexis to improve core enterprise features.
+## PROFESSIONAL EXPERIENCE
 
-<h3 style="margin: 8px 0 2px 0; padding: 0; font-size: 11pt;"><strong>Product Manager</strong></h3>
-Sterkly Services | February 2019 - August 2021
+### **Product Owner → Product Manager (Functional Scope) | September 2021 - January 2026**
+Full Remote
 
-* Led modernization initiatives across internal operations platforms, resolving legacy architectural bottlenecks to unblock development teams.
-* Facilitated structured requirements workshops with executive leaders and account managers to turn complex strategies into actionable engineering tasks.
-* Partnered with agile engineering teams to validate early technical feasibility, reducing rework and increasing total product delivery throughput.
-* Developed new workflow automation processes that streamlined customer data processing and minimized manual overhead.
+Defined and executed the product roadmap for a revenue-bearing B2B SaaS platform generating approximately $40M in annual recurring revenue across ~3,500 active enterprise accounts. Directed platform strategy and lifecycle management during a multi-year modernization and migration phase.
 
-<h3 style="margin: 8px 0 2px 0; padding: 0; font-size: 11pt;"><strong>Account Manager / Product Owner</strong></h3>
-Zero To Sixty Media | June 2017 - January 2019
+### Digital Product Lifecycle & Strategy
+* Owned the vision and strategy for core platform modules and underlying Core Platform Infrastructure infrastructure.
+* Managed the full product lifecycle during a transition period, ensuring system stability while preparing for next-generation platform integration.
+* Partnered cross-functionally with engineering, data/AI, and GTM teams across global matrixed organizations.
+* Led quarterly planning cycles and dependency mapping to ensure portfolio coherence across multiple product modalities.
 
-* Co-created and launched automated onboarding and client lifecycle tools that directly increased delivery capacity and client retention.
-* Streamlined a comprehensive laptop fulfillment program handling ~$288,000 in contracts, building automation that saved $8,500 per quarter.
-* Formed partnerships with executives, account teams, and developers to build custom Salesforce integrations, saving $22,100 annually in processing overhead.
+### Integration Strategy & Data Integrity
+* Identified and resolved a 30-40% contact data drop-off by bypassing legacy ETL pipelines in favor of a direct integration with the primary source of truth (Centralized Contact Database).
 
-<h2 style="margin: 12px 0 6px 0; padding: 0; font-size: 12pt;"><strong>EDUCATION</strong></h2>
-Bachelor of Business Administration | National University
+### SaaS Enablement & Migration
 
-</div>
+### Stakeholder Management & Regulated Environments
+
+Product Manager  
+
+* Defined product roadmaps and authored structured requirements for internal and client-facing digital health and SaaS initiatives.
+* Facilitated cross-functional workshops to translate ambiguous business needs into explicit technical specifications for engineering squads.
+* Designed and delivered proprietary internal workflow solutions that resolved operational bottlenecks and increased delivery capacity.
+
+Product Owner  
+
+* Automated manual onboarding and fulfillment workflows, improving delivery throughput by approximately 40%.
+* Co-developed internal automation tools for Salesforce integration, reducing operational overhead and improving data accuracy in core customer databases.
+
+## EDUCATION
+
+Bachelor of Business Administration  
+National University
+
+## CERTIFICATIONS
+
+Certified Scrum Master (Scrum Alliance)
+
+## PROFESSIONAL SUMMARY
+
+Jason Taylor is a platform-focused Product Manager who has successfully stabilized and modernized $40M ARR enterprise systems under complex, matrixed conditions. He specializes in removing operational friction, improving data integrity through architectural simplification, and driving disciplined roadmap execution. He is uniquely positioned to bridge the gap between technical engineering teams and business stakeholders to deliver clinical and operational value in the Healthcare IT space.

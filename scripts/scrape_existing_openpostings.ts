@@ -43,7 +43,7 @@ async function run() {
                 FROM Postings
                 WHERE (LOWER(position_name) LIKE ?)
                 AND (last_seen_epoch >= ?)
-            `).all(term, FRESHNESS_CUTOFF_EPOCH);
+            `).all(term, FRESHNESS_CUTOFF_EPOCH) as any[];
 
             console.log(`    -> Found ${postings.length} candidates.`);
 
@@ -75,14 +75,14 @@ async function run() {
                 insert.run(randomUUID(), job.company, job.title, job.url);
                 saved++;
                 console.log(`    + Added: ${job.title} at ${job.company}`);
-            } catch (e) {
+            } catch (e: any) {
                 console.log(`    - Failed to save ${job.title}: ${e.message}`);
             }
         }
 
         console.log(`[DONE] ${saved} new roles added to jobagent.sqlite from existing OpenPostings DB.`);
 
-    } catch (e) {
+    } catch (e: any) {
         console.error('[ERROR]', e);
     } finally {
         OP_DB.close();

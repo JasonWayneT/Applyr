@@ -1,39 +1,51 @@
-<div style="font-size: 11pt; line-height: 1.25;">
+# JASON TAYLOR
 
-<h1 style="margin: 0; padding: 0; font-size: 16pt;"><strong>Jason Taylor</strong></h1>
 San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug
 
-<h2 style="margin: 12px 0 6px 0; padding: 0; font-size: 12pt;"><strong>PROFESSIONAL SUMMARY</strong></h2>
-High-impact Product Manager with 6+ years of experience specializing in platform stability, legacy system modernization, and B2B SaaS optimization. Proven success driving complex technical roadmaps, aligning engineering squads with business objectives, and optimizing data integrity and internal workflows to maximize enterprise value.
+## TECHNICAL PRODUCT MANAGER - PLATFORM, DATA & INFRASTRUCTURE
 
-<h2 style="margin: 12px 0 6px 0; padding: 0; font-size: 12pt;"><strong>PROFESSIONAL EXPERIENCE</strong></h2>
+Technical Product Manager with 6+ years of experience owning high-revenue B2B SaaS platforms ($40M ARR). Specialized in infrastructure modernization, data integrity initiatives (ETL/pipelines), and API integration strategy. Proven track record of reducing operational friction and improving system reliability through architectural simplification and disciplined prioritization.
 
-<h3 style="margin: 6px 0 2px 0; padding: 0; font-size: 11pt;"><strong>Product Manager</strong></h3>
-Cision | September 2021 - January 2026
+Expert at translating complex technical constraints into clear product specifications and partnering with engineering teams to ship reliable, scalable solutions. Operates comfortably in SQL and data-intensive environments.
 
-* Managed the end-to-end product strategy and roadmap for Legacy C3 and CPRE platforms, serving over 3,500 active accounts and generating $40M ARR.
-* Led the Bellwether initiative (an architectural data integration that bypassed legacy ETL pipelines), which eliminated 30-40% contact data loss.
-* Built direct integrations between GPOD (contact source of truth database) and C3 (customer platform) to ensure data freshness and minimize systemic churn.
-* Designed and executed voluntary, phased migration tooling to support safe, retention-focused transitions to newer platforms.
-* Guided cross-functional alignment across 15+ software engineers, DBAs, and DevOps to reduce a 300-item security backlog by 90%.
-* Supervised the secure ingestion and indexing of premium content data partners such as LexisNexis to improve core enterprise features.
+## PROFESSIONAL EXPERIENCE
 
-<h3 style="margin: 8px 0 2px 0; padding: 0; font-size: 11pt;"><strong>Product Manager</strong></h3>
-Sterkly Services | February 2019 - August 2021
+### **Product Owner → Product Manager (Functional Scope) | September 2021 - January 2026**
+Full Remote
 
-* Led modernization initiatives across internal operations platforms, resolving legacy architectural bottlenecks to unblock development teams.
-* Facilitated structured requirements workshops with executive leaders and account managers to turn complex strategies into actionable engineering tasks.
-* Partnered with agile engineering teams to validate early technical feasibility, reducing rework and increasing total product delivery throughput.
-* Developed new workflow automation processes that streamlined customer data processing and minimized manual overhead.
+Owned the end-to-end product strategy, roadmap, and infrastructure modernization for Core B2B SaaS Platform and Core Platform Infrastructure, a revenue-bearing platform generating $40M ARR across 3,500 enterprise accounts.
 
-<h3 style="margin: 8px 0 2px 0; padding: 0; font-size: 11pt;"><strong>Account Manager / Product Owner</strong></h3>
-Zero To Sixty Media | June 2017 - January 2019
+### Technical Platform Ownership & Reliability
+* Owned the Core Platform Infrastructure underlying infrastructure, treating system uptime and data integrity as core product features.
+* Managed platform reliability across ~200 SQL customer databases and integrated core modules with upstream data platforms (Upstream Media Monitoring Platform).
+* Implemented storage monitoring and alerting for DT Search indexing servers, eliminating a recurring outage pattern tied to index corruption.
+* Led remediation of ~300 penetration test findings, resolving 90% of vulnerabilities through risk-weighted, phased execution.
 
-* Co-created and launched automated onboarding and client lifecycle tools that directly increased delivery capacity and client retention.
-* Streamlined a comprehensive laptop fulfillment program handling ~$288,000 in contracts, building automation that saved $8,500 per quarter.
-* Formed partnerships with executives, account teams, and developers to build custom Salesforce integrations, saving $22,100 annually in processing overhead.
+### Data Integrity & Pipeline Modernization
+* Diagnosed a 30-40% contact data drop-off caused by fragile legacy ETL pipelines. Orchestrated an architectural bypass that directly integrated the application with the primary source of truth (Centralized Contact Database).
 
-<h2 style="margin: 12px 0 6px 0; padding: 0; font-size: 12pt;"><strong>EDUCATION</strong></h2>
-Bachelor of Business Administration | National University
+### Integration & API Strategy
 
-</div>
+Product Manager  
+
+* Authored detailed technical specifications and PRDs for internal operations platforms and digital modernization initiatives.
+* Facilitated workshops between business stakeholders and engineering to unblock critical friction points in development workflows.
+* Delivered proprietary workflow automation solutions that increased organizational delivery capacity and predictability.
+
+Product Owner  
+
+* Co-developed internal system automation tools for Salesforce onboarding, reducing manual effort and saving ~$22,000 annually.
+* Managed vendor fulfillment programs (~$288k contracts), implementing automation that reduced overhead by $8,500 per quarter.
+
+## EDUCATION
+
+Bachelor of Business Administration  
+National University
+
+## CERTIFICATIONS
+
+Certified Scrum Master (Scrum Alliance)
+
+## PROFESSIONAL SUMMARY
+
+Jason Taylor is a Technical Product Manager who specializes in the "under the hood" work that powers modern SaaS platforms. He has a demonstrated ability to stabilize aging infrastructure, simplify complex data pipelines, and drive system reliability in high-stakes environments. He is uniquely skilled at bridging the gap between GTM teams and engineering to ensure technical investments translate directly into business outcomes and customer trust.

@@ -1,23 +1,17 @@
-<div style="font-size: 11pt; line-height: 1.15;">
+# JASON TAYLOR
 
-<h1 style="margin: 0 0 8px 0; padding: 0; text-align: left; font-size: 16pt;"><strong>Jason Taylor</strong></h1>
-<div style="text-align: left; margin-bottom: 20px;">
 San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug
-</div>
 
-Dear Hiring Manager,
+Dear Hiring Team,
 
-[Opening paragraph connecting role to background]
+[Insert opening paragraph connecting the specific role and company to your background, emphasizing platform management, stability, and security in complex technical environments.]
 
-[Body paragraph 1 highlighting relevant experience]
+[Insert body paragraph 1 highlighting your relevant experience at Cision, focusing on systematic security cleanups, vulnerability remediation, or roadmap continuity under shifting priorities.]
 
-[Body paragraph 2 describing alignment with company culture/needs]
+[Insert body paragraph 2 describing your track record of resolving data integrity failures, pipelines, or architectural integrations (such as centralized platform data remediation initiatives) and how it aligns with the company's product goals.]
 
-[Closing paragraph and call to action]
+Thank you for your time and consideration. I look forward to the possibility of discussing how my experience can support [Company Name]’s growth.
 
-Sincerely,
+Best regards,
 
 Jason Taylor
-
-</div>
-

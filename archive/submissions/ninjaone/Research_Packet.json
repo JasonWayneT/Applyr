@@ -1,0 +1,45 @@
+{
+  "Module_A": {
+    "Core_Mission_Values": {
+      "Stated": "NinjaOne's mission is to empower IT teams to manage and secure endpoints effortlessly, focusing on simplicity, automation, and scalability in IT management. Core values include innovation, customer obsession, and relentless execution. [Source: https://www.ninjaone.com/about/]",
+      "Observed": "Emphasis on remote-first culture, unlimited PTO, and rapid product iteration, as seen in job postings and employee reviews highlighting fast growth and high expectations. [Source: https://www.glassdoor.com/Overview/Working-at-NinjaOne-EI_IE2432803.11,19.htm]"
+    },
+    "Problem_Space": "NinjaOne solves the pain of complex IT endpoint management for MSPs and IT teams by providing an all-in-one RMM platform that automates patching, monitoring, backups, and MDM across Windows, Mac, and Linux devices, reducing manual work and downtime. [Source: https://www.ninjaone.com/platform/]",
+    "Business_Model": "SaaS subscription model with per-device pricing tiers for MSPs and enterprises. Growth stage: High-growth unicorn (valued at $1.9B in 2024 funding). Financial health: Profitable with strong ARR growth; raised $231M Series C in 2024. [Source: https://www.ninjaone.com/press/ninjaone-raises-231-million/; https://techcrunch.com/2024/02/07/ninjaone-raises-231m-at-1-9b-valuation-to-expand-its-it-management-platform/]",
+    "Founding_Story": "Founded in 2013 by Sal Sferlazza in Austin, TX, as NinjaRMM (rebranded to NinjaOne in 2021). Key inflection: Explosive growth during COVID remote work boom; expanded from RMM to full UEM/MDM suite. [Source: https://www.ninjaone.com/about/]"
+  },
+  "Module_B": {
+    "Big_3_Competitors": [
+      "1. ConnectWise (Manage): Direct RMM rival; NinjaOne differentiates with simpler UI, faster patching, and Apple MDM focus. [Source: https://www.g2.com/categories/remote-monitoring-management-rmm#grid]",
+      "2. Kaseya: Enterprise-focused UEM; NinjaOne wins on MSP affordability and ease-of-use. [Source: https://www.g2.com/categories/unified-endpoint-management]",
+      "3. Microsoft Intune: Cloud-native MDM; NinjaOne stands out with cross-platform RMM integration and no Microsoft ecosystem lock-in. [Source: https://www.ninjaone.com/compare/ninjaone-vs-microsoft-intune/]"
+    ],
+    "Macro_Trends": "AI-driven automation in IT ops (e.g., predictive patching); rising cybersecurity threats pushing zero-trust endpoint security; regulatory pressures like SEC cybersecurity rules and Apple privacy changes (e.g., Declarative Device Management). Headwinds: Economic slowdowns hitting MSP budgets, AI disruption commoditizing basic RMM. [Source: https://www.gartner.com/en/information-technology/insights/it-operations-management; https://www.apple.com/business/docs/iOS_iPadOS_Management.pdf]"
+  },
+  "Module_C": {
+    "Financials_Funding": "Series C: $231M at $1.9B valuation (Feb 2024). No new rounds in last 90 days (as of May 2026); steady profitability reported. [Source: https://www.ninjaone.com/press/ninjaone-raises-231-million/; https://www.crunchbase.com/organization/ninjarMM]",
+    "Organizational_Shifts": "Hiring surge in product/engineering (multiple PM roles open); no major layoffs. Leadership stable post-2024 expansion. [Source: https://jobs.jobvite.com/ninjaone/jobs; https://www.linkedin.com/company/ninjaone/jobs/]",
+    "Product_Partnership_News": "Launched enhanced Apple MDM features (Q1 2026); partnered with SentinelOne for integrated EDR (late 2025). No M&A in 90 days. [Source: https://www.ninjaone.com/blog/ninjaone-apple-mdm/; https://www.ninjaone.com/partners/sentinelone/]"
+  },
+  "Module_D": {
+    "JD_Analysis": {
+      "Keywords": "Apple MDM, roadmap, customer research, competitive analysis, engineering collaboration, MSP workflows.",
+      "Hidden_Success_Signals": "Deep Apple ecosystem expertise (e.g., Declarative Device Management, WWDC translation); hands-on device management experience; external representation (conferences/webinars).",
+      "Required": "3+ years PM in B2B SaaS/endpoint management; deep Apple knowledge; roadmap ownership.",
+      "Preferred": "MDM/UEM vendor experience; Jamf/Apple certs; MSP familiarity; Android/IAM exposure. [Source: https://remotive.com/remote/jobs/product/product-manager-3890344]"
+    },
+    "Hierarchy": "PM reports to Director of Product Management (MDM team); part of larger Product org under VP Product. Cross-functional with Eng/Design/QA. [Source: https://www.glassdoor.com/job-listing/product-manager-endpoint-management-ninjaone-JV_KO0,35_KE36,44.htm?jl=1010026014467]",
+    "Hiring_Manager_Profile": "Likely John Kim (VP Product) or MDM team lead; background in SaaS PM at endpoint firms; priorities: Apple innovation, MSP simplification. Limited public content. [Source: https://www.linkedin.com/in/johnkim-ninjaone/; https://www.ninjaone.com/leadership/]"
+  },
+  "Module_E": {
+    "Sentiment_Analysis": "Glassdoor: 4.5/5 stars; pros: remote flexibility, growth opps, unlimited PTO; cons: fast-paced 'startup hustle' even at scale, high expectations. Reddit/Blind: Positive for comp ($150-200K), mixed on work-life balance. [Source: https://www.glassdoor.com/Reviews/NinjaOne-Reviews-E2432803.htm; https://www.teamblind.com/company/NinjaOne/posts]",
+    "Operational_Style": "Fully remote (USA-only for this role); avg tenure ~2 years (high growth turnover); collaborative, async-heavy with tools like Slack/Jira. [Source: https://www.ninjaone.com/careers/; https://www.glassdoor.com/Overview/Working-at-NinjaOne-EI_IE2432803.11,19.htm]"
+  },
+  "Module_F": {
+    "Priority_Mapping": [
+      "Priority: Apple MDM roadmap ownership → Jason's Platform experience (scalable device mgmt systems). [Connection: Data Integrity in enrollment/config workflows].",
+      "Priority: Customer research & competitive analysis → Jason's Revenue Systems (market-driven prioritization). [Connection: Platform strategy alignment].",
+      "Priority: MSP workflows simplification → Jason's cross-platform expertise. [Connection: Revenue-impacting automation]. [Sources: JD at https://remotive.com/remote/jobs/product/product-manager-3890344; NinjaOne platform docs]"
+    ]
+  }
+}

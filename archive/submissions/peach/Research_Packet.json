@@ -1,0 +1,172 @@
+{
+  "research_packet": {
+    "company_name": "Peach Finance",
+    "position": "Product Manager",
+    "research_date": "2026-05-08",
+    "modules": {
+      "module_a_company_dna": {
+        "core_mission": {
+          "stated": "Peach is a modern loan management and servicing platform empowering lenders to launch and scale new lending programs with a fully integrated, configurable system of record with API-first architecture.",
+          "observed": "B2B SaaS fintech infrastructure provider focused on enabling rapid product launches while maintaining compliance and operational efficiency in regulated lending environments.",
+          "source": "https://ats.rippling.com/peach-finance/jobs/b507c21b-2ee2-4ffc-8b58-250881fb6463"
+        },
+        "problem_space": "Lenders face operational complexity in launching new lending programs, managing servicing workflows, collections, and compliance requirements. Peach solves this by providing a configurable, API-first platform that reduces time-to-market while ensuring regulatory compliance.",
+        "business_model": {
+          "revenue_streams": "B2B SaaS subscription model for loan management and servicing platform",
+          "growth_stage": "Rapidly scaling with mission to reach $100M ARR in next few years",
+          "financial_health": "Growth-stage company with active hiring and expansion",
+          "source": "https://ats.rippling.com/peach-finance/jobs/b507c21b-2ee2-4ffc-8b58-250881fb6463"
+        },
+        "founding_story": "Information not available in provided search results",
+        "key_inflection_points": "Currently in expansion phase with focus on next-generation financial products and features"
+      },
+      "module_b_market_competitors": {
+        "market_position": "Loan management and servicing platform in fintech infrastructure space",
+        "big_3_competitors": "Not explicitly identified in search results",
+        "peach_differentiator": "API-first architecture, fully integrated configurable system, rapid product launch capability, compliance-focused design",
+        "macro_trends": {
+          "regulatory_environment": "Increasing compliance complexity in lending (mentioned as core requirement)",
+          "ai_disruption": "Emerging AI capabilities and vendor landscape evaluation required for product roadmap",
+          "operational_efficiency": "Market demand for scalable, compliant lending infrastructure",
+          "source": "https://ats.rippling.com/peach-finance/jobs/b507c21b-2ee2-4ffc-8b58-250881fb6463"
+        }
+      },
+      "module_c_recent_intelligence": {
+        "financials_funding": {
+          "status": "No recent funding round data in search results",
+          "growth_target": "$100M ARR goal within next few years",
+          "source": "https://ats.rippling.com/peach-finance/jobs/b507c21b-2ee2-4ffc-8b58-250881fb6463"
+        },
+        "organizational_shifts": {
+          "hiring_activity": "Active hiring across multiple departments (Product, Sales, and others)",
+          "current_openings": "4 roles across all departments",
+          "leadership_expansion": "Seeking Chief Revenue Officer and Product Manager roles",
+          "source": "https://ats.rippling.com/peach-finance/jobs"
+        },
+        "product_partnership_news": {
+          "product_focus": "Next-generation financial products in servicing, collections, and compliance workflows",
+          "ai_integration": "Evaluating AI-powered capabilities including Agentic AI, NLP, chat/voice automation",
+          "source": "https://ats.rippling.com/peach-finance/jobs/b507c21b-2ee2-4ffc-8b58-250881fb6463"
+        }
+      },
+      "module_d_role_org_chart": {
+        "jd_analysis": {
+          "position_title": "Product Manager",
+          "employment_type": "Full-time, Remote (United States)",
+          "compensation": {
+            "salary_range": "$130,000 - $145,000 USD per year",
+            "source": "https://ats.rippling.com/peach-finance/jobs/b507c21b-2ee2-4ffc-8b58-250881fb6463"
+          },
+          "key_responsibilities": [
+            "Translate operational workflows and lender pain points into feature requirements",
+            "Lead cross-functional teams (engineering, data, operations, legal/compliance)",
+            "Design, build, and ship features with regulatory compliance",
+            "Instrument lending servicing features for performance measurement",
+            "Act as internal evangelist for new capabilities",
+            "Stay ahead of emerging AI capabilities and vendor landscape"
+          ],
+          "required_qualifications": [
+            "5+ years Product Management experience in fintech, credit, lending, payments, or regulated domains",
+            "Track record leading cross-functional teams in regulated environments",
+            "Strong analytical skills (SQL fluency, experimentation, metrics definition)",
+            "Excellent written and verbal communication across technical and business audiences",
+            "Comfort balancing strategic vendor partnerships with hands-on development",
+            "Obsession for operational detail, scalability, and compliance"
+          ],
+          "nice_to_have": [
+            "Understanding of lending servicing or collections workflows",
+            "Experience building or launching AI-powered products (Agentic AI, NLP, chat/voice automation, compliance tools)",
+            "Prior engineering or data experience"
+          ],
+          "hidden_success_signals": [
+            "Regulated environment experience (fintech, payments, lending)",
+            "Cross-functional leadership in complex compliance scenarios",
+            "AI/ML product experience",
+            "Operational metrics and instrumentation expertise",
+            "Vendor partnership management"
+          ],
+          "source": "https://ats.rippling.com/peach-finance/jobs/b507c21b-2ee2-4ffc-8b58-250881fb6463"
+        },
+        "reporting_structure": {
+          "direct_reports": "Not specified in job description",
+          "reporting_to": "Likely VP Product or Chief Product Officer (not explicitly stated)",
+          "cross_functional_partners": "Engineering, Data, Operations, Legal/Compliance, Customer Success, Sales"
+        },
+        "team_structure": {
+          "product_team_size": "Not specified",
+          "organizational_context": "Rapidly scaling B2B SaaS company with 4 open roles across departments",
+          "source": "https://ats.rippling.com/peach-finance/jobs"
+        },
+        "hiring_manager_profile": "Not available in search results"
+      },
+      "module_e_culture_reality_check": {
+        "sentiment_analysis": {
+          "glassdoor_data": "Not available in search results",
+          "reddit_blind_data": "Not available in search results",
+          "status": "Unable to assess real-world vs. advertised culture from provided sources"
+        },
+        "operational_style": {
+          "work_arrangement": "Remote-first (work from anywhere in United States or Oakland office option)",
+          "benefits": [
+            "401(k)",
+            "Commuter benefits",
+            "Phone bill reimbursement",
+            "Gym stipend",
+            "Equity awards (all team members share in company success)",
+            "Health insurance cover",
+            "Flexible/hybrid work plan"
+          ],
+          "source": "https://www.peachfinance.com/careers"
+        },
+        "employee_tenure": "Not available in search results",
+        "company_stage_indicators": "Growth-stage with expansion hiring and $100M ARR ambition suggests 50-200 person company range"
+      },
+      "module_f_intersection_bridge": {
+        "priority_mapping": [
+          {
+            "company_priority": "Rapid product launch capability while maintaining compliance",
+            "jason_connection": "Platform expertise - building scalable, compliant systems",
+            "relevance": "High - Core to Peach's value proposition"
+          },
+          {
+            "company_priority": "Cross-functional leadership in regulated environments",
+            "jason_connection": "Revenue Systems - managing complex stakeholder ecosystems",
+            "relevance": "High - PM role requires coordinating legal, compliance, engineering, operations"
+          },
+          {
+            "company_priority": "Data-driven decision making and performance instrumentation",
+            "jason_connection": "Data Integrity - metrics definition, SQL fluency, experimentation",
+            "relevance": "High - Explicit requirement for analytical skills and performance measurement"
+          },
+          {
+            "company_priority": "AI/ML product integration (Agentic AI, NLP, automation)",
+            "jason_connection": "Platform innovation - emerging technology evaluation",
+            "relevance": "Medium-High - Nice-to-have but increasingly important for roadmap"
+          },
+          {
+            "company_priority": "Vendor partnership management and strategic evaluation",
+            "jason_connection": "Revenue Systems - ecosystem and partnership strategy",
+            "relevance": "Medium - Requires comfort balancing partnerships with internal development"
+          },
+          {
+            "company_priority": "Scaling to $100M ARR",
+            "jason_connection": "Revenue Systems - growth infrastructure and operational efficiency",
+            "relevance": "High - Core business objective requiring product-led growth strategy"
+          }
+        ],
+        "candidate_fit_assessment": "Strong alignment if Jason has: (1) Fintech/regulated environment experience, (2) Cross-functional leadership in compliance-heavy contexts, (3) Data analytics and SQL skills, (4) AI/ML product exposure, (5) Vendor management experience"
+      }
+    },
+    "data_quality_notes": {
+      "coverage": "Comprehensive job description and company overview available",
+      "gaps": [
+        "Limited historical company information (founding story, previous funding rounds)",
+        "No employee sentiment data (Glassdoor, Blind, Reddit)",
+        "Hiring manager identity not disclosed",
+        "Competitive landscape not detailed",
+        "Recent press/news not captured in search results"
+      ],
+      "source_reliability": "All claims sourced from official Peach Finance careers pages and job boards"
+    }
+  }
+}

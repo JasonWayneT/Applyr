@@ -1,0 +1,71 @@
+Product Manager
+
+About The Role:
+
+Our data feed business is one of the fastest-growing segments of YipitData. To accelerate that growth, we're looking for a Product Manager to own and help scale several of our data feed products.
+
+This is not a maintenance role. We are in the midst of a strategic transformation, moving towards a more centralized, commercially accountable product management model. You will be instrumental in shaping how that model works, establishing best practices, and driving both internal and external impact across a portfolio of high-value alternative data feeds.
+
+Our Feeds organization includes product managers, quant researchers, product specialists, feed operations, and product marketers. We collaborate closely with engineering partners (who own technical architecture, infrastructure, and delivery) and our go-to-market teams (Sales, CS, and dedicated Product Specialists who sit between Product and Sales). Together, we build data feed products on top of proprietary and exclusively licensed alternative datasets - including transaction data, email receipt data, B2B spend data, and more - serving fundamental, quantitative, and systematic investors.
+
+What You'll Do
+
+Product Strategy & Roadmap Ownership
+
+Own the product roadmap for one or more data feeds, defining, prioritizing, and evangelizing the what and the why behind what we build
+Set product vision and strategy that balances both internal customer needs (Quant research team requirements, analyst workflows) and external client needs (buy-side investors, quant/systematic funds)
+Translate business goals into a technical roadmap in close partnership with engineering, ensuring strategy matches technical reality
+Contribute to long-term feed portfolio strategy, identifying opportunities for new products, enhancements, and market expansion
+Commercial Accountability
+
+Share ARR and P&L accountability alongside Product Specialists / Product Enablement partners for the feeds you own.
+Conduct deep customer and market research to understand use cases, the competitive landscape, and whitespace opportunities.
+Support pricing, packaging, and competitive positioning decisions in partnership with GTM teams.
+Cross-Functional Collaboration
+
+Partner with Engineering on technical approach, scaled infrastructure, delivery architecture, and reliability - you own strategy and direction; engineering owns implementation.
+Work closely with Quant researchers, who function as a key internal customer providing research requirements, content, and deliverables for the external quant end market.
+Collaborate with Product Specialists (our product-sales translators) to enable sales motions, support client conversations, and scale enablement across all feed products.
+Partner with the CS team (who own feed retention and renewal) to drive retention, expansion, and client satisfaction.
+Coordinate with Feed Operations on day-to-day delivery, incident management, and operational improvements.
+Data Quality, QA & Operational Reliability
+
+Own the product-side accountability for data quality and reliability of your feeds - ensuring products are highly stable, accurate, and delivered on a consistent frequency.
+Partner with engineering and data science teams on QA frameworks, including auto-QA systems, outlier detection, coverage checks, and data transparency metrics.
+Define and own processes for incident communication - including client-facing notifications, data issue escalation, and resolution workflows.
+Monitor operational health and proactively identify risks before they reach clients.
+Delivery Experience & Documentation
+
+Own the client delivery experience end-to-end - including portal delivery, file formatting and notification systems.
+Partner with product marketing on centralized, professional, client-facing documentation for the feeds you manage.
+Ensure documentation is complete, accurate, and continuously updated as products evolve.
+3P Data Partnerships
+
+Contribute to the evaluation and management of additional data vendor relationships that underpin feed products.
+Understand data licensing constraints, coverage, and quality implications when making product decisions.
+Collaborate with data sourcing teams to assess new data opportunities and integration feasibility.
+What You'll Bring
+
+Required
+
+5+ years of product management experience, with meaningful time spent in data-intensive, data feed, data solutions, or B2B SaaS product environments.
+Strong cross-functional collaboration skills - you've worked at the intersection of engineering, data science, sales, and client success.
+Excellent written and verbal communication - you can write a clear product spec, lead a roadmap review, and hold your own in a client meeting.
+Comfort with ambiguity and change management - you thrive in environments where you're building the operating model, not just following one.
+Strong analytical skills with hands-on experience working with data.
+Preferred
+
+Experience owning a product P&L or demonstrable commercial accountability.
+Familiarity with buy-side, quant, and systematic investor use cases (signal testing, backtesting, alpha generation workflows).
+Experience with alternative data products or the alternative data ecosystem.
+Exposure to data delivery infrastructure (APIs, flat files, cloud storage, portal-based delivery).
+Familiarity with Databricks, Jira, and Agile project management methodologies.
+Experience managing or partnering on third-party data vendor relationships.
+Background in data quality, QA systems, or data operations.
+Why This Role
+
+Shape a new function: You won't just manage a product - you'll help define how centralized feed product management works at YipitData.
+High visibility: Large internal and external exposure, from engineering leadership to C-suite to buy-side clients.
+Commercial impact: Direct line of sight to revenue outcomes and P&L accountability.
+Portfolio breadth: Work across a diverse set of alternative datasets (transaction, email receipt, B2B spend, cloud, medtech, and more).
+Fast-paced growth: The feeds and quant segment is one of our fastest-growing businesses - you'll be riding

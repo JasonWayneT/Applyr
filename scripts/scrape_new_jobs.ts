@@ -43,7 +43,7 @@ async function run() {
           'main', 'article', 'body'
         ];
         for (const sel of selectors) {
-          const el = document.querySelector(sel);
+          const el = document.querySelector(sel) as HTMLElement | null;
           if (el && el.innerText.length > 500) {
             return el.innerText;
           }

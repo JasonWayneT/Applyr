@@ -7,7 +7,7 @@ linkedin.com/in/redacted-linkedin-slug
 
 ---
 
-# **PRODUCT MANAGER – PLATFORM & REVENUE SYSTEMS (B2B SAAS)**
+# **PRODUCT MANAGER – Platform & Ingestion Systems (B2B SAAS)**
 
 Product Manager with 6+ years of experience owning complex B2B SaaS platforms (~$40M ARR). Specialized in defining product strategy for platform modernization, reducing high-impact churn drivers, and leading cross-functional teams through data-intensive migration and stabilization initiatives.
 
@@ -35,16 +35,16 @@ Agile / Scrum Methodology
 
 ## **CISION**
 
-Product Owner → Product Manager (Functional Scope)  
-September 2021 – January 2026 | Full Remote
+### **Product Owner → Product Manager (Functional Scope) | September 2021 – January 2026**
+Full Remote
 
-Defined and executed the product roadmap for Legacy C3 and CPRE, a revenue-bearing B2B SaaS platform generating approximately $40M in annual recurring revenue across ~3,500 active accounts and ~25,000 users. Directed platform strategy during a multi-year transition while the organization migrated customers to newer systems.
+Defined and executed the product roadmap for Core B2B SaaS Platform and Core Platform Infrastructure, a revenue-bearing B2B SaaS platform generating approximately $40M in annual recurring revenue across ~3,500 active accounts and ~25,000 users. Directed platform strategy during a multi-year transition while the organization migrated customers to newer systems.
 
 ### **Platform Ownership & Scope**
 
-* Owned Legacy C3 (media monitoring \+ media contact database) and CPRE infrastructure.  
-* Integrated C3 with upstream systems including GPOD (contact source of truth) and UCP (Unified Content Platform).  
-* Partnered cross-functionally with product and engineering teams across Cision One, Next Gen C3, and enterprise data initiatives (Nexus / EDP).  
+* Owned Core B2B SaaS Platform (media monitoring \+ media contact database) and Core Platform Infrastructure infrastructure.  
+* Integrated Core B2B SaaS Platform with upstream systems including Centralized Contact Database (contact source of truth) and Upstream Media Monitoring Platform (Upstream Media Monitoring Platform).  
+* Partnered cross-functionally with product and engineering teams across Cision One, Next Gen Core B2B SaaS Platform, and enterprise data initiatives (Nexus / EDP).  
 * Coordinated across engineering teams fluctuating between \~6 and \~15 engineers over tenure.  
 * Led quarterly PI planning cycles, dependency mapping, and roadmap presentations to cross-functional and executive audiences.
 
@@ -59,13 +59,13 @@ Defined and executed the product roadmap for Legacy C3 and CPRE, a revenue-beari
 
 ---
 
-### **Project Bellwether – Data Strategy & Churn Driver Elimination**
+### **Platform Data Remediation – Data Strategy & Churn Driver Elimination**
 
 Identified and resolved the largest documented product-driven churn driver: stale contact data.
 
-* Investigated legacy ETL pipelines and identified 30–40% contact data drop-off between GPOD and C3.  
-* Defined architectural remediation strategy to bypass opaque legacy systems in favor of direct integration with GPOD.  
-* Led proof-of-concept development and production rollout of “Bellwether,” a simplified ingestion and delta-update system.  
+* Investigated legacy ETL pipelines and identified 30–40% contact data drop-off between Centralized Contact Database and Core B2B SaaS Platform.  
+* Defined architectural remediation strategy to bypass opaque legacy systems in favor of direct integration with Centralized Contact Database.  
+* Led proof-of-concept development and production rollout of “Platform Data Remediation,” a simplified ingestion and delta-update system.  
 * Eliminated data drop-off and removed the primary stale-data complaint, restoring customer trust in base data quality.  
 * Improved competitive data freshness relative to industry peers.
 
@@ -82,7 +82,7 @@ Identified and resolved the largest documented product-driven churn driver: stal
 
 ### **Migration Strategy & Tooling**
 
-Led product strategy for voluntary migration from C3 to newer platforms.
+Led product strategy for voluntary migration from Core B2B SaaS Platform to newer platforms.
 
 * Designed phased migration rollout based on customer complexity (database-only → database \+ monitoring → data groups).  
 * Closed feature-parity gaps prior to expanding migration scope.  
@@ -117,7 +117,7 @@ The initiative was executive-driven and later discontinued due to unfavorable ec
 
 * Identified mobile UVPM (Unique Visitors Per Month) gap as customer retention risk.  
 * Delivered interim mobile UVPM support within architectural constraints.  
-* Scoped longer-term GPOD-based UVPM integration for unified metric accuracy.
+* Scoped longer-term Centralized Contact Database-based UVPM integration for unified metric accuracy.
 
 ---
 
@@ -145,8 +145,8 @@ Evolved from reactive execution to structured prioritization leadership.
 
 ## **STERKLY SERVICES**
 
-Product Manager  
-February 2019 – August 2021 | San Diego, CA (Hybrid)
+### **Product Manager | February 2019 – August 2021**
+San Diego, CA (Hybrid)
 
 * Defined product roadmaps and authored structured requirements for internal and client-facing initiatives.  
 * Facilitated cross-functional workshops to clarify ambiguous requirements in constrained technical environments.  
@@ -157,8 +157,8 @@ February 2019 – August 2021 | San Diego, CA (Hybrid)
 
 ## **ZERO TO SIXTY MEDIA**
 
-Product Owner  
-June 2017 – January 2019 | San Diego, CA (On-site)
+### **Product Owner | June 2017 – January 2019**
+San Diego, CA (On-site)
 
 * Automated manual onboarding and fulfillment workflows, increasing onboarding throughput by \~40%.  
 * Co-developed internal product automating Salesforce onboarding processes.  

@@ -39,3 +39,6 @@ submissions/
 
 # Materialized from SQLite — source of truth is the Job Search settings UI
 data/candidate_preferences.json
+
+# Local-only docs (not for public repo)
+docs/PROJECT_DEEP_DIVE.md

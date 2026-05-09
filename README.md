@@ -174,9 +174,15 @@ When you mark a role as **Applied**, the submission folder is automatically move
 
 ```
 server/
-  index.ts          — Express API (23 routes), key injection, experience codification
+  index.ts          — Entry point: middleware, router mounts, app.listen (33 lines)
+  shared.ts         — Shared path constants, buildPythonEnv, resolveCompanyFolder, materializeJobSearchPrefs
   scout.ts          — Scout orchestrator: spawns scout → backfill → scrape → evaluate
   db.ts             — SQLite init, logActivity helper
+  routes/
+    system.ts       — /api/system-status, /api/ats-pipeline, /api/logs
+    jobs.ts         — All /api/jobs/* routes (CRUD, files, AI rewrite, ZIP download, manual draft)
+    profile.ts      — /api/profile/*, /api/experience (includes proof-code codification)
+    pipeline.ts     — /api/evaluate (SSE stream), /api/sync
 
 scripts/
   scout_local.ts    — 7-source parallel job scraper (reads candidate_preferences.json)

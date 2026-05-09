@@ -4,7 +4,6 @@ import TodayView from './pages/TodayView';
 import AllJobsView from './pages/AllJobsView';
 import FindNewJobsView from './pages/FindNewJobsView';
 import SyncActivityView from './pages/SyncActivityView';
-import ProfileView from './pages/ProfileView';
 import JobDetailPanel from './components/JobDetailPanel';
 import NotificationPanel from './components/NotificationPanel';
 import { Job } from './types/job';
@@ -51,8 +50,6 @@ function App() {
         return <FindNewJobsView />;
       case 'Job Search':
         return <SyncActivityView />;
-      case 'My profile':
-        return <ProfileView />;
       case 'Settings':
         return <SettingsView />;
       case 'Tuning Log':

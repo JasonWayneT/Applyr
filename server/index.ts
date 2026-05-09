@@ -9,8 +9,6 @@ import { randomUUID } from 'crypto';
 import AdmZip from 'adm-zip';
 import { db, logActivity } from './db.js';
 import { runScoutSync } from './scout.js';
-import { TITLE_BLOCKLIST, INDUSTRY_BLOCKLIST_DEFAULT } from './config.js';
-
 // Allowlist of columns that may be updated via the generic PATCH endpoint
 const ALLOWED_JOB_FIELDS = new Set([
   'title', 'company', 'url', 'score', 'summary', 'status',
@@ -178,13 +176,6 @@ app.get('/api/ats-pipeline', (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch ATS pipeline' });
   }
-});
-
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-app.get('/api/config', (_req, res) => {
-  res.json({ titleBlocklist: TITLE_BLOCKLIST, industryBlocklist: INDUSTRY_BLOCKLIST_DEFAULT });
 });
 
 // ---------------------------------------------------------------------------

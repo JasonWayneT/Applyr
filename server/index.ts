@@ -807,6 +807,18 @@ app.post('/api/experience', (req, res) => {
     const codifiedContent = codifyExperienceAndAssignIDs(content);
     fs.writeFileSync(WORK_EXPERIENCE_PATH, codifiedContent, 'utf-8');
     logActivity('INFO', 'System', 'workExperience.md updated and automatically codified under SDD with sequential IDs by user.');
+
+    // Implements FR-064: regenerate scoring summary in background — fire and forget
+    const summaryProc = spawn('python', ['scripts/generate_experience_summary.py'], {
+      cwd: path.join(__dirname, '..'),
+      shell: true,
+      env: { ...process.env, ...buildPythonEnv() },
+      detached: true,
+      stdio: 'ignore',
+    });
+    summaryProc.unref();
+    logActivity('INFO', 'System', 'Regenerating experience scoring summary in background...');
+
     res.json({ success: true, content: codifiedContent });
   } catch (err) {
     res.status(500).json({ error: 'Failed to save experience file' });

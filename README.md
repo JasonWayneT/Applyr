@@ -83,7 +83,7 @@ Go to **Settings → Experience**. Paste your raw work history in any format —
 
 The system structures it into five sections and assigns stable proof codes (`ACC-NNN`, `VOC-XX`, `MET-XX`) to every claim. These codes are the anti-hallucination contract: the AI cannot claim anything in a generated document that doesn't trace back to a code in this file.
 
-> **Important:** Also maintain `data/workExperience_summary.md` — a condensed version of your experience used during the fit-scoring stage. The full `workExperience.md` is used for drafting; the summary keeps scoring prompts within token budget. Both files must exist for the pipeline to run.
+After saving, the system automatically generates a condensed scoring brief (`data/workExperience_summary.md`) in the background using your configured LLM. This is used during fit scoring to keep token usage low — the full experience document is only loaded for roles that pass the score threshold. You never need to touch the summary file directly.
 
 ### 4. Set your job search criteria
 
@@ -182,9 +182,10 @@ scripts/
   scout_local.ts    — 7-source parallel job scraper (reads candidate_preferences.json)
   scrape_new_jobs.ts — Fetches full JD text for newly discovered jobs
   batch_pipeline.py — Fit scoring + asset generation engine (--mode batch | single)
-  drafting_engine.py — Resume/CL drafting (imported by batch_pipeline)
-  research-engine.py — Company intelligence via Perplexity or primary LLM
-  compile_single.py  — Markdown → PDF via Playwright
+  drafting_engine.py             — Resume/CL drafting (imported by batch_pipeline)
+  generate_experience_summary.py — Auto-generates scoring brief from workExperience.md (background)
+  research-engine.py             — Company intelligence via Perplexity or primary LLM
+  compile_single.py              — Markdown → PDF via Playwright
   style_compliance_guard.py — Resume/CL format validation
   ai_rewrite.py      — LLM-powered document editing
   utils.py           — Shared: LLM call with fallback chain, path constants, file I/O
@@ -199,7 +200,7 @@ src/
 data/
   candidate_preferences.json    — Materialized search/scoring config (auto-written by server)
   workExperience.md             — Full codified work history (edited via Settings > Experience)
-  workExperience_summary.md     — Condensed version for LLM scoring prompts (manually maintained)
+  workExperience_summary.md     — Condensed scoring brief (auto-generated on every experience save)
   job_fit_engine.md             — Scoring rules and anchor criteria
   Resume.md                     — Master resume template
   Cover_Letter_Reference.md     — Master cover letter template

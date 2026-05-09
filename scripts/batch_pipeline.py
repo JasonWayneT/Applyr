@@ -114,8 +114,8 @@ def process_single(company, url, jd_text):
     print(json.dumps({"id": "gate", "status": "done", "summary": "Signals detected."}))
     print(json.dumps({"id": "fit", "status": "running", "summary": f"Evaluating '{company}'..."}))
 
-    # Scoring uses condensed summary — full workExperience loaded only on YES
-    work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE)
+    # Implements FR-064: summary auto-generated on save; fall back to full file if not yet generated
+    work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE)
     result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
     if not result:
         print(json.dumps({"id": "fit", "status": "error", "summary": "Evaluation failed."}))
@@ -165,13 +165,13 @@ def process_batch():
     print(" JobAgent v3.2 Batch Pipeline Sync  ")
     print("====================================")
 
-    # Scoring uses condensed summary; full file loaded only on YES
-    work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE)
+    # Implements FR-064: summary auto-generated on save; fall back to full file if not yet generated
+    work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE)
     fit_rules = load_file(FIT_ENGINE_FILE)
     prefs = load_candidate_preferences()
 
     if not work_exp_summary or not fit_rules:
-        print("CRITICAL ERROR: workExperience_summary.md or Fit Rules missing. Aborting.")
+        print("CRITICAL ERROR: workExperience.md and Fit Rules must both exist. Aborting.")
         return
 
     job_files = glob.glob(os.path.join(JOBS_DIR, "*.txt"))

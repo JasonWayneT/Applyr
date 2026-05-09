@@ -34,6 +34,44 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 5.17
+Applyr Release
+May 9, 2026
+
+Version 5.17, first offered to local users on May 9, 2026
+
+Previous
+Applyr 5.16
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Job Funnel Expansion — 7 Active Sources (CR-004, FR-052):** Added three new job sources to the scout pipeline: Himalayas (remote-focused), The Muse (culture-forward listings), and Adzuna (aggregates thousands of boards). Phase 1 now runs 7 parallel API sources simultaneously, significantly expanding the top of the funnel without additional token spend.
+- **Adzuna Optional Connection (FR-054, FR-055, NFR-004):** Adzuna is configured entirely from the UI. If no key is provided the source is silently skipped. A built-in rate guard caps usage at 10 calls per scout run with a 3-second inter-call delay, keeping usage comfortably inside the free tier (25 req/min, 250 req/day).
+- **LLM Provider Fallback Chain (CR-006, FR-059, FR-060):** The pipeline now supports automatic multi-provider fallback. The primary provider is tried first; on a non-rate-limit error it falls through to the next configured provider in order (Gemini → Claude → Local → Perplexity). Rate limit errors retry within the same provider. If no providers are configured, an actionable warning is logged and no API call is attempted.
+- **Perplexity as Full LLM Provider (FR-061):** Perplexity `sonar-pro` is now a first-class pipeline provider alongside Gemini, Claude, and Local. When a Perplexity key is configured, the research engine uses it first for company intelligence (native web retrieval), then falls back to the primary LLM on failure. No Perplexity key = no Perplexity calls, ever.
+- **Four-Card LLM Provider UI (FR-062):** The "API or Connections" settings tab is redesigned into four independent provider cards — Gemini, Claude, Local LLM, and Perplexity. Each card has an always-visible key/URL field, a Connected badge when credentials are present, and a "Set Primary / Primary ✓" toggle. Configure any combination; the pipeline uses whatever is connected.
+
+Fixed
+- **RemoteOK Tag Format Bug:** RemoteOK slugs require hyphens (`product-manager`), not URL-encoded spaces (`product+manager`). Fixed tag generation to use the correct format.
+- **Remotive Category Lock:** Remotive was locked to a single category search. Fixed to iterate all `SEARCH_TERMS` with per-term dedup via a shared `seenUrls` Set.
+- **WWR Single Feed:** We Work Remotely was fetching only one RSS feed. Fixed to pull both the product and management/finance feeds with shared extraction logic.
+- **Import-Time Gemini Crash:** `utils.py` instantiated a global `genai.Client` at module import time, causing an immediate crash if `GEMINI_API_KEY` was unset. Removed — clients are now created lazily inside `_call_gemini()` only when that provider is actually invoked.
+
+Changed
+- **Role-Aware Muse Routing (FR-056):** The Muse source now derives its category from `TARGET_ROLE` via `getTheMuseCategory()` rather than a hardcoded `"Product"` category. Users targeting Engineering, Design, or Data roles get correct category routing automatically.
+- **PM Search Term Expansion (FR-053):** `materializeJobSearchPrefs()` now automatically appends Product Owner, Technical Product Manager, Platform Product Manager, and Digital Product Manager to the search terms when the target role includes "Product Manager" — without hardcoding these anywhere in scout scripts.
+- **Perplexity Moved from Data Sources to LLM Providers (SEC-004):** The Perplexity API key is now stored in `llm_settings` alongside Gemini and Claude, not in `api_connections`. Existing keys are transparently migrated on first Settings load.
+- **`provider` → `primaryProvider` (FR-063):** The LLM settings field renamed from `provider` to `primaryProvider` in both the frontend and Python. Backward compatibility is maintained — old DB records with `"provider"` continue to work automatically.
+
+Developer
+- **`_is_configured()` + `_get_configured_providers()` in `utils.py` (FR-059):** Provider guard functions ensure no LLM API is ever called without a valid key. Configured providers are returned in call order: primary first, then the fixed fallback sequence.
+- **`buildPythonEnv()` updated (FR-058, SEC-004):** Reads `perplexityApiKey` from `llm_settings`; reads Adzuna keys from `api_connections`. All LLM keys injected at Python spawn time via environment variables — never written to disk.
+- **SDD compliance:** CR-004, CR-005, and CR-006 documents created. Requirements registry updated with FR-052 through FR-063, NFR-005, and SEC-004.
+
+---
+
 ### 5.16
 Applyr Release
 May 8, 2026

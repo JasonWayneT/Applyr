@@ -1,0 +1,5 @@
+python-dotenv
+google-genai
+playwright
+Markdown
+requests

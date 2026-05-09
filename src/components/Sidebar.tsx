@@ -19,7 +19,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     { name: 'Job Search', icon: 'radar' },
     { name: 'Add Job', icon: 'post_add' },
     { name: 'Tuning Log', icon: 'tune' },
-    { name: 'Settings', icon: 'settings' },
+    { name: 'Profile', icon: 'person' },
   ];
 
   // Close menu when clicking outside
@@ -98,7 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
             <div className="space-y-0.5">
               <button
                 onClick={() => {
-                  setActiveTab('Settings');
+                  setActiveTab('Profile');
                   setIsMenuOpen(false);
                 }}
                 className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"

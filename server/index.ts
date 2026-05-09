@@ -743,7 +743,7 @@ function codifyExperienceAndAssignIDs(markdown: string): string {
       !trimmed.includes('*   **Unowned Systems**')
     ) {
       const content = trimmed.replace(/^\*\s*/, '').trim();
-      if (content.startsWith('**') && !content.includes('[ACC-')) {
+      if (content.startsWith('**') && !content.includes('[ACC-') && !content.includes('[RETIRED-ACC-')) {
         const sectionIdx = parseInt(currentSection.split('.')[1], 10);
         const rangeBase = sectionIdx * 100 + 1;
         const nextId = sectionCounters.get(currentSection) ?? rangeBase;

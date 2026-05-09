@@ -384,12 +384,12 @@ const SettingsView: React.FC = () => {
                             <p className="text-[11px] font-bold text-error uppercase tracking-wider">Retire a Claim — Unlink</p>
                           </div>
                           <p className="text-xs text-on-surface-variant leading-relaxed">
-                            Remove the <span className="font-mono text-on-surface">[ACC-NNN]</span> tag from the bold header before saving.
-                            Keep the plain text as a record. Never delete lines silently.
+                            Change <span className="font-mono text-on-surface">[ACC-NNN]</span> to <span className="font-mono text-on-surface">[RETIRED-ACC-NNN]</span> before saving.
+                            The engine skips lines containing <span className="font-mono text-on-surface">RETIRED-ACC</span> and will not re-assign a new code to it.
                           </p>
                           <div className="bg-surface-container rounded-lg p-2 font-mono text-[10px] text-on-surface-variant leading-relaxed">
-                            <span className="text-error">→</span> <span className="text-on-surface">**Old claim, no longer used**</span>
-                            <br /><span className="text-on-surface-variant/60 pl-4">(tag removed = unlinked from AI)</span>
+                            <span className="text-error">→</span> <span className="text-on-surface">**[RETIRED-ACC-101] Old claim**</span>
+                            <br /><span className="text-on-surface-variant/60 pl-4">(preserved in file, invisible to AI)</span>
                           </div>
                         </div>
                       </div>

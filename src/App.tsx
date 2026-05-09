@@ -50,7 +50,7 @@ function App() {
         return <FindNewJobsView />;
       case 'Job Search':
         return <SyncActivityView />;
-      case 'Settings':
+      case 'Profile':
         return <SettingsView />;
       case 'Tuning Log':
         return <TuningLogView jobs={jobs} onJobClick={setSelectedJob} />;

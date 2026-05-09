@@ -23,14 +23,18 @@ interface StatusChipProps {
 const StatusChip: React.FC<StatusChipProps> = ({ status, long = false, hasAssets = true }) => {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG['Closed'];
   let label = long ? status : config.label;
+  let chipClass = config.chipClass;
+  let dotClass = config.dotClass;
   
   if ((status === 'New' || status === 'Backlog') && !hasAssets) {
-    label = 'Pending';
+    label = 'Pending Assets';
+    chipClass = 'chip chip-drafted';
+    dotClass = 'bg-status-drafted-text';
   }
 
   return (
-    <span className={config.chipClass}>
-      <span className={`w-1.5 h-1.5 rounded-full ${config.dotClass}`} />
+    <span className={chipClass}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
       {label}
     </span>
   );

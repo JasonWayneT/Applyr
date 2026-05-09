@@ -1,0 +1,118 @@
+URL: https://vitestro.recruitee.com/o/technical-product-owner-platform-connectivity
+
+Technical Product Owner - Platform & Connectivity
+Utrecht, Netherlands
+Job details
+Apply
+Job description
+
+About Vitestro
+
+Founded in 2017 in Utrecht, Vitestro is pioneering the future of blood collection with the Aletta® Autonomous Robotic Phlebotomy Device™ (ARPD™). This groundbreaking medical device combines advanced multi-modal imaging (near-infrared, ultrasound, and Doppler ultrasound) with robotics and AI to perform the entire diagnostic blood draw procedure autonomously.
+
+By addressing critical healthcare staffing shortages and improving patient experience, Vitestro is transforming one of the most common and essential medical procedures. With more than 90 team members and growing rapidly, we are scaling our impact.
+
+At Vitestro, we are committed to continuous innovation and improvement.
+
+ 
+
+Join us as our new Technical Product Owner (Platform & Connectivity)
+
+As our Technical Product Owner for Platform & Connectivity, you take ownership of the cloud and connectivity layer that enables Vitestro’s products to operate reliably, securely, and at scale in clinical environments.
+
+You operate at the intersection of engineering and product, ensuring that complex platform, data, and connectivity challenges are translated into clear priorities and delivered effectively. You are responsible for backlog ownership, prioritization, and delivery, while acting as a sparring partner for engineers and aligning stakeholders across the organization.
+
+You work on topics such as cloud platform architecture, device connectivity, data flows, observability, and security ensuring that systems integrate seamlessly and perform reliably in real-world healthcare environments.
+
+ 
+
+First Months at Vitestro
+
+In your first months, your focus will be on taking ownership of the Platform & Connectivity backlog and bringing structure to ongoing work across cloud, connectivity, and data initiatives.
+
+You align closely with engineering, product management, and key stakeholders to clarify priorities, define scope, and ensure that delivery is predictable and aligned with company goals. You facilitate refinements, define clear requirements, and ensure that engineers are working on the highest-value topics.
+
+You build a strong understanding of the system landscape, including cloud services, data flows, device connectivity, and integrations, and quickly become a trusted sparring partner for the team.
+
+At the same time, you help improve how work is organized, ensuring clarity in ownership, priorities, and delivery timelines across multiple complex initiatives.
+
+ 
+
+This is what your success looks like
+
+After 12 months, the Platform & Connectivity domain operates with clear priorities, structured backlog management, and predictable delivery.
+
+The team delivers reliably on key initiatives related to cloud, connectivity, and data, and stakeholders have clear visibility into progress, risks, and priorities. You are recognized as the go-to person for aligning technical and product decisions within this domain.
+
+You have built strong trust with engineering and stakeholders, and you are able to balance technical complexity with business impact, ensuring that the right decisions are made at the right time.
+
+Job requirements
+
+What You’ll Bring
+
+Engineering background or strong technical foundation
+
+2+ years experience as a Product Owner with clear, dedicated ownership
+
+6+ years total experience in high-tech or software development.  
+
+Proven track record of owning backlog, prioritization, and delivery
+
+Experience with cloud, platform, or connectivity domains
+
+Experience with data flows, APIs, and system integrations
+
+Ability to understand and challenge engineers on technical topics
+
+Hands-on Product Owner mindset (structured, pragmatic, and delivery-focused)
+
+Experience working in Agile/Scrum environments
+
+Fluent in English and Dutch (required)
+
+ 
+
+Nice to have:
+
+Experience with IoT or device connectivity
+
+Experience in regulated environments (MedTech, healthcare, safety-critical)
+
+Experience with cybersecurity or platform security topics
+
+Experience scaling products or teams in a growing environment
+
+What we offer
+
+Competitive salary including pension plan
+
+25 days of annual leave based on a full-time position
+
+Hybrid work model
+
+Working together in a high-skilled team with our home base in Utrecht
+
+Frequent out-of-work activities with our team, and annual company weekend away
+
+Training budget
+
+Opportunity to be key shaper of a new global industry niche: autonomous medical robotics
+
+We’re big fans of working from the office, this is where team spirit comes alive. At the same time, we offer flexibility, allowing up to 2 (out of 5) days of working from home.
+
+ 
+
+Are you excited?
+
+We totally understand that and so are we! By joining us, you can play an active role in changing the future of health care. Excited to join our revolution? Then we’d love to hear from you!
+
+If you think you've got what it takes, but you don't meet all the requirements, we still recommend you apply. We would love to learn about your interest and experience, and consider if you can be a good fit for Vitestro. Nobody is a perfect fit, and we welcome applications with imperfections. We offer a learning environment where we grow together!
+
+For recruitment agencies, we are currently happy with the way we manage our process and fill our vacancies with our own efforts. Consider this as an answer to your offering via email, call, LinkedIn, etc. – we do not require your support now. Thank you.
+
+Apply
+
+or
+
+Apply with Indeed
+Share job

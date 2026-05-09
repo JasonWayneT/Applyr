@@ -51,7 +51,7 @@ export const runScoutSync = () => {
       
       if (code === 0) {
         logActivity('INFO', 'Scout', 'Starting URL backfill crawl for any missing job URLs...');
-        const backfillProcess = spawn('npx', ['tsx', 'scripts/backfill_urls.ts'], {
+        const backfillProcess = spawn('npx', ['tsx', 'scripts/archive/backfill_urls.ts'], {
           cwd: path.join(__dirname, '..'),
           shell: true
         });

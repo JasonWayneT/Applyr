@@ -8,7 +8,7 @@ from datetime import datetime
 from utils import (
     load_file, call_llm, JOBS_DIR, PROJECT_ROOT,
     WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
-    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS, load_candidate_preferences
+    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE, load_candidate_preferences
 )
 from drafting_engine import run_drafting_engine
 from generate_cheat_sheet import generate_cheat_sheet
@@ -125,7 +125,7 @@ def process_single(company, url, jd_text):
     decision = result.get("Decision", "NO")
     summary = result.get("Summary", "")
     
-    if decision == "NO" or score < 72:
+    if decision == "NO" or score < MIN_FIT_SCORE:
         print(json.dumps({"id": "fit", "status": "done", "summary": f"Rejected (Score: {score}). {summary}"}))
         print(json.dumps({"score": score, "passed": False}))
         return
@@ -265,7 +265,7 @@ def process_batch():
         print(f"  -> Result: {decision} (Score: {score})")
         print(f"  -> Summary: {result.get('Summary')}")
 
-        if decision == "NO" or score < 72:
+        if decision == "NO" or score < MIN_FIT_SCORE:
             print(f"  -> [GATEKEEPER REJECT] JD scored below 72 or triggered hard stop.")
             if db_exists:
                 try:

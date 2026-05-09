@@ -35,21 +35,21 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
       title: `${newJobs.length} new role${newJobs.length > 1 ? 's' : ''} found`,
       detail: newJobs.slice(0, 3).map(j => j.company).join(', ') + (newJobs.length > 3 ? ` +${newJobs.length - 3} more` : ''),
       time: 'From last scout',
-      action: () => { onNavigate('Applications'); onClose(); },
+      action: () => { onNavigate('Opportunities'); onClose(); },
     });
   }
 
-  // 2. Backlog items waiting for review
+  // 2. Backlog items ready to apply
   const backlog = jobs.filter(j => j.status === 'Backlog');
   if (backlog.length > 0) {
     notifications.push({
       id: 'backlog',
-      icon: 'priority_high',
-      iconClass: 'bg-status-backlog-bg text-status-backlog-text',
-      title: `${backlog.length} job${backlog.length > 1 ? 's' : ''} need review`,
-      detail: 'Backlog items waiting for your decision.',
-      time: 'Action needed',
-      action: () => { onNavigate('Applications'); onClose(); },
+      icon: 'star',
+      iconClass: 'bg-status-applied-bg text-status-applied-text',
+      title: `${backlog.length} matched role${backlog.length > 1 ? 's' : ''} ready to apply`,
+      detail: 'New opportunities ready for your application.',
+      time: 'Ready to Apply',
+      action: () => { onNavigate('Opportunities'); onClose(); },
     });
   }
 
@@ -85,7 +85,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
       title: `${activeInterviews.length} active interview process${activeInterviews.length > 1 ? 'es' : ''}`,
       detail: activeInterviews.map(j => j.company).join(', '),
       time: 'In progress',
-      action: () => { onNavigate('Applications'); onClose(); },
+      action: () => { onNavigate('Opportunities'); onClose(); },
     });
   }
 

@@ -1,38 +1,31 @@
 {
   "target_role": "Product Manager",
-  "search_terms": "Product Manager NOT Senior NOT Lead NOT Director",
-  "location_preference": "Remote, United States",
+  "search_terms": ["Product Manager", "Product Owner"],
+  "location_preference": "United States",
+  "work_setting": "Remote",
+  "experience_levels": [],
+  "date_posted": "Past week",
+  "freshness_days": 7,
+  "blocked_titles": [
+    "Senior", "Staff", "VP", "Head", "Principal", "Lead", "Director",
+    "Growth", "Founding", "First", "Manager of", "Assistant", "Coordinator",
+    "Intern", "Associate", "Junior", "Analyst", "Engineer", "Developer",
+    "Designer", "Marketer"
+  ],
+  "blocked_industries": [
+    "Gambling", "Sports Betting", "Gaming", "Ad Tech", "Crypto", "Web3"
+  ],
+  "min_salary": 0,
+  "min_fit_score": 72,
+  "jd_required_keywords": [
+    "saas", "b2b", "platform", "integration", "enterprise", "api",
+    "product", "software", "agile", "roadmap", "stakeholder"
+  ],
   "experience_range": {
     "min": 3,
     "max": 7,
     "total_years_observed": 6
   },
-  "blocked_industries": [
-    "Gambling",
-    "Sports Betting",
-    "Gaming",
-    "Ad Tech",
-    "Crypto",
-    "Web3"
-  ],
-  "blocked_titles": [
-    "Senior",
-    "Staff",
-    "VP",
-    "Head",
-    "Principal",
-    "Lead",
-    "Director",
-    "Growth",
-    "Founding",
-    "First"
-  ],
-  "required_anchors": [
-    "Platform stability/reliability",
-    "Complex data migrations/integrations",
-    "Security/Risk prioritization",
-    "B2B Enterprise workflow scaling"
-  ],
   "preferences": {
     "no_people_management": true,
     "no_zero_to_one": true,

@@ -2,6 +2,7 @@ import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Page } from 'playwright';
 import path from 'path';
+import fs from 'fs';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 import { spawn, ChildProcess } from 'child_process';
@@ -12,18 +13,108 @@ const DB_PATH = 'jobagent.sqlite';
 const CONTEXT_DIR = path.resolve('data/browser_context');
 const OPENPOSTINGS_DIR = path.resolve('OpenPostings-extracted/OpenPostings-main');
 const OPENPOSTINGS_PORT = 8787;
-const SCOUT_FRESHNESS_DAYS = 7;
-const FRESHNESS_CUTOFF_EPOCH = Math.floor(Date.now() / 1000) - (SCOUT_FRESHNESS_DAYS * 24 * 60 * 60);
 
-const DB = new Database(DB_PATH);
+// ---------------------------------------------------------------------------
+// Load candidate preferences — single source of truth
+// ---------------------------------------------------------------------------
+let prefs: any = {};
+try {
+    const raw = fs.readFileSync(path.resolve('data/candidate_preferences.json'), 'utf-8');
+    prefs = JSON.parse(raw);
+} catch {
+    console.log('[WARN] Could not load candidate_preferences.json — using built-in defaults.');
+}
 
-// Mirrors server/config.ts — single source of truth lives there
-const TITLE_BLOCKLIST = [
+const TARGET_ROLE: string           = prefs.target_role || 'Product Manager';
+const SEARCH_TERMS: string[]        = prefs.search_terms?.length ? prefs.search_terms : [TARGET_ROLE, 'Product Owner'];
+const WORK_SETTING: string          = prefs.work_setting || 'Remote';
+const LOCATION: string              = prefs.location_preference || 'United States';
+const EXPERIENCE_LEVELS: string[]   = prefs.experience_levels || [];
+const FRESHNESS_DAYS: number        = prefs.freshness_days ?? 7;
+const TITLE_BLOCKLIST: string[]     = (prefs.blocked_titles || [
     'senior', 'staff', 'vp', 'head', 'principal', 'lead product manager',
     'director', 'growth', 'founding', 'manager of',
     'assistant', 'coordinator', 'intern', 'associate', 'junior',
     'analyst', 'engineer', 'developer', 'designer', 'marketer',
-];
+]).map((t: string) => t.toLowerCase());
+
+const FRESHNESS_CUTOFF_EPOCH = Math.floor(Date.now() / 1000) - (FRESHNESS_DAYS * 24 * 60 * 60);
+
+// ---------------------------------------------------------------------------
+// Location → LinkedIn geo ID
+// ---------------------------------------------------------------------------
+const LINKEDIN_GEO_IDS: Record<string, string> = {
+    'United States':         '103644278',
+    'Canada':                '101174742',
+    'United Kingdom':        '101165590',
+    'Australia':             '101452733',
+    'Worldwide / Remote Only': '',
+};
+
+// Work setting → LinkedIn f_WT param
+const LINKEDIN_WORK_TYPES: Record<string, string> = {
+    'Remote':  '2',
+    'Hybrid':  '3',
+    'On-site': '1',
+};
+
+// Experience level → LinkedIn f_E code
+const LINKEDIN_EXP_CODES: Record<string, string> = {
+    'Internship':             '1',
+    'Entry Level (0-1 Years)': '2',
+    'Junior (1-2 Years)':     '3',
+    'Mid Level (2-5 Years)':  '4',
+    'Senior Level (5-9 Years)': '5',
+    'Expert/Leader (9+ Years)': '6',
+};
+
+// Experience level → BuiltIn slug
+const BUILTIN_EXP_SLUGS: Record<string, string> = {
+    'Internship':             'internship',
+    'Entry Level (0-1 Years)': 'entry-level',
+    'Junior (1-2 Years)':     'entry-level',
+    'Mid Level (2-5 Years)':  'mid-level',
+    'Senior Level (5-9 Years)': 'senior-level',
+    'Expert/Leader (9+ Years)': 'senior-level',
+};
+
+// ---------------------------------------------------------------------------
+// URL builders
+// ---------------------------------------------------------------------------
+function buildLinkedInUrl(term: string): string {
+    const encoded   = encodeURIComponent(term);
+    const geoId     = LINKEDIN_GEO_IDS[LOCATION] ?? '103644278';
+    const workType  = LINKEDIN_WORK_TYPES[WORK_SETTING] ?? '2';
+    const freshnessSeconds = FRESHNESS_DAYS * 24 * 60 * 60;
+
+    let url = `https://www.linkedin.com/jobs/search/?f_TPR=r${freshnessSeconds}&keywords=${encoded}&f_WT=${workType}`;
+    if (geoId) url += `&geoId=${geoId}`;
+
+    if (EXPERIENCE_LEVELS.length > 0) {
+        const codes = [...new Set(EXPERIENCE_LEVELS.map(l => LINKEDIN_EXP_CODES[l]).filter(Boolean))];
+        if (codes.length) url += `&f_E=${codes.join('%2C')}`;
+    }
+
+    return url;
+}
+
+function buildBuiltInUrl(): string {
+    const workPrefix = WORK_SETTING === 'Hybrid' ? 'hybrid' : WORK_SETTING === 'On-site' ? '' : 'remote';
+    const base = workPrefix
+        ? `https://builtin.com/jobs/${workPrefix}/product-management`
+        : 'https://builtin.com/jobs/product-management';
+
+    let url = `${base}?days_since_posted=${FRESHNESS_DAYS}`;
+
+    if (EXPERIENCE_LEVELS.length > 0) {
+        const slugs = [...new Set(EXPERIENCE_LEVELS.map(l => BUILTIN_EXP_SLUGS[l]).filter(Boolean))];
+        for (const slug of slugs) url += `&experience%5B%5D=${slug}`;
+    }
+
+    return url;
+}
+
+const DB = new Database(DB_PATH);
 
 interface ScrapedJob {
     company: string;
@@ -161,10 +252,11 @@ const scoutOpenPostings = async (): Promise<ScrapedJob[]> => {
             } catch { break; }
         }
 
-        // Query for both search terms
-        for (const term of ['product manager', 'product owner']) {
+        // Query for all configured search terms
+        for (const term of SEARCH_TERMS) {
             try {
-                const url = `http://localhost:${OPENPOSTINGS_PORT}/postings?search=${encodeURIComponent(term)}&remote=remote`;
+                const remoteParam = WORK_SETTING === 'Remote' ? '&remote=remote' : '';
+                const url = `http://localhost:${OPENPOSTINGS_PORT}/postings?search=${encodeURIComponent(term)}${remoteParam}`;
                 const data = await (await fetch(url)).json() as any[];
                 console.log(`[LOG] OpenPostings: ${data.length} results for "${term}"`);
 
@@ -233,8 +325,8 @@ const scoutLinkedIn = async (page: Page): Promise<ScrapedJob[]> => {
 
     const jobs: ScrapedJob[] = [];
 
-    for (const term of ['Product%20Manager', 'Product%20Owner']) {
-        const searchUrl = `https://www.linkedin.com/jobs/search/?f_TPR=r604800&geoId=103644278&keywords=${term}&location=United%20States&f_WT=2`;
+    for (const term of SEARCH_TERMS) {
+        const searchUrl = buildLinkedInUrl(term);
 
         try {
             await page.goto(searchUrl);
@@ -299,8 +391,7 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
     const jobs: ScrapedJob[] = [];
 
     try {
-        // Targeted product-management category for higher precision
-        await page.goto('https://builtin.com/jobs/remote/product-management?days_since_posted=7', { waitUntil: 'domcontentloaded' });
+        await page.goto(buildBuiltInUrl(), { waitUntil: 'domcontentloaded' });
         await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
         await humanWait(2000, 4000);
         await page.waitForSelector('.job-item', { timeout: 10000 }).catch(() => {});
@@ -452,7 +543,8 @@ const scoutRemoteOK = async (): Promise<ScrapedJob[]> => {
     const jobs: ScrapedJob[] = [];
 
     try {
-        const res = await fetch('https://remoteok.com/api?tags=product+manager', {
+        const tag = encodeURIComponent(TARGET_ROLE.toLowerCase().replace(/\s+/g, '+'));
+        const res = await fetch(`https://remoteok.com/api?tags=${tag}`, {
             headers: { 'User-Agent': 'JobAgent/1.0' },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);

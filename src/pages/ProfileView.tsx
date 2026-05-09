@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api } from '../lib/api';
 
-type Tab = 'Identity' | 'Experience' | 'Preferences' | 'Analytics' | 'Security';
+type Tab = 'Identity' | 'Experience' | 'Analytics' | 'Settings';
 
 interface ProfileData {
   name: string;
@@ -12,26 +12,41 @@ interface ProfileData {
   portfolio: string;
 }
 
-interface PreferenceData {
-  minSalary: number;
-  environment: string;
-  titleBlocklist: string;
-  industryBlocklist: string;
+interface LLMSettings {
+  provider: 'gemini' | 'claude' | 'local';
+  geminiApiKey: string;
+  claudeApiKey: string;
+  localUrl: string;
+  localModel: string;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 const ProfileView: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<Tab>('Identity');
+  const [activeTab, setActiveTabState] = useState<Tab>(() => {
+    const saved = localStorage.getItem('profile_subtab');
+    if (saved === 'Security' || saved === 'Preferences') return 'Settings';
+    return (saved as Tab) || 'Identity';
+  });
+
+  const setActiveTab = (tab: Tab) => {
+    localStorage.setItem('profile_subtab', tab);
+    setActiveTabState(tab);
+  };
   const [profile, setProfile] = useState<ProfileData>({
     name: '', email: '', phone: '', location: '', linkedin: '', portfolio: ''
   });
-  const [preferences, setPreferences] = useState<PreferenceData>({
-    minSalary: 0, environment: 'Remote', titleBlocklist: '', industryBlocklist: ''
+  const [llmSettings, setLlmSettings] = useState<LLMSettings>({
+    provider: 'gemini',
+    geminiApiKey: '',
+    claudeApiKey: '',
+    localUrl: 'http://localhost:11434',
+    localModel: 'llama3'
   });
   const [experience, setExperience] = useState('');
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [isFormatGuideOpen, setIsFormatGuideOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [stats, setStats] = useState<{
     total: number;
@@ -46,22 +61,22 @@ const ProfileView: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [profileRes, prefRes, expRes, statsRes] = await Promise.all([
+        const [profileRes, expRes, statsRes, llmRes] = await Promise.all([
           fetch(api('/api/profile/identity')),
-          fetch(api('/api/profile/preferences')),
           fetch(api('/api/experience')),
           fetch(api('/api/jobs/stats')),
+          fetch(api('/api/profile/llm_settings')),
         ]);
-        const [profileData, prefData, expData, statsData] = await Promise.all([
+        const [profileData, expData, statsData, llmData] = await Promise.all([
           profileRes.json(),
-          prefRes.json(),
           expRes.json(),
           statsRes.json(),
+          llmRes.json(),
         ]);
         if (profileData.name) setProfile(profileData);
-        if (prefData.minSalary) setPreferences(prefData);
         setExperience(expData.content ?? '');
         if (!statsData.error) setStats(statsData);
+        if (llmData.provider) setLlmSettings(llmData);
       } catch {
         setLoadError('Could not connect to the local server. Make sure `npm run dev:server` is running.');
       }
@@ -124,6 +139,14 @@ const ProfileView: React.FC = () => {
     return null;
   };
 
+  const expStats = useMemo(() => ({
+    acc: (experience.match(/ACC-\d+/g) || []).length,
+    voc: (experience.match(/VOC-\d+/g) || []).length,
+    met: (experience.match(/MET-\d+/g) || []).length,
+  }), [experience]);
+
+  const isExperienceEmpty = experience.trim().length < 100;
+
   return (
     <div className="space-y-8 pb-20">
       {/* Header */}
@@ -145,7 +168,7 @@ const ProfileView: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex gap-8 border-b border-outline-variant/20">
-        {(['Identity', 'Experience', 'Preferences', 'Analytics', 'Security'] as Tab[]).map((tab) => (
+        {(['Identity', 'Experience', 'Analytics', 'Settings'] as Tab[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -197,110 +220,224 @@ const ProfileView: React.FC = () => {
 
         {/* Experience Tab */}
         {activeTab === 'Experience' && (
-          <div className="bg-surface-container-lowest rounded-2xl editorial-shadow overflow-hidden">
-            <div className="px-6 py-3 flex justify-between items-center bg-surface-container-low">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] text-on-surface-variant font-mono uppercase tracking-widest">Master Career Context (workExperience.md)</span>
-                {experienceDirty && (
-                  <span className="text-[10px] text-secondary flex items-center gap-1 font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-secondary inline-block"></span> Unsaved changes
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={saveExperience}
-                disabled={!experienceDirty || saveStatus === 'saving'}
-                className={`text-[11px] font-bold px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
-                  experienceDirty
-                    ? 'btn-primary text-xs py-1.5'
-                    : 'bg-surface-container text-on-surface-variant cursor-not-allowed'
-                }`}
-              >
-                <span className="material-symbols-outlined text-sm">save</span>
-                {saveStatus === 'saving' ? 'Saving...' : 'Save & Sync AI'}
-              </button>
-            </div>
-            <textarea
-              value={experience}
-              onChange={(e) => { setExperience(e.target.value); setExperienceDirty(true); }}
-              className="w-full h-[600px] bg-surface p-6 text-[13px] font-mono leading-relaxed text-on-surface focus:outline-none applyr-scrollbar resize-none"
-              spellCheck={false}
-            />
-          </div>
-        )}
+          <div className="space-y-4 animate-fade-in">
 
-        {/* Preferences Tab */}
-        {activeTab === 'Preferences' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-surface-container-lowest p-8 rounded-2xl editorial-shadow">
-            <div className="space-y-6">
-              <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Minimum Salary Requirement</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">$</span>
-                  <input
-                    type="number"
-                    value={preferences.minSalary}
-                    onChange={(e) => {
-                      const next = { ...preferences, minSalary: parseInt(e.target.value) || 0 };
-                      setPreferences(next);
-                      debouncedSave('preferences', next);
-                    }}
-                    className="input-applyr w-full rounded-xl pl-8"
+            {/* Empty state — onboarding prompt */}
+            {isExperienceEmpty ? (
+              <div className="bg-surface-container-lowest rounded-2xl editorial-shadow overflow-hidden">
+                <div className="px-8 pt-8 pb-6 space-y-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-primary text-2xl">history_edu</span>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-headline font-bold text-on-surface">Master Career Experience</h3>
+                      <p className="text-xs text-on-surface-variant mt-1 leading-relaxed max-w-xl">
+                        This is the anti-hallucination source of truth for every resume and cover letter the system generates.
+                        Every claim in a generated document must trace back to a coded proof point here —
+                        an accomplishment <span className="font-mono text-primary">ACC-NNN</span>, a vocabulary
+                        term <span className="font-mono text-primary">VOC-XX</span>, or a metric <span className="font-mono text-primary">MET-XX</span>.
+                        If no proof code exists, the AI is not allowed to make the claim.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-primary/5 border border-primary/15 rounded-xl px-5 py-4 space-y-2">
+                    <p className="text-xs font-bold text-primary uppercase tracking-widest">Getting started</p>
+                    <p className="text-xs text-on-surface-variant leading-relaxed">
+                      Paste your raw work history below in any format — job titles, bullet points, responsibilities,
+                      numbers, anything you remember. Click <strong className="text-on-surface">Save & Sync AI</strong> and
+                      the system will automatically structure it into five sections and assign stable proof codes to every claim.
+                      You can refine the structure over time.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+                      {[
+                        { icon: 'psychology', label: 'Vocabulary (VOC)', desc: 'Terms and language that define your professional voice' },
+                        { icon: 'bar_chart', label: 'Metrics (MET)', desc: 'Quantitative proof points — percentages, dollar amounts, scale' },
+                        { icon: 'emoji_events', label: 'Accomplishments (ACC)', desc: 'Role-specific achievements that resume bullets are drawn from' },
+                      ].map(item => (
+                        <div key={item.label} className="bg-surface-container rounded-xl p-3 flex gap-3 items-start">
+                          <span className="material-symbols-outlined text-primary text-base mt-0.5">{item.icon}</span>
+                          <div>
+                            <p className="text-[11px] font-bold text-on-surface">{item.label}</p>
+                            <p className="text-[10px] text-on-surface-variant mt-0.5 leading-snug">{item.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-outline-variant/10">
+                  <div className="px-4 py-2.5 flex justify-between items-center bg-surface-container-low">
+                    <span className="text-[10px] text-on-surface-variant font-mono uppercase tracking-widest">workExperience.md</span>
+                    <button
+                      onClick={saveExperience}
+                      disabled={!experienceDirty || saveStatus === 'saving'}
+                      className={`text-[11px] font-bold px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                        experienceDirty ? 'btn-primary text-xs py-1.5' : 'bg-surface-container text-on-surface-variant cursor-not-allowed'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-sm">auto_fix_high</span>
+                      {saveStatus === 'saving' ? 'Codifying...' : 'Save & Sync AI'}
+                    </button>
+                  </div>
+                  <textarea
+                    value={experience}
+                    onChange={(e) => { setExperience(e.target.value); setExperienceDirty(true); }}
+                    className="w-full h-64 bg-surface p-6 text-[13px] font-mono leading-relaxed text-on-surface focus:outline-none applyr-scrollbar resize-none"
+                    placeholder="Paste your work history here in any format. Include job titles, responsibilities, key projects, metrics, and anything you're proud of. Don't worry about structure — the system will organize and codify it."
+                    spellCheck={false}
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Preferred Work Environment</label>
-                <div className="flex gap-2">
-                  {['Remote', 'Hybrid', 'On-site'].map((opt) => (
+            ) : (
+              <>
+                {/* Codification status bar */}
+                <div className="flex items-center gap-4 bg-surface-container-lowest border border-outline-variant/10 rounded-2xl px-6 py-4 editorial-shadow">
+                  <span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>verified</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-on-surface">Codification Active</p>
+                    <p className="text-[11px] text-on-surface-variant mt-0.5">All generated documents must cite codes from this file.</p>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    {[
+                      { label: 'Accomplishments', value: expStats.acc, color: 'text-primary', code: 'ACC' },
+                      { label: 'Vocabulary', value: expStats.voc, color: 'text-secondary', code: 'VOC' },
+                      { label: 'Metrics', value: expStats.met, color: 'text-tertiary', code: 'MET' },
+                    ].map(stat => (
+                      <div key={stat.code} className="text-center">
+                        <p className={`text-2xl font-headline font-extrabold ${stat.color}`}>{stat.value}</p>
+                        <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-widest mt-0.5">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Update process guide */}
+                <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-2xl editorial-shadow overflow-hidden">
+                  <button
+                    onClick={() => setIsFormatGuideOpen(prev => !prev)}
+                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-surface-container-low transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="material-symbols-outlined text-on-surface-variant text-base">edit_note</span>
+                      <span className="text-xs font-bold text-on-surface">How to edit this document without breaking codes</span>
+                    </div>
+                    <span className="material-symbols-outlined text-on-surface-variant text-base">
+                      {isFormatGuideOpen ? 'expand_less' : 'expand_more'}
+                    </span>
+                  </button>
+
+                  {isFormatGuideOpen && (
+                    <div className="px-6 pb-6 space-y-4 border-t border-outline-variant/10">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
+                        <div className="bg-primary/5 border border-primary/15 rounded-xl p-4 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                            <p className="text-[11px] font-bold text-primary uppercase tracking-wider">Minor Edit — Safe</p>
+                          </div>
+                          <p className="text-xs text-on-surface-variant leading-relaxed">
+                            Fix wording, correct typos, or improve a sentence. The <span className="font-mono text-on-surface">[ACC-NNN]</span> tag
+                            stays in the line — the system preserves it and updates the content it points to.
+                          </p>
+                          <div className="bg-surface-container rounded-lg p-2 font-mono text-[10px] text-on-surface-variant leading-relaxed">
+                            <span className="text-primary">✓</span> <span className="text-on-surface">**[ACC-101] Led migration reducing latency 40%**</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-secondary/5 border border-secondary/15 rounded-xl p-4 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-secondary text-base" style={{ fontVariationSettings: "'FILL' 1" }}>add_circle</span>
+                            <p className="text-[11px] font-bold text-secondary uppercase tracking-wider">New Claim — Add</p>
+                          </div>
+                          <p className="text-xs text-on-surface-variant leading-relaxed">
+                            Add a new bold bullet without any code tag. Save, and the system assigns the next available code automatically.
+                          </p>
+                          <div className="bg-surface-container rounded-lg p-2 font-mono text-[10px] text-on-surface-variant leading-relaxed">
+                            <span className="text-secondary">+</span> <span className="text-on-surface">**New accomplishment here**</span>
+                            <br /><span className="text-on-surface-variant/60 pl-4">→ becomes [ACC-NNN] on save</span>
+                          </div>
+                        </div>
+
+                        <div className="bg-error/5 border border-error/15 rounded-xl p-4 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-error text-base" style={{ fontVariationSettings: "'FILL' 1" }}>link_off</span>
+                            <p className="text-[11px] font-bold text-error uppercase tracking-wider">Retire a Claim — Unlink</p>
+                          </div>
+                          <p className="text-xs text-on-surface-variant leading-relaxed">
+                            To stop a code from being used in future drafts, <strong className="text-on-surface">remove the [ACC-NNN] tag</strong> from
+                            the bold header before saving. Keep the plain text as a record. Never delete lines silently.
+                          </p>
+                          <div className="bg-surface-container rounded-lg p-2 font-mono text-[10px] text-on-surface-variant leading-relaxed">
+                            <span className="text-error">→</span> <span className="text-on-surface">**Old claim, no longer used**</span>
+                            <br /><span className="text-on-surface-variant/60 pl-4">(tag removed = unlinked from AI)</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-surface-container rounded-xl px-4 py-3 flex gap-3 items-start">
+                        <span className="material-symbols-outlined text-on-surface-variant text-base mt-0.5">info</span>
+                        <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                          <strong className="text-on-surface">Never delete a coded line entirely.</strong> If a claim is no longer accurate,
+                          unlink it by removing the code tag — the text stays as context but the AI will not cite it.
+                          This mirrors the SDD convention: retire, don't delete.
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Document structure (5 sections)</p>
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                          {[
+                            { num: '1', label: 'Identity & Positioning', desc: 'Who you are professionally' },
+                            { num: '2', label: 'Core Skills', desc: 'What you can do' },
+                            { num: '3', label: 'Vocabulary (VOC)', desc: 'Terms that define your voice' },
+                            { num: '4', label: 'Metrics Bank (MET)', desc: 'Quantitative proof points' },
+                            { num: '5', label: 'Accomplishments (ACC)', desc: 'Per-employer bullet points' },
+                          ].map(s => (
+                            <div key={s.num} className="bg-surface-container rounded-xl p-3">
+                              <p className="text-[9px] font-bold text-primary uppercase tracking-widest mb-1">§{s.num}</p>
+                              <p className="text-[11px] font-bold text-on-surface leading-tight">{s.label}</p>
+                              <p className="text-[10px] text-on-surface-variant mt-1 leading-snug">{s.desc}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Editor */}
+                <div className="bg-surface-container-lowest rounded-2xl editorial-shadow overflow-hidden">
+                  <div className="px-6 py-3 flex justify-between items-center bg-surface-container-low">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] text-on-surface-variant font-mono uppercase tracking-widest">workExperience.md</span>
+                      {experienceDirty && (
+                        <span className="text-[10px] text-secondary flex items-center gap-1 font-bold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-secondary inline-block"></span> Unsaved changes
+                        </span>
+                      )}
+                    </div>
                     <button
-                      key={opt}
-                      onClick={() => {
-                        const next = { ...preferences, environment: opt };
-                        setPreferences(next);
-                        debouncedSave('preferences', next);
-                      }}
-                      className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
-                        preferences.environment === opt
-                          ? 'bg-primary-container text-on-primary-container'
-                          : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'
+                      onClick={saveExperience}
+                      disabled={!experienceDirty || saveStatus === 'saving'}
+                      className={`text-[11px] font-bold px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                        experienceDirty ? 'btn-primary text-xs py-1.5' : 'bg-surface-container text-on-surface-variant cursor-not-allowed'
                       }`}
                     >
-                      {opt}
+                      <span className="material-symbols-outlined text-sm">save</span>
+                      {saveStatus === 'saving' ? 'Saving...' : 'Save & Sync AI'}
                     </button>
-                  ))}
+                  </div>
+                  <textarea
+                    value={experience}
+                    onChange={(e) => { setExperience(e.target.value); setExperienceDirty(true); }}
+                    className="w-full h-[600px] bg-surface p-6 text-[13px] font-mono leading-relaxed text-on-surface focus:outline-none applyr-scrollbar resize-none"
+                    spellCheck={false}
+                  />
                 </div>
-              </div>
-            </div>
-            <div className="space-y-6">
-              <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Title Blocklist (AI auto-reject)</label>
-                <textarea
-                  value={preferences.titleBlocklist}
-                  onChange={(e) => {
-                    const next = { ...preferences, titleBlocklist: e.target.value };
-                    setPreferences(next);
-                    debouncedSave('preferences', next);
-                  }}
-                  className="input-applyr w-full h-20 rounded-xl px-4 py-3 text-xs resize-none"
-                  placeholder="Senior, VP, Director, Lead..."
-                />
-                <p className="text-[10px] text-on-surface-variant mt-1.5 italic">Comma separated. Auto-saves 1 second after you stop typing.</p>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Industry Blocklist</label>
-                <textarea
-                  value={preferences.industryBlocklist}
-                  onChange={(e) => {
-                    const next = { ...preferences, industryBlocklist: e.target.value };
-                    setPreferences(next);
-                    debouncedSave('preferences', next);
-                  }}
-                  className="input-applyr w-full h-20 rounded-xl px-4 py-3 text-xs resize-none"
-                  placeholder="Crypto, Gambling, Web3..."
-                />
-              </div>
-            </div>
+              </>
+            )}
           </div>
         )}
 
@@ -407,27 +544,134 @@ const ProfileView: React.FC = () => {
           </div>
         )}
 
-        {/* Security Tab */}
-        {activeTab === 'Security' && (
-          <div className="bg-surface-container-lowest p-8 rounded-2xl editorial-shadow space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-surface-container flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-on-surface-variant text-2xl">shield</span>
-              </div>
+        {/* Settings Tab */}
+        {activeTab === 'Settings' && (
+          <div className="space-y-8 animate-fade-in">
+            {/* LLM Provider Selection Cards */}
+            <div className="bg-surface-container-lowest p-8 rounded-2xl editorial-shadow space-y-6 border border-outline-variant/10">
               <div>
-                <h3 className="text-base font-headline font-bold text-on-surface">Local Privacy Mode</h3>
-                <p className="text-xs text-on-surface-variant mt-1">All data is stored on your local machine in SQLite. Nothing leaves your device.</p>
+                <h3 className="text-sm font-headline font-bold text-on-surface">Active LLM Provider</h3>
+                <p className="text-xs text-on-surface-variant mt-1">Select the intelligence engine used for job description parsing, fit evaluation, and drafting assets.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  { id: 'gemini', name: 'Google Gemini', desc: 'Default fast cloud model', icon: 'google' },
+                  { id: 'claude', name: 'Anthropic Claude', desc: 'Premium reasoning cloud model', icon: 'psychology' },
+                  { id: 'local', name: 'Local LLM (Ollama/LM Studio)', desc: 'Privacy-focused local execution', icon: 'terminal' }
+                ].map((prov) => (
+                  <button
+                    key={prov.id}
+                    onClick={() => {
+                      const next = { ...llmSettings, provider: prov.id as any };
+                      setLlmSettings(next);
+                      debouncedSave('llm_settings', next);
+                    }}
+                    className={`p-5 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between h-36 ${
+                      llmSettings.provider === prov.id
+                        ? 'bg-primary/5 border-primary shadow-sm scale-98'
+                        : 'border-outline-variant/20 bg-surface hover:bg-surface-container-low hover:border-outline-variant/40'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start w-full">
+                      <span className="material-symbols-outlined text-primary text-xl">{prov.icon}</span>
+                      {llmSettings.provider === prov.id && (
+                        <span className="material-symbols-outlined text-primary text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-on-surface leading-tight">{prov.name}</p>
+                      <p className="text-[10px] text-on-surface-variant mt-1 leading-snug">{prov.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Dynamic Settings Fields */}
+              <div className="pt-4 border-t border-outline-variant/10 space-y-6">
+                {llmSettings.provider === 'gemini' && (
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Gemini API Key</label>
+                    <input
+                      type="password"
+                      value={llmSettings.geminiApiKey}
+                      onChange={(e) => {
+                        const next = { ...llmSettings, geminiApiKey: e.target.value };
+                        setLlmSettings(next);
+                        debouncedSave('llm_settings', next);
+                      }}
+                      className="input-applyr w-full rounded-xl pr-8 font-mono text-xs"
+                      placeholder="AIzaSy..."
+                    />
+                    <p className="text-[10px] text-on-surface-variant mt-1.5 italic">Auto-saves 1 second after you stop typing.</p>
+                  </div>
+                )}
+
+                {llmSettings.provider === 'claude' && (
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Claude API Key</label>
+                    <input
+                      type="password"
+                      value={llmSettings.claudeApiKey}
+                      onChange={(e) => {
+                        const next = { ...llmSettings, claudeApiKey: e.target.value };
+                        setLlmSettings(next);
+                        debouncedSave('llm_settings', next);
+                      }}
+                      className="input-applyr w-full rounded-xl pr-8 font-mono text-xs"
+                      placeholder="sk-ant-api03..."
+                    />
+                    <p className="text-[10px] text-on-surface-variant mt-1.5 italic">Auto-saves 1 second after you stop typing.</p>
+                  </div>
+                )}
+
+                {llmSettings.provider === 'local' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Local Endpoint Base URL</label>
+                      <input
+                        type="text"
+                        value={llmSettings.localUrl}
+                        onChange={(e) => {
+                          const next = { ...llmSettings, localUrl: e.target.value };
+                          setLlmSettings(next);
+                          debouncedSave('llm_settings', next);
+                        }}
+                        className="input-applyr w-full rounded-xl font-mono text-xs"
+                        placeholder="http://localhost:11434"
+                      />
+                      <p className="text-[10px] text-on-surface-variant mt-1.5 italic">Use http://localhost:11434 for Ollama or http://localhost:1234/v1 for LM Studio.</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Model Identifier / Name</label>
+                      <input
+                        type="text"
+                        value={llmSettings.localModel}
+                        onChange={(e) => {
+                          const next = { ...llmSettings, localModel: e.target.value };
+                          setLlmSettings(next);
+                          debouncedSave('llm_settings', next);
+                        }}
+                        className="input-applyr w-full rounded-xl font-mono text-xs"
+                        placeholder="llama3"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="p-5 bg-primary-container/20 rounded-xl flex justify-between items-center">
-              <div>
-                <p className="text-sm font-headline font-bold text-primary">Google Identity Integration</p>
-                <p className="text-xs text-on-surface-variant mt-1">Connect Gmail for automated scout result notifications (future).</p>
+            {/* Local Security Block */}
+            <div className="bg-surface-container-lowest p-8 rounded-2xl editorial-shadow space-y-6 border border-outline-variant/10">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-surface-container flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-on-surface-variant text-2xl">shield</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-headline font-bold text-on-surface">Local Privacy Mode</h3>
+                  <p className="text-xs text-on-surface-variant mt-1">All database configurations, keys, and job details remain fully encrypted and local to your system SQLite files.</p>
+                </div>
               </div>
-              <button disabled className="bg-surface-container text-on-surface-variant text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-lg cursor-not-allowed">
-                Coming Soon
-              </button>
             </div>
           </div>
         )}

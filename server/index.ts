@@ -25,6 +25,94 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORK_EXPERIENCE_PATH = path.join(__dirname, '../data/workExperience.md');
 const SUBMISSION_DIR = path.join(__dirname, '../submissions');
 const ARCHIVE_DIR = path.join(__dirname, '../archive/submissions');
+const CANDIDATE_PREFS_PATH = path.join(__dirname, '../data/candidate_preferences.json');
+
+const DATE_POSTED_TO_DAYS: Record<string, number> = {
+  'Past 24 hours': 1,
+  'Past 3 days': 3,
+  'Past week': 7,
+  'Past month': 30,
+};
+
+const DEFAULT_JD_KEYWORDS = [
+  'saas', 'b2b', 'platform', 'integration', 'enterprise', 'api',
+  'product', 'software', 'agile', 'roadmap', 'stakeholder',
+];
+
+const DEFAULT_PIPELINE_PREFERENCES = {
+  no_people_management: true,
+  no_zero_to_one: true,
+  structured_team_required: true,
+  max_company_size_penalty_threshold: 50,
+};
+
+function materializeJobSearchPrefs(jobSearch: any): void {
+  let existing: any = {};
+  try {
+    if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
+      existing = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8'));
+    }
+  } catch { /* use defaults */ }
+
+  const targetRole: string = jobSearch.targetRole || 'Product Manager';
+
+  // Derive search terms: always include the target role; add "Product Owner" variant for PM roles
+  const searchTerms: string[] = [targetRole];
+  if (targetRole.toLowerCase().includes('product manager')) searchTerms.push('Product Owner');
+
+  const blockedTitles: string[] = (jobSearch.titleBlocklist || '')
+    .split(',').map((s: string) => s.trim()).filter(Boolean);
+
+  const blockedIndustries: string[] = (jobSearch.industryBlocklist || '')
+    .split(',').map((s: string) => s.trim()).filter(Boolean);
+
+  const freshnessdays: number = DATE_POSTED_TO_DAYS[jobSearch.datePosted] ?? 7;
+
+  const materialized = {
+    target_role: targetRole,
+    search_terms: searchTerms,
+    location_preference: jobSearch.location || 'United States',
+    work_setting: jobSearch.workSetting || 'Remote',
+    experience_levels: jobSearch.experienceLevels || [],
+    date_posted: jobSearch.datePosted || 'Past week',
+    freshness_days: freshnessdays,
+    blocked_titles: blockedTitles,
+    blocked_industries: blockedIndustries,
+    min_salary: jobSearch.minSalary ?? 0,
+    min_fit_score: existing.min_fit_score ?? 72,
+    jd_required_keywords: existing.jd_required_keywords ?? DEFAULT_JD_KEYWORDS,
+    experience_range: existing.experience_range ?? { min: 0, max: 7, total_years_observed: 6 },
+    preferences: existing.preferences ?? DEFAULT_PIPELINE_PREFERENCES,
+  };
+
+  fs.writeFileSync(CANDIDATE_PREFS_PATH, JSON.stringify(materialized, null, 2), 'utf-8');
+}
+
+function resolveCompanyFolder(company: string, baseDir: string): string {
+  const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const standardPath = path.join(baseDir, companySlug);
+  if (fs.existsSync(standardPath)) return standardPath;
+
+  const withTrailing = company.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  const trailingPath = path.join(baseDir, withTrailing);
+  if (fs.existsSync(trailingPath)) return trailingPath;
+
+  const simpleReplace = company.toLowerCase().replace(/ /g, '_');
+  const pathSimple = path.join(baseDir, simpleReplace);
+  if (fs.existsSync(pathSimple)) return pathSimple;
+
+  try {
+    const strippedTarget = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const dirs = fs.readdirSync(baseDir);
+    for (const d of dirs) {
+      if (d.toLowerCase().replace(/[^a-z0-9]/g, '') === strippedTarget) {
+        return path.join(baseDir, d);
+      }
+    }
+  } catch (e) {}
+
+  return standardPath; // fallback
+}
 
 // Ensure archive dir exists on boot
 if (!fs.existsSync(ARCHIVE_DIR)) {
@@ -102,8 +190,13 @@ app.get('/api/config', (_req, res) => {
 // ---------------------------------------------------------------------------
 // Activity logs
 // ---------------------------------------------------------------------------
-app.get('/api/logs', (_req, res) => {
+app.get('/api/logs', (req, res) => {
   try {
+    const q = req.query.q as string;
+    if (q) {
+      const logs = db.prepare('SELECT * FROM activity_log WHERE message LIKE ? OR source LIKE ? ORDER BY timestamp DESC LIMIT 50').all(`%${q}%`, `%${q}%`);
+      return res.json(logs);
+    }
     const logs = db.prepare('SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100').all();
     res.json(logs);
   } catch (err) {
@@ -121,8 +214,7 @@ app.get('/api/jobs', (_req, res) => {
     // Enrich jobs with has_assets flag
     const enrichedJobs = jobs.map(job => {
       let has_assets = false;
-      const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-      const activePath = path.join(SUBMISSION_DIR, companySlug);
+      const activePath = resolveCompanyFolder(job.company, SUBMISSION_DIR);
       
       if (fs.existsSync(activePath)) {
         try {
@@ -272,10 +364,8 @@ app.get('/api/jobs/:id/files', (req, res) => {
     const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(req.params.id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const folderPath = ['Backlog', 'Drafted'].includes(job.status)
-      ? path.join(SUBMISSION_DIR, companySlug)
-      : path.join(ARCHIVE_DIR, companySlug);
+    const baseDir = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const folderPath = resolveCompanyFolder(job.company, baseDir);
 
     if (!fs.existsSync(folderPath)) return res.json({ files: [] });
 
@@ -295,11 +385,11 @@ app.get('/api/jobs/:id/files/:filename', (req, res) => {
     const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(req.params.id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const folder = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const baseDir = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const folderPath = resolveCompanyFolder(job.company, baseDir);
     // path.basename strips any directory traversal (e.g. ../../etc/passwd → passwd)
     const safeFilename = path.basename(req.params.filename);
-    const filePath = path.join(folder, companySlug, safeFilename);
+    const filePath = path.join(folderPath, safeFilename);
 
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
@@ -320,10 +410,10 @@ app.put('/api/jobs/:id/files/:filename', (req, res) => {
     const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const folder = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const baseDir = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const folderPath = resolveCompanyFolder(job.company, baseDir);
     const safeFilename = path.basename(filename);
-    const filePath = path.join(folder, companySlug, safeFilename);
+    const filePath = path.join(folderPath, safeFilename);
 
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
@@ -333,7 +423,7 @@ app.put('/api/jobs/:id/files/:filename', (req, res) => {
     // If it's a markdown file, compile the corresponding PDF automatically
     if (safeFilename.endsWith('.md')) {
       const pdfFilename = safeFilename.replace('.md', '.pdf');
-      const pdfPath = path.join(folder, companySlug, pdfFilename);
+      const pdfPath = path.join(folderPath, pdfFilename);
       
       const guardScript = path.join(__dirname, '../scripts/style_compliance_guard.py');
       const compileScript = path.join(__dirname, '../scripts/compile_single.py');
@@ -407,9 +497,8 @@ app.get('/api/jobs/:id/download-all', (req, res) => {
     const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(req.params.id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    const companySlug = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const folder = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
-    const folderPath = path.join(folder, companySlug);
+    const baseDir = ['Backlog', 'Drafted'].includes(job.status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+    const folderPath = resolveCompanyFolder(job.company, baseDir);
 
     if (!fs.existsSync(folderPath)) return res.status(404).json({ error: 'No files found' });
 
@@ -424,6 +513,7 @@ app.get('/api/jobs/:id/download-all', (req, res) => {
       zip.addLocalFile(path.join(folderPath, file), zipFolderName);
     });
 
+    const companySlug = path.basename(folderPath);
     const zipName = `${companySlug}_assets.zip`;
     const buffer = zip.toBuffer();
 
@@ -496,9 +586,71 @@ app.post('/api/evaluate', (req, res) => {
   });
 });
 
+app.post('/api/jobs/:id/draft', (req, res) => {
+  try {
+    const { id } = req.params;
+    const job = db.prepare('SELECT company, url FROM jobs WHERE id = ?').get(id) as any;
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    db.prepare(`UPDATE system_status SET status = 'drafting', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Generating tailored assets for ${job.company}`);
+    logActivity('INFO', 'Pipeline', `Manual asset generation triggered for "${job.company}"`);
+
+    const scriptPath = path.join(__dirname, '../scripts/batch_pipeline.py');
+    const proc = spawn('python', [scriptPath, '--company', job.company, '--url', job.url || '', '--mode', 'single'], {
+      cwd: path.join(__dirname, '..'),
+      env: { ...process.env }
+    });
+
+    proc.stdin.write('');
+    proc.stdin.end();
+
+    proc.stdout.on('data', (data) => {
+      const output = data.toString().trim();
+      if (output) {
+        try {
+          const parsed = JSON.parse(output);
+          if (parsed.summary) {
+            logActivity('INFO', 'Pipeline', `[Draft] ${parsed.summary}`);
+          }
+        } catch {
+          logActivity('INFO', 'Pipeline', `[Draft] ${output}`);
+        }
+      }
+    });
+
+    proc.stderr.on('data', (data) => {
+      const errOutput = data.toString().trim();
+      if (errOutput && !errOutput.includes('UserWarning')) {
+        logActivity('ERROR', 'Pipeline', `[Draft Error] ${errOutput}`);
+      }
+    });
+
+    proc.on('close', (code) => {
+      logActivity(code === 0 ? 'INFO' : 'ERROR', 'Pipeline', `Evaluation for "${job.company}" exited with code ${code}`);
+      db.prepare(`UPDATE system_status SET status = 'completed', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Completed asset generation for ${job.company}`);
+    });
+
+    res.json({ success: true, message: `Drafting started for ${job.company}` });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to start drafting' });
+  }
+});
+
 // ---------------------------------------------------------------------------
-// Profile
+// Profile — job_search has dedicated POST to also materialize candidate_preferences.json
 // ---------------------------------------------------------------------------
+app.post('/api/profile/job_search', (req, res) => {
+  try {
+    const value = JSON.stringify(req.body);
+    db.prepare('INSERT OR REPLACE INTO profiles (key, value) VALUES (?, ?)').run('job_search', value);
+    materializeJobSearchPrefs(req.body);
+    logActivity('INFO', 'System', 'Job search settings saved and candidate_preferences.json updated.');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save job search settings' });
+  }
+});
+
 app.get('/api/profile/:key', (req, res) => {
   try {
     const row = db.prepare('SELECT value FROM profiles WHERE key = ?').get(req.params.key) as any;
@@ -523,23 +675,24 @@ app.post('/api/profile/:key', (req, res) => {
 // ---------------------------------------------------------------------------
 function codifyExperienceAndAssignIDs(markdown: string): string {
   const lines = markdown.split('\n');
-  let currentSection = '';
   let inVocabularyTable = false;
   let inMetricsTable = false;
-  let nextVocId = 12;
-  let nextMetId = 13;
-  let nextAccCision = 106;
-  let nextAccSterkly = 203;
-  let nextAccZero = 303;
+  let currentSection = ''; // '5.1', '5.2', '5.3', etc.
 
-  // Scan existing IDs to avoid collisions
+  // Dynamic per-section ACC counters: section key → next ID
+  // Section 5.N maps to range N*100+1 through (N+1)*100
+  const sectionCounters = new Map<string, number>();
+  let nextVocId = 1;
+  let nextMetId = 1;
+
+  // Scan existing IDs to seed counters above existing maxima
   lines.forEach(line => {
-    const vocMatch = line.match(/VOC-(\d+)/i);
+    const vocMatch = line.match(/\*\*VOC-(\d+)\*\*/i);
     if (vocMatch) {
       const num = parseInt(vocMatch[1], 10);
       if (num >= nextVocId) nextVocId = num + 1;
     }
-    const metMatch = line.match(/MET-(\d+)/i);
+    const metMatch = line.match(/\*\*MET-(\d+)\*\*/i);
     if (metMatch) {
       const num = parseInt(metMatch[1], 10);
       if (num >= nextMetId) nextMetId = num + 1;
@@ -547,33 +700,31 @@ function codifyExperienceAndAssignIDs(markdown: string): string {
     const accMatch = line.match(/ACC-(\d+)/i);
     if (accMatch) {
       const num = parseInt(accMatch[1], 10);
-      if (num >= 100 && num < 200 && num >= nextAccCision) nextAccCision = num + 1;
-      if (num >= 200 && num < 300 && num >= nextAccSterkly) nextAccSterkly = num + 1;
-      if (num >= 300 && num < 400 && num >= nextAccZero) nextAccZero = num + 1;
+      if (num >= 101) {
+        // Derive which section this belongs to: 101-199 → 5.1, 201-299 → 5.2, etc.
+        const sectionIdx = Math.floor((num - 1) / 100);
+        const secKey = `5.${sectionIdx}`;
+        const rangeBase = sectionIdx * 100 + 1;
+        const prev = sectionCounters.get(secKey) ?? rangeBase;
+        if (num >= prev) sectionCounters.set(secKey, num + 1);
+      }
     }
   });
 
   const processedLines = lines.map(line => {
     const trimmed = line.trim();
-    if (trimmed.startsWith('## Section 3:')) {
-      inVocabularyTable = true;
-      inMetricsTable = false;
-    } else if (trimmed.startsWith('## Section 4:')) {
-      inVocabularyTable = false;
-      inMetricsTable = true;
-    } else if (trimmed.startsWith('## Section 5:') || trimmed.startsWith('### 5.1')) {
-      inVocabularyTable = false;
-      inMetricsTable = false;
-      currentSection = '5.1';
-    } else if (trimmed.startsWith('### 5.2')) {
-      currentSection = '5.2';
-    } else if (trimmed.startsWith('### 5.3')) {
-      currentSection = '5.3';
-    } else if (trimmed.startsWith('## Section 6:')) {
-      currentSection = '';
-    }
 
-    // Process Vocabulary Table rows
+    // Table section markers
+    if (trimmed.startsWith('## Section 3:')) { inVocabularyTable = true; inMetricsTable = false; }
+    else if (trimmed.startsWith('## Section 4:')) { inVocabularyTable = false; inMetricsTable = true; }
+    else if (trimmed.startsWith('## Section 5:')) { inVocabularyTable = false; inMetricsTable = false; }
+    else if (trimmed.startsWith('## Section 6:')) { inVocabularyTable = false; inMetricsTable = false; currentSection = ''; }
+
+    // Detect any ### 5.N subsection dynamically
+    const subMatch = trimmed.match(/^### (5\.\d+)/);
+    if (subMatch) { inVocabularyTable = false; inMetricsTable = false; currentSection = subMatch[1]; }
+
+    // Vocabulary table rows
     if (inVocabularyTable && trimmed.startsWith('|') && !trimmed.includes('Fact ID') && !trimmed.includes(':---')) {
       const cells = line.split('|').map(c => c.trim());
       if (cells.length >= 2 && cells[1] === '') {
@@ -582,7 +733,7 @@ function codifyExperienceAndAssignIDs(markdown: string): string {
       }
     }
 
-    // Process Metrics Table rows
+    // Metrics table rows
     if (inMetricsTable && trimmed.startsWith('|') && !trimmed.includes('Fact ID') && !trimmed.includes(':---')) {
       const cells = line.split('|').map(c => c.trim());
       if (cells.length >= 2 && cells[1] === '') {
@@ -591,23 +742,23 @@ function codifyExperienceAndAssignIDs(markdown: string): string {
       }
     }
 
-    // Process Accomplishment bullets
-    if (trimmed.startsWith('*') && !trimmed.includes('DO NOT claim') && !trimmed.includes('*   **Context & Constraints**') && !trimmed.includes('*   **Owned Systems**') && !trimmed.includes('*   **Unowned Systems**')) {
+    // Accomplishment bullets inside a 5.N subsection
+    if (
+      currentSection &&
+      trimmed.startsWith('*') &&
+      !trimmed.includes('DO NOT claim') &&
+      !trimmed.includes('*   **Context & Constraints**') &&
+      !trimmed.includes('*   **Owned Systems**') &&
+      !trimmed.includes('*   **Unowned Systems**')
+    ) {
       const content = trimmed.replace(/^\*\s*/, '').trim();
       if (content.startsWith('**') && !content.includes('[ACC-')) {
-        let assignedId = '';
-        if (currentSection === '5.1') {
-          assignedId = `ACC-${nextAccCision++}`;
-        } else if (currentSection === '5.2') {
-          assignedId = `ACC-${nextAccSterkly++}`;
-        } else if (currentSection === '5.3') {
-          assignedId = `ACC-${nextAccZero++}`;
-        }
-
-        if (assignedId) {
-          const newContent = content.replace(/^\*\*([^*]+)\*\*/, `**[${assignedId}] $1**`);
-          return `*   ${newContent}`;
-        }
+        const sectionIdx = parseInt(currentSection.split('.')[1], 10);
+        const rangeBase = sectionIdx * 100 + 1;
+        const nextId = sectionCounters.get(currentSection) ?? rangeBase;
+        sectionCounters.set(currentSection, nextId + 1);
+        const newContent = content.replace(/^\*\*([^*]+)\*\*/, `**[ACC-${nextId}] $1**`);
+        return `*   ${newContent}`;
       }
     }
 

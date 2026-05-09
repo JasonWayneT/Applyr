@@ -10,6 +10,7 @@ import NotificationPanel from './components/NotificationPanel';
 import { Job } from './types/job';
 import { api } from './lib/api';
 import TuningLogView from './pages/TuningLogView';
+import SettingsView from './components/SettingsView';
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
@@ -44,14 +45,16 @@ function App() {
     switch (activeTab) {
       case 'Dashboard':
         return <TodayView jobs={jobs} onJobClick={setSelectedJob} />;
-      case 'Applications':
+      case 'Opportunities':
         return <AllJobsView jobs={jobs} onJobClick={setSelectedJob} />;
       case 'Add Job':
         return <FindNewJobsView />;
-      case 'Scout':
+      case 'Job Search':
         return <SyncActivityView />;
       case 'My profile':
         return <ProfileView />;
+      case 'Settings':
+        return <SettingsView />;
       case 'Tuning Log':
         return <TuningLogView jobs={jobs} onJobClick={setSelectedJob} />;
       default:
@@ -91,12 +94,6 @@ function App() {
               onJobClick={(job) => { setSelectedJob(job); setIsNotifOpen(false); }}
               onNavigate={(tab) => { setActiveTab(tab); setIsNotifOpen(false); }}
             />
-            <button
-              onClick={() => setActiveTab('My profile')}
-              className="p-2 text-on-surface-variant hover:bg-surface-container rounded-full transition-colors active:scale-95"
-            >
-              <span className="material-symbols-outlined">settings</span>
-            </button>
             <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary text-sm font-bold ml-1">
               JT
             </div>

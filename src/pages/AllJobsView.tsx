@@ -46,7 +46,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Applications</h1>
+          <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Opportunities</h1>
           <p className="text-on-surface-variant mt-1">Track your career journeys with clarity.</p>
         </div>
         <div className="flex items-center gap-3">
@@ -111,7 +111,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-base font-bold text-on-surface truncate">{job.company}</span>
-                        <StatusChip status={job.status} />
+                        <StatusChip status={job.status} hasAssets={job.has_assets} />
                         </div>
                         <p className="text-sm text-on-surface-variant truncate mt-0.5">{job.title}</p>
                       </div>
@@ -147,8 +147,8 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
                             <span className="material-symbols-outlined text-[18px]">link</span>
                           </a>
                         )}
-                        {job.status === 'Backlog' ? (
-                          <button className="btn-primary text-xs py-1.5 px-4 rounded-lg">Review</button>
+                        {job.status === 'Backlog' && job.has_assets ? (
+                          <button className="btn-primary text-xs py-1.5 px-4 rounded-lg">Apply Now</button>
                         ) : job.status === 'Core Interviews' ? (
                           <button className="btn-secondary text-xs py-1.5 px-4 rounded-lg">Cheat sheet</button>
                         ) : (

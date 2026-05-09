@@ -34,6 +34,232 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 5.16
+Applyr Release
+May 8, 2026
+
+Version 5.16, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.15
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Unified Job Search Settings Panel (CR-003, FR-046, FR-047):** Collapsed four disconnected preference islands into a single canonical control surface under a renamed "Job Search" sidebar tab. A primary card covers Target Role, Work Setting, Location, Date Posted, and Experience Level. A secondary card covers Title Blocklist, Industry Blocklist, and Minimum Salary. Every field saved here now actually governs every scout run.
+- **Live Settings Materialization Pipeline (FR-048, ADR-005):** Saving Job Search settings writes to `profiles/job_search` in SQLite and immediately materializes `data/candidate_preferences.json` server-side. Python pipeline scripts read only the JSON file — the entire preference chain is now end-to-end live with zero manual file editing required.
+- **Dynamic Scout URL Generation (FR-049):** `scout_local.ts` now builds all search URLs at runtime from `candidate_preferences.json` — LinkedIn geo IDs, BuiltIn city/state slugs, RemoteOK tag arrays, search terms, and the freshness window are all derived from user settings. No hardcoded URLs remain.
+- **Generic ACC-ID Codification Engine:** Rewrote `codifyExperienceAndAssignIDs()` to use a dynamic employer Map rather than hardcoded per-company seed values. Any number of `### 5.N` experience sections are supported; each section gets IDs in the range `N×100+1` to `(N+1)×100` automatically.
+- **Experience Tab Onboarding Flow (FR-050, FR-051):** The Experience tab now branches on file state. An empty or uninitialized file shows a structured onboarding card explaining the VOC/MET/ACC proof-code system before the user pastes anything. A populated file shows a live codification status bar with real-time ACC/VOC/MET count pills and a collapsible edit guide covering the three safe edit patterns: Minor Edit, New Claim, and Retire.
+- **Premium Settings Modal (FR-041):** Migrated all app configuration from a static Profile sub-tab into a full-screen backdrop-blur overlay with Claude-style dual-pane navigation. Left pane: vertically stacked tabs (General, Account, Privacy, Billing, Usage, Capabilities, Connectors, LLM Engine). Right pane: dynamic scrolling workspace. LLM provider selection and API key management now live here.
+
+Changed
+- **Sidebar Label:** "Scout" renamed to "Job Search" to reflect that the tab now controls all search criteria, not just crawl scheduling.
+- **Profile Tab Cleanup:** Removed the "Preferences" sub-tab from the Profile page entirely; those settings now live in the unified Job Search panel.
+- **Pipeline Score Threshold:** Hardcoded `score < 72` filter in `batch_pipeline.py` replaced with `MIN_FIT_SCORE` read from `candidate_preferences.json`, making the pass threshold user-configurable.
+
+---
+
+### 5.15
+Applyr Release
+May 8, 2026
+
+Version 5.15, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.14
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Direct Manual Asset Drafting Triggers (FR-045, AC-046):** Integrated an inline, premium "Draft Assets" manual trigger button directly onto matched role cards that are in "Pending Assets" state. This gives users absolute, granular control to initiate localized single-role background evaluations and resume/cover letter compilations instantly on demand.
+- **Background Single-Job Drafting Pipeline (FR-045, AC-046):** Built a dedicated POST `/api/jobs/:id/draft` server endpoint that triggers single-mode batch execution, feeds real-time stdout and stderr logs straight to the Scout page terminal, and dynamically updates system status.
+
+---
+
+### 5.14
+Applyr Release
+May 8, 2026
+
+Version 5.14, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.13
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Pulsing Active Process Log Console:** Appended a real-time pulsing `ACTIVE` terminal line to the bottom of the Scout page's Log Console. When the background system is crawling feeds or synthesizing assets, the active item is shown natively at the bottom of the log stream, providing continuous visibility.
+- **Drawer Active Task Indicators:** Embedded a glowing active indicator at the top of the details panel's log drawer. If the background scouter is actively processing assets for the selected company, a glowing green `ACTIVE` log line is shown to make current pipeline executions instantly transparent.
+
+---
+
+### 5.13
+Applyr Release
+May 8, 2026
+
+Version 5.13, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.12
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Interactive Pipeline Process Logs (FR-045, AC-046):** Built an inline, monospace background log console inside the `JobDetailPanel` drawer. It dynamically queries the database for any crawling, gate evaluation, and asset synthesis logs matching the selected opportunity's company name. This provides complete visibility and background transparency for roles currently in the "Pending Assets" queue (such as *Vitestro*).
+
+Changed
+- **Standardized Pipeline Labels & Badges:** Extended the dynamic *"Pending Assets"* fallback to the Scout page (`SyncActivityView.tsx`) to guarantee label consistency across the app. Jobs in backlog missing assets are now cleanly labeled as *"Pending Assets"* with a neutral amber look instead of being labeled as *"Ready to Apply"*.
+
+---
+
+### 5.12
+Applyr Release
+May 8, 2026
+
+Version 5.12, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.11
+
+Next
+Applyr 6.0 (Planned)
+
+Fixed
+- **Strict Backlog Asset Readiness Verification (FR-045, AC-046):** Fixed a logical bug where backlog jobs with missing PDF assets were incorrectly marked as *"Ready to Apply"* with green buttons on the Opportunities board. Now, they dynamically render with a neutral grey **"Pending Assets"** status badge and a standard **"Details"** button, switching to the green **"Apply Now"** button only after their compiled assets become available.
+- **Accurate Dashboard & Sidebar Pipeline Metrics:** Hardened Sidebar badge counts and Dashboard progress charts to only include backlog opportunities that have completed asset generation, keeping pending-asset roles cleanly segregated in the background.
+
+---
+
+### 5.11
+Applyr Release
+May 8, 2026
+
+Version 5.11, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.10
+
+Next
+Applyr 6.0 (Planned)
+
+Changed
+- **Unified "Opportunities" Branding Refactor (FR-045, AC-046):** Fully re-labeled the central application-tracking vertical to "Opportunities" across the entire user experience. This includes renaming sidebar navigation tags, main page headings, notifications routing callbacks, and active lists inside `TodayView.tsx`, establishing a far more professional, premium, and lifelike terminology.
+
+---
+
+### 5.10
+Applyr Release
+May 8, 2026
+
+Version 5.10, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.9
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **First-Class Settings Panel Tab (FR-041, AC-042):** Transformed Settings from a pop-up modal to a first-class page/tab rendered directly inside the main workspace's right panel. It features a full-panel 2-column layout with vertical tab navigation, fully integrating all 5 subsections (Profile, Job Preferences, Experience, API or Connections, Analytics).
+- **Sage-and-Cream Premium Light Styling:** Completely replaced legacy dark mode grays and blacks (`#121212` and `#181818`) with the premium Applyr light theme color tokens (`bg-surface-container-lowest` pure white cards, `bg-surface-container-low` cream text inputs, and charcoal text), creating a beautifully unified first impression.
+
+Changed
+- **Direct Sidebar Navigation Routing (FR-041):** Added "Settings" directly into the main sidebar's icon navigation, allowing instant single-click access. Clicking "Settings" inside the lower-left profile menu also automatically redirects the active tab to the main Settings page.
+
+---
+
+### 5.9
+Applyr Release
+May 8, 2026
+
+Version 5.9, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.8
+
+Next
+Applyr 6.0 (Planned)
+
+Fixed
+- **Robust Company Folder Resolution (FR-045, AC-046):** Integrated a dynamic `resolveCompanyFolder()` path-compatibility helper in `server/index.ts` to solve file/folder slug mismatches caused by trailing underscores or different spacing (e.g., `'Cisco_Systems_Inc_'`), instantly restoring the visibility of compiled PDF assets on the Dashboard and All Jobs review panes.
+- **Background URL Backfill Execution (FR-042):** Updated the background scouter orchestrator (`server/scout.ts`) to target the correct path `scripts/archive/backfill_urls.ts` for missing URL crawls, eliminating module-not-found background execution logs.
+
+Changed
+- **Dashboard Ready to Apply Filter Integrity (FR-045, AC-046):** Hardened TodayView and Sidebar indicators to count and display only `'Backlog'` status jobs (which have fully ready compiled assets) under "Ready to Apply", keeping jobs with `'New'` or `'Drafted'` pending states in the background.
+- **Friendly "Ready to Apply" Notification Labels (FR-045, AC-046):** Re-mapped the notification panel backlog text to read friendly `"matched roles ready to apply"` instead of `"backlog"`.
+- **Scout Matched Roles Layout Correction (FR-045, AC-046):** Fixed inverted status badge labels in the active matches list on the Scout page, mapping `'Backlog'` status to a green **Ready to Apply** badge and `'Drafted'` to an amber **Pending Assets** badge.
+- **Action Button Copy Streamlining:** Re-labeled the button for backlog items from `"Review"` to `"Apply Now"` inside the All Jobs grid, removing work-like chore implications and inviting immediate submission.
+
+---
+
+### 5.8
+Applyr Release
+May 8, 2026
+
+Version 5.8, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.7
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Hybrid Scouting Active Filters Panel (FR-042, AC-043):** Deployed a premium, high-impact scouter parameters control card at the very top of the Scouting dashboard, containing live editable inputs for Target Job Title, option chips for Job Type (Remote, Hybrid, On-site), and a locked location indicator. All parameters auto-save to SQLite with beautiful debounced status indicators.
+- **Experience Level Multi-Select Dropdown Filter (FR-044, AC-045):** Implemented a high-fidelity dropdown component containing multi-select experience options (Internship, Entry Level, Junior, Mid Level, Senior, Expert) with an immediate clear action. The selected filter values seamlessly persist in real-time to SQLite scouter preferences.
+- **Isolated Portfolio and GitHub Fields (FR-043, AC-044):** Fully separated Portfolio and GitHub link text inputs inside the Profile settings sub-tab, enabling structured, isolated data collection instead of combined values.
+- **Master Experience Rich Text Context Editor:** Embedded a direct master markdown textarea context editor inside the settings modal's new Experience tab, complete with a "Save & Sync AI" action button to write to `workExperience.md`.
+
+Changed
+- **Dashboard Opportunity Visibility (FR-045, AC-046):** Made all newly matched and backlog jobs show up instantly on the TodayView dashboard as "Pending" while their PDF assets are being drafted, preventing them from appearing lost before compilation finishes.
+- **Friendly Backlog Notifications (FR-045, AC-046):** Replaced the confusing "need review" backlog alerts with friendly "matched roles in backlog ready to apply" notifications, fully eliminating chore-like wording.
+- **Streamlined Sidebar Layout:** Completely eliminated redundant links (Personalization, Profile) from the lower-left sidebar menu, routing settings workflow entirely through the unified Claude-style Settings Modal.
+- **Vertical 5-Tab Modal Restructuring:** Restructured Settings Modal sidebar navigation into five streamlined categories: Profile, Job Preferences, Experience, API or Connections, and Analytics.
+
+---
+
+### 5.7
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Premium Claude-Style Overlay Settings Modal (FR-041, AC-042):** Designed and deployed a stunning, high-fidelity settings room overlay mimicking Anthropic Claude's layout. It includes a responsive 2-column sidebar navigation with 8 fully custom settings sub-tabs (General, Account, Privacy, Billing, Usage, Capabilities, Connectors, LLM Engine).
+- **Interactive Usage Limit Indicators (FR-041):** Integrated dynamic session and weekly model progress bars (e.g. 4% session usage, 25% weekly limits, daily Selenium routine runs tracker), alongside a functional "Extra Usage" toggle control.
+- **Centralized LLM Engine Configuration Tab:** Migrated the dynamic Multi-LLM card selector and cloud/local API keys settings directly into the modal for seamless, unified setup.
+
+Changed
+- **Uncluttered Profile View Tab:** Centralized LLM configuration under the dynamic SettingsModal overlay triggered directly from the lower-left sidebar profile menu.
+
+---
+
+### 5.6
+Applyr Release
+May 8, 2026
+
+Version 5.6, first offered to local users on May 8, 2026
+
+Previous
+Applyr 5.5
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Multi-LLM Provider Support (FR-040, AC-041):** Added fully dynamic Multi-LLM provider selection directly inside the Settings tab of My Profile. Users can select between Google Gemini (Cloud), Anthropic Claude (Cloud), and Local LLM (Ollama / LM Studio) with custom API keys and base URL configurations.
+- **Dynamic LLM Routing Engine:** Updated the python backend calling utility (`scripts/utils.py:call_llm()`) to dynamically retrieve LLM configurations from the local SQLite database and route requests in real-time. It supports standard OpenAI-compatible endpoints as well as Ollama's direct `/api/chat` native API for maximum local resiliency.
+- **ChatGPT-Style Lower-Left Profile Menu:** Designed and implemented a sleek, stateful user profile card at the bottom of the sidebar displaying name/avatar initials, user plan, and a chevron toggle. Clicking the card opens an interactive popup menu with direct links to Preferences, Identity, and Settings tabs, aligning perfectly with modern ChatGPT UI aesthetics.
+
+Changed
+- **Header Cleanup:** Streamlined the main layout by completely removing the legacy top-right settings cog button, unifying settings navigation under the new lower-left sidebar menu.
+
+---
+
 ### 5.5
 Applyr Release
 May 7, 2026

@@ -36,7 +36,19 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-036` | User Request | `FEAT-005` | `scripts/style_compliance_guard.py` | implemented |
 | `FR-037` | User Request | `FEAT-006` | `server/index.ts` | implemented |
 | `FR-038` | User Request | `FEAT-005` | `scripts/style_compliance_guard.py` | implemented |
-| `FR-039` | User Request | `FEAT-002` | `scripts/utils.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-039` | User Request | `FEAT-002`, `FEAT-009` | `scripts/utils.py`, `scripts/batch_pipeline.py`, `data/candidate_preferences.json` | implemented |
+| `FR-040` | User Request | `FEAT-007` | `src/pages/ProfileView.tsx`, `scripts/utils.py` | implemented |
+| `FR-041` | User Request | `FEAT-008` | `src/components/SettingsView.tsx`, `src/components/Sidebar.tsx` | implemented |
+| `FR-042` | User Request | `FEAT-009` | `src/pages/SyncActivityView.tsx` | implemented |
+| `FR-043` | User Request | `FEAT-008` | `src/components/SettingsView.tsx` | implemented |
+| `FR-044` | User Request | `FEAT-009` | `src/pages/SyncActivityView.tsx`, `scripts/scout_local.ts` | implemented |
+| `FR-045` | User Request | `FEAT-001` | `src/pages/TodayView.tsx`, `src/components/NotificationPanel.tsx` | implemented |
+| `FR-046` | `CR-003` | `FEAT-009` | `src/pages/SyncActivityView.tsx`, `src/pages/ProfileView.tsx`, `server/index.ts` | implemented |
+| `FR-047` | `CR-003` | `FEAT-009` | `server/index.ts`, `data/candidate_preferences.json` | implemented |
+| `FR-048` | `CR-003` | `FEAT-009` | `scripts/scout_local.ts`, `scripts/utils.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-049` | `CR-003` | `FEAT-009` | `server/index.ts` | implemented |
+| `FR-050` | User Request | `FEAT-010` | `src/pages/ProfileView.tsx` | implemented |
+| `FR-051` | User Request | `FEAT-010` | `src/pages/ProfileView.tsx` | implemented |
 | `DATA-001` | User Request | `FEAT-005` | `data/workExperience.md` | implemented |
 
 ## Coverage checklist

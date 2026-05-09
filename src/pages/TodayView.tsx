@@ -24,10 +24,10 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
       .then(data => { if (data?.name) setFirstName(data.name.trim().split(' ')[0]); })
       .catch(() => {});
   }, []);
-  const backlogs = jobs.filter(j => j.status === 'Backlog' || j.status === 'New');
+  const backlogs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status));
-  const pipelineJobs = jobs.filter(j => ['New', 'Backlog'].includes(j.status) && j.has_assets);
+  const pipelineJobs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
   const interviews = jobs
     .filter(j => j.interview_date && !['Closed'].includes(j.status))
     .sort((a, b) => new Date(a.interview_date!).getTime() - new Date(b.interview_date!).getTime());
@@ -200,9 +200,9 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           </div>
         </div>
 
-        {/* Active Applications List */}
+        {/* Active Opportunities List */}
         <div className="lg:col-span-12 mt-8">
-          <h3 className="text-2xl font-headline font-bold text-on-surface mb-6">Active Applications</h3>
+          <h3 className="text-2xl font-headline font-bold text-on-surface mb-6">Active Opportunities</h3>
           <div className="space-y-4">
             {activeJobs.slice(0, 20).map(job => (
               <div

@@ -41,12 +41,12 @@ def fetch_company_intel_perplexity(company, role, prompt):
 
 
 def fetch_company_intel_gemini(company, role, prompt):
-    print(f"Fetching intelligence for {company} - {role} using Gemini Search...")
+    print(f"Fetching intelligence for {company} - {role} using Gemini 2.5 Flash Search...")
 
     result = call_llm(
         system_prompt="You are a corporate intelligence agent. Return output in VALID JSON format ONLY. Do not include markdown code blocks like ```json in your response. Ensure the output is strictly valid JSON.",
         user_prompt=prompt,
-        model="gemini-2.5-pro",
+        model="gemini-2.5-flash",
         temperature=0.2,
         tools=[{"google_search": {}}]
     )
@@ -74,11 +74,8 @@ def fetch_company_intel(company, role, contract_path=None):
     Ensure all factual claims include a URL source.
     """
 
-    try:
-        return fetch_company_intel_perplexity(company, role, prompt)
-    except Exception as e:
-        print(f"Perplexity failed: {e}. Falling back to 'in-house' Gemini.")
-        return fetch_company_intel_gemini(company, role, prompt)
+    return fetch_company_intel_gemini(company, role, prompt)
+
 
 
 if __name__ == "__main__":

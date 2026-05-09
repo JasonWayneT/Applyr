@@ -1,16 +1,19 @@
 import os
 import json
 import requests
-from utils import load_file, call_llm, SUBMISSIONS_DIR, RESEARCH_CONTRACT_FILE
+from utils import load_file, call_llm, load_llm_settings, _is_configured, SUBMISSIONS_DIR, RESEARCH_CONTRACT_FILE
 from dotenv import load_dotenv
 
 load_dotenv()
-PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 
 
-def fetch_company_intel_perplexity(company, role, prompt):
-    if not PERPLEXITY_API_KEY:
-        raise ValueError("Perplexity API Key not found.")
+# Implements FR-061: Perplexity key read dynamically from llm_settings, not module-level env
+def fetch_company_intel_perplexity(company, role, prompt, settings=None):
+    if settings is None:
+        settings = load_llm_settings()
+    api_key = settings.get('perplexityApiKey') or os.getenv('PERPLEXITY_API_KEY')
+    if not api_key:
+        raise ValueError("Perplexity API Key not configured.")
 
     url = "https://api.perplexity.ai/chat/completions"
     payload = {
@@ -22,12 +25,11 @@ def fetch_company_intel_perplexity(company, role, prompt):
             },
             {"role": "user", "content": prompt}
         ],
-        "temperature": 0.2
+        "temperature": 0.2,
     }
-
     headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json"
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
     }
 
     print(f"Fetching intelligence for {company} - {role} using Perplexity...")
@@ -64,15 +66,22 @@ def fetch_company_intel(company, role, contract_path=None):
         contract_path = RESEARCH_CONTRACT_FILE
 
     contract = load_file(contract_path)
-
     prompt = f"""
     Using the following Research Packet Contract:
     {contract}
-    
+
     Conduct a deep dive/web search into {company} for the {role} position.
     Provide a structured JSON response following the contract modules (A-F).
     Ensure all factual claims include a URL source.
     """
+
+    # Implements FR-061: try Perplexity first (native web retrieval), fall back to primary LLM
+    settings = load_llm_settings()
+    if _is_configured('perplexity', settings):
+        try:
+            return fetch_company_intel_perplexity(company, role, prompt, settings)
+        except Exception as e:
+            print(f"Perplexity research failed ({e}), falling back to primary LLM...", file=sys.stderr)
 
     return fetch_company_intel_gemini(company, role, prompt)
 

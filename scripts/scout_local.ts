@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Page } from 'playwright';
@@ -26,7 +28,8 @@ try {
 }
 
 const TARGET_ROLE: string           = prefs.target_role || 'Product Manager';
-const SEARCH_TERMS: string[]        = prefs.search_terms?.length ? prefs.search_terms : [TARGET_ROLE, 'Product Owner'];
+// Implements FR-056 — fallback uses only TARGET_ROLE; variant expansion happens in materializeJobSearchPrefs
+const SEARCH_TERMS: string[]        = prefs.search_terms?.length ? prefs.search_terms : [TARGET_ROLE];
 const WORK_SETTING: string          = prefs.work_setting || 'Remote';
 const LOCATION: string              = prefs.location_preference || 'United States';
 const EXPERIENCE_LEVELS: string[]   = prefs.experience_levels || [];
@@ -39,6 +42,23 @@ const TITLE_BLOCKLIST: string[]     = (prefs.blocked_titles || [
 ]).map((t: string) => t.toLowerCase());
 
 const FRESHNESS_CUTOFF_EPOCH = Math.floor(Date.now() / 1000) - (FRESHNESS_DAYS * 24 * 60 * 60);
+
+const ADZUNA_APP_ID  = process.env.ADZUNA_APP_ID  || '';
+const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY || '';
+
+// Implements FR-055 — free-tier rate guard: 25 req/min, 250 req/day
+const MAX_ADZUNA_CALLS_PER_RUN = 10;
+
+// Implements FR-056 — map target role to The Muse API category slug
+function getTheMuseCategory(targetRole: string): string {
+    const lower = targetRole.toLowerCase();
+    if (lower.includes('data') || lower.includes('scientist') || lower.includes('analytics')) return 'Data Science';
+    if (lower.includes('design') || lower.includes('ux') || lower.includes('ui'))             return 'Design';
+    if (lower.includes('engineer') || lower.includes('developer') || lower.includes('software') ||
+        lower.includes('backend')  || lower.includes('frontend')  || lower.includes('fullstack')) return 'Engineering & Tech';
+    if (lower.includes('market')) return 'Marketing';
+    return 'Product'; // default covers PM/PO/product roles
+}
 
 // ---------------------------------------------------------------------------
 // Location → LinkedIn geo ID
@@ -485,50 +505,55 @@ const scoutLevelsFyi = async (page: Page): Promise<ScrapedJob[]> => {
 // ---------------------------------------------------------------------------
 
 const scoutRemotive = async (): Promise<ScrapedJob[]> => {
-    console.log('[LOG] Remotive: Fetching product jobs...');
+    console.log('[LOG] Remotive: Fetching jobs by search terms...');
     const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
 
-    try {
-        const res = await fetch('https://remotive.com/api/remote-jobs?category=product&limit=100');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json() as any;
-        const postings = data.jobs || [];
-        console.log(`[LOG] Remotive: ${postings.length} raw results.`);
+    for (const term of SEARCH_TERMS) {
+        try {
+            const res = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(term)}&limit=50`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json() as any;
+            const postings = data.jobs || [];
+            console.log(`[LOG] Remotive: ${postings.length} results for "${term}".`);
 
-        for (const p of postings) {
-            const title   = String(p.title || '').trim();
-            const company = String(p.company_name || '').trim();
-            const url     = String(p.url || '').trim();
-            const pubDate = p.publication_date ? new Date(p.publication_date) : null;
+            for (const p of postings) {
+                const title   = String(p.title || '').trim();
+                const company = String(p.company_name || '').trim();
+                const url     = String(p.url || '').trim();
+                const pubDate = p.publication_date ? new Date(p.publication_date) : null;
 
-            if (!title || !company || !url) continue;
-            if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
-                console.log(`[REJECT] ${title} at ${company} (Remotive) - Stale`);
-                continue;
-            }
-            if (!passesTitleBlocklist(title)) {
-                console.log(`[REJECT] ${title} at ${company} (Remotive) - Title Blocklist`);
-                continue;
-            }
-            if (!isJobNewByUrl(url)) {
-                console.log(`[REJECT] ${title} at ${company} (Remotive) - URL already exists`);
-                continue;
-            }
-            if (!isJobNewByCompanyTitle(company, title)) {
-                console.log(`[REJECT] ${title} at ${company} (Remotive) - Company/Title already exists`);
-                continue;
-            }
+                if (!title || !company || !url) continue;
+                if (seenUrls.has(url)) continue;
+                if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                    console.log(`[REJECT] ${title} at ${company} (Remotive) - Stale`);
+                    continue;
+                }
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Remotive) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(url)) {
+                    console.log(`[REJECT] ${title} at ${company} (Remotive) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Remotive) - Company/Title already exists`);
+                    continue;
+                }
 
-            jobs.push({
-                company, title, url,
-                description: String(p.description || '').slice(0, 1500),
-                salary_range: p.salary || undefined,
-                source: 'Remotive',
-            });
-            console.log(`[FOUND] ${title} at ${company} (Remotive)`);
+                seenUrls.add(url);
+                jobs.push({
+                    company, title, url,
+                    description: String(p.description || '').slice(0, 1500),
+                    salary_range: p.salary || undefined,
+                    source: 'Remotive',
+                });
+                console.log(`[FOUND] ${title} at ${company} (Remotive)`);
+            }
+        } catch (err) {
+            console.log(`[WARN] Remotive search failed for "${term}": ${err}`);
         }
-    } catch (err) {
-        console.log(`[WARN] Remotive failed: ${err}`);
     }
 
     return jobs;
@@ -543,8 +568,9 @@ const scoutRemoteOK = async (): Promise<ScrapedJob[]> => {
     const jobs: ScrapedJob[] = [];
 
     try {
-        const tag = encodeURIComponent(TARGET_ROLE.toLowerCase().replace(/\s+/g, '+'));
-        const res = await fetch(`https://remoteok.com/api?tags=${tag}`, {
+        // RemoteOK tags are hyphen-separated slugs (not URL-encoded spaces)
+        const tags = SEARCH_TERMS.slice(0, 2).map(t => t.toLowerCase().replace(/\s+/g, '-')).join(',');
+        const res = await fetch(`https://remoteok.com/api?tags=${encodeURIComponent(tags)}`, {
             headers: { 'User-Agent': 'JobAgent/1.0' },
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -598,60 +624,263 @@ const scoutRemoteOK = async (): Promise<ScrapedJob[]> => {
 // ---------------------------------------------------------------------------
 
 const scoutWWR = async (): Promise<ScrapedJob[]> => {
-    console.log('[LOG] WWR: Fetching product jobs via RSS...');
+    console.log('[LOG] WWR: Fetching product & management jobs via RSS...');
+    const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
+
+    const feeds = [
+        'https://weworkremotely.com/categories/remote-product-jobs.rss',
+        'https://weworkremotely.com/categories/remote-management-finance-jobs.rss',
+    ];
+
+    const extract = (item: string, tag: string) => {
+        const m = item.match(new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`))
+            || item.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+        return m ? m[1].trim() : '';
+    };
+
+    for (const feedUrl of feeds) {
+        try {
+            const res = await fetch(feedUrl);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const xml = await res.text();
+
+            const items = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+            console.log(`[LOG] WWR: ${items.length} RSS items from ${feedUrl.split('/').pop()}.`);
+
+            for (const item of items) {
+                const rawTitle = extract(item, 'title');
+                const url      = extract(item, 'link');
+                const pubDate  = extract(item, 'pubDate');
+
+                const colonIdx = rawTitle.indexOf(':');
+                const company  = colonIdx > 0 ? rawTitle.slice(0, colonIdx).trim() : 'Unknown';
+                const title    = colonIdx > 0 ? rawTitle.slice(colonIdx + 1).trim() : rawTitle;
+
+                if (!title || !url) continue;
+                if (seenUrls.has(url)) continue;
+                if (pubDate) {
+                    const d = new Date(pubDate);
+                    if (d.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                        console.log(`[REJECT] ${title} at ${company} (WWR) - Stale`);
+                        continue;
+                    }
+                }
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (WWR) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(url)) {
+                    console.log(`[REJECT] ${title} at ${company} (WWR) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (WWR) - Company/Title already exists`);
+                    continue;
+                }
+
+                seenUrls.add(url);
+                jobs.push({ company, title, url, description: '', source: 'WWR' });
+                console.log(`[FOUND] ${title} at ${company} (WWR)`);
+            }
+        } catch (err) {
+            console.log(`[WARN] WWR feed ${feedUrl.split('/').pop()}: ${err}`);
+        }
+    }
+
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
+// Source G: Himalayas (Public JSON API, zero risk)
+// ---------------------------------------------------------------------------
+
+const scoutHimalayas = async (): Promise<ScrapedJob[]> => {
+    console.log('[LOG] Himalayas: Fetching remote jobs...');
+    const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
+
+    for (const term of SEARCH_TERMS) {
+        try {
+            const slug = term.toLowerCase().replace(/\s+/g, '-');
+            const res = await fetch(`https://himalayas.app/jobs/api?roles=${encodeURIComponent(slug)}&limit=50`, {
+                headers: { 'Accept': 'application/json' },
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json() as any;
+            const postings = data.jobs || [];
+            console.log(`[LOG] Himalayas: ${postings.length} results for "${term}".`);
+
+            for (const p of postings) {
+                const title   = String(p.title || '').trim();
+                const company = String(p.companyName || '').trim();
+                const url     = String(p.applicationLink || '').trim();
+                const pubDate = p.publishedAt ? new Date(p.publishedAt) : null;
+
+                if (!title || !company || !url) continue;
+                if (seenUrls.has(url)) continue;
+                if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                    console.log(`[REJECT] ${title} at ${company} (Himalayas) - Stale`);
+                    continue;
+                }
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Himalayas) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(url)) {
+                    console.log(`[REJECT] ${title} at ${company} (Himalayas) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Himalayas) - Company/Title already exists`);
+                    continue;
+                }
+
+                seenUrls.add(url);
+                jobs.push({
+                    company, title, url,
+                    description: String(p.description || '').replace(/<[^>]+>/g, '').slice(0, 1500),
+                    salary_range: p.salaryRange || undefined,
+                    source: 'Himalayas',
+                });
+                console.log(`[FOUND] ${title} at ${company} (Himalayas)`);
+            }
+        } catch (err) {
+            console.log(`[WARN] Himalayas search failed for "${term}": ${err}`);
+        }
+    }
+
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
+// Source H: The Muse (Public JSON API, no auth, zero risk)
+// ---------------------------------------------------------------------------
+
+// Implements FR-056 — category derived from TARGET_ROLE, not hardcoded to "Product"
+const scoutTheMuse = async (): Promise<ScrapedJob[]> => {
+    const museCategory = getTheMuseCategory(TARGET_ROLE);
+    console.log(`[LOG] The Muse: Fetching ${museCategory} jobs...`);
     const jobs: ScrapedJob[] = [];
 
     try {
-        const res = await fetch('https://weworkremotely.com/categories/remote-product-jobs.rss');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const xml = await res.text();
+        for (let page = 0; page <= 1; page++) {
+            const res = await fetch(
+                `https://www.themuse.com/api/public/jobs?category=${encodeURIComponent(museCategory)}&level=Mid+Level&page=${page}`,
+                { headers: { 'Accept': 'application/json' } }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json() as any;
+            const postings = data.results || [];
+            if (postings.length === 0) break;
+            console.log(`[LOG] The Muse: ${postings.length} results (page ${page}).`);
 
-        // Simple regex XML parsing — no dependency needed for RSS
-        const items = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
-        console.log(`[LOG] WWR: ${items.length} RSS items.`);
+            for (const p of postings) {
+                const title   = String(p.name || '').trim();
+                const company = String(p.company?.name || '').trim();
+                const url     = String(p.refs?.landing_page || '').trim();
+                const pubDate = p.publication_date ? new Date(p.publication_date) : null;
 
-        for (const item of items) {
-            const extract = (tag: string) => {
-                const m = item.match(new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`))
-                    || item.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
-                return m ? m[1].trim() : '';
-            };
-
-            const rawTitle = extract('title');
-            const url      = extract('link');
-            const pubDate  = extract('pubDate');
-
-            // Title format is usually "Company: Role Title"
-            const colonIdx = rawTitle.indexOf(':');
-            const company  = colonIdx > 0 ? rawTitle.slice(0, colonIdx).trim() : 'Unknown';
-            const title    = colonIdx > 0 ? rawTitle.slice(colonIdx + 1).trim() : rawTitle;
-
-            if (!title || !url) continue;
-            if (pubDate) {
-                const d = new Date(pubDate);
-                if (d.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
-                    console.log(`[REJECT] ${title} at ${company} (WWR) - Stale`);
+                if (!title || !company || !url) continue;
+                if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                    console.log(`[REJECT] ${title} at ${company} (The Muse) - Stale`);
                     continue;
                 }
-            }
-            if (!passesTitleBlocklist(title)) {
-                console.log(`[REJECT] ${title} at ${company} (WWR) - Title Blocklist`);
-                continue;
-            }
-            if (!isJobNewByUrl(url)) {
-                console.log(`[REJECT] ${title} at ${company} (WWR) - URL already exists`);
-                continue;
-            }
-            if (!isJobNewByCompanyTitle(company, title)) {
-                console.log(`[REJECT] ${title} at ${company} (WWR) - Company/Title already exists`);
-                continue;
-            }
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (The Muse) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(url)) {
+                    console.log(`[REJECT] ${title} at ${company} (The Muse) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (The Muse) - Company/Title already exists`);
+                    continue;
+                }
 
-            jobs.push({ company, title, url, description: '', source: 'WWR' });
-            console.log(`[FOUND] ${title} at ${company} (WWR)`);
+                const desc = String(p.contents || '').replace(/<[^>]+>/g, '').slice(0, 1500);
+                jobs.push({ company, title, url, description: desc, source: 'The Muse' });
+                console.log(`[FOUND] ${title} at ${company} (The Muse)`);
+            }
         }
     } catch (err) {
-        console.log(`[WARN] WWR (We Work Remotely) failed: ${err}`);
+        console.log(`[WARN] The Muse failed: ${err}`);
+    }
+
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
+// Source I: Adzuna (Paid API, aggregates many boards)
+// ---------------------------------------------------------------------------
+
+// Implements FR-052, FR-054, FR-055, SEC-002
+const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
+    if (!ADZUNA_APP_ID || !ADZUNA_APP_KEY) {
+        console.log('[LOG] Adzuna: No API credentials configured. Skipping.');
+        return [];
+    }
+
+    console.log('[LOG] Adzuna: Fetching jobs...');
+    const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
+    let callCount = 0;
+
+    for (const term of SEARCH_TERMS) {
+        if (callCount >= MAX_ADZUNA_CALLS_PER_RUN) {
+            console.log(`[WARN] Adzuna: Rate cap reached (${MAX_ADZUNA_CALLS_PER_RUN} calls/run). Stopping early.`);
+            break;
+        }
+        // 3s gap between calls to respect 25 req/min free-tier limit (Implements FR-055)
+        if (callCount > 0) await new Promise(r => setTimeout(r, 3000));
+        callCount++;
+        try {
+            const params = new URLSearchParams({
+                app_id: ADZUNA_APP_ID,
+                app_key: ADZUNA_APP_KEY,
+                results_per_page: '50',
+                what: term,
+                max_days_old: String(FRESHNESS_DAYS),
+                'content-type': 'application/json',
+            });
+            const res = await fetch(`https://api.adzuna.com/v1/api/jobs/us/search/1?${params}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json() as any;
+            const postings = data.results || [];
+            console.log(`[LOG] Adzuna: ${postings.length} results for "${term}".`);
+
+            for (const p of postings) {
+                const title   = String(p.title || '').trim();
+                const company = String(p.company?.display_name || '').trim();
+                const url     = String(p.redirect_url || '').trim();
+
+                if (!title || !company || !url) continue;
+                if (seenUrls.has(url)) continue;
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Adzuna) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(url)) {
+                    console.log(`[REJECT] ${title} at ${company} (Adzuna) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Adzuna) - Company/Title already exists`);
+                    continue;
+                }
+
+                seenUrls.add(url);
+                const salary = p.salary_min && p.salary_max
+                    ? `$${Math.round(p.salary_min / 1000)}k - $${Math.round(p.salary_max / 1000)}k`
+                    : undefined;
+                const desc = String(p.description || '').replace(/<[^>]+>/g, '').slice(0, 1500);
+                jobs.push({ company, title, url, description: desc, salary_range: salary, source: 'Adzuna' });
+                console.log(`[FOUND] ${title} at ${company} (Adzuna)`);
+            }
+        } catch (err) {
+            console.log(`[WARN] Adzuna search failed for "${term}": ${err}`);
+        }
     }
 
     return jobs;
@@ -664,18 +893,27 @@ const scoutWWR = async (): Promise<ScrapedJob[]> => {
 (async () => {
     const healthLog: SourceHealth[] = [];
 
-    console.log('[START] Multi-source scout run starting (6 sources)...');
+    console.log('[START] Multi-source scout run starting (9 sources)...');
 
-    // --- Phase 1: All API sources + OpenPostings run in parallel (no browser needed) ---
-    const [opResult, remotiveResult, remoteOkResult, wwrResult] = await Promise.all([
+    // --- Phase 1: All API sources run in parallel (no browser needed) ---
+    const [opResult, remotiveResult, remoteOkResult, wwrResult, himalayasResult, theMuseResult, adzunaResult] = await Promise.all([
         runWithHealth('OpenPostings', scoutOpenPostings),
         runWithHealth('Remotive', scoutRemotive),
         runWithHealth('RemoteOK', scoutRemoteOK),
         runWithHealth('WWR', scoutWWR),
+        runWithHealth('Himalayas', scoutHimalayas),
+        runWithHealth('The Muse', scoutTheMuse),
+        runWithHealth('Adzuna', scoutAdzuna),
     ]);
 
-    healthLog.push(opResult.health, remotiveResult.health, remoteOkResult.health, wwrResult.health);
-    const apiJobs = [...opResult.jobs, ...remotiveResult.jobs, ...remoteOkResult.jobs, ...wwrResult.jobs];
+    healthLog.push(
+        opResult.health, remotiveResult.health, remoteOkResult.health, wwrResult.health,
+        himalayasResult.health, theMuseResult.health, adzunaResult.health,
+    );
+    const apiJobs = [
+        ...opResult.jobs, ...remotiveResult.jobs, ...remoteOkResult.jobs, ...wwrResult.jobs,
+        ...himalayasResult.jobs, ...theMuseResult.jobs, ...adzunaResult.jobs,
+    ];
 
     // --- Phase 2: Browser sources (LinkedIn + BuiltIn + Levels.fyi) run sequentially ---
     let browserJobs: ScrapedJob[] = [];

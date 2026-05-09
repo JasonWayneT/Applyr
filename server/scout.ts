@@ -11,9 +11,32 @@ export const runScoutSync = () => {
   db.prepare(`UPDATE system_status SET status = 'scout_running', current_item = 'Crawling and scanning direct job feeds...', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
 
   try {
+    // Implements FR-054, FR-057, FR-058, SEC-002, SEC-003
+    // Reads ALL API keys from SQLite profiles and injects them at spawn time so .env is never required.
+    const extraEnv: Record<string, string> = {};
+    try {
+      const connRow = db.prepare("SELECT value FROM profiles WHERE key = 'api_connections'").get() as any;
+      if (connRow?.value) {
+        const conns = JSON.parse(connRow.value);
+        if (conns.adzunaAppId)  extraEnv.ADZUNA_APP_ID  = conns.adzunaAppId;
+        if (conns.adzunaAppKey) extraEnv.ADZUNA_APP_KEY = conns.adzunaAppKey;
+      }
+    } catch { /* no api_connections record yet — skip */ }
+    try {
+      // Implements FR-058, FR-061, SEC-003, SEC-004
+      const llmRow = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as any;
+      if (llmRow?.value) {
+        const llm = JSON.parse(llmRow.value);
+        if (llm.geminiApiKey)     extraEnv.GEMINI_API_KEY    = llm.geminiApiKey;
+        if (llm.claudeApiKey)     extraEnv.ANTHROPIC_API_KEY = llm.claudeApiKey;
+        if (llm.perplexityApiKey) extraEnv.PERPLEXITY_API_KEY = llm.perplexityApiKey;
+      }
+    } catch { /* no llm_settings record yet — skip */ }
+
     const scoutProcess = spawn('npx', ['tsx', 'scripts/scout_local.ts'], {
       cwd: path.join(__dirname, '..'),
-      shell: true
+      shell: true,
+      env: { ...process.env, ...extraEnv },
     });
 
     scoutProcess.stdout.on('data', (data) => {
@@ -105,7 +128,8 @@ export const runScoutSync = () => {
 
             const evalProcess = spawn('python', ['scripts/batch_pipeline.py', '--mode', 'batch'], {
               cwd: path.join(__dirname, '..'),
-              shell: true
+              shell: true,
+              env: { ...process.env, ...extraEnv },
             });
 
             evalProcess.stdout.on('data', (data) => {

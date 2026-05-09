@@ -6,11 +6,8 @@ import os
 import sys
 import time
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # --- Path Constants ---
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -105,139 +102,216 @@ def load_llm_settings():
     return {}
 
 
-def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
-             response_mime_type=None, tools=None, max_retries=5):
-    """
-    Centralized LLM call supporting Google Gemini, Anthropic Claude,
-    and Local OpenAI-compatible models (Ollama / LM Studio) dynamically routed from DB settings.
-    """
-    settings = load_llm_settings()
-    provider = settings.get("provider", "gemini")
+# --- Implements FR-059: Provider configuration guard ---
+def _is_configured(provider: str, settings: dict) -> bool:
+    """Returns True only if the given provider has a usable key or URL configured."""
+    if provider == 'gemini':
+        return bool(settings.get('geminiApiKey') or os.getenv('GEMINI_API_KEY'))
+    if provider == 'claude':
+        return bool(settings.get('claudeApiKey') or os.getenv('ANTHROPIC_API_KEY'))
+    if provider == 'local':
+        return bool(settings.get('localUrl'))
+    if provider == 'perplexity':
+        return bool(settings.get('perplexityApiKey') or os.getenv('PERPLEXITY_API_KEY'))
+    return False
 
-    if provider == "gemini":
-        api_key = settings.get("geminiApiKey") or os.getenv("GEMINI_API_KEY")
-        local_client = client
-        if api_key and api_key != os.getenv("GEMINI_API_KEY"):
-            try:
-                local_client = genai.Client(api_key=api_key)
-            except Exception as e:
-                print(f"    [LLM Error] Failed to initialize Gemini Client with settings key: {e}", file=sys.stderr)
 
-        if model is None:
-            model = DEFAULT_MODEL
-            
-        print(f"    [LLM] Calling Gemini: {model}...", file=sys.stderr)
-        for attempt in range(max_retries):
-            try:
-                config_kwargs = {
-                    "system_instruction": system_prompt,
-                    "temperature": temperature
-                }
-                if response_mime_type:
-                    config_kwargs["response_mime_type"] = response_mime_type
-                if tools:
-                    config_kwargs["tools"] = tools
+# --- Implements FR-060, FR-063: Multi-provider fallback chain with primaryProvider ---
+def _get_configured_providers(settings: dict) -> list:
+    """Returns providers in call order: primary first, then remaining configured ones."""
+    primary = settings.get('primaryProvider') or settings.get('provider', 'gemini')
+    fixed_order = ['gemini', 'claude', 'local', 'perplexity']
+    ordered = [primary] + [p for p in fixed_order if p != primary]
+    return [p for p in ordered if _is_configured(p, settings)]
 
-                config = types.GenerateContentConfig(**config_kwargs)
-                response = local_client.models.generate_content(
-                    model=model,
-                    contents=user_prompt,
-                    config=config
-                )
-                return (response.text or "").strip()
-            except Exception as e:
-                err = str(e).lower()
-                if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
-                    wait = 60 * (attempt + 1)
-                    print(f"  -> Rate limit hit. Waiting {wait}s...", file=sys.stderr)
-                    time.sleep(wait)
-                else:
-                    print(f"    [LLM Error] {e}", file=sys.stderr)
-                    break
-        return ""
 
-    elif provider == "claude":
-        import requests
-        import json
-        api_key = settings.get("claudeApiKey") or os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            print("    [LLM Error] Anthropic API Key not set.", file=sys.stderr)
-            return ""
-        
-        target_model = model or "claude-3-5-sonnet-20241022"
-        print(f"    [LLM] Calling Claude: {target_model}...", file=sys.stderr)
-        
-        for attempt in range(max_retries):
-            try:
-                headers = {
-                    "x-api-key": api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json"
-                }
-                payload = {
-                    "model": target_model,
-                    "max_tokens": 4000,
-                    "temperature": temperature,
-                    "system": system_prompt,
-                    "messages": [{"role": "user", "content": user_prompt}]
-                }
-                res = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    return data["content"][0]["text"].strip()
-                elif res.status_code == 429:
-                    wait = 60 * (attempt + 1)
-                    print(f"  -> Claude rate limit hit. Waiting {wait}s...", file=sys.stderr)
-                    time.sleep(wait)
-                else:
-                    print(f"    [LLM Error] Claude returned status {res.status_code}: {res.text}", file=sys.stderr)
-                    break
-            except Exception as e:
-                print(f"    [LLM Error] {e}", file=sys.stderr)
-                break
-        return ""
-
-    elif provider == "local":
-        import requests
-        import json
-        base_url = settings.get("localUrl", "http://localhost:11434")
-        target_model = settings.get("localModel") or model or "llama3"
-        print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model}...", file=sys.stderr)
-        
-        endpoint = base_url.rstrip("/")
-        if not endpoint.endswith("/v1") and not endpoint.endswith("/v1/chat/completions"):
-            endpoint = f"{endpoint}/v1/chat/completions"
-        elif endpoint.endswith("/v1"):
-            endpoint = f"{endpoint}/chat/completions"
-            
+def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
+                 response_mime_type, tools, max_retries):
+    """Returns result string on success, None to signal try-next-provider."""
+    from google import genai
+    from google.genai import types
+    api_key = settings.get('geminiApiKey') or os.getenv('GEMINI_API_KEY')
+    try:
+        local_client = genai.Client(api_key=api_key)
+    except Exception as e:
+        print(f"    [LLM Error] Failed to initialize Gemini client: {e}", file=sys.stderr)
+        return None
+    target_model = model or DEFAULT_MODEL
+    print(f"    [LLM] Calling Gemini: {target_model}...", file=sys.stderr)
+    for attempt in range(max_retries):
         try:
+            config_kwargs = {"system_instruction": system_prompt, "temperature": temperature}
+            if response_mime_type:
+                config_kwargs["response_mime_type"] = response_mime_type
+            if tools:
+                config_kwargs["tools"] = tools
+            config = types.GenerateContentConfig(**config_kwargs)
+            response = local_client.models.generate_content(
+                model=target_model, contents=user_prompt, config=config
+            )
+            return (response.text or "").strip()
+        except Exception as e:
+            err = str(e).lower()
+            if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
+                wait = 60 * (attempt + 1)
+                print(f"  -> Gemini rate limit. Waiting {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                print(f"    [LLM Error] Gemini: {e}", file=sys.stderr)
+                return None
+    return None
+
+
+def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries):
+    """Returns result string on success, None to signal try-next-provider."""
+    import requests
+    api_key = settings.get('claudeApiKey') or os.getenv('ANTHROPIC_API_KEY')
+    target_model = model or "claude-3-5-sonnet-20241022"
+    print(f"    [LLM] Calling Claude: {target_model}...", file=sys.stderr)
+    for attempt in range(max_retries):
+        try:
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            }
             payload = {
                 "model": target_model,
+                "max_tokens": 4000,
+                "temperature": temperature,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            }
+            res = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload)
+            if res.status_code == 200:
+                return res.json()["content"][0]["text"].strip()
+            elif res.status_code == 429:
+                wait = 60 * (attempt + 1)
+                print(f"  -> Claude rate limit. Waiting {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                print(f"    [LLM Error] Claude status {res.status_code}: {res.text}", file=sys.stderr)
+                return None
+        except Exception as e:
+            print(f"    [LLM Error] Claude: {e}", file=sys.stderr)
+            return None
+    return None
+
+
+def _call_local(settings, system_prompt, user_prompt, model, temperature):
+    """Returns result string on success, None to signal try-next-provider."""
+    import requests
+    base_url = settings.get('localUrl', 'http://localhost:11434')
+    target_model = settings.get('localModel') or model or 'llama3'
+    print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model}...", file=sys.stderr)
+    endpoint = base_url.rstrip('/')
+    if not endpoint.endswith('/v1') and not endpoint.endswith('/v1/chat/completions'):
+        endpoint = f"{endpoint}/v1/chat/completions"
+    elif endpoint.endswith('/v1'):
+        endpoint = f"{endpoint}/chat/completions"
+    try:
+        payload = {
+            "model": target_model,
+            "temperature": temperature,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        res = requests.post(endpoint, json=payload, timeout=120)
+        if res.status_code == 200:
+            return res.json()["choices"][0]["message"]["content"].strip()
+        # Fallback to Ollama native API
+        ollama_endpoint = base_url.rstrip('/') + '/api/chat'
+        payload_ollama = {
+            "model": target_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "options": {"temperature": temperature},
+            "stream": False,
+        }
+        res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=120)
+        if res_ollama.status_code == 200:
+            return res_ollama.json()["message"]["content"].strip()
+        print(f"    [LLM Error] Local LLM failed: OpenAI v1 {res.status_code}, Ollama {res_ollama.status_code}", file=sys.stderr)
+    except Exception as e:
+        print(f"    [LLM Error] Local LLM connection failed: {e}", file=sys.stderr)
+    return None
+
+
+# --- Implements FR-061: Perplexity as LLM provider ---
+def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retries):
+    """Returns result string on success, None to signal try-next-provider."""
+    import requests
+    api_key = settings.get('perplexityApiKey') or os.getenv('PERPLEXITY_API_KEY')
+    print("    [LLM] Calling Perplexity sonar-pro...", file=sys.stderr)
+    for attempt in range(max_retries):
+        try:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": "sonar-pro",
                 "temperature": temperature,
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ]
+                    {"role": "user", "content": user_prompt},
+                ],
             }
-            res = requests.post(endpoint, json=payload, timeout=120)
+            res = requests.post("https://api.perplexity.ai/chat/completions", headers=headers, json=payload)
             if res.status_code == 200:
-                data = res.json()
-                return data["choices"][0]["message"]["content"].strip()
+                return res.json()["choices"][0]["message"]["content"].strip()
+            elif res.status_code == 429:
+                wait = 60 * (attempt + 1)
+                print(f"  -> Perplexity rate limit. Waiting {wait}s...", file=sys.stderr)
+                time.sleep(wait)
             else:
-                ollama_endpoint = base_url.rstrip("/") + "/api/chat"
-                payload_ollama = {
-                    "model": target_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "options": {"temperature": temperature},
-                    "stream": False
-                }
-                res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=120)
-                if res_ollama.status_code == 200:
-                    return res_ollama.json()["message"]["content"].strip()
-                print(f"    [LLM Error] Local LLM failed: OpenAI v1 status {res.status_code}, Ollama status {res_ollama.status_code}", file=sys.stderr)
+                print(f"    [LLM Error] Perplexity status {res.status_code}: {res.text}", file=sys.stderr)
+                return None
         except Exception as e:
-            print(f"    [LLM Error] Failed to connect to local LLM: {e}", file=sys.stderr)
+            print(f"    [LLM Error] Perplexity: {e}", file=sys.stderr)
+            return None
+    return None
+
+
+def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
+             response_mime_type=None, tools=None, max_retries=5):
+    """
+    Centralized LLM call with automatic provider fallback chain.
+    Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
+    Only calls providers that have a configured key. On non-rate-limit error, falls through to next provider.
+    """
+    settings = load_llm_settings()
+    providers = _get_configured_providers(settings)
+
+    if not providers:
+        print(
+            "    [LLM Error] No configured LLM providers. Add an API key via Settings > API or Connections.",
+            file=sys.stderr,
+        )
         return ""
+
+    for i, provider in enumerate(providers):
+        result = None
+        if provider == 'gemini':
+            result = _call_gemini(
+                settings, system_prompt, user_prompt, model, temperature,
+                response_mime_type, tools, max_retries
+            )
+        elif provider == 'claude':
+            # Claude does not support google_search tools — tools param intentionally omitted
+            result = _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries)
+        elif provider == 'local':
+            result = _call_local(settings, system_prompt, user_prompt, model, temperature)
+        elif provider == 'perplexity':
+            result = _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retries)
+
+        if result is not None:
+            return result
+        if i + 1 < len(providers):
+            print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
+
+    return ""

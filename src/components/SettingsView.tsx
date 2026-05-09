@@ -11,12 +11,20 @@ interface ProfileData {
   github: string;
 }
 
+// Implements FR-062, FR-063, SEC-004
 interface LlmSettings {
-  provider: 'gemini' | 'claude' | 'local';
+  primaryProvider: 'gemini' | 'claude' | 'local' | 'perplexity';
   geminiApiKey: string;
   claudeApiKey: string;
   localUrl: string;
   localModel: string;
+  perplexityApiKey: string;
+}
+
+// Implements FR-054, SEC-002
+interface ApiConnections {
+  adzunaAppId: string;
+  adzunaAppKey: string;
 }
 
 interface StatsData {
@@ -36,12 +44,14 @@ const SettingsView: React.FC = () => {
   });
   const [isFormatGuideOpen, setIsFormatGuideOpen] = useState(false);
   const [llmSettings, setLlmSettings] = useState<LlmSettings>({
-    provider: 'gemini',
+    primaryProvider: 'gemini',
     geminiApiKey: '',
     claudeApiKey: '',
     localUrl: 'http://localhost:11434',
     localModel: 'llama3',
+    perplexityApiKey: '',
   });
+  const [apiConnections, setApiConnections] = useState<ApiConnections>({ adzunaAppId: '', adzunaAppKey: '' });
   const [experience, setExperience] = useState('');
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -53,18 +63,20 @@ const SettingsView: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [profileRes, expRes, statsRes, llmRes] = await Promise.all([
+        const [profileRes, expRes, statsRes, llmRes, connRes] = await Promise.all([
           fetch(api('/api/profile/identity')),
           fetch(api('/api/experience')),
           fetch(api('/api/jobs/stats')),
           fetch(api('/api/profile/llm_settings')),
+          fetch(api('/api/profile/api_connections')),
         ]);
 
-        const [profileData, expData, statsData, llmData] = await Promise.all([
+        const [profileData, expData, statsData, llmData, connData] = await Promise.all([
           profileRes.json(),
           expRes.json(),
           statsRes.json(),
           llmRes.json(),
+          connRes.json(),
         ]);
 
         if (profileData && typeof profileData === 'object') {
@@ -74,8 +86,20 @@ const SettingsView: React.FC = () => {
         if (statsData && !statsData.error) {
           setStats(statsData);
         }
-        if (llmData && llmData.provider) {
-          setLlmSettings(prev => ({ ...prev, ...llmData }));
+        if (llmData && typeof llmData === 'object') {
+          // Implements FR-063: backward compat — old 'provider' field → primaryProvider
+          setLlmSettings(prev => ({
+            ...prev,
+            ...llmData,
+            primaryProvider: llmData.primaryProvider || llmData.provider || 'gemini',
+            // Migrate perplexityApiKey from old api_connections location if not yet in llm_settings
+            perplexityApiKey: llmData.perplexityApiKey || connData?.perplexityApiKey || '',
+          }));
+        }
+        if (connData && !connData.error) {
+          // perplexityApiKey now lives in llm_settings — exclude it from apiConnections state
+          const { perplexityApiKey: _legacy, ...rest } = connData as any;
+          setApiConnections(prev => ({ ...prev, ...rest }));
         }
       } catch (err) {
         console.error('Failed to load SettingsView configurations:', err);
@@ -459,118 +483,237 @@ const SettingsView: React.FC = () => {
           </div>
         )}
 
-        {/* API or Connections Tab */}
+        {/* API or Connections Tab — Implements FR-059, FR-060, FR-061, FR-062, FR-063 */}
         {activeTab === 'API or Connections' && (
           <div className="space-y-6 animate-fade-in">
             <div>
-              <h3 className="text-base font-headline font-bold text-on-surface">Active LLM Provider</h3>
-              <p className="text-xs text-on-surface-variant mt-1">Select the intelligence engine used for job description parsing, fit evaluation, and drafting assets.</p>
+              <h3 className="text-base font-headline font-bold text-on-surface">LLM Providers</h3>
+              <p className="text-xs text-on-surface-variant mt-1">Configure one or more AI providers. The primary is tried first; others serve as automatic fallback. Only providers with a configured key will be called.</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t border-outline-variant/10">
-              {[
-                { id: 'gemini', name: 'Google Gemini', desc: 'Default fast cloud model', icon: 'google' },
-                { id: 'claude', name: 'Anthropic Claude', desc: 'Premium reasoning cloud model', icon: 'psychology' },
-                { id: 'local', name: 'Local LLM (Ollama)', desc: 'Privacy-focused execution', icon: 'terminal' }
-              ].map((prov) => (
-                <button
-                  key={prov.id}
-                  onClick={() => {
-                    const next = { ...llmSettings, provider: prov.id as any };
-                    setLlmSettings(next);
-                    debouncedSave('llm_settings', next);
-                  }}
-                  className={`p-5 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between h-32 ${
-                    llmSettings.provider === prov.id
-                      ? 'bg-primary/5 border-primary shadow-sm scale-98'
-                      : 'border-outline-variant/20 bg-surface-container-low hover:bg-surface-container hover:border-outline-variant/40'
-                  }`}
-                >
-                  <div className="flex justify-between items-start w-full">
-                    <span className="material-symbols-outlined text-primary text-lg">{prov.icon}</span>
-                    {llmSettings.provider === prov.id && (
-                      <span className="material-symbols-outlined text-primary text-base" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                    )}
+            <div className="space-y-4 pt-4 border-t border-outline-variant/10">
+
+              {/* Gemini Card */}
+              {(() => {
+                const isPrimary = llmSettings.primaryProvider === 'gemini';
+                const isConnected = Boolean(llmSettings.geminiApiKey);
+                return (
+                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary text-lg">google</span>
+                        <div>
+                          <p className="text-xs font-bold text-on-surface">Google Gemini</p>
+                          <p className="text-[10px] text-on-surface-variant mt-0.5">Fast cloud model with Google Search grounding. Recommended primary.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
+                        <button
+                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'gemini' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
+                        >
+                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
+                      <input
+                        type="password"
+                        value={llmSettings.geminiApiKey ?? ''}
+                        onChange={(e) => { const next = { ...llmSettings, geminiApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                        placeholder="AIzaSy..."
+                      />
+                      <p className="text-[9px] text-on-surface-variant italic">Get a free key at aistudio.google.com. Auto-saves to local database.</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-on-surface leading-tight">{prov.name}</p>
-                    <p className="text-[10px] text-on-surface-variant mt-1 leading-snug">{prov.desc}</p>
+                );
+              })()}
+
+              {/* Claude Card */}
+              {(() => {
+                const isPrimary = llmSettings.primaryProvider === 'claude';
+                const isConnected = Boolean(llmSettings.claudeApiKey);
+                return (
+                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary text-lg">psychology</span>
+                        <div>
+                          <p className="text-xs font-bold text-on-surface">Anthropic Claude</p>
+                          <p className="text-[10px] text-on-surface-variant mt-0.5">Premium reasoning model. Serves as automatic fallback if Gemini fails.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
+                        <button
+                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'claude' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
+                        >
+                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
+                      <input
+                        type="password"
+                        value={llmSettings.claudeApiKey ?? ''}
+                        onChange={(e) => { const next = { ...llmSettings, claudeApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                        placeholder="sk-ant-api03..."
+                      />
+                      <p className="text-[9px] text-on-surface-variant italic">Get a key at console.anthropic.com. Auto-saves to local database.</p>
+                    </div>
                   </div>
-                </button>
-              ))}
+                );
+              })()}
+
+              {/* Local LLM Card */}
+              {(() => {
+                const isPrimary = llmSettings.primaryProvider === 'local';
+                const isConnected = Boolean(llmSettings.localUrl);
+                return (
+                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary text-lg">terminal</span>
+                        <div>
+                          <p className="text-xs font-bold text-on-surface">Local LLM (Ollama / LM Studio)</p>
+                          <p className="text-[10px] text-on-surface-variant mt-0.5">100% private, runs on your machine. No API key required.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Configured</span>}
+                        <button
+                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'local' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
+                        >
+                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Endpoint Base URL</label>
+                        <input
+                          type="text"
+                          value={llmSettings.localUrl ?? ''}
+                          onChange={(e) => { const next = { ...llmSettings, localUrl: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                          className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                          placeholder="http://localhost:11434"
+                        />
+                        <p className="text-[9px] text-on-surface-variant italic">Ollama: localhost:11434 · LM Studio: localhost:1234/v1</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Model Name</label>
+                        <input
+                          type="text"
+                          value={llmSettings.localModel ?? ''}
+                          onChange={(e) => { const next = { ...llmSettings, localModel: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                          className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                          placeholder="llama3"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Perplexity Card — Implements FR-061, FR-062, SEC-004 */}
+              {(() => {
+                const isPrimary = llmSettings.primaryProvider === 'perplexity';
+                const isConnected = Boolean(llmSettings.perplexityApiKey);
+                return (
+                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="material-symbols-outlined text-primary text-lg">travel_explore</span>
+                        <div>
+                          <p className="text-xs font-bold text-on-surface">Perplexity AI</p>
+                          <p className="text-[10px] text-on-surface-variant mt-0.5">Web-native LLM — used automatically for company research if configured.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
+                        <button
+                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'perplexity' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
+                        >
+                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
+                      <input
+                        type="password"
+                        value={llmSettings.perplexityApiKey ?? ''}
+                        onChange={(e) => { const next = { ...llmSettings, perplexityApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                        placeholder="pplx-..."
+                      />
+                      <p className="text-[9px] text-on-surface-variant italic">Get a key at perplexity.ai/settings/api. Auto-saves to local database.</p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* Dynamic Settings Fields */}
-            <div className="pt-4 border-t border-outline-variant/10 space-y-5">
-              {llmSettings.provider === 'gemini' && (
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Gemini API Key</label>
-                  <input
-                    type="password"
-                    value={llmSettings.geminiApiKey ?? ''}
-                    onChange={(e) => {
-                      const next = { ...llmSettings, geminiApiKey: e.target.value };
-                      setLlmSettings(next);
-                      debouncedSave('llm_settings', next);
-                    }}
-                    className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                    placeholder="AIzaSy..."
-                  />
-                  <p className="text-[9px] text-on-surface-variant italic">Auto-saves to database instantly on change.</p>
-                </div>
-              )}
+            {/* Data Sources — Implements FR-054, SEC-002 */}
+            <div className="pt-6 border-t border-outline-variant/10 space-y-4">
+              <div>
+                <h3 className="text-base font-headline font-bold text-on-surface">Data Sources</h3>
+                <p className="text-xs text-on-surface-variant mt-1">Optional job board API connections. Keys are stored only in the local database and never synced to git.</p>
+              </div>
 
-              {llmSettings.provider === 'claude' && (
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Claude API Key</label>
-                  <input
-                    type="password"
-                    value={llmSettings.claudeApiKey ?? ''}
-                    onChange={(e) => {
-                      const next = { ...llmSettings, claudeApiKey: e.target.value };
-                      setLlmSettings(next);
-                      debouncedSave('llm_settings', next);
-                    }}
-                    className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                    placeholder="sk-ant-api03..."
-                  />
-                  <p className="text-[9px] text-on-surface-variant italic">Auto-saves to database instantly on change.</p>
+              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-on-surface-variant text-lg">work_history</span>
+                    <div>
+                      <p className="text-xs font-bold text-on-surface">Adzuna Job Search API</p>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5">Aggregates listings from thousands of boards. Free tier: 250 requests/day.</p>
+                    </div>
+                  </div>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${apiConnections.adzunaAppId && apiConnections.adzunaAppKey ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant'}`}>
+                    {apiConnections.adzunaAppId && apiConnections.adzunaAppKey ? 'Connected' : 'Not Connected'}
+                  </span>
                 </div>
-              )}
-
-              {llmSettings.provider === 'local' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Local Endpoint Base URL</label>
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App ID</label>
                     <input
                       type="text"
-                      value={llmSettings.localUrl ?? ''}
+                      value={apiConnections.adzunaAppId}
                       onChange={(e) => {
-                        const next = { ...llmSettings, localUrl: e.target.value };
-                        setLlmSettings(next);
-                        debouncedSave('llm_settings', next);
+                        const next = { ...apiConnections, adzunaAppId: e.target.value };
+                        setApiConnections(next);
+                        debouncedSave('api_connections', next);
                       }}
-                      className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                      placeholder="http://localhost:11434"
+                      className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                      placeholder="a1b2c3d4"
                     />
-                    <p className="text-[9px] text-on-surface-variant italic">Use http://localhost:11434 for Ollama or http://localhost:1234/v1 for LM Studio.</p>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Model Identifier / Name</label>
+                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App Key</label>
                     <input
-                      type="text"
-                      value={llmSettings.localModel ?? ''}
+                      type="password"
+                      value={apiConnections.adzunaAppKey}
                       onChange={(e) => {
-                        const next = { ...llmSettings, localModel: e.target.value };
-                        setLlmSettings(next);
-                        debouncedSave('llm_settings', next);
+                        const next = { ...apiConnections, adzunaAppKey: e.target.value };
+                        setApiConnections(next);
+                        debouncedSave('api_connections', next);
                       }}
-                      className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                      placeholder="llama3"
+                      className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                      placeholder="••••••••••••••••"
                     />
                   </div>
                 </div>
-              )}
+                <p className="text-[9px] text-on-surface-variant italic">Auto-saves to local database. Register at developer.adzuna.com — free tier only.</p>
+              </div>
             </div>
           </div>
         )}

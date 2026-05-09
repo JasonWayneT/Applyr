@@ -44,6 +44,32 @@ const DEFAULT_PIPELINE_PREFERENCES = {
   max_company_size_penalty_threshold: 50,
 };
 
+// Implements FR-058, SEC-003 — reads all API keys from SQLite and returns them as env vars.
+// Merged into every Python spawn so the app functions without a .env file.
+// Implements FR-058, FR-061, SEC-003, SEC-004
+// Python's load_dotenv() does not override existing env vars, so DB values always win.
+function buildPythonEnv(): Record<string, string> {
+  const extra: Record<string, string> = {};
+  try {
+    const llmRow = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as any;
+    if (llmRow?.value) {
+      const llm = JSON.parse(llmRow.value);
+      if (llm.geminiApiKey)     extra.GEMINI_API_KEY     = llm.geminiApiKey;
+      if (llm.claudeApiKey)     extra.ANTHROPIC_API_KEY  = llm.claudeApiKey;
+      if (llm.perplexityApiKey) extra.PERPLEXITY_API_KEY = llm.perplexityApiKey;
+    }
+  } catch { /* no llm_settings record yet */ }
+  try {
+    const connRow = db.prepare("SELECT value FROM profiles WHERE key = 'api_connections'").get() as any;
+    if (connRow?.value) {
+      const conns = JSON.parse(connRow.value);
+      if (conns.adzunaAppId)  extra.ADZUNA_APP_ID  = conns.adzunaAppId;
+      if (conns.adzunaAppKey) extra.ADZUNA_APP_KEY = conns.adzunaAppKey;
+    }
+  } catch { /* no api_connections record yet */ }
+  return extra;
+}
+
 function materializeJobSearchPrefs(jobSearch: any): void {
   let existing: any = {};
   try {
@@ -54,9 +80,14 @@ function materializeJobSearchPrefs(jobSearch: any): void {
 
   const targetRole: string = jobSearch.targetRole || 'Product Manager';
 
-  // Derive search terms: always include the target role; add "Product Owner" variant for PM roles
+  // Derive search terms: always include the target role; add semantically equivalent variants per role
   const searchTerms: string[] = [targetRole];
-  if (targetRole.toLowerCase().includes('product manager')) searchTerms.push('Product Owner');
+  if (targetRole.toLowerCase().includes('product manager')) {
+    searchTerms.push('Product Owner');
+    searchTerms.push('Technical Product Manager');
+    searchTerms.push('Platform Product Manager');
+    searchTerms.push('Digital Product Manager');
+  }
 
   const blockedTitles: string[] = (jobSearch.titleBlocklist || '')
     .split(',').map((s: string) => s.trim()).filter(Boolean);
@@ -542,7 +573,7 @@ app.post('/api/evaluate', (req, res) => {
 
   const proc = spawn('python', [scriptPath, '--company', company, '--url', url || '', '--mode', 'single'], {
     cwd: path.join(__dirname, '..'),
-    env: { ...process.env }
+    env: { ...process.env, ...buildPythonEnv() },
   });
 
   proc.stdin.write(jd);

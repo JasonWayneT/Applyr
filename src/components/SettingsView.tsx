@@ -526,7 +526,10 @@ const SettingsView: React.FC = () => {
                         className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
                         placeholder="AIzaSy..."
                       />
-                      <p className="text-[9px] text-on-surface-variant italic">Get a free key at aistudio.google.com. Auto-saves to local database.</p>
+                      <p className={`text-[9px] italic transition-colors duration-300 flex items-center gap-1 ${saveStatus === 'saved' ? 'text-primary font-bold' : 'text-on-surface-variant'}`}>
+                        {saveStatus === 'saved' && <span className="material-symbols-outlined text-[10px]">check</span>}
+                        {saveStatus === 'saved' ? 'Key successfully synchronized to local storage.' : 'Get a key at the provider portal. Auto-saves to local database.'}
+                      </p>
                     </div>
                   </div>
                 );
@@ -783,6 +786,26 @@ const SettingsView: React.FC = () => {
           </div>
         )}
       </div>
+      
+      {/* Floating Feedback Toast (Implements user request for immediate visual save confirmation) */}
+      <div className={`fixed bottom-8 right-8 flex items-center gap-3 bg-surface-container-highest text-on-surface border border-outline-variant/20 px-5 py-3 rounded-2xl shadow-2xl transition-all duration-300 z-50 transform ${
+        saveStatus === 'saved' ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0 pointer-events-none'
+      }`}>
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+        </div>
+        <div>
+          <p className="text-xs font-bold">Changes Synchronized</p>
+          <p className="text-[10px] text-on-surface-variant">Stored securely in your local SQLite database.</p>
+        </div>
+      </div>
+      
+      {saveStatus === 'saving' && (
+        <div className="fixed bottom-8 right-8 flex items-center gap-3 bg-surface-container-highest text-on-surface border border-outline-variant/20 px-5 py-3 rounded-2xl shadow-xl z-50">
+          <div className="w-5 h-5 border-2 border-secondary border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs font-bold text-secondary">Autosaving...</p>
+        </div>
+      )}
     </div>
   );
 };

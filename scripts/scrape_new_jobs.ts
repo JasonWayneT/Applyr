@@ -21,7 +21,6 @@ async function run() {
   console.log(`Scraping descriptions for ${jobs.length} new jobs...`);
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
-  const page = await context.newPage();
 
   for (const job of jobs) {
     if (!job.url) {
@@ -29,10 +28,15 @@ async function run() {
       continue;
     }
 
+    // Create a FRESH page for each job to isolate network state and prevent cross-job navigation leakage
+    const page = await context.newPage();
+
     try {
       console.log(`Scraping ${job.company} from ${job.url}...`);
-      await page.goto(job.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-      await new Promise(r => setTimeout(r, 3000));
+      await page.goto(job.url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      
+      // Wait a bit longer for multi-hop redirects common on aggregator sites
+      await new Promise(r => setTimeout(r, 6000));
 
       // Extract the main content/text
       const text = await page.evaluate(() => {
@@ -48,7 +52,7 @@ async function run() {
             return el.innerText;
           }
         }
-        return document.body.innerText;
+        return document.body ? document.body.innerText : "";
       });
 
       if (text && text.length > 200) {
@@ -65,6 +69,20 @@ async function run() {
       }
     } catch (e: any) {
       console.error(`  -> Failed to scrape ${job.company}: ${e.message}`);
+      // Implements BUG-007: Handle dead links triggering instant redirects/interrupted navigation
+      if (e.message && e.message.includes('interrupted by another navigation')) {
+        console.warn(`  [BUG-007] Detected dead/redirected link for ${job.company}. Archiving to stale_jobs.`);
+        try {
+          db.prepare('INSERT OR IGNORE INTO stale_jobs (url, company, title) VALUES (?, ?, ?)').run(job.url, job.company, job.title);
+          db.prepare('DELETE FROM jobs WHERE id = ?').run(job.id);
+          console.log(`  -> Successfully moved dead link to stale_jobs and removed from active queue.`);
+        } catch (dbErr) {
+          console.error(`  -> Database operation failed while handling dead link:`, dbErr);
+        }
+      }
+    } finally {
+      // Always close the page to free up memory and end pending network activity
+      await page.close().catch(() => {});
     }
   }
 

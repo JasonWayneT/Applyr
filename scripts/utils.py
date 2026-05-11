@@ -199,45 +199,71 @@ def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_r
 
 
 def _call_local(settings, system_prompt, user_prompt, model, temperature):
-    """Returns result string on success, None to signal try-next-provider."""
+    """
+    Returns result string on success, None to signal try-next-provider.
+    Implements intra-local model fallback chain (e.g. fallback to smaller model if large one hits OOM).
+    """
     import requests
     base_url = settings.get('localUrl', 'http://localhost:11434')
-    target_model = settings.get('localModel') or model or 'llama3'
-    print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model}...", file=sys.stderr)
-    endpoint = base_url.rstrip('/')
-    if not endpoint.endswith('/v1') and not endpoint.endswith('/v1/chat/completions'):
-        endpoint = f"{endpoint}/v1/chat/completions"
-    elif endpoint.endswith('/v1'):
-        endpoint = f"{endpoint}/chat/completions"
-    try:
-        payload = {
-            "model": target_model,
-            "temperature": temperature,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        }
-        res = requests.post(endpoint, json=payload, timeout=120)
-        if res.status_code == 200:
-            return res.json()["choices"][0]["message"]["content"].strip()
-        # Fallback to Ollama native API
-        ollama_endpoint = base_url.rstrip('/') + '/api/chat'
-        payload_ollama = {
-            "model": target_model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "options": {"temperature": temperature},
-            "stream": False,
-        }
-        res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=120)
-        if res_ollama.status_code == 200:
-            return res_ollama.json()["message"]["content"].strip()
-        print(f"    [LLM Error] Local LLM failed: OpenAI v1 {res.status_code}, Ollama {res_ollama.status_code}", file=sys.stderr)
-    except Exception as e:
-        print(f"    [LLM Error] Local LLM connection failed: {e}", file=sys.stderr)
+    primary = settings.get('localModel') or model or 'llama3'
+    fallback = settings.get('localFallbackModel')
+    
+    models_to_try = [primary]
+    if fallback and fallback != primary:
+        models_to_try.append(fallback)
+    
+    for target_model in models_to_try:
+        print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model}...", file=sys.stderr)
+        endpoint = base_url.rstrip('/')
+        if not endpoint.endswith('/v1') and not endpoint.endswith('/v1/chat/completions'):
+            endpoint = f"{endpoint}/v1/chat/completions"
+        elif endpoint.endswith('/v1'):
+            endpoint = f"{endpoint}/chat/completions"
+        
+        try:
+            # Try native Ollama API first - proven most reliable for local models
+            ollama_endpoint = base_url.rstrip('/') + '/api/chat'
+            payload_ollama = {
+                "model": target_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "options": {"temperature": temperature},
+                "stream": False,
+            }
+            res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=120)
+            if res_ollama.status_code == 200:
+                res_json = res_ollama.json()
+                result = res_json.get("message", {}).get("content", "")
+                if result.strip():
+                    return result.strip()
+
+            # Fallback to OpenAI compatibility API
+            payload = {
+                "model": target_model,
+                "temperature": temperature,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            }
+            res = requests.post(endpoint, json=payload, timeout=120)
+            if res.status_code == 200:
+                result = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                if result.strip():
+                    return result.strip()
+
+            print(f"    [LLM Local Warning] Model '{target_model}' returned empty or failed status.", file=sys.stderr)
+            
+        except Exception as e:
+            print(f"    [LLM Local Warning] Connection failed for model '{target_model}': {e}", file=sys.stderr)
+        
+        # If we have another model left to try, output log and continue
+        if target_model != models_to_try[-1]:
+            print(f"    [LLM] Attempting next local fallback model...", file=sys.stderr)
+
+    # Exhausted all local models
     return None
 
 
@@ -278,14 +304,24 @@ def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retr
 
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
-             response_mime_type=None, tools=None, max_retries=5):
+             response_mime_type=None, tools=None, max_retries=5, provider_override=None):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
     Only calls providers that have a configured key. On non-rate-limit error, falls through to next provider.
+    
+    Use provider_override (str or list) to lock specific high-fidelity operations (like drafting)
+    to cloud models, bypassing the local core.
     """
     settings = load_llm_settings()
-    providers = _get_configured_providers(settings)
+    all_providers = _get_configured_providers(settings)
+    
+    if provider_override:
+        requested = [provider_override] if isinstance(provider_override, str) else provider_override
+        # Filter list to only configured providers that match request
+        providers = [p for p in requested if p in all_providers]
+    else:
+        providers = all_providers
 
     if not providers:
         print(
@@ -315,3 +351,38 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
 
     return ""
+
+
+def unload_local_models():
+    """
+    Forces local Ollama instance to unload any active models immediately, 
+    restoring GPU VRAM back to system/desktop.
+    """
+    import requests
+    settings = load_llm_settings()
+    if not _is_configured('local', settings):
+        return
+    
+    base_url = settings.get('localUrl', 'http://localhost:11434')
+    models_to_unload = [
+        settings.get('localModel'),
+        settings.get('localFallbackModel'),
+        'llama3', 'gemma2:9b'
+    ]
+    # Filter unique valid model tags
+    unique_models = set([m for m in models_to_unload if m])
+
+    if not unique_models:
+        return
+
+    print(f"\n[LLM System] Process finished. Dispatching unload signal for local models...", file=sys.stderr)
+    endpoint = base_url.rstrip('/') + '/api/chat'
+    
+    for model_name in unique_models:
+        try:
+            # keep_alive: 0 explicitly purges it from memory
+            requests.post(endpoint, json={"model": model_name, "keep_alive": 0}, timeout=5)
+            print(f"  -> Unload complete: {model_name}", file=sys.stderr)
+        except Exception:
+            pass
+    print("[LLM System] GPU VRAM reclamation complete.\n", file=sys.stderr)

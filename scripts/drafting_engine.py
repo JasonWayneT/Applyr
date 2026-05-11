@@ -143,7 +143,7 @@ def verify_claims(draft_text, work_exp, claim_verifier_rules):
     Perform the verification. If high-risk flags exist, rewrite the sentence to be accurate.
     Return ONLY the final corrected markdown text. Do not output 'FAILED CLAIM' unless explicitly asked, just fix it in the final output directly to ensure the pipeline can proceed automatically with corrected text.
     """
-    result = call_llm(system_prompt, user_prompt)
+    result = call_llm(system_prompt, user_prompt, provider_override='gemini')
     if not result:
         print("    [Audit Warning] Claim Verifier returned empty. Using original draft.")
         return draft_text
@@ -223,7 +223,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     Output strictly the translated standard Markdown resume. No preamble.
     """
     }
-    draft_resume = call_llm(resume_prompt["role"], resume_prompt["content"])
+    draft_resume = call_llm(resume_prompt["role"], resume_prompt["content"], provider_override='gemini')
     if not draft_resume:
         print(f"  [ERROR] LLM returned empty resume for {company_name}. Skipping save.")
         return
@@ -289,7 +289,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     Output strictly the standard markdown cover letter. No preamble.
     """
     }
-    draft_cl = call_llm(cl_prompt["role"], cl_prompt["content"])
+    draft_cl = call_llm(cl_prompt["role"], cl_prompt["content"], provider_override='gemini')
     if not draft_cl:
         print(f"  [ERROR] LLM returned empty cover letter for {company_name}. Skipping save.")
         return

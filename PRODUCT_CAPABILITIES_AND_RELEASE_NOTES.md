@@ -34,6 +34,67 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 5.20
+Applyr Release
+May 11, 2026
+
+Version 5.20, deployed on May 11, 2026
+
+Previous
+Applyr 5.19
+
+Next
+Applyr 6.0 (Planned)
+
+New
+- **Dual-Tier Local Intelligence Failover:** Redesigned `utils.py` to dynamically monitor local inference health. If the large primary model throws an Out-Of-Memory (500) exception, the engine automatically locks onto a user-defined lightweight fallback model (`gemma2:9b`) and resumes with zero pipeline lag.
+- **Automatic VRAM Reclamation (Eco-Hook):** Authored `unload_local_models()` protocol and hooked it to the `finally` block of `batch_pipeline.py`. As soon as processing finishes, Python sends explicit `keep_alive: 0` signals to Ollama, immediately cleaning local GPU memory for system/gaming performance.
+- **Hybrid Local-Cloud Switching:** Introduced explicit `provider_override` logic enabling tiered operations. Rejection triage runs instantly locally while delicate Drafting and Auditing functions dynamically lock to Gemini Pro, eliminating local model hallucinations.
+
+---
+
+### 5.19
+Applyr Release
+May 11, 2026
+
+Version 5.19, hotfix deployed to local users on May 11, 2026
+
+Previous
+Applyr 5.18
+
+Next
+Applyr 6.0 (Planned)
+
+Fixed
+- **Critical Scraper Context Leak (BUG-008):** Resolved a core execution defect where sequential loops shared a single Playwright `Page` instance. Pending redirects from previous hops would asynchronously interrupt subsequent job loadings, which the system misclassified as "dead links." 
+- **Redirection Chain Isolation:** The engine now allocates a fresh, isolated browser context per URL load and enforces strict destruction (`page.close()`) to end lingering network threads, ensuring high-fidelity navigation capture for multi-hop aggregators like Adzuna.
+
+Developer
+- **Data Recovery Protocol:** Authored `restore_stale_jobs.ts` to successfully pull 93 false-positively archived records from `stale_jobs` back into `jobs` table.
+- **SDD compliance:** Logged `BUG-008` in known-issues registry.
+
+---
+
+### 5.18
+Applyr Release
+May 11, 2026
+
+Version 5.18, first offered to local users on May 11, 2026
+
+Previous
+Applyr 5.17
+
+Next
+Applyr 6.0 (Planned)
+
+Fixed
+- **Scraper Navigation Interruption Loop (BUG-007):** Resolved an issue where automated client/server redirects (common with expired Adzuna links) interrupted the Playwright navigation cycle, trapping jobs in an infinite `New` processing loop. Dead links are now caught, automatically archived in `stale_jobs`, and removed from the primary queue.
+
+Developer
+- **SDD compliance:** Registered `BUG-007` in `traceability-matrix.md` and finalized resolution state in known-issues log.
+
+---
+
 ### 5.17
 Applyr Release
 May 9, 2026

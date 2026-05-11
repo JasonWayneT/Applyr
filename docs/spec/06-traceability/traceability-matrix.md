@@ -50,6 +50,16 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-050` | User Request | `FEAT-010` | `src/pages/ProfileView.tsx` | implemented |
 | `FR-051` | User Request | `FEAT-010` | `src/pages/ProfileView.tsx` | implemented |
 | `DATA-001` | User Request | `FEAT-005` | `data/workExperience.md` | implemented |
+| `BUG-007` | Engine Error | `BUG-007` | `scripts/scrape_new_jobs.ts` | implemented |
+| `FR-052` | `CR-004` | `FEAT-011` | `server/scout.ts` | implemented |
+| `FR-060` | `CR-006` | `FEAT-007` | `scripts/utils.py` | implemented |
+| `FR-061` | `CR-006` | `FEAT-007` | `scripts/research-engine.py` | implemented |
+| `FR-063` | `CR-006` | `FEAT-008` | `src/components/SettingsView.tsx` | implemented |
+| `FR-064` | internal | `FEAT-002` | `scripts/batch_pipeline.py`, `scripts/generate_experience_summary.py` | implemented |
+| `FR-065` | User Request | `FEAT-012` | `scripts/utils.py` | implemented |
+| `FR-066` | User Request | `FEAT-012` | `scripts/utils.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-067` | User Request | `FEAT-012` | `scripts/utils.py`, `scripts/drafting_engine.py` | implemented |
+| `BUG-008` | Regression | `BUG-008` | `scripts/scrape_new_jobs.ts` | implemented |
 
 ## Coverage checklist
 

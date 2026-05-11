@@ -8,7 +8,8 @@ from datetime import datetime
 from utils import (
     load_file, call_llm, JOBS_DIR, PROJECT_ROOT,
     WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
-    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE, load_candidate_preferences
+    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE, load_candidate_preferences,
+    unload_local_models
 )
 from drafting_engine import run_drafting_engine
 from generate_cheat_sheet import generate_cheat_sheet
@@ -333,12 +334,16 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    if args.mode == 'single':
-        # the Node server passes JD via stdin for robust parsing
-        jd_input = ""
-        if not sys.stdin.isatty():
-            jd_input = sys.stdin.read().strip()
-            
-        process_single(args.company, args.url, jd_input)
-    else:
-        process_batch()
+    try:
+        if args.mode == 'single':
+            # the Node server passes JD via stdin for robust parsing
+            jd_input = ""
+            if not sys.stdin.isatty():
+                jd_input = sys.stdin.read().strip()
+                
+            process_single(args.company, args.url, jd_input)
+        else:
+            process_batch()
+    finally:
+        # Implements auto-reclaim to clear VRAM when python process ends
+        unload_local_models()

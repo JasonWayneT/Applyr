@@ -46,9 +46,10 @@ def generate_cheat_sheet(company_name):
     """
 
     result = call_llm(
-        system_prompt="You are a professional interview coach. Output high-intent, tailored markdown.",
+        system_prompt="You are the Cheat Sheet Engine. Output Markdown strictly.",
         user_prompt=prompt,
-        temperature=0.3
+        temperature=0.2,
+        provider_override='gemini'
     )
 
     if result:

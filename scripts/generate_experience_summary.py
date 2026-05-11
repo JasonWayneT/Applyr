@@ -54,6 +54,7 @@ def generate_summary():
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=f"Generate the scoring brief from this work experience document:\n\n{full_experience}",
         temperature=0.1,
+        provider_override='gemini'
     )
 
     if not result:

@@ -185,7 +185,8 @@ def process_batch():
     db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
     db_exists = os.path.exists(db_path)
 
-    for filepath in job_files:
+    total_jobs = len(job_files)
+    for idx, filepath in enumerate(job_files):
         filename = os.path.basename(filepath)
         name_part = filename.replace(".txt", "").strip()
 
@@ -198,6 +199,7 @@ def process_batch():
                 job_id_prefix = parts[1]
 
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Processing: {company_name}")
+        print(f"[JOB_PROGRESS] Job {idx + 1}/{total_jobs}: Evaluating {company_name}...")
         
         status_to_check = None
         if db_exists:
@@ -296,6 +298,7 @@ def process_batch():
 
         # Load full work experience only for YES decisions
         work_exp_full = load_file(WORK_EXP_FILE)
+        print(f"[JOB_PROGRESS] Job {idx + 1}/{total_jobs}: Generating assets for {company_name}...")
         print(f"  -> [GATEKEEPER PASS] Score: {score}. Running drafting engine...")
         run_drafting_engine(company_name, jd_text, work_exp_full, result)
         try:

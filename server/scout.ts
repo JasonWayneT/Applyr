@@ -112,7 +112,17 @@ export const runScoutSync = () => {
             evalProcess.stdout.on('data', (data) => {
               const lines = data.toString().trim().split('\n');
               for (const line of lines) {
-                if (line.trim()) logActivity('INFO', 'Pipeline', line.trim());
+                const clean = line.trim();
+                if (!clean) continue;
+                
+                if (clean.startsWith('[JOB_PROGRESS]')) {
+                  const statusMsg = clean.replace('[JOB_PROGRESS]', '').trim();
+                  try {
+                    db.prepare(`UPDATE system_status SET current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(statusMsg);
+                  } catch {}
+                }
+                
+                logActivity('INFO', 'Pipeline', clean);
               }
             });
 

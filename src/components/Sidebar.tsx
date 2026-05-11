@@ -19,7 +19,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     { name: 'Job Search', icon: 'radar' },
     { name: 'Add Job', icon: 'post_add' },
     { name: 'Tuning Log', icon: 'tune' },
-    { name: 'Profile', icon: 'person' },
   ];
 
   // Close menu when clicking outside

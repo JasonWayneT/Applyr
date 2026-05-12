@@ -61,6 +61,8 @@ db.exec(`
 
   INSERT OR IGNORE INTO system_status (id, process_type, status, current_item)
   VALUES ('global', 'all', 'idle', 'No active pipeline run');
+
+  UPDATE system_status SET status = 'idle', current_item = 'Server restart detected. No active pipeline run.', updated_at = CURRENT_TIMESTAMP WHERE id = 'global';
 `);
 
 export const logActivity = (

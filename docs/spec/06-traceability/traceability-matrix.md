@@ -63,6 +63,11 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-068` | User Request | `FEAT-001` | `server/scout.ts` | accepted |
 | `FR-069` | User Request | `FEAT-005` | `scripts/verify_claims.py`, `scripts/drafting_engine.py` | accepted |
 | `FR-070` | User Request | `FEAT-001` | `scripts/scout_local.ts` | accepted |
+| `FR-071` | `CR-007` | `FEAT-012` | `scripts/utils.py` | implemented |
+| `FR-072` | `CR-007` | `FEAT-012` | `scripts/drafting_engine.py`, `scripts/utils.py` | implemented |
+| `FR-073` | `CR-007` | `FEAT-005` | `scripts/verify_claims.py`, `scripts/drafting_engine.py` | implemented |
+| `FR-074` | `CR-007` | `FEAT-005` | `scripts/style_compliance_guard.py` | implemented |
+| `FR-075` | `CR-007` | `FEAT-005` | `scripts/drafting_engine.py` | implemented |
 
 ## Coverage checklist
 

@@ -23,8 +23,8 @@ async function run() {
   const context = await browser.newContext();
 
   for (const job of jobs) {
-    if (!job.url) {
-      console.log(`Skipping ${job.company} - No URL`);
+    if (!job.url || job.url.startsWith('local://')) {
+      console.log(`Skipping ${job.company} - ${!job.url ? 'No URL' : 'Local Mock URL'}`);
       continue;
     }
 

@@ -48,7 +48,7 @@ def fetch_company_intel_gemini(company, role, prompt):
     result = call_llm(
         system_prompt="You are a corporate intelligence agent. Return output in VALID JSON format ONLY. Do not include markdown code blocks like ```json in your response. Ensure the output is strictly valid JSON.",
         user_prompt=prompt,
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         temperature=0.2,
         tools=[{"google_search": {}}]
     )

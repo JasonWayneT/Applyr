@@ -5,8 +5,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
 
-const primary = 'hf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-IQ4_XS';
-const fallback = 'gemma2:9b';
+const primary = 'ministral-3-14b:latest';
+const fallback = 'gemma4-e4b:latest';
 
 console.log("Configuring Dual-Tier Local Failover...");
 const row = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as any;

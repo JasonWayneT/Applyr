@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
 
-// The bigger model identified from local tags
+// Upgrade to highest-quality local model (requires ~14GB VRAM free)
+// Only run this when on desktop with no other GPU-heavy tasks active.
 const biggerModel = 'hf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-IQ4_XS';
 
 console.log("Fetching current config...");

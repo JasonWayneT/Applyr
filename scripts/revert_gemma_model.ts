@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
 
-const workingModel = 'gemma4-e4b:latest';
+// Revert to standard working model (ministral-3-14b, ~9-10GB VRAM, strong instruction following)
+const workingModel = 'ministral-3-14b:latest';
 
 console.log("Reverting config to working fallback due to upstream loading error...");
 const row = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as any;

@@ -6,9 +6,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '../jobagent.sqlite');
 
 export const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 30000');
 
 // Initialize schema — idempotent, safe to run on every boot
 db.exec(`
+  CREATE TABLE IF NOT EXISTS pipeline_runs (
+    run_id TEXT PRIMARY KEY,
+    status TEXT DEFAULT 'PENDING',
+    current_stage TEXT DEFAULT 'SCOUT',
+    last_error TEXT,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
     company TEXT NOT NULL,

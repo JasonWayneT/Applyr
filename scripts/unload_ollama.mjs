@@ -4,7 +4,6 @@ const models = [
   "gemma4-e4b:latest",
   "ministral-3-14b:latest",
   "hf.co/unsloth/gemma-4-26B-A4B-it-GGUF:UD-IQ4_XS",
-  "gemma2:9b"
 ];
 
 async function unload(modelName) {

@@ -2,6 +2,7 @@ import os
 import re
 import json
 import subprocess
+import verify_claims as determinator
 from utils import (load_file, call_llm, SUBMISSIONS_DIR,
                    RESUME_MASTER_FILE, COVER_LETTER_REF_FILE,
                    RESUME_STYLE_REF_FILE, CLAIM_VERIFIER_FILE,
@@ -44,13 +45,64 @@ def _load_hard_facts(master_resume_text):
 
 # Common hallucination substitutions the LLM tends to make
 KNOWN_HALLUCINATIONS = {
+    # Education substitutions
     "San Diego State University": "National University",
     "SDSU": "National University",
     "San Diego State": "National University",
     "University of San Diego": "National University",
     "UC San Diego": "National University",
     "UCSD": "National University",
+    "California State University": "National University",
+    "CSUSM": "National University",
+    # Company name corrections
+    "PR Newswire": "Cision",
+    "Cision Ltd": "Cision",
+    "Cision Inc": "Cision",
 }
+
+# Tools Jason has NEVER used — block any mention in generated output
+# Source: workExperience.md — if it isn't there, it doesn't exist.
+BLOCKED_TOOLS = [
+    "Snowflake", "Tableau", "Looker", "dbt", "Airflow", "Spark", "Kafka",
+    "Kubernetes", "Docker", "Terraform", "Helm", "Jenkins", "CircleCI",
+    "FHIR", "HL7", "HIPAA", "SOC2", "SOC 2", "ISO 27001",
+    "Databricks", "Redshift", "BigQuery", "Fivetran", "Segment",
+    "Amplitude", "Mixpanel", "Pendo", "LaunchDarkly",
+    "React", "Node.js", "GraphQL", "Rust", "Go",
+    "TensorFlow", "PyTorch", "LangChain", "RAG", "LLM pipeline",
+    "AWS", "Azure", "GCP", "Heroku",
+]
+
+# Seniority inflation phrases — flag if any appear in the resume
+SENIORITY_INFLATION_PHRASES = [
+    "Led a team of", "Led team of",
+    "Managed a team", "Managed team",
+    "Director of", "Vice President", " VP ", "Head of",
+    "Hired and", "Hire and", "Supervised",
+    "People management", "Direct reports",
+    "P&L ownership", "Revenue owner", "Owned billing",
+    "Shipped AI", "Shipped ML", "Trained model", "Deployed model",
+    "Built ML", "Built AI", "AI pipeline", "ML pipeline",
+]
+
+# Approved verified metrics from workExperience.md — exact values only
+# Any numeric claim in the output must match one of these to pass.
+APPROVED_METRICS = [
+    "$40", "40M", "40,000,000",  # MET-01: $40M ARR
+    "3,500", "3500",              # MET-02: 3,500 active accounts
+    "25,000", "25000",            # MET-03: 25,000 active users
+    "7%",                         # MET-04: 7% churn
+    "$1M", "$2M", "1,000,000", "2,000,000",  # MET-05: infra savings
+    "30%", "40%",                 # MET-06: data drop-off
+    "100%",                       # MET-07: drop-off resolved
+    "90%",                        # MET-08: security backlog
+    "200",                        # MET-09: SQL databases
+    "700",                        # MET-10: migrations
+    "$288", "288,000",            # MET-11: fulfillment contracts
+    "$8,500", "8500",             # MET-11: quarterly savings
+    "$22,100", "22,100",          # MET-12: onboarding savings
+    "6+", "6 years",              # tenure
+]
 
 
 def validate_hard_facts(generated_text, master_resume_text):
@@ -58,6 +110,13 @@ def validate_hard_facts(generated_text, master_resume_text):
     Deterministic post-generation check. Compares generated output against
     the master resume source of truth. Fixes known hallucinations and logs
     any discrepancies.
+
+    Checks (all regex/string — no LLM dependency):
+      1. Known bad substitutions (auto-fixed)
+      2. Blocked tool names (flagged for removal)
+      3. Seniority inflation phrases (flagged)
+      4. Metric integrity (any number not in approved list is flagged)
+      5. Education / company / contact presence
 
     Returns (corrected_text, warnings_list).
     """
@@ -82,21 +141,77 @@ def validate_hard_facts(generated_text, master_resume_text):
         flags=re.IGNORECASE
     )
 
-    # 2. Verify education facts are present
+    # 2. TOOL BLOCKLIST — flag any tool Jason never used
+    tool_violations = []
+    for tool in BLOCKED_TOOLS:
+        # Word-boundary match to avoid partial hits (e.g. "Go" inside "Agora")
+        pattern = r'(?<![\w-])' + re.escape(tool) + r'(?![\w-])'
+        if re.search(pattern, corrected, re.IGNORECASE):
+            tool_violations.append(tool)
+    if tool_violations:
+        warnings.append(
+            f"TOOL HALLUCINATION: The following tools are NOT in workExperience.md and must be removed: "
+            f"{', '.join(tool_violations)}"
+        )
+        # Auto-remove the tool mentions from the text to prevent them reaching the PDF
+        for tool in tool_violations:
+            pattern = r'(?<![\w-])' + re.escape(tool) + r'(?![\w-])'
+            corrected = re.sub(pattern, '[REDACTED]', corrected, flags=re.IGNORECASE)
+        print(f"    [GUARD] Auto-redacted {len(tool_violations)} blocked tool(s): {tool_violations}")
+
+    # 3. SENIORITY INFLATION — flag leadership/management claims
+    seniority_violations = []
+    for phrase in SENIORITY_INFLATION_PHRASES:
+        if phrase.lower() in corrected.lower():
+            seniority_violations.append(phrase)
+    if seniority_violations:
+        warnings.append(
+            f"SENIORITY INFLATION: The following phrases imply leadership/management Jason did not hold: "
+            f"{', '.join(seniority_violations)}"
+        )
+        print(f"    [GUARD] Seniority inflation detected: {seniority_violations}")
+
+    # 4. METRIC INTEGRITY — scan for any number patterns and verify against approved list
+    # Find all standalone numeric claims (percentages, dollar amounts, counts)
+    numeric_pattern = re.compile(r'(?:\$[\d,]+(?:M|K|B)?|\d+(?:,\d{3})*(?:\.\d+)?\s*%|\d{1,3}(?:,\d{3})+|\b\d{2,}\b)')
+    found_numbers = numeric_pattern.findall(corrected)
+    unapproved = []
+    for num in found_numbers:
+        clean = num.strip()
+        if not any(approved.lower() in clean.lower() or clean.lower() in approved.lower()
+                   for approved in APPROVED_METRICS):
+            unapproved.append(clean)
+    if unapproved:
+        # Filter out obvious false positives (years, phone numbers, etc.)
+        real_violations = [n for n in unapproved if not re.match(r'^(?:20\d{2}|760|619|858|2026|2025|2024|2023|2022|2021|2019|2017|\d{1,2})$', n.replace(',', '').strip())]
+        if real_violations:
+            warnings.append(
+                f"METRIC INTEGRITY: Unverified numeric claims found (not in approved metrics list): "
+                f"{', '.join(real_violations)}"
+            )
+            print(f"    [GUARD] Unverified metrics detected: {real_violations}")
+
+    # 5. Verify education facts are present
     for uni in HARD_FACTS["education"]:
         if uni not in corrected:
             warnings.append(f"MISSING FACT: Education '{uni}' not found in generated output.")
 
-    # 3. Verify company names are present (at least the primary employer)
+    # 6. Verify company names are present (at least the primary employer)
     for company in HARD_FACTS["companies"][:2]:  # Check top 2 companies
         if company.upper() not in corrected.upper():
             warnings.append(f"MISSING FACT: Company '{company}' not found in generated output.")
 
-    # 4. Verify contact name
+    # 7. Verify contact name
     if HARD_FACTS["contact"]:
         name = HARD_FACTS["contact"][0]
         if name and name not in corrected:
             warnings.append(f"MISSING FACT: Name '{name}' not found in generated output.")
+
+    # 8. Anti-AI fingerprint: catch em-dashes
+    if '\u2014' in corrected or ' -- ' in corrected:
+        warnings.append("STYLE VIOLATION: Em-dash detected. Replacing with comma or clause break.")
+        corrected = corrected.replace('\u2014', ', ').replace(' -- ', ', ')
+        print("    [GUARD] Em-dash auto-corrected.")
 
     if warnings:
         print(f"    [HARD FACT AUDIT] {len(warnings)} issue(s) found:")
@@ -127,7 +242,7 @@ def run_research(company_name, jd_text):
     return "No research data available."
 
 
-def verify_claims(draft_text, work_exp, claim_verifier_rules):
+def llm_verify_claims(draft_text, work_exp, claim_verifier_rules):
     print("    [Audit] Running Claim Verifier (v2.0) against generated text...")
     system_prompt = "You are the cynical auditor enforcing the Claim Verifier rules."
     user_prompt = f"""
@@ -143,7 +258,7 @@ def verify_claims(draft_text, work_exp, claim_verifier_rules):
     Perform the verification. If high-risk flags exist, rewrite the sentence to be accurate.
     Return ONLY the final corrected markdown text. Do not output 'FAILED CLAIM' unless explicitly asked, just fix it in the final output directly to ensure the pipeline can proceed automatically with corrected text.
     """
-    result = call_llm(system_prompt, user_prompt, provider_override='gemini')
+    result = call_llm(system_prompt, user_prompt, provider_override=['gemini', 'local'])
     if not result:
         print("    [Audit Warning] Claim Verifier returned empty. Using original draft.")
         return draft_text
@@ -186,14 +301,18 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
 
     # 2. Bridge Logic & Resume Generation
     print("    [Drafting] Applying 'Bridge Logic' (Platform -> Growth) to Resume...")
+    
+    # Load valid claim IDs
+    valid_ids = determinator.load_valid_ids(WORK_EXP_FILE)
+    
     resume_prompt = {
         "role": "You are a professional resume writer for Jason Taylor. "
                 "Your goal is to create a high-impact, ONE-PAGE technical resume that matches the style reference template exactly. "
                 "STRICT CONSTRAINT: The resume MUST have exactly these three headers: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, and EDUCATION. No other headers are allowed. "
                 "The PROFESSIONAL SUMMARY must be exactly 1-2 concise lines to save space. Do not include Skills or Technical Environment sections. "
-                "Do not use company-specific terms like GPOD or Bellwether without explaining what that is. "
                 "The entire resume MUST fit on a single page. Do not exceed 3,200 characters. "
-                "Use the provided work experience faithfully. Do not hallucinate tools or seniority.",
+                "Use the provided work experience faithfully. Do not hallucinate tools or seniority.\n"
+                "STRICT REQUIREMENT OVERRIDE: Despite rules suggesting otherwise, you MUST physically anchor EVERY accomplishment, metric, and translation claim in your output by appending its respective bracketed ID (e.g. [ACC-101], [MET-01], [VOC-01]) from the ground truth directly to the end of each sentence or bullet point. Every single claim must be traceable.",
         "content": f"""
     Transform the MASTER RESUME to match the JOB DESCRIPTION while strictly adhering to the BRIDGE LOGIC.
     
@@ -220,14 +339,47 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     JOB DESCRIPTION:
     {jd_text}
     
+    CRITICAL REQUIREMENT: For EVERY bullet point or sentence making a factual claim, you MUST append the bracketed source Fact ID (e.g., [ACC-101], [MET-01]) at the end of that sentence. Do not output any content without anchoring claims to specific IDs.
+    
     Output strictly the translated standard Markdown resume. No preamble.
     """
     }
-    draft_resume = call_llm(resume_prompt["role"], resume_prompt["content"], provider_override='gemini')
+    
+    draft_resume = ""
+    error_hint = ""
+    
+    # Initial Attempt + up to 2 retries
+    for attempt in range(3):
+        role = resume_prompt["role"]
+        content = resume_prompt["content"]
+        if error_hint:
+            content += f"\n\n[PREVIOUS ATTEMPT FAILED CLAIM VERIFICATION]\nError details: {error_hint}\nPlease rewrite the resume ensuring EVERY single factual claim or metric is correctly tagged with valid bracketed IDs (e.g., [ACC-101], [MET-01]) from the ground truth. Do not invent tags."
+            
+        draft_resume = call_llm(role, content, provider_override=['gemini', 'local'])
+        if not draft_resume:
+            print("    [Drafting Error] LLM returned empty content.")
+            break
+            
+        # Validate
+        res = determinator.verify_content(draft_resume, valid_ids)
+        if res["success"]:
+            print(f"    [Audit] Resume passed claim ID verification on attempt {attempt+1}.")
+            break
+        else:
+            error_hint = res["error"]
+            print(f"    [Audit Warning] Resume failed claim ID verification on attempt {attempt+1}: {error_hint}")
+            if attempt == 2:
+                print("    [CRITICAL WARNING] Resume failed claim ID verification after maximum retries. Using best-effort output.")
+                
     if not draft_resume:
         print(f"  [ERROR] LLM returned empty resume for {company_name}. Skipping save.")
         return
-    verified_resume = verify_claims(draft_resume, work_exp, verifier_rules)
+        
+    # Run LLM-based claim verification before we strip the IDs so the auditor can see them
+    # We can instruct the LLM auditor to also keep them or we can strip them right after.
+    # Let's strip IDs programmatically now so they are removed before writing to file and compiling
+    cleaned_draft_resume = determinator.strip_ids(draft_resume)
+    verified_resume = llm_verify_claims(cleaned_draft_resume, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
     final_resume, resume_warnings = validate_hard_facts(verified_resume, master_resume)
@@ -263,8 +415,8 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
         "role": "You are a professional cover letter writer for Jason Taylor. "
                 "Your goal is to write a concise, one-page cover letter. "
                 "STRICT CONSTRAINT: The entire letter must be under 1,800 characters to fit on one page with headers. "
-                "Do not use company-specific terms like GPOD or Bellwether without explaining what that is. "
-                "Directly address the job requirements using Jason's actual experience.",
+                "Directly address the job requirements using Jason's actual experience.\n"
+                "STRICT REQUIREMENT OVERRIDE: Despite instructions otherwise, you MUST physically anchor EVERY claim or accomplishment in your output by appending its respective bracketed ID (e.g. [ACC-101], [MET-01]) from the ground truth directly to the end of the sentence. Every single claim must have an ID.",
         "content": f"""
     Write a 250-400 word Cover Letter based on the JOB DESCRIPTION and RESEARCH PACKET.
     
@@ -286,14 +438,43 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     RESEARCH:
     {research_json}
     
+    CRITICAL REQUIREMENT: For EVERY sentence making a factual claim, you MUST append the bracketed source Fact ID (e.g., [ACC-101], [MET-01]) at the end of that sentence. Output must be traceable.
+    
     Output strictly the standard markdown cover letter. No preamble.
     """
     }
-    draft_cl = call_llm(cl_prompt["role"], cl_prompt["content"], provider_override='gemini')
+    
+    draft_cl = ""
+    cl_error_hint = ""
+    
+    # Initial attempt + up to 2 retries
+    for attempt in range(3):
+        role = cl_prompt["role"]
+        content = cl_prompt["content"]
+        if cl_error_hint:
+            content += f"\n\n[PREVIOUS ATTEMPT FAILED CLAIM VERIFICATION]\nError details: {cl_error_hint}\nPlease rewrite the cover letter ensuring EVERY single claim is tagged with its valid bracketed ID (e.g. [ACC-101], [MET-01]) from the ground truth."
+            
+        draft_cl = call_llm(role, content, provider_override=['gemini', 'local'])
+        if not draft_cl:
+            break
+            
+        # Validate
+        res = determinator.verify_content(draft_cl, valid_ids)
+        if res["success"]:
+            print(f"    [Audit] Cover letter passed claim ID verification on attempt {attempt+1}.")
+            break
+        else:
+            cl_error_hint = res["error"]
+            print(f"    [Audit Warning] Cover letter failed claim ID verification on attempt {attempt+1}: {cl_error_hint}")
+            if attempt == 2:
+                print("    [CRITICAL WARNING] Cover letter failed claim ID verification after maximum retries. Using best-effort output.")
+                
     if not draft_cl:
         print(f"  [ERROR] LLM returned empty cover letter for {company_name}. Skipping save.")
         return
-    verified_cl = verify_claims(draft_cl, work_exp, verifier_rules)
+        
+    cleaned_draft_cl = determinator.strip_ids(draft_cl)
+    verified_cl = llm_verify_claims(cleaned_draft_cl, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
     final_cl, cl_warnings = validate_hard_facts(verified_cl, master_resume)

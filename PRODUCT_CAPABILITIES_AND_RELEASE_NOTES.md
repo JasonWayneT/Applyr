@@ -34,6 +34,58 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.0
+Applyr Release
+May 13, 2026
+
+Version 6.0, deployed on May 13, 2026
+
+Previous
+Applyr 5.21
+
+Next
+Applyr 6.1 (Planned)
+
+New
+- **Fact-Bound Semantic Anti-Hallucination (FR-069):** Replaced literal ID scanning with dynamic numerical containment checking. The audit engine aggregates ground truth sentences for all citations within a generated sentence and mathematically verifies that all generated percentages, dollar values, and user scales represent valid subsets of the ground truth, actively blocking numeric fabrication or inflation.
+- **Early Ingestion Location Gate (FR-070):** Embedded geographical boundary validations directly inside the multi-source scouting aggregator. Automatically filters and drops out-of-bounds on-site listings before database storage, enforcing strict compliance with Remote US or San Diego / Carlsbad local requirements.
+- **Stateful Orchestration & Stage Recovery (FR-068):** Introduced a persistent `pipeline_runs` schema coupled to a flattened, modular child-process async handler. Sync crashes no longer recycle the full batch queue; re-triggering sync dynamically restores the precise failed sub-stage (`SCOUT` -> `BACKFILL` -> `SCRAPE` -> `EVALUATE`).
+- **SQLite Write-Ahead Logging Concurrency:** Configured `PRAGMA journal_mode = WAL` and set a 30,000ms busy timeout globally in Node, and hardened all concurrent Python connections with mandatory `timeout=30.0` parameters. These mitigations completely eliminate single-point-of-failure database locking deadlocks during high-concurrency execution cycles.
+
+Fixed
+- **Resilient LinkedIn DOM Obfuscation Workaround:** Replaced brittle, obfuscated CSS selectors with sequential `innerText` text buffer scanning and async locator auto-waiting. This decouples harvester routines from unstable CSS tokens, fully preventing card timeout hangs.
+- **Mock Scheme Page Load Bypassing:** Patched the description scraper to automatically intercept and skip `local://` URI schemes, preventing Chromium driver exceptions and system resource waste during manual mock evaluations.
+
+Developer
+- **SDD Compliance:** Registered structural mappings for functional requirements `FR-068`, `FR-069`, and `FR-070` inside the Traceability Matrix.
+- **Static Integrity Validation:** Fully verified system static typing, passing complete TypeScript `tsc --noEmit` checks with zero compilation errors.
+
+---
+
+### 5.21
+Applyr Release
+May 12, 2026
+
+Version 5.21, deployed on May 12, 2026
+
+Previous
+Applyr 5.20
+
+Next
+Applyr 6.0
+
+New
+- **Deterministic Claim‑to‑ID Verification (FR-014):** Added code-level validation requiring the LLM to anchor all resume and cover letter factual claims using bracketed Fact IDs (`[ACC-###]`, `[MET-###]`, `[VOC-###]`) directly from the ground truth. Programmatically strips IDs before final document compilation to conform to style rules.
+- **Automated Verification Retry Loop:** Configured a 3-attempt generator loop inside the drafting engine. If validation catches a hallucinated or invented Fact ID, the system appends the error details to the prompt, forces a localized rewrite, and retries.
+- **Dynamic GPU Model Tiering (FR-015):** Created `scripts/model_manager.py` to parse `nvidia-smi` output at runtime. Dynamically selects high-resource `ministral-3-14b:latest` if free VRAM is ≥ 10 GB, else safely executes `gemma4-e4b:latest` fallback.
+- **Intra-Loop Memory Cleanup:** Integrated aggressive `unload_all_models()` execution inside the active `batch_pipeline.py` loop. Every sequential job processing run now finishes with a full VRAM reclamation call to prevent active weight stacking in Ollama.
+- **Instant Congestion Failover:** Removed wait-and-polling cycles on Cloud API rate limits. Upon receiving a 429 resource exhausted code, the calling wrapper instantly propagates failure, routing evaluation and drafting operations dynamically to local LLM resources to preserve execution velocity.
+
+Developer
+- **SDD compliance:** Updated traceability matrix for FR-014 and FR-015 to map new modules `verify_claims.py` and `model_manager.py`.
+
+---
+
 ### 5.20
 Applyr Release
 May 11, 2026

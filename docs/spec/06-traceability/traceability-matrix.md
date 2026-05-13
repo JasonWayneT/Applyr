@@ -15,8 +15,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-009` | `BMAD-SRC-004` | `FEAT-002` | `scripts/batch_pipeline.py` | implemented |
 | `FR-011` | `BMAD-SRC-007` | `FEAT-003` | `scripts/research-engine.py` | implemented |
 | `FR-012` | `BMAD-SRC-007` | `FEAT-003` | `scripts/research-engine.py` | implemented |
-| `FR-014` | `BMAD-SRC-004` | `FEAT-004` | `scripts/drafting_engine.py` | implemented |
-| `FR-015` | `BMAD-SRC-006` | `FEAT-004` | `scripts/drafting_engine.py` | implemented |
+| `FR-014` | `BMAD-SRC-004` | `FEAT-004` | `scripts/drafting_engine.py`, `scripts/verify_claims.py` | implemented |
+| `FR-015` | `BMAD-SRC-006` | `FEAT-004` | `scripts/drafting_engine.py`, `scripts/model_manager.py`, `scripts/utils.py` | implemented |
 | `FR-016` | `BMAD-SRC-004` | `FEAT-004` | `scripts/drafting_engine.py` | implemented |
 | `FR-019` | `BMAD-SRC-006` | `FEAT-005` | `scripts/drafting_engine.py` | implemented |
 | `FR-020` | `BMAD-SRC-006` | `FEAT-005` | `scripts/drafting_engine.py` | implemented |
@@ -60,6 +60,9 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-066` | User Request | `FEAT-012` | `scripts/utils.py`, `scripts/batch_pipeline.py` | implemented |
 | `FR-067` | User Request | `FEAT-012` | `scripts/utils.py`, `scripts/drafting_engine.py` | implemented |
 | `BUG-008` | Regression | `BUG-008` | `scripts/scrape_new_jobs.ts` | implemented |
+| `FR-068` | User Request | `FEAT-001` | `server/scout.ts` | accepted |
+| `FR-069` | User Request | `FEAT-005` | `scripts/verify_claims.py`, `scripts/drafting_engine.py` | accepted |
+| `FR-070` | User Request | `FEAT-001` | `scripts/scout_local.ts` | accepted |
 
 ## Coverage checklist
 

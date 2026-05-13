@@ -35,6 +35,12 @@ If any of the following triggers are met, return **Score: 0**, **Decision: NO**,
 - **Blocked Industries:** Reject if the company operates in any of the `blocked_industries` listed in Candidate Preferences.
 - **Domain Gate:** Reject if the role requires domain expertise explicitly marked as a "Soft Blocker" in the candidate's history (e.g., hands-on ML model training, Developer Auth) unless allowed.
 
+### 2.3 Location & Setting Gate
+- **Home Base:** The candidate is located in the **San Diego, CA** area.
+- **Remote Criteria:** If the role is explicitly "Remote", it is **ALLOWED** (provided it supports US hiring).
+- **On-Site/Hybrid Criteria:** If the role is On-Site or Hybrid, it MUST be located within **50 miles of San Diego, CA**.
+- **Trigger:** Reject and Terminate if the role is On-Site or Hybrid in any city outside of greater San Diego (e.g., New York, Chicago, Plano, Atlanta, Seattle, Charlotte, Sunnyvale, Canada). Any non-San Diego, non-remote physical location requirement is an instant kill.
+
 ---
 
 ## 3) Stage B: Full Scoring (0–100)

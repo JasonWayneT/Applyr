@@ -204,7 +204,7 @@ def process_batch():
         status_to_check = None
         if db_exists:
             try:
-                conn = sqlite3.connect(db_path)
+                conn = sqlite3.connect(db_path, timeout=30.0)
                 cursor = conn.cursor()
                 if job_id_prefix:
                     cursor.execute("SELECT status FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
@@ -232,7 +232,7 @@ def process_batch():
             print(f"  -> Skipping. JD failed keyword pre-filter (no relevant signals).")
             if db_exists:
                 try:
-                    conn = sqlite3.connect(db_path)
+                    conn = sqlite3.connect(db_path, timeout=30.0)
                     cursor = conn.cursor()
                     if job_id_prefix:
                         cursor.execute("SELECT url, company, title FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
@@ -272,7 +272,7 @@ def process_batch():
             print(f"  -> [GATEKEEPER REJECT] JD scored below 72 or triggered hard stop.")
             if db_exists:
                 try:
-                    conn = sqlite3.connect(db_path)
+                    conn = sqlite3.connect(db_path, timeout=30.0)
                     cursor = conn.cursor()
                     if job_id_prefix:
                         cursor.execute("SELECT url, company, title FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
@@ -308,7 +308,7 @@ def process_batch():
 
         if db_exists:
             try:
-                conn = sqlite3.connect(db_path)
+                conn = sqlite3.connect(db_path, timeout=30.0)
                 cursor = conn.cursor()
                 if job_id_prefix:
                     cursor.execute(
@@ -326,6 +326,9 @@ def process_batch():
             except Exception as e:
                 print(f"  -> Error updating database: {e}")
             
+        # Force immediate model unload to prevent swapping / stacked VRAM usage during sequential processing
+        unload_local_models()
+        
         print("  -> Sleeping for 15 seconds to respect rate limits...")
         time.sleep(15)
 

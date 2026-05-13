@@ -101,21 +101,47 @@ const BUILTIN_EXP_SLUGS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // URL builders
 // ---------------------------------------------------------------------------
-function buildLinkedInUrl(term: string): string {
-    const encoded   = encodeURIComponent(term);
-    const geoId     = LINKEDIN_GEO_IDS[LOCATION] ?? '103644278';
-    const workType  = LINKEDIN_WORK_TYPES[WORK_SETTING] ?? '2';
+interface LinkedInSearchProfile {
+    label: string;
+    geoId: string;
+    workType: string; // '2' = Remote, '1%2C3' = On-site/Hybrid
+}
+
+function buildLinkedInUrlsForTerm(term: string): { url: string; label: string }[] {
+    const encoded = encodeURIComponent(term);
     const freshnessSeconds = FRESHNESS_DAYS * 24 * 60 * 60;
+    const targets: { url: string; label: string }[] = [];
 
-    let url = `https://www.linkedin.com/jobs/search/?f_TPR=r${freshnessSeconds}&keywords=${encoded}&f_WT=${workType}`;
-    if (geoId) url += `&geoId=${geoId}`;
+    // FR-070 / Scout Gap Fix: Run two separate search archetypes
+    // Archetype 1: General Remote roles across the entire United States
+    // Archetype 2: Hybrid & In-Person roles located exclusively in the San Diego Metro Area
+    const searchProfiles: LinkedInSearchProfile[] = [
+        {
+            label: 'Remote US',
+            geoId: '103644278', // United States (all)
+            workType: '2'      // Remote
+        },
+        {
+            label: 'Local San Diego Metro',
+            geoId: '90010472',  // San Diego Metropolitan Area
+            workType: '1%2C3'  // On-site OR Hybrid (comma encoded)
+        }
+    ];
 
+    let expFilter = '';
     if (EXPERIENCE_LEVELS.length > 0) {
         const codes = [...new Set(EXPERIENCE_LEVELS.map(l => LINKEDIN_EXP_CODES[l]).filter(Boolean))];
-        if (codes.length) url += `&f_E=${codes.join('%2C')}`;
+        if (codes.length) {
+            expFilter = `&f_E=${codes.join('%2C')}`;
+        }
     }
 
-    return url;
+    for (const profile of searchProfiles) {
+        const url = `https://www.linkedin.com/jobs/search/?f_TPR=r${freshnessSeconds}&keywords=${encoded}&f_WT=${profile.workType}&geoId=${profile.geoId}${expFilter}`;
+        targets.push({ url, label: profile.label });
+    }
+
+    return targets;
 }
 
 function buildBuiltInUrl(): string {
@@ -154,6 +180,67 @@ interface SourceHealth {
     found: number;
     durationMs: number;
     error?: string;
+}
+
+/**
+ * Implements FR-070: Early Ingestion Location Gate
+ * Prevents persisting job listings that are neither Remote nor local to San Diego/Carlsbad metro.
+ */
+function passesGeographicGate(job: ScrapedJob): boolean {
+    const text = `${job.title} ${job.description || ''}`.toLowerCase();
+    
+    // If description is placeholder or very short, bypass gate here to allow 
+    // the down-funnel scrape_new_jobs + batch_pipeline stages to evaluate fully.
+    if ((job.description || '').trim().length < 50) {
+        return true; 
+    }
+
+    const hasLocalSD = text.includes('san diego') || 
+                       text.includes('carlsbad') || 
+                       text.includes('la jolla') || 
+                       text.includes('encinitas') || 
+                       text.includes('del mar') || 
+                       text.includes('solana beach') ||
+                       text.includes('ca'); // Keep CA as soft local signal
+
+    const hasRemote = text.includes('remote') || 
+                      text.includes('anywhere in') || 
+                      text.includes('work from home') || 
+                      text.includes('telecommute');
+
+    // Explicit exclusion of major non-US geographies if no US indicators are present
+    const isExplicitForeign = (
+        text.includes('canada') || 
+        text.includes('united kingdom') || 
+        text.includes('london,') || 
+        text.includes('europe') || 
+        text.includes('germany') || 
+        text.includes('india') || 
+        text.includes('apac')
+    ) && !(
+        text.includes('united states') || 
+        text.includes('within the us') || 
+        text.includes('us citizen')
+    );
+
+    if (isExplicitForeign) {
+        return false;
+    }
+
+    // Accept if it has SD local bounds or is Remote
+    if (hasLocalSD || hasRemote) {
+        return true;
+    }
+
+    // Hardwired acceptance for remote-only sources
+    const explicitRemoteSources = ['Remotive', 'RemoteOK', 'WWR', 'Himalayas'];
+    if (explicitRemoteSources.includes(job.source)) {
+        return true;
+    }
+
+    // If it has neither remote nor local indicators, and it's from LinkedIn/BuiltIn,
+    // reject it as an out-of-bound on-site role.
+    return false;
 }
 
 // Wraps any source fn — catches unexpected throws, records timing + status
@@ -277,7 +364,14 @@ const scoutOpenPostings = async (): Promise<ScrapedJob[]> => {
             try {
                 const remoteParam = WORK_SETTING === 'Remote' ? '&remote=remote' : '';
                 const url = `http://localhost:${OPENPOSTINGS_PORT}/postings?search=${encodeURIComponent(term)}${remoteParam}`;
-                const data = await (await fetch(url)).json() as any[];
+                const res = await fetch(url);
+                const data = await res.json() as any;
+                
+                if (!data || !Array.isArray(data)) {
+                    console.log(`[LOG] OpenPostings: Unexpected response for "${term}" (Not an array): ${JSON.stringify(data).slice(0, 200)}`);
+                    continue;
+                }
+                
                 console.log(`[LOG] OpenPostings: ${data.length} results for "${term}"`);
 
                 for (const p of data) {
@@ -346,16 +440,18 @@ const scoutLinkedIn = async (page: Page): Promise<ScrapedJob[]> => {
     const jobs: ScrapedJob[] = [];
 
     for (const term of SEARCH_TERMS) {
-        const searchUrl = buildLinkedInUrl(term);
+        const targets = buildLinkedInUrlsForTerm(term);
 
-        try {
-            await page.goto(searchUrl);
-            await humanWait(4000, 6000);
-            await page.evaluate(() => window.scrollTo(0, 1000));
-            await humanWait(2000, 3000);
+        for (const target of targets) {
+            try {
+                console.log(`[LOG] LinkedIn: Crawling "${decodeURIComponent(term)}" [Scope: ${target.label}]`);
+                await page.goto(target.url);
+                await humanWait(4000, 6000);
+                await page.evaluate(() => window.scrollTo(0, 1000));
+                await humanWait(2000, 3000);
 
-            const cards = await page.$$('.job-card-container');
-            console.log(`[LOG] LinkedIn: ${cards.length} cards for "${decodeURIComponent(term)}"`);
+                const cards = await page.$$('.job-card-container');
+                console.log(`[LOG] LinkedIn: ${cards.length} cards found for "${decodeURIComponent(term)}" (${target.label})`);
 
             for (const card of cards) {
                 if (jobs.length >= 50) break;
@@ -367,10 +463,44 @@ const scoutLinkedIn = async (page: Page): Promise<ScrapedJob[]> => {
                     await jiggleMouse(page);
 
                     const url     = page.url().split('?')[0];
-                    const title   = (await page.textContent('.jobs-unified-top-card__job-title')   || '').trim();
-                    const company = (await page.textContent('.jobs-unified-top-card__company-name') || '').trim();
 
-                    if (!url || !title || !company) continue;
+                    // Supreme Bulletproof Title & Company Extraction from Left Rail & Fallbacks
+                    let title   = (await card.$eval('.job-card-list__title--link', el => el.textContent).catch(() => '')).trim();
+                    let company = '';
+
+                    // Sequential card text parse (100% immune to selector changes!)
+                    try {
+                        const cardLines = (await card.innerText()).split('\n').map(s => s.trim()).filter(s => s.length > 1);
+                        if (!title && cardLines.length > 0) {
+                            title = cardLines[0];
+                        }
+                        if (title && cardLines.length > 1) {
+                            // The very next substantial text block directly underneath the title is the company
+                            const idx = cardLines.findIndex(line => line.toLowerCase().includes(title.toLowerCase()) || title.toLowerCase().includes(line.toLowerCase()));
+                            if (idx !== -1 && idx + 1 < cardLines.length) {
+                                company = cardLines[idx + 1];
+                            }
+                        }
+                    } catch {}
+
+                    // Right Panel Async Locators (waits up to 2 seconds dynamically for renders!)
+                    if (!title) {
+                        title = (await page.locator('.jobs-search__job-details--wrapper a[href*="/jobs/view/"]').first().textContent({timeout: 2000}).catch(() => '')).trim();
+                    }
+                    if (!company) {
+                        company = (await page.locator('.jobs-search__job-details--wrapper a[href*="/company/"]').first().textContent({timeout: 2000}).catch(() => '')).trim();
+                    }
+                    if (!company) {
+                        company = (await page.locator('.job-card-container__company-name, .job-card-list__company-name').first().textContent({timeout: 1000}).catch(() => '')).trim();
+                    }
+                    if (!company) {
+                        company = (await page.textContent('.jobs-unified-top-card__company-name', {timeout: 1000}).catch(() => '')).trim();
+                    }
+
+                    if (!url || !title || !company) {
+                        console.log(`[LOG] LinkedIn skip card: missing metadata (URL: ${!!url}, Title: "${title}", Company: "${company}")`);
+                        continue;
+                    }
                     if (!passesTitleBlocklist(title)) {
                         console.log(`[REJECT] ${title} at ${company} (LinkedIn) - Title Blocklist`);
                         continue;
@@ -384,20 +514,36 @@ const scoutLinkedIn = async (page: Page): Promise<ScrapedJob[]> => {
                         continue;
                     }
 
-                    const desc     = (await page.textContent('#job-details') || '').slice(0, 1500);
+                    // Bulletproof Description Extraction
+                    let desc = '';
+                    // Try 1: Legacy Selector
+                    desc = (await page.textContent('#job-details', {timeout: 1500}).catch(() => '')).trim();
+                    if (!desc) {
+                        // Try 2: Class-based selectors
+                        desc = (await page.textContent('.jobs-description__content, .jobs-box__html-content', {timeout: 1500}).catch(() => '')).trim();
+                    }
+                    if (!desc) {
+                        // Try 3: Detail wrapper catch-all (guaranteed to contain description text!)
+                        desc = (await page.textContent('.jobs-search__job-details--wrapper', {timeout: 1500}).catch(() => '')).trim();
+                    }
+                    desc = desc.slice(0, 1500);
+
                     const salary   = desc.match(/\$[\d,]+ ?[-–] ?\$[\d,]+/)?.[0];
-                    const recName  = (await page.textContent('.jobs-poster__name').catch(() => ''))?.trim() || undefined;
-                    const recUrl   = (await page.getAttribute('.jobs-poster__name-link', 'href').catch(() => '')) || undefined;
+                    const recName  = (await page.textContent('.jobs-poster__name', {timeout: 1000}).catch(() => ''))?.trim() || undefined;
+                    const recUrl   = (await page.getAttribute('.jobs-poster__name-link', 'href', {timeout: 1000}).catch(() => '')) || undefined;
 
                     jobs.push({ company, title, url, description: desc,
                         salary_range: salary, recruiter_name: recName, recruiter_url: recUrl || undefined, source: 'LinkedIn' });
                     console.log(`[FOUND] ${title} at ${company} (LinkedIn)`);
-                } catch { /* silently skip bad cards */ }
+                } catch (cardErr) {
+                    console.log(`[LOG] LinkedIn card process failed: ${cardErr}`);
+                }
             }
         } catch (err) {
             console.log(`[LOG] LinkedIn search failed for "${term}": ${err}`);
         }
     }
+}
 
     return jobs;
 };
@@ -428,7 +574,10 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
                 const relUrl  = await card.$eval('a.card-alias-after-overlay', el => el.getAttribute('href')).catch(() => '');
                 const url     = relUrl ? `https://builtin.com${relUrl}` : '';
 
-                if (!url || !title || !company) continue;
+                if (!url || !title || !company) {
+                    console.log(`[LOG] Built In skip card: missing metadata (URL: ${!!url}, Title: "${title}", Company: "${company}")`);
+                    continue;
+                }
                 if (!passesTitleBlocklist(title)) {
                     console.log(`[REJECT] ${title} at ${company} (Built In) - Title Blocklist`);
                     continue;
@@ -444,7 +593,9 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
 
                 jobs.push({ company, title, url, description: '', source: 'Built In' });
                 console.log(`[FOUND] ${title} at ${company} (Built In)`);
-            } catch { /* skip */ }
+            } catch (cardErr) {
+                console.log(`[LOG] Built In card process failed: ${cardErr}`);
+            }
         }
     } catch (err) {
         console.log(`[LOG] Built In scrape failed: ${err}`);
@@ -485,13 +636,24 @@ const scoutLevelsFyi = async (page: Page): Promise<ScrapedJob[]> => {
                 const title = parts[0] || 'Product Manager';
                 const company = parts[1] || 'Levels.fyi Candidate';
 
-                if (!passesTitleBlocklist(title)) continue;
-                if (!isJobNewByUrl(fullUrl)) continue;
-                if (!isJobNewByCompanyTitle(company, title)) continue;
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Levels.fyi) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(fullUrl)) {
+                    console.log(`[REJECT] ${title} at ${company} (Levels.fyi) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Levels.fyi) - Company/Title already exists`);
+                    continue;
+                }
 
                 jobs.push({ company, title, url: fullUrl, description: '', source: 'Levels.fyi' });
                 console.log(`[FOUND] ${title} at ${company} (Levels.fyi)`);
-            } catch { /* skip */ }
+            } catch (cardErr) {
+                console.log(`[LOG] Levels.fyi card process failed: ${cardErr}`);
+            }
         }
     } catch (err) {
         console.log(`[LOG] Levels.fyi scrape failed: ${err}`);
@@ -765,8 +927,9 @@ const scoutTheMuse = async (): Promise<ScrapedJob[]> => {
 
     try {
         for (let page = 0; page <= 1; page++) {
+            const locationParam = WORK_SETTING === 'Remote' ? '&location=Flexible%20%2F%20Remote' : '';
             const res = await fetch(
-                `https://www.themuse.com/api/public/jobs?category=${encodeURIComponent(museCategory)}&level=Mid+Level&page=${page}`,
+                `https://www.themuse.com/api/public/jobs?category=${encodeURIComponent(museCategory)}&level=Mid+Level${locationParam}&page=${page}`,
                 { headers: { 'Accept': 'application/json' } }
             );
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -836,11 +999,12 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
         if (callCount > 0) await new Promise(r => setTimeout(r, 3000));
         callCount++;
         try {
+            const queryTerm = WORK_SETTING === 'Remote' ? `${term} remote` : term;
             const params = new URLSearchParams({
                 app_id: ADZUNA_APP_ID,
                 app_key: ADZUNA_APP_KEY,
                 results_per_page: '50',
-                what: term,
+                what: queryTerm,
                 max_days_old: String(FRESHNESS_DAYS),
                 'content-type': 'application/json',
             });
@@ -956,13 +1120,22 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
         return true;
     });
 
+    // Apply geographic boundary pre-gate
+    const gatedJobs = uniqueJobs.filter(j => {
+        if (!passesGeographicGate(j)) {
+            console.log(`[REJECT] ${j.title} at ${j.company} (${j.source}) - [GEOGRAPHIC REJECT]`);
+            return false;
+        }
+        return true;
+    });
+
     const insert = DB.prepare(`
         INSERT INTO jobs (id, company, title, url, status, salary_range, recruiter_name, recruiter_url, source_site, created_at)
         VALUES (?, ?, ?, ?, 'New', ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
 
     let saved = 0;
-    for (const job of uniqueJobs) {
+    for (const job of gatedJobs) {
         try {
             insert.run(randomUUID(), job.company, job.title, job.url || null,
                 job.salary_range || null, job.recruiter_name || null,

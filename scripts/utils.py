@@ -5,6 +5,9 @@ Centralizes file I/O, LLM calls with retry logic, and path constants.
 import os
 import sys
 import time
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -31,8 +34,8 @@ RESUME_BEST_PRACTICES = os.path.join(DATA_DIR, "resume-conversion-best-practices
 CL_BEST_PRACTICES = os.path.join(DATA_DIR, "cover-letter-conversion-best-practices.md")
 CANDIDATE_PREFERENCES_FILE = os.path.join(DATA_DIR, "candidate_preferences.json")
 
-# Default LLM model for the pipeline
-DEFAULT_MODEL = "gemini-2.5-flash"
+# Default LLM model for the pipeline (using lite due to 20-req/day cap on standard flash)
+DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
 # Max JD characters to send to LLM for scoring (token budget gate)
 SCORING_JD_MAX_CHARS = 1500
@@ -153,9 +156,8 @@ def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
         except Exception as e:
             err = str(e).lower()
             if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
-                wait = 60 * (attempt + 1)
-                print(f"  -> Gemini rate limit. Waiting {wait}s...", file=sys.stderr)
-                time.sleep(wait)
+                print(f"    [LLM Notice] Gemini is busy/rate-limited ({err[:100]}). Falling back to local model tier...", file=sys.stderr)
+                return None
             else:
                 print(f"    [LLM Error] Gemini: {e}", file=sys.stderr)
                 return None
@@ -204,14 +206,33 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
     Implements intra-local model fallback chain (e.g. fallback to smaller model if large one hits OOM).
     """
     import requests
+    import model_manager
+    
     base_url = settings.get('localUrl', 'http://localhost:11434')
-    primary = settings.get('localModel') or model or 'llama3'
-    fallback = settings.get('localFallbackModel')
     
-    models_to_try = [primary]
-    if fallback and fallback != primary:
+    # Select the appropriate model tier dynamically based on available VRAM
+    target_model = model_manager.select_model(settings)
+    models_to_try = [target_model]
+    
+    # Add fallback if selected was primary, or vice versa
+    fallback = settings.get('localFallbackModel') or 'gemma4-e4b:latest'
+    if target_model != fallback:
         models_to_try.append(fallback)
-    
+
+    # ANTI-HALLUCINATION CONSTRAINT PREFIX
+    # Small models (7B-14B) benefit most from explicit negative constraints in the system message.
+    LOCAL_CONSTRAINT_PREFIX = (
+        "STRICT RULES YOU MUST FOLLOW WITHOUT EXCEPTION:\n"
+        "1. ONLY use facts, company names, job titles, tools, and metrics explicitly provided in the user prompt.\n"
+        "2. NEVER invent, assume, or extrapolate any information not directly stated.\n"
+        "3. NEVER mention tools such as Snowflake, Tableau, Docker, Kubernetes, AWS, GCP, Azure, FHIR, HL7, "
+        "TensorFlow, or any technology not explicitly listed in the provided ground truth.\n"
+        "4. NEVER inflate seniority. Do not write 'Led a team', 'Managed a team', 'Director', 'VP', or 'Head of'.\n"
+        "5. NEVER invent percentage or dollar metrics. Only use numbers explicitly given to you.\n"
+        "6. Output ONLY what was asked. No preamble, no explanations, no footnotes.\n\n"
+    )
+    enhanced_system = LOCAL_CONSTRAINT_PREFIX + system_prompt
+
     for target_model in models_to_try:
         print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model}...", file=sys.stderr)
         endpoint = base_url.rstrip('/')
@@ -219,20 +240,25 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
             endpoint = f"{endpoint}/v1/chat/completions"
         elif endpoint.endswith('/v1'):
             endpoint = f"{endpoint}/chat/completions"
-        
+
         try:
             # Try native Ollama API first - proven most reliable for local models
             ollama_endpoint = base_url.rstrip('/') + '/api/chat'
             payload_ollama = {
                 "model": target_model,
                 "messages": [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": enhanced_system},
                     {"role": "user", "content": user_prompt},
                 ],
-                "options": {"temperature": temperature},
+                "options": {
+                    "temperature": temperature,
+                    "num_ctx": 16384,
+                    "num_predict": 4096,
+                    "repeat_penalty": 1.1,
+                },
                 "stream": False,
             }
-            res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=120)
+            res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=180)
             if res_ollama.status_code == 200:
                 res_json = res_ollama.json()
                 result = res_json.get("message", {}).get("content", "")
@@ -244,21 +270,21 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
                 "model": target_model,
                 "temperature": temperature,
                 "messages": [
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": enhanced_system},
                     {"role": "user", "content": user_prompt},
                 ],
             }
-            res = requests.post(endpoint, json=payload, timeout=120)
+            res = requests.post(endpoint, json=payload, timeout=180)
             if res.status_code == 200:
                 result = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                 if result.strip():
                     return result.strip()
 
             print(f"    [LLM Local Warning] Model '{target_model}' returned empty or failed status.", file=sys.stderr)
-            
+
         except Exception as e:
             print(f"    [LLM Local Warning] Connection failed for model '{target_model}': {e}", file=sys.stderr)
-        
+
         # If we have another model left to try, output log and continue
         if target_model != models_to_try[-1]:
             print(f"    [LLM] Attempting next local fallback model...", file=sys.stderr)
@@ -304,7 +330,7 @@ def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retr
 
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
-             response_mime_type=None, tools=None, max_retries=5, provider_override=None):
+             response_mime_type=None, tools=None, max_retries=8, provider_override=None):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
@@ -358,31 +384,10 @@ def unload_local_models():
     Forces local Ollama instance to unload any active models immediately, 
     restoring GPU VRAM back to system/desktop.
     """
-    import requests
+    import model_manager
     settings = load_llm_settings()
     if not _is_configured('local', settings):
         return
     
     base_url = settings.get('localUrl', 'http://localhost:11434')
-    models_to_unload = [
-        settings.get('localModel'),
-        settings.get('localFallbackModel'),
-        'llama3', 'gemma2:9b'
-    ]
-    # Filter unique valid model tags
-    unique_models = set([m for m in models_to_unload if m])
-
-    if not unique_models:
-        return
-
-    print(f"\n[LLM System] Process finished. Dispatching unload signal for local models...", file=sys.stderr)
-    endpoint = base_url.rstrip('/') + '/api/chat'
-    
-    for model_name in unique_models:
-        try:
-            # keep_alive: 0 explicitly purges it from memory
-            requests.post(endpoint, json={"model": model_name, "keep_alive": 0}, timeout=5)
-            print(f"  -> Unload complete: {model_name}", file=sys.stderr)
-        except Exception:
-            pass
-    print("[LLM System] GPU VRAM reclamation complete.\n", file=sys.stderr)
+    model_manager.unload_all_models(base_url)

@@ -30,7 +30,6 @@ San Diego, CA
 * Automated manual onboarding workflows, increasing throughput by ~40% for revenue-generating programs.
 * Managed vendor integrations and internal execution to ensure predictable revenue delivery.
 
-## EDUCATION & CERTIFICATIONS
+## EDUCATION
 
 * **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019
-* **Certified Scrum Master** — Scrum Alliance

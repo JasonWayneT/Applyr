@@ -35,7 +35,7 @@ Agile / Scrum Methodology
 
 ## **CISION**
 
-### **Product Owner → Product Manager (Functional Scope) | September 2021 – January 2026**
+### **Product Manager | September 2021 – January 2026**
 Full Remote
 
 Defined and executed the product roadmap for Core B2B SaaS Platform and Core Platform Infrastructure, a revenue-bearing B2B SaaS platform generating approximately $40M in annual recurring revenue across ~3,500 active accounts and ~25,000 users. Directed platform strategy during a multi-year transition while the organization migrated customers to newer systems.
@@ -177,12 +177,6 @@ SQL, RabbitMQ, Kafka (Architecture Exposure), ETL pipelines, DT Search indexing 
 
 Bachelor of Business Administration  
 National University
-
----
-
-# **CERTIFICATIONS**
-
-Certified Scrum Master (Scrum Alliance)
 
 ---
 

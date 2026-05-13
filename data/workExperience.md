@@ -59,7 +59,7 @@ graph TD
         S[Product Manager / Product Owner]
     end
     subgraph Cision [2021 - 2026]
-        C[Product Owner / Functional Product Manager]
+        C[Product Manager]
     end
     Z --> S --> C
 ```
@@ -67,7 +67,7 @@ graph TD
 ### 2.1 Employer Timeline Details
 | Employer | Role | Start Date | End Date | Reporting Line | Team Footprint |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Cision** | Product Owner (Functionally Product Manager) | September 2021 | January 2026 | Reported to Director of Product (first 3 months), then operated autonomously partnering with Engineering Managers. | Fluctuated between 6 and 15 engineers across up to 3 cross-functional teams (including Core, Next-Gen Core B2B SaaS Platform, and Migration Tooling). |
+| **Cision** | Product Manager | September 2021 | January 2026 | Reported to Director of Product (first 3 months), then operated autonomously partnering with Engineering Managers. | Fluctuated between 6 and 15 engineers across up to 3 cross-functional teams (including Core, Next-Gen Core B2B SaaS Platform, and Migration Tooling). |
 | **Sterkly Services** | Product Manager / Product Owner | February 2019 | August 2021 | Reported to Head of Product / Operations. | Partnered with 1 cross-functional team of 5-8 engineers and QA. |
 | **Zero To Sixty Media** | Account Manager / Product Owner | June 2017 | January 2019 | Reported to Account & Operations Director. | Partnered with 2-3 developers and external vendor teams. |
 
@@ -188,8 +188,7 @@ If any required information or context is missing from this spec, the AI must ne
 
 ---
 
-## Section 7: Education & Certifications
+## Section 7: Education
 
 *   **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019
-*   **Certified Scrum Master** — Scrum Alliance
 

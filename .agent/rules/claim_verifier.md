@@ -18,7 +18,7 @@ Before any output is finalized, you must run this check:
 ## 2) High-Risk Red Flags (Automated Revision Required)
 If you detect any of the following, you MUST rewrite the sentence to be accurate or flag it for the user:
 - **Seniority Inflation:** Claiming "Director," "Head of," or "People Management."
-- **Metric Fabrication:** Inventing percentages or dollar amounts not found in `workExperience.md`. The approved numeric values are: $40M ARR, 3,500 accounts, 25,000 users, 7% churn, 30%–40% data drop-off, 90% security backlog resolved, ~300 pen-test items, ~700 migrations, $288,000 contracts, $8,500/quarter savings, $22,100/year savings.
+- **Metric Fabrication:** Inventing percentages or dollar amounts not found in `workExperience.md`. The approved numeric values are: $40M ARR, 3,500 accounts, 25,000 users, 7% churn, 40% data drop-off, 90% security backlog resolved, ~300 pen-test items, ~700 migrations, $288,000 contracts, $8,500/quarter savings, $22,100/year savings.
 - **Tool Hallucination:** Do not claim proficiency or use names of tools/standards (e.g., Snowflake, Tableau, FHIR, HL7, Docker, Kubernetes, Terraform, AWS, Azure, GCP) unless they are in `workExperience.md`.
 - **"Lite" Proficiency Trap:** Strictly forbidden to claim "Literacy," "Familiarity," "Awareness," or "Functional knowledge" of a tool just to match a JD if it isn't in his history. If it's not a hard skill in the source, it doesn't exist.
 - **Domain/Jargon Theft:** Do not "borrow" industry-specific jargon (e.g., "HIPAA," "SOC2," "FHIR") to sound like a domain expert. Use Jason's actual terminology (e.g., "Regulated Environment," "Security Compliance").

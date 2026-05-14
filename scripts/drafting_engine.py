@@ -93,7 +93,7 @@ APPROVED_METRICS = [
     "25,000", "25000",            # MET-03: 25,000 active users
     "7%",                         # MET-04: 7% churn
     "$1M", "$2M", "1,000,000", "2,000,000",  # MET-05: infra savings
-    "30%", "40%",                 # MET-06: data drop-off
+    "40%",                 # MET-06: data drop-off
     "100%",                       # MET-07: drop-off resolved
     "90%",                        # MET-08: security backlog
     "200",                        # MET-09: SQL databases

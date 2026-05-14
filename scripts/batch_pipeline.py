@@ -77,11 +77,18 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
         response_mime_type="application/json"
     )
 
-    if not result:
+    if not result or not result.strip():
         return None
 
     try:
-        output = result
+        import re
+        # Extract the JSON object robustly from free-form response text
+        match = re.search(r'\{.*\}', result, re.DOTALL)
+        if match:
+            output = match.group(0).strip()
+            return json.loads(output)
+            
+        output = result.strip()
         if output.startswith("```json"):
             output = output[7:-3].strip()
         elif output.startswith("```"):

@@ -8,7 +8,7 @@ This document contains polished, grounded responses to common behavioral and tec
 **Question:** Describe a product or feature you shipped that improved how internal teams access or use data. What was your role, and what impact did it have?
 
 **Response:**
-At Cision, our media platform encountered a critical challenge where layered legacy synchronization processes resulted in a 30% to 40% contact record drop-off between the central repository and the live production environment. This structural discrepancy triggered a high volume of client complaints regarding stale data intelligence. Serving as the technical product owner, I bypassed the failing legacy architecture by coordinating the development of a direct data pipeline. Consuming data straight from the source database permanently resolved the discrepancy, eliminated related user escalations, and restored operational confidence for our customer-facing teams.
+At Cision, our media platform encountered a critical challenge where layered legacy synchronization processes resulted in a 40% contact record drop-off between the central repository and the live production environment. This structural discrepancy triggered a high volume of client complaints regarding stale data intelligence. Serving as the technical product owner, I bypassed the failing legacy architecture by coordinating the development of a direct data pipeline. Consuming data straight from the source database permanently resolved the discrepancy, eliminated related user escalations, and restored operational confidence for our customer-facing teams.
 
 ---
 

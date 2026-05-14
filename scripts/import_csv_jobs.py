@@ -19,7 +19,17 @@ def import_jobs():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    csv1_path = 'C:/Users/Jason/Downloads/Job Evaluation 1 - Sheet1 (1).csv'
+    # Check both variants of CSV 1
+    csv1_variants = [
+        'C:/Users/Jason/Downloads/Job Evaluation 1 - Sheet1.csv',
+        'C:/Users/Jason/Downloads/Job Evaluation 1 - Sheet1 (1).csv'
+    ]
+    csv1_path = None
+    for variant in csv1_variants:
+        if os.path.exists(variant):
+            csv1_path = variant
+            break
+            
     csv2_path = 'C:/Users/Jason/Downloads/Job Evaluation 2 - Sheet1.csv'
     
     imported_count = 0

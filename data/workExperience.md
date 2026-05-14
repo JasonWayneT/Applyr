@@ -124,7 +124,7 @@ These metrics are the **absolute bounds of truth**. They must never be extrapola
 | **MET-03** | **User Scale** | **~25,000 active users** | Total daily/weekly active individual professional users accessing the platform. |
 | **MET-04** | **Platform Churn Rate** | **7% annually** (approximate) | Extremely stable retention rate, including voluntary migrations to newer corporate systems. |
 | **MET-05** | **Infrastructure Savings** | **$1,000,000 - $2,000,000** | Cumulative cost reduction achieved through resources optimization and dead account cleanups. |
-| **MET-06** | **Contact Data Loss** | **30% - 40% loss** (pre-remediation) | Historical data drop-off rate between Centralized Contact Database and Core B2B SaaS Platform due to layered legacy ETL pipelines. |
+| **MET-06** | **Contact Data Loss** | **40% loss** (pre-remediation) | Historical data drop-off rate between Centralized Contact Database and Core B2B SaaS Platform due to layered legacy ETL pipelines. |
 | **MET-07** | **Data Drop-off Resolved** | **100% reduction** | Total elimination of stale-contact complaints tied to the data pipeline post-Platform Data Remediation launch. |
 | **MET-08** | **Security Risk Backlog** | **90% resolved** (approximate) | Resolution of high-priority security vulnerabilities from an initial backlog of ~300 items. |
 | **MET-09** | **Customer Databases** | **~200 SQL databases** | The physical database footprint managed and maintained under Core Platform Infrastructure. |
@@ -147,7 +147,7 @@ These metrics are the **absolute bounds of truth**. They must never be extrapola
 
 #### Approved Accomplishments Inventory
 *   **[ACC-101] Platform Stabilization**: Mitigated recurring indexing server crashes by implementing proactive storage capacity monitoring, alerting thresholds, and legal-approved cleanups of stale accounts, reducing overall service outages.
-*   **[ACC-102] Data Remediation**: Conceived and drove a centralized platform data remediation initiative that bypassed failing legacy ETL paths to integrate directly with the upstream source-of-truth database, eliminating a 30-40% data drop-off rate and reducing stale-data complaints to zero.
+*   **[ACC-102] Data Remediation**: Conceived and drove a centralized platform data remediation initiative that bypassed failing legacy ETL paths to integrate directly with the upstream source-of-truth database, eliminating a 40% data drop-off rate and reducing stale-data complaints to zero.
 *   **[ACC-103] Security Backlog Triage**: Prioritized a massive backlog of ~300 penetration test vulnerabilities using a balanced, risk-weighted severity scoring filter, resolving 90% of security risks over a one-year phased roll-out without stalling core roadmap development.
 *   **[ACC-104] Controlled Migration Strategy**: Partnered with upgrades, engineering, and customer experience teams to build and deploy phased voluntary migration tooling, successfully transitioning ~700 high-risk accounts at renewal times without customer friction.
 *   **[ACC-105] Prioritization & Capacity Discipline**: Replaced reactive planning with a rigorous, PTO-adjusted capacity model based on workday-hours per engineer, using T-shirt sizing with uncertainty bands to manage resource allocations across stability, compliance, and planned roadmap items.

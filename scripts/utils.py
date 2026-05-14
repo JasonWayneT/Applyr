@@ -253,7 +253,9 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
                 "options": {
                     "temperature": temperature,
                     "num_ctx": 16384,
-                    "num_predict": 4096,
+                    "num_predict": 1000,
+                    "top_k": 40,
+                    "top_p": 0.9,
                     "repeat_penalty": 1.1,
                 },
                 "stream": False,
@@ -377,6 +379,13 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
 
     return ""
+
+
+def is_local_primary():
+    """Returns True when local Ollama is the only configured LLM provider."""
+    settings = load_llm_settings()
+    providers = _get_configured_providers(settings)
+    return providers == ['local'] or (len(providers) == 1 and 'local' in providers)
 
 
 def unload_local_models():

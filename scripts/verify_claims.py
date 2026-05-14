@@ -130,6 +130,35 @@ def verify_content(content, truth_map):
         "found_ids": list(found_ids)
     }
 
+def _verify_bullet_local(source_text, generated_bullet):
+    """
+    Pure deterministic check: does the generated bullet introduce any numeric
+    facts that are not present in the source ground-truth sentence?
+    Returns (is_valid: bool, error: str | None).
+    """
+    id_pattern = re.compile(r"\[(ACC-\d+|MET-\d+|VOC-\d+)\]")
+    clean_source = id_pattern.sub(" ", source_text).replace(",", "")
+    clean_bullet = id_pattern.sub(" ", generated_bullet).replace(",", "")
+
+    source_nums = extract_numeric_tokens(clean_source)
+    bullet_nums = extract_numeric_tokens(clean_bullet)
+
+    # Any multi-digit number in the bullet must be grounded in the source
+    fabricated = {n for n in bullet_nums if len(n) > 1 and n not in source_nums}
+    if fabricated:
+        return False, f"Fabricated numeric claims not in source: {sorted(fabricated)}"
+    return True, None
+
+
+def preserves_core_facts(source_text, generated_bullet):
+    """
+    Returns True when the generated bullet introduces no numeric facts
+    absent from the source ground-truth. Wrapper around _verify_bullet_local.
+    """
+    valid, _ = _verify_bullet_local(source_text, generated_bullet)
+    return valid
+
+
 def strip_ids(content):
     """Strips claim IDs from generated content so it can be compiled."""
     # Support both bracket types: [ACC-101] and (ACC-101)

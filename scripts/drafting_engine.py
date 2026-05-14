@@ -3,7 +3,7 @@ import re
 import json
 import subprocess
 import verify_claims as determinator
-from utils import (load_file, call_llm, SUBMISSIONS_DIR,
+from utils import (load_file, call_llm, is_local_primary, SUBMISSIONS_DIR,
                    RESUME_MASTER_FILE, COVER_LETTER_REF_FILE,
                    RESUME_STYLE_REF_FILE, CLAIM_VERIFIER_FILE,
                    WORK_EXP_FILE, RESUME_BEST_PRACTICES,
@@ -105,7 +105,7 @@ APPROVED_METRICS = [
 ]
 
 
-def validate_hard_facts(generated_text, master_resume_text, target_company=None):
+def validate_hard_facts(generated_text, master_resume_text, target_company=None, doc_type='resume'):
     """
     Deterministic post-generation check. Compares generated output against
     the master resume source of truth. Fixes known hallucinations and logs
@@ -117,8 +117,11 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None)
       2. Blocked tool names (flagged for removal)
       3. Seniority inflation phrases (flagged)
       4. Metric integrity (any number not in approved list is flagged)
-      5. Education / company / contact presence
+      5. Education / company / contact presence (resume only)
       6. Enhanced placeholder and bracket healing
+
+    Args:
+        doc_type: 'resume' or 'cover_letter' — gates checks that only apply to resumes.
 
     Returns (corrected_text, warnings_list).
     """
@@ -242,28 +245,29 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None)
             )
             print(f"    [GUARD] Unverified metrics detected: {real_violations}")
 
-    # 5. Verify education facts are present & Auto-heal if missing
-    missing_edu = False
-    for uni in HARD_FACTS["education"]:
-        if uni not in corrected:
-            missing_edu = True
-            warnings.append(f"MISSING FACT: Education '{uni}' not found in generated output. Triggering self-healing injection.")
+    # 5. Verify education facts are present & Auto-heal if missing (resume only)
+    if doc_type == 'resume':
+        missing_edu = False
+        for uni in HARD_FACTS["education"]:
+            if uni not in corrected:
+                missing_edu = True
+                warnings.append(f"MISSING FACT: Education '{uni}' not found in generated output. Triggering self-healing injection.")
 
-    if missing_edu:
-        corrected = re.sub(r'##\s*Education\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
-        corrected = re.sub(r'##\s*Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
-        corrected = re.sub(r'##\s*Education & Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
-        
-        edu_cert_block = "\n\n## EDUCATION & CERTIFICATIONS\n\n" \
-                         "* **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019\n" \
-                         "* **Certified Scrum Master** — Scrum Alliance\n"
-        corrected = corrected.rstrip() + edu_cert_block
-        print("    [GUARD] Auto-injected verified Education & Certifications block.")
+        if missing_edu:
+            corrected = re.sub(r'##\s*Education\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
+            corrected = re.sub(r'##\s*Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
+            corrected = re.sub(r'##\s*Education & Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
 
-    # 6. Verify company names are present (at least the primary employer)
-    for company in HARD_FACTS["companies"][:2]:
-        if company.upper() not in corrected.upper():
-            warnings.append(f"MISSING FACT: Company '{company}' not found in generated output.")
+            edu_cert_block = "\n\n## EDUCATION & CERTIFICATIONS\n\n" \
+                             "* **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019\n" \
+                             "* **Certified Scrum Master** — Scrum Alliance\n"
+            corrected = corrected.rstrip() + edu_cert_block
+            print("    [GUARD] Auto-injected verified Education & Certifications block.")
+
+        # 6. Verify company names are present (resume only)
+        for company in HARD_FACTS["companies"][:2]:
+            if company.upper() not in corrected.upper():
+                warnings.append(f"MISSING FACT: Company '{company}' not found in generated output.")
 
     # 7. Auto-heal Contact & Template Info Placeholders (Hyper-Aggressive Local fallback sweeping)
     placeholders = {
@@ -348,6 +352,54 @@ def run_research(company_name, jd_text):
     return "No research data available."
 
 
+def select_relevant_claims(jd_text, valid_ids):
+    """
+    Phase 1 of two-phase generation: ask the LLM to pick the most relevant
+    claim IDs for this specific JD before any resume text is written.
+    Returns a list of valid ID strings. Falls back to all IDs on failure.
+    """
+    id_context = "\n".join(f"{k}: {v}" for k, v in valid_ids.items())
+    system_prompt = (
+        "You are a resume strategist. Your only job is to select claim IDs. "
+        "Output ONLY a valid JSON array of ID strings. No explanation, no markdown, just JSON."
+    )
+    user_prompt = f"""Select the 8-12 claim IDs most relevant to this job description.
+
+AVAILABLE CLAIMS (ID: ground-truth sentence):
+{id_context}
+
+JOB DESCRIPTION:
+{jd_text[:2500]}
+
+Rules:
+- Output ONLY a JSON array, e.g. ["ACC-101", "MET-01", "VOC-03"]
+- Only include IDs from the list above
+- Prefer IDs whose evidence directly matches a stated requirement in the JD
+- Do not invent IDs"""
+
+    result = call_llm(
+        system_prompt, user_prompt,
+        temperature=0.0,
+        response_mime_type="application/json",
+        provider_override=["gemini", "local"],
+    )
+
+    if result:
+        try:
+            cleaned = result.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            selected = json.loads(cleaned)
+            if isinstance(selected, list):
+                valid_selected = [i for i in selected if i in valid_ids]
+                if valid_selected:
+                    print(f"    [Phase 1] Selected {len(valid_selected)} relevant claims: {valid_selected}")
+                    return valid_selected
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    print("    [Phase 1] Selection failed or returned no valid IDs — using all claims.")
+    return list(valid_ids.keys())
+
+
 def llm_verify_claims(draft_text, work_exp, claim_verifier_rules):
     print("    [Audit] Running Claim Verifier (v2.0) against generated text...")
     system_prompt = "You are the cynical auditor enforcing the Claim Verifier rules."
@@ -381,6 +433,68 @@ def generate_pdf(md_path, output_path):
         print(f"    [Export Error] Failed to generate PDF: {e}")
 
 
+def _fallback_bullet(source_text):
+    """Last-resort: reformat the raw ground-truth line as a plain bullet."""
+    clean = re.sub(r'\[(ACC|MET|VOC)-\d+\]', '', source_text)
+    clean = re.sub(r'\*+', '', clean)
+    clean = clean.strip().lstrip('-•').strip()
+    if clean and not clean.endswith('.'):
+        clean += '.'
+    return clean
+
+
+def _generate_bullets_local(selected_ids, valid_ids, jd_text):
+    """
+    Phase 2 of the local two-phase flow.
+    For each selected claim ID, makes one focused local LLM call to produce
+    a single validated resume bullet. Falls back to reformatted source on failure.
+    Returns dict {claim_id: bullet_text}.
+    """
+    from verify_claims import _verify_bullet_local
+
+    bullets = {}
+    for claim_id in selected_ids:
+        source_text = valid_ids.get(claim_id, "")
+        if not source_text:
+            continue
+
+        system = (
+            "You are a resume bullet writer. Write exactly ONE resume bullet point. "
+            "Output ONLY the bullet — no preamble, no ID tags, no explanation."
+        )
+        user = f"""Rewrite the achievement below as one resume bullet point reframed for the job.
+
+ORIGINAL ACHIEVEMENT:
+{source_text}
+
+JOB CONTEXT (first 600 chars):
+{jd_text[:600]}
+
+Rules:
+- Keep ALL numbers and dollar values EXACTLY as stated in the original
+- Do NOT invent tools, metrics, or facts not in the original
+- Start with an action verb
+- Maximum 25 words
+- Output the bullet only
+
+Bullet:"""
+
+        result = call_llm(system, user, temperature=0.0, provider_override=['local'])
+
+        if result:
+            bullet = result.strip().lstrip('-•').strip()
+            valid, err = _verify_bullet_local(source_text, bullet)
+            if valid:
+                bullets[claim_id] = bullet
+            else:
+                print(f"    [Phase 2] {claim_id} bullet failed validation ({err}). Using source fallback.")
+                bullets[claim_id] = _fallback_bullet(source_text)
+        else:
+            bullets[claim_id] = _fallback_bullet(source_text)
+
+    return bullets
+
+
 def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     print(f"  -> Initializing Drafting Engine for {company_name}")
     company_folder = os.path.join(SUBMISSIONS_DIR, company_name.lower().replace(" ", "_"))
@@ -410,7 +524,21 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     
     # Load valid claim IDs
     valid_ids = determinator.load_valid_ids(WORK_EXP_FILE)
-    
+
+    # Phase 1: select the most relevant claims for this JD before writing anything
+    selected_ids = select_relevant_claims(jd_text, valid_ids)
+    selected_truth = "\n".join(
+        f"[{id_}] {valid_ids[id_]}" for id_ in selected_ids if id_ in valid_ids
+    )
+
+    # Phase 2 (local only): pre-generate validated bullets before the full resume call
+    using_local = is_local_primary()
+    pre_validated_bullets = {}
+    if using_local:
+        print("    [Local Mode] Running Phase 2: pre-generating validated bullets for each selected claim...")
+        pre_validated_bullets = _generate_bullets_local(selected_ids, valid_ids, jd_text)
+        print(f"    [Local Mode] Phase 2 complete: {len(pre_validated_bullets)} validated bullets ready.")
+
     resume_prompt = {
         "role": "You are a professional resume writer for Jason Taylor. "
                 "Your goal is to create a high-impact, ONE-PAGE technical resume that matches the style reference template exactly. "
@@ -421,32 +549,49 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
                 "STRICT REQUIREMENT OVERRIDE: Despite rules suggesting otherwise, you MUST physically anchor EVERY accomplishment, metric, and translation claim in your output by appending its respective bracketed ID (e.g. [ACC-101], [MET-01], [VOC-01]) from the ground truth directly to the end of each sentence or bullet point. Every single claim must be traceable.",
         "content": f"""
     Transform the MASTER RESUME to match the JOB DESCRIPTION while strictly adhering to the BRIDGE LOGIC.
-    
+
     BRIDGE LOGIC RULES:
     1. Translate Platform wins (Stability/Scale) to Growth needs (User Scaling, Business Revenue).
     Example: "Reduced API latency by 40%" -> "Improved system responsiveness to support 10x user scaling and retention."
     Example: "Resolved 300+ security vulnerabilities" -> "Mitigated enterprise risk to unblock GTM expansion."
-    
+
+    HALLUCINATION EXAMPLES — STUDY THESE BEFORE WRITING:
+    ❌ WRONG: "Led a team of 12 engineers to build a Kubernetes microservices platform, cutting costs by $5M [ACC-101]"
+       WHY WRONG: seniority inflation ("Led a team"), blocked tool (Kubernetes), fabricated metric ($5M not approved)
+    ❌ WRONG: "Deployed Snowflake data pipeline improving churn by 15% [MET-04]"
+       WHY WRONG: blocked tool (Snowflake), MET-04 value is 7% not 15%
+    ❌ WRONG: "Owned P&L and drove $80M ARR growth [MET-01]"
+       WHY WRONG: seniority inflation (P&L ownership), MET-01 value is $40M not $80M
+    ✓ RIGHT: "Stabilized core platform to support 25,000 active users [MET-03], protecting $40M ARR [MET-01]."
+
+    PHASE 2 CONSTRAINT — USE ONLY PRE-SELECTED CLAIMS:
+    The following claims have already been selected as most relevant to this JD.
+    You MUST build your bullets exclusively from these IDs. Do not reference any ID not listed here.
+
+    SELECTED CLAIMS FOR THIS ROLE:
+    {selected_truth}
+    {(chr(10) + "    PRE-VALIDATED BULLETS (COPY THESE EXACTLY — do not rewrite, do not change any numbers):" + chr(10) + chr(10).join(f"    [{id_}] → {bullet}" for id_, bullet in pre_validated_bullets.items()) + chr(10)) if pre_validated_bullets else ""}
+
     STYLE & STRATEGY GUIDE:
     Write pure, standard Markdown (using `#`, `##`, `*`, etc.). DO NOT output any raw HTML tags or `<div...>` wrappers. The system will convert your standard Markdown into the final styled PDF automatically.
-    
+
     You MUST strictly follow these best practices for conversion and impact:
     {resume_best_practices}
 
     You MUST strictly match the layout and structural formatting of this template:
     {resume_style}
-    
-    GROUND TRUTH:
+
+    FULL GROUND TRUTH (for context — but ONLY cite IDs from SELECTED CLAIMS above):
     {work_exp}
-    
+
     MASTER RESUME (Format to follow, but update bullets):
     {master_resume}
-    
+
     JOB DESCRIPTION:
     {jd_text}
-    
-    CRITICAL REQUIREMENT: For EVERY bullet point or sentence making a factual claim, you MUST append the bracketed source Fact ID (e.g., [ACC-101], [MET-01]) at the end of that sentence. Do not output any content without anchoring claims to specific IDs.
-    
+
+    CRITICAL REQUIREMENT: For EVERY bullet point or sentence making a factual claim, you MUST append the bracketed source Fact ID (e.g., [ACC-101], [MET-01]) at the end of that sentence. Only use IDs from the SELECTED CLAIMS list above.
+
     Output strictly the translated standard Markdown resume. No preamble.
     """
     }
@@ -461,7 +606,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
         if error_hint:
             content += f"\n\n[PREVIOUS ATTEMPT FAILED CLAIM VERIFICATION]\nError details: {error_hint}\nPlease rewrite the resume ensuring EVERY single factual claim or metric is correctly tagged with valid bracketed IDs (e.g., [ACC-101], [MET-01]) from the ground truth. Do not invent tags."
             
-        draft_resume = call_llm(role, content, provider_override=['gemini', 'local'])
+        draft_resume = call_llm(role, content, temperature=0.0, provider_override=['gemini', 'local'])
         if not draft_resume:
             print("    [Drafting Error] LLM returned empty content.")
             break
@@ -481,14 +626,16 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
         print(f"  [ERROR] LLM returned empty resume for {company_name}. Skipping save.")
         return
         
-    # Run LLM-based claim verification before we strip the IDs so the auditor can see them
-    # We can instruct the LLM auditor to also keep them or we can strip them right after.
-    # Let's strip IDs programmatically now so they are removed before writing to file and compiling
     cleaned_draft_resume = determinator.strip_ids(draft_resume)
-    verified_resume = llm_verify_claims(cleaned_draft_resume, work_exp, verifier_rules)
+    # Skip LLM claim audit when local is the only provider — the model cannot reliably audit itself
+    if using_local:
+        print("    [Local Mode] Skipping LLM claim audit (local self-audit unreliable). Deterministic guards cover this.")
+        verified_resume = cleaned_draft_resume
+    else:
+        verified_resume = llm_verify_claims(cleaned_draft_resume, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
-    final_resume, resume_warnings = validate_hard_facts(verified_resume, master_resume, target_company=company_name)
+    final_resume, resume_warnings = validate_hard_facts(verified_resume, master_resume, target_company=company_name, doc_type='resume')
 
     resume_md_path = os.path.join(company_folder, "Resume.md")
     resume_pdf_path = os.path.join(company_folder, "Resume.pdf")
@@ -528,27 +675,34 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
                 "STRICT REQUIREMENT OVERRIDE: Despite instructions otherwise, you MUST physically anchor EVERY claim or accomplishment in your output by appending its respective bracketed ID (e.g. [ACC-101], [MET-01]) from the ground truth directly to the end of the sentence. Every single claim must have an ID.",
         "content": f"""
     Write a 250-400 word Cover Letter based on the JOB DESCRIPTION and RESEARCH PACKET.
-    
+
+    PHASE 2 CONSTRAINT — USE ONLY PRE-SELECTED CLAIMS:
+    Build every factual claim exclusively from the IDs below. Do not reference any ID not listed here.
+
+    SELECTED CLAIMS FOR THIS ROLE:
+    {selected_truth}
+    {(chr(10) + "    PRE-VALIDATED BULLETS (use these exact facts and numbers):" + chr(10) + chr(10).join(f"    [{id_}] → {bullet}" for id_, bullet in pre_validated_bullets.items()) + chr(10)) if pre_validated_bullets else ""}
+
     STYLE & STRATEGY GUIDE:
     Write pure, standard Markdown. DO NOT output any raw HTML tags.
-    
+
     You MUST strictly follow these best practices for cover letter writing:
     {cl_best_practices}
 
     You MUST strictly match the structural format and signature style of this template:
     {cl_style}
-    
-    GROUND TRUTH:
+
+    FULL GROUND TRUTH (for context — but ONLY cite IDs from SELECTED CLAIMS above):
     {work_exp}
-    
+
     JOB DESCRIPTION:
     {jd_text}
-    
+
     RESEARCH:
     {research_json}
-    
-    CRITICAL REQUIREMENT: For EVERY sentence making a factual claim, you MUST append the bracketed source Fact ID (e.g., [ACC-101], [MET-01]) at the end of that sentence. Output must be traceable.
-    
+
+    CRITICAL REQUIREMENT: For EVERY sentence making a factual claim, you MUST append the bracketed source Fact ID (e.g., [ACC-101], [MET-01]) at the end of that sentence. Only use IDs from the SELECTED CLAIMS list above.
+
     Output strictly the standard markdown cover letter. No preamble.
     """
     }
@@ -563,7 +717,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
         if cl_error_hint:
             content += f"\n\n[PREVIOUS ATTEMPT FAILED CLAIM VERIFICATION]\nError details: {cl_error_hint}\nPlease rewrite the cover letter ensuring EVERY single claim is tagged with its valid bracketed ID (e.g. [ACC-101], [MET-01]) from the ground truth."
             
-        draft_cl = call_llm(role, content, provider_override=['gemini', 'local'])
+        draft_cl = call_llm(role, content, temperature=0.0, provider_override=['gemini', 'local'])
         if not draft_cl:
             break
             
@@ -583,10 +737,13 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
         return
         
     cleaned_draft_cl = determinator.strip_ids(draft_cl)
-    verified_cl = llm_verify_claims(cleaned_draft_cl, work_exp, verifier_rules)
+    if using_local:
+        verified_cl = cleaned_draft_cl
+    else:
+        verified_cl = llm_verify_claims(cleaned_draft_cl, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
-    final_cl, cl_warnings = validate_hard_facts(verified_cl, master_resume, target_company=company_name)
+    final_cl, cl_warnings = validate_hard_facts(verified_cl, master_resume, target_company=company_name, doc_type='cover_letter')
 
     cl_md_path = os.path.join(company_folder, "CoverLetter.md")
     cl_pdf_path = os.path.join(company_folder, "CoverLetter.pdf")

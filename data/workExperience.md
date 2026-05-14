@@ -71,6 +71,26 @@ graph TD
 | **Sterkly Services** | Product Manager / Product Owner | February 2019 | August 2021 | Reported to Head of Product / Operations. | Partnered with 1 cross-functional team of 5-8 engineers and QA. |
 | **Zero To Sixty Media** | Account Manager / Product Owner | June 2017 | January 2019 | Reported to Account & Operations Director. | Partnered with 2-3 developers and external vendor teams. |
 
+### 2.2 Verified Cross-Functional Partners (Cision — DO NOT INVENT BEYOND THIS LIST)
+
+This is the exhaustive list of teams and stakeholders Jason actually collaborated with at Cision. AI models MUST select cross-functional references only from this list. Do NOT name teams drawn from a job description if they are not on this list.
+
+| Partner | Relationship Depth | Context |
+| :--- | :--- | :--- |
+| **Engineering** | Extremely close — primary daily partner | Owned the product roadmap; worked directly with Engineering Managers and engineers across 2-3 teams simultaneously. |
+| **Database Administration (DBA)** | Very close | Coordinated on infrastructure improvements, index stability, and data pipeline work; had a primary DBA stakeholder for quarterly planning. |
+| **DevOps** | Very close | Collaborated on server migrations, monitoring/alerting setup, cloud consolidation, and capacity planning; mid-quarter interrupts frequently required direct coordination. |
+| **Customer Experience (CX)** | Close | Regular partner for ticket triage prioritization, high-risk account escalations, and understanding customer pain points. |
+| **Customer Support** | Close | Supported and partially absorbed triage responsibilities as dedicated C3 support was wound down; built Jira scoring system with support workflow in mind. |
+| **Sales** | Regular | Used Sales data (Salesforce, closed-lost analysis) to justify roadmap priorities; partnered on communicating platform stability to prospects. |
+| **Account Management** | Regular | Coordinated on high-risk account retention, the critical save program, and voluntary migration timing at renewal. |
+| **Legal** | Regular | Required sign-off for dead account data deletion (compliance with SLAs), premium content licensing rules, and regional data regulations. |
+| **InfoSec** | Regular | Worked through penetration test vulnerability backlog; coordinated on security remediation prioritization and timelines. |
+| **Product Marketing** | Regular | Collaborated during premium content integrations and go-to-market coordination for new capabilities. |
+| **Executive / Presidential Leadership** | High visibility | Presented the quarterly roadmap to the full product and engineering organization (~200-300 people including CEOs and executive leadership); navigated three executive team transitions. |
+
+**Roadmap ownership note:** Jason constructed the quarterly roadmap by gathering inputs from all of the above teams, synthesized competing priorities into a single plan, and presented it to the entire organization before each quarter. He then drove execution of that roadmap through each quarter, managing mid-quarter interrupts and trade-offs in real time.
+
 ---
 
 ## Section 3: Approved Plain-Language Vocabulary Translation Map
@@ -111,6 +131,10 @@ These metrics are the **absolute bounds of truth**. They must never be extrapola
 | **MET-10** | **Voluntary Migrations** | **~700 accounts** (approximate) | Total successful, non-disruptive migrations completed using the custom phased tooling. |
 | **MET-11** | **Fulfillment Automation** | **$288,000 in contracts** | Total laptop vendor contract value managed, saving **$8,500 per quarter** ($34,000/yr) via automation. |
 | **MET-12** | **Onboarding Automation** | **$22,100 saved annually** | Total cost savings from an internal automation project that streamlined user onboarding into Salesforce. |
+| **MET-13** | **Sterkly Revenue Sustained** | **~$1M - $3M** (estimated) | Approximate revenue stream unlocked or sustained by resolving the Safari extension certificate bottleneck at Sterkly. |
+| **MET-14** | **Certificate Cost Savings** | **~$100 per certificate** | Per-unit savings from building an in-house certificate procurement workflow vs. sourcing from external vendors. |
+| **MET-15** | **Conversion Improvement** | **~40%** (estimated) | Approximate increase in prospect-to-customer conversion rate from the landing page and Salesforce onboarding automation at Zero To Sixty. |
+| **MET-16** | **Fulfillment Scale** | **10 manual → 100+ units/day** | Laptop fulfillment program throughput improvement after replacing manual setup with automated script-based deployment. |
 
 ---
 
@@ -127,6 +151,11 @@ These metrics are the **absolute bounds of truth**. They must never be extrapola
 *   **[ACC-103] Security Backlog Triage**: Prioritized a massive backlog of ~300 penetration test vulnerabilities using a balanced, risk-weighted severity scoring filter, resolving 90% of security risks over a one-year phased roll-out without stalling core roadmap development.
 *   **[ACC-104] Controlled Migration Strategy**: Partnered with upgrades, engineering, and customer experience teams to build and deploy phased voluntary migration tooling, successfully transitioning ~700 high-risk accounts at renewal times without customer friction.
 *   **[ACC-105] Prioritization & Capacity Discipline**: Replaced reactive planning with a rigorous, PTO-adjusted capacity model based on workday-hours per engineer, using T-shirt sizing with uncertainty bands to manage resource allocations across stability, compliance, and planned roadmap items.
+*   **[ACC-106] Mobile UVPM Implementation**: Implemented mobile Unique Visitors Per Month (UVPM) support for the media outlet database, closing a critical competitive gap and reducing churn risk among core database customers who were actively evaluating alternatives due to the platform's desktop-only audience metrics.
+*   **[ACC-107] Compliance & Privacy Workflows**: Built privacy and compliance workflows to handle contact data removal requests, enforce regional licensing constraints (including Australian and UK markets), and maintain adherence to third-party platform terms across Twitter, Google, and Yahoo data sources.
+*   **[ACC-108] Customer Ticket Triage System**: Designed and maintained a structured Jira ticket prioritization system scoring inbound customer issues on revenue impact, frequency, and severity, with a dedicated escalation channel for high-risk accounts that automatically surfaced churn-risk tickets at the front of the queue.
+*   **[ACC-109] Quarterly PI Planning & Roadmap Communication**: Led quarterly PI planning cycles, synthesizing inputs from CX, legal, DevOps, DBA, sales, and go-to-market teams into a single prioritized roadmap and presenting it to approximately 200-300 stakeholders — including executives — before each quarter.
+*   **[ACC-110] Cross-Team Knowledge Transfer**: Established structured cross-training across engineering teams to eliminate single points of failure on critical platform components, maintaining operational continuity through three to four rounds of layoffs and voluntary attrition.
 
 #### Factual Anti-Claims & Boundaries (DO NOT CLAIM)
 *   *DO NOT claim Core B2B SaaS Platform returned to revenue growth (it was intentionally winding down).*
@@ -144,11 +173,14 @@ These metrics are the **absolute bounds of truth**. They must never be extrapola
 #### Approved Accomplishments Inventory
 *   **[ACC-201] Operational Bottleneck Reduction**: Analyzed and optimized internal team workflows by standardizing requirements gathering, resolving resource conflicts, and facilitating regular cross-functional alignment sessions to maintain consistent delivery.
 *   **[ACC-202] Technical-Business Translation**: Translated complex business constraints and operational requirements into granular, engineering-ready product specs, partnering with a team of 5-8 developers to ensure accurate, on-time delivery.
+*   **[ACC-203] Critical Revenue Bottleneck Resolution**: Resolved a critical distribution bottleneck for a macOS security product by developing an in-house browser extension certificate procurement workflow — eliminating dependency on unreliable third-party vendors, saving approximately $100 per certificate, and sustaining an estimated $1M-$3M in product revenue that had been blocked.
+*   **[ACC-204] QA Ownership & Global Team Coordination**: Owned backlog management and led QA processes for a macOS security product, coordinating with a globally distributed engineering team across three countries to maintain release cadence and product quality standards.
 
 #### Factual Anti-Claims & Boundaries (DO NOT CLAIM)
 *   *DO NOT claim people management, hiring, or direct leadership of PMs.*
 *   *DO NOT claim ownership of any customer-facing SaaS core products.*
 *   *DO NOT claim any specific revenue growth or funding round attribution.*
+*   *DO NOT name the specific product ("Airo") — it is under NDA. Describe generically as "a macOS security product."*
 
 ---
 
@@ -157,13 +189,15 @@ These metrics are the **absolute bounds of truth**. They must never be extrapola
 *   **Owned Systems**: Internal fulfillment programs, client onboarding pipelines, and operational tools.
 
 #### Approved Accomplishments Inventory
-*   **[ACC-301] Laptop Fulfillment Automation**: Managed a laptop fulfillment program governing $288,000 in vendor contracts, building automated pipelines that reduced setup overhead and saved $8,500 per quarter ($34,000 annually).
+*   **[ACC-301] Laptop Fulfillment Automation**: Managed a laptop fulfillment program governing $288,000 in vendor contracts, replacing a manual setup process with a custom automated deployment script — scaling throughput from 10 manual setups per day to 100+ units processed unattended and saving $8,500 per quarter ($34,000 annually).
 *   **[ACC-302] Onboarding Workflow Optimization**: Co-created and optimized an internal onboarding automation tool that streamlined new customer data mapping into Salesforce, reducing manual overhead and saving $22,100 annually.
+*   **[ACC-303] Conversion Funnel & Lead Automation**: Built the company's first professional landing page and automated prospect onboarding funnel, integrating a website builder with Salesforce to eliminate manual account manager tasks, increasing estimated conversion rates by approximately 40%.
 
 #### Factual Anti-Claims & Boundaries (DO NOT CLAIM)
 *   *DO NOT claim ownership of the agency's primary client strategy or accounts.*
 *   *DO NOT claim to have built the automation tools single-handedly (worked with 2-3 developers).*
 *   *DO NOT claim direct budget ownership or P&L management beyond the specified vendor contracts.*
+*   *DO NOT state the 40% conversion figure as verified — it is an estimate from memory.*
 
 ---
 

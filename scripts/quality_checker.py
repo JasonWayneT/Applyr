@@ -41,9 +41,15 @@ def check_and_repair_cover_letter(file_path):
     if char_count > 1800:
         messages.append(f"[CL-006 WARNING] Cover letter length ({char_count} chars) exceeds the 1,800-char single-page threshold.")
         
+    # Check for bracket placeholders or redactions (Rule CL-009: Zero-Placeholder Integrity)
+    placeholders = re.findall(r'\[[^\]]{2,}\]', content)
+    cleaned_placeholders = [p for p in placeholders if not re.search(r'https?://', p) and 'REDACTED' in p.upper() or any(k in p.upper() for k in ['COMPANY', 'NAME', 'DATE', 'INSERT', 'TITLE', 'ROLE'])]
+    if cleaned_placeholders:
+        messages.append(f"[CL-009 FAIL] Corrupted placeholder brackets found: {', '.join(cleaned_placeholders)}")
+
     if repaired:
         return True, " | ".join(messages)
-    elif any("[CL-008 FAIL]" in msg for msg in messages):
+    elif any("[CL-008 FAIL]" in msg or "[CL-009 FAIL]" in msg for msg in messages):
         return False, " | ".join(messages)
     elif messages:
         return True, " | ".join(messages)
@@ -86,6 +92,13 @@ def check_resume(file_path):
     if re.search(r'^\s*[\*\-•]\s*\*\*[^*]+?\*\*:', content, re.MULTILINE):
         messages.append("[R-008 FAIL] Bullet points contain bold prefixes (e.g. **Skill:**). Violates the Option A Clean Action-Verb Standard.")
         
+    # Check for bracket placeholders or redactions (Rule R-009: Zero-Placeholder Integrity)
+    placeholders = re.findall(r'\[[^\]]{2,}\]', content)
+    # Exclude valid markdown links or image syntax
+    cleaned_placeholders = [p for p in placeholders if not re.search(r'https?://', p) and 'REDACTED' in p.upper() or any(k in p.upper() for k in ['COMPANY', 'NAME', 'DATE', 'INSERT', 'TITLE', 'ROLE'])]
+    if cleaned_placeholders:
+        messages.append(f"[R-009 FAIL] Corrupted placeholder brackets found: {', '.join(cleaned_placeholders)}")
+
     # Check that all three core career history experiences are present (Rule R-005: Use Standard Section Headings and Content)
     lower_content = content.lower()
     if "cision" not in lower_content:
@@ -95,7 +108,7 @@ def check_resume(file_path):
     if "zero to sixty" not in lower_content and "zero to 60" not in lower_content and "account manager" not in lower_content:
         messages.append("[R-005 FAIL] Missing core career history experience: Zero to Sixty")
 
-    if any("[R-005 FAIL]" in msg or "[R-008 FAIL]" in msg for msg in messages):
+    if any("[R-005 FAIL]" in msg or "[R-008 FAIL]" in msg or "[R-009 FAIL]" in msg for msg in messages):
         return False, " | ".join(messages)
     elif messages:
         return True, " | ".join(messages)

@@ -1,0 +1,49 @@
+{
+  "Module_A": {
+    "Core_Mission_Values": {
+      "Stated": "Customers first since 1979, providing the best parts, prices, and customer service in the automotive aftermarket industry. [https://autozone.referrals.selectminds.com/jobs/product-manager-55271] [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720]",
+      "Observed": "Focus on retail expansion, digital products, and fulfillment optimization to support stores, distribution centers, and e-commerce. [https://www.productmanagerjobboard.com/jobs/product-manager-fulfillment-at-autozone-06a85723] [https://careers.autozone.com/hcmUI/CandidateExperience/en/sites/CX_1/job/81111]"
+    },
+    "Problem_Space": "Solves pain points in automotive parts distribution by streamlining fulfillment, digital customer experiences, and supply chain across stores, distribution centers, and online channels to ensure fast, reliable access to parts. [https://www.productmanagerjobboard.com/jobs/product-manager-fulfillment-at-autozone-06a85723] [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720]",
+    "Business_Model": "Retailer and distributor of automotive replacement parts and accessories; revenue from store sales, distribution, and digital commerce across U.S., Puerto Rico, Mexico, Brazil. Mature growth stage (public company since 1979). Financial health: Stable with median PM comp $123K indicating solid operations. [https://autozone.referrals.selectminds.com/jobs/product-manager-55271] [https://www.levels.fyi/companies/autozone/salaries/product-manager]",
+    "Founding_Story": "Opened first store in 1979 in Forrest City, Arkansas; grown into leading retailer/distributor with stores across Americas. Key inflection: Expansion into Mexico/Brazil. [https://autozone.referrals.selectminds.com/jobs/product-manager-55271] [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720]"
+  },
+  "Module_B": {
+    "Big_3_Competitors": "Direct rivals: Advance Auto Parts, O'Reilly Auto Parts, NAPA Auto Parts. Differentiators: Strong focus on digital products, fulfillment optimization, and supply chain across physical/digital channels. [Inferred from industry context; no direct source in results]",
+    "Macro_Trends": "E-commerce growth in auto parts, supply chain disruptions, digital transformation for omnichannel retail (stores + online). Headwinds: Competition from Amazon Auto, inventory management in automotive aftermarket. [https://www.productmanagerjobboard.com/jobs/product-manager-fulfillment-at-autozone-06a85723] [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720]"
+  },
+  "Module_C": {
+    "Financials_Funding": "Public company; no recent funding rounds (mature). PM salaries $99.5K-$156K (median $123K) as of 4/11/2025. No 90-day specifics. [https://www.levels.fyi/companies/autozone/salaries/product-manager]",
+    "Organizational_Shifts": "No recent layoffs/hiring surges mentioned. Active hiring for PM roles in fulfillment/digital. [https://careers.autozone.com/hcmUI/CandidateExperience/en/sites/CX_1/job/81111] [https://careers.autozone.com/hcmUI/CandidateExperience/en/sites/CX_1/jobs]",
+    "Product_Partnership_News": "Focus on digital products, fulfillment systems; no specific new launches/M&A in results. [https://www.productmanagerjobboard.com/jobs/product-manager-fulfillment-at-autozone-06a85723] [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720]"
+  },
+  "Module_D": {
+    "JD_Analysis": {
+      "Keywords": "Product roadmap, backlog prioritization, Agile/Scrum, stakeholder alignment, data-driven decisions, customer advocacy, KPIs, fulfillment, digital products.",
+      "Hidden_Success_Signals": "Drive consensus across business units, manage escalations, evangelize future-state vision, deliver measurable impact in ambiguity.",
+      "Required_vs_Preferred": "Required: 5+ years PM experience, Bachelor's, Agile familiarity, data/insights skills. Preferred: Automotive/retail experience, Master's. [https://www.productmanagerjobboard.com/jobs/product-manager-fulfillment-at-autozone-06a85723] [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720]"
+    },
+    "Hierarchy": "Reports to Senior Manager/Director of Digital Products or similar; collaborates with engineering, design, analytics, business teams. Manages direct reports/geographically distributed teams in some roles. [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720] [https://careers.autozone.com/hcmUI/CandidateExperience/en/sites/CX_1/job/38053]",
+    "Hiring_Manager_Profile": "No specific profiles found in results."
+  },
+  "Module_E": {
+    "Sentiment_Analysis": "No Glassdoor/Reddit/Blind data in results. Advertised: Equal opportunity employer, customer-focused culture. [https://s01autozone.upgrade.selectminds.com/jobs/product-manager-digital-products-customer-134720]",
+    "Operational_Style": "Hybrid/in-office implied (e.g., Cloverdale location); fast-paced, cross-functional collaboration. No tenure data. [https://www.productmanagerjobboard.com/jobs/product-manager-fulfillment-at-autozone-06a85723]"
+  },
+  "Module_F": {
+    "Priority_Mapping": [
+      {
+        "Priority": "Develop/prioritize product roadmap and backlog for fulfillment/digital products.",
+        "Jason_Connection": "Platform experience aligns with roadmap ownership and Agile delivery."
+      },
+      {
+        "Priority": "Data analysis for KPIs, user insights, experimentation.",
+        "Jason_Connection": "Data Integrity expertise for informing decisions and optimizing outcomes."
+      },
+      {
+        "Priority": "Stakeholder alignment, revenue-impacting initiatives across supply chain.",
+        "Jason_Connection": "Revenue Systems background for business value prioritization and escalations."
+      }
+    ]
+  }
+}

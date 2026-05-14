@@ -28,20 +28,20 @@ Defined and executed the product roadmap for a revenue-bearing B2B SaaS platform
 
 ### Stakeholder Management & Regulated Environments
 
-Product Manager  
+Product Manager 
 
 * Defined product roadmaps and authored structured requirements for internal and client-facing digital health and SaaS initiatives.
 * Facilitated cross-functional workshops to translate ambiguous business needs into explicit technical specifications for engineering squads.
 * Designed and delivered proprietary internal workflow solutions that resolved operational bottlenecks and increased delivery capacity.
 
-Product Owner  
+Product Owner 
 
 * Automated manual onboarding and fulfillment workflows, improving delivery throughput by approximately 40%.
 * Co-developed internal automation tools for Salesforce integration, reducing operational overhead and improving data accuracy in core customer databases.
 
 ## EDUCATION
 
-Bachelor of Business Administration  
+Bachelor of Business Administration 
 National University
 
 ## CERTIFICATIONS

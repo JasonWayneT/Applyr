@@ -26,20 +26,20 @@ Owned the product roadmap and evolving platform modules for a $40M ARR B2B SaaS 
 
 ### Strategic Ownership & Roadmapping
 
-Product Manager  
+Product Manager 
 
 * Defined product roadmaps and authored structured requirements for digital platforms and internal operations solutions.
 * Facilitated discovery workshops with internal and external clients to understand workflows, user behavior, and business impact.
 * Delivered proprietary workflow solutions that resolved operational bottlenecks and enabled scalable program growth.
 
-Product Owner  
+Product Owner 
 
 * Automated manual onboarding and fulfillment workflows, increasing delivery throughput by ~40%.
 * Co-developed internal tools for Salesforce integration, reducing operational overhead and improving data accuracy in core customer databases.
 
 ## EDUCATION
 
-Bachelor of Business Administration  
+Bachelor of Business Administration 
 National University
 
 ## CERTIFICATIONS

@@ -24,13 +24,13 @@ Owned the product roadmap and execution for a $40M ARR enterprise platform, focu
 * Identified a 30-40% contact data drop-off by analyzing complex ETL workflows. Orchestrated an architectural bypass that directly integrated the application with the source of truth (Centralized Contact Database).
 * Simplified data ingestion and transformation logic, restoring customer trust and eliminating the largest documented product-driven churn driver.
 
-Product Manager  
+Product Manager 
 
 * Defined product roadmaps and authored structured requirements for digital modernization and internal operations platforms.
 * Facilitated cross-functional workshops to deeply understand business practice pain points and translate them into technical solutions.
 * Designed and delivered proprietary internal workflow solutions that resolved operational bottlenecks and increased delivery capacity.
 
-Product Owner  
+Product Owner 
 
 * Identified manual onboarding and fulfillment bottlenecks and co-developed internal automation tools for Salesforce integration.
 * Improved delivery throughput by ~40% and reduced recurring operational overhead through targeted automation initiatives.
@@ -38,7 +38,7 @@ Product Owner
 
 ## EDUCATION
 
-Bachelor of Business Administration  
+Bachelor of Business Administration 
 National University
 
 ## CERTIFICATIONS

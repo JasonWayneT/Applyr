@@ -1,0 +1,45 @@
+{
+  "Module_A_Company_DNA": {
+    "Core_Mission_Values": {
+      "Stated": "Bitso's mission is to 'accelerate the adoption of cryptocurrency in Latin America' by providing a platform for investing, trading, and borderless payments using crypto like Bitcoin, Ether, and Digital Dollars. Core values include innovation, user trust/safety, and pioneering crypto-powered products. [Source: https://bitso.com/jobs]",
+      "Observed": "Strong emphasis on security and fraud prevention, as seen in specialized PM roles for fraud/account security and crypto core systems, indicating a focus on reliability in high-growth crypto markets. [Source: https://jobs.dcg.co/companies/bitso/jobs/35050862-product-manager]"
+    },
+    "Problem_Space": "Bitso solves the pain of limited financial access in Latin America by enabling seamless crypto trading, money movement, and payments across borders, addressing high fees, slow remittances, and currency volatility for millions of users. [Source: https://bitso.com/jobs; https://jobs.valorcapitalgroup.com/companies/bitso/jobs/60976048-product-manager]",
+    "Business_Model": "Revenue from trading fees (with zero fees for employees), likely custodial services, and money movement products. Growth-stage: Mature unicorn (over 7M users), operating in Mexico, Brazil, Argentina. Financial health: Profitable with expansions, but crypto market-dependent. [Source: https://bitso.com/jobs; https://jobs.dcg.co/companies/bitso/jobs/35050862-product-manager]",
+    "Founding_Story": "Founded in 2014 in Mexico, Bitso grew as Latin America's leading crypto exchange, hitting key inflections like expanding to Brazil/Argentina, achieving 7M+ users, and focusing on stablecoins/digital dollars amid regional hyperinflation/remittance booms. [Source: https://bitso.com/jobs]"
+  },
+  "Module_B_Market_Competitors": {
+    "Big_3_Competitors": [
+      "Binance: Global giant with low fees; Bitso differentiates via LatAm regulatory compliance and local fiat ramps.",
+      "Mercado Bitcoin: Brazil-focused; Bitso wins with multi-country presence and advanced security features.",
+      "Ripio: LatAm rival; Bitso leads in user base (7M+) and product depth like money movement. [Source: General crypto market knowledge; https://bitso.com/jobs]"
+    ],
+    "Macro_Trends": "Regulatory tightening in LatAm (e.g., Brazil/Argentina crypto laws), rising stablecoin adoption for remittances, AI-driven fraud threats in crypto, and competition from CBDCs. Headwinds: Volatility, scams eroding trust. [Source: https://jobs.dcg.co/companies/bitso/jobs/35050862-product-manager]"
+  },
+  "Module_C_Recent_Intelligence": {
+    "Financials_Funding": "No specific 90-day data (post-2025); historically raised $250M+ (unicorn status). Recent job postings suggest hiring amid growth, no distress signals. [Source: https://bitso.com/jobs]",
+    "Organizational_Shifts": "Active hiring for multiple PM roles (fraud, group, money movement), indicating expansion. Some roles closed (e.g., fraud PM). No layoffs noted. [Source: Search results [1]-[7]]",
+    "Product_Partnership_News": "Focus on crypto core, money movement, accounts management products; no specific new launches in 90 days, but ongoing innovation in security/internal tools. [Source: https://pitchmeai.com/jobs/bitso/product-manager-crypto-core-du5rzummcm; https://cryptocurrencyjobs.co/other/bitso-associate-product-manager-money-movement/]"
+  },
+  "Module_D_Role_Org_Chart": {
+    "JD_Analysis": {
+      "Keywords": "Fraud prevention, account security, product strategy, cross-functional leadership, data-driven, agile, crypto security.",
+      "Hidden_Success_Signals": "Data analytics for iteration, compliance focus, user research on fraud trends—signals for proactive threat mitigation.",
+      "Required_vs_Preferred": "Required: 2+ yrs PM exp in fraud/cyber/crypto, BS degree, English/Spanish, analytical skills. Preferred: Agile exp, fast-paced growth comfort. [Source: https://jobs.dcg.co/companies/bitso/jobs/35050862-product-manager]"
+    },
+    "Hierarchy": "Likely reports to Senior/Group PM (e.g., supports Sr PM in some roles); teams include eng, data science, UX, legal, fraud/cybersec/compliance. Group PM leads PM teams. [Source: https://weworkremotely.com/remote-jobs/bitso-group-product-manager; https://dailyremote.com/remote-job/product-manager-4660105]",
+    "Hiring_Manager_Profile": "Not identified in results; potentially under fraud/security leads, no specific names or content found."
+  },
+  "Module_E_Culture_Reality_Check": {
+    "Sentiment_Analysis": "Advertised: Remote-first, unlimited PTO, ESOP, family leave, health perks, gym stipends—high-growth crypto vibe. Real-world: Limited Glassdoor/Blind data in results; job perks suggest employee-friendly, but fast-paced crypto implies high pressure. [Source: https://jobs.dcg.co/companies/bitso/jobs/35050862-product-manager]",
+    "Operational_Style": "Fully remote (100%), LatAm-focused (Mexico/Brazil/Argentina), agile practices, autonomous work in growth environment. High tenure not specified. [Source: https://jobs.dcg.co/companies/bitso/jobs/35050862-product-manager; https://cryptocurrencyjobs.co/other/bitso-associate-product-manager-money-movement/]"
+  },
+  "Module_F_Intersection": {
+    "Priority_Mapping": [
+      "Fraud Prevention Strategy: Maps to Jason's Data Integrity experience in securing platforms against threats.",
+      "Data-Driven Security Decisions: Aligns with Platform experience using analytics for risk management.",
+      "Cross-Functional Product Ownership: Connects to Revenue Systems leadership in agile, multi-team environments.",
+      "Crypto Security Challenges: Direct tie to Platform expertise in financial tech reliability. [Source: JD at https://jobs.dcg.co/companies/bitso/jobs/35050862-product-manager]"
+    ]
+  }
+}

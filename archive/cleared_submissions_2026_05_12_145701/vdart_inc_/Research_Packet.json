@@ -1,0 +1,48 @@
+{
+  "Module_A_Company_DNA": {
+    "Core_Mission_Values": {
+      "Stated": "VDart is a global leader in digital talent solutions and IT staffing, delivering top technology professionals to businesses worldwide. They connect people, skills, and businesses around the globe, creating successful careers. [Source: https://www.vdart.com/careers/ and https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22]",
+      "Observed": "Focus on staffing for IT roles, particularly contract positions in tech domains like healthcare, CLM, cloud security. Heavy emphasis on remote and contract W2/Corp-to-Corp roles. [Source: https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22 and https://www.dice.com/job-detail/19edb7b0-081b-440d-91b8-11d8f708a156]"
+    },
+    "Problem_Space": "VDart solves the pain of organizations navigating complex technology landscapes by providing specialized IT talent for short-term contracts and projects, enabling quick scaling without long-term hiring commitments. [Source: https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22]",
+    "Business_Model": "Revenue from IT staffing and talent placement services (contract W2, Corp-to-Corp). Growth stage: Established with global presence in North America, Europe, Asia. Financial health: Not publicly detailed; appears stable as active poster of numerous contract roles. [Source: https://www.vdart.com/careers/ and job postings]",
+    "Founding_Story": "Headquartered in Atlanta, GA. Key inflection: Expansion to global operations across continents, specializing in digital talent. No specific founding date or detailed milestones found in search. [Source: https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22]"
+  },
+  "Module_B_Market_Competitors": {
+    "Big_3_Competitors": "1. TEKsystems (IT staffing giant). 2. Robert Half Technology (tech talent placement). 3. Apex Systems (contract IT professionals). Differentiator: Strong focus on niche tech domains like healthcare IT, CLM, cloud security with global reach. [Inferred from industry knowledge; direct sources limited in results]",
+    "Macro_Trends": "AI disruption in talent matching; regulatory shifts in data privacy (GDPR, CCPA, HIPAA) impacting healthcare/IT roles; rise of remote contract work post-pandemic. [Source: https://www.dice.com/job-detail/19edb7b0-081b-440d-91b8-11d8f708a156 and https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22]"
+  },
+  "Module_C_Recent_Intelligence": {
+    "Financials_Funding": "No recent funding rounds or earnings reported in 90-day window. Privately held staffing firm. [No specific sources in results]",
+    "Organizational_Shifts": "Active hiring surge with multiple Product Manager roles posted 3-4 days ago, indicating growth in product management staffing. [Source: https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22 and https://www.dice.com/job-detail/19edb7b0-081b-440d-91b8-11d8f708a156]",
+    "Product_Partnership_News": "No new launches or M&A in results. Focus on client placements in healthcare, CLM, cloud security. [Source: Job postings]"
+  },
+  "Module_D_Role_Org_Chart": {
+    "JD_Analysis": {
+      "Keywords": "Product Manager, Healthcare (remote role), Agile (Jira, Confluence, Azure DevOps), Git, CI/CD; CLM (San Jose role: Docusign, Apttus); Cloud Security (Houston). Hidden success signals: Data-driven decisions, stakeholder management, regulatory knowledge (HIPAA, GDPR). Required: Domain expertise, Agile tools. Preferred: Certifications, Bachelor's degree. [Source: https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22, https://www.dice.com/job-detail/19edb7b0-081b-440d-91b8-11d8f708a156, https://www.iitjobs.com/job/product-manager-houston-tx-usa-248960]",
+      "Multiple_Roles": "Primarily remote Healthcare PM (6+ months), San Jose CLM PM (12+ months, in-person interview), Dallas/Houston variants."
+    },
+    "Hierarchy": "Not detailed; typical staffing firm structure - PM leads cross-functional teams (Eng, UX, Ops, Data, vendors). Reports likely to client stakeholders. [Source: https://www.recruit.net/job/product-manager-jobs/F22FA06362B7C729]",
+    "Hiring_Manager_Profile": "No specific profiles found. VDart recruiters handle via Dice/VDart careers page. [Source: https://www.vdart.com/careers/current-opportunities/]"
+  },
+  "Module_E_Culture_Reality_Check": {
+    "Sentiment_Analysis": "Limited data in results. As staffing firm, culture tied to client projects; employee tenure likely short-term contracts. No Glassdoor/Reddit specifics here. [No direct sources]",
+    "Operational_Style": "Mix of remote (Healthcare PM) and onsite (San Jose with in-person interview). Contract-heavy (W2/Corp-to-Corp, 6-12+ months), no travel for some roles. [Source: https://www.dice.com/job-detail/ccd4bd16-2dc8-4f8b-a721-1cab7bd8cf22]"
+  },
+  "Module_F_Intersection": {
+    "Priority_Mapping": [
+      {
+        "Priority": "Healthcare product strategy, Agile tools (Jira, Azure DevOps), regulatory compliance.",
+        "Jason_Connection": "Direct match to Platform experience in healthcare tech; Data Integrity for compliance; Revenue Systems via stakeholder alignment."
+      },
+      {
+        "Priority": "CLM with AI integration, API/CRM/ERP, legal ops.",
+        "Jason_Connection": "Platform for contract workflows; Data Integrity for risk scoring/compliance (GDPR/HIPAA); Revenue Systems for sales/procurement acceleration."
+      },
+      {
+        "Priority": "Cloud Security project management.",
+        "Jason_Connection": "Platform for secure IT environments; Data Integrity core to cybersecurity; Revenue Systems through operational efficiency."
+      }
+    ]
+  }
+}

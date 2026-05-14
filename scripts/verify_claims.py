@@ -132,7 +132,8 @@ def verify_content(content, truth_map):
 
 def strip_ids(content):
     """Strips claim IDs from generated content so it can be compiled."""
-    pattern = re.compile(r"\s*\[(ACC-\d+|MET-\d+|VOC-\d+)\]\s*")
+    # Support both bracket types: [ACC-101] and (ACC-101)
+    pattern = re.compile(r"\s*[\[\(](ACC-\d+|MET-\d+|VOC-\d+)[\]\)]\s*")
     cleaned = pattern.sub(" ", content)
     cleaned = re.sub(r"  +", " ", cleaned)
     return cleaned.strip()

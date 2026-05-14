@@ -26,20 +26,20 @@ Owned the end-to-end product strategy, roadmap, and infrastructure modernization
 
 ### Integration & API Strategy
 
-Product Manager  
+Product Manager 
 
 * Authored detailed technical specifications and PRDs for internal operations platforms and digital modernization initiatives.
 * Facilitated workshops between business stakeholders and engineering to unblock critical friction points in development workflows.
 * Delivered proprietary workflow automation solutions that increased organizational delivery capacity and predictability.
 
-Product Owner  
+Product Owner 
 
 * Co-developed internal system automation tools for Salesforce onboarding, reducing manual effort and saving ~$22,000 annually.
 * Managed vendor fulfillment programs (~$288k contracts), implementing automation that reduced overhead by $8,500 per quarter.
 
 ## EDUCATION
 
-Bachelor of Business Administration  
+Bachelor of Business Administration 
 National University
 
 ## CERTIFICATIONS

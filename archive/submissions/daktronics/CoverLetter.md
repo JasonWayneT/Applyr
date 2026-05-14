@@ -1,13 +1,13 @@
 # Jason Taylor
 
-San Diego, CA  
-[REDACTED_EMAIL]  
-[REDACTED_PHONE]  
+San Diego, CA 
+[REDACTED_EMAIL] 
+[REDACTED_PHONE] 
 
 May 1, 2026
 
-**Hiring Team**  
-Daktronics  
+**Hiring Team** 
+Daktronics 
 
 **RE: Product Manager Application**
 

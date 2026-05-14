@@ -20,6 +20,12 @@ def main():
         with open(md_path, "r", encoding="utf-8") as f:
             md_text = f.read()
 
+        # Ensure blank line before bullet lists that directly follow a paragraph line.
+        # Python-Markdown requires a blank line between a <p> and a list; without it
+        # the bullets get absorbed into the paragraph as literal text.
+        # Match: a non-list, non-header line immediately followed by a "* " or "- " line.
+        md_text = re.sub(r'(?m)^((?!\* |\- |#).+)\n(\* |\- )', r'\1\n\n\2', md_text)
+
         # Convert standard Markdown to HTML
         html_content = markdown.markdown(md_text, extensions=['extra', 'tables'])
 
@@ -41,7 +47,7 @@ def main():
             p_font_size = "10.5pt"
             header_margin_bottom = "24px"
         else:
-            page_margin = "0.45in 0.55in 0.45in 0.55in"
+            page_margin = "0.65in 0.75in 0.65in 0.75in"
             body_line_height = "1.35"
             p_margin = "0 0 5px 0"
             p_font_size = "9.5pt"
@@ -103,12 +109,12 @@ def main():
             font-size: 10pt;
             font-weight: 700;
             color: #2d3748;
-            margin: 20px 0 3px 0;
+            margin: 14px 0 2px 0;
             display: block;
             position: relative;
         }}
         h2 + h3 {{
-            margin-top: 8px;
+            margin-top: 6px;
         }}
         h3 span.date {{
             float: right;
@@ -129,14 +135,14 @@ def main():
             color: #2d3748;
         }}
         ul {{
-            margin: 0 0 8px 0;
+            margin: 0 0 5px 0;
             padding-left: 15px;
         }}
         li {{
             font-size: 9.5pt;
-            margin-bottom: 5px;
+            margin-bottom: 3px;
             color: #2d3748;
-            line-height: 1.4;
+            line-height: 1.35;
         }}
         strong {{
             font-weight: 600;

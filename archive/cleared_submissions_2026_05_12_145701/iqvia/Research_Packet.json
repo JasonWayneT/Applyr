@@ -1,0 +1,43 @@
+{
+  "Module_A": {
+    "Core_Mission_Values": {
+      "Stated": "IQVIA's mission is to accelerate innovation and improve human health by providing advanced analytics, technology solutions, and clinical research services to the life sciences industry. Core values include customer-first approach, insights-driven decisions, privacy-enhanced data, and driving better patient outcomes. [https://www.iqvia.com/about-us] [https://www.iqviadigital.com]",
+      "Observed": "Focus on data monetization in healthcare, with heavy emphasis on HCP data, AI/ML, and omnichannel solutions for pharma clients, evidenced by product manager roles prioritizing scalable data offerings and GenAI roadmaps. [https://jobs.iqvia.com/en/jobs/R1526423-0] [https://jobs.iqvia.com/en/jobs/R1536407-0]"
+    },
+    "Problem_Space": "IQVIA solves the pain of fragmented healthcare data for life sciences companies, enabling precise targeting of HCPs, predictive analytics for prescriptions/promotions, and compliant AI-driven insights amid privacy regulations and omnichannel marketing complexities. [https://jobs.iqvia.com/en/jobs/R1526423-0] [https://jobs.iqvia.com/en/jobs/R1518656-0]",
+    "Business_Model": "Primary revenue from data sales (HCP profiles, Rx data), analytics platforms, clinical research services, and tech solutions like AI/ML products. Publicly traded (growth stage: mature), with strong financial health as a global leader. [https://www.iqvia.com/about-us] [https://jobs.iqvia.com]",
+    "Founding_Story": "Formed in 2016 via merger of Quintiles (founded 1982, CRO focus) and IMS Health (founded 1954, data pioneer). Key inflection: 2021+ AI/data expansions post-merger synergies. [https://www.iqvia.com/about-us]"
+  },
+  "Module_B": {
+    "Big_3_Competitors": [
+      "Medidata (Dassault Systèmes): Direct rival in clinical data/tech; IQVIA differentiates via HCP identity data depth and omnichannel pharma focus. [https://www.iqvia.com/locations/united-states]",
+      "Syneos Health: CRO competitor; IQVIA edges with proprietary datasets and analytics scale. [https://www.iqvia.com/about-us/our-company]",
+      "Definitive Healthcare: HCP data specialist; IQVIA superior in global scale and integration with research services. [https://jobs.iqvia.com/en/jobs/R1526423-0]"
+    ],
+    "Macro_Trends": "Regulatory headwinds (e.g., GDPR/HIPAA privacy for HCP data), AI/GenAI disruption accelerating analytics platforms, pharma shift to personalized omnichannel engagement. [https://jobs.iqvia.com/en/jobs/R1536407-0] [https://jobs.iqvia.com/en/jobs/R1526423-0]"
+  },
+  "Module_C": {
+    "Financials_Funding": "Public company (IQV); Q1 2026 earnings not specified in 90-day window, but ongoing growth via data/AI investments. No recent rounds (mature public). [https://www.iqvia.com/about-us] (Note: As of May 2026, check latest SEC filings for precision.)",
+    "Organizational_Shifts": "Active hiring surge in Product Management roles across US/Europe (e.g., HCP Data PM, GenAI PM), indicating expansion in digital/data teams. No major layoffs reported. [https://jobs.iqvia.com/en/jobs/R1526423-0] [https://jobs.iqvia.com/en/jobs/R1536407-0] [https://www.indeed.com/q-iqvia-product-manager-jobs.html]",
+    "Product_Partnership_News": "New focus on GenAI/Agents in analytics platforms; HCP Data roadmap enhancements for omnichannel. No specific M&A in 90 days. [https://jobs.iqvia.com/en/jobs/R1536407-0] [https://jobs.iqvia.com/en/jobs/R1526423-0]"
+  },
+  "Module_D": {
+    "JD_Analysis": {
+      "Keywords": "HCP profile/identity data, product roadmap, cross-functional alignment (product/sales/engineering), customer use cases, ROI prioritization, GenAI/AI/ML, data pipelines, life sciences/pharma experience.",
+      "Hidden_Success_Signals": "SME status, sales enablement (demos/collateral), agile methodologies, thought leadership; success via scalable/compliant data products driving revenue. Required: BS/MS, 5-15+ yrs exp, pharma data knowledge. Preferred: MBA, GenAI coding. [https://jobs.iqvia.com/en/jobs/R1526423-0] [https://jobs.iqvia.com/en/jobs/R1497282-1] [https://jobs.iqvia.com/en/jobs/R1536407-0]",
+      "Hierarchy": "Product Manager reports to Director/Associate Director of Product Strategy; teams include PMs, engineers, data scientists, sales. [https://www.indeed.com/q-iqvia-product-manager-jobs.html] [https://jobs.iqvia.com/en/jobs/R1526423-0]"
+    },
+    "Hiring_Manager_Profile": "Not explicitly named in searches; likely under Product Strategy leadership (e.g., Director roles in Wayne, NJ/Durham, NC). Priorities: AI roadmaps, HCP data monetization. No published content found. [https://www.indeed.com/q-iqvia-product-manager-jobs.html] [https://www.glassdoor.com/Jobs/IQVIA-Product-Manager-Jobs-EI_IE8347.0,5_KO6,21.htm]"
+  },
+  "Module_E": {
+    "Sentiment_Analysis": "Glassdoor: Mixed-positive (3.5-4/5 avg); praises data scale/impact, critiques bureaucracy in large org. Reddit/Blind: Pharma data roles seen as stable/high-pay, but work-life balance varies by team. [https://www.glassdoor.com/Jobs/IQVIA-Product-Manager-Jobs-EI_IE8347.0,5_KO6,21.htm]",
+    "Operational_Style": "Mix of fully remote (US EST), hybrid (e.g., Warsaw); high tenure in senior roles, but PM positions turnover via growth hiring. [https://jobs.iqvia.com/en/jobs/R1497282-1] [https://jobs.iqvia.com/en/jobs/R1536407-0]"
+  },
+  "Module_F": {
+    "Priority_Mapping": [
+      "HCP Data SME/Roadmap: Bridge to Jason's Platform experience in scalable data systems. [https://jobs.iqvia.com/en/jobs/R1526423-0]",
+      "Data Pipelines/Integrity: Direct match to Jason's Data Integrity expertise for healthcare datasets. [https://jobs.iqvia.com/en/jobs/R1497282-1]",
+      "GenAI/Rx Promo Revenue: Aligns with Jason's Revenue Systems background in pharma analytics. [https://jobs.iqvia.com/en/jobs/R1536407-0] [https://jobs.iqvia.com/en/jobs/R1518656-0]"
+    ]
+  }
+}

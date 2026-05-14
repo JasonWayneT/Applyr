@@ -1,0 +1,141 @@
+{
+  "research_packet": {
+    "company": "OneDigital Health",
+    "research_date": "2026-05-12",
+    "position": "Embedded Product Manager - Remote",
+    "modules": {
+      "module_a_company_dna": {
+        "core_mission": {
+          "stated": "OneDigital's team of fierce advocates helps businesses and individuals achieve their aspirations of health, success and financial security.",
+          "observed": "Providing tech-enabled, personalized solutions across insurance, financial services, and HR platforms for contemporary work-life experiences.",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        },
+        "problem_space": "Organizations and individuals struggle to navigate complex benefits, retirement/wealth planning, and HR workflows. OneDigital solves fragmented decision-making and lack of personalized guidance through integrated platform solutions.",
+        "business_model": {
+          "revenue_streams": "B2B insurance and financial services consulting; B2C benefits enrollment and wealth management platforms",
+          "growth_stage": "Established mid-market player (2,966 employees as of search date)",
+          "financial_health": "Stable; actively hiring across product and engineering functions",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        },
+        "founding_story": {
+          "year_founded": 2000,
+          "headquarters": "Atlanta, Georgia",
+          "key_inflection": "Evolution from traditional insurance consulting to tech-enabled platform provider with AI-driven automation focus",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        }
+      },
+      "module_b_market_competitors": {
+        "big_3_competitors": {
+          "direct_rivals": "Mercer, Willis Towers Watson, Aon (traditional); Guidepoint, Catch, Empower (digital-first)",
+          "onedigital_differentiator": "Embedded product teams using AI agents for rapid prototyping; practice-area-specific solutions (Benefits, Retirement/Wealth, HR); speed-to-market focus over process",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        },
+        "macro_trends": {
+          "trend_1": "AI disruption in financial services and HR automation - OneDigital explicitly building AI agent-driven workflows",
+          "trend_2": "Shift from centralized product teams to embedded, business-aligned product functions",
+          "trend_3": "Regulatory complexity in benefits and retirement planning driving demand for tech-enabled guidance",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        }
+      },
+      "module_c_recent_intelligence": {
+        "financials_funding": {
+          "status": "No recent funding round identified in search results",
+          "hiring_signal": "Active hiring for Embedded Product Manager and Product Owner roles indicates growth investment",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        },
+        "organizational_shifts": {
+          "shift_1": "Structural reorganization toward embedded product model (moving away from centralized product function)",
+          "shift_2": "Heavy investment in AI capabilities and AI builder hiring",
+          "shift_3": "Expansion of Advanced Health division with dedicated Chicago-based team",
+          "source": "https://www.onedigital.com/en-US/careers/advanced-health-careers/"
+        },
+        "product_partnership_news": {
+          "focus": "AI agent-driven automation for workflow optimization; CRM integration (Salesforce, Dynamics 365)",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        }
+      },
+      "module_d_role_org_chart": {
+        "jd_analysis": {
+          "core_keywords": [
+            "AI agents",
+            "rapid prototyping",
+            "embedded product builder",
+            "low-code/no-code platforms",
+            "workflow automation",
+            "speed over process"
+          ],
+          "hidden_success_signals": [
+            "Comfort with ambiguity and minimal structure",
+            "Hands-on builder mentality (not just defining work)",
+            "Experience in startups or innovation teams",
+            "Ability to simplify complex problems"
+          ],
+          "required_vs_preferred": {
+            "required": "2-5 years product management/ownership; ability to move concept-to-prototype quickly; exceptional communication",
+            "strongly_preferred": "AI tools/agents experience; fast-paced iterative environment background; financial services or retirement/wealth domain knowledge; CRM familiarity",
+            "nice_to_have": "Bachelor's degree (not required)"
+          },
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        },
+        "hierarchy": {
+          "reporting_structure": "Embedded within specific practice area (Benefits, Retirement/Wealth, or HR); collaborates with AI builders and engineers; bridges business stakeholders and technical teams",
+          "team_structure": "Cross-functional: business practice leaders, AI builders, engineers, stakeholders",
+          "note": "Hiring manager profile not publicly available in search results"
+        },
+        "compensation": {
+          "embedded_pm_range": "$100K-$130K annually",
+          "product_owner_range": "$100K-$125K annually",
+          "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+        }
+      },
+      "module_e_culture_reality_check": {
+        "sentiment_analysis": {
+          "data_available": "Limited Glassdoor/Blind data in search results",
+          "advertised_culture": "Career growth, collaborative environment, mission-driven (improving lives of millions)",
+          "operational_reality": "Fast-paced, ambiguous, minimal structure; emphasis on speed and outcomes over process",
+          "source": "https://www.onedigital.com/en-US/careers/"
+        },
+        "operational_style": {
+          "remote_status": "Fully remote position",
+          "work_environment": "Iterative, experimental, bias toward action",
+          "team_tenure": "Not specified in available data",
+          "note": "Role explicitly designed for rapid iteration and prototyping, suggesting high-velocity culture"
+        }
+      },
+      "module_f_intersection_bridge": {
+        "priority_mapping": {
+          "priority_1_ai_driven_automation": {
+            "company_priority": "Build AI agent-driven solutions that automate workflows and enhance user experiences",
+            "jason_connection": "Platform expertise: designing systems that scale automation; Data Integrity: ensuring AI agents operate on clean, reliable data; Revenue Systems: automating high-value workflows in financial services",
+            "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+          },
+          "priority_2_rapid_prototyping": {
+            "company_priority": "Move quickly from idea → prototype → production using modern AI tools and low-code platforms",
+            "jason_connection": "Platform: building MVP infrastructure; Data Integrity: validating data flows in prototypes; Revenue Systems: rapid testing of monetizable features",
+            "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+          },
+          "priority_3_embedded_product_model": {
+            "company_priority": "Embed product managers within business practices to deeply understand workflows and pain points",
+            "jason_connection": "Platform: designing practice-area-specific solutions; Data Integrity: understanding domain-specific data requirements; Revenue Systems: aligning product delivery with business unit KPIs",
+            "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+          },
+          "priority_4_crm_integration": {
+            "company_priority": "Familiarity with CRM systems (Salesforce, Dynamics 365) and data flow understanding",
+            "jason_connection": "Data Integrity: managing data flows between CRM and internal systems; Platform: integrating CRM data into product workflows; Revenue Systems: tracking customer lifecycle and revenue attribution",
+            "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+          },
+          "priority_5_financial_services_domain": {
+            "company_priority": "Experience or exposure to financial services, retirement/wealth, or similar industries",
+            "jason_connection": "Revenue Systems: deep expertise in financial product monetization; Data Integrity: regulatory compliance and data governance in financial services; Platform: building trust and security into financial platforms",
+            "source": "https://builtin.com/job/embedded-product-manager-remote/9184229"
+          }
+        }
+      }
+    },
+    "strategic_assessment": {
+      "fit_analysis": "Strong alignment with Jason's platform and data integrity expertise. Role emphasizes rapid prototyping and AI-driven automation—areas where systematic thinking and data governance are critical. Financial services domain knowledge would be significant advantage.",
+      "growth_opportunity": "Embedded model offers exposure to multiple business domains (Benefits, Retirement/Wealth, HR) and direct influence on revenue systems through product delivery.",
+      "risk_factors": "High ambiguity and minimal structure may require strong self-direction; success heavily dependent on stakeholder communication skills."
+    }
+  }
+}

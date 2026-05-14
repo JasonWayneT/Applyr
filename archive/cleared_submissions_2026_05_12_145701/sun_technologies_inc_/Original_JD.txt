@@ -1,0 +1,188 @@
+
+Sun Technologies,Inc.
+Apply Now
+Technical Product Manager
+Plano, TX, US • Posted 7 days ago • Updated 7 days ago
+Contract W2
+Contract Corp To Corp
+No Travel Required
+On-site
+$60 - $65/hr
+Sun Technologies,Inc.
+Fitment
+Dice Job Match Score™
+
+To see how well you match this job, please log in or create an account.
+
+Once logged in, be sure to complete your profile to get the most accurate match score.
+
+Job Details
+Skills
+API
+Business Analysis
+Business Architecture
+Elasticsearch
+Git
+HTTP
+Kibana
+POSTMAN
+Product Development
+Product Management
+RESTful
+Roadmaps
+Sprint
+Requirements Management
+User Experience
+User Stories
+Version Control
+Test Scripts
+Business Analytics
+Product Requirements
+ELK
+Summary
+
+Job Title: Technical Product Manager - Senior
+
+Duration: Expected to be 12 months of a contract with possible of extension.
+
+Location: Plano, TX (on-site for 2 weeks then remote until WFH order is lifted)
+
+Pay Range: $60-65$/hr.., the pay rate may differ depending on your skills, education, experience, and other qualifications.
+
+Featured Benefits:
+
+Medical Insurance in compliance with the ACA
+401(k)
+Sick leave in compliance with applicable state, federal, and local laws
+
+# of Positions: 01
+
+ 
+
+Job Description:
+
+ 
+
+Candidate will work on-site for 2 weeks then remote until WFH order is lifted. *** In-Person interviews.
+
+ 
+
+Top 5 skills required:
+
+ 
+
+Product Management
+Agile Methodologies
+PI Planning
+Sprint Planning
+Rest APIs
+
+ 
+
+Overall Purpose: Define and drive the technical product vision, roadmap, and execution by collaborating with cross-functional teams, ensuring alignment with market demands, and delivering customer-centric software solutions that meet business objectives.
+
+ 
+
+Key Roles and Responsibilities:
+
+ 
+
+Technical Product Vision and Strategy:
+
+Develop product vision and strategy by understanding customer needs, market trends, and competitive landscape. Leverage insights from data analysis and user feedback to refine product direction.
+
+Roadmap Planning and Stakeholder Collaboration:
+
+Define and prioritize the product roadmap through collaboration with cross-functional teams, including business, architecture, UX, and other product managers.
+Foster strong relationships with stakeholders to ensure alignment and communication.
+Product Development and Requirements Management:
+Guide product development by detailing software product requirements, user stories, and acceptance criteria.
+Facilitate trade-off discussions and negotiations to balance scope, time, and cost.
+
+Customer-Centric Product Management:
+
+Ensure product viability and alignment with business goals by monitoring performance, serving as the voice of the customer, and ensuring a high-quality user experience.
+Conduct regular customer interviews and usability testing.
+
+Sprint Planning and Subject Matter Expertise:
+
+Participate in sprint planning, support feature refinement, and act as a subject matter expert within the organization for assigned products or product lines.
+Collaborate closely with development teams to ensure successful delivery of product features.
+
+Technical Experience:
+
+APIs and RESTful Services: Experience designing, developing, and managing APIs, ensuring secure and efficient data exchange.
+Proficiency in working with RESTful services, understanding HTTP methods, status codes, and best practices.
+
+Postman:
+
+Skilled in using Postman for API testing, automating test scripts, and validating API endpoints.
+
+ELK Stack:
+
+Experience with Elasticsearch, Logstash, and Kibana (ELK) for logging, monitoring, and analyzing system performance and application metrics.
+
+Agile Methodologies:
+
+Strong understanding of Agile frameworks such as Scrum or Kanban, with the ability to lead and facilitate Agile ceremonies.
+
+Version Control Systems:
+
+Proficiency in using Git for version control, including branching, merging, and pull requests.
+
+Job Contribution:
+
+An experienced professional with advanced, interdisciplinary knowledge, resolving difficult and complex issues using broad professional concepts.
+Guides others, applying advanced principles and company practices. Leads moderate-sized projects (or parts of larger projects) with strategic value.
+Operates autonomously with frequent senior leadership interaction.
+
+Education/Experience:
+
+Bachelor’s degree (BS/BA) desired in Computer Science or a related field. 5+ years of related experience in product management or a similar role.
+
+Employers have access to artificial intelligence language tools (“AI”) that help generate and enhance job descriptions and AI may have been used to create this description. The position description has been reviewed for accuracy and Dice believes it to correctly reflect the job opportunity.
+Dice Id: 10186216
+Position Id: 8960951
+Posted 7 days ago
+Company Info
+About Sun Technologies,Inc.
+
+Established in 1996, Sun Technologies Inc. is recognized as an award-winning innovative IT solutions company, specializing in Infrastructure Management Services, Gaming Services, Application Development and Application Testing Services with niche expertise in storage, virtualization, middleware and database. With highly skilled resources, innovative business models, we assist our customers to increase revenues, enhance brand value and stay ahead from competitors.
+
+Our core service offering includes:
+
+Legacy Modernization
+Digital Transformation
+Software Development
+Independent Software Testing
+Infrastructure Management Service
+Media & Entertainment Services
+Staff Augmentation
+Go to company profile
+Contact the job poster
+DP
+Dev Prasad
+Recruiter @ Sun Technologies,Inc.
+View Profile
+Create job alert
+Never miss an opportunity! Create an alert based on the job you applied for.
+Create alert
+Similar Jobs
+
+Sun Technologies,Inc.
+
+Project Manager with expertise in data engineering disciplines
+
+Remote
+
+•
+
+19d ago
+
+Job Title: Project Manager with expertise in data engineering disciplines DOD (Dept of Defense) / Department of War(DOW) projects ship required due to program access requirements. Must be eligible to obtain DOD Clearance Duration: up to 8 months Contract with possible extensions Location: Remote (Work From Home) Work Schedule: 4/10 First Shift, Monday to Thursday 10 hours per day. Pay Rate: $80/hr on W2 [the pay rate may differ depending on your skills, education, experience, and other quali
+
+Contract
+
+80
+
+Search all similar jobs

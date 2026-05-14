@@ -28,16 +28,16 @@ Owned the delivery backlog and product execution for Core B2B SaaS Platform and 
 
 ### **Platform Data Remediation | Data Trust Initiative**
 
-Product Manager / Product Owner  
+Product Manager / Product Owner 
 
 * Authored structured requirements and roadmaps for internal operations platforms and digital modernization projects.
 * Facilitated workshops to resolve ambiguous requirements and operational bottlenecks in constrained technical environments.
 
-Account Manager / Product Owner  
+Account Manager / Product Owner 
 
 ## EDUCATION
 
-Bachelor of Business Administration  
+Bachelor of Business Administration 
 National University
 
 ## CERTIFICATIONS

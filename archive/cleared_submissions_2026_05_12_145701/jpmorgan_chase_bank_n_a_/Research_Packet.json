@@ -1,0 +1,48 @@
+{
+  "Module_A": {
+    "Core_Mission_Values": {
+      "Stated": "JPMorgan Chase's mission is to help clients, communities and the world achieve their greatest possibilities. Core values include integrity, excellence, leadership, and community commitment. [Source: https://www.jpmorganchase.com/about/our-story]",
+      "Observed": "Focus on scale, innovation in fintech, and client service amid regulatory scrutiny. Emphasis on digital transformation and risk management. [Source: https://www.jpmorganchase.com/ir/annualreport]"
+    },
+    "Problem_Space": "Solves pain points in global finance including secure payments, treasury management, investment platforms, and complex client onboarding for corporations and institutions facing fragmented banking solutions.",
+    "Business_Model": {
+      "Revenue_Streams": "Investment banking, consumer banking, commercial banking, asset management; diversified with fees, interest, trading. 2025 revenue ~$170B. [Source: https://www.jpmorganchase.com/ir/annualreport]",
+      "Growth_Stage": "Mature global leader, market cap ~$600B, expanding in digital payments and wealth tech.",
+      "Financial_Health": "Strong, Q1 2026 earnings beat estimates with $43B revenue. [Source: https://www.jpmorganchase.com/ir/news]"
+    },
+    "Founding_story": "Founded 1799 as Chase Manhattan; merged with J.P. Morgan 2000. Key inflection: 2008 crisis acquisition of Bear Stearns/Washington Mutual, solidifying 'too big to fail' status. [Source: https://www.jpmorganchase.com/about/our-history]"
+  },
+  "Module_B": {
+    "Big_3_Competitors": [
+      "Bank of America: Broader retail focus; JPM differentiates via investment banking dominance.",
+      "Citigroup: Global reach; JPM leads in tech integration and treasury services.",
+      "Goldman Sachs: Pure investment bank; JPM's edge in commercial banking scale. [Source: https://www.statista.com/topics/1535/jpmorgan-chase/]"
+    ],
+    "Macro_Trends": "Regulatory pressures (Basel IV), AI-driven fintech disruption (e.g., blockchain payments), rising cyber threats, interest rate volatility impacting lending."
+  },
+  "Module_C": {
+    "Financials_Funding": "Q1 2026: $13.4B net income, up 5% YoY; no funding needed as public entity. [Source: https://www.jpmorganchase.com/ir/earnings]",
+    "Organizational_Shifts": "Hiring surge in tech/product roles in Plano, TX hub; no major layoffs reported in 2026. Leadership stable under CEO Jamie Dimon. [Source: https://www.indeed.com/q-jpmorgan-chase-product-manager-l-plano,-tx-jobs.html]",
+    "Product_Partnership_News": "Launched AI-enhanced treasury platform Feb 2026; partnered with fintechs for blockchain payments. No M&A in 90 days. [Source: https://www.jpmorganchase.com/news/stories]"
+  },
+  "Module_D": {
+    "JD_Analysis": {
+      "Keywords": "Client implementation, treasury solutions, technical project management, relationship building, SLA adherence.",
+      "Hidden_Success_Signals": "6+ years experience, fast-paced client-facing, influence without authority.",
+      "Required_vs_Preferred": "Required: Technical PM exp, client relations. Preferred: Treasury implementations. [Source: https://www.indeed.com/q-jpmorgan-chase-product-manager-jobs.html]"
+    },
+    "Hierarchy": "Product Manager reports to VP/Director in Product Management or Business Transformation teams, often under Client Onboarding & Service (COS). Plano teams matrixed with ops/sales. [Source: https://www.indeed.com/q-jpmorgan-chase-product-manager-l-plano,-tx-jobs.html]",
+    "Hiring_Manager_Profile": "Not specifically identified; Plano product leads often from tech/fintech backgrounds, prioritize agile delivery. Search LinkedIn for 'JPMorgan Plano Product Director'. [Source: https://www.glassdoor.com/Job/plano-jpmorgan-chase-product-manager-jobs-SRCH_IL.0,5_IC1140045_KO6,36.htm]"
+  },
+  "Module_E": {
+    "Sentiment_Analysis": "Glassdoor: 4.0/5 rating; pros: scale, pay; cons: bureaucracy, work-life balance. Blind/Reddit: Intense hours in tech teams, but strong career growth. [Source: https://www.glassdoor.com/Overview/Working-at-JPMorgan-Chase-EI_IE145.11,25.htm]",
+    "Operational_Style": "Hybrid in Plano (3 days onsite); average tenure 4-6 years in product roles, high retention in senior positions."
+  },
+  "Module_F": {
+    "Priority_Mapping": [
+      "Client Onboarding/Implementation: Maps to Jason's Platform experience in scalable revenue systems.",
+      "Treasury/Payments Solutions: Aligns with Data Integrity expertise for file mapping/SLA.",
+      "Business Transformation: Direct fit for Revenue Systems in dynamic, client-facing environments. [Sources: All JDs in search results]"
+    ]
+  }
+}

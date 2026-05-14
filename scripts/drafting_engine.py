@@ -105,18 +105,20 @@ APPROVED_METRICS = [
 ]
 
 
-def validate_hard_facts(generated_text, master_resume_text):
+def validate_hard_facts(generated_text, master_resume_text, target_company=None):
     """
     Deterministic post-generation check. Compares generated output against
     the master resume source of truth. Fixes known hallucinations and logs
     any discrepancies.
 
     Checks (all regex/string — no LLM dependency):
+      0. Header normalization to required standard headings
       1. Known bad substitutions (auto-fixed)
       2. Blocked tool names (flagged for removal)
       3. Seniority inflation phrases (flagged)
       4. Metric integrity (any number not in approved list is flagged)
       5. Education / company / contact presence
+      6. Enhanced placeholder and bracket healing
 
     Returns (corrected_text, warnings_list).
     """
@@ -127,15 +129,37 @@ def validate_hard_facts(generated_text, master_resume_text):
     warnings = []
     corrected = generated_text
 
+    # 0. Header Normalization Guard (Option A Standard)
+    header_mappings = [
+        (r'^#{2,3}\s*(?:\*\*)?PROFESSIONAL\s+SUMMARY(?:\*\*)?', '## PROFESSIONAL SUMMARY'),
+        (r'^#{2,3}\s*(?:\*\*)?SUMMARY(?:\*\*)?', '## PROFESSIONAL SUMMARY'),
+        (r'^#{2,3}\s*(?:\*\*)?PROFESSIONAL\s+EXPERIENCE(?:\*\*)?', '## PROFESSIONAL EXPERIENCE'),
+        (r'^#{2,3}\s*(?:\*\*)?EXPERIENCE(?:\*\*)?', '## PROFESSIONAL EXPERIENCE'),
+        (r'^#{2,3}\s*(?:\*\*)?WORK\s+EXPERIENCE(?:\*\*)?', '## PROFESSIONAL EXPERIENCE'),
+        (r'^#{2,3}\s*(?:\*\*)?EMPLOYMENT\s+HISTORY(?:\*\*)?', '## PROFESSIONAL EXPERIENCE'),
+        (r'^#{2,3}\s*(?:\*\*)?EDUCATION(?:\s+.*)?(?:\*\*)?', '## EDUCATION & CERTIFICATIONS'),
+    ]
+    
+    header_fixed = False
+    for pat, replacement in header_mappings:
+        # Apply replacement line by line or multiline safely
+        new_text = re.sub(pat, replacement, corrected, flags=re.MULTILINE | re.IGNORECASE)
+        if new_text != corrected:
+            corrected = new_text
+            header_fixed = True
+    
+    if header_fixed:
+         print("    [GUARD] Normalized layout section headers to standard uppercase format.")
+
     # 1. Fix known hallucination substitutions
     for wrong, right in KNOWN_HALLUCINATIONS.items():
         if wrong in corrected:
             warnings.append(f"HALLUCINATION CAUGHT: '{wrong}' replaced with '{right}'")
             corrected = corrected.replace(wrong, right)
 
-    # 1b. Automatically strip Skills and Technical Environment sections safely
+    # 1b. Automatically strip Skills and Technical Environment sections safely (bulletproof variants)
     corrected = re.sub(
-        r'(?:<h2[^>]*>\s*<strong>\s*(?:SKILLS|TECHNICAL).*?</h2>|##\s*(?:Skills|Technical Environment|Core Expertise).*?)([\s\S]*?)(?=<h2[^>]*>|##|###|</div>|$)',
+        r'(?:<h2[^>]*>\s*<strong>\s*(?:SKILLS|TECHNICAL).*?</h2>|##\s*(?:Skills|Technical Skills|Technical Environment|Core Expertise|Skills & Tools).*?)([\s\S]*?)(?=<h2[^>]*>|##|###|</div>|$)',
         '',
         corrected,
         flags=re.IGNORECASE
@@ -144,7 +168,6 @@ def validate_hard_facts(generated_text, master_resume_text):
     # 2. TOOL BLOCKLIST — flag any tool Jason never used
     tool_violations = []
     for tool in BLOCKED_TOOLS:
-        # Word-boundary match to avoid partial hits (e.g. "Go" inside "Agora")
         pattern = r'(?<![\w-])' + re.escape(tool) + r'(?![\w-])'
         if re.search(pattern, corrected, re.IGNORECASE):
             tool_violations.append(tool)
@@ -153,7 +176,6 @@ def validate_hard_facts(generated_text, master_resume_text):
             f"TOOL HALLUCINATION: The following tools are NOT in workExperience.md and must be removed: "
             f"{', '.join(tool_violations)}"
         )
-        # Auto-remove the tool mentions from the text to prevent them reaching the PDF
         for tool in tool_violations:
             pattern = r'(?<![\w-])' + re.escape(tool) + r'(?![\w-])'
             corrected = re.sub(pattern, '[REDACTED]', corrected, flags=re.IGNORECASE)
@@ -171,8 +193,38 @@ def validate_hard_facts(generated_text, master_resume_text):
         )
         print(f"    [GUARD] Seniority inflation detected: {seniority_violations}")
 
+    # 3b. MANDATORY TITLE CONSISTENCY GUARD — Enforce Cision is strictly "Product Manager"
+    lines = corrected.split('\n')
+    new_lines = []
+    cision_healed = False
+    for line in lines:
+        if 'cision' in line.lower() and any(kw in line.lower() for kw in ['product owner', 'functional product manager']):
+            ugly_titles = [
+                "Product Owner / Functional Product Manager",
+                "Product Owner / Platform Product Manager",
+                "Product Owner (Functionally Product Manager)",
+                "Product Owner (Functional Scope)",
+                "Product Owner → Product Manager (Functional Scope)",
+                "Product Owner -> Product Manager (Functional Scope)",
+                "Product Owner / Product Manager",
+                "Product Owner"
+            ]
+            for ugly in ugly_titles:
+                pattern = re.compile(re.escape(ugly), re.IGNORECASE)
+                if pattern.search(line):
+                    line = pattern.sub("Product Manager", line)
+                    cision_healed = True
+            
+            line = re.sub(r'Product Manager\s*/\s*Product Manager', 'Product Manager', line, flags=re.IGNORECASE)
+            line = re.sub(r'Product Manager\s*/\s*Platform Product Manager', 'Product Manager', line, flags=re.IGNORECASE)
+            
+        new_lines.append(line)
+    
+    if cision_healed:
+        corrected = '\n'.join(new_lines)
+        print("    [GUARD] Enforced strict 'Product Manager' title consistency for Cision.")
+
     # 4. METRIC INTEGRITY — scan for any number patterns and verify against approved list
-    # Find all standalone numeric claims (percentages, dollar amounts, counts)
     numeric_pattern = re.compile(r'(?:\$[\d,]+(?:M|K|B)?|\d+(?:,\d{3})*(?:\.\d+)?\s*%|\d{1,3}(?:,\d{3})+|\b\d{2,}\b)')
     found_numbers = numeric_pattern.findall(corrected)
     unapproved = []
@@ -182,7 +234,6 @@ def validate_hard_facts(generated_text, master_resume_text):
                    for approved in APPROVED_METRICS):
             unapproved.append(clean)
     if unapproved:
-        # Filter out obvious false positives (years, phone numbers, etc.)
         real_violations = [n for n in unapproved if not re.match(r'^(?:20\d{2}|760|619|858|2026|2025|2024|2023|2022|2021|2019|2017|\d{1,2})$', n.replace(',', '').strip())]
         if real_violations:
             warnings.append(
@@ -191,21 +242,76 @@ def validate_hard_facts(generated_text, master_resume_text):
             )
             print(f"    [GUARD] Unverified metrics detected: {real_violations}")
 
-    # 5. Verify education facts are present
+    # 5. Verify education facts are present & Auto-heal if missing
+    missing_edu = False
     for uni in HARD_FACTS["education"]:
         if uni not in corrected:
-            warnings.append(f"MISSING FACT: Education '{uni}' not found in generated output.")
+            missing_edu = True
+            warnings.append(f"MISSING FACT: Education '{uni}' not found in generated output. Triggering self-healing injection.")
+
+    if missing_edu:
+        corrected = re.sub(r'##\s*Education\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
+        corrected = re.sub(r'##\s*Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
+        corrected = re.sub(r'##\s*Education & Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
+        
+        edu_cert_block = "\n\n## EDUCATION & CERTIFICATIONS\n\n" \
+                         "* **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019\n" \
+                         "* **Certified Scrum Master** — Scrum Alliance\n"
+        corrected = corrected.rstrip() + edu_cert_block
+        print("    [GUARD] Auto-injected verified Education & Certifications block.")
 
     # 6. Verify company names are present (at least the primary employer)
-    for company in HARD_FACTS["companies"][:2]:  # Check top 2 companies
+    for company in HARD_FACTS["companies"][:2]:
         if company.upper() not in corrected.upper():
             warnings.append(f"MISSING FACT: Company '{company}' not found in generated output.")
 
-    # 7. Verify contact name
+    # 7. Auto-heal Contact & Template Info Placeholders (Hyper-Aggressive Local fallback sweeping)
+    placeholders = {
+        "[Your Name]": "JASON TAYLOR",
+        "*[Your Name]*": "JASON TAYLOR",
+        "[Full Name]": "JASON TAYLOR",
+        "[Your Phone Number]": "[REDACTED_PHONE]",
+        "[Phone Number]": "[REDACTED_PHONE]",
+        "[Your Email Address]": "[REDACTED_EMAIL]",
+        "[Your Email]": "[REDACTED_EMAIL]",
+        "[Email Address]": "[REDACTED_EMAIL]",
+        "[Your LinkedIn Profile URL]": "linkedin.com/in/redacted-linkedin-slug",
+        "[LinkedIn Profile URL]": "linkedin.com/in/redacted-linkedin-slug",
+        "[LinkedIn URL]": "linkedin.com/in/redacted-linkedin-slug",
+        "[LinkedIn]": "linkedin.com/in/redacted-linkedin-slug",
+        "## [Your Name]": "# JASON TAYLOR",
+        "[University Name]": "National University",
+        "[University]": "National University",
+        "[Hiring Manager Name]": "Hiring Team",
+        "[Hiring Manager]": "Hiring Team",
+        "[Dates]": "",  # Safe collapse for leftover template debris
+        "*[Dates]*": ""
+    }
+    if target_company:
+        placeholders["[Company Name]"] = target_company
+        placeholders["*[Company Name]*"] = target_company
+        placeholders["[Target Company]"] = target_company
+        
+    placeholder_triggered = False
+    for ph, val in placeholders.items():
+        # Case-insensitive safe sweep for common variations
+        if ph.lower() in corrected.lower():
+            # Perform literal replacement on matching keys
+            pattern = re.compile(re.escape(ph), re.IGNORECASE)
+            corrected = pattern.sub(val, corrected)
+            placeholder_triggered = True
+            
+    if placeholder_triggered:
+        print("    [GUARD] Resolved model template placeholders and bracket tags to actual ground truth.")
+
+    # 7b. Verify contact name is at the very top
     if HARD_FACTS["contact"]:
         name = HARD_FACTS["contact"][0]
-        if name and name not in corrected:
-            warnings.append(f"MISSING FACT: Name '{name}' not found in generated output.")
+        if name and name.upper() not in corrected[:300].upper():
+            warnings.append(f"MISSING FACT: Name '{name}' not found at top of resume. Repairing header.")
+            header = f"# JASON TAYLOR\n\nSan Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug\n\n"
+            corrected = header + corrected.lstrip()
+            print("    [GUARD] Prepend-repaired missing Name/Contact header.")
 
     # 8. Anti-AI fingerprint: catch em-dashes
     if '\u2014' in corrected or ' -- ' in corrected:
@@ -214,7 +320,7 @@ def validate_hard_facts(generated_text, master_resume_text):
         print("    [GUARD] Em-dash auto-corrected.")
 
     if warnings:
-        print(f"    [HARD FACT AUDIT] {len(warnings)} issue(s) found:")
+        print(f"    [HARD FACT AUDIT] {len(warnings)} issue(s) found & actively defended:")
         for w in warnings:
             print(f"      - {w}")
     else:
@@ -382,7 +488,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     verified_resume = llm_verify_claims(cleaned_draft_resume, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
-    final_resume, resume_warnings = validate_hard_facts(verified_resume, master_resume)
+    final_resume, resume_warnings = validate_hard_facts(verified_resume, master_resume, target_company=company_name)
 
     resume_md_path = os.path.join(company_folder, "Resume.md")
     resume_pdf_path = os.path.join(company_folder, "Resume.pdf")
@@ -394,11 +500,14 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     from style_compliance_guard import run_guard
     run_guard(resume_md_path)
     
-    # Run the structural QA Checklist
+    # Run the structural QA Checklist (Zero-Tolerance Enforced)
     from quality_checker import check_resume
     qa_passed, qa_msg = check_resume(resume_md_path)
     if not qa_passed:
         print(f"    [QA AUDIT FAIL] Resume: {qa_msg}")
+        # Hard Block: Delete garbage markdown if it fails the final verification
+        if os.path.exists(resume_md_path): os.remove(resume_md_path)
+        raise ValueError(f"CRITICAL QA FAILURE: Resume does not meet production standards: {qa_msg}")
     else:
         print(f"    [QA AUDIT PASS] Resume: {qa_msg}")
     
@@ -477,7 +586,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     verified_cl = llm_verify_claims(cleaned_draft_cl, work_exp, verifier_rules)
 
     # Hard Fact Validation: deterministic check against master resume
-    final_cl, cl_warnings = validate_hard_facts(verified_cl, master_resume)
+    final_cl, cl_warnings = validate_hard_facts(verified_cl, master_resume, target_company=company_name)
 
     cl_md_path = os.path.join(company_folder, "CoverLetter.md")
     cl_pdf_path = os.path.join(company_folder, "CoverLetter.pdf")
@@ -489,11 +598,14 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result):
     from style_compliance_guard import run_guard
     run_guard(cl_md_path)
     
-    # Run the structural QA Checklist & Auto-Repair
+    # Run the structural QA Checklist & Auto-Repair (Zero-Tolerance Enforced)
     from quality_checker import check_and_repair_cover_letter
     qa_passed, qa_msg = check_and_repair_cover_letter(cl_md_path)
     if not qa_passed:
         print(f"    [QA AUDIT FAIL] Cover Letter: {qa_msg}")
+        # Hard Block: Delete garbage cover letter
+        if os.path.exists(cl_md_path): os.remove(cl_md_path)
+        raise ValueError(f"CRITICAL QA FAILURE: Cover Letter does not meet production standards: {qa_msg}")
     else:
         print(f"    [QA AUDIT PASS] Cover Letter: {qa_msg}")
     

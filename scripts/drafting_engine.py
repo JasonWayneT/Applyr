@@ -258,11 +258,10 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
             corrected = re.sub(r'##\s*Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
             corrected = re.sub(r'##\s*Education & Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
 
-            edu_cert_block = "\n\n## EDUCATION & CERTIFICATIONS\n\n" \
-                             "* **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019\n" \
-                             "* **Certified Scrum Master** — Scrum Alliance\n"
+            edu_cert_block = "\n\n## EDUCATION\n\n" \
+                             "* **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019\n"
             corrected = corrected.rstrip() + edu_cert_block
-            print("    [GUARD] Auto-injected verified Education & Certifications block.")
+            print("    [GUARD] Auto-injected verified Education block.")
 
         # 6. Verify company names are present (resume only)
         for company in HARD_FACTS["companies"][:2]:

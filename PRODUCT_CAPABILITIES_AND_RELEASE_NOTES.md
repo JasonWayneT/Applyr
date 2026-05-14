@@ -34,6 +34,30 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.1
+Applyr Release
+May 14, 2026
+
+Version 6.1, deployed on May 14, 2026
+
+Previous
+Applyr 6.0
+
+Next
+Applyr 6.2 (Planned)
+
+New
+- **Built In Multi-Term Search Integration (FR-079, CR-009):** Integrated native support for full text search iteration against configured candidate `SEARCH_TERMS`. Replaced single static taxonomy path targeting with dynamic `/jobs?search={term}` navigations, expanding top-of-funnel Built In discovery by 21+ new eligible jobs in local testing.
+- **Dual-Archetype Resilient Selector Layouts (FR-078):** Formulated layout-agnostic CSS collection utilizing unified selectors representing both traditional `.job-item` layouts and newer React-based search engine `div[data-id="job-card"]` components, fully resolving DOM architecture scouting gaps.
+
+Fixed
+- **High-Risk LinkedIn Scraper Decommission (FR-080, CR-010):** Permanently excised the high-risk automated LinkedIn browser scouter module to safeguard system integrity and comply with session-risk directives. Bypassed parallel browser dispatches targeting `linkedin.com`, deleted the redundant manual authentication asset `login_linkedin.ts`, and rerouted the orchestration sequence exclusively through verified compliant channels.
+
+Developer
+- **SDD Registry Hardening:** Added structural mappings for CR-009 and CR-010 requirements inside registry matrices and confirmed TypeScript syntactic stability passing `tsc --noEmit` clean compilations.
+
+---
+
 ### 6.0
 Applyr Release
 May 13, 2026
@@ -44,7 +68,7 @@ Previous
 Applyr 5.21
 
 Next
-Applyr 6.1 (Planned)
+Applyr 6.1
 
 New
 - **Fact-Bound Semantic Anti-Hallucination (FR-069):** Replaced literal ID scanning with dynamic numerical containment checking. The audit engine aggregates ground truth sentences for all citations within a generated sentence and mathematically verifies that all generated percentages, dollar values, and user scales represent valid subsets of the ground truth, actively blocking numeric fabrication or inflation.

@@ -60,33 +60,6 @@ function getTheMuseCategory(targetRole: string): string {
     return 'Product'; // default covers PM/PO/product roles
 }
 
-// ---------------------------------------------------------------------------
-// Location → LinkedIn geo ID
-// ---------------------------------------------------------------------------
-const LINKEDIN_GEO_IDS: Record<string, string> = {
-    'United States':         '103644278',
-    'Canada':                '101174742',
-    'United Kingdom':        '101165590',
-    'Australia':             '101452733',
-    'Worldwide / Remote Only': '',
-};
-
-// Work setting → LinkedIn f_WT param
-const LINKEDIN_WORK_TYPES: Record<string, string> = {
-    'Remote':  '2',
-    'Hybrid':  '3',
-    'On-site': '1',
-};
-
-// Experience level → LinkedIn f_E code
-const LINKEDIN_EXP_CODES: Record<string, string> = {
-    'Internship':             '1',
-    'Entry Level (0-1 Years)': '2',
-    'Junior (1-2 Years)':     '3',
-    'Mid Level (2-5 Years)':  '4',
-    'Senior Level (5-9 Years)': '5',
-    'Expert/Leader (9+ Years)': '6',
-};
 
 // Experience level → BuiltIn slug
 const BUILTIN_EXP_SLUGS: Record<string, string> = {
@@ -101,50 +74,37 @@ const BUILTIN_EXP_SLUGS: Record<string, string> = {
 // ---------------------------------------------------------------------------
 // URL builders
 // ---------------------------------------------------------------------------
-interface LinkedInSearchProfile {
-    label: string;
-    geoId: string;
-    workType: string; // '2' = Remote, '1%2C3' = On-site/Hybrid
-}
 
-function buildLinkedInUrlsForTerm(term: string): { url: string; label: string }[] {
-    const encoded = encodeURIComponent(term);
-    const freshnessSeconds = FRESHNESS_DAYS * 24 * 60 * 60;
-    const targets: { url: string; label: string }[] = [];
+function buildBuiltInUrlsForTerm(term: string): string[] {
+    const workPrefix = WORK_SETTING === 'Hybrid' ? 'hybrid' : WORK_SETTING === 'On-site' ? '' : 'remote';
+    const expSlugs = EXPERIENCE_LEVELS.length > 0
+        ? [...new Set(EXPERIENCE_LEVELS.map(l => BUILTIN_EXP_SLUGS[l]).filter(Boolean))]
+        : [];
 
-    // FR-070 / Scout Gap Fix: Run two separate search archetypes
-    // Archetype 1: General Remote roles across the entire United States
-    // Archetype 2: Hybrid & In-Person roles located exclusively in the San Diego Metro Area
-    const searchProfiles: LinkedInSearchProfile[] = [
-        {
-            label: 'Remote US',
-            geoId: '103644278', // United States (all)
-            workType: '2'      // Remote
-        },
-        {
-            label: 'Local San Diego Metro',
-            geoId: '90010472',  // San Diego Metropolitan Area
-            workType: '1%2C3'  // On-site OR Hybrid (comma encoded)
-        }
-    ];
+    const targets: string[] = [];
+    const pathSegments = ['jobs'];
+    
+    if (workPrefix) pathSegments.push(workPrefix);
+    // Leverage first experience slug inside URL path, mirroring Built In's routing architecture
+    if (expSlugs.length > 0) pathSegments.push(expSlugs[0]);
 
-    let expFilter = '';
-    if (EXPERIENCE_LEVELS.length > 0) {
-        const codes = [...new Set(EXPERIENCE_LEVELS.map(l => LINKEDIN_EXP_CODES[l]).filter(Boolean))];
-        if (codes.length) {
-            expFilter = `&f_E=${codes.join('%2C')}`;
+    const basePath = pathSegments.join('/');
+    
+    // Combine daysSinceUpdated and days_since_posted queries to ensure API routing coverage
+    let query = `?search=${encodeURIComponent(term)}&daysSinceUpdated=${FRESHNESS_DAYS}&days_since_posted=${FRESHNESS_DAYS}&country=USA&allLocations=true`;
+    
+    // Append remaining experience slugs as array params
+    if (expSlugs.length > 1) {
+        for (let i = 1; i < expSlugs.length; i++) {
+            query += `&experience%5B%5D=${expSlugs[i]}`;
         }
     }
 
-    for (const profile of searchProfiles) {
-        const url = `https://www.linkedin.com/jobs/search/?f_TPR=r${freshnessSeconds}&keywords=${encoded}&f_WT=${profile.workType}&geoId=${profile.geoId}${expFilter}`;
-        targets.push({ url, label: profile.label });
-    }
-
+    targets.push(`https://builtin.com/${basePath}${query}`);
     return targets;
 }
 
-function buildBuiltInUrl(): string {
+function buildBuiltInTaxonomyUrl(): string {
     const workPrefix = WORK_SETTING === 'Hybrid' ? 'hybrid' : WORK_SETTING === 'On-site' ? '' : 'remote';
     const base = workPrefix
         ? `https://builtin.com/jobs/${workPrefix}/product-management`
@@ -417,188 +377,85 @@ const scoutOpenPostings = async (): Promise<ScrapedJob[]> => {
     return jobs;
 };
 
-// ---------------------------------------------------------------------------
-// Source B: LinkedIn (Playwright, stealth, 7-day param in URL)
-// ---------------------------------------------------------------------------
-
-const scoutLinkedIn = async (page: Page): Promise<ScrapedJob[]> => {
-    console.log('[LOG] LinkedIn: Checking session health...');
-
-    // Session health check — fail fast if login wall detected
-    try {
-        await page.goto('https://www.linkedin.com/feed/', { timeout: 15000 });
-        await humanWait(2000, 3000);
-        if (page.url().includes('login') || page.url().includes('checkpoint')) {
-            console.log('[ACTION] LinkedIn session expired. Sign in manually to restore. Skipping LinkedIn this run.');
-            return [];
-        }
-    } catch {
-        console.log('[LOG] LinkedIn session check failed. Skipping LinkedIn.');
-        return [];
-    }
-
-    const jobs: ScrapedJob[] = [];
-
-    for (const term of SEARCH_TERMS) {
-        const targets = buildLinkedInUrlsForTerm(term);
-
-        for (const target of targets) {
-            try {
-                console.log(`[LOG] LinkedIn: Crawling "${decodeURIComponent(term)}" [Scope: ${target.label}]`);
-                await page.goto(target.url);
-                await humanWait(4000, 6000);
-                await page.evaluate(() => window.scrollTo(0, 1000));
-                await humanWait(2000, 3000);
-
-                const cards = await page.$$('.job-card-container');
-                console.log(`[LOG] LinkedIn: ${cards.length} cards found for "${decodeURIComponent(term)}" (${target.label})`);
-
-            for (const card of cards) {
-                if (jobs.length >= 50) break;
-                try {
-                    await card.scrollIntoViewIfNeeded();
-                    await humanWait(1000, 2000);
-                    await card.click();
-                    await humanWait(3000, 5000);
-                    await jiggleMouse(page);
-
-                    const url     = page.url().split('?')[0];
-
-                    // Supreme Bulletproof Title & Company Extraction from Left Rail & Fallbacks
-                    let title   = (await card.$eval('.job-card-list__title--link', el => el.textContent).catch(() => '')).trim();
-                    let company = '';
-
-                    // Sequential card text parse (100% immune to selector changes!)
-                    try {
-                        const cardLines = (await card.innerText()).split('\n').map(s => s.trim()).filter(s => s.length > 1);
-                        if (!title && cardLines.length > 0) {
-                            title = cardLines[0];
-                        }
-                        if (title && cardLines.length > 1) {
-                            // The very next substantial text block directly underneath the title is the company
-                            const idx = cardLines.findIndex(line => line.toLowerCase().includes(title.toLowerCase()) || title.toLowerCase().includes(line.toLowerCase()));
-                            if (idx !== -1 && idx + 1 < cardLines.length) {
-                                company = cardLines[idx + 1];
-                            }
-                        }
-                    } catch {}
-
-                    // Right Panel Async Locators (waits up to 2 seconds dynamically for renders!)
-                    if (!title) {
-                        title = (await page.locator('.jobs-search__job-details--wrapper a[href*="/jobs/view/"]').first().textContent({timeout: 2000}).catch(() => '')).trim();
-                    }
-                    if (!company) {
-                        company = (await page.locator('.jobs-search__job-details--wrapper a[href*="/company/"]').first().textContent({timeout: 2000}).catch(() => '')).trim();
-                    }
-                    if (!company) {
-                        company = (await page.locator('.job-card-container__company-name, .job-card-list__company-name').first().textContent({timeout: 1000}).catch(() => '')).trim();
-                    }
-                    if (!company) {
-                        company = (await page.textContent('.jobs-unified-top-card__company-name', {timeout: 1000}).catch(() => '')).trim();
-                    }
-
-                    if (!url || !title || !company) {
-                        console.log(`[LOG] LinkedIn skip card: missing metadata (URL: ${!!url}, Title: "${title}", Company: "${company}")`);
-                        continue;
-                    }
-                    if (!passesTitleBlocklist(title)) {
-                        console.log(`[REJECT] ${title} at ${company} (LinkedIn) - Title Blocklist`);
-                        continue;
-                    }
-                    if (!isJobNewByUrl(url)) {
-                        console.log(`[REJECT] ${title} at ${company} (LinkedIn) - URL already exists`);
-                        continue;
-                    }
-                    if (!isJobNewByCompanyTitle(company, title)) {
-                        console.log(`[REJECT] ${title} at ${company} (LinkedIn) - Company/Title already exists`);
-                        continue;
-                    }
-
-                    // Bulletproof Description Extraction
-                    let desc = '';
-                    // Try 1: Legacy Selector
-                    desc = (await page.textContent('#job-details', {timeout: 1500}).catch(() => '')).trim();
-                    if (!desc) {
-                        // Try 2: Class-based selectors
-                        desc = (await page.textContent('.jobs-description__content, .jobs-box__html-content', {timeout: 1500}).catch(() => '')).trim();
-                    }
-                    if (!desc) {
-                        // Try 3: Detail wrapper catch-all (guaranteed to contain description text!)
-                        desc = (await page.textContent('.jobs-search__job-details--wrapper', {timeout: 1500}).catch(() => '')).trim();
-                    }
-                    desc = desc.slice(0, 1500);
-
-                    const salary   = desc.match(/\$[\d,]+ ?[-–] ?\$[\d,]+/)?.[0];
-                    const recName  = (await page.textContent('.jobs-poster__name', {timeout: 1000}).catch(() => ''))?.trim() || undefined;
-                    const recUrl   = (await page.getAttribute('.jobs-poster__name-link', 'href', {timeout: 1000}).catch(() => '')) || undefined;
-
-                    jobs.push({ company, title, url, description: desc,
-                        salary_range: salary, recruiter_name: recName, recruiter_url: recUrl || undefined, source: 'LinkedIn' });
-                    console.log(`[FOUND] ${title} at ${company} (LinkedIn)`);
-                } catch (cardErr) {
-                    console.log(`[LOG] LinkedIn card process failed: ${cardErr}`);
-                }
-            }
-        } catch (err) {
-            console.log(`[LOG] LinkedIn search failed for "${term}": ${err}`);
-        }
-    }
-}
-
-    return jobs;
-};
 
 // ---------------------------------------------------------------------------
 // Source C: BuiltIn (Playwright, 7-day param in URL)
 // ---------------------------------------------------------------------------
 
 const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
-    console.log('[LOG] Built In: Scouting...');
+    console.log('[LOG] Built In: Scouting multiple target channels...');
     const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
 
-    try {
-        await page.goto(buildBuiltInUrl(), { waitUntil: 'domcontentloaded' });
-        await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
-        await humanWait(2000, 4000);
-        await page.waitForSelector('.job-item', { timeout: 10000 }).catch(() => {});
-
-        const cards = await page.$$('.job-item');
-        console.log(`[LOG] Built In: ${cards.length} cards found.`);
-
-        for (const card of cards) {
-            if (jobs.length >= 30) break;
-            try {
-                // Modern selectors based on utility-first and descriptive classes
-                const title   = (await card.$eval('.card-alias-after-overlay', el => el.textContent).catch(() => '')).trim();
-                const company = (await card.$eval('a[href^="/company/"]',       el => el.textContent).catch(() => '')).trim();
-                const relUrl  = await card.$eval('a.card-alias-after-overlay', el => el.getAttribute('href')).catch(() => '');
-                const url     = relUrl ? `https://builtin.com${relUrl}` : '';
-
-                if (!url || !title || !company) {
-                    console.log(`[LOG] Built In skip card: missing metadata (URL: ${!!url}, Title: "${title}", Company: "${company}")`);
-                    continue;
-                }
-                if (!passesTitleBlocklist(title)) {
-                    console.log(`[REJECT] ${title} at ${company} (Built In) - Title Blocklist`);
-                    continue;
-                }
-                if (!isJobNewByUrl(url)) {
-                    console.log(`[REJECT] ${title} at ${company} (Built In) - URL already exists`);
-                    continue;
-                }
-                if (!isJobNewByCompanyTitle(company, title)) {
-                    console.log(`[REJECT] ${title} at ${company} (Built In) - Company/Title already exists`);
-                    continue;
-                }
-
-                jobs.push({ company, title, url, description: '', source: 'Built In' });
-                console.log(`[FOUND] ${title} at ${company} (Built In)`);
-            } catch (cardErr) {
-                console.log(`[LOG] Built In card process failed: ${cardErr}`);
-            }
+    // Gather combined endpoints: Term-specific text search and legacy taxonomy fallback
+    const targets: { url: string; label: string }[] = [];
+    for (const term of SEARCH_TERMS) {
+        const urls = buildBuiltInUrlsForTerm(term);
+        for (const u of urls) {
+            targets.push({ url: u, label: `Search: ${term}` });
         }
-    } catch (err) {
-        console.log(`[LOG] Built In scrape failed: ${err}`);
+    }
+    targets.push({ url: buildBuiltInTaxonomyUrl(), label: 'Taxonomy Fallback' });
+
+    for (const target of targets) {
+        try {
+            console.log(`[LOG] Built In: Crawling ${target.label}...`);
+            await page.goto(target.url, { waitUntil: 'domcontentloaded' });
+            await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+            await humanWait(2000, 4000);
+            
+            // Wait for either traditional .job-item OR modern div[data-id="job-card"]
+            await page.waitForSelector('.job-item, div[data-id="job-card"]', { timeout: 10000 }).catch(() => {});
+
+            const cards = await page.$$('.job-item, div[data-id="job-card"]');
+            console.log(`[LOG] Built In: ${cards.length} cards found for ${target.label}.`);
+
+            for (const card of cards) {
+                if (jobs.length >= 60) break; // Aggregate safety cap
+                try {
+                    // Resilient Dual-Archetype Metadata Selectors
+                    const title = (await card.$eval('[data-id="job-card-title"], .card-alias-after-overlay', el => el.textContent).catch(() => '')).trim();
+                    
+                    // Extract company name using data-id, falling back to general anchor link
+                    const company = (await card.$eval('[data-id="company-title"]', el => el.textContent).catch(() => 
+                                     card.$eval('a[href^="/company/"]', el => el.textContent).catch(() => ''))).trim();
+                    
+                    const relUrl = await card.$eval('[data-id="job-card-title"], a.card-alias-after-overlay', el => el.getAttribute('href')).catch(() => '');
+                    
+                    if (!relUrl || !title || !company) {
+                        continue;
+                    }
+
+                    const url = relUrl.startsWith('http') ? relUrl : `https://builtin.com${relUrl}`;
+
+                    if (seenUrls.has(url)) continue;
+                    seenUrls.add(url);
+
+                    if (!passesTitleBlocklist(title)) {
+                        console.log(`[REJECT] ${title} at ${company} (Built In) - Title Blocklist`);
+                        continue;
+                    }
+                    if (!isJobNewByUrl(url)) {
+                        console.log(`[REJECT] ${title} at ${company} (Built In) - URL already exists`);
+                        continue;
+                    }
+                    if (!isJobNewByCompanyTitle(company, title)) {
+                        console.log(`[REJECT] ${title} at ${company} (Built In) - Company/Title already exists`);
+                        continue;
+                    }
+
+                    jobs.push({ company, title, url, description: '', source: 'Built In' });
+                    console.log(`[FOUND] ${title} at ${company} (Built In)`);
+                } catch (cardErr) {
+                    console.log(`[LOG] Built In card process failed: ${cardErr}`);
+                }
+            }
+        } catch (err) {
+            console.log(`[LOG] Built In scrape failed for ${target.label}: ${err}`);
+        }
+        
+        // Pause briefly between endpoints to protect browser session health
+        await humanWait(1500, 3000);
     }
 
     return jobs;
@@ -1089,8 +946,8 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
         });
         const page = context.pages()[0] || await context.newPage();
 
-        const liResult = await runWithHealth('LinkedIn', () => scoutLinkedIn(page));
-        healthLog.push(liResult.health);
+        console.log('[LOG] LinkedIn: Bypassed (Permanently decommissioned due to security-risk directives)');
+        healthLog.push({ name: 'LinkedIn', status: 'skipped', found: 0, durationMs: 0, error: 'Decommissioned' });
 
         const biResult = await runWithHealth('BuiltIn', () => scoutBuiltIn(page));
         healthLog.push(biResult.health);
@@ -1098,7 +955,7 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
         const lvResult = await runWithHealth('Levels.fyi', () => scoutLevelsFyi(page));
         healthLog.push(lvResult.health);
 
-        browserJobs = [...liResult.jobs, ...biResult.jobs, ...lvResult.jobs];
+        browserJobs = [...biResult.jobs, ...lvResult.jobs];
         await context.close();
     } catch (err) {
         console.log(`[WARN] Browser init failed. Skipping LinkedIn + BuiltIn + Levels.fyi: ${err}`);

@@ -48,3 +48,9 @@ docs/PROJECT_DEEP_DIVE.md
 .claude/
 settings.local.json
 *.sqlite*
+
+# User/Auditor custom ignores
+tmp_audit.txt
+audit_report.md
+data/scouted_jobs_log.txt
+*.csv

@@ -11,17 +11,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/JasonWayneT/JobHuntAgent.git"
-  },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/JasonWayneT/JobHuntAgent/issues"
-  },
-  "homepage": "https://github.com/JasonWayneT/JobHuntAgent#readme",
   "dependencies": {
     "@toast-ui/editor": "^3.2.2",
     "@toast-ui/react-editor": "^3.2.3",

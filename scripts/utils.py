@@ -34,8 +34,9 @@ RESUME_BEST_PRACTICES = os.path.join(DATA_DIR, "resume-conversion-best-practices
 CL_BEST_PRACTICES = os.path.join(DATA_DIR, "cover-letter-conversion-best-practices.md")
 CANDIDATE_PREFERENCES_FILE = os.path.join(DATA_DIR, "candidate_preferences.json")
 
-# Default LLM model for the pipeline (using lite due to 20-req/day cap on standard flash)
-DEFAULT_MODEL = "gemini-2.5-flash-lite"
+# Default LLM model for the pipeline (using 2.0-flash to escape 2.5-exp's 20 RPD cap)
+# Implements BUG-009
+DEFAULT_MODEL = "gemini-2.0-flash"
 
 # Max JD characters to send to LLM for scoring (token budget gate)
 SCORING_JD_MAX_CHARS = 1500

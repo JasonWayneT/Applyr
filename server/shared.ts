@@ -42,7 +42,9 @@ const DEFAULT_PIPELINE_PREFERENCES = {
 // Reads all API keys from SQLite at spawn time — never from .env.
 // Python's load_dotenv() does not override existing env vars, so DB values always win.
 export function buildPythonEnv(): Record<string, string> {
-  const extra: Record<string, string> = {};
+  const extra: Record<string, string> = {
+    PYTHONUNBUFFERED: "1", // Forces immediate flush of stdout to prevent Node buffering lag
+  };
   try {
     const llmRow = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as any;
     if (llmRow?.value) {

@@ -73,6 +73,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-078` | `CR-009` | `FEAT-001` | `scripts/scout_local.ts` | accepted |
 | `FR-079` | `CR-009` | `FEAT-001` | `scripts/scout_local.ts` | accepted |
 | `FR-080` | `CR-010` | `FEAT-001` | `scripts/scout_local.ts` | accepted |
+| `BUG-009` | Rate Limit | `BUG-009` | `scripts/utils.py`, `scripts/research-engine.py` | implemented |
 
 ## Coverage checklist
 

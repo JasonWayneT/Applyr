@@ -43,12 +43,13 @@ def fetch_company_intel_perplexity(company, role, prompt, settings=None):
 
 
 def fetch_company_intel_gemini(company, role, prompt):
-    print(f"Fetching intelligence for {company} - {role} using Gemini 2.5 Flash Search...")
+    # Implements BUG-009
+    print(f"Fetching intelligence for {company} - {role} using Gemini 2.0 Flash Search...")
 
     result = call_llm(
         system_prompt="You are a corporate intelligence agent. Return output in VALID JSON format ONLY. Do not include markdown code blocks like ```json in your response. Ensure the output is strictly valid JSON.",
         user_prompt=prompt,
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.0-flash",
         temperature=0.2,
         tools=[{"google_search": {}}]
     )

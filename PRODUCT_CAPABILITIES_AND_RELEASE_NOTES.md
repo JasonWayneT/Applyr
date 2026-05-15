@@ -34,6 +34,26 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.1.1
+Applyr Release
+May 14, 2026
+
+Version 6.1.1, hotfix deployed on May 14, 2026
+
+Previous
+Applyr 6.1
+
+Next
+Applyr 6.2 (Planned)
+
+Fixed
+- **Gemini 2.5 Experimental 429 Rate Limit Guard (BUG-009):** Mitigated recurring `429 Resource Exhausted` cascades triggered by Google's restrictive daily quota on the Gemini 2.5 experimental family. Downgraded default cloud model synthesis routing from `gemini-2.5-flash-lite` to stable `gemini-2.0-flash` (Public Preview). This expands Jason's daily free-tier processing ceiling from **20 requests per day** back to the massive **1,500 requests per day** limit (a 75x headroom boost) and restores multi-threaded background batch crawlers without operational lockout.
+
+Developer
+- **SDD Compliance Updates:** Formally logged bug specification `BUG-009-gemini-experimental-rate-limits.md` and registered updated integration bindings inside `traceability-matrix.md`.
+
+---
+
 ### 6.1
 Applyr Release
 May 14, 2026

@@ -3,8 +3,8 @@ import re
 import json
 import subprocess
 import verify_claims as determinator
-from utils import (load_file, call_llm, is_local_primary, SUBMISSIONS_DIR,
-                   RESUME_MASTER_FILE, COVER_LETTER_REF_FILE,
+from utils import (load_file, call_llm, is_local_primary, get_verifier_model,
+                   SUBMISSIONS_DIR, RESUME_MASTER_FILE, COVER_LETTER_REF_FILE,
                    RESUME_STYLE_REF_FILE, CLAIM_VERIFIER_FILE,
                    WORK_EXP_FILE, RESUME_BEST_PRACTICES,
                    CL_BEST_PRACTICES)
@@ -405,17 +405,22 @@ def llm_verify_claims(draft_text, work_exp, claim_verifier_rules):
     user_prompt = f"""
     RULES:
     {claim_verifier_rules}
-    
+
     GROUND TRUTH:
     {work_exp}
-    
+
     TEXT TO AUDIT:
     {draft_text}
-    
+
     Perform the verification. If high-risk flags exist, rewrite the sentence to be accurate.
     Return ONLY the final corrected markdown text. Do not output 'FAILED CLAIM' unless explicitly asked, just fix it in the final output directly to ensure the pipeline can proceed automatically with corrected text.
     """
-    result = call_llm(system_prompt, user_prompt, provider_override=['gemini', 'local'])
+    # Route local verification to the smaller, faster verifier model (phi3.5 by default).
+    # Gemini still takes priority when configured; the model pin only applies to local calls.
+    verifier_model = get_verifier_model()
+    result = call_llm(system_prompt, user_prompt,
+                      model=verifier_model,
+                      provider_override=['gemini', 'local'])
     if not result:
         print("    [Audit Warning] Claim Verifier returned empty. Using original draft.")
         return draft_text

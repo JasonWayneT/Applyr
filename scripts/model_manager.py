@@ -26,18 +26,17 @@ def get_free_vram_mb():
 def select_model(settings=None):
     """
     Dynamically selects the local model based on available free VRAM.
-    Threshold is 10 GB (10240 MB).
-    Primary: ministral-3-14b:latest
-    Fallback: gemma4-e4b:latest
+    Threshold is 7.5 GB (7500 MB) — sized for llama3.1:8b-q5_K_M (~6GB) with headroom.
+    Primary: llama3.1:8b-instruct-q5_K_M
+    Fallback: phi3.5:3.8b-mini-instruct-q8_0
     """
     if settings is None:
-        # Avoid circular import if needed, but generally safe to import here or pass
         settings = {}
-        
+
     # Define default thresholds and models
-    threshold_mb = settings.get("vram_threshold_mb", 10240) # 10 GB
-    primary_model = settings.get("localModel") or "ministral-3-14b:latest"
-    fallback_model = settings.get("localFallbackModel") or "gemma4-e4b:latest"
+    threshold_mb = settings.get("vram_threshold_mb", 7500)  # 7.5 GB
+    primary_model = settings.get("localModel") or "llama3.1:8b-instruct-q5_K_M"
+    fallback_model = settings.get("localFallbackModel") or "phi3.5:3.8b-mini-instruct-q8_0"
     
     free_vram = get_free_vram_mb()
     
@@ -93,7 +92,7 @@ def unload_all_models(base_url="http://localhost:11434"):
         
     # Fallback to hardcoded expected models if query fails
     if not loaded_models:
-        loaded_models = {"ministral-3-14b:latest", "gemma4-e4b:latest", "llama3"}
+        loaded_models = {"llama3.1:8b-instruct-q5_K_M", "phi3.5:3.8b-mini-instruct-q8_0", "llama3"}
         
     print(f"\n[Model Manager] Dispatching unload signal to reclaim VRAM from: {', '.join(loaded_models)}...", file=sys.stderr)
     

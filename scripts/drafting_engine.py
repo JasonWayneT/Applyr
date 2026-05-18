@@ -415,12 +415,13 @@ def llm_verify_claims(draft_text, work_exp, claim_verifier_rules):
     Perform the verification. If high-risk flags exist, rewrite the sentence to be accurate.
     Return ONLY the final corrected markdown text. Do not output 'FAILED CLAIM' unless explicitly asked, just fix it in the final output directly to ensure the pipeline can proceed automatically with corrected text.
     """
-    # Route local verification to the smaller, faster verifier model (phi3.5 by default).
-    # Gemini still takes priority when configured; the model pin only applies to local calls.
+    # BUG-010: local self-audit is unreliable — use Gemini when available.
+    # In local-only mode, route to the dedicated verifier model (phi3.5 by default).
     verifier_model = get_verifier_model()
+    providers = ['local'] if is_local_primary() else ['gemini']
     result = call_llm(system_prompt, user_prompt,
                       model=verifier_model,
-                      provider_override=['gemini', 'local'])
+                      provider_override=providers)
     if not result:
         print("    [Audit Warning] Claim Verifier returned empty. Using original draft.")
         return draft_text

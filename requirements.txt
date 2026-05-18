@@ -3,3 +3,4 @@ google-genai
 playwright
 Markdown
 requests
+types-requests

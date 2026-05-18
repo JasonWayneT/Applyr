@@ -1,0 +1,11 @@
+# Pyrefly configuration for JobAgent
+# Points the type checker at the Python 3.12 interpreter where
+# project dependencies (python-dotenv, google-genai, etc.) are installed.
+
+python_interpreter = "C:\\Users\\Jason\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
+
+# scripts/ is both the target to check AND the import root — scripts import
+# each other directly (e.g. `import utils`, `import model_manager`)
+project_includes = ["scripts"]
+project_excludes = ["node_modules", "dist", ".claude", "archive", "scratch"]
+search_path = ["scripts"]

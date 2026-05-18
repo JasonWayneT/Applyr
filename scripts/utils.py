@@ -210,15 +210,18 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
     import model_manager
     
     base_url = settings.get('localUrl', 'http://localhost:11434')
-    
-    # Select the appropriate model tier dynamically based on available VRAM
-    target_model = model_manager.select_model(settings)
-    models_to_try = [target_model]
-    
-    # Add fallback if selected was primary, or vice versa
-    fallback = settings.get('localFallbackModel') or 'gemma4-e4b:latest'
-    if target_model != fallback:
-        models_to_try.append(fallback)
+
+    # If caller explicitly pins a model (e.g. verifier using phi3.5), honour it directly.
+    # Otherwise select dynamically based on available VRAM.
+    fallback = settings.get('localFallbackModel') or 'phi3.5:3.8b-mini-instruct-q8_0'
+    if model:
+        target_model = model
+        models_to_try = [model]
+    else:
+        target_model = model_manager.select_model(settings)
+        models_to_try = [target_model]
+        if target_model != fallback:
+            models_to_try.append(fallback)
 
     # ANTI-HALLUCINATION CONSTRAINT PREFIX
     # Small models (7B-14B) benefit most from explicit negative constraints in the system message.
@@ -387,6 +390,12 @@ def is_local_primary():
     settings = load_llm_settings()
     providers = _get_configured_providers(settings)
     return providers == ['local'] or (len(providers) == 1 and 'local' in providers)
+
+
+def get_verifier_model() -> str:
+    """Returns the configured local verifier model, defaulting to phi3.5."""
+    settings = load_llm_settings()
+    return settings.get('localVerifierModel') or 'phi3.5:3.8b-mini-instruct-q8_0'
 
 
 def unload_local_models():

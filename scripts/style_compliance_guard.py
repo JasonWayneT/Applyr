@@ -201,6 +201,30 @@ def normalize_education_section(content: str) -> str:
     return _BAD_EDU_RE.sub(_CANONICAL_BBA, content)
 
 
+_AI_FINGERPRINT_TRANSITIONS = re.compile(
+    r'\b(furthermore|moreover|additionally),?\s*',
+    re.IGNORECASE,
+)
+
+_AI_FINGERPRINT_WORDS = {
+    'synergy': 'collaboration',
+    'synergies': 'collaboration',
+    'leverage': 'use',
+    'leveraging': 'using',
+    'leveraged': 'used',
+    'passionate': 'dedicated',
+    'passionately': 'dedicatedly',
+}
+
+
+def remove_ai_fingerprints(content: str) -> str:
+    """Strip transition filler words and replace AI-signature vocabulary."""
+    content = _AI_FINGERPRINT_TRANSITIONS.sub('', content)
+    for bad, good in _AI_FINGERPRINT_WORDS.items():
+        content = re.sub(rf'\b{bad}\b', good, content, flags=re.IGNORECASE)
+    return content
+
+
 def strip_html_wrappers(content):
     """Strip legacy HTML wrappers and convert them back to pure standard Markdown."""
     content = re.sub(r'<div[^>]*>', '', content, flags=re.IGNORECASE)
@@ -315,6 +339,7 @@ def run_guard(file_path):
     # Strip HTML and restore to pure Markdown
     content = strip_html_wrappers(content)
     content = clean_escapes(content)
+    content = remove_ai_fingerprints(content)
 
     # Strip unfilled template placeholders (applies to all doc types)
     content = strip_placeholders(content)

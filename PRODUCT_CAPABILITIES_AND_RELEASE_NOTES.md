@@ -34,6 +34,27 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.1
+Applyr Release
+May 18, 2026
+
+Version 6.2.1, hotfix deployed on May 18, 2026
+
+Previous
+Applyr 6.1.1
+
+Next
+Applyr 6.3 (Planned)
+
+Fixed
+- **False-Alarm Stderr Logging Errors (BUG-010):** Addressed Express orchestrator intercepting all stderr buffers from subprocess runs and unconditionally tagging them as critical pipeline `ERROR` entries. Introduced a robust `handleStderr` log routing helper in `server/scout.ts` that filters out safe deprecation warnings, cleanly parses informational debug logs (`[Model Manager]`, `[LLM]`, `[Research]`, etc.) to register under `INFO`, routes warnings to `WARN`, and isolates only legitimate traceback errors under `ERROR`.
+- **Local Self-Audit Resume Corruption (BUG-010):** Resolved a failure where the drafting engine called the primary local model (`ministral-3-14b`) to audit its own resume output. Because local models lack the reasoning capacity to audit large files under strict constraints, it returned unstructured text, failing zero-tolerance structural QA checks and causing a `Sync stopped due to stage error` crash. Locked `llm_verify_claims` to cloud providers (`provider_override=['gemini']`) to ensure high-fidelity audits always utilize cloud models when configured, bypassing unreliable local self-auditing.
+
+Developer
+- **SDD Integrity:** Codified bug specification `BUG-010-false-alarm-stderr-errors.md`, added tracing rows to `traceability-matrix.md`, and marked tasks complete in `task.md` with explicit `# Implements BUG-010` comments in code.
+
+---
+
 ### 6.1.1
 Applyr Release
 May 14, 2026

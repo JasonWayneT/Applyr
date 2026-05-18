@@ -39,6 +39,40 @@ function updateCheckpoint(runId: string, stage: string, statusMsg: string) {
   db.prepare(`UPDATE system_status SET status = 'scout_running', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(statusMsg);
 }
 
+/**
+ * Route subprocess stderr lines to INFO, WARN, or ERROR based on their prefixes or content.
+ * Implements BUG-010
+ */
+function handleStderr(source: string, stderr: string) {
+  const trimmed = stderr.trim();
+  if (!trimmed) return;
+  
+  const lines = trimmed.split('\n');
+  for (const line of lines) {
+    const clean = line.trim();
+    if (!clean || clean.includes('DeprecationWarning')) continue;
+    
+    const isInfo = clean.includes('[Model Manager]') || 
+                   clean.includes('[LLM]') || 
+                   clean.includes('[Research]') ||
+                   clean.includes('[Drafting]') ||
+                   clean.includes('[Audit]') ||
+                   clean.includes('[Export]') ||
+                   clean.includes('[Phase 1]') ||
+                   clean.includes('[Phase 2]') ||
+                   clean.includes('[GUARD]') ||
+                   clean.includes('[HARD FACT AUDIT]');
+                   
+    if (isInfo) {
+      logActivity('INFO', source, clean);
+    } else if (clean.toLowerCase().includes('warning') || clean.includes('[Audit Warning]') || clean.includes('[Local Warning]')) {
+      logActivity('WARN', source, clean);
+    } else {
+      logActivity('ERROR', source, `Engine Stderr: ${clean}`);
+    }
+  }
+}
+
 export const runScoutSync = async () => {
   const extraEnv = buildPythonEnv();
 
@@ -83,7 +117,7 @@ export const runScoutSync = async () => {
           else if (line.trim()) logActivity('INFO', 'Scout', line.trim());
         }
       }, (stderr) => {
-        if (stderr.trim() && !stderr.includes('DeprecationWarning')) logActivity('ERROR', 'Scout', `Engine Stderr: ${stderr.trim()}`);
+        handleStderr('Scout', stderr);
       });
 
       if (code !== 0) throw new Error(`Scout stage exited with non-zero code ${code}`);
@@ -98,7 +132,7 @@ export const runScoutSync = async () => {
       const code = await spawnProcessAsync('npx', ['tsx', 'scripts/archive/backfill_urls.ts'], extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Crawler', line.trim()));
       }, (stderr) => {
-        if (stderr.trim() && !stderr.includes('DeprecationWarning')) logActivity('ERROR', 'Crawler', `Engine Stderr: ${stderr.trim()}`);
+        handleStderr('Crawler', stderr);
       });
 
       if (code !== 0) throw new Error(`Backfill stage exited with non-zero code ${code}`);
@@ -113,7 +147,7 @@ export const runScoutSync = async () => {
       const code = await spawnProcessAsync('npx', ['tsx', 'scripts/scrape_new_jobs.ts'], extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Scraper', line.trim()));
       }, (stderr) => {
-        if (stderr.trim() && !stderr.includes('DeprecationWarning')) logActivity('ERROR', 'Scraper', `Engine Stderr: ${stderr.trim()}`);
+        handleStderr('Scraper', stderr);
       });
 
       if (code !== 0) throw new Error(`Scrape stage exited with non-zero code ${code}`);
@@ -137,8 +171,9 @@ export const runScoutSync = async () => {
           logActivity('INFO', 'Pipeline', clean);
         }
       }, (stderr) => {
-        if (stderr.trim()) logActivity('ERROR', 'Pipeline', `Engine Stderr: ${stderr.trim()}`);
+        handleStderr('Pipeline', stderr);
       });
+
 
       if (code !== 0) throw new Error(`Evaluation stage exited with non-zero code ${code}`);
     }

@@ -6,7 +6,7 @@ Welcome to the definitive product capabilities registry and release ledger for *
 
 ## Part 1: Core System Capabilities (Today)
 
-Applyr is a highly specialized, local-first intelligence platform designed to automate the job search lifecycle—from automated discovery and deterministic fit filtering to bespoke resume drafting, WYSIWYG visual asset editing, and application lifecycle tracking.
+Applyr is a highly specialized, local-first intelligence platform designed to automate the job search lifecycle—from automated discovery and deterministic fit filtering to bespoke resume drafting, WYSIWYG visual asset editing, and application lifecycle tracking. All provider credentials and search preferences live in a local SQLite database configured through the Settings UI—no `.env` file required.
 
 ### 1. Automated Job Scouting & Crawling Pipeline
 *   **Multi-Platform Scraping Engine:** Orchestrates automated web crawls across major networks (LinkedIn, Built In, and direct company career portals) using localized selenium/playwright tasks.
@@ -19,8 +19,14 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 *   **Anchor Safeguard Room:** Validates that a role contains at least two core overlaps (Platform stability, complex migrations, security compliance, or enterprise B2B workflows) before allowing a greenlight.
 
 ### 3. Bespoke Asset Generation (The Bridge)
-*   **The "Hallucination" Guard:** A cynical auditor that strictly verifies that every metric, tool, or team responsibility claimed in generated documents is 100% grounded in `data/workExperience.md` to prevent AI seniority inflation.
-*   **Custom Asset Pack Compilation:** Synthesizes professional resumes, cover letters, and interview cheat sheets tailored precisely to the job description keywords using the Company DNA research.
+*   **Claim Composition Engine (CR-017):** Default `DRAFT_MODE=compose` builds bullets from the `workExperience.md` ACC catalog with VOC replacements and JD bridge prefixes—no per-claim LLM rewrite unless `legacy_llm` is set. `verification_chain` and `recruiter_qa` fail closed before PDFs ship.
+*   **Unified Draft Compiler (CR-014):** One code-owned pipeline (`scripts/draft_compiler.py`) for local-first deployments. LLMs optionally power JD profile JSON and claim selection; summary, cover letter, section order, char budget, and PDF assembly are deterministic templates.
+*   **Per-Claim Tailoring with Fail-Closed Gates:** Compose-mode bullets pass numeric, tool-block, and seniority-inflation checks; failures use sanitized catalog text. `verify_content` errors block the pipeline instead of logging warnings only.
+*   **The "Hallucination" Guard:** `verify_content()` runs on resume text with claim IDs before tags are stripped; `validate_hard_facts()` and `style_compliance_guard` enforce ground truth from `data/workExperience.md` and the master resume. Cloud self-audit (`llm_verify_claims`) is retired for compiler output.
+*   **JD-Aware Selection:** `JdProfile` (validated JD extract) plus fit-engine `Summary` scores and ranks claims per employer before bullets are generated.
+*   **Audit Trail:** Each submission folder receives `draft_manifest.json` listing selected claim IDs, bullet IDs, fallback counts, and `pipeline_version` for reproducibility.
+*   **Resilient Batch Drafting:** `batch_pipeline.py` catches per-job drafting failures, marks jobs `Needs Retry` (up to 3 auto-retries), and continues the queue instead of halting the entire sync.
+*   **Research vs. Resume Separation:** Company DNA / Perplexity research feeds interview cheat sheets only—it is not injected into resume or cover letter body text.
 
 ### 4. Live Visual Document Workspace
 *   **Inline Action Triggers:** Consolidates all file-level actions. Standard PDF download and visual editing triggers reside inline as side-by-side controls within each asset row.
@@ -30,9 +36,146 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 *   **Background Single-File PDF Compiler:** Initiates sub-second compilation processes to write edited Markdown directly to the file system and instantly regenerate high-quality PDF binaries.
 *   **Setting-Gated AI Copywriter:** Displays an LLM instruction input panel in the editor workspace if a Gemini API key is linked in Settings, enabling direct, prompt-based document rewrites.
 
+### 5. Settings & Local-First Credential Management
+*   **SQLite as the sole secrets store:** Gemini, Claude, Perplexity, local LLM URL/models, and Adzuna credentials are saved through **Settings → API or Connections** into `jobagent.sqlite` (`profiles.llm_settings` and `profiles.api_connections`). No `.env` file is required or read.
+*   **In-process key resolution:** Python scripts call `load_llm_settings()`; the scout reads Adzuna keys directly from SQLite. Child processes are not passed API keys via environment variables.
+*   **Job search materialization:** Saving **Job Search** preferences writes to SQLite and projects `data/candidate_preferences.json` for pipeline scripts (gitignored runtime file).
+*   **Optional ATS queue file:** Manual outbound-application URLs can be maintained in `data/ats-pipeline.md` and listed via `GET /api/ats-pipeline`.
+
 ---
 
 ## Part 2: Release Ledger
+
+### 6.2.9
+
+**New**
+- **Doppler Secret Injection (SEC-005):** Integrated the Doppler CLI to securely inject secrets (`GEMINI_API_KEY`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, `OLLAMA_HOST`) via environment variables at runtime (`npm run dev:doppler`), entirely decoupling sensitive strings from the local SQLite database.
+- **Tailscale Overlay Support (NFR-006):** Exposed the Vite client and Express server to bind to `0.0.0.0` rather than `localhost`, enabling secure overlay network access (e.g. Tailscale or Cloudflare Tunnels) for "Thin Client" laptop usage while desktop hardware runs workloads.
+- **Smart Setting Redaction:** Designed a dynamic UI mechanism (`/api/env_status`) to automatically detect when environment variables are actively injected by Doppler. Passwords inputs are conditionally replaced by secure "Managed via Doppler" lock badges.
+
+**Changed**
+- Fallback logic safely permits usage of the local `jobagent.sqlite` identity store when Doppler is not active, seamlessly bridging owner and non-owner workflows without application disruption.
+
+### 6.2.8
+
+**Changed**
+- **Zero-touch draft polish (CR-018 / FR-105–108):** Sentence-aware bullet fitting (`bullet_fit.py`, 28-word cap), at most one JD bridge per resume, bridge stripping on cover proof lines, fresh Backlog summaries on successful draft, and template-first interview cheat sheets (`CHEAT_SHEET_MODE=template` default).
+
+**Developer**
+- `scripts/refresh_backlog_summaries.py` one-time DB summary refresh for existing Backlog rows.
+- Extended `recruiter_qa`, `audit_opportunities`, and `smoke_draft_compiler` for AC-106–110 checks.
+
+### 6.2.7
+
+**Changed**
+- **Local claim composition (CR-017 / FR-100–104):** New `claim_catalog`, `claim_composer`, `verification_chain`, and `recruiter_qa` modules. Draft compiler v `CR-017-1` defaults to compose mode, strips all fact ID token formats, fixes resume `## EDUCATION` header (no `& CERTIFICATIONS`), and uses DB company names on cover letters.
+- **Local-first LLM routing:** `llm_stages` prefers local providers; fit evaluation in `batch_pipeline` respects `LOCAL_ONLY_MODE` and `primaryProvider: local`.
+
+**Developer**
+- Set `DRAFT_MODE=legacy_llm` to restore per-claim LLM bullet rewrites. Smoke tests extended in `scripts/smoke_draft_compiler.py`.
+- SDD: `IMP-CR-017`, `FEAT-012`/`FEAT-004`/`DESIGN-002` updated; AC-100–105 in requirements registry.
+
+### 6.2.6
+Applyr Release
+May 21, 2026
+
+Version 6.2.6, deployed on May 21, 2026
+
+Previous
+Applyr 6.2.5
+
+**Fixed**
+- **Submissions folder hygiene (BUG-014, FR-030):** Applied and Closed roles no longer leave duplicate or stub folders in `submissions/`. Archiving merges into existing `archive/submissions/` copies instead of failing when the destination already exists. Server startup and `POST /api/jobs/reconcile-submissions` sweep stale folders; `has_assets` now checks archive paths for submitted jobs.
+
+**Developer**
+- Added `server/submissionFolders.ts` and `scripts/reconcile_submissions.py` for manual reconciliation.
+
+### 6.2.5
+Applyr Release
+May 19, 2026
+
+Version 6.2.5, deployed on May 19, 2026
+
+Previous
+Applyr 6.2.4
+
+Next
+Applyr 6.3 (Planned)
+
+**Changed**
+- **SQLite-only secrets (CR-015, FR-095):** All API and data-source keys are read from `jobagent.sqlite` at runtime. Removed `.env`, `dotenv`, `python-dotenv`, and env-var key injection into child processes. Configure everything in **Settings → API or Connections** — no manual env files.
+
+**Fixed**
+- **Stale `.env` confusion:** Keys in a local `.env` are no longer consulted; Settings UI is the only supported configuration path, matching the product’s local-first security model.
+
+**Developer**
+- `buildPythonEnv()` now sets only `PYTHONUNBUFFERED` (no `GEMINI_API_KEY` / `ADZUNA_*` shuttle).
+- `scripts/scout_local.ts` loads `api_connections` from SQLite; `scripts/utils.py` adds `load_api_connections()`.
+- Deleted `.env.example`; `scripts/test_llm.py` reads Gemini from SQLite.
+
+### 6.2.4
+Applyr Release
+May 19, 2026
+
+Version 6.2.4, deployed on May 19, 2026
+
+Previous
+Applyr 6.2.3
+
+Next
+Applyr 6.2.5
+
+**Changed**
+- **Root folder cleanup:** Removed vendored `career-ops-main/` tree; ATS manual queue lives at `data/ats-pipeline.md`. Legacy docs moved to `docs/legacy/`. OpenPostings zip extracted to `OpenPostings-extracted/` (zip removed locally).
+
+**Developer**
+- `.gitignore`: `/archive/` only at repo root (fixes `docs/legacy/` being ignored); added `job_hunter.db`, `jobagent_temp.sqlite`, WAL files, `OpenPostings-main.zip`, `career-ops-main/`.
+- Deleted orphan DBs and temp audit files; `GET /api/ats-pipeline` now reads `data/ats-pipeline.md`.
+
+### 6.2.3
+Applyr Release
+May 19, 2026
+
+Version 6.2.3, deployed on May 19, 2026
+
+Previous
+Applyr 6.2.2
+
+Next
+Applyr 6.2.4
+
+**Changed**
+- **Drafting codebase consolidation:** Removed superseded dual-path modules (`local_draft_pipeline.py`, `batch_pipeline_new_only.py`, `repair_resume_content.py`) and dead helpers (`is_local_primary`, `build_draft_manifest`, `group_bullets_by_employer`). Bullet generation now lives in `scripts/bullet_generation.py`.
+
+**Developer**
+- Traceability matrix and requirements registry updated: `FR-082` / `083` / `086` / `088` / `093` now point at `draft_compiler.py` and `bullet_generation.py`.
+- `scripts/smoke_draft_compiler.py` passes after cleanup; README script index lists the unified compiler modules.
+
+### 6.2.2
+Applyr Release
+May 19, 2026
+
+Version 6.2.2, deployed on May 19, 2026
+
+Previous
+Applyr 6.2.1
+
+Next
+Applyr 6.2.3
+
+**Changed**
+- **Unified Draft Compiler (CR-014, FR-089–094):** Gemini and local LLMs now run the same `draft_compiler` stage graph—`JdProfile` → claim selection → per-claim bullets (bridge phrases + gates) → deterministic summary/cover templates → `verify_content` → QA/PDF → `draft_manifest.json`. Removed monolithic `_run_gemini_monolithic_draft` and separate cloud vs local routing in `run_drafting_engine`.
+- **Per-stage LLM routing:** `call_llm_stage(stage_id)` tries providers in stage-specific order (typically `['gemini','local']`) so quota or timeout on one model does not require a different pipeline shape.
+- **Research boundary:** Cheat-sheet / company research runs after the resume pack and is excluded from resume and cover body text.
+
+**Fixed**
+- **Batch no longer dies on one bad draft:** Per-job `DraftingPipelineError` handling in `batch_pipeline.py` marks failures as `Needs Retry` (with retry cap) instead of stopping the full sync with `Sync stopped due to stage error`.
+- **Local bullet QA failures:** Missing `PROFESSIONAL SUMMARY` and similar structural gaps are repaired via `repair_resume_markdown()` inside the compiler before hard QA, with deterministic fallbacks when LLM bullets fail gates.
+
+**Developer**
+- New: `scripts/draft_compiler.py`, `scripts/jd_tailoring.py`, `scripts/llm_stages.py`, `scripts/bullet_generation.py`, `data/bridge_phrases.json`, `scripts/smoke_draft_compiler.py`, `scripts/drafting_errors.py`.
+- Retired for compiler output: `llm_verify_claims`, monolithic full-resume cloud generation.
+- Specs: `CR-014-unified-draft-compiler.md`, `FEAT-012` updated, `FR-089`–`FR-094` in requirements registry.
 
 ### 6.2.1
 Applyr Release
@@ -44,9 +187,9 @@ Previous
 Applyr 6.1.1
 
 Next
-Applyr 6.3 (Planned)
+Applyr 6.2.2
 
-Fixed
+**Fixed**
 - **False-Alarm Stderr Logging Errors (BUG-010):** Addressed Express orchestrator intercepting all stderr buffers from subprocess runs and unconditionally tagging them as critical pipeline `ERROR` entries. Introduced a robust `handleStderr` log routing helper in `server/scout.ts` that filters out safe deprecation warnings, cleanly parses informational debug logs (`[Model Manager]`, `[LLM]`, `[Research]`, etc.) to register under `INFO`, routes warnings to `WARN`, and isolates only legitimate traceback errors under `ERROR`.
 - **Local Self-Audit Resume Corruption (BUG-010):** Resolved a failure where the drafting engine called the primary local model (`ministral-3-14b`) to audit its own resume output. Because local models lack the reasoning capacity to audit large files under strict constraints, it returned unstructured text, failing zero-tolerance structural QA checks and causing a `Sync stopped due to stage error` crash. Locked `llm_verify_claims` to cloud providers (`provider_override=['gemini']`) to ensure high-fidelity audits always utilize cloud models when configured, bypassing unreliable local self-auditing.
 

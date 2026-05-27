@@ -5,7 +5,8 @@
 - Feature ID: `FEAT-004`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-004`, `BMAD-SRC-006`
-- Related requirements: `FR-014`, `FR-015`, `FR-016`, `FR-017`, `FR-018`
+- Related requirements: `FR-014`, `FR-015`, `FR-016`, `FR-017`, `FR-018`, `FR-089`–`FR-094`, `FR-100`–`FR-104`
+- Related change requests: `CR-014`, `CR-017`
 
 ## Problem statement
 
@@ -23,6 +24,13 @@ Writing custom resumes for every job is the biggest bottleneck. The system must 
 | `FR-014` | Bridge Logic | Translates Platform → Growth |
 | `FR-015` | Resume Generation | Uses `data/Resume.md` as template |
 | `FR-016` | PDF Export | ATS-optimized |
+| `FR-100`–`FR-104` | Claim composition + verification | See `FEAT-012`, `CR-017` |
+
+## Pipeline entry (current)
+
+- `drafting_engine.run_drafting_engine()` → `draft_compiler.run()` (`CR-014`, `CR-017`).
+- Ground truth: `data/workExperience.md` via `claim_catalog.load_catalog()`.
+- Default bullet path: compose mode (`claim_composer`); not monolithic LLM resume generation.
 
 ## Verification plan
 

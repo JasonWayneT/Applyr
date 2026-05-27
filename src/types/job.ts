@@ -4,7 +4,8 @@ export interface Job {
   title: string;
   url: string;
   score: number | null;
-  status: 'New' | 'Backlog' | 'Drafted' | 'Applied' | 'Recruiter Screen' | 'Core Interviews' | 'Offer and Negotiation' | 'Closed';
+  status: 'New' | 'Backlog' | 'Drafted' | 'Needs Retry' | 'Rejected' | 'Applied' | 'Recruiter Screen' | 'Core Interviews' | 'Offer and Negotiation' | 'Closed';
+  retry_count?: number;
   rejection_stage?: string | null;
   rejection_type?: 'Ghosted' | 'Rejected' | 'Withdrawn' | 'Other' | 'Self-Rejected' | 'No Longer Available' | null;
   outcome_notes?: string | null;

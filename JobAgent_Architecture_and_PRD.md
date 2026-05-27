@@ -70,6 +70,15 @@ If the scout runs in the background, the user needs to know what it is doing.
 *   **Real-Time Polling:** Every 3 seconds, the Frontend asks the Backend: "Do you have any new logs?"
 *   If new logs exist, React adds them to a fake "Terminal" window, and automatically scrolls to the bottom so the user can watch the robot work in real-time.
 
+### 4.4 Bespoke Application Drafting (`scripts/draft_compiler.py`, CR-017)
+When a job passes fit scoring (≥72), the batch pipeline generates tailored resume and cover letter PDFs under `submissions/<company>/`.
+*   **Source of truth:** `data/workExperience.md` is parsed into a structured claim catalog (`ACC-*` accomplishments, `VOC-*` vocabulary map). The AI does not invent facts; it **composes** approved claim text.
+*   **Compose mode (default):** Bullets use JD bridge phrases and plain-language VOC replacements without per-claim LLM rewrites. Optional `DRAFT_MODE=legacy_llm` restores the older rewrite path for experiments.
+*   **Fail-closed verification:** Every draft runs `verify_content`, hard-fact guards, numeric corpus audit, and recruiter QA before the job can reach **Backlog**. Internal fact IDs never appear in final PDFs.
+*   **Local-first:** With `primaryProvider: local` or `LOCAL_ONLY_MODE=1`, fit evaluation and optional micro-stages (JD profile, claim selection) use Ollama only—no cloud drafting on the hot path.
+*   **Audit trail:** `draft_manifest.json` records claim IDs, `display_company`, `draft_mode`, and `verification_passed` for each submission folder.
+*   **CR-018 polish:** Bullets are trimmed at sentence boundaries (28-word soft cap). At most one JD bridge prefix appears on the resume; cover letter proof lines strip bridges. Successful drafts write a canonical Backlog summary (no stale audit errors). Interview cheat sheets are built from research + manifest templates when cloud LLM is unavailable (`CHEAT_SHEET_MODE=template`).
+
 ---
 
 ## 5. The Journey of a Job Posting (Step-by-Step Data Flow)

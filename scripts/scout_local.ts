@@ -1,5 +1,3 @@
-import dotenv from 'dotenv';
-dotenv.config();
 import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Page } from 'playwright';
@@ -42,9 +40,6 @@ const TITLE_BLOCKLIST: string[]     = (prefs.blocked_titles || [
 ]).map((t: string) => t.toLowerCase());
 
 const FRESHNESS_CUTOFF_EPOCH = Math.floor(Date.now() / 1000) - (FRESHNESS_DAYS * 24 * 60 * 60);
-
-const ADZUNA_APP_ID  = process.env.ADZUNA_APP_ID  || '';
-const ADZUNA_APP_KEY = process.env.ADZUNA_APP_KEY || '';
 
 // Implements FR-055 — free-tier rate guard: 25 req/min, 250 req/day
 const MAX_ADZUNA_CALLS_PER_RUN = 10;
@@ -121,6 +116,33 @@ function buildBuiltInTaxonomyUrl(): string {
 }
 
 const DB = new Database(DB_PATH);
+
+function loadApiConnections(db: Database.Database): { adzunaAppId: string; adzunaAppKey: string } {
+    // 1. First priority: Environment variables (Doppler injection)
+    if (process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY) {
+        return {
+            adzunaAppId: process.env.ADZUNA_APP_ID,
+            adzunaAppKey: process.env.ADZUNA_APP_KEY
+        };
+    }
+
+    // 2. Second priority: Local SQLite settings (for other users without Doppler)
+    const row = db.prepare("SELECT value FROM profiles WHERE key = 'api_connections'").get() as any;
+    if (row && row.value) {
+        try {
+            const conns = JSON.parse(row.value);
+            return {
+                adzunaAppId: conns.adzunaAppId || '',
+                adzunaAppKey: conns.adzunaAppKey || '',
+            };
+        } catch (e) {
+            console.error("Failed to parse api_connections:", e);
+        }
+    }
+    return { adzunaAppId: '', adzunaAppKey: '' };
+}
+
+const { adzunaAppId: ADZUNA_APP_ID, adzunaAppKey: ADZUNA_APP_KEY } = loadApiConnections(DB);
 
 interface ScrapedJob {
     company: string;

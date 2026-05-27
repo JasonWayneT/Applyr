@@ -8,10 +8,6 @@ import time
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 # --- Path Constants ---
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JOBS_DIR = os.path.join(PROJECT_ROOT, "jobs")
@@ -34,9 +30,9 @@ RESUME_BEST_PRACTICES = os.path.join(DATA_DIR, "resume-conversion-best-practices
 CL_BEST_PRACTICES = os.path.join(DATA_DIR, "cover-letter-conversion-best-practices.md")
 CANDIDATE_PREFERENCES_FILE = os.path.join(DATA_DIR, "candidate_preferences.json")
 
-# Default LLM model for the pipeline (using 2.0-flash to escape 2.5-exp's 20 RPD cap)
-# Implements BUG-009
-DEFAULT_MODEL = "gemini-2.0-flash"
+# Default cloud model — must have non-zero free-tier quota on the user's AI Studio project.
+# gemini-2.0-flash often returns limit:0 on free tier (see BUG-009); 2.5-flash-lite works.
+DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
 # Max JD characters to send to LLM for scoring (token budget gate)
 SCORING_JD_MAX_CHARS = 1500
@@ -77,6 +73,69 @@ def load_candidate_preferences():
     return {}
 
 
+# --- Rate Limit & Validation Helpers ---
+def check_rate_limits(provider: str) -> bool:
+    """
+    Checks rate limits for a provider via activity_log.
+    Returns True if allowed to proceed, False if provider should be skipped/disabled.
+    Sleeps if approaching RPM limit.
+    """
+    if provider != 'gemini':
+        return True
+        
+    import sqlite3
+    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    try:
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path, timeout=10.0)
+            cursor = conn.cursor()
+            
+            cursor.execute("SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE '%[gemini]%' AND timestamp >= datetime('now', '-24 hours')")
+            daily_calls = cursor.fetchone()[0]
+            if daily_calls >= 1400:
+                print(f"    [Circuit Breaker] Gemini daily quota exceeded ({daily_calls}/1500). Disabling Gemini for 24h.", file=sys.stderr)
+                conn.close()
+                return False
+                
+            cursor.execute("SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE '%[gemini]%' AND timestamp >= datetime('now', '-1 minute')")
+            minute_calls = cursor.fetchone()[0]
+            
+            cursor.execute("INSERT INTO activity_log (level, source, message) VALUES ('INFO', 'LLM_Call', '[gemini] API request initiated')")
+            conn.commit()
+            conn.close()
+            
+            if minute_calls >= 14:
+                print(f"    [Circuit Breaker] Gemini RPM approaching limit ({minute_calls}/15). Sleeping 60s...", file=sys.stderr)
+                time.sleep(60)
+                
+    except Exception as e:
+        print(f"    [Circuit Breaker Error] {e}", file=sys.stderr)
+        
+    return True
+
+
+def extract_json_from_text(text: str) -> str:
+    """
+    Robustly extracts a JSON object from text, stripping markdown codeblocks
+    and conversational fluff.
+    """
+    import re
+    if not text:
+        return ""
+        
+    text = text.strip()
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        return match.group(0).strip()
+        
+    if text.startswith("```json"):
+        text = text[7:-3].strip()
+    elif text.startswith("```"):
+        text = text[3:-3].strip()
+        
+    return text.strip()
+
+
 def load_file(filepath):
     """Read a text file safely. Returns empty string on failure."""
     try:
@@ -85,6 +144,25 @@ def load_file(filepath):
     except Exception as e:
         print(f"Error reading {filepath}: {e}", file=sys.stderr)
         return ""
+
+
+def load_api_connections():
+    """Reads api_connections from SQLite profiles table. Returns dict or empty dict on failure."""
+    import sqlite3
+    import json
+    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    try:
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM profiles WHERE key = 'api_connections'")
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                return json.loads(row[0])
+    except Exception as e:
+        print(f"Error loading API connections from DB: {e}", file=sys.stderr)
+    return {}
 
 
 def load_llm_settings():
@@ -114,7 +192,7 @@ def _is_configured(provider: str, settings: dict) -> bool:
     if provider == 'claude':
         return bool(settings.get('claudeApiKey') or os.getenv('ANTHROPIC_API_KEY'))
     if provider == 'local':
-        return bool(settings.get('localUrl'))
+        return bool(settings.get('localUrl') or os.getenv('OLLAMA_HOST'))
     if provider == 'perplexity':
         return bool(settings.get('perplexityApiKey') or os.getenv('PERPLEXITY_API_KEY'))
     return False
@@ -201,7 +279,7 @@ def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_r
     return None
 
 
-def _call_local(settings, system_prompt, user_prompt, model, temperature):
+def _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type=None):
     """
     Returns result string on success, None to signal try-next-provider.
     Implements intra-local model fallback chain (e.g. fallback to smaller model if large one hits OOM).
@@ -209,7 +287,7 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
     import requests
     import model_manager
     
-    base_url = settings.get('localUrl', 'http://localhost:11434')
+    base_url = settings.get('localUrl') or os.getenv('OLLAMA_HOST') or 'http://localhost:11434'
 
     # If caller explicitly pins a model (e.g. verifier using phi3.5), honour it directly.
     # Otherwise select dynamically based on available VRAM.
@@ -236,6 +314,8 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
         "6. Output ONLY what was asked. No preamble, no explanations, no footnotes.\n\n"
     )
     enhanced_system = LOCAL_CONSTRAINT_PREFIX + system_prompt
+    
+    anchored_user = user_prompt + "\n\n[SYSTEM REMINDER: You must strictly follow the constraints defined in your system prompt, especially regarding factual accuracy and output formatting.]"
 
     for target_model in models_to_try:
         print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model}...", file=sys.stderr)
@@ -252,18 +332,21 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
                 "model": target_model,
                 "messages": [
                     {"role": "system", "content": enhanced_system},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": anchored_user},
                 ],
                 "options": {
                     "temperature": temperature,
                     "num_ctx": 16384,
-                    "num_predict": 1000,
+                    "num_predict": 4000,
                     "top_k": 40,
                     "top_p": 0.9,
                     "repeat_penalty": 1.1,
                 },
                 "stream": False,
             }
+            if response_mime_type == 'application/json':
+                payload_ollama["format"] = "json"
+                
             res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=180)
             if res_ollama.status_code == 200:
                 res_json = res_ollama.json()
@@ -277,9 +360,11 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature):
                 "temperature": temperature,
                 "messages": [
                     {"role": "system", "content": enhanced_system},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": anchored_user},
                 ],
             }
+            if response_mime_type == 'application/json':
+                payload["response_format"] = {"type": "json_object"}
             res = requests.post(endpoint, json=payload, timeout=180)
             if res.status_code == 200:
                 result = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
@@ -363,6 +448,9 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         return ""
 
     for i, provider in enumerate(providers):
+        if not check_rate_limits(provider):
+            continue
+            
         result = None
         if provider == 'gemini':
             result = _call_gemini(
@@ -373,7 +461,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             # Claude does not support google_search tools — tools param intentionally omitted
             result = _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries)
         elif provider == 'local':
-            result = _call_local(settings, system_prompt, user_prompt, model, temperature)
+            result = _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type)
         elif provider == 'perplexity':
             result = _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retries)
 
@@ -383,13 +471,6 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
 
     return ""
-
-
-def is_local_primary():
-    """Returns True when local Ollama is the only configured LLM provider."""
-    settings = load_llm_settings()
-    providers = _get_configured_providers(settings)
-    return providers == ['local'] or (len(providers) == 1 and 'local' in providers)
 
 
 def get_verifier_model() -> str:

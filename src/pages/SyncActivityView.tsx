@@ -159,7 +159,7 @@ const SyncActivityView: React.FC = () => {
       const res = await fetch(api('/api/jobs'));
       const data = await res.json();
       if (Array.isArray(data)) {
-        setMatchedJobs(data.filter(j => ['Backlog', 'Drafted'].includes(j.status)));
+        setMatchedJobs(data.filter(j => ['Backlog', 'Drafted', 'Needs Retry'].includes(j.status)));
       }
     } catch { /* ignore */ }
   };
@@ -186,10 +186,35 @@ const SyncActivityView: React.FC = () => {
     setDraftingJobId(jobId);
     try {
       await fetch(api(`/api/jobs/${jobId}/draft`), { method: 'POST' });
+      for (let i = 0; i < 120; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        const res = await fetch(api('/api/system-status'));
+        const data = await res.json();
+        if (data?.status !== 'drafting') break;
+      }
       fetchSystemStatus();
       fetchMatchedJobs();
     } catch { /* ignore */ }
     finally { setDraftingJobId(null); }
+  };
+
+  const handleDismissJob = async (jobId: string, mode: 'remove' | 'not_a_fit') => {
+    try {
+      const body =
+        mode === 'remove'
+          ? { status: 'No Longer Available' }
+          : {
+              status: 'Rejected',
+              rejection_type: 'Self-Rejected',
+              outcome_notes: 'Dismissed from Scout — not pursuing',
+            };
+      const res = await fetch(api(`/api/jobs/${jobId}/status`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (res.ok) fetchMatchedJobs();
+    } catch { /* ignore */ }
   };
 
   useEffect(() => {
@@ -526,7 +551,11 @@ const SyncActivityView: React.FC = () => {
                       ? 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
                       : 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
                   }`}>
-                    {job.status === 'Backlog' && job.has_assets ? 'Ready to Apply' : 'Pending Assets'}
+                    {job.status === 'Needs Retry'
+                      ? 'Needs retry'
+                      : job.status === 'Backlog' && job.has_assets
+                        ? 'Ready to Apply'
+                        : 'Pending Assets'}
                   </span>
                 </div>
                 <h4 className="text-sm font-headline font-bold text-on-surface leading-tight">{job.title}</h4>
@@ -534,8 +563,8 @@ const SyncActivityView: React.FC = () => {
                   <span>Score: {job.score || 'N/A'}</span>
                   <span>Discovered: {new Date(job.created_at).toLocaleDateString()}</span>
                 </div>
-                {((job.status === 'Backlog' && !job.has_assets) || job.status === 'Drafted') && (
-                  <div className="mt-2.5 flex justify-end">
+                <div className="mt-2.5 flex flex-wrap justify-end gap-2">
+                  {((job.status === 'Backlog' && !job.has_assets) || job.status === 'Drafted' || job.status === 'Needs Retry') && (
                     <button
                       onClick={() => handleDraftAssets(job.id)}
                       disabled={draftingJobId === job.id || systemStatus.status === 'drafting'}
@@ -544,8 +573,10 @@ const SyncActivityView: React.FC = () => {
                       <span className={`material-symbols-outlined text-[13px] ${draftingJobId === job.id ? 'animate-spin' : ''}`}>auto_fix</span>
                       {draftingJobId === job.id ? 'Drafting...' : 'Draft Assets'}
                     </button>
-                  </div>
-                )}
+                  )}
+                  <button type="button" onClick={() => handleDismissJob(job.id, 'not_a_fit')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Not a fit</button>
+                  <button type="button" onClick={() => handleDismissJob(job.id, 'remove')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Remove</button>
+                </div>
               </div>
             ))}
             {matchedJobs.length === 0 && (

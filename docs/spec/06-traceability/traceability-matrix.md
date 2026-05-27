@@ -27,9 +27,9 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-027` | `BMAD-SRC-001` | `FEAT-006` | `scripts/compile_single.py` | implemented |
 | `FR-028` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
 | `FR-029` | `BMAD-SRC-004` | `FEAT-006` | `src/components/DocumentEditor.tsx` | implemented |
-| `FR-030` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
+| `FR-030` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx`, `server/submissionFolders.ts`, `server/routes/jobs.ts` | implemented |
 | `FR-031` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
-| `FR-032` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
+| `FR-032` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx`, `src/pages/TodayView.tsx` | implemented |
 | `FR-033` | `BMAD-SRC-003` | `FEAT-006` | `server/index.ts` | implemented |
 | `FR-034` | `BMAD-SRC-003` | `FEAT-006` | `src/pages/TodayView.tsx` | implemented |
 | `FR-035` | `BMAD-SRC-005` | `FEAT-002` | `server/scout.ts`, `scripts/batch_pipeline.py` | implemented |
@@ -73,8 +73,37 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-078` | `CR-009` | `FEAT-001` | `scripts/scout_local.ts` | accepted |
 | `FR-079` | `CR-009` | `FEAT-001` | `scripts/scout_local.ts` | accepted |
 | `FR-080` | `CR-010` | `FEAT-001` | `scripts/scout_local.ts` | accepted |
+| `FR-081` | `CR-012` | `FEAT-012` | `scripts/drafting_engine.py` | implemented |
+| `FR-082` | `CR-012` | `FEAT-012` | `scripts/draft_compiler.py` (supersedes local_draft_pipeline) | implemented |
+| `FR-083` | `CR-012` | `FEAT-005` | `scripts/quality_checker.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-084` | `CR-012` | `FEAT-005` | `scripts/drafting_errors.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-085` | `CR-013` | `FEAT-012` | `scripts/local_draft_stages.py` | implemented |
+| `FR-086` | `CR-013` | `FEAT-012` | `scripts/local_draft_stages.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-087` | `CR-013` | `FEAT-012` | `scripts/local_draft_stages.py`, `scripts/drafting_engine.py` | implemented |
+| `FR-088` | `CR-013` | `FEAT-012` | `scripts/local_draft_stages.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-095` | `CR-015` | `FEAT-008` | `server/shared.ts`, `scripts/utils.py`, `scripts/scout_local.ts`, `scripts/research-engine.py` | implemented |
+| `FR-089` | `CR-014` | `FEAT-012` | `scripts/draft_compiler.py`, `scripts/drafting_engine.py` | implemented |
+| `FR-090` | `CR-014` | `FEAT-012` | `scripts/draft_compiler.py` | implemented |
+| `FR-091` | `CR-014` | `FEAT-012` | `scripts/jd_tailoring.py` | implemented |
+| `FR-092` | `CR-014` | `FEAT-005` | `scripts/draft_compiler.py`, `scripts/verify_claims.py` | implemented |
+| `FR-093` | `CR-014` | `FEAT-012` | `scripts/llm_stages.py`, `scripts/bullet_generation.py` | implemented |
+| `FR-094` | `CR-014` | `FEAT-012` | `scripts/draft_compiler.py`, `scripts/jd_tailoring.py` | implemented |
+| `FR-100` | `CR-017` | `FEAT-012` | `scripts/claim_catalog.py` | implemented |
+| `FR-101` | `CR-017` | `FEAT-012` | `scripts/claim_composer.py`, `scripts/bullet_generation.py` | implemented |
+| `FR-102` | `CR-017` | `FEAT-012` | `scripts/verification_chain.py` | implemented |
+| `FR-103` | `CR-017` | `FEAT-012` | `scripts/batch_pipeline.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-104` | `CR-017` | `FEAT-012` | `scripts/recruiter_qa.py` | implemented |
+| `IMP-CR-017` | `CR-017` | `FEAT-012` | `docs/spec/08-implementation/IMP-CR-017-claim-composition-engine.md` | completed |
+| `FR-105` | `CR-018` | `FEAT-012` | `scripts/bullet_fit.py` | implemented |
+| `FR-106` | `CR-018` | `FEAT-012` | `scripts/claim_composer.py`, `scripts/local_draft_stages.py` | implemented |
+| `FR-107` | `CR-018` | `FEAT-012` | `scripts/batch_pipeline.py`, `scripts/refresh_backlog_summaries.py` | implemented |
+| `FR-108` | `CR-018` | `FEAT-012` | `scripts/generate_cheat_sheet.py` | implemented |
 | `BUG-009` | Rate Limit | `BUG-009` | `scripts/utils.py`, `scripts/research-engine.py` | implemented |
 | `BUG-010` | Subprocess Stderr / Local Audit | `BUG-010` | `server/scout.ts`, `scripts/drafting_engine.py` | implemented |
+| `BUG-011` | Pipeline Stall / Queue Clog | `BUG-011` | `scripts/batch_pipeline.py` | in_progress |
+| `BUG-012` | Sync stage error vs pipeline done | `BUG-012` | `server/scout.ts`, `scripts/batch_pipeline.py` | fixed |
+| `CR-011` | Pipeline status vocabulary + auto-requeue | `CR-011` | `scripts/requeue_needs_retry.ts`, `scripts/batch_pipeline.py`, `server/scout.ts`, UI | implemented |
+
 
 ## Coverage checklist
 

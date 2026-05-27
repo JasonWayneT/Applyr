@@ -21,13 +21,17 @@ The cloud-backed LLM tier should accommodate typical user processing volumes (up
 
 Google enforces an extremely restrictive, experimental quota of exactly **20 Requests Per Day (RPD)** for all models residing within the brand-new **Gemini 2.5** experimental family (both Standard and Lite). Switching to standard Gemini 2.0 public preview restores the general availability free quota limits.
 
-## Fix Implementation
+## Fix Implementation (v6.1.1)
 
-Downgraded the global default cloud fallback model to **`gemini-2.0-flash`**:
-1. Modified `DEFAULT_MODEL` in `scripts/utils.py` to target `"gemini-2.0-flash"`.
-2. Updated `scripts/research-engine.py` fallback targeting from `gemini-2.5-flash-lite` to `"gemini-2.0-flash"`.
+Initially switched default to **`gemini-2.0-flash`** to escape Gemini 2.5 experimental 20 RPD caps.
 
-This restores Jason's limits to **1,500 Requests Per Day** (a 75x expansion) and **15 Requests Per Minute** (a 3x speed expansion).
+## Regression (May 2026)
+
+Google AI Studio now returns **`limit: 0`** for `generate_content_free_tier_requests` on **`gemini-2.0-flash`** and **`gemini-2.0-flash-lite`** for many projects — the model is not available on the free tier at all (429 with "quota exceeded" is misleading). **`gemini-2.5-flash`** and **`gemini-2.5-flash-lite`** still work on free tier.
+
+## Current fix
+
+Default cloud model is **`gemini-2.5-flash-lite`** in `scripts/utils.py`, `scripts/research-engine.py`, and `scripts/test_llm.py`. Check live limits at [AI Studio rate limits](https://aistudio.google.com/rate-limit).
 
 ## Verification
 

@@ -124,6 +124,16 @@ router.post('/api/profile/:key', (req, res) => {
   }
 });
 
+router.get('/api/env_status', (req, res) => {
+  res.json({
+    gemini: !!process.env.GEMINI_API_KEY,
+    claude: !!process.env.ANTHROPIC_API_KEY,
+    perplexity: !!process.env.PERPLEXITY_API_KEY,
+    adzuna: !!process.env.ADZUNA_APP_ID && !!process.env.ADZUNA_APP_KEY,
+    localUrl: !!process.env.OLLAMA_HOST
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Work experience
 // ---------------------------------------------------------------------------

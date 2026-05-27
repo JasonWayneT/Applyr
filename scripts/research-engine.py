@@ -2,16 +2,13 @@ import os
 import json
 import requests
 from utils import load_file, call_llm, load_llm_settings, _is_configured, SUBMISSIONS_DIR, RESEARCH_CONTRACT_FILE
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
-# Implements FR-061: Perplexity key read dynamically from llm_settings, not module-level env
+# Implements FR-061 / CR-015: Perplexity key from SQLite llm_settings only
 def fetch_company_intel_perplexity(company, role, prompt, settings=None):
     if settings is None:
         settings = load_llm_settings()
-    api_key = settings.get('perplexityApiKey') or os.getenv('PERPLEXITY_API_KEY')
+    api_key = settings.get('perplexityApiKey')
     if not api_key:
         raise ValueError("Perplexity API Key not configured.")
 
@@ -49,7 +46,7 @@ def fetch_company_intel_gemini(company, role, prompt):
     result = call_llm(
         system_prompt="You are a corporate intelligence agent. Return output in VALID JSON format ONLY. Do not include markdown code blocks like ```json in your response. Ensure the output is strictly valid JSON.",
         user_prompt=prompt,
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash-lite",
         temperature=0.2,
         tools=[{"google_search": {}}]
     )

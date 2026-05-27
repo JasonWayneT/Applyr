@@ -35,7 +35,7 @@ router.post('/api/system-status', (req, res) => {
 
 router.get('/api/ats-pipeline', (_req, res) => {
   try {
-    const pipelinePath = path.join(PROJECT_ROOT, 'career-ops-main/data/pipeline.md');
+    const pipelinePath = path.join(PROJECT_ROOT, 'data/ats-pipeline.md');
     if (!fs.existsSync(pipelinePath)) return res.json({ jobs: [] });
     const content = fs.readFileSync(pipelinePath, 'utf-8');
     const jobs = content

@@ -168,6 +168,10 @@ Backlog → Applied → Recruiter Screen → Core Interviews → Offer & Negotia
 
 When you mark a role as **Applied**, the submission folder is automatically moved to `archive/submissions/`. Closed roles record rejection stage and type for analytics.
 
+### OpenPostings (optional scout source)
+
+To enable the OpenPostings scraper, extract `OpenPostings-main.zip` into `OpenPostings-extracted/OpenPostings-main/` (the zip is gitignored after first extract). Scouts read `OpenPostings-extracted/OpenPostings-main/jobs.db`.
+
 ---
 
 ## Project structure
@@ -175,7 +179,7 @@ When you mark a role as **Applied**, the submission folder is automatically move
 ```
 server/
   index.ts          — Entry point: middleware, router mounts, app.listen (33 lines)
-  shared.ts         — Shared path constants, buildPythonEnv, resolveCompanyFolder, materializeJobSearchPrefs
+  shared.ts         — Shared path constants, buildPythonEnv (PYTHONUNBUFFERED only), resolveCompanyFolder, materializeJobSearchPrefs
   scout.ts          — Scout orchestrator: spawns scout → backfill → scrape → evaluate
   db.ts             — SQLite init, logActivity helper
   routes/
@@ -188,7 +192,10 @@ scripts/
   scout_local.ts    — 7-source parallel job scraper (reads candidate_preferences.json)
   scrape_new_jobs.ts — Fetches full JD text for newly discovered jobs
   batch_pipeline.py — Fit scoring + asset generation engine (--mode batch | single)
-  drafting_engine.py             — Resume/CL drafting (imported by batch_pipeline)
+  drafting_engine.py             — Entry + research + hard-fact guards (delegates to draft_compiler)
+  draft_compiler.py              — Unified resume/cover compiler (CR-014)
+  bullet_generation.py           — Per-claim bullets (Stage 3)
+  jd_tailoring.py / llm_stages.py — JD profile + per-stage LLM routing
   generate_experience_summary.py — Auto-generates scoring brief from workExperience.md (background)
   research-engine.py             — Company intelligence via Perplexity or primary LLM
   compile_single.py              — Markdown → PDF via Playwright
@@ -204,6 +211,7 @@ src/
   components/       — JobDetailPanel, DocumentEditor, SettingsView, Sidebar, ...
 
 data/
+  ats-pipeline.md               — Optional manual ATS queue for GET /api/ats-pipeline
   candidate_preferences.json    — Materialized search/scoring config (auto-written by server)
   workExperience.md             — Full codified work history (edited via Settings > Experience)
   workExperience_summary.md     — Condensed scoring brief (auto-generated on every experience save)
@@ -233,6 +241,7 @@ These scripts are not part of the automated pipeline but are useful for maintena
 
 | Script | Purpose |
 |---|---|
+| `scripts/reconcile_submissions.py` | Archive or remove stale folders in `submissions/` (FR-030) |
 | `scripts/audit_all_submissions.py` | Audit quality of all generated assets |
 | `scripts/regenerate_all_submissions.py` | Bulk regenerate all resumes and cover letters |
 | `scripts/login_linkedin.ts` | Re-authenticate the LinkedIn Playwright session |

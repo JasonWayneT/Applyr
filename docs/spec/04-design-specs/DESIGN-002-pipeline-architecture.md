@@ -4,7 +4,8 @@
 
 - Design spec ID: `DESIGN-002`
 - Status: implemented
-- Related feature specs: `FEAT-001` through `FEAT-005`
+- Related feature specs: `FEAT-001` through `FEAT-005`, `FEAT-012`, `FEAT-004`
+- Related change requests: `CR-014`, `CR-017`
 - Related requirements: `ARCH-001`, `ARCH-002`
 
 ## System Overview
@@ -21,8 +22,9 @@ JobAgent is a hybrid Python/Node system.
 2. `batch_pipeline.py` (Orchestration)
 3. `evaluate_job_fit` (Gating)
 4. `research-engine.py` (Intelligence)
-5. `drafting_engine.py` (Generation)
-6. `claim_verifier.md` (Audit)
+5. `drafting_engine.py` → `draft_compiler.py` (Generation, CR-014/CR-017)
+6. `claim_catalog.py` + `claim_composer.py` (Compose-mode bullets, FR-100–101)
+7. `verification_chain.py` + `recruiter_qa.py` (Fail-closed audit, FR-102/104)
 
 ## Data Flow
 

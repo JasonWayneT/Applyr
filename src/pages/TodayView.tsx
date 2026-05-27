@@ -28,12 +28,17 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status));
   const pipelineJobs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
-  const interviews = jobs
-    .filter(j => j.interview_date && !['Closed'].includes(j.status))
+  const now = Date.now();
+  const upcomingInterviews = jobs
+    .filter(j => {
+      if (!j.interview_date || ['Closed'].includes(j.status)) return false;
+      return new Date(j.interview_date).getTime() > now;
+    })
     .sort((a, b) => new Date(a.interview_date!).getTime() - new Date(b.interview_date!).getTime());
-  
-  const nextInterview = interviews.find(j => new Date(j.interview_date!).getTime() > Date.now()) || interviews[0];
+
+  const nextInterview = upcomingInterviews[0];
   const screenings = jobs.filter(j => j.status === 'Recruiter Screen');
+  const coreInterviews = jobs.filter(j => j.status === 'Core Interviews');
   const offers = jobs.filter(j => j.status === 'Offer and Negotiation');
 
   const getBarHeight = (count: number, total: number) => {
@@ -46,7 +51,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
     { label: 'Backlog', count: backlogs.length, height: getBarHeight(backlogs.length, jobs.length) },
     { label: 'Applied', count: applied.length, height: getBarHeight(applied.length, jobs.length) },
     { label: 'Screening', count: screenings.length, height: getBarHeight(screenings.length, jobs.length) },
-    { label: 'Interviews', count: interviews.length, height: getBarHeight(interviews.length, jobs.length) },
+    { label: 'Interviews', count: coreInterviews.length, height: getBarHeight(coreInterviews.length, jobs.length) },
     { label: 'Offers', count: offers.length, height: getBarHeight(offers.length, jobs.length) },
   ];
 
@@ -267,12 +272,12 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-2xl font-headline font-bold text-on-surface">Upcoming Interviews</h3>
             <div className="flex gap-2">
-              <span className="badge bg-secondary/10 text-secondary text-xs">{interviews.length} Scheduled</span>
+              <span className="badge bg-secondary/10 text-secondary text-xs">{upcomingInterviews.length} Scheduled</span>
             </div>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {interviews.map(job => (
+            {upcomingInterviews.map(job => (
               <div 
                 key={job.id}
                 onClick={() => onJobClick(job)}
@@ -299,7 +304,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
                 </div>
               </div>
             ))}
-            {interviews.length === 0 && (
+            {upcomingInterviews.length === 0 && (
               <div className="col-span-full py-12 bg-surface-container-low/30 border border-dashed border-outline-variant/20 rounded-3xl text-center">
                 <p className="text-on-surface-variant text-sm">No future interviews scheduled.</p>
               </div>
@@ -313,8 +318,8 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
         {[
           { label: 'Total Active', value: activeJobs.length, icon: 'trending_up' },
           { label: 'Screening', value: screenings.length, icon: 'hourglass_top' },
-          { label: 'Interviewing', value: interviews.length, icon: 'record_voice_over', accent: true },
-          { label: 'Response Rate', value: jobs.length > 0 ? `${Math.round((screenings.length + interviews.length + offers.length) / jobs.length * 100)}%` : '0%', icon: 'insights', accent: true },
+          { label: 'Interviewing', value: coreInterviews.length, icon: 'record_voice_over', accent: true },
+          { label: 'Response Rate', value: jobs.length > 0 ? `${Math.round((screenings.length + coreInterviews.length + offers.length) / jobs.length * 100)}%` : '0%', icon: 'insights', accent: true },
         ].map(stat => (
           <div key={stat.label} className="bg-surface-container-lowest rounded-2xl p-6 editorial-shadow">
             <div className="flex items-center justify-between mb-3">

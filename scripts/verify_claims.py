@@ -160,10 +160,12 @@ def preserves_core_facts(source_text, generated_bullet):
 
 
 def strip_ids(content):
-    """Strips claim IDs from generated content so it can be compiled."""
+    """Strips claim IDs from generated content so it can be compiled. Implements FR-100 (CR-017)."""
     # Support both bracket types: [ACC-101] and (ACC-101)
     pattern = re.compile(r"\s*[\[\(](ACC-\d+|MET-\d+|VOC-\d+)[\]\)]\s*")
     cleaned = pattern.sub(" ", content)
+    cleaned = re.sub(r"\|\s*(ACC|MET|VOC)-\d+\s*\|", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(ACC|MET|VOC)-\d+\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"  +", " ", cleaned)
     return cleaned.strip()
 

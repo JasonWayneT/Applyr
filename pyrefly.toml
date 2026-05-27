@@ -1,6 +1,6 @@
 # Pyrefly configuration for JobAgent
 # Points the type checker at the Python 3.12 interpreter where
-# project dependencies (python-dotenv, google-genai, etc.) are installed.
+# project dependencies (google-genai, etc.) are installed.
 
 python_interpreter = "C:\\Users\\Jason\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
 

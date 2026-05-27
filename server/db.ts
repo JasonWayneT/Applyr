@@ -76,6 +76,18 @@ db.exec(`
   UPDATE system_status SET status = 'idle', current_item = 'Server restart detected. No active pipeline run.', updated_at = CURRENT_TIMESTAMP WHERE id = 'global';
 `);
 
+// CR-011: retry tracking + legacy status migration
+try {
+  db.exec(`ALTER TABLE jobs ADD COLUMN retry_count INTEGER DEFAULT 0`);
+} catch {
+  /* column exists */
+}
+try {
+  db.prepare(`UPDATE jobs SET status = 'Needs Retry' WHERE status = 'Failed'`).run();
+} catch {
+  /* ignore */
+}
+
 export const logActivity = (
   level: 'INFO' | 'WARN' | 'ERROR',
   source: string,

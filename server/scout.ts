@@ -61,10 +61,16 @@ function handleStderr(source: string, stderr: string) {
                    clean.includes('[Phase 1]') ||
                    clean.includes('[Phase 2]') ||
                    clean.includes('[GUARD]') ||
-                   clean.includes('[HARD FACT AUDIT]');
+                   clean.includes('[HARD FACT AUDIT]') ||
+                   clean.includes('[QA AUDIT PASS]') ||
+                   clean.includes('[BATCH_SUMMARY]') ||
+                   clean.includes('Successfully audited') ||
+                   clean.includes('Running Style Compliance Guard');
                    
     if (isInfo) {
       logActivity('INFO', source, clean);
+    } else if (clean.includes('[LLM Notice]') || clean.includes('Falling back to local')) {
+      logActivity('WARN', source, clean);
     } else if (clean.toLowerCase().includes('warning') || clean.includes('[Audit Warning]') || clean.includes('[Local Warning]')) {
       logActivity('WARN', source, clean);
     } else {
@@ -94,6 +100,10 @@ export const runScoutSync = async () => {
   } else {
     runId = `run_${Date.now()}`;
     activeStage = 'SCOUT';
+    db.prepare(`
+      UPDATE pipeline_runs SET status = 'FAILED', last_error = 'Superseded by newer run',
+      updated_at = CURRENT_TIMESTAMP WHERE status = 'RUNNING'
+    `).run();
     db.prepare(`INSERT INTO pipeline_runs (run_id, status, current_stage) VALUES (?, 'RUNNING', 'SCOUT')`).run(runId);
     logActivity('INFO', 'Scout', `Pipeline Start: Initialized run ${runId}.`);
   }
@@ -105,7 +115,7 @@ export const runScoutSync = async () => {
     // --- STAGE 1: SCOUT ---
     if (activeStage === 'SCOUT') {
       updateCheckpoint(runId, 'SCOUT', 'Crawling and scanning direct job feeds...');
-      logActivity('INFO', 'Scout', 'Executing Stage 1/4: Crawling job feeds via TS Crawler.');
+      logActivity('INFO', 'Scout', 'Executing Stage 1/5: Crawling job feeds via TS Crawler.');
       
       const code = await spawnProcessAsync('npx', ['tsx', 'scripts/scout_local.ts'], extraEnv, (output) => {
         const lines = output.trim().split('\n');
@@ -127,7 +137,7 @@ export const runScoutSync = async () => {
     // --- STAGE 2: BACKFILL ---
     if (activeStage === 'BACKFILL') {
       updateCheckpoint(runId, 'BACKFILL', 'Reconciling URLs and executing backfills...');
-      logActivity('INFO', 'Scout', 'Executing Stage 2/4: Reconciling missing URLs.');
+      logActivity('INFO', 'Scout', 'Executing Stage 2/5: Reconciling missing URLs.');
 
       const code = await spawnProcessAsync('npx', ['tsx', 'scripts/archive/backfill_urls.ts'], extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Crawler', line.trim()));
@@ -139,10 +149,21 @@ export const runScoutSync = async () => {
       activeStage = 'SCRAPE';
     }
 
-    // --- STAGE 3: SCRAPE ---
+    // --- STAGE 3: SCRAPE (requeue Needs Retry, then scrape New) ---
     if (activeStage === 'SCRAPE') {
+      updateCheckpoint(runId, 'SCRAPE', 'Re-queuing jobs that need another pipeline pass...');
+      logActivity('INFO', 'Scout', 'Executing Stage 3/5: Re-queuing Needs Retry jobs.');
+
+      const requeueCode = await spawnProcessAsync('npx', ['tsx', 'scripts/requeue_needs_retry.ts'], extraEnv, (output) => {
+        output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Requeue', line.trim()));
+      }, (stderr) => {
+        handleStderr('Requeue', stderr);
+      });
+
+      if (requeueCode !== 0) throw new Error(`Requeue stage exited with non-zero code ${requeueCode}`);
+
       updateCheckpoint(runId, 'SCRAPE', 'Scraping job descriptions for new postings...');
-      logActivity('INFO', 'Scout', 'Executing Stage 3/4: Scraping job descriptions.');
+      logActivity('INFO', 'Scout', 'Executing Stage 4/5: Scraping job descriptions.');
 
       const code = await spawnProcessAsync('npx', ['tsx', 'scripts/scrape_new_jobs.ts'], extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Scraper', line.trim()));
@@ -157,7 +178,7 @@ export const runScoutSync = async () => {
     // --- STAGE 4: EVALUATE ---
     if (activeStage === 'EVALUATE') {
       updateCheckpoint(runId, 'EVALUATE', 'Evaluating fit and generating PDF assets...');
-      logActivity('INFO', 'Scout', 'Executing Stage 4/4: Evaluating job fit and drafting assets.');
+      logActivity('INFO', 'Scout', 'Executing Stage 5/5: Evaluating fit and drafting assets.');
 
       const code = await spawnProcessAsync('python', ['scripts/batch_pipeline.py', '--mode', 'batch'], extraEnv, (output) => {
         const lines = output.trim().split('\n');
@@ -188,6 +209,6 @@ export const runScoutSync = async () => {
     logActivity('ERROR', 'Scout', `Pipeline ${runId} aborted due to failure: ${errMsg}`);
     
     db.prepare(`UPDATE pipeline_runs SET status = 'FAILED', last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE run_id = ?`).run(errMsg, runId);
-    db.prepare(`UPDATE system_status SET status = 'idle', current_item = 'Sync stopped due to stage error.', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
+    db.prepare(`UPDATE system_status SET status = 'idle', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Sync stopped: ${errMsg}`);
   }
 };

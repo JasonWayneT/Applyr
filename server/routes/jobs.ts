@@ -10,6 +10,12 @@ import {
   SUBMISSION_DIR, ARCHIVE_DIR, SCRIPTS_DIR, PROJECT_ROOT,
   ALLOWED_JOB_FIELDS,
 } from '../shared.js';
+import {
+  archiveActiveSubmission,
+  restoreArchivedSubmission,
+  jobHasPdfAssets,
+  reconcileActiveSubmissionFolders,
+} from '../submissionFolders.js';
 
 const router = Router();
 
@@ -26,14 +32,10 @@ function jobBaseDir(status: string): string {
 router.get('/api/jobs', (_req, res) => {
   try {
     const jobs = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as any[];
-    const enriched = jobs.map(job => {
-      let has_assets = false;
-      const folder = resolveCompanyFolder(job.company, SUBMISSION_DIR);
-      if (fs.existsSync(folder)) {
-        try { has_assets = fs.readdirSync(folder).some(f => f.toLowerCase().endsWith('.pdf')); } catch (_) {}
-      }
-      return { ...job, has_assets };
-    });
+    const enriched = jobs.map(job => ({
+      ...job,
+      has_assets: jobHasPdfAssets(job.company, job.status),
+    }));
     res.json(enriched);
   } catch {
     res.status(500).json({ error: 'Failed to fetch jobs' });
@@ -53,6 +55,21 @@ router.post('/api/jobs', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to add job' });
+  }
+});
+
+router.post('/api/jobs/reconcile-submissions', (_req, res) => {
+  try {
+    const result = reconcileActiveSubmissionFolders();
+    logActivity(
+      'INFO',
+      'System',
+      `Reconciled submissions/: archived=${result.archived.length}, removed=${result.removed.length}`,
+    );
+    res.json({ success: true, ...result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reconcile submission folders' });
   }
 });
 
@@ -80,9 +97,8 @@ router.patch('/api/jobs/:id/status', (req, res) => {
     const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    const slug        = job.company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    const activePath  = path.join(SUBMISSION_DIR, slug);
-    const archivePath = path.join(ARCHIVE_DIR, slug);
+    const activePath  = resolveCompanyFolder(job.company, SUBMISSION_DIR);
+    const archivePath = resolveCompanyFolder(job.company, ARCHIVE_DIR);
 
     if (status === 'No Longer Available') {
       const fullJob = db.prepare('SELECT company, title, url FROM jobs WHERE id = ?').get(id) as any;
@@ -99,8 +115,8 @@ router.patch('/api/jobs/:id/status', (req, res) => {
     const isNowArchived = !ACTIVE_STATUSES.has(status);
     const wasArchived   = !ACTIVE_STATUSES.has(job.status);
 
-    if (isNowArchived  && !wasArchived && fs.existsSync(activePath))  fs.renameSync(activePath,  archivePath);
-    if (!isNowArchived && wasArchived  && fs.existsSync(archivePath)) fs.renameSync(archivePath, activePath);
+    if (isNowArchived && !wasArchived) archiveActiveSubmission(job.company);
+    if (!isNowArchived && wasArchived) restoreArchivedSubmission(job.company);
 
     db.prepare(`
       UPDATE jobs
@@ -280,13 +296,35 @@ router.get('/api/jobs/:id/download-all', (req, res) => {
 router.post('/api/jobs/:id/draft', (req, res) => {
   try {
     const { id } = req.params;
-    const job = db.prepare('SELECT company, url FROM jobs WHERE id = ?').get(id) as any;
+    const job = db.prepare('SELECT company, url, score, status FROM jobs WHERE id = ?').get(id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
-    db.prepare(`UPDATE system_status SET status = 'drafting', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Generating tailored assets for ${job.company}`);
-    logActivity('INFO', 'Pipeline', `Manual asset generation triggered for "${job.company}"`);
+    const draftOnly =
+      job.score != null &&
+      job.score >= 72 &&
+      ['Needs Retry', 'Backlog', 'Drafted'].includes(job.status);
 
-    const proc = spawn('python', [path.join(SCRIPTS_DIR, 'batch_pipeline.py'), '--company', job.company, '--url', job.url || '', '--mode', 'single'], {
+    db.prepare(`UPDATE system_status SET status = 'drafting', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(
+      draftOnly
+        ? `Drafting assets for ${job.company} (using saved fit score ${job.score})`
+        : `Generating tailored assets for ${job.company}`,
+    );
+    logActivity(
+      'INFO',
+      'Pipeline',
+      `Manual asset generation for "${job.company}"${draftOnly ? ' [draft-only]' : ''}`,
+    );
+
+    const procArgs = [
+      path.join(SCRIPTS_DIR, 'batch_pipeline.py'),
+      '--mode', 'single',
+      '--company', job.company,
+      '--url', job.url || '',
+      '--job-id', id,
+    ];
+    if (draftOnly) procArgs.push('--draft-only');
+
+    const proc = spawn('python', procArgs, {
       cwd: PROJECT_ROOT,
       env: { ...process.env, ...buildPythonEnv() },
     });

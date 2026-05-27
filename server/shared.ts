@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { db } from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,31 +37,11 @@ const DEFAULT_PIPELINE_PREFERENCES = {
   max_company_size_penalty_threshold: 50,
 };
 
-// Implements FR-058, SEC-003, SEC-004
-// Reads all API keys from SQLite at spawn time — never from .env.
-// Python's load_dotenv() does not override existing env vars, so DB values always win.
+// Implements FR-095 / CR-015 — spawn flags only; secrets read from SQLite inside each script.
 export function buildPythonEnv(): Record<string, string> {
-  const extra: Record<string, string> = {
-    PYTHONUNBUFFERED: "1", // Forces immediate flush of stdout to prevent Node buffering lag
+  return {
+    PYTHONUNBUFFERED: '1',
   };
-  try {
-    const llmRow = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as any;
-    if (llmRow?.value) {
-      const llm = JSON.parse(llmRow.value);
-      if (llm.geminiApiKey)     extra.GEMINI_API_KEY     = llm.geminiApiKey;
-      if (llm.claudeApiKey)     extra.ANTHROPIC_API_KEY  = llm.claudeApiKey;
-      if (llm.perplexityApiKey) extra.PERPLEXITY_API_KEY = llm.perplexityApiKey;
-    }
-  } catch { /* no llm_settings record yet */ }
-  try {
-    const connRow = db.prepare("SELECT value FROM profiles WHERE key = 'api_connections'").get() as any;
-    if (connRow?.value) {
-      const conns = JSON.parse(connRow.value);
-      if (conns.adzunaAppId)  extra.ADZUNA_APP_ID  = conns.adzunaAppId;
-      if (conns.adzunaAppKey) extra.ADZUNA_APP_KEY = conns.adzunaAppKey;
-    }
-  } catch { /* no api_connections record yet */ }
-  return extra;
 }
 
 // Fuzzy-matches a company name to its folder under baseDir (handles slug variants).

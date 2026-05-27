@@ -11,6 +11,8 @@ const STATUS_CONFIG: Record<Status, { chipClass: string; dotClass: string; label
   'Core Interviews':     { chipClass: 'chip chip-core-interviews',   dotClass: 'bg-secondary',          label: 'Interviewing' },
   'Offer and Negotiation': { chipClass: 'chip chip-offer',          dotClass: 'bg-primary',            label: 'Offer' },
   'Drafted':              { chipClass: 'chip chip-closed',          dotClass: 'bg-on-surface-variant', label: 'Drafting…' },
+  'Needs Retry':          { chipClass: 'chip chip-drafted',         dotClass: 'bg-amber-500',          label: 'Needs retry' },
+  'Rejected':             { chipClass: 'chip chip-closed',          dotClass: 'bg-on-surface-variant', label: 'Not a fit' },
   'Closed':              { chipClass: 'chip chip-closed',            dotClass: 'bg-on-surface-variant', label: 'Closed' },
 };
 

@@ -95,7 +95,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-055` | functional | P1 | implemented | Adzuna free-tier rate guard — max 10 calls per scout run, 3s delay between calls | `AC-057` | `CR-004` |
 | `FR-056` | functional | P1 | implemented | Role-aware source routing — The Muse category derived from TARGET_ROLE; hardcoded `Product Owner` fallback removed | `AC-058` | `CR-004` |
 | `FR-057` | functional | P0 | superseded | Perplexity API key UI entry point — superseded by FR-061/FR-062; key moved to `llm_settings` | `AC-059` | `CR-005` |
-| `FR-058` | functional | P0 | implemented | Unified Python env injection — `buildPythonEnv()` injects all DB-stored keys into every Python spawn so `.env` is never required | `AC-060` | `CR-005` |
+| `FR-058` | functional | P0 | superseded | Unified Python env injection — superseded by `FR-095`; keys no longer passed via env | `AC-060` | `CR-005` |
+| `FR-095` | functional | P0 | implemented | SQLite-only secrets — all scripts read `profiles` from `jobagent.sqlite`; no `.env`, dotenv, or `os.getenv` key fallbacks; `buildPythonEnv()` sets `PYTHONUNBUFFERED` only | `AC-095` | `CR-015` |
 | `FR-059` | functional | P0 | implemented | Provider configuration guard — `call_llm()` calls `_is_configured()` before invoking any provider; returns `""` with actionable warning if no providers configured | `AC-061` | `CR-006` |
 | `FR-060` | functional | P0 | implemented | Multi-provider fallback chain — `call_llm()` iterates providers: primary first, then `[gemini, claude, local, perplexity]`; non-rate-limit error falls through to next provider | `AC-062` | `CR-006` |
 | `FR-061` | functional | P1 | implemented | Perplexity as LLM provider — `sonar-pro` added as `call_llm()` provider branch; key stored in `llm_settings.perplexityApiKey`; research engine tries Perplexity first if configured | `AC-063` | `CR-006` |
@@ -118,6 +119,29 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-078` | functional | P0 | accepted | Resilient Dual-Layout Built In Parsing — extracts metadata using combined selectors representing both `.job-item` and `div[data-id="job-card"]` patterns | `AC-080` | `CR-009` |
 | `FR-079` | functional | P0 | accepted | Multi-Term Built In Search Gating — generates specific `/jobs?search={term}` target endpoints for each candidate search variant | `AC-081` | `CR-009` |
 | `FR-080` | functional | P0 | accepted | Decommissioned LinkedIn Channel — removes all automated scraping, navigation, and auth operations targeting `linkedin.com` to eliminate session risk | `AC-082` | `CR-010` |
+| `FR-081` | functional | P0 | implemented | Gemini-Primary Drafting — cloud monolithic resume/cover use `provider_override=['gemini']` only; no silent monolithic local fallback | `AC-083` | `CR-012` |
+| `FR-082` | functional | P0 | implemented | Structured Local Fallback Pipeline — superseded by `draft_compiler.run()` (CR-014); bite-sized select → bullets → summary → assemble | `AC-084` | `CR-012` |
+| `FR-083` | functional | P0 | implemented | Deterministic Resume QA Repair — `repair_resume_markdown()` injects missing R-005 sections before hard QA | `AC-085` | `CR-012` |
+| `FR-084` | functional | P0 | implemented | Non-Fatal Drafting Errors — `DraftingPipelineError` replaces QA `ValueError`; batch marks `Needs Retry` and continues | `AC-086` | `CR-012` |
+| `FR-085` | functional | P0 | implemented | Employer-Scoped Claim Routing — `ACC-1xx/2xx/3xx` prefix maps to Cision/Sterkly/ZTS buckets deterministically | `AC-087` | `CR-013` |
+| `FR-086` | functional | P0 | implemented | Per-Employer Claim Selection — Tier 2 runs ≤3 small JSON selections (one per employer) with keyword fallback | `AC-088` | `CR-013` |
+| `FR-087` | functional | P0 | implemented | Expanded Bullet Gates — local bullets reject blocked tools, seniority inflation, and >25 words before fallback | `AC-089` | `CR-013` |
+| `FR-088` | functional | P0 | implemented | Deterministic Summary & Cover Assembly — summary and cover letter built without monolithic LLM; corpus numeric audit on final text | `AC-090` | `CR-013` |
+| `FR-089` | functional | P0 | implemented | Unified Draft Compiler — single `draft_compiler.run()` stage graph; no cloud/local fork in `run_drafting_engine` | `AC-091` | `CR-014` |
+| `FR-090` | functional | P0 | implemented | Draft Manifest — `draft_manifest.json` records claim IDs, jd_profile, pipeline_version, fallback counts | `AC-092` | `CR-014` |
+| `FR-091` | functional | P0 | implemented | Validated JdProfile — themes/requirements must substring-match JD; fit summary boosts scoring | `AC-093` | `CR-014` |
+| `FR-092` | functional | P0 | implemented | Compiler-stage gates — `verify_content` with internal claim IDs before strip; `DraftingPipelineError` on QA fail | `AC-094` | `CR-014` |
+| `FR-093` | functional | P0 | implemented | `call_llm_stage(stage_id)` — per-stage provider preference list; same prompts for gemini and local | `AC-095` | `CR-014` |
+| `FR-094` | functional | P0 | implemented | Fit-aware tailoring — `evaluation_result` feeds JdProfile and claim ranking | `AC-096` | `CR-014` |
+| `FR-100` | functional | P0 | implemented | Claim catalog — parse `workExperience.md` ACC/VOC into `claim_catalog.py` | `AC-100` | `CR-017` |
+| `FR-101` | functional | P0 | implemented | Compose-mode bullets — `claim_composer.py` default; `DRAFT_MODE=legacy_llm` escape hatch | `AC-101` | `CR-017` |
+| `FR-102` | functional | P0 | implemented | Fail-closed verification chain — `verification_chain.py` blocks on verify/QA failures | `AC-102` | `CR-017` |
+| `FR-103` | functional | P0 | implemented | Display company name — DB `jobs.company` passed to cover letter templates | `AC-103` | `CR-017` |
+| `FR-104` | functional | P0 | implemented | Recruiter QA gate — `recruiter_qa.py` before Backlog PDF promotion | `AC-104` | `CR-017` |
+| `FR-105` | functional | P1 | implemented | Sentence-aware bullet fitting — `bullet_fit.fit_bullet_to_budget()` | `AC-106` | `CR-018` |
+| `FR-106` | functional | P1 | implemented | One bridge bullet per job; `strip_bridge_prefix` on cover proofs | `AC-107`, `AC-108` | `CR-018` |
+| `FR-107` | functional | P1 | implemented | Fresh backlog summary on successful draft — `_draft_success_summary()` | `AC-109` | `CR-018` |
+| `FR-108` | functional | P1 | implemented | Template-first cheat sheet — `CHEAT_SHEET_MODE` default template | `AC-110` | `CR-018` |
 
 
 ### Data Traceability (DATA-001 to DATA-001)
@@ -165,6 +189,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-058` | `FR-056` | Role-aware Muse | User sets targetRole to "Software Engineer" | Scout runs | The Muse fetches `category=Engineering+%26+Tech` not `category=Product` | accepted |
 | `AC-059` | `FR-057` | Perplexity UI (superseded) | — | — | Superseded by AC-063; key now in `llm_settings` | superseded |
 | `AC-060` | `FR-058` | No .env required | User clears `.env` and sets all keys in UI | Runs full pipeline | Evaluation, drafting, and research all succeed using only SQLite-stored keys | accepted |
+| `AC-095` | `FR-095` | SQLite-only secrets | No `.env` file on disk; keys in Settings | Scout + `batch_pipeline.py` + research | All providers read keys from `jobagent.sqlite` only | implemented |
 | `AC-061` | `FR-059` | Provider guard | No LLM keys configured | Pipeline calls `call_llm()` | Returns `""` and logs actionable warning; no API call attempted | accepted |
 | `AC-062` | `FR-060` | Fallback chain | Gemini is primary but key is invalid | `call_llm()` invoked | Gemini fails → falls through to next configured provider; result returned from working provider | accepted |
 | `AC-063` | `FR-061` | Perplexity provider | User sets Perplexity key in Settings > LLM Providers | Research engine runs | Key read from `llm_settings.perplexityApiKey`; Perplexity tried first for research; falls back to primary LLM on failure | accepted |
@@ -187,6 +212,33 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-080` | `FR-078` | Dual Selector Match | Page loads in search mode or taxonomy mode | `scoutBuiltIn` runs | Standardizes selector to `.job-item, div[data-id="job-card"]` ensuring all listing cards are captured | accepted |
 | `AC-081` | `FR-079` | Search Loop Execution | Multiple search terms configured in json preferences | Built In scout phase triggered | Crawler cycles through distinct URLs for each term, scraping up to 30 positions per term | accepted |
 | `AC-082` | `FR-080` | Browser Request Bypassing | Main orchestration loop triggered | `scout_local` script executed | Browser initializes and executes BuiltIn + Levels.fyi pipelines while logging that LinkedIn is skipped, dispatching zero network packets to linkedin.com | accepted |
+| `AC-083` | `FR-081` | Gemini-only cloud draft | Gemini configured and quota available | `run_drafting_engine()` drafts resume | `call_llm` uses `provider_override=['gemini']` for monolithic resume/cover; no monolithic local in cloud path | implemented |
+| `AC-084` | `FR-082` | Structured local fallback | Gemini returns 429 or QA fails on a stage | `call_llm_stage` falls back to local | `draft_compiler.run()` completes bite-sized stages; log shows Compiler Stage 1–3 | implemented |
+| `AC-085` | `FR-083` | QA repair | Local resume missing `## PROFESSIONAL SUMMARY` | `repair_resume_markdown()` runs before `check_resume` | Required sections and employer anchors injected deterministically | implemented |
+| `AC-086` | `FR-084` | Batch continues on draft fail | Drafting raises `DraftingPipelineError` | `batch_pipeline` processes job | Job marked `Needs Retry`; batch exit code 0; no uncaught `ValueError` | implemented |
+| `AC-087` | `FR-085` | Employer routing | Claim `ACC-203` selected | `employer_for_claim_id()` runs | Returns `sterkly`, not `cision` | implemented |
+| `AC-088` | `FR-086` | Per-employer select | JD mentions onboarding | Tier 2 selection runs | At least one `ACC-3xx` ID included when ZTS pool non-empty | implemented |
+| `AC-089` | `FR-087` | Bullet tool block | Local bullet mentions `Kubernetes` | `validate_bullet_for_local()` runs | Returns invalid; `_fallback_bullet` used | implemented |
+| `AC-090` | `FR-088` | Deterministic CL | 4+ validated bullets exist | `assemble_cover_letter_deterministic()` runs | Cover letter has no LLM call; paragraphs use bullet corpus only | implemented |
+| `AC-091` | `FR-089` | Unified compiler | Drafting runs with gemini or local configured | `draft_compiler.run()` completes | Same stage order; no `_run_gemini_monolithic_draft` invoked | implemented |
+| `AC-092` | `FR-090` | Manifest | Draft completes | Read `draft_manifest.json` | Contains `selected_claim_ids`, `jd_profile`, `pipeline_version` | implemented |
+| `AC-093` | `FR-091` | JdProfile validation | LLM returns invented requirement | `build_jd_profile()` validates | Invented strings dropped; deterministic fallback fills gaps | implemented |
+| `AC-094` | `FR-092` | verify_content | Resume assembled with `[ACC-*]` on bullets | `verify_content()` runs pre-strip | Invalid IDs fail closed or trigger fallback bullets | implemented |
+| `AC-095` | `FR-093` | Stage providers | Stage `bullet` runs | `call_llm_stage('bullet')` | Uses `['gemini','local']` preference, not hardcoded local-only | implemented |
+| `AC-096` | `FR-094` | Fit boost | Job passed fit with Summary | Stage 2 selection runs | Claims matching fit summary themes rank higher | implemented |
+| `AC-100` | `FR-100` | No ID tokens in PDFs | Compose draft completes | Read `Resume.md` and `CoverLetter.md` | No `ACC-`, `MET-`, `VOC-`, or pipe-wrapped ID tokens in final text | implemented |
+| `AC-101` | `FR-101` | Manifest compose mode | Draft completes | Read `draft_manifest.json` | Contains `draft_mode`, `selected_claim_ids`, `pipeline_version` CR-017-* | implemented |
+| `AC-102` | `FR-102` | verify_content blocks | Invalid metric on tagged resume body | `draft_compiler.run()` | Raises `DraftingPipelineError`; job not promoted to Backlog | implemented |
+| `AC-103` | `FR-103` | Display company | Job row has `company` in SQLite | Cover letter generated | Salutation uses DB `company`, not `submissions/` folder slug | implemented |
+| `AC-104` | `FR-104` | Summary length | Compose draft completes | Read `## PROFESSIONAL SUMMARY` | ≤380 characters; not concatenation of full bullets | implemented |
+| `AC-105` | `FR-102`, `FR-104` | Verification passed flag | Full chain succeeds | Read `draft_manifest.json` | `verification_passed: true` before Backlog-eligible PDFs | implemented |
+| `AC-106` | `FR-105` | Complete bullets | Compose draft completes | recruiter_qa on resume | No incomplete-clause bullet endings | implemented |
+| `AC-107` | `FR-106` | One bridge | Resume with JD roadmap theme | Count bridge-prefixed bullets | At most one bullet starts with bridge phrase | implemented |
+| `AC-108` | `FR-106` | Cover strip | Cover generated | Read CoverLetter.md | No bridge_phrases.json values in proof paragraphs | implemented |
+| `AC-109` | `FR-107` | Fresh summary | Draft succeeds | Query jobs.summary | No `Asset drafting failed` or `numeric audit` in summary | implemented |
+| `AC-110` | `FR-108` | Cheat sheet | Research packet exists | Read Interview_Cheat_Sheet.md | Non-empty template cheat sheet | implemented |
+| `AC-111` | `SEC-005` | Doppler Hybrid Config | User boots with `npm run dev:doppler` | App loads | UI detects injected variables and hides input fields displaying "Managed via Doppler" lock badge | verified |
+| `AC-112` | `NFR-006` | Overlay Network Access | App running on Desktop | Laptop on Tailscale accesses IP | Server accepts connection and renders JobAgent UI | verified |
 
 ## Non-Functional Requirements
 
@@ -197,6 +249,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `NFR-003` | security | P0 | implemented | Local-only execution; no career data leaves localhost |
 | `NFR-004` | performance | P1 | implemented | Adzuna API calls capped at 10 per scout run with 3s inter-call delay to respect 25 req/min free-tier limit |
 | `NFR-005` | cost | P0 | implemented | No LLM provider is called unless `_is_configured()` returns True — zero silent token waste from misconfigured providers |
+| `NFR-006` | infrastructure | P1 | implemented | Zero-Trust Remote Binding — Vite client and Express server bind to `0.0.0.0` to permit authorized access across overlay networks (Tailscale) |
 
 ## Security Requirements
 
@@ -204,6 +257,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 |---|---|---|---|---|
 | `SEC-001` | security | P0 | implemented | `.env` excluded from git via `.gitignore` |
 | `SEC-002` | security | P0 | implemented | Third-party data source API keys (Adzuna) stored only in SQLite `profiles/api_connections` table (gitignored); never written to tracked files |
-| `SEC-003` | security | P0 | implemented | `.env` is an optional fallback only — all API keys have a UI entry point and DB-first read path; application must function without `.env` |
-| `SEC-004` | security | P0 | implemented | All LLM provider keys (Gemini, Claude, Perplexity) stored in `profiles/llm_settings`; injected at spawn time via env vars and never logged or written to disk |
+| `SEC-003` | security | P0 | implemented | No `.env` for secrets — all API keys configured via Settings UI and read from SQLite at runtime (`CR-015`) |
+| `SEC-004` | security | P0 | implemented | LLM and data-source keys stored in `profiles` (`llm_settings`, `api_connections`); read in-process from `jobagent.sqlite`; never logged or written to tracked files |
+| `SEC-005` | security | P0 | implemented | Secret Portable Management — Supports injecting API keys directly from environment variables (Doppler) decoupling sensitive strings from local database |
 | `NFR-004` | maintainability | P0 | implemented | All pipeline behavior variables (search terms, blocklists, score threshold, freshness window) must trace to `candidate_preferences.json`; no hardcoded overrides permitted in scout or pipeline scripts |

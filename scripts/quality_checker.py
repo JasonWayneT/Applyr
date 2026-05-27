@@ -114,6 +114,44 @@ def check_resume(file_path):
         return True, " | ".join(messages)
     return True, "[R-001 PASS] Resume passed all best practice checks."
 
+
+def repair_resume_markdown(content: str, education_block: str | None = None) -> str:
+    """
+    Deterministic R-005 repair before QA (CR-012 / FR-083).
+    Injects missing headers and education without LLM creativity.
+    """
+    if "# JASON TAYLOR" not in content.upper():
+        content = HEADER_BLOCK + content.lstrip()
+
+    if not re.search(r"^##\s*(?:\*\*)?PROFESSIONAL\s+SUMMARY", content, re.MULTILINE | re.IGNORECASE):
+        insert = "\n## PROFESSIONAL SUMMARY\n\nProduct Manager with B2B SaaS platform ownership and cross-functional delivery experience.\n"
+        if HEADER_BLOCK.strip() in content:
+            content = content.replace(HEADER_BLOCK.strip(), HEADER_BLOCK.strip() + insert, 1)
+        else:
+            content = HEADER_BLOCK + insert + content.lstrip()
+
+    if not re.search(r"^##\s*(?:\*\*)?PROFESSIONAL\s+EXPERIENCE", content, re.MULTILINE | re.IGNORECASE):
+        content += "\n\n## PROFESSIONAL EXPERIENCE\n"
+
+    if not re.search(r"^##\s*(?:\*\*)?EDUCATION", content, re.MULTILINE | re.IGNORECASE):
+        edu = education_block or (
+            "## EDUCATION\n\n"
+            "* **Bachelor of Business Administration, Major in Management** — "
+            "National University, San Diego, California, 2019\n"
+        )
+        content = content.rstrip() + "\n\n" + edu.strip() + "\n"
+
+    lower = content.lower()
+    if "cision" not in lower:
+        content += "\n### Product Manager | Cision\n* Platform and ingestion systems delivery.\n"
+    if "sterkly" not in lower:
+        content += "\n### Product Manager | Sterkly\n"
+    if "zero to sixty" not in lower and "zero to 60" not in lower:
+        content += "\n### Product Owner / Account Manager | Zero to Sixty\n"
+
+    return content
+
+
 def run_quality_checks(company_dir):
     """
     Runs all quality checks for a given submission directory.

@@ -1,25 +1,19 @@
-import os
-from dotenv import load_dotenv
+"""Quick Gemini connectivity check — reads key from jobagent.sqlite (Settings UI)."""
+from utils import load_llm_settings
+
+settings = load_llm_settings()
+api_key = settings.get("geminiApiKey") or ""
+print("Gemini key configured:", bool(api_key))
+print("Gemini key length:", len(api_key))
+
+if not api_key:
+    raise SystemExit("No geminiApiKey in profiles/llm_settings — add one in Settings → API or Connections.")
+
 from google import genai
-load_dotenv()
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-print("Gemini key length:", len(os.getenv("GEMINI_API_KEY") or ""))
-
-try:
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents="Hello! Say 'Yes, the API key works' if you receive this."
-    )
-    print("Response gemini-2.0-flash:", response.text)
-except Exception as e:
-    print("Error during test call gemini-2.0-flash:", e)
-
-try:
-    response = client.models.generate_content(
-        model="gemini-1.5-flash",
-        contents="Hello! Say 'Yes, the API key works' if you receive this."
-    )
-    print("Response gemini-1.5-flash:", response.text)
-except Exception as e:
-    print("Error during test call gemini-1.5-flash:", e)
+client = genai.Client(api_key=api_key)
+response = client.models.generate_content(
+    model="gemini-2.5-flash-lite",
+    contents="Reply with exactly: OK",
+)
+print("Response:", (response.text or "").strip())

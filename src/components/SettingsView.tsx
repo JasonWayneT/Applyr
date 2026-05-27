@@ -27,6 +27,14 @@ interface ApiConnections {
   adzunaAppKey: string;
 }
 
+interface EnvStatus {
+  gemini: boolean;
+  claude: boolean;
+  perplexity: boolean;
+  adzuna: boolean;
+  localUrl: boolean;
+}
+
 interface StatsData {
   total: number;
   byStatus: { status: string; count: number }[];
@@ -55,6 +63,7 @@ const SettingsView: React.FC = () => {
   const [experience, setExperience] = useState('');
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [envStatus, setEnvStatus] = useState<EnvStatus>({ gemini: false, claude: false, perplexity: false, adzuna: false, localUrl: false });
 
   // Debounce Ref
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,20 +72,22 @@ const SettingsView: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [profileRes, expRes, statsRes, llmRes, connRes] = await Promise.all([
+        const [profileRes, expRes, statsRes, llmRes, connRes, envRes] = await Promise.all([
           fetch(api('/api/profile/identity')),
           fetch(api('/api/experience')),
           fetch(api('/api/jobs/stats')),
           fetch(api('/api/profile/llm_settings')),
           fetch(api('/api/profile/api_connections')),
+          fetch(api('/api/env_status')),
         ]);
 
-        const [profileData, expData, statsData, llmData, connData] = await Promise.all([
+        const [profileData, expData, statsData, llmData, connData, envData] = await Promise.all([
           profileRes.json(),
           expRes.json(),
           statsRes.json(),
           llmRes.json(),
           connRes.json(),
+          envRes.json(),
         ]);
 
         if (profileData && typeof profileData === 'object') {
@@ -100,6 +111,9 @@ const SettingsView: React.FC = () => {
           // perplexityApiKey now lives in llm_settings — exclude it from apiConnections state
           const { perplexityApiKey: _legacy, ...rest } = connData as any;
           setApiConnections(prev => ({ ...prev, ...rest }));
+        }
+        if (envData) {
+          setEnvStatus(envData);
         }
       } catch (err) {
         console.error('Failed to load SettingsView configurations:', err);
@@ -519,17 +533,26 @@ const SettingsView: React.FC = () => {
                     </div>
                     <div className="space-y-1.5">
                       <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
-                      <input
-                        type="password"
-                        value={llmSettings.geminiApiKey ?? ''}
-                        onChange={(e) => { const next = { ...llmSettings, geminiApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                        placeholder="AIzaSy..."
-                      />
-                      <p className={`text-[9px] italic transition-colors duration-300 flex items-center gap-1 ${saveStatus === 'saved' ? 'text-primary font-bold' : 'text-on-surface-variant'}`}>
-                        {saveStatus === 'saved' && <span className="material-symbols-outlined text-[10px]">check</span>}
-                        {saveStatus === 'saved' ? 'Key successfully synchronized to local storage.' : 'Get a key at the provider portal. Auto-saves to local database.'}
-                      </p>
+                      {envStatus.gemini ? (
+                        <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[14px]">lock</span>
+                          Managed via Doppler / Environment
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="password"
+                            value={llmSettings.geminiApiKey ?? ''}
+                            onChange={(e) => { const next = { ...llmSettings, geminiApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                            className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                            placeholder="AIzaSy..."
+                          />
+                          <p className={`text-[9px] italic transition-colors duration-300 flex items-center gap-1 ${saveStatus === 'saved' ? 'text-primary font-bold' : 'text-on-surface-variant'}`}>
+                            {saveStatus === 'saved' && <span className="material-symbols-outlined text-[10px]">check</span>}
+                            {saveStatus === 'saved' ? 'Key successfully synchronized to local storage.' : 'Get a key at the provider portal. Auto-saves to local database.'}
+                          </p>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -550,7 +573,7 @@ const SettingsView: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
+                        {(isConnected || envStatus.claude) && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
                         <button
                           onClick={() => { const next = { ...llmSettings, primaryProvider: 'claude' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
                           className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
@@ -561,14 +584,23 @@ const SettingsView: React.FC = () => {
                     </div>
                     <div className="space-y-1.5">
                       <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
-                      <input
-                        type="password"
-                        value={llmSettings.claudeApiKey ?? ''}
-                        onChange={(e) => { const next = { ...llmSettings, claudeApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                        placeholder="sk-ant-api03..."
-                      />
-                      <p className="text-[9px] text-on-surface-variant italic">Get a key at console.anthropic.com. Auto-saves to local database.</p>
+                      {envStatus.claude ? (
+                        <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[14px]">lock</span>
+                          Managed via Doppler / Environment
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="password"
+                            value={llmSettings.claudeApiKey ?? ''}
+                            onChange={(e) => { const next = { ...llmSettings, claudeApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                            className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                            placeholder="sk-ant-api03..."
+                          />
+                          <p className="text-[9px] text-on-surface-variant italic">Get a key at console.anthropic.com. Auto-saves to local database.</p>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -640,7 +672,7 @@ const SettingsView: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
+                        {(isConnected || envStatus.perplexity) && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
                         <button
                           onClick={() => { const next = { ...llmSettings, primaryProvider: 'perplexity' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
                           className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
@@ -651,14 +683,23 @@ const SettingsView: React.FC = () => {
                     </div>
                     <div className="space-y-1.5">
                       <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
-                      <input
-                        type="password"
-                        value={llmSettings.perplexityApiKey ?? ''}
-                        onChange={(e) => { const next = { ...llmSettings, perplexityApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                        placeholder="pplx-..."
-                      />
-                      <p className="text-[9px] text-on-surface-variant italic">Get a key at perplexity.ai/settings/api. Auto-saves to local database.</p>
+                      {envStatus.perplexity ? (
+                        <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
+                          <span className="material-symbols-outlined text-[14px]">lock</span>
+                          Managed via Doppler / Environment
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="password"
+                            value={llmSettings.perplexityApiKey ?? ''}
+                            onChange={(e) => { const next = { ...llmSettings, perplexityApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                            className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                            placeholder="pplx-..."
+                          />
+                          <p className="text-[9px] text-on-surface-variant italic">Get a key at perplexity.ai/settings/api. Auto-saves to local database.</p>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -681,40 +722,47 @@ const SettingsView: React.FC = () => {
                       <p className="text-[10px] text-on-surface-variant mt-0.5">Aggregates listings from thousands of boards. Free tier: 250 requests/day.</p>
                     </div>
                   </div>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${apiConnections.adzunaAppId && apiConnections.adzunaAppKey ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-                    {apiConnections.adzunaAppId && apiConnections.adzunaAppKey ? 'Connected' : 'Not Connected'}
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant'}`}>
+                    {(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'Connected' : 'Not Connected'}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App ID</label>
-                    <input
-                      type="text"
-                      value={apiConnections.adzunaAppId}
-                      onChange={(e) => {
-                        const next = { ...apiConnections, adzunaAppId: e.target.value };
-                        setApiConnections(next);
-                        debouncedSave('api_connections', next);
-                      }}
-                      className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                      placeholder="a1b2c3d4"
-                    />
+                {envStatus.adzuna ? (
+                  <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
+                    <span className="material-symbols-outlined text-[14px]">lock</span>
+                    Adzuna Credentials Managed via Doppler / Environment
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App Key</label>
-                    <input
-                      type="password"
-                      value={apiConnections.adzunaAppKey}
-                      onChange={(e) => {
-                        const next = { ...apiConnections, adzunaAppKey: e.target.value };
-                        setApiConnections(next);
-                        debouncedSave('api_connections', next);
-                      }}
-                      className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                      placeholder="••••••••••••••••"
-                    />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App ID</label>
+                      <input
+                        type="text"
+                        value={apiConnections.adzunaAppId}
+                        onChange={(e) => {
+                          const next = { ...apiConnections, adzunaAppId: e.target.value };
+                          setApiConnections(next);
+                          debouncedSave('api_connections', next);
+                        }}
+                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                        placeholder="a1b2c3d4"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App Key</label>
+                      <input
+                        type="password"
+                        value={apiConnections.adzunaAppKey}
+                        onChange={(e) => {
+                          const next = { ...apiConnections, adzunaAppKey: e.target.value };
+                          setApiConnections(next);
+                          debouncedSave('api_connections', next);
+                        }}
+                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                        placeholder="••••••••••••••••"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
                 <p className="text-[9px] text-on-surface-variant italic">Auto-saves to local database. Register at developer.adzuna.com — free tier only.</p>
               </div>
             </div>

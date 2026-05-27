@@ -6,8 +6,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "dev:doppler": "doppler run -- concurrently \"npm run dev:client\" \"npm run dev:server\"",
     "dev:client": "vite",
-    "dev:server": "tsx watch server/index.ts",
+    "dev:server": "tsx watch --exclude \"jobagent.sqlite*\" --exclude \"data/**\" --exclude \"submissions/**\" --exclude \"jobs/**\" --exclude \"archive/**\" server/index.ts",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
@@ -21,7 +22,6 @@
     "better-sqlite3": "^12.9.0",
     "concurrently": "^9.2.1",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "papaparse": "^5.5.3",
     "playwright": "^1.59.1",

@@ -15,10 +15,12 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
   const processedJobs = jobs.filter(job => {
     // 1. Filter by status
     if (job.status === 'Drafted') return false; // Completely hidden from views
+    if (job.status === 'Rejected') return false; // Not a fit — hidden from Opportunities (Tuning Log / Settings stats)
     if (activeFilter === 'Active' && job.status !== 'Applied') return false;
     if (activeFilter === 'Backlog' && !['New', 'Backlog'].includes(job.status)) return false;
     if (activeFilter === 'Interviewing' && !['Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(job.status)) return false;
     if (activeFilter === 'Closed' && job.status !== 'Closed') return false;
+    if (activeFilter === 'Retry' && job.status !== 'Needs Retry') return false;
 
     // 2. Filter by search term
     if (searchTerm.trim() !== '') {
@@ -34,6 +36,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
   const groups = [
     { title: 'New from scout', statuses: ['New'], chipClass: 'chip-new', icon: 'fiber_new' },
     { title: 'Ready to Apply', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
+    { title: 'Needs retry', statuses: ['Needs Retry'], chipClass: 'chip-drafted', icon: 'replay' },
     { title: 'Waiting for contact', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
     { title: 'Initial screening', statuses: ['Recruiter Screen'], chipClass: 'chip-recruiter-screen', icon: 'hourglass_top' },
     { title: 'Active gauntlet', statuses: ['Core Interviews'], chipClass: 'chip-core-interviews', icon: 'record_voice_over' },
@@ -61,7 +64,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
             />
           </div>
           <div className="flex bg-surface-container-low p-1 rounded-xl">
-            {['All', 'Backlog', 'Active', 'Interviewing', 'Closed'].map(f => (
+            {['All', 'Backlog', 'Retry', 'Active', 'Interviewing', 'Closed'].map(f => (
               <button 
                 key={f} 
                 onClick={() => setActiveFilter(f)}

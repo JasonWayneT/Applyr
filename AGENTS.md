@@ -47,3 +47,10 @@ Agents must not:
 - Treat generated code as the source of truth when docs disagree.
 - Bypass the `CR-*` workflow for material changes.
 - **Perform code-only changes.** (All three layers must be updated).
+
+## Data Privacy & Public Repo Rule
+
+All agents MUST respect the public/private boundary of this repository. 
+- **DO NOT** track or commit real personal career documents (data/*.md, data/*.json).
+- If you need to scaffold examples for new features, generate .example.md or .example.json templates using generic text and push those.
+- Never override or remove the wildcard ignores in .gitignore covering the data/ directory.

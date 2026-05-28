@@ -601,17 +601,35 @@ def process_batch():
         work_exp_full = load_file(WORK_EXP_FILE)
         print(f"[JOB_PROGRESS] Job {idx + 1}/{total_jobs}: Generating assets for {company_name}...")
         print(f"  -> [GATEKEEPER PASS] Score: {score}. Running drafting engine...")
+        
+        from drafting_errors import SelfCorrectionError
         draft_error = None
-        try:
-            display = _resolve_display_company(db_path, company_name, job_id_prefix) if db_exists else company_name
-            run_drafting_engine(company_name, jd_text, work_exp_full, result, display_name=display)
+        max_retries = 1
+        retries = 0
+        
+        while retries <= max_retries:
             try:
-                generate_cheat_sheet(company_name, display_name=display)
+                display = _resolve_display_company(db_path, company_name, job_id_prefix) if db_exists else company_name
+                run_drafting_engine(company_name, jd_text, work_exp_full, result, display_name=display)
+                try:
+                    generate_cheat_sheet(company_name, display_name=display)
+                except Exception as e:
+                    print(f"  -> [Cheat sheet warning] {e}")
+                draft_error = None
+                break
+            except SelfCorrectionError as e:
+                if retries < max_retries:
+                    print(f"  -> [SELF CORRECTION] Formatting error detected: {e}. Retrying generator...")
+                    os.environ["DRAFTING_FEEDBACK"] = str(e)
+                    retries += 1
+                else:
+                    draft_error = e
+                    print(f"  -> [DRAFT ERROR] Asset generation failed after retries: {e}")
+                    break
             except Exception as e:
-                print(f"  -> [Cheat sheet warning] {e}")
-        except Exception as e:
-            draft_error = e
-            print(f"  -> [DRAFT ERROR] Asset generation failed: {e}")
+                draft_error = e
+                print(f"  -> [DRAFT ERROR] Asset generation failed: {e}")
+                break
 
         if draft_error or not _has_required_pdfs(company_name):
             job_failures += 1

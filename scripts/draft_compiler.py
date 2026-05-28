@@ -90,21 +90,57 @@ def _assemble_resume(
     skeleton: dict,
     bullets_with_ids: Optional[Dict[str, str]] = None,
 ) -> str:
-    parts = [HEADER_BLOCK.strip(), "", "## PROFESSIONAL SUMMARY", summary.strip(), "", "## PROFESSIONAL EXPERIENCE", ""]
-    id_map = bullets_with_ids or {}
-    for key in EMPLOYERS:
-        parts.append(skeleton[key])
-        for cid, text in sorted(
-            [(c, t) for c, t in id_map.items() if _employer_for(c) == key],
-            key=lambda x: x[0],
-        ):
-            parts.append(f"* {text}")
-        if not id_map:
-            for b in bullets_by_company.get(key, [])[:5]:
-                parts.append(f"* {b}")
-        parts.append("")
-    parts.append(education_block.strip())
-    return "\n".join(parts).strip() + "\n"
+    RESUME_CHAR_BUDGET = 3200
+    import copy
+    local_bullets = copy.deepcopy(bullets_by_company)
+    id_map = copy.deepcopy(bullets_with_ids) if bullets_with_ids else {}
+
+    def _render() -> str:
+        parts = [HEADER_BLOCK.strip(), "", "## PROFESSIONAL SUMMARY", summary.strip(), "", "## PROFESSIONAL EXPERIENCE", ""]
+        for key in EMPLOYERS:
+            parts.append(skeleton[key])
+            if id_map:
+                for cid, text in sorted(
+                    [(c, t) for c, t in id_map.items() if _employer_for(c) == key],
+                    key=lambda x: x[0],
+                ):
+                    parts.append(f"* {text}")
+            else:
+                for b in local_bullets.get(key, [])[:5]:
+                    parts.append(f"* {b}")
+            parts.append("")
+        parts.append(education_block.strip())
+        return "\n".join(parts).strip() + "\n"
+
+    result = _render()
+    
+    # Dynamic AST Pruning
+    prune_order = ["zero_to_sixty", "sterkly"]
+    
+    while len(result) > RESUME_CHAR_BUDGET:
+        pruned = False
+        for employer in prune_order:
+            if id_map:
+                emp_bullets = [(c, t) for c, t in id_map.items() if _employer_for(c) == employer]
+                if len(emp_bullets) > 1: # Keep at least 1
+                    emp_bullets.sort(key=lambda x: x[0])
+                    cid_to_remove = emp_bullets[-1][0]
+                    del id_map[cid_to_remove]
+                    pruned = True
+                    break
+            else:
+                blist = local_bullets.get(employer, [])
+                if len(blist) > 1:
+                    blist.pop()
+                    pruned = True
+                    break
+        
+        if not pruned:
+            break
+            
+        result = _render()
+        
+    return result
 
 
 def _employer_for(claim_id: str) -> str:

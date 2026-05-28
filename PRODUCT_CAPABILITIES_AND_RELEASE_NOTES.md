@@ -46,6 +46,30 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.11
+Applyr Release
+May 27, 2026
+
+Version 6.2.11, deployed on May 27, 2026
+
+Previous
+Applyr 6.2.10
+
+**New**
+- **Local Embedding Vector Selection:** Implemented `local_embeddings.py` to wrap Ollama's `nomic-embed-text` endpoint. Replaced error-prone LLM claim selection in `local_draft_stages.py` with lightning-fast deterministic Cosine Similarity vector matching.
+- **BM25 Summary Pruning:** Added a sparse BM25 index to intelligently prune Job Descriptions before feeding them to the LLM, reducing context length and preventing summary hallucinations.
+- **Syntactic Skeleton "Mad Libs" Bullets:** Upgraded `bullet_generation.py` to force the LLM to output only an Action Verb and an Objective in strict JSON, appending verified quantitative metrics deterministically via Python code to absolutely prevent number inflation.
+- **Automated Self-Correction Loop:** Introduced `SelfCorrectionError` in `drafting_errors.py` and `quality_checker.py`. Modified `batch_pipeline.py` to natively catch QA violations (like Cover Letters exceeding character limits or missing headers) and execute an automated retry loop with injected LLM feedback.
+
+**Changed**
+- **Decomposed One-by-One Rewriting:** Re-architected bullet generation to prompt the LLM to rewrite exactly one bullet at a time instead of all at once, maximizing small-model accuracy.
+- **Dynamic AST Pruning for PDF Layout:** Modified `draft_compiler.py` to assemble the resume as an AST and dynamically pop off the oldest bullets if the content exceeds a strict 3,200 character budget, guaranteeing a pristine 1-page PDF layout without LLM guessing.
+- **Ollama Options Integration:** Extended `utils.py` `call_llm` to natively support native JSON Schema outputs and `logit_bias` parameter overrides for enforcing specific structural formats on local models.
+- **Claim Catalog Caching:** Updated `claim_catalog.py` to pre-compute and cache vector embeddings on startup.
+
+**Developer**
+- Ensured strict compliance with the local 8GB fallback constraints by shifting text analysis to traditional algorithm libraries.
+
 ### 6.2.10
 
 **Changed**

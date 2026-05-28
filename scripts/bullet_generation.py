@@ -45,13 +45,22 @@ def generate_bullets_for_claims(selected_ids, valid_ids, jd_text, profile=None):
             continue
 
         system = (
-            "You are a resume bullet writer. Write exactly ONE resume bullet point. "
-            "Output ONLY the bullet — no preamble, no ID tags, no explanation."
+            "You are a strict resume parsing engine. Your job is to extract the action verb and objective from an achievement, "
+            "optimizing them for the provided job context. Output ONLY valid JSON matching this exact schema: "
+            "{\"action_verb\": \"<single past-tense verb>\", \"objective\": \"<what was done, under 15 words>\"}"
         )
-        user = f"""Rewrite the achievement below as one resume bullet point reframed for the job.
+        
+        user = f"""Rewrite the achievement below to highlight its relevance to the job. Output JSON.
+        
+EXAMPLES:
+Input: * **[ACC-101] Data Pipeline**: Built a data ingestion pipeline using Python that processed 40M records.
+Output: {{"action_verb": "Engineered", "objective": "Python-based data ingestion pipeline"}}
 
-ORIGINAL ACHIEVEMENT:
-{source_text}
+Input: * **[ACC-102] Sales**: Led a team of 5 to increase sales by 20%.
+Output: {{"action_verb": "Directed", "objective": "cross-functional sales initiative"}}
+
+Input: * **[ACC-103] API Integration**: Integrated Stripe API to process payments, reducing latency.
+Output: {{"action_verb": "Integrated", "objective": "Stripe API payment processing system"}}
 
 JOB CONTEXT (first 600 chars):
 {jd_text[:600]}
@@ -60,20 +69,62 @@ JOB CONTEXT (first 600 chars):
 
 {bridge_block}
 
+ORIGINAL ACHIEVEMENT:
+{source_text}
+
 Rules:
-- Keep ALL numbers and dollar values EXACTLY as stated in the original
-- Do NOT invent tools, metrics, or facts not in the original
-- Do NOT add technologies from the JD unless they appear in the original
-- Start with an action verb
-- Maximum 25 words
-- Output the bullet only
+- NEVER include the metrics or numbers in your JSON. We will append them automatically.
+- action_verb must be a single strong past-tense verb.
+- objective must be under 15 words.
+- ONLY output JSON."""
 
-Bullet:"""
+        # Use the options_override to ban vibe words and response_schema to enforce JSON
+        vibe_words_penalty = {
+            "synergy": -100, "leverage": -100, "spearheaded": -100, "passionate": -100,
+            "transformative": -100, "dynamic": -100, "innovative": -100
+        }
+        
+        schema = {
+            "type": "object",
+            "properties": {
+                "action_verb": {"type": "string"},
+                "objective": {"type": "string"}
+            },
+            "required": ["action_verb", "objective"]
+        }
 
-        result = call_llm_stage("bullet", system, user, temperature=0.0)
+        from utils import call_llm
+        result = call_llm(
+            system, user, 
+            temperature=0.0, 
+            response_mime_type="application/json",
+            options_override={"logit_bias": vibe_words_penalty},
+            response_schema=schema
+        )
 
         if result:
-            bullet = result.strip().lstrip("-•").strip()
+            import json
+            from utils import extract_json_from_text
+            try:
+                data = json.loads(extract_json_from_text(result))
+                action = data.get("action_verb", "").strip()
+                obj = data.get("objective", "").strip()
+                
+                # Extract the metric clause from the original source deterministically
+                from local_draft_stages import _first_metric_clause
+                metric_clause = _first_metric_clause(source_text)
+                
+                if action and obj:
+                    if metric_clause:
+                        bullet = f"{action} {obj}, {metric_clause}."
+                    else:
+                        bullet = f"{action} {obj}."
+                else:
+                    bullet = fallback_bullet(source_text)
+            except Exception as e:
+                print(f"    [Stage 3] JSON parsing failed: {e}. Using source fallback.")
+                bullet = fallback_bullet(source_text)
+                
             valid, err = validate_bullet_for_local(source_text, bullet)
             if valid:
                 bullets[claim_id] = bullet

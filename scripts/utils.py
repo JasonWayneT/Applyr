@@ -279,7 +279,7 @@ def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_r
     return None
 
 
-def _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type=None):
+def _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type=None, options_override=None, response_schema=None):
     """
     Returns result string on success, None to signal try-next-provider.
     Implements intra-local model fallback chain (e.g. fallback to smaller model if large one hits OOM).
@@ -344,7 +344,13 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
                 },
                 "stream": False,
             }
-            if response_mime_type == 'application/json':
+            # Merge any options overrides (like logit_bias)
+            if options_override:
+                payload_ollama["options"].update(options_override)
+
+            if response_schema:
+                payload_ollama["format"] = response_schema
+            elif response_mime_type == 'application/json':
                 payload_ollama["format"] = "json"
                 
             res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=180)
@@ -421,7 +427,8 @@ def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retr
 
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
-             response_mime_type=None, tools=None, max_retries=8, provider_override=None):
+             response_mime_type=None, tools=None, max_retries=8, provider_override=None,
+             options_override=None, response_schema=None):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
@@ -461,7 +468,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             # Claude does not support google_search tools — tools param intentionally omitted
             result = _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries)
         elif provider == 'local':
-            result = _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type)
+            result = _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type, options_override, response_schema)
         elif provider == 'perplexity':
             result = _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retries)
 

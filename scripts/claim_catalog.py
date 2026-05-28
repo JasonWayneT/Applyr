@@ -9,7 +9,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from utils import WORK_EXP_FILE, load_file
+from utils import WORK_EXP_FILE, DATA_DIR, load_file
+import os
+import json
 
 ACC_LINE = re.compile(
     r"^\*\s+\*\*\[(ACC-\d+)\]\s*([^*]+)\*\*:\s*(.+?)\s*$",
@@ -47,6 +49,7 @@ class ClaimCatalog:
     voc_map: Dict[str, str] = field(default_factory=dict)
     anti_claim_hints: List[str] = field(default_factory=list)
     raw_truth_lines: Dict[str, str] = field(default_factory=dict)
+    claim_embeddings: Dict[str, list] = field(default_factory=dict)
 
     def truth_map(self) -> Dict[str, str]:
         out = dict(self.raw_truth_lines)
@@ -94,7 +97,38 @@ def load_catalog(path: Optional[str] = None) -> ClaimCatalog:
             if mid not in catalog.raw_truth_lines and mid.startswith("MET-"):
                 catalog.raw_truth_lines[mid] = line.strip()
 
+    _sync_embeddings(catalog, path)
     return catalog
+
+def _sync_embeddings(catalog: ClaimCatalog, source_path: str):
+    """Load or generate cached embeddings for all claims in the catalog."""
+    cache_path = os.path.join(DATA_DIR, "claim_embeddings.json")
+    
+    # Check if cache is fresh
+    if os.path.exists(cache_path) and os.path.getmtime(cache_path) >= os.path.getmtime(source_path):
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                catalog.claim_embeddings = json.load(f)
+            # Verify we have embeddings for all claims
+            if all(cid in catalog.claim_embeddings for cid in catalog.claims):
+                return
+        except Exception:
+            pass
+
+    # Need to generate or update embeddings
+    import sys
+    print("    [Info] Generating local embeddings for claims...", file=sys.stderr)
+    try:
+        from local_embeddings import get_embedding
+        for cid, rec in catalog.claims.items():
+            if cid not in catalog.claim_embeddings:
+                sanitized = sanitize_claim_text(rec.body, catalog)
+                catalog.claim_embeddings[cid] = get_embedding(sanitized)
+        
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(catalog.claim_embeddings, f)
+    except Exception as e:
+        print(f"    [Error] Failed to generate claim embeddings: {e}", file=sys.stderr)
 
 
 def apply_voc_map(text: str, catalog: ClaimCatalog) -> str:

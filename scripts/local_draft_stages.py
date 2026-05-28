@@ -91,44 +91,67 @@ def select_claims_per_employer_local(
     call_llm_fn=None,
     per_employer: int = 3,
 ) -> List[str]:
-    call_llm_fn = call_llm_fn or _call_llm_claim_select
-    """Tier 2: one small JSON selection per employer bucket."""
+    """Tier 2 Vector Search: Use local embeddings to rank claims via cosine similarity."""
+    import os
+    import json
+    import sys
+    from utils import DATA_DIR
+    from local_embeddings import get_embedding, cosine_similarity
+    
     buckets = bucket_claim_ids(valid_ids)
     selected: List[str] = []
+    
+    # Load claim embeddings
+    claim_embeddings = {}
+    cache_path = os.path.join(DATA_DIR, "claim_embeddings.json")
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                claim_embeddings = json.load(f)
+    except Exception as e:
+        print(f"    [Vector Search] Failed to load claim embeddings: {e}", file=sys.stderr)
+        
+    if not claim_embeddings:
+        print("    [Vector Search] No embeddings cache found. Falling back to keyword search.", file=sys.stderr)
+        return select_claims_deterministic(jd_text, valid_ids, per_employer)
+        
+    # Embed the JD requirements
+    # We truncate JD slightly to avoid exceeding context window for embeddings
+    jd_embedding = get_embedding(jd_text[:3000])
+    
+    if not jd_embedding:
+        print("    [Vector Search] JD embedding failed. Falling back to keyword search.", file=sys.stderr)
+        return select_claims_deterministic(jd_text, valid_ids, per_employer)
+
     for employer in EMPLOYERS:
-        pool = buckets[employer][:20]
+        pool = buckets[employer]
         if not pool:
             continue
-        menu = "\n".join(f"{k}: {valid_ids[k][:100]}" for k in pool)
-        prompt = f"""Select the {per_employer} most relevant claim IDs for this job at this employer.
-Output ONLY JSON: {{"selected_ids": ["ACC-101", ...]}}
-
-Employer context: {employer}
-
-IDS:
-{menu}
-
-JD:
-{jd_text[:1200]}"""
-        raw = call_llm_fn(
-            "Output only valid JSON.",
-            prompt,
-            temperature=0.0,
-            response_mime_type="application/json",
-        )
-        picked: List[str] = []
-        if raw:
-            try:
-                cleaned = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-                data = json.loads(cleaned)
-                ids = data.get("selected_ids", data if isinstance(data, list) else [])
-                picked = [i for i in ids if i in valid_ids and employer_for_claim_id(i) == employer]
-            except (json.JSONDecodeError, TypeError):
-                pass
+            
+        # Score pool via cosine similarity
+        scored_pool = []
+        for cid in pool:
+            emb = claim_embeddings.get(cid)
+            if emb:
+                score = cosine_similarity(jd_embedding, emb)
+                scored_pool.append((cid, score))
+            else:
+                scored_pool.append((cid, -1.0))
+                
+        # Sort by score descending
+        scored_pool.sort(key=lambda x: x[1], reverse=True)
+        picked = [cid for cid, score in scored_pool[:per_employer]]
+        
         if len(picked) < MIN_BULLETS_PER_EMPLOYER:
-            picked = select_claims_deterministic(jd_text, valid_ids, per_employer=per_employer)
-            picked = [i for i in picked if employer_for_claim_id(i) == employer][:per_employer]
+            fallback = select_claims_deterministic(jd_text, valid_ids, per_employer=per_employer)
+            for cid in fallback:
+                if employer_for_claim_id(cid) == employer and cid not in picked:
+                    picked.append(cid)
+                if len(picked) >= per_employer:
+                    break
+                    
         selected.extend(picked[:per_employer])
+        
     return list(dict.fromkeys(selected))
 
 
@@ -207,13 +230,23 @@ def build_summary_deterministic(
     jd_text: str,
     profile=None,
 ) -> str:
-    """Tier 4 v2: themes + one metric proof. Implements FR-088, FR-104 (CR-013, CR-017)."""
+    """Tier 4 v2: themes + one metric proof. Uses BM25 to pick the best matching bullet."""
+    from local_embeddings import BM25
+    
+    all_bullets = []
+    for blist in bullets_by_company.values():
+        all_bullets.extend(blist)
+        
     top_bullet = None
-    for employer in ("cision", "sterkly", "zero_to_sixty"):
-        blist = bullets_by_company.get(employer, [])
-        if blist:
-            top_bullet = blist[0]
-            break
+    if all_bullets:
+        if jd_text:
+            bm25 = BM25(all_bullets)
+            top_results = bm25.get_top_n(jd_text, n=1)
+            if top_results:
+                best_idx = top_results[0][0]
+                top_bullet = all_bullets[best_idx]
+        if not top_bullet:
+            top_bullet = all_bullets[0]
 
     if profile and getattr(profile, "priority_themes", None):
         blocked = {"zenoti", "airo", "spa", "medical aesthetics"}

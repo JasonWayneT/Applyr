@@ -47,11 +47,16 @@ def check_and_repair_cover_letter(file_path):
     if cleaned_placeholders:
         messages.append(f"[CL-009 FAIL] Corrupted placeholder brackets found: {', '.join(cleaned_placeholders)}")
 
+    from drafting_errors import SelfCorrectionError
+    
     if repaired:
         return True, " | ".join(messages)
     elif any("[CL-008 FAIL]" in msg or "[CL-009 FAIL]" in msg for msg in messages):
-        return False, " | ".join(messages)
+        raise SelfCorrectionError(" | ".join(messages))
     elif messages:
+        # Some warnings might just be length warnings. We'll raise error for length too if we want self-correction
+        if any("[CL-006 WARNING]" in msg for msg in messages):
+            raise SelfCorrectionError(" | ".join(messages))
         return True, " | ".join(messages)
     return True, "[CL-001 PASS] Cover letter passed all best practice checks."
 
@@ -108,8 +113,10 @@ def check_resume(file_path):
     if "zero to sixty" not in lower_content and "zero to 60" not in lower_content and "account manager" not in lower_content:
         messages.append("[R-005 FAIL] Missing core career history experience: Zero to Sixty")
 
+    from drafting_errors import SelfCorrectionError
+    
     if any("[R-005 FAIL]" in msg or "[R-008 FAIL]" in msg or "[R-009 FAIL]" in msg for msg in messages):
-        return False, " | ".join(messages)
+        raise SelfCorrectionError(" | ".join(messages))
     elif messages:
         return True, " | ".join(messages)
     return True, "[R-001 PASS] Resume passed all best practice checks."

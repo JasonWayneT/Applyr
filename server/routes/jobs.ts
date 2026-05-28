@@ -29,15 +29,28 @@ function jobBaseDir(status: string): string {
 // Collection
 // ---------------------------------------------------------------------------
 
-router.get('/api/jobs', (_req, res) => {
+router.get('/api/jobs', (req, res) => {
   try {
-    const jobs = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as any[];
+    const search = req.query.search as string;
+    let jobs;
+    if (search) {
+      jobs = db.prepare(`
+        SELECT jobs.* 
+        FROM jobs 
+        JOIN jobs_fts ON jobs.id = jobs_fts.id
+        WHERE jobs_fts MATCH ? 
+        ORDER BY rank
+      `).all(`"${search}"*`) as any[];
+    } else {
+      jobs = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as any[];
+    }
     const enriched = jobs.map(job => ({
       ...job,
       has_assets: jobHasPdfAssets(job.company, job.status),
     }));
     res.json(enriched);
-  } catch {
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Failed to fetch jobs' });
   }
 });
@@ -186,6 +199,29 @@ router.get('/api/jobs/:id/files/:filename', (req, res) => {
     res.sendFile(filePath);
   } catch {
     res.status(500).json({ error: 'Failed to serve file' });
+  }
+});
+
+router.get('/api/jobs/:id/skill-gap', (req, res) => {
+  try {
+    const { id } = req.params;
+    const scriptPath = path.join(SCRIPTS_DIR, 'skill_gap.py');
+    const dbPath = path.join(PROJECT_ROOT, 'jobagent.sqlite');
+    
+    exec(`python "${scriptPath}" "${dbPath}" "${id}"`, (err, stdout, stderr) => {
+      if (err) {
+        console.error(stderr);
+        return res.status(500).json({ error: 'Failed to analyze skill gap' });
+      }
+      try {
+        const result = JSON.parse(stdout);
+        res.json(result);
+      } catch (parseErr) {
+        res.status(500).json({ error: 'Invalid JSON returned from model' });
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

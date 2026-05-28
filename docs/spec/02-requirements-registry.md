@@ -143,7 +143,27 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-107` | functional | P1 | implemented | Fresh backlog summary on successful draft — `_draft_success_summary()` | `AC-109` | `CR-018` |
 | `FR-108` | functional | P1 | implemented | Template-first cheat sheet — `CHEAT_SHEET_MODE` default template | `AC-110` | `CR-018` |
 | `FR-109` | functional | P1 | implemented | Years-first seniority gate — `seniority_gate.py` title + years pre-LLM | `AC-115`, `AC-116`, `AC-117` | `CR-019` |
-| `FR-110` | functional | P1 | implemented | AI-tools vs AI-PM rubric — LLM fit must not reject tool mentions alone | `AC-118` | `CR-019` |
+| `FR-110` | functional | P1 | implemented | AI-tools vs AI-PM rubric - LLM fit must not reject tool mentions alone | `AC-118` | `CR-019` |
+| `FR-111` | functional | P1 | implemented | JD Deduplication via Vector Similarity | `AC-119` | User Request |
+| `FR-112` | functional | P1 | implemented | I/O vs GPU Concurrency Splitting | `AC-120` | User Request |
+| `FR-113` | functional | P1 | implemented | Local Salary Extraction | `AC-121` | User Request |
+| `FR-114` | functional | P1 | implemented | Vector-Based ATS Backlog Re-ranking | `AC-122` | User Request |
+| `FR-115` | functional | P1 | implemented | Rapid Metadata Tagging using Cosine Similarity | `AC-123` | User Request |
+| `FR-116` | functional | P1 | implemented | SQLite FTS5 Search Integration | `AC-124` | User Request |
+| `FR-117` | functional | P1 | implemented | DOM Cleanup Pre-Processor for JDs | `AC-125` | User Request |
+| `FR-118` | functional | P1 | implemented | Prompt Context Truncation Guard | `AC-126` | User Request |
+| `FR-119` | functional | P1 | implemented | Fast-Fail Context Fallbacks | `AC-127` | User Request |
+| `FR-120` | functional | P1 | implemented | Local Skill-Gap Analysis & UI integration | `AC-128` | User Request |
+| `FR-121` | functional | P1 | implemented | Cover Letter Intro Customization via local model | `AC-129` | User Request |
+| `FR-122` | functional | P1 | implemented | Local Offline Web Research (SearXNG + Playwright) | `AC-130` | User Request |
+| `FR-123` | functional | P1 | implemented | Competitor Matrix via Pre-computed Local Vectors | `AC-131` | User Request |
+| `FR-124` | functional | P1 | implemented | Zero-Shot On-Site Classifier | `AC-132` | User Request |
+| `FR-125` | functional | P1 | implemented | Auto-Pruning Stale DB Blobs script/cron | `AC-133` | User Request |
+| `FR-126` | functional | P1 | implemented | Local Model Text Streaming (SSE) | `AC-134` | User Request |
+| `FR-127` | functional | P1 | implemented | WebGPU Browser-Side Inference for Grammar checks | `AC-135` | User Request |
+| `FR-128` | functional | P1 | implemented | Responsive PDF Layout Feedback dynamically | `AC-136` | User Request |
+| `FR-129` | functional | P1 | implemented | Notification Webhooks (Tailscale Native / NTFY) | `AC-137` | User Request |
+| `FR-130` | functional | P1 | implemented | Local PII Redaction Guard via SpaCy/Regex | `AC-138` | User Request |
 
 
 ### Data Traceability (DATA-001 to DATA-001)
@@ -246,6 +266,26 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-116` | `FR-109` | Lead blocked | Title Lead Product Manager | Title gate | Rejected title_blocked | implemented |
 | `AC-117` | `FR-109` | Years cap | JD requires 10+ years, max=7 | Years gate | Rejected before LLM | implemented |
 | `AC-118` | `FR-110` | AI tools OK | JD mentions ChatGPT as plus | LLM fit | Not sole reject reason | implemented |
+| `AC-119` | `FR-111` | JD Deduplication via Vector Similarity | New JD arrives | Compare vector to existing | JD is deduplicated correctly | implemented |
+| `AC-120` | `FR-112` | I/O vs GPU Concurrency Splitting | Batch process starts | I/O and GPU tasks | Process concurrency is split safely | implemented |
+| `AC-121` | `FR-113` | Local Salary Extraction | Salary string is passed | Extract salary locally | Correct salary integer extracted | implemented |
+| `AC-122` | `FR-114` | Vector-Based ATS Backlog Re-ranking | Backlog is re-ranked | Compare vectors | Correct order and updated ranks | implemented |
+| `AC-123` | `FR-115` | Rapid Metadata Tagging using Cosine Similarity | Tags generated | Compute cosine similarity | Tags assigned efficiently | implemented |
+| `AC-124` | `FR-116` | SQLite FTS5 Search Integration | Queries are sent | FTS5 enabled tables | Text searches match semantics | implemented |
+| `AC-125` | `FR-117` | DOM Cleanup Pre-Processor for JDs | HTML loaded | Pre-process | Clean text returned | implemented |
+| `AC-126` | `FR-118` | Prompt Context Truncation Guard | Long context passed | Enforce limits | Text is truncated safely | implemented |
+| `AC-127` | `FR-119` | Fast-Fail Context Fallbacks | System encounters an error | Try fallback | Recovers from context error | implemented |
+| `AC-128` | `FR-120` | Local Skill-Gap Analysis & UI integration | Skills analyzed | Render UI | Shows gap correctly | implemented |
+| `AC-129` | `FR-121` | Cover Letter Intro Customization via local model | Prompt sent | Local model processes | Custom intro generated | implemented |
+| `AC-130` | `FR-122` | Local Offline Web Research (SearXNG + Playwright) | Queries triggered | SearXNG runs locally | Retrieves valid results offline | implemented |
+| `AC-131` | `FR-123` | Competitor Matrix via Pre-computed Local Vectors | Compare vectors | Run model | Valid matrix is generated | implemented |
+| `AC-132` | `FR-124` | Zero-Shot On-Site Classifier | JD indicates on-site | Run local model | Correctly classifies role type | implemented |
+| `AC-133` | `FR-125` | Auto-Pruning Stale DB Blobs script/cron | Run pruning script | DB is checked | Stale blobs are deleted | implemented |
+| `AC-134` | `FR-126` | Local Model Text Streaming (SSE) | Generate text | SSE enabled | Text is streamed line by line | implemented |
+| `AC-135` | `FR-127` | WebGPU Browser-Side Inference for Grammar checks | Input text | Check with WebGPU | Errors highlighted client-side | implemented |
+| `AC-136` | `FR-128` | Responsive PDF Layout Feedback dynamically | Layout updated | PDF scaled | Fits one page cleanly | implemented |
+| `AC-137` | `FR-129` | Notification Webhooks (Tailscale Native / NTFY) | System event occurs | Send webhook | Push notification received | implemented |
+| `AC-138` | `FR-130` | Local PII Redaction Guard via SpaCy/Regex | Input containing PII | Run guard | PII replaced with redaction | implemented |
 
 ## Non-Functional Requirements
 

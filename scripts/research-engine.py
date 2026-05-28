@@ -59,6 +59,29 @@ def fetch_company_intel_gemini(company, role, prompt):
     return clean_json
 
 
+def fetch_company_intel_local(company, role, prompt):
+    """
+    Local Offline Web Research (SearXNG) fallback replacing Perplexity.
+    Queries a local SearXNG instance and passes corpus to local LLM.
+    """
+    searxng_url = "http://localhost:8080/search"
+    text_corpus = ""
+    try:
+        res = requests.get(searxng_url, params={"q": f"{company} company news financials {role}", "format": "json"}, timeout=15)
+        if res.status_code == 200:
+            results = res.json().get('results', [])[:5]
+            text_corpus = "\n".join([r.get('content', '') for r in results if r.get('content')])
+    except Exception as e:
+        print(f"    [Research] Local SearXNG failed or not running: {e}", file=sys.stderr)
+
+    if not text_corpus:
+        text_corpus = "No recent web data available. Rely on internal knowledge."
+
+    system_prompt = "You are a corporate intelligence agent. Return output in VALID JSON format ONLY based on the provided Web Corpus."
+    
+    return call_llm(system_prompt, f"Web Corpus:\n{text_corpus}\n\nTask:\n{prompt}", response_schema="json", temperature=0.2)
+
+
 def fetch_company_intel(company, role, contract_path=None):
     if contract_path is None:
         contract_path = RESEARCH_CONTRACT_FILE
@@ -79,7 +102,8 @@ def fetch_company_intel(company, role, contract_path=None):
         try:
             return fetch_company_intel_perplexity(company, role, prompt, settings)
         except Exception as e:
-            print(f"Perplexity research failed ({e}), falling back to primary LLM...", file=sys.stderr)
+            print(f"Perplexity research failed ({e}), falling back to local fallback...", file=sys.stderr)
+            return fetch_company_intel_local(company, role, prompt)
 
     return fetch_company_intel_gemini(company, role, prompt)
 

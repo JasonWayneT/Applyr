@@ -67,4 +67,48 @@ router.get('/api/logs', (req, res) => {
   }
 });
 
+router.post('/api/stream/local-model', (req, res) => {
+  // Implements Server-Sent Events (SSE) for Local Model Streaming
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+  });
+  
+  const { prompt } = req.body;
+  if (!prompt) {
+    res.write('event: error\ndata: {"error":"Prompt required"}\n\n');
+    return res.end();
+  }
+  
+  const settingsStr = fs.readFileSync(path.join(PROJECT_ROOT, '.agent', 'llm_settings.json'), 'utf8');
+  const settings = JSON.parse(settingsStr);
+  const baseUrl = settings.localUrl || 'http://localhost:11434';
+  
+  fetch(`${baseUrl}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: settings.localFallbackModel || 'phi3.5:3.8b-mini-instruct-q8_0',
+      prompt: prompt,
+      stream: true
+    })
+  }).then(async (response) => {
+    if (!response.body) throw new Error("No body");
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+    }
+    res.write('event: end\ndata: {}\n\n');
+    res.end();
+  }).catch(err => {
+    res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+    res.end();
+  });
+});
+
 export default router;

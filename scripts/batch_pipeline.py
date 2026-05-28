@@ -7,12 +7,15 @@ import sys
 import sqlite3
 import re
 from datetime import datetime
+import threading
+import concurrent.futures
 from utils import (
     load_file, call_llm, check_rate_limits, JOBS_DIR, PROJECT_ROOT, SUBMISSIONS_DIR,
     WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
     SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE, load_candidate_preferences,
-    unload_local_models
+    unload_local_models, clean_jd_text, send_notification
 )
+from local_embeddings import get_embedding, cosine_similarity
 from drafting_engine import run_drafting_engine
 from generate_cheat_sheet import generate_cheat_sheet
 
@@ -20,6 +23,78 @@ from generate_cheat_sheet import generate_cheat_sheet
 STATUS_NEEDS_RETRY = "Needs Retry"
 STATUS_REJECTED = "Rejected"
 MAX_AUTO_RETRIES = 3
+
+
+GPU_LOCK = threading.Lock()
+PRINT_LOCK = threading.Lock()
+_orig_print = print
+def safe_print(*args, **kwargs):
+    with PRINT_LOCK:
+        _orig_print(*args, **kwargs)
+print = safe_print
+
+def check_is_duplicate_and_get_vector(db_path: str, jd_text: str):
+    if not jd_text or len(jd_text) < 100:
+        return False, None
+    try:
+        vector = get_embedding(jd_text[:3000])
+        if not vector:
+            return False, None
+        import sqlite3, json
+        conn = sqlite3.connect(db_path, timeout=30.0)
+        cursor = conn.cursor()
+        cursor.execute("SELECT company, jd_vector FROM jobs WHERE jd_vector IS NOT NULL AND created_at >= datetime('now', '-14 days')")
+        rows = cursor.fetchall()
+        conn.close()
+        for row in rows:
+            company, vec_str = row
+            try:
+                past_vector = json.loads(vec_str)
+                if cosine_similarity(vector, past_vector) > 0.95:
+                    return True, vector
+            except Exception:
+                pass
+        return False, vector
+    except Exception as e:
+        print(f"  -> Error checking duplicate: {e}")
+        return False, None
+
+def extract_and_save_salary(db_path: str, job_id_prefix: str, company_name: str, jd_text: str):
+    """Uses regex to extract salary from JD and updates SQLite."""
+    if not jd_text: return
+    try:
+        import re
+        # Looks for patterns like $120,000 - $150,000, $120k to $150k, 120k - 150k, etc.
+        pattern = r'\$[\d,]+[kK]?(?:\s*(?:-|to|and)\s*\$[\d,]+[kK]?)?'
+        matches = re.findall(pattern, jd_text)
+        if matches:
+            salary = matches[0]
+            conn = sqlite3.connect(db_path, timeout=30.0)
+            cursor = conn.cursor()
+            if job_id_prefix:
+                cursor.execute("UPDATE jobs SET salary_range = ? WHERE id LIKE ?", (salary, f"{job_id_prefix}%"))
+            else:
+                cursor.execute("UPDATE jobs SET salary_range = ? WHERE LOWER(company) = LOWER(?)", (salary, company_name))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        safe_print(f"  -> Error saving salary: {e}")
+
+def save_jd_vector(db_path: str, job_id_prefix: str, company_name: str, vector: list):
+    if not vector: return
+    try:
+        import sqlite3, json
+        conn = sqlite3.connect(db_path, timeout=30.0)
+        cursor = conn.cursor()
+        vec_str = json.dumps(vector)
+        if job_id_prefix:
+            cursor.execute("UPDATE jobs SET jd_vector = ? WHERE id LIKE ?", (vec_str, f"{job_id_prefix}%"))
+        else:
+            cursor.execute("UPDATE jobs SET jd_vector = ? WHERE LOWER(company) = LOWER(?)", (vec_str, company_name))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  -> Error saving jd_vector: {e}")
 
 
 def _company_submission_dir(company_name: str) -> str:
@@ -364,7 +439,8 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
     else:
         print(json.dumps({"id": "fit", "status": "running", "summary": f"Evaluating '{company}'..."}))
         work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE)
-        result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
+        with GPU_LOCK:
+            result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
         if not result:
             print(json.dumps({"id": "fit", "status": "error", "summary": "Evaluation failed."}))
             return
@@ -388,7 +464,8 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
 
     try:
         display = _resolve_display_company(db_path, company, job_id)
-        run_drafting_engine(company, jd_text, work_exp_full, result, display_name=display)
+        with GPU_LOCK:
+            run_drafting_engine(company, jd_text, work_exp_full, result, display_name=display)
         print(json.dumps({"id": "resume", "status": "done", "summary": "ATS-Optimized PDF Generated"}))
         print(json.dumps({"id": "cover", "status": "done", "summary": "PDF Generated"}))
     except Exception as e:
@@ -402,7 +479,8 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
         return
 
     try:
-        generate_cheat_sheet(company, display_name=display)
+        with GPU_LOCK:
+            generate_cheat_sheet(company, display_name=display)
     except Exception as e:
         print(json.dumps({"id": "cheat_sheet", "status": "warning", "summary": str(e)[:200]}))
 
@@ -439,6 +517,8 @@ def process_batch():
     print(" JobAgent v3.2 Batch Pipeline Sync  ")
     print("====================================")
 
+    stats = {"processed": 0, "skipped_duplicates": 0, "rejected": 0, "drafted": 0, "errors": 0}
+
     # Implements FR-064: summary auto-generated on save; fall back to full file if not yet generated
     work_exp_summary = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE)
     fit_rules = load_file(FIT_ENGINE_FILE)
@@ -460,7 +540,8 @@ def process_batch():
 
     total_jobs = len(job_files)
     job_failures = 0
-    for idx, filepath in enumerate(job_files):
+    def process_single_job(idx, filepath):
+        job_failures_local = 0
         filename = os.path.basename(filepath)
         name_part = filename.replace(".txt", "").strip()
 
@@ -480,7 +561,7 @@ def process_batch():
         if not jd_text or len(jd_text.strip()) < 100:
             print(f"  -> Skipping. File {filename} seems empty or too short.")
             _cleanup_staging_file(filepath, filename)
-            continue
+            return job_failures_local
 
         file_url = None
         first_line = jd_text.strip().split('\n')[0].strip()
@@ -513,14 +594,40 @@ def process_batch():
         if is_stale:
             print(f"  -> Skipping. Job already present in 'stale_jobs'.")
             _cleanup_staging_file(filepath, filename)
-            continue
+            return job_failures_local
 
         if status_to_check and status_to_check not in ('New', 'Drafted'):
             print(f"  -> Skipping. Already evaluated (status: {status_to_check}).")
             _cleanup_staging_file(filepath, filename)
-            continue
+            return job_failures_local
 
         # Zero-token keyword gate
+        if db_exists:
+            extract_and_save_salary(db_path, job_id_prefix, company_name, jd_text)
+            is_dup, vec = check_is_duplicate_and_get_vector(db_path, jd_text)
+            if is_dup:
+                print(f"  -> Skipping. JD is a >95% vector match with a recently processed job (Duplicate/Repost).")
+                try:
+                    conn = sqlite3.connect(db_path, timeout=30.0)
+                    cursor = conn.cursor()
+                    if job_id_prefix:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                    else:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                    row = cursor.fetchone()
+                    if row:
+                        url, company, title = row
+                        conn.close()
+                        _mark_job_rejected(db_path, job_id_prefix, company_name, url, title, "Duplicate JD (Vector Similarity)")
+                    else:
+                        conn.close()
+                except Exception as e:
+                    pass
+                _cleanup_staging_file(filepath, filename)
+                return job_failures_local
+            if vec:
+                save_jd_vector(db_path, job_id_prefix, company_name, vec)
+
         if not passes_jd_keyword_gate(jd_text, prefs):
             print(f"  -> Skipping. JD failed keyword pre-filter (no relevant signals).")
             if db_exists:
@@ -537,7 +644,7 @@ def process_batch():
                         conn.close()
                         _mark_job_rejected(
                             db_path, job_id_prefix, company_name, url, title,
-                            "Not a fit — keyword or title gate",
+                            "Not a fit â€” keyword or title gate",
                         )
                         print(f"  -> Marked as '{STATUS_REJECTED}' (keyword/title gate).")
                     else:
@@ -545,14 +652,15 @@ def process_batch():
                 except Exception as e:
                     print(f"  -> Error handling keyword gate db update: {e}")
             _cleanup_staging_file(filepath, filename)
-            continue
+            return job_failures_local
 
         print(f"  -> Evaluating fit against v3.2 Rubric...")
-        result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
+        with GPU_LOCK:
+            result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
 
         if not result:
             print("  -> Evaluation failed due to an error.")
-            job_failures += 1
+            job_failures_local += 1
             if db_exists:
                 try:
                     _mark_job_needs_retry(
@@ -563,7 +671,7 @@ def process_batch():
                 except Exception as e:
                     print(f"  -> Error marking failure in database: {e}")
             _cleanup_staging_file(filepath, filename)
-            continue
+            return job_failures_local
 
         score = result.get("Score", 0)
         decision = result.get("Decision", "NO")
@@ -586,7 +694,7 @@ def process_batch():
                         conn.close()
                         _mark_job_rejected(
                             db_path, job_id_prefix, company_name, url, title,
-                            f"Not a fit — score {score} below threshold ({MIN_FIT_SCORE})",
+                            f"Not a fit â€” score {score} below threshold ({MIN_FIT_SCORE})",
                             score=score,
                         )
                         print(f"  -> Marked as '{STATUS_REJECTED}' (low fit score).")
@@ -595,7 +703,7 @@ def process_batch():
                 except Exception as e:
                     print(f"  -> Error handling low score db update: {e}")
             _cleanup_staging_file(filepath, filename)
-            continue
+            return job_failures_local
 
         # Load full work experience only for YES decisions
         work_exp_full = load_file(WORK_EXP_FILE)
@@ -610,9 +718,11 @@ def process_batch():
         while retries <= max_retries:
             try:
                 display = _resolve_display_company(db_path, company_name, job_id_prefix) if db_exists else company_name
-                run_drafting_engine(company_name, jd_text, work_exp_full, result, display_name=display)
+                with GPU_LOCK:
+                    run_drafting_engine(company_name, jd_text, work_exp_full, result, display_name=display)
                 try:
-                    generate_cheat_sheet(company_name, display_name=display)
+                    with GPU_LOCK:
+                        generate_cheat_sheet(company_name, display_name=display)
                 except Exception as e:
                     print(f"  -> [Cheat sheet warning] {e}")
                 draft_error = None
@@ -632,7 +742,7 @@ def process_batch():
                 break
 
         if draft_error or not _has_required_pdfs(company_name):
-            job_failures += 1
+            job_failures_local += 1
             if db_exists:
                 try:
                     reason = str(draft_error) if draft_error else "PDF assets missing after drafting"
@@ -656,7 +766,7 @@ def process_batch():
                 print(f"  -> Database status updated to 'Backlog' (Ready to Apply) with score {score}.")
             except Exception as e:
                 print(f"  -> Error updating database: {e}")
-                job_failures += 1
+                job_failures_local += 1
 
         _cleanup_staging_file(filepath, filename)
 
@@ -666,10 +776,24 @@ def process_batch():
         print("  -> Sleeping for 15 seconds to respect rate limits...")
         time.sleep(15)
 
-    if job_failures:
-        print(f"\n[BATCH_SUMMARY] Queue drained with {job_failures} job failure(s). See logs above.")
+        return job_failures_local
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = []
+        for idx, filepath in enumerate(job_files):
+            futures.append(executor.submit(process_single_job, idx, filepath))
+        
+        for future in concurrent.futures.as_completed(futures):
+            job_failures += future.result()
+
+    if job_failures > 0:
+        msg = f"Batch queue drained with {job_failures} job failure(s)."
+        print(f"\n[BATCH_SUMMARY] {msg} See logs above.")
+        send_notification(msg, "jobagent_alerts")
     else:
-        print("\n[BATCH_SUMMARY] Batch queue processed successfully.")
+        msg = "Batch queue processed successfully."
+        print(f"\n[BATCH_SUMMARY] {msg}")
+        send_notification(msg, "jobagent_alerts")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

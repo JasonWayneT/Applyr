@@ -284,6 +284,25 @@ def build_summary_deterministic(
 
 
 def _jd_hook_sentence(jd_text: str, company_name: str, profile=None) -> str:
+    from utils import call_llm
+    
+    # Try local LLM first for a highly customized intro
+    if jd_text:
+        system_prompt = (
+            "You are a professional technical recruiter writing an opening hook for a cover letter for Jason Taylor. "
+            "Write exactly ONE sentence. "
+            f"Format strictly: 'I am applying for the [Job Title] role at {company_name}, where my background in [1-2 key skills from JD] aligns with your focus on [1 key goal from JD].' "
+            "Do not include any greeting or signature. Output ONLY the single sentence."
+        )
+        try:
+            custom_hook = call_llm(system_prompt, f"JD Text:\n{jd_text[:4000]}", temperature=0.2)
+            if custom_hook and custom_hook.startswith("I am") and len(custom_hook) < 300:
+                return custom_hook.strip()
+        except Exception as e:
+            import sys
+            print(f"    [Local Draft Warning] Failed to generate custom cover letter hook: {e}", file=sys.stderr)
+
+    # Fallback to keyword extraction
     if profile and getattr(profile, "priority_themes", None):
         theme_str = ", ".join(profile.priority_themes[:2])
     else:

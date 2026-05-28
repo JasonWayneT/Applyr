@@ -146,6 +146,19 @@ def load_file(filepath):
         return ""
 
 
+def clean_jd_text(text: str) -> str:
+    """Removes HTML tags, boilerplate, navbars, and excess whitespace to save tokens."""
+    import re
+    if not text:
+        return ""
+    # Strip HTML tags
+    text = re.sub(r'<[^>]+>', ' ', text)
+    # Remove extra spaces and newlines
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    text = re.sub(r' {2,}', ' ', text)
+    return text.strip()
+
+
 def load_api_connections():
     """Reads api_connections from SQLite profiles table. Returns dict or empty dict on failure."""
     import sqlite3
@@ -302,7 +315,6 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
             models_to_try.append(fallback)
 
     # ANTI-HALLUCINATION CONSTRAINT PREFIX
-    # Small models (7B-14B) benefit most from explicit negative constraints in the system message.
     LOCAL_CONSTRAINT_PREFIX = (
         "STRICT RULES YOU MUST FOLLOW WITHOUT EXCEPTION:\n"
         "1. ONLY use facts, company names, job titles, tools, and metrics explicitly provided in the user prompt.\n"
@@ -315,74 +327,89 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
     )
     enhanced_system = LOCAL_CONSTRAINT_PREFIX + system_prompt
     
-    anchored_user = user_prompt + "\n\n[SYSTEM REMINDER: You must strictly follow the constraints defined in your system prompt, especially regarding factual accuracy and output formatting.]"
+    anchored_user_original = user_prompt + "\n\n[SYSTEM REMINDER: You must strictly follow the constraints defined in your system prompt, especially regarding factual accuracy and output formatting.]"
+
+    def _truncate_prompt(prompt: str, fraction: float = 0.5) -> str:
+        length = len(prompt)
+        if length < 2000:
+            return prompt
+        keep_start = int(length * fraction / 2)
+        keep_end = int(length * fraction / 2)
+        return prompt[:keep_start] + "\n\n...[TRUNCATED BY LOCAL GUARD]...\n\n" + prompt[-keep_end:]
 
     for target_model in models_to_try:
-        print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model}...", file=sys.stderr)
-        endpoint = base_url.rstrip('/')
-        if not endpoint.endswith('/v1') and not endpoint.endswith('/v1/chat/completions'):
-            endpoint = f"{endpoint}/v1/chat/completions"
-        elif endpoint.endswith('/v1'):
-            endpoint = f"{endpoint}/chat/completions"
+        anchored_user = anchored_user_original
+        for attempt in range(2):
+            print(f"    [LLM] Calling Local LLM ({base_url}) Model: {target_model} (Attempt {attempt+1})...", file=sys.stderr)
+            endpoint = base_url.rstrip('/')
+            if not endpoint.endswith('/v1') and not endpoint.endswith('/v1/chat/completions'):
+                endpoint = f"{endpoint}/v1/chat/completions"
+            elif endpoint.endswith('/v1'):
+                endpoint = f"{endpoint}/chat/completions"
 
-        try:
-            # Try native Ollama API first - proven most reliable for local models
-            ollama_endpoint = base_url.rstrip('/') + '/api/chat'
-            payload_ollama = {
-                "model": target_model,
-                "messages": [
-                    {"role": "system", "content": enhanced_system},
-                    {"role": "user", "content": anchored_user},
-                ],
-                "options": {
-                    "temperature": temperature,
-                    "num_ctx": 16384,
-                    "num_predict": 4000,
-                    "top_k": 40,
-                    "top_p": 0.9,
-                    "repeat_penalty": 1.1,
-                },
-                "stream": False,
-            }
-            # Merge any options overrides (like logit_bias)
-            if options_override:
-                payload_ollama["options"].update(options_override)
-
-            if response_schema:
-                payload_ollama["format"] = response_schema
-            elif response_mime_type == 'application/json':
-                payload_ollama["format"] = "json"
+            try:
+                ollama_endpoint = base_url.rstrip('/') + '/api/chat'
+                payload_ollama = {
+                    "model": target_model,
+                    "messages": [
+                        {"role": "system", "content": enhanced_system},
+                        {"role": "user", "content": anchored_user},
+                    ],
+                    "options": {
+                        "temperature": temperature,
+                        "num_ctx": 16384,
+                        "num_predict": 4000,
+                        "top_k": 40,
+                        "top_p": 0.9,
+                        "repeat_penalty": 1.1,
+                    },
+                    "stream": False,
+                }
                 
-            res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=180)
-            if res_ollama.status_code == 200:
-                res_json = res_ollama.json()
-                result = res_json.get("message", {}).get("content", "")
-                if result.strip():
-                    return result.strip()
+                if options_override:
+                    payload_ollama["options"].update(options_override)
 
-            # Fallback to OpenAI compatibility API
-            payload = {
-                "model": target_model,
-                "temperature": temperature,
-                "messages": [
-                    {"role": "system", "content": enhanced_system},
-                    {"role": "user", "content": anchored_user},
-                ],
-            }
-            if response_mime_type == 'application/json':
-                payload["response_format"] = {"type": "json_object"}
-            res = requests.post(endpoint, json=payload, timeout=180)
-            if res.status_code == 200:
-                result = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
-                if result.strip():
-                    return result.strip()
+                if response_schema:
+                    payload_ollama["format"] = response_schema
+                elif response_mime_type == 'application/json':
+                    payload_ollama["format"] = "json"
+                    
+                res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=120)
+                if res_ollama.status_code == 200:
+                    res_json = res_ollama.json()
+                    result = res_json.get("message", {}).get("content", "")
+                    if result.strip():
+                        return result.strip()
+                else:
+                    print(f"    [LLM Local Error] HTTP {res_ollama.status_code}: {res_ollama.text}", file=sys.stderr)
 
-            print(f"    [LLM Local Warning] Model '{target_model}' returned empty or failed status.", file=sys.stderr)
+                # Fallback to OpenAI compatibility API
+                payload = {
+                    "model": target_model,
+                    "temperature": temperature,
+                    "messages": [
+                        {"role": "system", "content": enhanced_system},
+                        {"role": "user", "content": anchored_user},
+                    ],
+                }
+                if response_mime_type == 'application/json':
+                    payload["response_format"] = {"type": "json_object"}
+                res = requests.post(endpoint, json=payload, timeout=120)
+                if res.status_code == 200:
+                    result = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                    if result.strip():
+                        return result.strip()
 
-        except Exception as e:
-            print(f"    [LLM Local Warning] Connection failed for model '{target_model}': {e}", file=sys.stderr)
+            except Exception as e:
+                print(f"    [LLM Local Warning] Connection failed for model '{target_model}': {e}", file=sys.stderr)
 
-        # If we have another model left to try, output log and continue
+            # If we reach here, the attempt failed
+            if attempt == 0:
+                print(f"    [LLM] Local call failed (OOM/Timeout). Truncating context by 50% for fast-retry...", file=sys.stderr)
+                anchored_user = _truncate_prompt(anchored_user_original, 0.5)
+            else:
+                print(f"    [LLM] Model '{target_model}' failed both full and truncated attempts.", file=sys.stderr)
+
         if target_model != models_to_try[-1]:
             print(f"    [LLM] Attempting next local fallback model...", file=sys.stderr)
 
@@ -498,3 +525,15 @@ def unload_local_models():
     
     base_url = settings.get('localUrl', 'http://localhost:11434')
     model_manager.unload_all_models(base_url)
+
+def send_notification(message: str, topic: str = "jobagent_alerts"):
+    """
+    Sends a push notification via ntfy.sh.
+    Implements local-first notification webhooks for pipeline events.
+    """
+    import requests
+    try:
+        requests.post(f"https://ntfy.sh/{topic}", data=message.encode('utf-8'), timeout=5)
+    except Exception as e:
+        import sys
+        print(f"    [Warning] Failed to send notification: {e}", file=sys.stderr)

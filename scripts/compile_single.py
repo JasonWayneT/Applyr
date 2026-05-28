@@ -164,12 +164,35 @@ def main():
             page = browser.new_page()
             page.set_content(full_html)
             page.evaluate("document.fonts.ready")
+            
+            # Initial render at 100%
             page.pdf(
                 path=pdf_path,
                 format="Letter",
                 print_background=True,
-                prefer_css_page_size=True
+                prefer_css_page_size=True,
+                scale=1.0
             )
+            
+            # Implement Responsive PDF Layout Feedback dynamically
+            def get_pdf_page_count(path):
+                import re
+                try:
+                    with open(path, 'rb') as f:
+                        return len(re.findall(b'/Type\\s*/Page\\b', f.read()))
+                except:
+                    return 1
+                    
+            if get_pdf_page_count(pdf_path) > 1:
+                # Scale down by 10% to try and fit it onto 1 page
+                page.pdf(
+                    path=pdf_path,
+                    format="Letter",
+                    print_background=True,
+                    prefer_css_page_size=True,
+                    scale=0.9
+                )
+                
             browser.close()
 
         print("SUCCESS")

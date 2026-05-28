@@ -112,3 +112,64 @@ class BM25:
         indexed_scores.sort(key=lambda x: x[1], reverse=True)
         return indexed_scores[:n]
 
+_TAG_ANCHORS = None
+def fast_tag_jd(jd_vector: list) -> list[str]:
+    """
+    Rapidly tags a JD based on cosine similarity to predefined anchor vectors.
+    Saves LLM inference time by using cheap vector arithmetic.
+    """
+    global _TAG_ANCHORS
+    if not jd_vector:
+        return []
+        
+    tags = {
+        "B2B SaaS": "Business to business software as a service enterprise platform",
+        "Data Platform": "Data pipeline data platform analytics data warehouse",
+        "AI / ML": "Artificial intelligence machine learning LLM predictive models",
+        "Healthcare / Regulated": "Healthcare HIPAA regulated compliance medical",
+        "FinTech": "Financial technology payments banking compliance ledger"
+    }
+    
+    if _TAG_ANCHORS is None:
+        _TAG_ANCHORS = {}
+        for tag, text in tags.items():
+            vec = get_embedding(text)
+            if vec:
+                _TAG_ANCHORS[tag] = vec
+                
+    results = []
+    for tag, anchor_vec in _TAG_ANCHORS.items():
+        if cosine_similarity(jd_vector, anchor_vec) > 0.65:
+            results.append(tag)
+            
+    return results
+
+
+_COMPETITOR_VECTORS = None
+def build_competitor_matrix(jd_text: str) -> list[str]:
+    """
+    Finds the closest competitors based on JD text using pre-computed vector embeddings.
+    """
+    global _COMPETITOR_VECTORS
+    if _COMPETITOR_VECTORS is None:
+        competitors = [
+            "Salesforce CRM Enterprise", "HubSpot Marketing Automation B2B",
+            "Snowflake Cloud Data Warehouse", "Databricks AI Data Platform",
+            "Stripe Payments API FinTech", "Plaid Financial Data Network",
+            "Twilio Cloud Communications API", "Okta Identity Access Management",
+            "CrowdStrike Endpoint Security", "Palo Alto Networks Cybersecurity",
+            "Epic Systems Healthcare IT", "Cerner Medical Records EHR"
+        ]
+        _COMPETITOR_VECTORS = {c: get_embedding(c) for c in competitors}
+        
+    jd_vector = get_embedding(jd_text)
+    if not jd_vector:
+        return []
+        
+    scores = []
+    for comp, c_vec in _COMPETITOR_VECTORS.items():
+        if c_vec:
+            scores.append((comp, cosine_similarity(jd_vector, c_vec)))
+            
+    scores.sort(key=lambda x: x[1], reverse=True)
+    return [c[0] for c in scores[:3]]

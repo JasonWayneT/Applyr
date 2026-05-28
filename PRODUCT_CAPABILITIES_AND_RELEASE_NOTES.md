@@ -46,6 +46,31 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.12
+Applyr Release
+May 28, 2026
+
+Version 6.2.12, deployed on May 28, 2026
+
+Previous
+Applyr 6.2.11
+
+**New**
+- **Offline Intelligence Pipeline:** Replaced external Perplexity and LinkedIn dependencies with a robust local execution chain. Orchestrated SearXNG local web searching and Playwright-based headless scraping to capture up-to-date company data and job descriptions directly, enabling full disconnected operation.
+- **Vector-Based Backlog Reranking:** Upgraded ATS queue management with a fully local vector database. Re-evaluates stale listings by projecting semantic similarity between JD embeddings and candidate preferences to resurface hidden gem roles previously buried in the backlog.
+- **Edge-Computed Grammar Inference:** Transferred final stage stylistic and grammatical validation from Python server layers to the client browser using WebGPU. Eliminates server VRAM contention while providing real-time local linting.
+- **Responsive Push Notifications:** Plumbed NTFY push-notification webhooks natively into the background batch pipeline, enabling zero-latency cross-device alerts for system failures, completed assets, and rate-limit triggers.
+- **On-Device PII Masking Guard:** Implemented a robust SpaCy/Regex PII redaction layer prior to LLM submission, neutralizing the risk of data leakage when connecting to semi-trusted cloud API endpoints.
+
+**Changed**
+- **Adaptive PDF Pagination & Layout:** Reworked `compile_single.py` to dynamically measure Markdown token weights and iteratively reflow the single-page layout buffer, virtually guaranteeing zero multi-page spillages regardless of generated text length.
+- **Real-Time Streaming Generation Output:** Augmented the server `system.ts` route with Server-Sent Events (SSE), streaming partial draft completions instantly to the React frontend UI to drastically improve perceived performance and keep the user engaged.
+- **SQLite FTS5 Rapid Metadata Search:** Re-indexed core SQLite databases with FTS5 tokenizers to dramatically accelerate semantic candidate preference lookups, bypassing slower legacy SQL LIKE wildcard queries.
+- **Intelligent Asset Pruning Engine:** Deployed an automated DB grooming script that sweeps stale vector blob embeddings and trims long-abandoned ATS data arrays, enforcing strict data lifecycle policies to ensure maximum runtime speed and minimal storage overhead.
+
+**Developer**
+- Hardened multi-process data access to prevent locking across concurrent threading operations, isolating CPU-bound I/O vectors away from constrained GPU compute resources.
+
 ### 6.2.11
 Applyr Release
 May 27, 2026

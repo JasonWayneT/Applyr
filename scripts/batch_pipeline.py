@@ -18,6 +18,9 @@ from utils import (
 from local_embeddings import get_embedding, cosine_similarity
 from drafting_engine import run_drafting_engine
 from generate_cheat_sheet import generate_cheat_sheet
+from metadata_tagger import tag_job_metadata
+from dom_cleanup import clean_html_to_text
+from zero_shot_classifier import classify_onsite
 
 # CR-011: user-facing pipeline status vocabulary
 STATUS_NEEDS_RETRY = "Needs Retry"
@@ -601,9 +604,21 @@ def process_batch():
             _cleanup_staging_file(filepath, filename)
             return job_failures_local
 
+        # DOM Cleanup Pre-Processor
+        jd_text = clean_html_to_text(jd_text)
+
+        if not jd_text or len(jd_text.strip()) < 100:
+            print(f"  -> Skipping. File {filename} seems empty or too short after cleanup.")
+            _cleanup_staging_file(filepath, filename)
+            return job_failures_local
+
         # Zero-token keyword gate
         if db_exists:
             extract_and_save_salary(db_path, job_id_prefix, company_name, jd_text)
+            
+            # Rapid Metadata Tagging
+            tag_job_metadata(db_path, job_id_prefix, company_name, jd_text)
+            
             is_dup, vec = check_is_duplicate_and_get_vector(db_path, jd_text)
             if is_dup:
                 print(f"  -> Skipping. JD is a >95% vector match with a recently processed job (Duplicate/Repost).")
@@ -644,13 +659,41 @@ def process_batch():
                         conn.close()
                         _mark_job_rejected(
                             db_path, job_id_prefix, company_name, url, title,
-                            "Not a fit â€” keyword or title gate",
+                            "Not a fit — keyword or title gate",
                         )
                         print(f"  -> Marked as '{STATUS_REJECTED}' (keyword/title gate).")
                     else:
                         conn.close()
                 except Exception as e:
                     print(f"  -> Error handling keyword gate db update: {e}")
+            _cleanup_staging_file(filepath, filename)
+            return job_failures_local
+
+        # Zero-Shot On-Site Classifier Gate
+        is_onsite, reason = classify_onsite(jd_text)
+        if is_onsite:
+            print(f"  -> Skipping. Zero-Shot Classifier detected stealth on-site/hybrid outside local area: {reason}")
+            if db_exists:
+                try:
+                    conn = sqlite3.connect(db_path, timeout=30.0)
+                    cursor = conn.cursor()
+                    if job_id_prefix:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                    else:
+                        cursor.execute("SELECT url, company, title FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                    row = cursor.fetchone()
+                    if row:
+                        url, company, title = row
+                        conn.close()
+                        _mark_job_rejected(
+                            db_path, job_id_prefix, company_name, url, title,
+                            f"Not a fit — Stealth On-site detected: {reason}",
+                        )
+                        print(f"  -> Marked as '{STATUS_REJECTED}' (On-site gate).")
+                    else:
+                        conn.close()
+                except Exception as e:
+                    print(f"  -> Error handling on-site gate db update: {e}")
             _cleanup_staging_file(filepath, filename)
             return job_failures_local
 

@@ -86,6 +86,37 @@ def fetch_company_intel(company, role, contract_path=None):
     if contract_path is None:
         contract_path = RESEARCH_CONTRACT_FILE
 
+    # Local Vector Competitor Lookup
+    try:
+        from local_embeddings import get_embedding, cosine_similarity
+        import sqlite3
+        import os
+        from utils import PROJECT_ROOT
+        db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+        competitors = []
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path, timeout=30.0)
+            cursor = conn.cursor()
+            # Try to find the vector for this company
+            cursor.execute("SELECT id, company, metadata_vector FROM jobs WHERE LOWER(company) = LOWER(?) LIMIT 1", (company,))
+            row = cursor.fetchone()
+            if row and row[2]:
+                import json
+                import numpy as np
+                target_vec = np.array(json.loads(row[2]))
+                cursor.execute("SELECT company, title, metadata_vector FROM jobs WHERE metadata_vector IS NOT NULL AND LOWER(company) != LOWER(?)", (company,))
+                for cmp, title, vec_json in cursor.fetchall():
+                    vec = np.array(json.loads(vec_json))
+                    sim = cosine_similarity(target_vec, vec)
+                    if sim > 0.85:
+                        competitors.append(cmp)
+            conn.close()
+            competitors = list(set(competitors))[:3]
+    except Exception as e:
+        competitors = []
+        import sys
+        print(f"    [Research Warning] Failed vector competitor lookup: {e}", file=sys.stderr)
+
     contract = load_file(contract_path)
     prompt = f"""
     Using the following Research Packet Contract:
@@ -95,6 +126,9 @@ def fetch_company_intel(company, role, contract_path=None):
     Provide a structured JSON response following the contract modules (A-F).
     Ensure all factual claims include a URL source.
     """
+    
+    if competitors:
+        prompt += f"\nNote: Similar companies in the user's pipeline that may be competitors include: {', '.join(competitors)}."
 
     # Implements FR-061: try Perplexity first (native web retrieval), fall back to primary LLM
     settings = load_llm_settings()

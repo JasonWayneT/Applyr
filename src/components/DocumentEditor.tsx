@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Editor } from '@toast-ui/react-editor';
 import { api } from '../lib/api';
 import '@toast-ui/editor/dist/toastui-editor.css';
+import { checkGrammarLocal, initGrammarChecker } from '../lib/grammarCheck';
 
 interface DocumentEditorProps {
   jobId: string;
@@ -26,6 +27,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const [aiInstruction, setAiInstruction] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [aiStatus, setAiStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [lintStatus, setLintStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [lintProgress, setLintProgress] = useState<string>('');
   const [hasAiKey, setHasAiKey] = useState(false);
 
   useEffect(() => {
@@ -78,31 +81,82 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       if (!editorInstance) return;
 
       const currentMarkdown = editorInstance.getMarkdown();
+      editorInstance.setMarkdown(''); // Clear while generating
 
-      // We make a call to our Express profile/ai rewrite proxy or direct local endpoint
-      const res = await fetch(api(`/api/jobs/${jobId}/ai-rewrite`), {
+      const res = await fetch(api(`/api/stream/local-model`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          filename,
-          instruction: aiInstruction,
-          text: currentMarkdown,
+          prompt: `You are an AI document editor. Apply the following instruction to rewrite the text. Output ONLY the raw markdown of the final rewritten text, no explanations, no chat.\n\nINSTRUCTION: ${aiInstruction}\n\nORIGINAL TEXT:\n${currentMarkdown}`,
         }),
       });
 
-      if (!res.ok) throw new Error();
-      const data = await res.json();
+      if (!res.body) throw new Error();
 
-      if (data.text) {
-        editorInstance.setMarkdown(data.text);
-        setAiStatus('success');
-        setAiInstruction('');
-        setTimeout(() => setAiStatus('idle'), 2000);
-      } else {
-        throw new Error();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunkText = decoder.decode(value);
+        const lines = chunkText.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (!dataStr) continue;
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.error) {
+                throw new Error(data.error);
+              }
+              if (data.chunk) {
+                // The chunk contains Ollama's raw SSE response
+                const ollamaData = JSON.parse(data.chunk);
+                if (ollamaData.response) {
+                  accumulatedContent += ollamaData.response;
+                  editorInstance.setMarkdown(accumulatedContent);
+                }
+              }
+            } catch (e) {
+              // skip parse errors from incomplete ollama chunks
+            }
+          }
+        }
       }
+
+      setAiStatus('success');
+      setAiInstruction('');
+      setTimeout(() => setAiStatus('idle'), 2000);
     } catch {
       setAiStatus('error');
+    }
+  };
+
+  const handleLint = async () => {
+    setLintStatus('running');
+    setLintProgress('Initializing WebGPU...');
+    try {
+      const editorInstance = editorRef.current?.getInstance();
+      if (!editorInstance) return;
+
+      const currentMarkdown = editorInstance.getMarkdown();
+      
+      const newText = await checkGrammarLocal(currentMarkdown);
+      
+      if (newText && newText !== currentMarkdown) {
+        editorInstance.setMarkdown(newText);
+        setLintStatus('success');
+      } else {
+        // Either no changes or failed (fallback to original text)
+        setLintStatus('idle'); 
+      }
+      setTimeout(() => setLintStatus('idle'), 2000);
+    } catch (err) {
+      setLintStatus('error');
     }
   };
 
@@ -138,6 +192,16 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               <span className="w-1.5 h-1.5 bg-error rounded-full"></span> Error Saving Document
             </span>
           )}
+
+          <button
+            onClick={handleLint}
+            disabled={lintStatus === 'running'}
+            className="btn-secondary text-xs py-1.5 px-4 rounded-xl flex items-center gap-1.5"
+            title="Locally check grammar using WebGPU (private)"
+          >
+            <span className="material-symbols-outlined text-sm">{lintStatus === 'running' ? 'sync' : 'spellcheck'}</span>
+            {lintStatus === 'running' ? 'Linting...' : 'Lint'}
+          </button>
 
           <button
             onClick={handleSave}

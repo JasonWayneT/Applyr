@@ -33,7 +33,20 @@ app.use('/', pipelineRouter);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n${'='.repeat(48)}`);
-  console.log(`  JobAgent Server  →  Listening on all interfaces (0.0.0.0:${PORT})`);
+  console.log(`  JobAgent Server  🚀  Listening on all interfaces (0.0.0.0:${PORT})`);
   console.log(`${'='.repeat(48)}\n`);
   logActivity('INFO', 'Server', 'System initialized. Ready for local and Tailscale syncing.');
+  
+  // Schedule auto-pruning database
+  setInterval(() => {
+    import('child_process').then(({ exec }) => {
+      exec('python scripts/auto_prune_db.py', (err, stdout, stderr) => {
+        if (err) {
+          logActivity('ERROR', 'System', `Auto-pruning failed: ${err.message}`);
+        } else {
+          logActivity('INFO', 'System', 'Auto-pruning completed.');
+        }
+      });
+    });
+  }, 12 * 60 * 60 * 1000); // 12 hours
 });

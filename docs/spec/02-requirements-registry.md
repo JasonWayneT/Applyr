@@ -73,22 +73,22 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-033` | functional | P1 | implemented | Bulk Asset ZIP Download |  | `BMAD-SRC-003` |
 | `FR-034` | functional | P0 | implemented | Pipeline Paradigm Split |  | `BMAD-SRC-003` |
 | `FR-035` | functional | P0 | implemented | End-to-End Automated Background Sync, Evaluation, and Drafting Pipeline | `AC-035` | `BMAD-SRC-005` |
-| `FR-036` | functional | P0 | implemented | Triple Redundancy Style Compliance Guard | `AC-036` | User Request |
-| `FR-037` | functional | P0 | implemented | SDD Auto-Codification Engine for Work Experience | `AC-037` | User Request |
-| `FR-038` | functional | P0 | implemented | Cover Letter Best Practices Enforcement | `AC-038` | User Request |
-| `FR-039` | functional | P0 | implemented | Dynamic Candidate Preference Integration | `AC-040` | User Request |
-| `FR-040` | functional | P1 | implemented | Multi-LLM Selection & Provider Configuration Support | `AC-041` | User Request |
-| `FR-041` | functional | P1 | implemented | Full-Panel Claude-Style Settings View | `AC-042` | User Request |
-| `FR-042` | functional | P1 | implemented | Hybrid Active Scouting Filters Control Panel | `AC-043` | User Request |
-| `FR-043` | functional | P1 | implemented | Separated Portfolio and GitHub Fields Isolation | `AC-044` | User Request |
-| `FR-044` | functional | P1 | implemented | Experience Level Multi-Select Filter Dropdown | `AC-045` | User Request |
-| `FR-045` | functional | P1 | implemented | Dashboard Opportunity Visibility & Refactored Notifications | `AC-046` | User Request |
+| `FR-036` | functional | P0 | implemented | Triple Redundancy Style Compliance Guard | `AC-036` | CR-020 |
+| `FR-037` | functional | P0 | implemented | SDD Auto-Codification Engine for Work Experience | `AC-037` | CR-020 |
+| `FR-038` | functional | P0 | implemented | Cover Letter Best Practices Enforcement | `AC-038` | CR-020 |
+| `FR-039` | functional | P0 | implemented | Dynamic Candidate Preference Integration | `AC-040` | CR-020 |
+| `FR-040` | functional | P1 | implemented | Multi-LLM Selection & Provider Configuration Support | `AC-041` | CR-020 |
+| `FR-041` | functional | P1 | implemented | Full-Panel Claude-Style Settings View | `AC-042` | CR-020 |
+| `FR-042` | functional | P1 | implemented | Hybrid Active Scouting Filters Control Panel | `AC-043` | CR-020 |
+| `FR-043` | functional | P1 | implemented | Separated Portfolio and GitHub Fields Isolation | `AC-044` | CR-020 |
+| `FR-044` | functional | P1 | implemented | Experience Level Multi-Select Filter Dropdown | `AC-045` | CR-020 |
+| `FR-045` | functional | P1 | implemented | Dashboard Opportunity Visibility & Refactored Notifications | `AC-046` | CR-020 |
 | `FR-046` | functional | P0 | implemented | Unified Job Search Settings Panel — single `profiles/job_search` key replaces `scouter_preferences` + `preferences` | `AC-050`, `AC-051` | `CR-003` |
 | `FR-047` | functional | P0 | implemented | Preference Materialization — server writes `candidate_preferences.json` on every job_search save | `AC-047` | `CR-003` |
 | `FR-048` | functional | P0 | implemented | Dynamic Scout URL Construction — all source URLs built at runtime from `candidate_preferences.json` | `AC-048` | `CR-003` |
 | `FR-049` | functional | P1 | implemented | Generic ACC-ID Codification — any number of employer sections supported with dynamic range assignment | `AC-049` | `CR-003` |
-| `FR-050` | functional | P1 | implemented | Context-Aware Experience Onboarding Flow — empty-state onboarding with VOC/MET/ACC explanation; active-state codification status bar with live code counts | `AC-052` | User Request |
-| `FR-051` | functional | P1 | implemented | Claim Update Protocol — collapsible three-panel edit guide enforcing retire-don't-delete convention for coded experience claims | `AC-053` | User Request |
+| `FR-050` | functional | P1 | implemented | Context-Aware Experience Onboarding Flow — empty-state onboarding with VOC/MET/ACC explanation; active-state codification status bar with live code counts | `AC-052` | CR-020 |
+| `FR-051` | functional | P1 | implemented | Claim Update Protocol — collapsible three-panel edit guide enforcing retire-don't-delete convention for coded experience claims | `AC-053` | CR-020 |
 | `FR-052` | functional | P0 | implemented | Funnel Expansion — Himalayas, The Muse, and Adzuna added as Phase 1 parallel API sources | `AC-054` | `CR-004` |
 | `FR-053` | functional | P1 | implemented | Role-generic search term expansion — `materializeJobSearchPrefs()` generates role-specific variants from targetRole | `AC-055` | `CR-004` |
 | `FR-054` | functional | P1 | implemented | Optional Adzuna connection — UI field in Settings > Connections; key stored in SQLite `profiles/api_connections`; injected at spawn time | `AC-056` | `CR-004` |
@@ -103,12 +103,12 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-062` | functional | P0 | implemented | Four-card LLM provider UI — Gemini, Claude, Local, Perplexity cards each show key field, Connected badge, and Primary selection button | `AC-064` | `CR-006` |
 | `FR-063` | functional | P0 | implemented | `primaryProvider` field — `LlmSettings.provider` renamed to `primaryProvider` with backward-compat read in Python and TypeScript | `AC-065` | `CR-006` |
 | `FR-064` | functional | P0 | implemented | Auto-generate `workExperience_summary.md` — spawned as background process after every `POST /api/experience` save; `batch_pipeline.py` falls back to full `workExperience.md` if summary not yet generated | `AC-066` | internal |
-| `FR-065` | functional | P1 | implemented | Intra-Local Model Failover — system detects 500/load failure from primary local model and immediately invokes configured `localFallbackModel` without interrupting the caller | `AC-067` | User Request |
-| `FR-066` | functional | P1 | implemented | Automatic VRAM Reclamation (Eco-Hook) — `batch_pipeline.py` utilizes explicit unload signals upon script exit to purge models from GPU and release resources immediately | `AC-068` | User Request |
-| `FR-067` | functional | P0 | implemented | Hybrid Intelligence Switching — `call_llm()` supports explicit `provider_override` flag allowing Drafting and Auditing stages to lock to Cloud while Evaluation stage runs locally | `AC-069` | User Request |
-| `FR-068` | functional | P0 | accepted | Stateful Pipeline Orchestration — decodes callback hell into a checkpointed state machine supporting resumes | `AC-070` | User Request |
-| `FR-069` | functional | P0 | accepted | Fact-Bound Numerical Verification & Refinement — auditing prevents metric inflation via automated 2-strike refinement loops | `AC-071` | User Request |
-| `FR-070` | functional | P0 | accepted | Early Scouting Geographic Gating — filters crawler opportunities at scraping phase based on candidate location bounds | `AC-072` | User Request |
+| `FR-065` | functional | P1 | implemented | Intra-Local Model Failover — system detects 500/load failure from primary local model and immediately invokes configured `localFallbackModel` without interrupting the caller | `AC-067` | CR-020 |
+| `FR-066` | functional | P1 | implemented | Automatic VRAM Reclamation (Eco-Hook) — `batch_pipeline.py` utilizes explicit unload signals upon script exit to purge models from GPU and release resources immediately | `AC-068` | CR-020 |
+| `FR-067` | functional | P0 | implemented | Hybrid Intelligence Switching — `call_llm()` supports explicit `provider_override` flag allowing Drafting and Auditing stages to lock to Cloud while Evaluation stage runs locally | `AC-069` | CR-020 |
+| `FR-068` | functional | P0 | accepted | Stateful Pipeline Orchestration — decodes callback hell into a checkpointed state machine supporting resumes | `AC-070` | CR-020 |
+| `FR-069` | functional | P0 | accepted | Fact-Bound Numerical Verification & Refinement — auditing prevents metric inflation via automated 2-strike refinement loops | `AC-071` | CR-020 |
+| `FR-070` | functional | P0 | accepted | Early Scouting Geographic Gating — filters crawler opportunities at scraping phase based on candidate location bounds | `AC-072` | CR-020 |
 | `FR-071` | functional | P0 | implemented | Local Model Deterministic Sampling Override — `_call_local()` forces `temperature=0.0`, `top_k=40`, `top_p=0.9`, `num_predict≤1000` regardless of caller input; few-shot WRONG/CORRECT bullet examples added to `LOCAL_CONSTRAINT_PREFIX` | `AC-073` | `CR-007` |
 | `FR-072` | functional | P0 | implemented | Two-Phase Local Resume Generation — when local provider is active, `_generate_resume_local_twophase()` splits generation into JSON ACC-ID selection (Phase 1) and per-bullet generation (Phase 2) instead of a single monolithic prompt | `AC-074` | `CR-007` |
 | `FR-073` | functional | P0 | implemented | Deterministic Numeric Fact Preservation — `preserves_core_facts()` extracts all numeric tokens from source and bullet, flags any number in the bullet with no equivalent in source as invented; zero LLM cost | `AC-075` | `CR-007` |
@@ -144,32 +144,32 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-108` | functional | P1 | implemented | Template-first cheat sheet — `CHEAT_SHEET_MODE` default template | `AC-110` | `CR-018` |
 | `FR-109` | functional | P1 | implemented | Years-first seniority gate — `seniority_gate.py` title + years pre-LLM | `AC-115`, `AC-116`, `AC-117` | `CR-019` |
 | `FR-110` | functional | P1 | implemented | AI-tools vs AI-PM rubric - LLM fit must not reject tool mentions alone | `AC-118` | `CR-019` |
-| `FR-111` | functional | P1 | implemented | JD Deduplication via Vector Similarity | `AC-119` | User Request |
-| `FR-112` | functional | P1 | implemented | I/O vs GPU Concurrency Splitting | `AC-120` | User Request |
-| `FR-113` | functional | P1 | implemented | Local Salary Extraction | `AC-121` | User Request |
-| `FR-114` | functional | P1 | implemented | Vector-Based ATS Backlog Re-ranking | `AC-122` | User Request |
-| `FR-115` | functional | P1 | implemented | Rapid Metadata Tagging using Cosine Similarity | `AC-123` | User Request |
-| `FR-116` | functional | P1 | implemented | SQLite FTS5 Search Integration | `AC-124` | User Request |
-| `FR-117` | functional | P1 | implemented | DOM Cleanup Pre-Processor for JDs | `AC-125` | User Request |
-| `FR-118` | functional | P1 | implemented | Prompt Context Truncation Guard | `AC-126` | User Request |
-| `FR-119` | functional | P1 | implemented | Fast-Fail Context Fallbacks | `AC-127` | User Request |
-| `FR-120` | functional | P1 | implemented | Local Skill-Gap Analysis & UI integration | `AC-128` | User Request |
-| `FR-121` | functional | P1 | implemented | Cover Letter Intro Customization via local model | `AC-129` | User Request |
-| `FR-122` | functional | P1 | implemented | Local Offline Web Research (SearXNG + Playwright) | `AC-130` | User Request |
-| `FR-123` | functional | P1 | implemented | Competitor Matrix via Pre-computed Local Vectors | `AC-131` | User Request |
-| `FR-124` | functional | P1 | implemented | Zero-Shot On-Site Classifier | `AC-132` | User Request |
-| `FR-125` | functional | P1 | implemented | Auto-Pruning Stale DB Blobs script/cron | `AC-133` | User Request |
-| `FR-126` | functional | P1 | implemented | Local Model Text Streaming (SSE) | `AC-134` | User Request |
-| `FR-127` | functional | P1 | implemented | WebGPU Browser-Side Inference for Grammar checks | `AC-135` | User Request |
-| `FR-128` | functional | P1 | implemented | Responsive PDF Layout Feedback dynamically | `AC-136` | User Request |
-| `FR-129` | functional | P1 | implemented | Notification Webhooks (Tailscale Native / NTFY) | `AC-137` | User Request |
-| `FR-130` | functional | P1 | implemented | Local PII Redaction Guard via SpaCy/Regex | `AC-138` | User Request |
+| `FR-111` | functional | P1 | implemented | JD Deduplication via Vector Similarity | `AC-119` | CR-020 |
+| `FR-112` | functional | P1 | implemented | I/O vs GPU Concurrency Splitting | `AC-120` | CR-020 |
+| `FR-113` | functional | P1 | implemented | Local Salary Extraction | `AC-121` | CR-020 |
+| `FR-114` | functional | P1 | implemented | Vector-Based ATS Backlog Re-ranking | `AC-122` | CR-020 |
+| `FR-115` | functional | P1 | implemented | Rapid Metadata Tagging using Cosine Similarity | `AC-123` | CR-020 |
+| `FR-116` | functional | P1 | implemented | SQLite FTS5 Search Integration | `AC-124` | CR-020 |
+| `FR-117` | functional | P1 | implemented | DOM Cleanup Pre-Processor for JDs | `AC-125` | CR-020 |
+| `FR-118` | functional | P1 | implemented | Prompt Context Truncation Guard | `AC-126` | CR-020 |
+| `FR-119` | functional | P1 | implemented | Fast-Fail Context Fallbacks | `AC-127` | CR-020 |
+| `FR-120` | functional | P1 | implemented | Local Skill-Gap Analysis & UI integration | `AC-128` | CR-020 |
+| `FR-121` | functional | P1 | implemented | Cover Letter Intro Customization via local model | `AC-129` | CR-020 |
+| `FR-122` | functional | P1 | implemented | Local Offline Web Research (SearXNG + Playwright) | `AC-130` | CR-020 |
+| `FR-123` | functional | P1 | implemented | Competitor Matrix via Pre-computed Local Vectors | `AC-131` | CR-020 |
+| `FR-124` | functional | P1 | implemented | Zero-Shot On-Site Classifier | `AC-132` | CR-020 |
+| `FR-125` | functional | P1 | implemented | Auto-Pruning Stale DB Blobs script/cron | `AC-133` | CR-020 |
+| `FR-126` | functional | P1 | implemented | Local Model Text Streaming (SSE) | `AC-134` | CR-020 |
+| `FR-127` | functional | P1 | implemented | WebGPU Browser-Side Inference for Grammar checks | `AC-135` | CR-020 |
+| `FR-128` | functional | P1 | implemented | Responsive PDF Layout Feedback dynamically | `AC-136` | CR-020 |
+| `FR-129` | functional | P1 | implemented | Notification Webhooks (Tailscale Native / NTFY) | `AC-137` | CR-020 |
+| `FR-130` | functional | P1 | implemented | Local PII Redaction Guard via SpaCy/Regex | `AC-138` | CR-020 |
 
 
 ### Data Traceability (DATA-001 to DATA-001)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
 |---|---|---|---|---|---|---|
-| `DATA-001` | data | P0 | implemented | Fact ID Traceability System | `AC-039` | User Request |
+| `DATA-001` | data | P0 | implemented | Fact ID Traceability System | `AC-039` | CR-020 |
 
 ## Acceptance criteria
 

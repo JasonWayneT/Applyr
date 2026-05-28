@@ -392,4 +392,50 @@ router.post('/api/jobs/:id/draft', (req, res) => {
   }
 });
 
+router.post('/api/jobs/rerank', (req, res) => {
+  try {
+    const { query, threshold } = req.body;
+    if (!query) return res.status(400).json({ error: 'Query is required' });
+    
+    logActivity('INFO', 'System', `Reranking backlog for query: "${query}"`);
+    const env = buildPythonEnv();
+    const scriptPath = path.join(SCRIPTS_DIR, 'rerank_backlog.py');
+    const args = [scriptPath, '--query', query];
+    if (threshold) {
+      args.push('--threshold', threshold.toString());
+    }
+
+    exec(`python ${args.join(' ')}`, { env }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Rerank error: ${stderr || error.message}`);
+        return res.status(500).json({ error: 'Failed to rerank backlog' });
+      }
+      res.json({ success: true, output: stdout.trim() });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error during rerank' });
+  }
+});
+
+router.get('/api/jobs/:id/skill-gap', (req, res) => {
+  try {
+    const { id } = req.params;
+    const dbPath = path.join(PROJECT_ROOT, 'data', 'applyr.db');
+    const scriptPath = path.join(SCRIPTS_DIR, 'skill_gap.py');
+    const env = buildPythonEnv();
+
+    exec(`python ${scriptPath} --db_path ${dbPath} --job_id ${id}`, { env }, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Skill gap error: ${stderr || error.message}`);
+        return res.status(500).json({ error: 'Failed to compute skill gap' });
+      }
+      res.json({ success: true, output: stdout.trim() });
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error during skill gap analysis' });
+  }
+});
+
 export default router;

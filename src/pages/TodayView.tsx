@@ -17,6 +17,8 @@ const getGreeting = () => {
 
 const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
   const [firstName, setFirstName] = useState('');
+  const [isReranking, setIsReranking] = useState(false);
+  const [rerankQuery, setRerankQuery] = useState('');
 
   useEffect(() => {
     fetch(api('/api/profile/identity'))
@@ -24,6 +26,25 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
       .then(data => { if (data?.name) setFirstName(data.name.trim().split(' ')[0]); })
       .catch(() => {});
   }, []);
+
+  const handleRerank = async () => {
+    if (!rerankQuery.trim()) return;
+    setIsReranking(true);
+    try {
+      await fetch(api('/api/jobs/rerank'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: rerankQuery })
+      });
+      // Optionally you could trigger a global job refresh here
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsReranking(false);
+      setRerankQuery('');
+    }
+  };
+
   const backlogs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status));
@@ -138,7 +159,25 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
 
         {/* Ready to Apply Pipeline List */}
         <div className="lg:col-span-12 mt-2">
-          <h3 className="text-2xl font-headline font-bold text-on-surface mb-6">Ready to Apply</h3>
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+            <h3 className="text-2xl font-headline font-bold text-on-surface">Ready to Apply</h3>
+            <div className="flex items-center gap-2 mt-4 md:mt-0">
+              <input 
+                type="text" 
+                placeholder="Semantic search (e.g. HealthTech)" 
+                value={rerankQuery} 
+                onChange={(e) => setRerankQuery(e.target.value)} 
+                className="px-4 py-2 bg-surface-container rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/50 text-on-surface"
+              />
+              <button 
+                onClick={handleRerank} 
+                disabled={isReranking || !rerankQuery.trim()}
+                className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-50 hover:bg-primary/90 transition-colors"
+              >
+                {isReranking ? 'Reranking...' : 'Rerank Backlog'}
+              </button>
+            </div>
+          </div>
           <div className="space-y-4">
             {pipelineJobs.slice(0, 10).map(job => (
               <div

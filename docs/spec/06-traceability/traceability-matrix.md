@@ -105,26 +105,26 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `BUG-011` | Pipeline Stall / Queue Clog | `BUG-011` | `scripts/batch_pipeline.py` | in_progress |
 | `BUG-012` | Sync stage error vs pipeline done | `BUG-012` | `server/scout.ts`, `scripts/batch_pipeline.py` | fixed |
 | `CR-011` | Pipeline status vocabulary + auto-requeue | `CR-011` | `scripts/requeue_needs_retry.ts`, `scripts/batch_pipeline.py`, `server/scout.ts`, UI | implemented |
-| `FR-111` | User Request | Local Optimizations | `scripts/local_embeddings.py` | implemented |
-| `FR-112` | User Request | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
-| `FR-113` | User Request | Local Optimizations | `scripts/extract_salary.py` | implemented |
-| `FR-114` | User Request | Local Optimizations | `scripts/re_rank_backlog.py` | implemented |
-| `FR-115` | User Request | Local Optimizations | `scripts/metadata_tagger.py` | implemented |
-| `FR-116` | User Request | Local Optimizations | `server/db.ts` | implemented |
-| `FR-117` | User Request | Local Optimizations | `scripts/dom_cleanup.py` | implemented |
-| `FR-118` | User Request | Local Optimizations | `scripts/utils.py` | implemented |
-| `FR-119` | User Request | Local Optimizations | `scripts/utils.py` | implemented |
-| `FR-120` | User Request | Local Optimizations | `src/components/SkillGap.tsx` | implemented |
-| `FR-121` | User Request | Local Optimizations | `scripts/draft_compiler.py` | implemented |
-| `FR-122` | User Request | Local Optimizations | `scripts/research-engine.py` | implemented |
-| `FR-123` | User Request | Local Optimizations | `scripts/research-engine.py` | implemented |
-| `FR-124` | User Request | Local Optimizations | `scripts/classify_onsite.py` | implemented |
-| `FR-125` | User Request | Local Optimizations | `scripts/prune_blobs.py` | implemented |
-| `FR-126` | User Request | Local Optimizations | `server/routes/system.ts` | implemented |
-| `FR-127` | User Request | Local Optimizations | `src/lib/grammarCheck.ts` | implemented |
-| `FR-128` | User Request | Local Optimizations | `scripts/compile_single.py` | implemented |
-| `FR-129` | User Request | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
-| `FR-130` | User Request | Local Optimizations | `scripts/pii_redact.py` | implemented |
+| `FR-111` | CR-020 | Local Optimizations | `scripts/local_embeddings.py` | implemented |
+| `FR-112` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
+| `FR-113` | CR-020 | Local Optimizations | `scripts/extract_salary.py` | implemented |
+| `FR-114` | CR-020 | Local Optimizations | `scripts/re_rank_backlog.py` | implemented |
+| `FR-115` | CR-020 | Local Optimizations | `scripts/metadata_tagger.py` | implemented |
+| `FR-116` | CR-020 | Local Optimizations | `server/db.ts` | implemented |
+| `FR-117` | CR-020 | Local Optimizations | `scripts/dom_cleanup.py` | implemented |
+| `FR-118` | CR-020 | Local Optimizations | `scripts/utils.py` | implemented |
+| `FR-119` | CR-020 | Local Optimizations | `scripts/utils.py` | implemented |
+| `FR-120` | CR-020 | Local Optimizations | `src/components/SkillGap.tsx` | implemented |
+| `FR-121` | CR-020 | Local Optimizations | `scripts/draft_compiler.py` | implemented |
+| `FR-122` | CR-020 | Local Optimizations | `scripts/research-engine.py` | implemented |
+| `FR-123` | CR-020 | Local Optimizations | `scripts/research-engine.py` | implemented |
+| `FR-124` | CR-020 | Local Optimizations | `scripts/classify_onsite.py` | implemented |
+| `FR-125` | CR-020 | Local Optimizations | `scripts/prune_blobs.py` | implemented |
+| `FR-126` | CR-020 | Local Optimizations | `server/routes/system.ts` | implemented |
+| `FR-127` | CR-020 | Local Optimizations | `src/lib/grammarCheck.ts` | implemented |
+| `FR-128` | CR-020 | Local Optimizations | `scripts/compile_single.py` | implemented |
+| `FR-129` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
+| `FR-130` | CR-020 | Local Optimizations | `scripts/pii_redact.py` | implemented |
 
 
 ## Coverage checklist

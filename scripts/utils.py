@@ -467,6 +467,16 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
     settings = load_llm_settings()
     all_providers = _get_configured_providers(settings)
     
+    try:
+        from pii_guard import redact_pii
+        user_prompt = redact_pii(user_prompt)
+        system_prompt = redact_pii(system_prompt)
+    except ImportError:
+        pass
+    except Exception as e:
+        import sys
+        print(f"    [Warning] Failed to run PII redaction: {e}", file=sys.stderr)
+        
     if provider_override:
         requested = [provider_override] if isinstance(provider_override, str) else provider_override
         # Filter list to only configured providers that match request

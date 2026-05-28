@@ -44,6 +44,9 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
   const [pdfReloadKey, setPdfReloadKey] = useState<number>(0);
   const [systemStatus, setSystemStatus] = useState<any>(null);
 
+  const [skillGap, setSkillGap] = useState<string | null>(null);
+  const [loadingSkillGap, setLoadingSkillGap] = useState(false);
+
   useEffect(() => {
     if (!job) return;
     setInterviewDate(job.interview_date || '');
@@ -81,6 +84,24 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
   ];
 
   const progression = STATUS_PROGRESSIONS[job.status];
+
+  const fetchSkillGap = async () => {
+    setLoadingSkillGap(true);
+    setSkillGap(null);
+    try {
+      const res = await fetch(api(`/api/jobs/${job.id}/skill-gap`));
+      const data = await res.json();
+      if (data.success) {
+        setSkillGap(data.output);
+      } else {
+        setSkillGap("Failed to compute skill gap.");
+      }
+    } catch {
+      setSkillGap("Error communicating with server.");
+    } finally {
+      setLoadingSkillGap(false);
+    }
+  };
 
   const handleDateChange = async (date: string) => {
     setInterviewDate(date);
@@ -225,6 +246,34 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                 </p>
               </section>
             )}
+
+            {/* Skill Gap Analysis */}
+            <section className="bg-surface-container-low p-6 rounded-2xl mb-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-secondary">psychology</span>
+                  <h3 className="text-lg font-headline font-bold text-on-surface">Skill Gap Analysis</h3>
+                </div>
+                <button
+                  onClick={fetchSkillGap}
+                  disabled={loadingSkillGap}
+                  className="btn-secondary text-xs flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-sm">{loadingSkillGap ? 'sync' : 'analytics'}</span>
+                  {loadingSkillGap ? 'Analyzing...' : 'Analyze Now'}
+                </button>
+              </div>
+              {skillGap && (
+                <div className="p-4 bg-inverse-surface rounded-xl text-inverse-on-surface text-sm font-mono whitespace-pre-wrap">
+                  {skillGap}
+                </div>
+              )}
+              {!skillGap && !loadingSkillGap && (
+                <p className="text-xs text-on-surface-variant">
+                  Run a localized analysis comparing your experience against this job description to identify missing hard skills.
+                </p>
+              )}
+            </section>
 
             {/* Application Assets */}
             <section>

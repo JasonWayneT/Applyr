@@ -46,6 +46,16 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.10
+
+**Changed**
+- **Seniority filter refinement (CR-019 / FR-109–110):** Removed blanket "Senior" title block. Years-first gate (`seniority_gate.py`) rejects JDs requiring more than max years (default 7). Title blocklist uses whole-word match on title line only. Rubric distinguishes AI PM roles from AI-tools mentions.
+- **Job Search UI:** Max years required field maps to `experience_range.max` in candidate preferences.
+
+**Developer**
+- `scripts/re_score_jobs.py` — re-run fit on Rejected jobs after preference changes.
+- CSV import writes `Title:` / `URL:` headers into staging JD files.
+
 ### 6.2.9
 
 **New**

@@ -237,18 +237,22 @@ def _cleanup_staging_file(filepath: str, filename: str):
 
 
 def passes_jd_keyword_gate(jd_text: str, prefs: dict = None) -> bool:
-    """Zero-token pre-filter. Rejects JDs that have no relevant keywords or hit blocked titles."""
-    lower = jd_text.lower()
-    
-    # 1. Blocked Titles Check (First 200 chars are typically the title/header)
-    if prefs and "blocked_titles" in prefs:
-        title_chunk = lower[:200]
-        for blocked in prefs["blocked_titles"]:
-            if blocked.lower() in title_chunk:
-                print(f"    [ZERO-TOKEN REJECT] Title chunk contains blocked keyword: '{blocked}'", file=sys.stderr)
-                return False
+    """Zero-token pre-filter. Rejects JDs with blocked titles (title line only) or missing keywords."""
+    from seniority_gate import check_years_gate, passes_title_gate
 
-    # 2. Required Keywords Check
+    prefs = prefs or {}
+
+    ok, reason = passes_title_gate(jd_text, prefs)
+    if not ok:
+        print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
+        return False
+
+    ok, reason = check_years_gate(jd_text, prefs)
+    if not ok:
+        print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
+        return False
+
+    lower = jd_text.lower()
     return any(kw in lower for kw in JD_REQUIRED_KEYWORDS)
 
 
@@ -276,6 +280,8 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     
     Process the above JOB DESCRIPTION using the strictly defined RULES & SCORING PROTOCOL. 
     First, check the Fast Gate (Hard Disqualifiers) based on the CANDIDATE PREFERENCES. If disqualified, return a score < 30 and Decision: NO.
+    Senior in the title is allowed when required years are within experience_range.max.
+    Do not reject solely for AI tools mentions; reject only for primary AI/ML model ownership roles.
     Next, apply the 100-point scoring criteria.
     Apply the Two-Anchor rule using the anchors defined in CANDIDATE PREFERENCES.
     

@@ -26,14 +26,17 @@ Evaluate the candidate using:
 If any of the following triggers are met, return **Score: 0**, **Decision: NO**, and **Terminate Pipeline** for this JD.
 
 ### 2.1 Title & Tier Blocklist
-- **Blocked Titles:** Reject if the JD title contains any terms found in `blocked_titles` from the Candidate Preferences.
+- **Blocked Titles:** Reject if the **job title** contains whole-word matches from `blocked_titles` (not substring hits in the JD body).
+- **Senior titles allowed:** "Senior Product Manager" (and similar) is **allowed** when stated required years are within `experience_range.max`.
 - **Organization Role:** Reject if the role is explicitly "Founding," "First," "0-to-1," or "Sole" product professional unless permitted by preferences.
 - **Management Constraints:** Reject if the role requires hiring or managing other people in that same function when forbidden by `preferences.no_people_management`.
+- **Entry-level:** Reject intern programs, 0–1 years required, or explicit greenfield 0-to-1 ownership when `no_zero_to_one` is true.
 
 ### 2.2 Experience & Constraints
 - **Years Required:** Reject if required years of experience exceeds `experience_range.max` in Candidate Preferences.
 - **Blocked Industries:** Reject if the company operates in any of the `blocked_industries` listed in Candidate Preferences.
 - **Domain Gate:** Reject if the role requires domain expertise explicitly marked as a "Soft Blocker" in the candidate's history (e.g., hands-on ML model training, Developer Auth) unless allowed.
+- **AI tools vs AI PM:** Do **not** reject because the JD mentions AI tools, Copilot, or workflow automation. Reject only when the role requires **owning ML model development** or being the primary AI/ML product owner.
 
 ### 2.3 Location & Setting Gate
 - **Home Base:** The candidate is located in the **San Diego, CA** area.
@@ -52,8 +55,8 @@ If any of the following triggers are met, return **Score: 0**, **Decision: NO**,
 - **0-14:** Solo trap (e.g., reports directly to a non-functional executive in a tiny startup).
 
 ### B) Seniority & Tenure Fit (0–25)
-- **23-25:** High overlap with `experience_range` (within min and max targets).
-- **0-17:** Demands experience outside the target bounds or requires senior-level traits.
+- **23-25:** High overlap with `experience_range` (within min and max targets). Senior title + 3–7 years required scores here.
+- **0-17:** Demands experience above `experience_range.max` or explicit people-management of PMs/engineers.
 
 ### C) Technical & Execution Depth (0–25)
 - **22-25:** High technical overlap with the `required_anchors` listed in preferences.

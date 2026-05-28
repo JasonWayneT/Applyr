@@ -98,6 +98,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-106` | `CR-018` | `FEAT-012` | `scripts/claim_composer.py`, `scripts/local_draft_stages.py` | implemented |
 | `FR-107` | `CR-018` | `FEAT-012` | `scripts/batch_pipeline.py`, `scripts/refresh_backlog_summaries.py` | implemented |
 | `FR-108` | `CR-018` | `FEAT-012` | `scripts/generate_cheat_sheet.py` | implemented |
+| `FR-109` | `CR-019` | `FEAT-002` | `scripts/seniority_gate.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-110` | `CR-019` | `FEAT-002` | `data/job_fit_engine.md`, `.agent/rules/job_fit_engine.md` | implemented |
 | `BUG-009` | Rate Limit | `BUG-009` | `scripts/utils.py`, `scripts/research-engine.py` | implemented |
 | `BUG-010` | Subprocess Stderr / Local Audit | `BUG-010` | `server/scout.ts`, `scripts/drafting_engine.py` | implemented |
 | `BUG-011` | Pipeline Stall / Queue Clog | `BUG-011` | `scripts/batch_pipeline.py` | in_progress |

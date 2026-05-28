@@ -142,6 +142,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-106` | functional | P1 | implemented | One bridge bullet per job; `strip_bridge_prefix` on cover proofs | `AC-107`, `AC-108` | `CR-018` |
 | `FR-107` | functional | P1 | implemented | Fresh backlog summary on successful draft — `_draft_success_summary()` | `AC-109` | `CR-018` |
 | `FR-108` | functional | P1 | implemented | Template-first cheat sheet — `CHEAT_SHEET_MODE` default template | `AC-110` | `CR-018` |
+| `FR-109` | functional | P1 | implemented | Years-first seniority gate — `seniority_gate.py` title + years pre-LLM | `AC-115`, `AC-116`, `AC-117` | `CR-019` |
+| `FR-110` | functional | P1 | implemented | AI-tools vs AI-PM rubric — LLM fit must not reject tool mentions alone | `AC-118` | `CR-019` |
 
 
 ### Data Traceability (DATA-001 to DATA-001)
@@ -154,7 +156,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | ID | Parent | Scenario | Given | When | Then | Status |
 |---|---|---|---|---|---|---|
 | `AC-001` | `FR-001` | Scout start | Valid cookie session | Scout command is triggered | Browser navigates to LinkedIn/BuiltIn | verified |
-| `AC-006` | `FR-006` | Keyword hit | Job title contains "Senior" | Pre-filter runs | Job is rejected with score 0 without calling LLM | verified |
+| `AC-006` | `FR-006` | Keyword hit | Job title contains blocked Lead/Director term | Pre-filter runs | Job is rejected with score 0 without calling LLM | implemented |
+| `AC-006b` | `FR-109` | Senior allowed | Job title Senior PM, years within range | Pre-filter runs | Job is not rejected by title gate alone | implemented |
 | `AC-007` | `FR-007` | Scoring | Valid JD and workExperience | Scoring engine runs | A JSON object with Score, Decision, and Reasoning is returned | verified |
 | `AC-015` | `FR-015` | Generation | Claim verifier pass | Resume generator runs | Output only contains metrics found in `data/` folder | verified |
 | `AC-019` | `FR-019` | Metric audit | Resume claims "15% increase" | Audit script runs | Claim is flagged if `workExperience.md` says "12%" | verified |
@@ -239,6 +242,10 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-110` | `FR-108` | Cheat sheet | Research packet exists | Read Interview_Cheat_Sheet.md | Non-empty template cheat sheet | implemented |
 | `AC-111` | `SEC-005` | Doppler Hybrid Config | User boots with `npm run dev:doppler` | App loads | UI detects injected variables and hides input fields displaying "Managed via Doppler" lock badge | verified |
 | `AC-112` | `NFR-006` | Overlay Network Access | App running on Desktop | Laptop on Tailscale accesses IP | Server accepts connection and renders JobAgent UI | verified |
+| `AC-115` | `FR-109` | Senior title allowed | Title Senior PM, JD 3-6 years | Title gate | Passes zero-token gate | implemented |
+| `AC-116` | `FR-109` | Lead blocked | Title Lead Product Manager | Title gate | Rejected title_blocked | implemented |
+| `AC-117` | `FR-109` | Years cap | JD requires 10+ years, max=7 | Years gate | Rejected before LLM | implemented |
+| `AC-118` | `FR-110` | AI tools OK | JD mentions ChatGPT as plus | LLM fit | Not sole reject reason | implemented |
 
 ## Non-Functional Requirements
 

@@ -16,6 +16,25 @@ def sanitize_filename(name):
     return re.sub(r'[\W_]+', '_', name).strip('_')
 
 
+def _is_weak_job_url(url: str) -> bool:
+    if not url:
+        return False
+    u = url.lower()
+    return "linkedin.com/jobs/search" in u or "currentjobid=" in u and "search-results" in u
+
+
+def _format_staging_jd(position: str, url: str, jd: str) -> str:
+    parts = []
+    if position:
+        parts.append(f"Title: {position}")
+    if url:
+        parts.append(f"URL: {url}")
+    if parts:
+        parts.append("")
+    parts.append(jd)
+    return "\n".join(parts)
+
+
 def import_jobs(csv_paths):
     """
     Import jobs from one or more CSV files into the pipeline.
@@ -29,6 +48,7 @@ def import_jobs(csv_paths):
     cursor = conn.cursor()
 
     imported_count = 0
+    weak_urls = 0
 
     for csv_path in csv_paths:
         if not os.path.exists(csv_path):
@@ -49,6 +69,9 @@ def import_jobs(csv_paths):
 
                 if not url:
                     url = f"local://{sanitize_filename(company)}_{get_id()}"
+                elif _is_weak_job_url(url):
+                    weak_urls += 1
+                    print(f"  [Warn] Weak job URL (search page?): {company} — {url[:80]}...")
 
                 cursor.execute("SELECT id FROM jobs WHERE url = ?", (url,))
                 if cursor.fetchone():
@@ -63,7 +86,7 @@ def import_jobs(csv_paths):
                     slug = sanitize_filename(company)
                     txt_filename = f"{slug}_{job_id}.txt"
                     with open(os.path.join(jobs_dir, txt_filename), 'w', encoding='utf-8') as jf:
-                        jf.write(jd)
+                        jf.write(_format_staging_jd(position, url, jd))
                     imported_count += 1
                 except sqlite3.IntegrityError:
                     pass
@@ -71,6 +94,8 @@ def import_jobs(csv_paths):
     conn.commit()
     conn.close()
     print(f"Successfully imported {imported_count} new jobs into the pipeline.")
+    if weak_urls:
+        print(f"  {weak_urls} row(s) had LinkedIn search URLs — consider replacing with direct job links.")
 
 
 if __name__ == "__main__":

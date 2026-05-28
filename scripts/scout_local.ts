@@ -33,11 +33,18 @@ const LOCATION: string              = prefs.location_preference || 'United State
 const EXPERIENCE_LEVELS: string[]   = prefs.experience_levels || [];
 const FRESHNESS_DAYS: number        = prefs.freshness_days ?? 7;
 const TITLE_BLOCKLIST: string[]     = (prefs.blocked_titles || [
-    'senior', 'staff', 'vp', 'head', 'principal', 'lead product manager',
-    'director', 'growth', 'founding', 'manager of',
-    'assistant', 'coordinator', 'intern', 'associate', 'junior',
-    'analyst', 'engineer', 'developer', 'designer', 'marketer',
-]).map((t: string) => t.toLowerCase());
+    'staff', 'vp', 'head', 'principal', 'lead', 'director',
+    'group product manager', 'gpm', 'growth', 'founding', 'first',
+    'manager of', 'engineering manager', 'people manager',
+    'assistant', 'coordinator', 'intern', 'associate', 'entry', 'junior',
+    'analyst', 'software engineer', 'developer', 'designer', 'marketer',
+]).map((t: string) => t.toLowerCase().trim()).filter(Boolean);
+
+/** CR-019: whole-word title match (not substring in description). */
+const titleMatchesBlocked = (title: string, term: string): boolean => {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escaped}\\b`, 'i').test(title);
+};
 
 const FRESHNESS_CUTOFF_EPOCH = Math.floor(Date.now() / 1000) - (FRESHNESS_DAYS * 24 * 60 * 60);
 
@@ -260,8 +267,8 @@ const isJobNewByCompanyTitle = (company: string, title: string): boolean =>
     !DB.prepare('SELECT url FROM stale_jobs WHERE LOWER(company) = LOWER(?) AND LOWER(title) = LOWER(?)').get(company, title);
 
 const passesTitleBlocklist = (title: string): boolean => {
-    const lower = title.toLowerCase();
-    return !TITLE_BLOCKLIST.some(blocked => lower.includes(blocked));
+    if (!title) return true;
+    return !TITLE_BLOCKLIST.some(blocked => titleMatchesBlocked(title, blocked));
 };
 
 // ---------------------------------------------------------------------------

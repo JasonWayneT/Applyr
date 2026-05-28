@@ -88,6 +88,10 @@ export function materializeJobSearchPrefs(jobSearch: any): void {
   const blockedTitles: string[]    = (jobSearch.titleBlocklist    || '').split(',').map((s: string) => s.trim()).filter(Boolean);
   const blockedIndustries: string[] = (jobSearch.industryBlocklist || '').split(',').map((s: string) => s.trim()).filter(Boolean);
 
+  const maxYears = jobSearch.maxYearsRequired ?? existing.experience_range?.max ?? 7;
+  const minYears = jobSearch.minYearsPreferred ?? existing.experience_range?.min ?? 2;
+  const totalYears = existing.experience_range?.total_years_observed ?? 6;
+
   const materialized = {
     target_role:          targetRole,
     search_terms:         searchTerms,
@@ -101,7 +105,7 @@ export function materializeJobSearchPrefs(jobSearch: any): void {
     min_salary:           jobSearch.minSalary        ?? 0,
     min_fit_score:        existing.min_fit_score     ?? 72,
     jd_required_keywords: existing.jd_required_keywords ?? DEFAULT_JD_KEYWORDS,
-    experience_range:     existing.experience_range  ?? { min: 0, max: 7, total_years_observed: 6 },
+    experience_range:     { min: minYears, max: maxYears, total_years_observed: totalYears },
     preferences:          existing.preferences       ?? DEFAULT_PIPELINE_PREFERENCES,
   };
 

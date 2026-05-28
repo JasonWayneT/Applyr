@@ -34,6 +34,8 @@ interface JobSearchSettings {
   titleBlocklist: string;
   industryBlocklist: string;
   minSalary: number;
+  maxYearsRequired: number;
+  minYearsPreferred: number;
 }
 
 const DEFAULT_SETTINGS: JobSearchSettings = {
@@ -42,9 +44,11 @@ const DEFAULT_SETTINGS: JobSearchSettings = {
   location: 'United States',
   experienceLevels: [],
   datePosted: 'Past week',
-  titleBlocklist: 'Senior, Staff, VP, Head, Principal, Lead, Director, Growth, Founding, First, Manager of, Assistant, Coordinator, Intern, Associate, Junior, Analyst, Engineer, Developer, Designer, Marketer',
+  titleBlocklist: 'Staff, VP, Head, Principal, Lead, Director, Group Product Manager, GPM, Growth, Founding, First, Manager of, Engineering Manager, People Manager, Assistant, Coordinator, Intern, Associate, Entry, Junior, Analyst, Software Engineer, Developer, Designer, Marketer',
   industryBlocklist: 'Gambling, Sports Betting, Gaming, Ad Tech, Crypto, Web3',
   minSalary: 0,
+  maxYearsRequired: 7,
+  minYearsPreferred: 2,
 };
 
 const LOCATIONS = [
@@ -101,7 +105,12 @@ const SyncActivityView: React.FC = () => {
         if (res.ok) {
           const data = await res.json();
           if (data && data.targetRole) {
-            setSettings(prev => ({ ...prev, ...data }));
+            setSettings(prev => ({
+              ...prev,
+              ...data,
+              maxYearsRequired: data.maxYearsRequired ?? prev.maxYearsRequired ?? 7,
+              minYearsPreferred: data.minYearsPreferred ?? prev.minYearsPreferred ?? 2,
+            }));
           }
         }
       } catch { /* use defaults */ }
@@ -404,7 +413,19 @@ const SyncActivityView: React.FC = () => {
               placeholder="Senior, VP, Director, Lead..."
               className="input-applyr w-full rounded-xl px-4 py-3 text-xs resize-none"
             />
-            <p className="text-[10px] text-on-surface-variant mt-1 italic">Comma separated. Jobs matching these title keywords are skipped.</p>
+            <p className="text-[10px] text-on-surface-variant mt-1 italic">Comma separated. Whole-word match on job title only. Senior is allowed; use years cap below.</p>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Max years required (reject above)</label>
+            <input
+              type="number"
+              min={3}
+              max={15}
+              value={settings.maxYearsRequired}
+              onChange={e => update('maxYearsRequired', parseInt(e.target.value, 10) || 7)}
+              className="input-applyr w-full rounded-xl px-4 py-3 text-sm"
+            />
+            <p className="text-[10px] text-on-surface-variant mt-1 italic">JD requiring more than this is auto-rejected (your profile: ~6 years).</p>
           </div>
           <div>
             <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Industry Blocklist</label>

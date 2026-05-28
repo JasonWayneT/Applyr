@@ -78,6 +78,7 @@ When a job passes fit scoring (≥72), the batch pipeline generates tailored res
 *   **Local-first:** With `primaryProvider: local` or `LOCAL_ONLY_MODE=1`, fit evaluation and optional micro-stages (JD profile, claim selection) use Ollama only—no cloud drafting on the hot path.
 *   **Audit trail:** `draft_manifest.json` records claim IDs, `display_company`, `draft_mode`, and `verification_passed` for each submission folder.
 *   **CR-018 polish:** Bullets are trimmed at sentence boundaries (28-word soft cap). At most one JD bridge prefix appears on the resume; cover letter proof lines strip bridges. Successful drafts write a canonical Backlog summary (no stale audit errors). Interview cheat sheets are built from research + manifest templates when cloud LLM is unavailable (`CHEAT_SHEET_MODE=template`).
+*   **CR-019 seniority:** "Senior" titles are allowed when JD required years fit the configured cap (default 7). Lead/Director/entry/0-to-1 titles remain blocked. Deterministic years and title-line gates run before LLM fit evaluation.
 
 ---
 

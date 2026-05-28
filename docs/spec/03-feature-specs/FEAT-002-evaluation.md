@@ -13,7 +13,7 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 
 ## Goals
 
-- `GOAL-001`: Filter out "Senior", "Lead", and "VP" roles without calling an AI API.
+- `GOAL-001`: Filter out Lead, Director, and VP-tier titles without calling an AI API; allow Senior when years fit (CR-019).
 - `GOAL-002`: Use LLM reasoning only for high-probability candidates.
 - `GOAL-003`: Enforce a "Two-Anchor" rule to ensure technical alignment.
 - `GOAL-004`: Fully automate the end-to-end sync, scraping, evaluation, and asset generation in the background.
@@ -33,7 +33,8 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 
 | AC ID | Requirement ID | Given | When | Then |
 |---|---|---|---|---|
-| `AC-006` | `FR-006` | Job title is "Senior PM" | Evaluator runs | Job is rejected with score 0 |
+| `AC-006` | `FR-006` | Job title is "Lead PM" | Evaluator runs | Job is rejected with score 0 |
+| `AC-006b` | `FR-109` | Job title is "Senior PM" with 3-6 years in JD | Title gate runs | Job passes title gate |
 | `AC-008` | `FR-008` | Score is 80 but 0 anchors hit | Evaluator runs | Decision is NO |
 | `AC-035` | `FR-035` | Jobs added as New | Background pipeline triggers | Descriptions are scraped, fit is evaluated, assets are drafted, and SQLite status is updated to Backlog |
 | `AC-040` | `FR-039` | Dynamic Routing | User changes candidate preferences | Evaluation run | System dynamically adjusts title blocklists and scoring anchors |

@@ -1,16 +1,16 @@
 {
   "target_role": "Product Manager",
-  "search_terms": ["Product Manager", "Product Owner"],
+  "search_terms": ["Product Manager", "Product Owner", "Technical Product Manager", "Platform Product Manager"],
   "location_preference": "United States",
   "work_setting": "Remote",
   "experience_levels": [],
   "date_posted": "Past week",
   "freshness_days": 7,
   "blocked_titles": [
-    "Senior", "Staff", "VP", "Head", "Principal", "Lead", "Director",
-    "Growth", "Founding", "First", "Manager of", "Assistant", "Coordinator",
-    "Intern", "Associate", "Junior", "Analyst", "Engineer", "Developer",
-    "Designer", "Marketer"
+    "Staff", "VP", "Head", "Principal", "Lead", "Director", "Group Product Manager", "GPM",
+    "Growth", "Founding", "First", "Manager of", "Engineering Manager", "People Manager",
+    "Assistant", "Coordinator", "Intern", "Associate", "Entry", "Junior",
+    "Analyst", "Software Engineer", "Developer", "Designer", "Marketer"
   ],
   "blocked_industries": [
     "Gambling", "Sports Betting", "Gaming", "Ad Tech", "Crypto", "Web3"
@@ -22,7 +22,7 @@
     "product", "software", "agile", "roadmap", "stakeholder"
   ],
   "experience_range": {
-    "min": 3,
+    "min": 2,
     "max": 7,
     "total_years_observed": 6
   },

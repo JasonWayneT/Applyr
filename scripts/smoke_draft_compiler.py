@@ -10,6 +10,13 @@ from bullet_generation import fallback_bullet
 from claim_catalog import load_catalog
 from bullet_fit import fit_bullet_to_budget, is_incomplete_bullet
 from claim_composer import compose_bullet, strip_bridge_prefix
+from seniority_gate import (
+    check_years_gate,
+    extract_job_title_line,
+    parse_max_years_required,
+    passes_title_gate,
+    title_blocked,
+)
 from verify_claims import strip_ids
 
 
@@ -59,6 +66,29 @@ def test_bullet_gate_blocks_kubernetes():
     assert ok2 or len(fb) > 10
 
 
+def test_senior_title_allowed():
+    jd = "Senior Product Manager\n\nRequires 3-5 years of product management experience."
+    prefs = {"blocked_titles": ["Lead", "Director"], "experience_range": {"max": 7}}
+    ok, _ = passes_title_gate(jd, prefs)
+    assert ok
+    ok_y, _ = check_years_gate(jd, prefs)
+    assert ok_y
+
+
+def test_lead_title_blocked():
+    title = "Lead Product Manager"
+    assert title_blocked(title, ["Lead", "Senior"]) == "Lead"
+
+
+def test_years_gate_rejects_high_requirement():
+    jd = "Product Manager\n\nMinimum 10 years of experience required."
+    prefs = {"experience_range": {"max": 7}}
+    ok, reason = check_years_gate(jd, prefs)
+    assert not ok
+    assert "10" in reason
+    assert parse_max_years_required(jd) == 10
+
+
 def test_fit_bullet_sentence_boundary():
     long = (
         "Led platform stabilization across ingestion pipelines and customer migrations, "
@@ -91,6 +121,9 @@ if __name__ == "__main__":
     test_jd_profile_validation()
     test_employer_routing()
     test_bullet_gate_blocks_kubernetes()
+    test_senior_title_allowed()
+    test_lead_title_blocked()
+    test_years_gate_rejects_high_requirement()
     test_fit_bullet_sentence_boundary()
     test_strip_bridge_prefix()
     test_score_claim()

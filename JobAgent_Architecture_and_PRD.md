@@ -47,8 +47,11 @@ Here is every technology used in JobAgent, and exactly why it was chosen over th
 ### 3.2 The Backend Tech
 *   **Node.js & Express:** Node lets us run JavaScript on our computer (outside the browser). Express is a tiny framework that lets us set up our Backend server in just 10 lines of code. It listens for requests from the Frontend and sends back data.
 *   **SQLite (via better-sqlite3):** 
-    *   *What is it?* Most databases (like Postgres or MySQL) require you to install heavy background services on your computer, or host them in the cloud. SQLite is entirely different. The entire database is just a single local file (`jobagent.sqlite`) living right next to our code.
-    *   *Why we chose it:* It is lightning fast, requires zero setup, and perfectly matches our "Local Privacy First" philosophy. Your data never leaves your hard drive. It also allows us to cleanly read from other local databases (like the separate scraper database).
+    *   *What is it?* Most databases (like Postgres or MySQL) require you to install heavy background services on your computer, or host them in the cloud. SQLite is entirely different. The entire database is just a single local file (`jobagent.sqlite`) living right next to our code. We also leverage **FTS5** for full-text search and **Vector Embeddings** directly in SQLite to bypass slow API calls for semantic matching.
+    *   *Why we chose it:* It is lightning fast, requires zero setup, and perfectly matches our "Local Privacy First" philosophy. Your data never leaves your hard drive.
+*   **Offline Web Intelligence (SearXNG & Playwright):** We route company research through a local SearXNG proxy and headless browser instances rather than relying purely on paid external APIs (like Perplexity), enabling fully disconnected intelligence gathering.
+*   **Edge-Computed AI (MLC WebLLM):** Browser-side WebGPU executes lightweight LLM models natively inside the React frontend for real-time grammar and stylistic checks, removing server compute bottlenecks.
+*   **Server-Sent Events (SSE):** We use SSE to stream local model inference (Ollama) text directly into the frontend editor, creating real-time UI updates without blocking backend threads.
 
 ---
 
@@ -104,5 +107,5 @@ You are placing your personal phone number, home address, and entire career hist
 Because JobAgent uses a Node server running on `localhost` and a SQLite file saved in your personal file directory, **your data physically cannot leave your machine** unless you explicitly program a feature to send it to an LLM for processing. It is completely isolated.
 
 ## 7. Next Steps for Development
-*   **Cron Jobs:** Right now, the user clicks "Sync". Eventually, we will add a timer in Node.js (a cron job) to wake up every morning at 4:00 AM automatically.
-*   **LLM Connection:** The "Pipeline" state tracker currently just simulates fetching research and writing cover letters. The next major phase is to wire those steps up to OpenAI/Gemini API calls.
+*   **Fully Local RAG:** We plan to completely migrate the `workExperience.md` parsing into a local, in-memory vector database so the scout can perform similarity checks without needing an external LLM at all.
+*   **Advanced Browser Automation:** Expanding Playwright to automatically hit the "Submit" button on generic ATS systems (e.g., Ashby, Greenhouse) once the cover letter is verified.

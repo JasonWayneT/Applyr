@@ -13,6 +13,7 @@ Empower the platform to utilize locally-hosted LLMs (via Ollama) for high-throug
 - `FR-089`–`FR-094`: Unified draft compiler — one pipeline for all providers *(CR-014)*
 - `FR-100`–`FR-104`: Local claim composition engine — compose-mode bullets, fail-closed verification *(CR-017)*
 - `FR-105`–`FR-108`: Zero-touch draft polish — sentence-complete bullets, one bridge, fresh summaries, template cheat sheets *(CR-018)*
+- `FR-131`–`FR-150`: Local funnel + compose hardening — pre-score, strict local-only, stage models, template hooks, manifest audit *(CR-021)*
 
 ## 3. Design description
 The core LLM Router (`utils.py`) manages traffic shaping between local resources and external APIs.
@@ -35,6 +36,7 @@ The core LLM Router (`utils.py`) manages traffic shaping between local resources
     - **Verification chain:** `verification_chain.verify_document_bundle()` runs after assembly — `verify_content` failure is **blocking**; `recruiter_qa` enforces no ID tokens, slug company names, or repeated $40M ARR.
     - **Display company:** `batch_pipeline` passes SQLite `jobs.company` as `display_name` for cover letter salutation (not folder slug).
     - **Local-first routing:** `llm_stages.local_only_mode()` forces `['local']` for JD profile / claim select / fit eval when `LOCAL_ONLY_MODE=1` or `primaryProvider: local`.
+8.  **CR-021 compose defaults:** `pipeline_env.py` sets deterministic JdProfile and template cover hooks in compose mode. `utils.call_llm` does not fall through to cloud when `LOCAL_ONLY_MODE=1`. Fit eval uses `call_llm_stage('fit')` with BM25-pruned work experience and JSON schema. Pre-score (`pre_score_jobs.py`) orders batch queue before fit LLM.
 
 ## 4. User interactions
 - Zero user interactions required for normal switching; routing decisions reside inside the automation engine algorithms.

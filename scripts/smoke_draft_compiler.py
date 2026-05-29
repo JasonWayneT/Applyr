@@ -5,7 +5,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from jd_tailoring import build_jd_profile_deterministic, score_claim_for_jd, _substring_valid
-from local_draft_stages import employer_for_claim_id, validate_bullet_for_local
+from local_draft_stages import (
+    assert_summary_grounded,
+    build_summary_deterministic,
+    employer_for_claim_id,
+    validate_bullet_for_local,
+)
+from pipeline_env import cover_hook_mode, jd_profile_mode, draft_mode, resume_bullet_quotas
+from local_draft_stages import project_id_for_claim, select_claims_deterministic
 from bullet_generation import fallback_bullet
 from claim_catalog import load_catalog
 from bullet_fit import fit_bullet_to_budget, is_incomplete_bullet
@@ -22,8 +29,8 @@ from verify_claims import strip_ids
 
 def test_catalog_loads_acc():
     cat = load_catalog()
-    assert "ACC-101" in cat.claims
-    assert "ACC-203" in cat.claims
+    assert any(k.startswith("ACC-101") for k in cat.claims)
+    assert any(k.startswith("ACC-203") for k in cat.claims)
     assert len(cat.claims) >= 10
 
 
@@ -37,7 +44,9 @@ def test_strip_ids_pipe_tokens():
 def test_compose_bullet_no_ids():
     cat = load_catalog()
     jd = "platform stability data migration roadmap"
-    b = compose_bullet("ACC-102", cat, jd)
+    cid = next((k for k in cat.claims if k.startswith("ACC-102")), None)
+    assert cid
+    b = compose_bullet(cid, cat, jd)
     assert b
     assert "ACC-" not in b
     assert "MET-" not in b
@@ -114,7 +123,107 @@ def test_score_claim():
     assert high >= low
 
 
+def test_pipeline_env_defaults():
+    assert draft_mode() == "compose" or os.environ.get("DRAFT_MODE")
+    assert jd_profile_mode() in ("deterministic", "llm")
+    assert cover_hook_mode() in ("template", "llm")
+
+
+def test_resume_bullet_quotas_default():
+    q = resume_bullet_quotas()
+    assert q.get("cision") == 5
+    assert q.get("sterkly") == 3
+    assert q.get("zero_to_sixty") == 3
+
+
+def test_project_id_for_claim():
+    assert project_id_for_claim("ACC-102-TECH") == "ACC-102"
+    assert project_id_for_claim("ACC-203") == "ACC-203"
+
+
+def test_select_claims_meets_quota():
+    cat = load_catalog()
+    truth = cat.truth_map()
+    if len(truth) < 20:
+        return
+    jd = "platform data integrity ingestion roadmap agile ceremonies user stories KPI"
+    picked = select_claims_deterministic(jd, truth)
+    cision = [c for c in picked if c.startswith("ACC-1")]
+    assert len(cision) >= 5
+
+
+def test_summary_grounding_fallback():
+    bullets = {"cision": ["Led platform roadmap for $40M ARR ecosystem."]}
+    bad = build_summary_deterministic(bullets, "data migration", None)
+    ok, _ = assert_summary_grounded(bad, bullets)
+    assert ok or "Product Manager" in bad
+
+
+def test_summary_no_chained_theme_ands():
+    from jd_tailoring import JdProfile
+
+    bullets = {
+        "cision": [
+            "Engineered a structural bypass of failing legacy ETL pipelines, eliminating a 40% data drop-off rate.",
+        ]
+    }
+    profile = JdProfile(
+        priority_themes=[
+            "platform reliability and scale",
+            "data integrity and ingestion",
+            "roadmap prioritization and execution",
+        ]
+    )
+    summary = build_summary_deterministic(bullets, "platform data rankings", profile)
+    assert " and scale and data " not in summary.lower()
+    assert " and ingestion" not in summary.lower() or summary.lower().count(" and ingestion") <= 1
+    assert "platform reliability and data integrity" in summary.lower()
+
+
+def test_cover_proof_format_and_picker():
+    from claim_composer import format_cover_proof_sentence
+    from jd_tailoring import build_jd_profile_deterministic, pick_cover_bullets
+
+    raw = "Prioritized delivery against roadmap goals: enforced strict prioritization."
+    fmt = format_cover_proof_sentence(raw)
+    assert fmt.startswith("Enforced")
+    assert fmt.endswith(".")
+
+    jd = (
+        "Forbes Intelligence platform rankings and list franchises. "
+        "monetization and media products. migration to structured data."
+    )
+    prof = build_jd_profile_deterministic(jd)
+    bullets = {
+        "ACC-105": "Roadmap prioritization for platform delivery.",
+        "ACC-104": "Executed migration of accounts to a new corporate platform.",
+        "ACC-202": "Translated business constraints into specs.",
+    }
+    valid = {k: v for k, v in bullets.items()}
+    picked = pick_cover_bullets(bullets, valid, prof, jd, k=2)
+    assert any("migrat" in p.lower() for p in picked)
+
+
+def test_tone_guard_rewrites_layoffs():
+    from tone_guard import sanitize_submission_tone, tone_violations, assert_submission_tone_clean
+
+    raw = (
+        "Maintained continuity through multiple rounds of layoffs and attrition "
+        "by driving knowledge sharing."
+    )
+    cleaned = sanitize_submission_tone(raw)
+    assert "layoff" not in cleaned.lower()
+    assert "attrition" not in cleaned.lower()
+    assert "constraints" in cleaned.lower()
+    assert not tone_violations(cleaned)
+    assert assert_submission_tone_clean(cleaned)[0]
+
+    ok, err = validate_bullet_for_local(raw, raw)
+    assert not ok and "Blocked tone" in (err or "")
+
+
 if __name__ == "__main__":
+    test_pipeline_env_defaults()
     test_catalog_loads_acc()
     test_strip_ids_pipe_tokens()
     test_compose_bullet_no_ids()
@@ -127,4 +236,10 @@ if __name__ == "__main__":
     test_fit_bullet_sentence_boundary()
     test_strip_bridge_prefix()
     test_score_claim()
+    test_resume_bullet_quotas_default()
+    test_project_id_for_claim()
+    test_select_claims_meets_quota()
+    test_summary_grounding_fallback()
+    test_cover_proof_format_and_picker()
+    test_tone_guard_rewrites_layoffs()
     print("smoke_draft_compiler: all passed")

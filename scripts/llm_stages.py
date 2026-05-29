@@ -1,7 +1,8 @@
 """
 Per-stage LLM provider preferences.
 
-Implements FR-093 (CR-014); local-only routing when FR-100–104 local policy active (CR-017).
+Implements FR-093 (CR-014), FR-133, FR-134 (CR-021);
+local-only routing when FR-100–104 policy active (CR-017).
 """
 import os
 
@@ -11,6 +12,14 @@ STAGE_PROVIDERS = {
     "jd_profile": ["local", "gemini"],
     "claim_select": ["local", "gemini"],
     "bullet": ["local", "gemini"],
+    "fit": ["local", "gemini"],
+}
+
+STAGE_MODEL_KEYS = {
+    "jd_profile": "localModelJdProfile",
+    "claim_select": "localModelClaimSelect",
+    "bullet": "localModelBullet",
+    "fit": "localModelFit",
 }
 
 
@@ -20,6 +29,18 @@ def local_only_mode() -> bool:
     settings = load_llm_settings()
     primary = settings.get("primaryProvider") or settings.get("provider", "gemini")
     return primary == "local"
+
+
+def stage_model(stage_id: str) -> str | None:
+    settings = load_llm_settings()
+    key = STAGE_MODEL_KEYS.get(stage_id)
+    if key and settings.get(key):
+        return settings[key]
+    defaults = {
+        "fit": settings.get("localModelFit") or "qwen2.5:7b-instruct-q4_K_M",
+        "jd_profile": settings.get("localModel") or "phi3.5:3.8b-mini-instruct-q8_0",
+    }
+    return defaults.get(stage_id)
 
 
 def call_llm_stage(stage_id: str, system_prompt: str, user_prompt: str, **kwargs):
@@ -32,9 +53,11 @@ def call_llm_stage(stage_id: str, system_prompt: str, user_prompt: str, **kwargs
     providers = [p for p in preferred if p in configured]
     if not providers:
         providers = configured
+    model = kwargs.pop("model", None) or stage_model(stage_id)
     return call_llm(
         system_prompt,
         user_prompt,
         provider_override=providers,
+        model=model,
         **kwargs,
     )

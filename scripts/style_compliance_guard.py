@@ -341,6 +341,10 @@ def run_guard(file_path):
     content = clean_escapes(content)
     content = remove_ai_fingerprints(content)
 
+    from tone_guard import sanitize_submission_tone
+
+    content = sanitize_submission_tone(content)
+
     # Strip unfilled template placeholders (applies to all doc types)
     content = strip_placeholders(content)
 

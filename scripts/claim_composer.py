@@ -1,7 +1,8 @@
 """
 Claim Composition Engine — deterministic bullets from catalog.
 
-Implements FR-101 (CR-017), FR-105, FR-106 (CR-018).
+Implements the hybrid vector-deterministic architecture.
+Pulls text directly from master_claims.json.
 """
 from __future__ import annotations
 
@@ -9,7 +10,6 @@ import os
 import re
 from typing import Dict, List, Optional, Tuple
 
-from bullet_fit import DEFAULT_MAX_BULLET_WORDS, fit_bullet_to_budget
 from claim_catalog import ClaimCatalog, load_catalog, sanitize_claim_text
 from jd_tailoring import JdProfile, load_bridge_phrases, score_claim_for_jd
 from local_draft_stages import (
@@ -21,10 +21,8 @@ from verify_claims import extract_numeric_tokens
 PRIMARY_METRIC_TOKENS = {"40", "40000000", "40000"}
 MAX_BRIDGE_BULLETS = 1
 
-
 def _draft_mode() -> str:
     return os.environ.get("DRAFT_MODE", "compose").lower()
-
 
 def pick_bridge_prefix(jd_text: str) -> str:
     """At most one bridge clause per job (first matching JD keyword)."""
@@ -39,9 +37,8 @@ def pick_bridge_prefix(jd_text: str) -> str:
             return phrase[0].upper() + phrase[1:] + ": "
     return ""
 
-
 def strip_bridge_prefix(bullet: str) -> str:
-    """Remove leading bridge phrase for cover letter proof lines (FR-106)."""
+    """Remove leading bridge phrase for cover letter proof lines."""
     text = bullet.strip()
     phrases = load_bridge_phrases()
     for phrase in sorted(phrases.values(), key=len, reverse=True):
@@ -60,6 +57,16 @@ def strip_bridge_prefix(bullet: str) -> str:
     return text
 
 
+def format_cover_proof_sentence(bullet: str) -> str:
+    """Cover proof line: strip bridge prefix, capitalize, ensure terminal period."""
+    text = strip_bridge_prefix(bullet).strip()
+    if not text:
+        return ""
+    if text[0].islower():
+        text = text[0].upper() + text[1:]
+    return text if text.endswith(".") else f"{text}."
+
+
 def compose_bullet(
     claim_id: str,
     catalog: ClaimCatalog,
@@ -70,28 +77,31 @@ def compose_bullet(
     rec = catalog.claims.get(claim_id)
     if not rec:
         return ""
-    source_line = catalog.raw_truth_lines.get(claim_id, rec.body)
+    
+    # In the new architecture, the text is already perfectly styled.
     core = sanitize_claim_text(rec.body, catalog)
+    
     prefix = pick_bridge_prefix(jd_text) if use_bridge else ""
     if prefix:
-        budget = max(DEFAULT_MAX_BULLET_WORDS - len(prefix.split()), 12)
-        core = fit_bullet_to_budget(core, max_words=budget)
-        bullet = (prefix + core).strip()
+        # We lowercase the first letter of core if we prepend a prefix
+        first_letter = core[0].lower() if core else ""
+        rest_of_string = core[1:] if len(core) > 1 else ""
+        bullet = (prefix + first_letter + rest_of_string).strip()
     else:
-        bullet = fit_bullet_to_budget(core, max_words=DEFAULT_MAX_BULLET_WORDS)
+        bullet = core.strip()
 
-    valid, _ = validate_bullet_for_local(source_line, bullet)
+    source_line = catalog.raw_truth_lines.get(claim_id, rec.body)
+    valid, err = validate_bullet_for_local(source_line, bullet)
+    
     if not valid:
-        bullet = fit_bullet_to_budget(
-            sanitize_claim_text(rec.body, catalog),
-            max_words=DEFAULT_MAX_BULLET_WORDS,
-        )
+        import sys
+        print(f"    [Warning] Local validation failed for {claim_id}: {err}. Falling back to raw text.", file=sys.stderr)
+        return core.strip()
+        
     return bullet
-
 
 def _metric_signature(text: str) -> frozenset:
     return frozenset(extract_numeric_tokens(text.replace(",", "")) & PRIMARY_METRIC_TOKENS)
-
 
 def generate_bullets_compose(
     selected_ids: List[str],
@@ -105,6 +115,7 @@ def generate_bullets_compose(
 
     truth = catalog.truth_map()
     prof = profile or JdProfile()
+    
     ranked = sorted(
         selected_ids,
         key=lambda cid: score_claim_for_jd(
@@ -123,29 +134,18 @@ def generate_bullets_compose(
         if not bullet:
             fallback_count += 1
             continue
+            
         sig = _metric_signature(bullet)
         if sig & PRIMARY_METRIC_TOKENS and used_primary_metric:
             rec = catalog.claims.get(claim_id)
             if rec:
-                bullet = fit_bullet_to_budget(sanitize_claim_text(rec.body, catalog))
+                bullet = sanitize_claim_text(rec.body, catalog)
         elif sig & PRIMARY_METRIC_TOKENS:
             used_primary_metric = True
 
-        source_line = catalog.raw_truth_lines.get(claim_id, bullet)
-        valid, _ = validate_bullet_for_local(source_line, bullet)
-        if valid:
-            bullets[claim_id] = bullet
-        else:
-            bullets[claim_id] = fit_bullet_to_budget(
-                sanitize_claim_text(
-                    catalog.claims[claim_id].body if claim_id in catalog.claims else bullet,
-                    catalog,
-                ),
-            )
-            fallback_count += 1
+        bullets[claim_id] = bullet
 
     return bullets, fallback_count
-
 
 def generate_bullets_for_claims(
     selected_ids: List[str],
@@ -154,19 +154,19 @@ def generate_bullets_for_claims(
     profile: Optional[JdProfile] = None,
 ):
     """Entry: compose mode (default) or legacy LLM bullets."""
+    from pipeline_env import assert_draft_mode_allowed
+
+    assert_draft_mode_allowed()
     if _draft_mode() == "legacy_llm":
         from bullet_generation import generate_bullets_for_claims as llm_gen
-
         return llm_gen(selected_ids, valid_ids, jd_text, profile=profile)
 
     catalog = load_catalog()
     if not catalog.claims:
         from bullet_generation import generate_bullets_for_claims as llm_gen
-
         return llm_gen(selected_ids, valid_ids, jd_text, profile=profile)
 
     return generate_bullets_compose(selected_ids, catalog, jd_text, profile)
-
 
 def select_claims_with_catalog(
     jd_text: str,

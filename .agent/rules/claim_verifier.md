@@ -27,6 +27,7 @@ If you detect any of the following, you MUST rewrite the sentence to be accurate
 - **Forbidden Resume Sections:** These section headers must never appear in a final resume output: Core Competencies, Technical Skills, Technical Skills & Tools, Technical Proficiencies, Key Projects & Achievements, Projects & Achievements, Key Achievements & Impact, Key Achievements & Impact Summary, Skills & Tools, Technical Environment, Core Expertise, Additional Information, Summary of Qualifications, Highlights. If any appear, strip the section and all its content.
 - **Unfilled Placeholders:** Never allow template tokens like `[JD]`, `[Position Overview]`, `[Your City, State]`, `[Year]`, `[Company Name]`, or any `[CAPS TEXT]` pattern to appear in final output. Strip them immediately.
 - **Education in Cover Letters:** Cover letters must NOT contain an `## EDUCATION & CERTIFICATIONS` section. Strip any such section from CL output.
+- **No Layoff / Attrition Tone (FR-096):** Never use `layoff`, `layoffs`, `laid off`, `attrition`, `reduction in force`, or `RIF` on resumes or cover letters. Describe the same work using **constraints** framing (e.g. "increasing organizational and resource constraints", "severe organizational resource constraints").
 
 ## 3) Output Protocol
 If a claim fails verification, provide the output in this format:

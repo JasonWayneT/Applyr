@@ -185,9 +185,34 @@ export const runScoutSync = async () => {
         for (const line of lines) {
           const clean = line.trim();
           if (!clean) continue;
-          if (clean.startsWith('[JOB_PROGRESS]')) {
+          if (clean.startsWith('[BATCH_PROGRESS]')) {
+            const completed = clean.match(/completed=(\d+)/);
+            const total = clean.match(/total=(\d+)/);
+            const current = clean.match(/current=([^\s]+)/);
+            const phase = clean.match(/phase=(\w+)/);
+            const item =
+              current && phase
+                ? `Job ${completed?.[1] ?? '?'}/${total?.[1] ?? '?'}: ${current[1]} (${phase[1]})`
+                : current?.[1];
+            db.prepare(`
+              UPDATE system_status SET
+                status = 'evaluate_running',
+                current_item = COALESCE(?, current_item),
+                items_completed = COALESCE(?, items_completed),
+                items_total = COALESCE(?, items_total),
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = 'global'
+            `).run(
+              item ?? null,
+              completed ? Number(completed[1]) : null,
+              total ? Number(total[1]) : null,
+            );
+          } else if (clean.startsWith('[JOB_PROGRESS]')) {
             const statusMsg = clean.replace('[JOB_PROGRESS]', '').trim();
-            db.prepare(`UPDATE system_status SET current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(statusMsg);
+            db.prepare(`
+              UPDATE system_status SET status = 'evaluate_running', current_item = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = 'global'
+            `).run(statusMsg);
           }
           logActivity('INFO', 'Pipeline', clean);
         }

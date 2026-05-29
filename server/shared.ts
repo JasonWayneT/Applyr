@@ -41,6 +41,18 @@ const DEFAULT_PIPELINE_PREFERENCES = {
 export function buildPythonEnv(): Record<string, string> {
   return {
     PYTHONUNBUFFERED: '1',
+    DRAFT_MODE: process.env.DRAFT_MODE || 'compose',
+    LOCAL_ONLY_MODE: process.env.LOCAL_ONLY_MODE || '1',
+    JD_PROFILE_MODE: process.env.JD_PROFILE_MODE || 'deterministic',
+    COVER_HOOK_MODE: process.env.COVER_HOOK_MODE || 'template',
+    CHEAT_SHEET_MODE: process.env.CHEAT_SHEET_MODE || 'template',
+    RESEARCH_MODE: process.env.RESEARCH_MODE || 'local',
+    BATCH_PARALLEL_WORKERS: process.env.BATCH_PARALLEL_WORKERS || '1',
+    FIT_LLM_TIMEOUT_SEC: process.env.FIT_LLM_TIMEOUT_SEC || '180',
+    BATCH_FAST_MODE: process.env.BATCH_FAST_MODE || '0',
+    BATCH_UNLOAD_MODELS: process.env.BATCH_UNLOAD_MODELS || '0',
+    BATCH_INTER_JOB_SLEEP_SEC: process.env.BATCH_INTER_JOB_SLEEP_SEC || '2',
+    FIT_NUM_PREDICT: process.env.FIT_NUM_PREDICT || '768',
   };
 }
 

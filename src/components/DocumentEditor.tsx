@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Editor } from '@toast-ui/react-editor';
 import { api } from '../lib/api';
 import '@toast-ui/editor/dist/toastui-editor.css';
-import { checkGrammarLocal, initGrammarChecker } from '../lib/grammarCheck';
+import { analyzeGrammarIssues, type GrammarIssue } from '../lib/grammarCheck';
 
 interface DocumentEditorProps {
   jobId: string;
@@ -30,6 +30,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const [lintStatus, setLintStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [lintProgress, setLintProgress] = useState<string>('');
   const [hasAiKey, setHasAiKey] = useState(false);
+  const [grammarIssues, setGrammarIssues] = useState<GrammarIssue[]>([]);
+  const [claimSources, setClaimSources] = useState<Record<string, string>>({});
 
   useEffect(() => {
     // Check if Gemini API Key is configured via Profile/Identity or server environment
@@ -44,7 +46,19 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       }
     };
     checkApiKey();
-  }, []);
+    const loadManifest = async () => {
+      try {
+        const res = await fetch(api(`/api/jobs/${jobId}/files/draft_manifest.json`));
+        if (!res.ok) return;
+        const text = await res.text();
+        const m = JSON.parse(text);
+        if (m.claim_sources) setClaimSources(m.claim_sources);
+      } catch {
+        /* no manifest */
+      }
+    };
+    loadManifest();
+  }, [jobId]);
 
   const handleSave = async () => {
     const editorInstance = editorRef.current?.getInstance();
@@ -145,16 +159,14 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
 
       const currentMarkdown = editorInstance.getMarkdown();
       
-      const newText = await checkGrammarLocal(currentMarkdown);
-      
-      if (newText && newText !== currentMarkdown) {
-        editorInstance.setMarkdown(newText);
-        setLintStatus('success');
-      } else {
-        // Either no changes or failed (fallback to original text)
-        setLintStatus('idle'); 
-      }
-      setTimeout(() => setLintStatus('idle'), 2000);
+      const issues = await analyzeGrammarIssues(currentMarkdown);
+      setGrammarIssues(issues);
+      setLintStatus(issues.length ? 'success' : 'idle');
+      setLintProgress(issues.length ? `${issues.length} issue(s) — text not modified` : 'No issues found');
+      setTimeout(() => {
+        setLintStatus('idle');
+        setLintProgress('');
+      }, 4000);
     } catch (err) {
       setLintStatus('error');
     }
@@ -245,6 +257,35 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
 
         {/* AI Assistant Sidebar Panel */}
         <div className="w-80 bg-surface-container-low border-l border-outline-variant/10 p-6 flex flex-col gap-6 overflow-y-auto applyr-scrollbar">
+          {Object.keys(claimSources).length > 0 && (
+            <div>
+              <h4 className="text-xs font-headline font-extrabold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-primary text-base">fact_check</span>
+                Claim sources
+              </h4>
+              <ul className="mt-2 space-y-2 max-h-40 overflow-y-auto text-[10px] text-on-surface-variant">
+                {Object.entries(claimSources).map(([id, src]) => (
+                  <li key={id} className="border-l-2 border-primary/30 pl-2">
+                    <span className="font-bold text-on-surface">{id}</span>
+                    <p className="line-clamp-2">{src}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {grammarIssues.length > 0 && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+              <p className="text-[10px] font-bold text-on-surface mb-1">Grammar notes (text unchanged)</p>
+              <ul className="text-[10px] text-on-surface-variant list-disc pl-4 space-y-1">
+                {grammarIssues.map((g, i) => (
+                  <li key={i}>{g.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {lintProgress && (
+            <p className="text-[10px] text-on-surface-variant">{lintProgress}</p>
+          )}
           <div>
             <h4 className="text-xs font-headline font-extrabold text-on-surface uppercase tracking-wider flex items-center gap-1.5">
               <span className="material-symbols-outlined text-secondary text-base">psychology</span>

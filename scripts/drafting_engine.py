@@ -195,6 +195,17 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
         )
         print(f"    [GUARD] Seniority inflation detected: {seniority_violations}")
 
+    from tone_guard import sanitize_submission_tone, tone_violations
+
+    tone_hits = tone_violations(corrected)
+    if tone_hits:
+        warnings.append(
+            f"TONE (FR-096): Workforce-reduction language must use constraints framing: "
+            f"{', '.join(sorted(set(tone_hits)))}"
+        )
+        print(f"    [GUARD] Blocked tone detected; rewriting to constraints language.")
+    corrected = sanitize_submission_tone(corrected)
+
     # 3b. MANDATORY TITLE CONSISTENCY GUARD — Enforce Cision is strictly "Product Manager"
     lines = corrected.split('\n')
     new_lines = []
@@ -332,17 +343,29 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
 
 
 def run_research(company_name, jd_text):
+    from pipeline_env import research_mode
+
     folder = os.path.join(SUBMISSIONS_DIR, company_name.lower().replace(" ", "_"))
     packet_path = os.path.join(folder, "Research_Packet.json")
     if os.path.exists(packet_path):
         print(f"    [Research] Found cached intelligence for {company_name}. Using local packet.")
         return load_file(packet_path)
 
-    print(f"    [Research] Pulling Perplexity intelligence for {company_name}...")
+    mode = research_mode()
+    if mode == "skip":
+        print(f"    [Research] Skipped (RESEARCH_MODE=skip). Template cheat sheet only.")
+        return "No research data available."
+
+    print(f"    [Research] Fetching intelligence ({mode}) for {company_name}...")
     try:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        subprocess.run(["python", os.path.join(script_dir, "research-engine.py"),
-                        company_name, "Product Manager"], check=True)
+        env = os.environ.copy()
+        env["RESEARCH_MODE"] = mode
+        subprocess.run(
+            ["python", os.path.join(script_dir, "research-engine.py"), company_name, "Product Manager"],
+            check=False,
+            env=env,
+        )
         if os.path.exists(packet_path):
             return load_file(packet_path)
     except Exception as e:
@@ -378,6 +401,13 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result, disp
     run_research(company_name, jd_text)
 
     from draft_compiler import run as run_compiler
-    run_compiler(company_name, jd_text, work_exp, evaluation_result, company_folder, display_name=display)
+    run_compiler(
+        company_name,
+        jd_text,
+        work_exp,
+        evaluation_result,
+        company_folder,
+        display_name=display,
+    )
     print(f"  -> Successfully generated and audited all assets for {company_name}")
 

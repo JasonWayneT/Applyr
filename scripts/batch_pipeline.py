@@ -1,3 +1,5 @@
+# Implements FR-132, FR-133, FR-149, FR-150 (CR-021); FR-006–FR-009, FR-109 (CR-019).
+# Pipeline defaults: FR-131 via pipeline_env / setdefault below.
 import os
 import json
 import glob
@@ -21,6 +23,16 @@ from generate_cheat_sheet import generate_cheat_sheet
 from metadata_tagger import tag_job_metadata
 from dom_cleanup import clean_html_to_text
 from zero_shot_classifier import classify_onsite
+
+os.environ.setdefault("DRAFT_MODE", "compose")
+os.environ.setdefault("LOCAL_ONLY_MODE", "1")
+os.environ.setdefault("JD_PROFILE_MODE", "deterministic")
+os.environ.setdefault("COVER_HOOK_MODE", "template")
+os.environ.setdefault("CHEAT_SHEET_MODE", "template")
+
+from pipeline_env import apply_quality_batch_defaults
+
+apply_quality_batch_defaults()
 
 # CR-011: user-facing pipeline status vocabulary
 STATUS_NEEDS_RETRY = "Needs Retry"
@@ -82,6 +94,87 @@ def extract_and_save_salary(db_path: str, job_id_prefix: str, company_name: str,
             conn.close()
     except Exception as e:
         safe_print(f"  -> Error saving salary: {e}")
+
+def ensure_jobs_schema(db_path: str):
+    """Idempotent column adds for CR-021 (jd_vector, pre_score, etc.)."""
+    if not db_path or not os.path.exists(db_path):
+        return
+    cols = [
+        ("jd_vector", "TEXT"),
+        ("pre_score", "INTEGER"),
+        ("metadata_vector", "TEXT"),
+        ("jd_text", "TEXT"),
+        ("metadata_tags", "TEXT"),
+    ]
+    try:
+        conn = sqlite3.connect(db_path, timeout=30.0)
+        for name, typ in cols:
+            try:
+                conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {typ}")
+            except sqlite3.OperationalError:
+                pass
+        _repair_jobs_fts(conn)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  -> Schema migration warning: {e}")
+
+
+def _repair_jobs_fts(conn):
+    """Standalone FTS index without UPDATE triggers (fixes pre_score/salary save errors)."""
+    for trig in (
+        "jobs_fts_ai", "jobs_fts_ad", "jobs_fts_au",
+        "jobs_ai", "jobs_ad", "jobs_au",
+    ):
+        conn.execute(f"DROP TRIGGER IF EXISTS {trig}")
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='jobs_fts'"
+    ).fetchone()
+    fts_sql = (row[0] if row else "") or ""
+    needs_rebuild = not row or "content='jobs'" in fts_sql or "url" not in fts_sql
+    if not needs_rebuild:
+        return
+    conn.execute("DROP TABLE IF EXISTS jobs_fts")
+    conn.execute(
+        """
+        CREATE VIRTUAL TABLE jobs_fts USING fts5(
+            company, title, summary, url,
+            tokenize='porter unicode61'
+        )
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO jobs_fts(rowid, company, title, summary, url)
+        SELECT rowid,
+            COALESCE(company, ''),
+            COALESCE(title, ''),
+            COALESCE(summary, ''),
+            COALESCE(url, '')
+        FROM jobs
+        """
+    )
+    print("  -> Repaired jobs_fts index (no sync triggers on job UPDATE).")
+
+
+def save_pre_score(db_path: str, job_id_prefix: str, company_name: str, score: int):
+    try:
+        conn = sqlite3.connect(db_path, timeout=30.0)
+        if job_id_prefix:
+            conn.execute(
+                "UPDATE jobs SET pre_score = ? WHERE id LIKE ?",
+                (score, f"{job_id_prefix}%"),
+            )
+        else:
+            conn.execute(
+                "UPDATE jobs SET pre_score = ? WHERE LOWER(company) = LOWER(?)",
+                (score, company_name),
+            )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  -> Error saving pre_score: {e}")
+
 
 def save_jd_vector(db_path: str, job_id_prefix: str, company_name: str, vector: list):
     if not vector: return
@@ -334,12 +427,50 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None) -> bool:
     return any(kw in lower for kw in JD_REQUIRED_KEYWORDS)
 
 
+def _pruned_work_exp_for_fit(jd_text: str, work_exp_summary: str, k: int = 8) -> str:
+    """BM25-select relevant experience paragraphs for fit prompt (CR-021)."""
+    from local_embeddings import BM25
+
+    if not work_exp_summary or len(work_exp_summary) < 500:
+        return work_exp_summary
+    paras = [
+        p.strip()
+        for p in re.split(r"\n\s*\n", work_exp_summary)
+        if len(p.strip()) > 40
+    ]
+    if not paras:
+        lines = [ln for ln in work_exp_summary.splitlines() if ln.strip().startswith("*")]
+        paras = lines[:40]
+    if not paras:
+        return work_exp_summary[:4000]
+    bm25 = BM25(paras[:80])
+    hits = bm25.get_top_n(jd_text[:3000], n=k)
+    picked = [paras[i] for i, _ in hits if i < len(paras)]
+    if not picked:
+        return work_exp_summary[:4000]
+    return "\n\n".join(picked)
+
+
 def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     """Uses condensed summary and dynamic candidate preferences to minimize token cost."""
     # Truncate JD — first 1500 chars contain ~90% of signal for scoring
     truncated_jd = jd_text[:SCORING_JD_MAX_CHARS] if len(jd_text) > SCORING_JD_MAX_CHARS else jd_text
+    work_exp_for_fit = _pruned_work_exp_for_fit(truncated_jd, work_exp_summary)
 
     prefs_str = json.dumps(prefs, indent=2) if prefs else "{}"
+
+    fit_schema = {
+        "type": "object",
+        "properties": {
+            "Decision": {"type": "string"},
+            "Score": {"type": "integer"},
+            "Confidence": {"type": "string"},
+            "Summary": {"type": "string"},
+            "TopFitReasons": {"type": "array", "items": {"type": "string"}},
+            "RiskFlags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["Decision", "Score", "Summary"],
+    }
 
     prompt = f"""
     You are the JobAgent Job-Fit Decision Engine.
@@ -347,8 +478,8 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     CANDIDATE PREFERENCES:
     {prefs_str}
 
-    GROUND TRUTH (Jason Taylor's Profile):
-    {work_exp_summary}
+    GROUND TRUTH (Jason Taylor's Profile — BM25-pruned):
+    {work_exp_for_fit}
     
     JOB DESCRIPTION (first {SCORING_JD_MAX_CHARS} chars):
     {truncated_jd}
@@ -375,15 +506,20 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     Do not output any introductory or concluding text outside the JSON object. Do not format with markdown codeblocks.
     """
 
-    from llm_stages import local_only_mode
+    from llm_stages import call_llm_stage
+    from pipeline_env import fit_llm_timeout_sec, fit_model_override, fit_num_predict
 
-    provider_override = ["local"] if local_only_mode() else ["local", "gemini"]
-    result = call_llm(
-        system_prompt="You are the Job-Fit Decision Engine. Output JSON strictly.",
-        user_prompt=prompt,
-        temperature=0.1,
+    fit_model = fit_model_override()
+    result = call_llm_stage(
+        "fit",
+        "You are the Job-Fit Decision Engine. Output JSON strictly.",
+        prompt,
+        temperature=0.0,
         response_mime_type="application/json",
-        provider_override=provider_override,
+        response_schema=fit_schema,
+        model=fit_model,
+        options_override={"num_predict": fit_num_predict()},
+        request_timeout=fit_llm_timeout_sec(),
     )
 
     if not result or not result.strip():
@@ -536,13 +672,61 @@ def process_batch():
         print(f"No job description files (.txt) found in {JOBS_DIR}/ directory.")
         return
 
-    print(f"Found {len(job_files)} jobs in batch queue.")
+    from pre_score_jobs import pre_score_job, _anchor_embedding
+    from pipeline_env import (
+        batch_fast_mode,
+        batch_inter_job_sleep_sec,
+        batch_parallel_workers,
+        batch_unload_models_between_jobs,
+        fit_eval_top_n,
+        skip_duplicate_vector_check,
+        skip_metadata_tagger,
+    )
+
+    anchor_vec = _anchor_embedding(work_exp_summary)
+    scored_files = []
+    for fp in job_files:
+        jd_preview = load_file(fp) or ""
+        ps = pre_score_job(jd_preview, work_exp_summary, anchor_vec=anchor_vec)
+        scored_files.append((ps, fp))
+    scored_files.sort(key=lambda x: x[0], reverse=True)
+    job_files = [fp for _, fp in scored_files]
+    top_n = fit_eval_top_n()
+    if top_n and len(job_files) > top_n:
+        print(f"Pre-score cap: evaluating top {top_n} of {len(scored_files)} jobs (FIT_EVAL_TOP_N).")
+        job_files = job_files[:top_n]
+
+    print(f"Found {len(scored_files)} jobs in batch queue (sorted by pre-score).")
+    if batch_fast_mode():
+        print(
+            "BATCH_FAST_MODE=1: phi3.5 fit, shorter tokens, no tagger/dedup embed, "
+            "no inter-job sleep, models stay loaded."
+        )
+    elif os.environ.get("LOCAL_ONLY_MODE", "").lower() in ("1", "true", "yes"):
+        print(
+            "Quality batch profile: qwen fit (unchanged), 768-token fit cap, "
+            "2s between jobs, models stay loaded, cached tag embeddings."
+        )
 
     db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
     db_exists = os.path.exists(db_path)
+    if db_exists:
+        ensure_jobs_schema(db_path)
 
     total_jobs = len(job_files)
     job_failures = 0
+    batch_completed = {"n": 0}
+
+    def _emit_batch_progress(company: str, phase: str):
+        print(
+            f"[BATCH_PROGRESS] completed={batch_completed['n']} total={total_jobs} "
+            f"current={company} phase={phase}"
+        )
+
+    print(
+        f"[BATCH_PROGRESS] completed=0 total={total_jobs} current=queue phase=starting"
+    )
+
     def process_single_job(idx, filepath):
         job_failures_local = 0
         filename = os.path.basename(filepath)
@@ -558,12 +742,15 @@ def process_batch():
 
         print(f"\n[{datetime.now().strftime('%H:%M:%S')}] Processing: {company_name}")
         print(f"[JOB_PROGRESS] Job {idx + 1}/{total_jobs}: Evaluating {company_name}...")
+        _emit_batch_progress(company_name, "evaluating")
         
         jd_text = load_file(filepath)
 
         if not jd_text or len(jd_text.strip()) < 100:
             print(f"  -> Skipping. File {filename} seems empty or too short.")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "skipped")
             return job_failures_local
 
         file_url = None
@@ -597,29 +784,42 @@ def process_batch():
         if is_stale:
             print(f"  -> Skipping. Job already present in 'stale_jobs'.")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "skipped")
             return job_failures_local
 
         if status_to_check and status_to_check not in ('New', 'Drafted'):
             print(f"  -> Skipping. Already evaluated (status: {status_to_check}).")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "skipped")
             return job_failures_local
 
         # DOM Cleanup Pre-Processor
         jd_text = clean_html_to_text(jd_text)
 
+        if db_exists:
+            ps = pre_score_job(jd_text, work_exp_summary, anchor_vec=anchor_vec)
+            save_pre_score(db_path, job_id_prefix, company_name, ps)
+            print(f"  -> Pre-score: {ps}/100")
+
         if not jd_text or len(jd_text.strip()) < 100:
             print(f"  -> Skipping. File {filename} seems empty or too short after cleanup.")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "skipped")
             return job_failures_local
 
         # Zero-token keyword gate
         if db_exists:
             extract_and_save_salary(db_path, job_id_prefix, company_name, jd_text)
             
-            # Rapid Metadata Tagging
-            tag_job_metadata(db_path, job_id_prefix, company_name, jd_text)
-            
-            is_dup, vec = check_is_duplicate_and_get_vector(db_path, jd_text)
+            if not skip_metadata_tagger():
+                tag_job_metadata(db_path, job_id_prefix, company_name, jd_text)
+
+            is_dup, vec = (False, None)
+            if not skip_duplicate_vector_check():
+                is_dup, vec = check_is_duplicate_and_get_vector(db_path, jd_text)
             if is_dup:
                 print(f"  -> Skipping. JD is a >95% vector match with a recently processed job (Duplicate/Repost).")
                 try:
@@ -639,6 +839,8 @@ def process_batch():
                 except Exception as e:
                     pass
                 _cleanup_staging_file(filepath, filename)
+                batch_completed["n"] += 1
+                _emit_batch_progress(company_name, "duplicate")
                 return job_failures_local
             if vec:
                 save_jd_vector(db_path, job_id_prefix, company_name, vec)
@@ -667,6 +869,8 @@ def process_batch():
                 except Exception as e:
                     print(f"  -> Error handling keyword gate db update: {e}")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "keyword_reject")
             return job_failures_local
 
         # Zero-Shot On-Site Classifier Gate
@@ -695,9 +899,12 @@ def process_batch():
                 except Exception as e:
                     print(f"  -> Error handling on-site gate db update: {e}")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "onsite_reject")
             return job_failures_local
 
         print(f"  -> Evaluating fit against v3.2 Rubric...")
+        _emit_batch_progress(company_name, "fit_llm")
         with GPU_LOCK:
             result = evaluate_job_fit(jd_text, work_exp_summary, fit_rules, prefs)
 
@@ -714,6 +921,8 @@ def process_batch():
                 except Exception as e:
                     print(f"  -> Error marking failure in database: {e}")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "fit_error")
             return job_failures_local
 
         score = result.get("Score", 0)
@@ -746,11 +955,14 @@ def process_batch():
                 except Exception as e:
                     print(f"  -> Error handling low score db update: {e}")
             _cleanup_staging_file(filepath, filename)
+            batch_completed["n"] += 1
+            _emit_batch_progress(company_name, "rejected")
             return job_failures_local
 
         # Load full work experience only for YES decisions
         work_exp_full = load_file(WORK_EXP_FILE)
         print(f"[JOB_PROGRESS] Job {idx + 1}/{total_jobs}: Generating assets for {company_name}...")
+        _emit_batch_progress(company_name, "drafting")
         print(f"  -> [GATEKEEPER PASS] Score: {score}. Running drafting engine...")
         
         from drafting_errors import SelfCorrectionError
@@ -813,21 +1025,33 @@ def process_batch():
 
         _cleanup_staging_file(filepath, filename)
 
-        # Force immediate model unload to prevent swapping / stacked VRAM usage during sequential processing
-        unload_local_models()
+        batch_completed["n"] += 1
+        _emit_batch_progress(company_name, "done")
+        print(f"[JOB_DONE] {idx + 1}/{total_jobs}: {company_name}")
 
-        print("  -> Sleeping for 15 seconds to respect rate limits...")
-        time.sleep(15)
+        if batch_unload_models_between_jobs():
+            unload_local_models()
+
+        sleep_s = batch_inter_job_sleep_sec()
+        if sleep_s > 0:
+            print(f"  -> Sleeping for {sleep_s:g}s before next job...")
+            time.sleep(sleep_s)
 
         return job_failures_local
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        futures = []
+    workers = batch_parallel_workers()
+    print(f"Batch workers: {workers} (set BATCH_PARALLEL_WORKERS to raise; default 1 = sequential).")
+    if workers <= 1:
         for idx, filepath in enumerate(job_files):
-            futures.append(executor.submit(process_single_job, idx, filepath))
-        
-        for future in concurrent.futures.as_completed(futures):
-            job_failures += future.result()
+            job_failures += process_single_job(idx, filepath)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [
+                executor.submit(process_single_job, idx, filepath)
+                for idx, filepath in enumerate(job_files)
+            ]
+            for future in concurrent.futures.as_completed(futures):
+                job_failures += future.result()
 
     if job_failures > 0:
         msg = f"Batch queue drained with {job_failures} job failure(s)."

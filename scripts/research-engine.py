@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import requests
 from utils import load_file, call_llm, load_llm_settings, _is_configured, SUBMISSIONS_DIR, RESEARCH_CONTRACT_FILE
@@ -129,6 +130,17 @@ def fetch_company_intel(company, role, contract_path=None):
     
     if competitors:
         prompt += f"\nNote: Similar companies in the user's pipeline that may be competitors include: {', '.join(competitors)}."
+
+    import os
+    mode = os.environ.get("RESEARCH_MODE", "").lower()
+    if mode == "skip":
+        return "{}"
+    if mode == "local" or os.environ.get("LOCAL_ONLY_MODE", "").lower() in ("1", "true", "yes"):
+        try:
+            return fetch_company_intel_local(company, role, prompt)
+        except Exception as e:
+            print(f"Local research failed ({e}), returning empty packet.", file=sys.stderr)
+            return "{}"
 
     # Implements FR-061: try Perplexity first (native web retrieval), fall back to primary LLM
     settings = load_llm_settings()

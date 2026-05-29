@@ -20,7 +20,8 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ### 3. Bespoke Asset Generation (The Bridge)
 *   **Claim Composition Engine (CR-017):** Default `DRAFT_MODE=compose` builds bullets from the `workExperience.md` ACC catalog with VOC replacements and JD bridge prefixes—no per-claim LLM rewrite unless `legacy_llm` is set. `verification_chain` and `recruiter_qa` fail closed before PDFs ship.
-*   **Unified Draft Compiler (CR-014):** One code-owned pipeline (`scripts/draft_compiler.py`) for local-first deployments. LLMs optionally power JD profile JSON and claim selection; summary, cover letter, section order, char budget, and PDF assembly are deterministic templates.
+*   **Unified Draft Compiler (CR-014):** One code-owned pipeline (`scripts/draft_compiler.py`) for local-first deployments. LLMs optionally power JD profile JSON and claim selection; resume summary, section order, char budget, and PDF assembly are deterministic templates.
+*   **Cover Conversion Engine (CR-024):** With `COVER_ENGINE=v1`, cover letters are a **separate pipeline** from resumes: JD-ranked needs, catalog proof selection, micro-narrative bodies, conversion audit — not resume bullet paste.
 *   **Per-Claim Tailoring with Fail-Closed Gates:** Compose-mode bullets pass numeric, tool-block, and seniority-inflation checks; failures use sanitized catalog text. `verify_content` errors block the pipeline instead of logging warnings only.
 *   **The "Hallucination" Guard:** `verify_content()` runs on resume text with claim IDs before tags are stripped; `validate_hard_facts()` and `style_compliance_guard` enforce ground truth from `data/workExperience.md` and the master resume. Cloud self-audit (`llm_verify_claims`) is retired for compiler output.
 *   **JD-Aware Selection:** `JdProfile` (validated JD extract) plus fit-engine `Summary` scores and ranks claims per employer before bullets are generated.
@@ -45,6 +46,64 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 ---
 
 ## Part 2: Release Ledger
+
+### 6.2.14
+Applyr Release
+May 28, 2026
+
+Version 6.2.14, deployed on May 28, 2026
+
+Previous
+Applyr 6.2.13
+
+**New**
+- **CR-024 Cover conversion engine:** `COVER_ENGINE=v1` builds Match Brief cover letters from **JD + master claims only** — does not read `Resume.md` for proof selection (`FR-158`).
+- **Application-first openers:** Letters lead with “I am applying for the {role} at {company}…” plus posting-alignment line; audit bans “{Company} is hiring…” (`FR-160`).
+- **`cover_letter_plan.json`:** Per-submission plan records claim IDs, ranked JD needs, and themes for traceability (`FR-159`).
+- **Theme prose helper:** `format_themes_for_prose()` fixes chained “and” in resume summaries (e.g. “platform reliability and data integrity” vs triple-and chains) (`FR-161`).
+
+**Changed**
+- **`draft_compiler.py`:** `PIPELINE_VERSION=CR-024-cover-engine`; cover numeric verification uses full claim catalog when `COVER_ENGINE=v1` (`AC-168`).
+- **Cover letter length QA:** Single-page char limit raised to 2400 for Match Brief format (salutation + bridge paragraph).
+- **Batch scripts:** `regenerate_all_cover_letters.py` sets `COVER_ENGINE=v1` by default.
+
+**Fixed**
+- Cover letters no longer paste resume bullets with a generic hook (`FR-088` cover path superseded).
+- Jobgether-style salary figures excluded from `ranked_needs` JD extraction.
+
+**Developer**
+- New modules: `scripts/cover_letter_compiler.py`, `cover_jd_needs.py`, `cover_claim_picker.py`, `cover_plan_builder.py`, `cover_narrative_templates.py`, `cover_letter_renderer.py`, `cover_letter_audit.py`, `cover_prose.py`, `match_thesis_builder.py`.
+- Specs: `CR-024`, `FEAT-013`, `FR-157`–`FR-163`, `IMP-CR-024`, traceability rows `AC-164`–`AC-169`.
+- Pilot: `python scripts/pilot_cover_forbes.py`.
+
+### 6.2.13
+Applyr Release
+May 28, 2026
+
+Version 6.2.13, deployed on May 28, 2026
+
+Previous
+Applyr 6.2.12
+
+**New**
+- **CR-021 compose hardening:** Default `JD_PROFILE_MODE=deterministic` and `COVER_HOOK_MODE=template` so resume/cover prose stays catalog-grounded; cover body remains proof bullets only.
+- **Pre-score queue:** BM25 + embedding pre-score sorts batch jobs before fit LLM; optional `FIT_EVAL_TOP_N` cap.
+- **Scout seniority gate:** Title blocklist and max-years check at ingest when description is available.
+- **Draft manifest sources:** `claim_sources` and `jd_hash` in `draft_manifest.json`; editor facts panel in Document Editor.
+- **ATS watchlist channel:** Optional `config/ats_watchlist.json` / `data/ats_watchlist.json` careers scrape.
+- **CI smoke workflow:** GitHub Actions runs `smoke_draft_compiler.py` without LLM.
+
+**Changed**
+- **Strict local-only:** `LOCAL_ONLY_MODE=1` no longer falls through to Gemini on fit/draft paths.
+- **Fit eval:** BM25-pruned work experience context + JSON schema via `call_llm_stage('fit')` with `qwen2.5:7b-instruct-q4_K_M` default.
+- **Grammar lint:** WebGPU reports issues only; does not rewrite resume/cover text.
+- **PDF export gate:** Manual compile blocked if `draft_manifest.verification_passed` is not true.
+
+**Developer**
+- `scripts/pipeline_env.py`, `scripts/pre_score_jobs.py`, `scripts/build_claim_embeddings.py`, `scripts/draft_linter.py`.
+- **SDD completion:** Full CR-021 spec chain (`FR-131`–`FR-150`, `AC-139`–`AC-158`), `IMP-CR-021`, FEAT-001/004/012 updates, per-requirement traceability rows.
+- **Agent rule:** `.agent/rules/pipeline_env.md` — always-on defaults for compose, local-only, and forbidden env combinations.
+- **Code traceability:** `# Implements FR-*` headers on `pipeline_env.py`, `batch_pipeline.py`, `draft_compiler.py`, `pre_score_jobs.py`, `claim_composer.py`, `llm_stages.py`.
 
 ### 6.2.12
 Applyr Release

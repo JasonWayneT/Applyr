@@ -292,7 +292,7 @@ def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_r
     return None
 
 
-def _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type=None, options_override=None, response_schema=None):
+def _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type=None, options_override=None, response_schema=None, request_timeout=120):
     """
     Returns result string on success, None to signal try-next-provider.
     Implements intra-local model fallback chain (e.g. fallback to smaller model if large one hits OOM).
@@ -374,7 +374,7 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
                 elif response_mime_type == 'application/json':
                     payload_ollama["format"] = "json"
                     
-                res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=120)
+                res_ollama = requests.post(ollama_endpoint, json=payload_ollama, timeout=request_timeout)
                 if res_ollama.status_code == 200:
                     res_json = res_ollama.json()
                     result = res_json.get("message", {}).get("content", "")
@@ -394,7 +394,7 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
                 }
                 if response_mime_type == 'application/json':
                     payload["response_format"] = {"type": "json_object"}
-                res = requests.post(endpoint, json=payload, timeout=120)
+                res = requests.post(endpoint, json=payload, timeout=request_timeout)
                 if res.status_code == 200:
                     result = res.json().get("choices", [{}])[0].get("message", {}).get("content", "")
                     if result.strip():
@@ -455,7 +455,7 @@ def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retr
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
              response_mime_type=None, tools=None, max_retries=8, provider_override=None,
-             options_override=None, response_schema=None):
+             options_override=None, response_schema=None, request_timeout=120):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
@@ -477,12 +477,22 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         import sys
         print(f"    [Warning] Failed to run PII redaction: {e}", file=sys.stderr)
         
+    try:
+        from pipeline_env import local_only_mode as _local_only_env
+    except ImportError:
+        _local_only_env = lambda: False
+
     if provider_override:
         requested = [provider_override] if isinstance(provider_override, str) else provider_override
         # Filter list to only configured providers that match request
         providers = [p for p in requested if p in all_providers]
     else:
         providers = all_providers
+
+    if _local_only_env():
+        providers = [p for p in providers if p == "local"]
+        if not providers and "local" in all_providers:
+            providers = ["local"]
 
     if not providers:
         print(
@@ -505,12 +515,18 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             # Claude does not support google_search tools — tools param intentionally omitted
             result = _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries)
         elif provider == 'local':
-            result = _call_local(settings, system_prompt, user_prompt, model, temperature, response_mime_type, options_override, response_schema)
+            result = _call_local(
+                settings, system_prompt, user_prompt, model, temperature,
+                response_mime_type, options_override, response_schema, request_timeout,
+            )
         elif provider == 'perplexity':
             result = _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retries)
 
         if result is not None:
             return result
+        if _local_only_env():
+            print("    [LLM] Local-only mode: no cloud fallback.", file=sys.stderr)
+            break
         if i + 1 < len(providers):
             print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
 

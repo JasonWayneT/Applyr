@@ -1,39 +1,23 @@
 """
-Parse workExperience.md Sections 3–5 into structured claims.
-
-Implements FR-100 (CR-017).
+Parse master_claims.json into structured claims.
+Implements the hybrid vector-deterministic architecture (CR-017 updated).
 """
 from __future__ import annotations
 
+import os
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from utils import WORK_EXP_FILE, DATA_DIR, load_file
-import os
-import json
+from utils import DATA_DIR
 
-ACC_LINE = re.compile(
-    r"^\*\s+\*\*\[(ACC-\d+)\]\s*([^*]+)\*\*:\s*(.+?)\s*$",
-    re.MULTILINE,
-)
-VOC_ROW = re.compile(
-    r"\|\s*\*\*(VOC-\d+)\*\*\s*\|\s*\*\*([^*]+)\*\*\s*\|\s*([^|]+?)\s*\|",
-)
-ANTI_CLAIM = re.compile(r"DO NOT\s+(.+?)\*", re.IGNORECASE)
+MASTER_CLAIMS_FILE = os.path.join(DATA_DIR, "master_claims.json")
 
-BOUNDARY_PHRASES = [
-    "airo",
-    "zenoti",
-    "led a team of",
-    "managed a team of",
-    "direct reports",
-    "people management",
-    "trained model",
-    "machine learning pipeline",
-    "0-to-1 greenfield",
-]
 
+def _project_id_from_claim_id(claim_id: str) -> str:
+    m = re.match(r"^(ACC-\d+)", claim_id or "")
+    return m.group(1) if m else (claim_id or "")
 
 @dataclass
 class ClaimRecord:
@@ -41,7 +25,9 @@ class ClaimRecord:
     title: str
     body: str
     employer: str
-
+    project_id: str = ""
+    tags: List[str] = field(default_factory=list)
+    metrics: List[str] = field(default_factory=list)
 
 @dataclass
 class ClaimCatalog:
@@ -52,50 +38,36 @@ class ClaimCatalog:
     claim_embeddings: Dict[str, list] = field(default_factory=dict)
 
     def truth_map(self) -> Dict[str, str]:
-        out = dict(self.raw_truth_lines)
-        for cid, rec in self.claims.items():
-            out[cid] = f"* **[{cid}] {rec.title}**: {rec.body}"
-        return out
-
-
-def _employer_for_acc(claim_id: str) -> str:
-    if claim_id.startswith("ACC-2"):
-        return "sterkly"
-    if claim_id.startswith("ACC-3"):
-        return "zero_to_sixty"
-    return "cision"
-
+        return self.raw_truth_lines
 
 def load_catalog(path: Optional[str] = None) -> ClaimCatalog:
-    path = path or WORK_EXP_FILE
-    content = load_file(path)
+    path = path or MASTER_CLAIMS_FILE
     catalog = ClaimCatalog()
+    
+    if not os.path.exists(path):
+        import sys
+        print(f"    [Warning] Claims DB not found at {path}", file=sys.stderr)
+        return catalog
 
-    for m in ACC_LINE.finditer(content):
-        cid, title, body = m.group(1), m.group(2).strip(), m.group(3).strip()
-        catalog.claims[cid] = ClaimRecord(
-            claim_id=cid,
-            title=title,
-            body=body,
-            employer=_employer_for_acc(cid),
-        )
-        catalog.raw_truth_lines[cid] = m.group(0).strip()
-
-    for m in VOC_ROW.finditer(content):
-        _vid, internal, plain = m.group(1), m.group(2).strip(), m.group(3).strip()
-        if internal and plain:
-            catalog.voc_map[internal] = plain
-
-    for m in ANTI_CLAIM.finditer(content):
-        hint = m.group(1).strip()
-        if len(hint) > 10:
-            catalog.anti_claim_hints.append(hint)
-
-    id_pat = re.compile(r"(ACC-\d+|MET-\d+|VOC-\d+)")
-    for line in content.splitlines():
-        for mid in id_pat.findall(line):
-            if mid not in catalog.raw_truth_lines and mid.startswith("MET-"):
-                catalog.raw_truth_lines[mid] = line.strip()
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            
+        for cid, val in data.items():
+            catalog.claims[cid] = ClaimRecord(
+                claim_id=cid,
+                title=val.get("lens", ""),
+                body=val.get("text", ""),
+                employer=val.get("employer", ""),
+                project_id=val.get("project_id", "") or _project_id_from_claim_id(cid),
+                tags=val.get("tags", []),
+                metrics=val.get("metrics", []),
+            )
+            catalog.raw_truth_lines[cid] = val.get("text", "")
+            
+    except Exception as e:
+        import sys
+        print(f"    [Error] Failed to load {path}: {e}", file=sys.stderr)
 
     _sync_embeddings(catalog, path)
     return catalog
@@ -117,39 +89,28 @@ def _sync_embeddings(catalog: ClaimCatalog, source_path: str):
 
     # Need to generate or update embeddings
     import sys
-    print("    [Info] Generating local embeddings for claims...", file=sys.stderr)
+    print("    [Info] Generating local embeddings for master_claims...", file=sys.stderr)
     try:
         from local_embeddings import get_embedding
         for cid, rec in catalog.claims.items():
             if cid not in catalog.claim_embeddings:
-                sanitized = sanitize_claim_text(rec.body, catalog)
-                catalog.claim_embeddings[cid] = get_embedding(sanitized)
+                # Embed the tags + body to maximize semantic matching capability
+                embedding_payload = f"{' '.join(rec.tags)} {rec.body}"
+                catalog.claim_embeddings[cid] = get_embedding(embedding_payload)
         
         with open(cache_path, 'w', encoding='utf-8') as f:
             json.dump(catalog.claim_embeddings, f)
     except Exception as e:
         print(f"    [Error] Failed to generate claim embeddings: {e}", file=sys.stderr)
 
-
 def apply_voc_map(text: str, catalog: ClaimCatalog) -> str:
-    out = text
-    for internal, plain in sorted(catalog.voc_map.items(), key=lambda x: -len(x[0])):
-        if internal in out:
-            out = out.replace(internal, plain)
-        bold = f"**{internal}**"
-        if bold in out:
-            out = out.replace(bold, plain)
-    return out
-
+    # Deprecated: master_claims.json is already plain-language
+    return text
 
 def sanitize_claim_text(text: str, catalog: ClaimCatalog) -> str:
-    clean = re.sub(r"\[(ACC|MET|VOC)-\d+\]", "", text)
-    clean = re.sub(r"\*+", "", clean).strip()
-    clean = apply_voc_map(clean, catalog)
-    for phrase in BOUNDARY_PHRASES:
-        if phrase.lower() in clean.lower():
-            clean = re.sub(re.escape(phrase), "", clean, flags=re.IGNORECASE)
-    clean = re.sub(r"\s+", " ", clean).strip()
+    # Deprecated: master_claims.json is already sanitized, just return it
+    # We still ensure trailing period for styling safety.
+    clean = text.strip()
     if clean and not clean.endswith("."):
         clean += "."
     return clean

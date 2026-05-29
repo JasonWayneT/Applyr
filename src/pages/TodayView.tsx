@@ -62,18 +62,34 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
   const coreInterviews = jobs.filter(j => j.status === 'Core Interviews');
   const offers = jobs.filter(j => j.status === 'Offer and Negotiation');
 
-  const getBarHeight = (count: number, total: number) => {
+  // Scale within this chart's series only (not total jobs). Sqrt blend keeps 1 vs 16 vs 78 visually distinct
+  // without a flat 12% floor that made Screening look like Backlog (BUG-006 chart follow-up).
+  const getChartBarHeight = (count: number, seriesMax: number) => {
     if (count === 0) return '4px';
-    const percentage = (count / Math.max(total, 1)) * 100;
-    return `${Math.max(12, percentage)}%`;
+    if (count >= seriesMax) return '100%';
+    const max = Math.max(seriesMax, 1);
+    const linearPct = (count / max) * 100;
+    const sqrtPct = (Math.sqrt(count) / Math.sqrt(max)) * 100;
+    const blended = 0.6 * sqrtPct + 0.4 * linearPct;
+    const minVisible = 8;
+    return `${Math.min(96, Math.max(minVisible, blended))}%`;
   };
 
+  const funnelCounts = [
+    backlogs.length,
+    applied.length,
+    screenings.length,
+    coreInterviews.length,
+    offers.length,
+  ];
+  const funnelMax = Math.max(...funnelCounts, 1);
+
   const statusCounts = [
-    { label: 'Backlog', count: backlogs.length, height: getBarHeight(backlogs.length, jobs.length) },
-    { label: 'Applied', count: applied.length, height: getBarHeight(applied.length, jobs.length) },
-    { label: 'Screening', count: screenings.length, height: getBarHeight(screenings.length, jobs.length) },
-    { label: 'Interviews', count: coreInterviews.length, height: getBarHeight(coreInterviews.length, jobs.length) },
-    { label: 'Offers', count: offers.length, height: getBarHeight(offers.length, jobs.length) },
+    { label: 'Backlog', count: backlogs.length, height: getChartBarHeight(backlogs.length, funnelMax) },
+    { label: 'Applied', count: applied.length, height: getChartBarHeight(applied.length, funnelMax) },
+    { label: 'Screening', count: screenings.length, height: getChartBarHeight(screenings.length, funnelMax) },
+    { label: 'Interviews', count: coreInterviews.length, height: getChartBarHeight(coreInterviews.length, funnelMax) },
+    { label: 'Offers', count: offers.length, height: getChartBarHeight(offers.length, funnelMax) },
   ];
 
   return (
@@ -122,7 +138,14 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
             <div className="absolute inset-x-0 top-3/4 border-b border-outline-variant/10 border-dashed"></div>
           </div>
           <div className="flex justify-between mt-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-2">
-            {statusCounts.map(s => <span key={s.label}>{s.label}</span>)}
+            {statusCounts.map(s => (
+              <span key={s.label} className="text-center">
+                {s.label}
+                <span className="block text-[11px] text-on-surface tabular-nums normal-case tracking-normal mt-0.5">
+                  {s.count}
+                </span>
+              </span>
+            ))}
           </div>
         </div>
 

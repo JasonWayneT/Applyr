@@ -23,6 +23,15 @@ def check_and_repair_cover_letter(file_path):
     messages = []
     repaired = False
 
+    from tone_guard import tone_violations
+
+    tone_hits = tone_violations(content)
+    if tone_hits:
+        messages.append(
+            f"[CL-010 FAIL] Forbidden workforce-reduction language (use constraints framing): "
+            f"{', '.join(sorted(set(tone_hits)))}"
+        )
+
     # Check for em-dashes (Rule CL-008: Authentic Voice and Anti-AI fingerprint)
     if '—' in content or '--' in content:
         messages.append("[CL-008 FAIL] Forbidden em-dash (—) or '--' found. Violates the Anti-AI fingerprint standard.")
@@ -36,10 +45,14 @@ def check_and_repair_cover_letter(file_path):
         repaired = True
         messages.append("[H-001 OK] Header block successfully injected.")
 
-    # Check for length (Rule CL-006: Keep it under 1 page / 1,800 characters)
+    # Check for length (Rule CL-006: ~1 page; CR-024 Match Brief allows slightly longer)
     char_count = len(content)
-    if char_count > 1800:
-        messages.append(f"[CL-006 WARNING] Cover letter length ({char_count} chars) exceeds the 1,800-char single-page threshold.")
+    cover_char_limit = 2400
+    if char_count > cover_char_limit:
+        messages.append(
+            f"[CL-006 WARNING] Cover letter length ({char_count} chars) exceeds "
+            f"the {cover_char_limit}-char single-page threshold."
+        )
         
     # Check for bracket placeholders or redactions (Rule CL-009: Zero-Placeholder Integrity)
     placeholders = re.findall(r'\[[^\]]{2,}\]', content)
@@ -51,7 +64,7 @@ def check_and_repair_cover_letter(file_path):
     
     if repaired:
         return True, " | ".join(messages)
-    elif any("[CL-008 FAIL]" in msg or "[CL-009 FAIL]" in msg for msg in messages):
+    elif any("[CL-008 FAIL]" in msg or "[CL-009 FAIL]" in msg or "[CL-010 FAIL]" in msg for msg in messages):
         raise SelfCorrectionError(" | ".join(messages))
     elif messages:
         # Some warnings might just be length warnings. We'll raise error for length too if we want self-correction
@@ -74,6 +87,15 @@ def check_resume(file_path):
 
     messages = []
     
+    from tone_guard import tone_violations
+
+    tone_hits = tone_violations(content)
+    if tone_hits:
+        messages.append(
+            f"[R-011 FAIL] Forbidden workforce-reduction language (use constraints framing): "
+            f"{', '.join(sorted(set(tone_hits)))}"
+        )
+
     # Check for em-dashes (Rule R-008 / Claim Verifier Anti-AI fingerprint)
     if '—' in content or '--' in content:
         messages.append("[R-008 FAIL] Forbidden em-dash (—) or '--' found. Violates the Anti-AI fingerprint standard.")
@@ -113,9 +135,45 @@ def check_resume(file_path):
     if "zero to sixty" not in lower_content and "zero to 60" not in lower_content and "account manager" not in lower_content:
         messages.append("[R-005 FAIL] Missing core career history experience: Zero to Sixty")
 
+    try:
+        from local_draft_stages import count_bullets_by_employer
+        from pipeline_env import resume_bullet_quotas
+
+        quotas = resume_bullet_quotas()
+        counts = count_bullets_by_employer(content)
+        cision_min = min(4, quotas.get("cision", 5))
+        if counts.get("cision", 0) < cision_min:
+            messages.append(
+                f"[R-010 FAIL] Cision has {counts.get('cision', 0)} bullets; "
+                f"expected at least {cision_min}."
+            )
+        for emp, label in (("sterkly", "Sterkly"), ("zero_to_sixty", "Zero to Sixty")):
+            want = quotas.get(emp, 3)
+            have = counts.get(emp, 0)
+            if have < max(2, want - 1):
+                messages.append(
+                    f"[R-010 FAIL] {label} has {have} bullets; expected at least {max(2, want - 1)}."
+                )
+        summary_block = re.search(
+            r"##\s*PROFESSIONAL\s+SUMMARY\s*\n([\s\S]*?)(?=\n##\s)",
+            content,
+            re.IGNORECASE,
+        )
+        if summary_block:
+            sents = [s.strip() for s in re.split(r"(?<=[.!?])\s+", summary_block.group(1).strip()) if s.strip()]
+            if len(sents) < 3:
+                messages.append(
+                    f"[R-010 FAIL] Professional summary has {len(sents)} sentence(s); expected at least 3."
+                )
+    except Exception:
+        pass
+
     from drafting_errors import SelfCorrectionError
     
-    if any("[R-005 FAIL]" in msg or "[R-008 FAIL]" in msg or "[R-009 FAIL]" in msg for msg in messages):
+    if any(
+        "[R-005 FAIL]" in msg or "[R-008 FAIL]" in msg or "[R-009 FAIL]" in msg or "[R-010 FAIL]" in msg or "[R-011 FAIL]" in msg
+        for msg in messages
+    ):
         raise SelfCorrectionError(" | ".join(messages))
     elif messages:
         return True, " | ".join(messages)

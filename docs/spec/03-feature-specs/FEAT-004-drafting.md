@@ -5,8 +5,9 @@
 - Feature ID: `FEAT-004`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-004`, `BMAD-SRC-006`
-- Related requirements: `FR-014`, `FR-015`, `FR-016`, `FR-017`, `FR-018`, `FR-089`–`FR-094`, `FR-100`–`FR-104`
-- Related change requests: `CR-014`, `CR-017`
+- Related requirements: `FR-014`, `FR-015`, `FR-016`, `FR-017`, `FR-018`, `FR-089`–`FR-094`, `FR-100`–`FR-104`, `FR-131`–`FR-146`, `FR-138`–`FR-140`, `FR-157`–`FR-163`
+- Related change requests: `CR-014`, `CR-017`, `CR-018`, `CR-021`, `CR-024`
+- Cover letters: see **`FEAT-013`** (`COVER_ENGINE=v1`)
 
 ## Problem statement
 
@@ -25,12 +26,16 @@ Writing custom resumes for every job is the biggest bottleneck. The system must 
 | `FR-015` | Resume Generation | Uses `data/Resume.md` as template |
 | `FR-016` | PDF Export | ATS-optimized |
 | `FR-100`–`FR-104` | Claim composition + verification | See `FEAT-012`, `CR-017` |
+| `FR-136`–`FR-138`, `FR-140`–`FR-146` | Compose hardening — template cover, summary grounding, manifest, grammar lint | `CR-021` |
+| `FR-139` | PDF export gate when verification not passed | `CR-021` |
 
 ## Pipeline entry (current)
 
-- `drafting_engine.run_drafting_engine()` → `draft_compiler.run()` (`CR-014`, `CR-017`).
+- `drafting_engine.run_drafting_engine()` → `draft_compiler.run()` (`CR-014`, `CR-017`, `CR-021`).
 - Ground truth: `data/workExperience.md` via `claim_catalog.load_catalog()`.
 - Default bullet path: compose mode (`claim_composer`); not monolithic LLM resume generation.
+- **CR-021 defaults:** `JD_PROFILE_MODE=deterministic`, `COVER_HOOK_MODE=template`, `DRAFT_MODE=compose`. Cover body = proof bullets only; optional LLM cover hook requires explicit `COVER_HOOK_MODE=llm`.
+- **Manifest:** `draft_manifest.json` includes `claim_sources`, `jd_hash`, `verification_passed` (required for manual PDF compile in UI).
 
 ## Verification plan
 

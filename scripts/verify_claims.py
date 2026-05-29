@@ -14,7 +14,7 @@ def load_valid_ids(work_exp_path):
         
     # Parse line by line to associate IDs with their content context
     lines = content.split('\n')
-    pattern = re.compile(r"(ACC-\d+|MET-\d+|VOC-\d+)")
+    pattern = re.compile(r"(ACC-\d+(?:-[A-Z]+)?|MET-\d+|VOC-\d+)")
     
     for line in lines:
         matches = pattern.findall(line)
@@ -40,7 +40,7 @@ def verify_content(content, truth_map):
     Verifies ID presence and ensures NO fabricated numeric metrics are injected.
     """
     # 1. Presence Verification
-    pattern = re.compile(r"\[(ACC-\d+|MET-\d+|VOC-\d+)\]")
+    pattern = re.compile(r"\[(ACC-\d+(?:-[A-Z]+)?|MET-\d+|VOC-\d+)\]")
     found_ids = set(pattern.findall(content))
     
     if not found_ids:
@@ -136,7 +136,7 @@ def _verify_bullet_local(source_text, generated_bullet):
     facts that are not present in the source ground-truth sentence?
     Returns (is_valid: bool, error: str | None).
     """
-    id_pattern = re.compile(r"\[(ACC-\d+|MET-\d+|VOC-\d+)\]")
+    id_pattern = re.compile(r"\[(ACC-\d+(?:-[A-Z]+)?|MET-\d+|VOC-\d+)\]")
     clean_source = id_pattern.sub(" ", source_text).replace(",", "")
     clean_bullet = id_pattern.sub(" ", generated_bullet).replace(",", "")
 
@@ -162,10 +162,10 @@ def preserves_core_facts(source_text, generated_bullet):
 def strip_ids(content):
     """Strips claim IDs from generated content so it can be compiled. Implements FR-100 (CR-017)."""
     # Support both bracket types: [ACC-101] and (ACC-101)
-    pattern = re.compile(r"\s*[\[\(](ACC-\d+|MET-\d+|VOC-\d+)[\]\)]\s*")
+    pattern = re.compile(r"\s*[\[\(](ACC-\d+(?:-[A-Z]+)?|MET-\d+|VOC-\d+)[\]\)]\s*")
     cleaned = pattern.sub(" ", content)
-    cleaned = re.sub(r"\|\s*(ACC|MET|VOC)-\d+\s*\|", " ", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\b(ACC|MET|VOC)-\d+\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\|\s*(ACC|MET|VOC)-\d+(?:-[a-zA-Z]+)?\s*\|", " ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(ACC|MET|VOC)-\d+(?:-[a-zA-Z]+)?\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"  +", " ", cleaned)
     return cleaned.strip()
 

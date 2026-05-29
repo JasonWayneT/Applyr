@@ -37,7 +37,7 @@ router.get('/api/jobs', (req, res) => {
       jobs = db.prepare(`
         SELECT jobs.* 
         FROM jobs 
-        JOIN jobs_fts ON jobs.id = jobs_fts.id
+        JOIN jobs_fts ON jobs.rowid = jobs_fts.rowid
         WHERE jobs_fts MATCH ? 
         ORDER BY rank
       `).all(`"${search}"*`) as any[];
@@ -242,6 +242,19 @@ router.put('/api/jobs/:id/files/:filename', (req, res) => {
     fs.writeFileSync(filePath, text, 'utf8');
 
     if (safeFilename.endsWith('.md')) {
+      const manifestPath = path.join(folder, 'draft_manifest.json');
+      if (fs.existsSync(manifestPath) && (safeFilename === 'Resume.md' || safeFilename === 'CoverLetter.md')) {
+        try {
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          if (manifest.verification_passed !== true) {
+            return res.status(400).json({
+              error: 'PDF export blocked: draft_manifest verification_passed is not true.',
+            });
+          }
+        } catch {
+          return res.status(400).json({ error: 'Invalid draft_manifest.json' });
+        }
+      }
       const pdfPath      = path.join(folder, safeFilename.replace('.md', '.pdf'));
       const guardScript  = path.join(SCRIPTS_DIR, 'style_compliance_guard.py');
       const compileScript = path.join(SCRIPTS_DIR, 'compile_single.py');

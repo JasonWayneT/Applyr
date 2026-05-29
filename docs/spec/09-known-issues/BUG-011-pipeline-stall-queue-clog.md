@@ -3,10 +3,10 @@
 ## Metadata
 
 - Bug ID: `BUG-011`
-- Status: proposed
+- Status: mitigated (2026-05-28)
 - Severity: critical
 - Found in: v6.2
-- Fixed in: pending
+- Fixed in: v6.2.14 (partial)
 - Related requirements: `FR-035`, `FR-065`, `FR-068`
 
 ## Current behavior
@@ -27,11 +27,15 @@
 2. The pipeline does not remove processed `.txt` files from the `jobs/` directory upon keyword rejection, fit rejection, or asset drafting.
 3. The database status checking in `scripts/batch_pipeline.py` does not inspect the `stale_jobs` table or skip jobs that were already deleted from `jobs` and moved to `stale_jobs`.
 
-## Fix Implementation
+## Fix Implementation (2026-05-28)
 
-1. **Delete File on Success/Rejection:** Update `scripts/batch_pipeline.py` to delete the `.txt` file from `jobs/` as soon as it is keyword-rejected, fit-rejected, or successfully drafted (i.e., at all terminal paths of the process loop).
-2. **Register Failures in Database:** Update the `if not result:` block in `scripts/batch_pipeline.py` to write `status = 'Failed'` for the job in the `jobs` database table and commit before doing `continue`, or delete the `.txt` file to prevent clogging.
-3. **Check `stale_jobs` Table:** Add a check during initial database status resolution to see if the job's URL (extracted from the first line of the `.txt` file) exists in `stale_jobs`. If it does, skip the job and delete the `.txt` file.
+1. **Delete File on Success/Rejection:** Implemented in `batch_pipeline.py` (`_cleanup_staging_file` on all terminal paths).
+2. **Register Failures:** `Needs Retry` on LLM/draft failure; staging file removed.
+3. **Check `stale_jobs`:** Implemented before evaluate.
+4. **Sequential batch + honest progress:** `BATCH_PARALLEL_WORKERS=1` default; `[BATCH_PROGRESS]` updates `items_completed` / `items_total` in `system_status`.
+5. **Fit timeout:** `FIT_LLM_TIMEOUT_SEC` (default 180) on local Ollama HTTP calls.
+6. **FTS trigger fix:** Dropped broken `jobs_fts` UPDATE triggers; standalone FTS rebuild in `server/db.ts` and `ensure_jobs_schema`.
+7. **Unblock script:** `python scripts/unblock_pipeline.py` marks stuck `RUNNING` runs `FAILED` and sets UI idle.
 
 ## Verification
 

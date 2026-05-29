@@ -1,0 +1,19 @@
+name: Pipeline smoke
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Smoke draft compiler (no LLM)
+        run: python scripts/smoke_draft_compiler.py
+      - name: Smoke regression
+        run: python scripts/test_smoke_regression.py

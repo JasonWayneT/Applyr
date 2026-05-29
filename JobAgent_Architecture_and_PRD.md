@@ -82,6 +82,8 @@ When a job passes fit scoring (≥72), the batch pipeline generates tailored res
 *   **Audit trail:** `draft_manifest.json` records claim IDs, `display_company`, `draft_mode`, and `verification_passed` for each submission folder.
 *   **CR-018 polish:** Bullets are trimmed at sentence boundaries (28-word soft cap). At most one JD bridge prefix appears on the resume; cover letter proof lines strip bridges. Successful drafts write a canonical Backlog summary (no stale audit errors). Interview cheat sheets are built from research + manifest templates when cloud LLM is unavailable (`CHEAT_SHEET_MODE=template`).
 *   **CR-019 seniority:** "Senior" titles are allowed when JD required years fit the configured cap (default 7). Lead/Director/entry/0-to-1 titles remain blocked. Deterministic years and title-line gates run before LLM fit evaluation.
+*   **CR-021 local funnel + compose hardening:** Default env locks compose drafting (`JD_PROFILE_MODE=deterministic`, `COVER_HOOK_MODE=template`). Batch jobs are pre-scored (BM25 + embeddings) before fit LLM; `LOCAL_ONLY_MODE=1` never falls back to cloud. Scout rejects title/years mismatch at ingest when description is available. Manual PDF export in the editor requires `draft_manifest.verification_passed`. WebGPU grammar lint lists issues only—it does not rewrite resume text.
+*   **CR-024 cover conversion engine:** With `COVER_ENGINE=v1` (default in batch cover regen), cover letters are a **separate pipeline** from resumes: JD-ranked needs, catalog proof selection, application-first opener, micro-narrative bodies, and conversion audit. Cover claim selection never reads `Resume.md`. Each submission folder may include `cover_letter_plan.json` for traceability.
 
 ---
 

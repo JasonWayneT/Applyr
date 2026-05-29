@@ -122,9 +122,38 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-125` | CR-020 | Local Optimizations | `scripts/prune_blobs.py` | implemented |
 | `FR-126` | CR-020 | Local Optimizations | `server/routes/system.ts` | implemented |
 | `FR-127` | CR-020 | Local Optimizations | `src/lib/grammarCheck.ts` | implemented |
+| `FR-131` | CR-021 | Pipeline env defaults | `scripts/pipeline_env.py`, `batch_pipeline.py`, `server/shared.ts` | implemented |
+| `FR-132` | CR-021 | Pre-score ordering | `scripts/pre_score_jobs.py` | implemented |
+| `FR-133` | CR-021 | Strict local-only LLM | `scripts/utils.py` | implemented |
+| `FR-134` | CR-021 | Stage-specific models | `scripts/llm_stages.py` | implemented |
+| `FR-135` | CR-021 | Scout seniority gate | `scripts/scout_local.ts` | implemented |
+| `FR-136` | CR-021 | Template cover hook | `scripts/local_draft_stages.py` | implemented |
+| `FR-137` | CR-021 | Summary grounding | `scripts/local_draft_stages.py` | implemented |
+| `FR-138` | CR-021 | Manifest claim_sources | `scripts/draft_compiler.py` | implemented |
+| `FR-139` | CR-021 | PDF verification gate | `server/routes/jobs.ts` | implemented |
+| `FR-140` | CR-021 | Grammar highlight-only | `src/lib/grammarCheck.ts` | implemented |
+| `FR-141` | CR-021 | Block legacy_llm local-only | `scripts/claim_composer.py` | implemented |
+| `FR-142` | CR-021 | JdProfile cache | `scripts/jd_tailoring.py` | implemented |
+| `FR-143` | CR-021 | Claim embeddings script | `scripts/build_claim_embeddings.py` | implemented |
+| `FR-144` | CR-021 | Draft linter | `scripts/draft_linter.py` | implemented |
+| `FR-145` | CR-021 | Anti-claim check | `scripts/verification_chain.py` | implemented |
+| `FR-146` | CR-021 | Verb/numeric gates | `scripts/local_draft_stages.py` | implemented |
+| `FR-147` | CR-021 | ATS watchlist | `scripts/scout_local.ts`, `config/ats_watchlist.example.json` | implemented |
+| `FR-148` | CR-021 | CI smoke workflow | `.github/workflows/smoke.yml` | implemented |
+| `FR-149` | CR-021 | BM25 fit + JSON schema | `scripts/batch_pipeline.py` | implemented |
+| `FR-150` | CR-021 | RESEARCH_MODE routing | `scripts/drafting_engine.py`, `research-engine.py` | implemented |
 | `FR-128` | CR-020 | Local Optimizations | `scripts/compile_single.py` | implemented |
 | `FR-129` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
 | `FR-130` | CR-020 | Local Optimizations | `scripts/pii_redact.py` | implemented |
+| `FR-096` | CR-023 | Submission tone guard | `scripts/tone_guard.py`, `scripts/quality_checker.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-157` | CR-024 | Cover conversion engine | `scripts/cover_letter_compiler.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-158` | CR-024 | Independent cover pipeline | `scripts/cover_claim_picker.py`, `scripts/cover_plan_builder.py` | implemented |
+| `FR-159` | CR-024 | Cover letter plan | `scripts/cover_letter_plan.py`, `submissions/*/cover_letter_plan.json` | implemented |
+| `FR-160` | CR-024 | Application-first opener | `scripts/cover_narrative_templates.py`, `scripts/cover_letter_audit.py` | implemented |
+| `FR-161` | CR-024 | Theme prose helper | `scripts/cover_prose.py`, `scripts/local_draft_stages.py` | implemented |
+| `FR-162` | CR-024 | Cover audit rubric | `scripts/cover_letter_audit.py` | implemented |
+| `FR-163` | CR-024 | Ranked JD needs | `scripts/cover_jd_needs.py` | implemented |
+| `IMP-CR-024` | CR-024 | FEAT-013 | `docs/spec/08-implementation/IMP-CR-024-cover-letter-engine.md` | completed |
 
 
 ## Coverage checklist

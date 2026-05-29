@@ -88,6 +88,54 @@ try {
   /* ignore */
 }
 
+// CR-021: extended job columns
+for (const [col, typ] of [
+  ['jd_vector', 'TEXT'],
+  ['pre_score', 'INTEGER'],
+  ['metadata_vector', 'TEXT'],
+  ['jd_text', 'TEXT'],
+  ['metadata_tags', 'TEXT'],
+] as const) {
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${typ}`);
+  } catch {
+    /* exists */
+  }
+}
+
+// FTS5 search (CR-020 / CR-021) — standalone index; no UPDATE triggers (BUG-011 / FTS url mismatch)
+try {
+  for (const trig of ['jobs_fts_ai', 'jobs_fts_ad', 'jobs_fts_au', 'jobs_ai', 'jobs_ad', 'jobs_au']) {
+    db.exec(`DROP TRIGGER IF EXISTS ${trig}`);
+  }
+  const ftsRow = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'jobs_fts'`).get() as
+    | { sql: string }
+    | undefined;
+  const ftsSql = ftsRow?.sql ?? '';
+  const needsRebuild =
+    !ftsRow || ftsSql.includes("content='jobs'") || !ftsSql.includes('url');
+  if (needsRebuild) {
+    db.exec(`DROP TABLE IF EXISTS jobs_fts`);
+    db.exec(`
+      CREATE VIRTUAL TABLE jobs_fts USING fts5(
+        company, title, summary, url,
+        tokenize='porter unicode61'
+      );
+    `);
+    db.exec(`
+      INSERT INTO jobs_fts(rowid, company, title, summary, url)
+      SELECT rowid,
+        COALESCE(company, ''),
+        COALESCE(title, ''),
+        COALESCE(summary, ''),
+        COALESCE(url, '')
+      FROM jobs;
+    `);
+  }
+} catch (err) {
+  console.warn('[db] jobs_fts repair skipped:', err);
+}
+
 export const logActivity = (
   level: 'INFO' | 'WARN' | 'ERROR',
   source: string,

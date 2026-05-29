@@ -9,6 +9,9 @@ import time
 
 # Ensure compose + local-first + template cheat sheets for regeneration
 os.environ.setdefault("DRAFT_MODE", "compose")
+os.environ.setdefault("JD_PROFILE_MODE", "deterministic")
+os.environ.setdefault("COVER_HOOK_MODE", "template")
+os.environ.setdefault("RESEARCH_MODE", "local")
 os.environ.setdefault("LOCAL_ONLY_MODE", "1")
 os.environ.setdefault("CHEAT_SHEET_MODE", "template")
 

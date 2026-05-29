@@ -35,3 +35,4 @@ Paste or summarize BMAD outputs here. This is the staging area before requiremen
 | Date | Imported by | Source IDs | Result | Follow-up |
 |---|---|---|---|---|
 | 2026-05-04 | Antigravity | BMAD-SRC-001 to 007 | Success | Normalize IDs in Registry |
+| 2026-05-28 | Cursor Agent | CR-021, CR-023, CR-024 | Success | Local funnel hardening, tone guard, cover conversion engine (`FEAT-013`, `FR-157`–`FR-163`) |

@@ -1,0 +1,6 @@
+{
+  "companies": [
+    { "name": "Example Corp", "careers_url": "https://boards.greenhouse.io/example" }
+  ],
+  "notes": "Copy to data/ats_watchlist.json (gitignored) for scout ATS channel (CR-021)."
+}

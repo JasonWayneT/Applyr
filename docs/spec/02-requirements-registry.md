@@ -56,6 +56,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 |---|---|---|---|---|---|---|
 | `FR-019` | functional | P0 | implemented | Hard Fact Validation (Metric check against source) | `AC-019` | `BMAD-SRC-006` |
 | `FR-020` | functional | P0 | implemented | Hallucination Guard: Automatic replacement of lies | `AC-020` | `BMAD-SRC-006` |
+| `FR-096` | functional | P0 | implemented | No layoff or workforce-reduction tone on resumes/cover letters — `tone_guard.py` rewrites to constraints framing; bullets rejected at compose; R-011 / CL-010 QA fail if present | `AC-097` | `CR-023` |
 
 ### Web Application & API (FR-023 to FR-034)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
@@ -126,7 +127,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-085` | functional | P0 | implemented | Employer-Scoped Claim Routing — `ACC-1xx/2xx/3xx` prefix maps to Cision/Sterkly/ZTS buckets deterministically | `AC-087` | `CR-013` |
 | `FR-086` | functional | P0 | implemented | Per-Employer Claim Selection — Tier 2 runs ≤3 small JSON selections (one per employer) with keyword fallback | `AC-088` | `CR-013` |
 | `FR-087` | functional | P0 | implemented | Expanded Bullet Gates — local bullets reject blocked tools, seniority inflation, and >25 words before fallback | `AC-089` | `CR-013` |
-| `FR-088` | functional | P0 | implemented | Deterministic Summary & Cover Assembly — summary and cover letter built without monolithic LLM; corpus numeric audit on final text | `AC-090` | `CR-013` |
+| `FR-088` | functional | P0 | superseded (cover) | Deterministic Summary & Cover Assembly — summary deterministic; **cover bullet-paste superseded by `FR-157` when `COVER_ENGINE=v1`** | `AC-090` | `CR-013` |
 | `FR-089` | functional | P0 | implemented | Unified Draft Compiler — single `draft_compiler.run()` stage graph; no cloud/local fork in `run_drafting_engine` | `AC-091` | `CR-014` |
 | `FR-090` | functional | P0 | implemented | Draft Manifest — `draft_manifest.json` records claim IDs, jd_profile, pipeline_version, fallback counts | `AC-092` | `CR-014` |
 | `FR-091` | functional | P0 | implemented | Validated JdProfile — themes/requirements must substring-match JD; fit summary boosts scoring | `AC-093` | `CR-014` |
@@ -286,6 +287,69 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-136` | `FR-128` | Responsive PDF Layout Feedback dynamically | Layout updated | PDF scaled | Fits one page cleanly | implemented |
 | `AC-137` | `FR-129` | Notification Webhooks (Tailscale Native / NTFY) | System event occurs | Send webhook | Push notification received | implemented |
 | `AC-138` | `FR-130` | Local PII Redaction Guard via SpaCy/Regex | Input containing PII | Run guard | PII replaced with redaction | implemented |
+| `AC-139` | `FR-131` | Compose pipeline env defaults | Batch starts | Env vars | `DRAFT_MODE=compose`, `JD_PROFILE_MODE=deterministic`, `COVER_HOOK_MODE=template` | implemented |
+| `AC-140` | `FR-132` | Pre-score job ordering | Batch queue | Sort by pre_score | Higher-signal jobs evaluated first | implemented |
+| `AC-141` | `FR-133` | Strict local-only LLM | `LOCAL_ONLY_MODE=1` | Fit/draft calls | No Gemini fallback in logs | implemented |
+| `AC-142` | `FR-134` | Stage-specific local models | `call_llm_stage('fit')` | Model pin | Uses `localModelFit` or qwen2.5 default | implemented |
+| `AC-143` | `FR-135` | Scout seniority gate | Scout ingest | Years/title reject | Logged before DB insert | implemented |
+| `AC-144` | `FR-136` | Template cover hook | Compose cover | Read para 1 | No ungrounded LLM hook by default | implemented |
+| `AC-145` | `FR-137` | Summary grounding | Compose summary | Audit | Fails back to theme-only if metrics invented | implemented |
+| `AC-146` | `FR-138` | Manifest claim_sources | Draft completes | `draft_manifest.json` | Maps ACC IDs to source snippets | implemented |
+| `AC-147` | `FR-139` | PDF export verification gate | Save Resume.md | PUT without verify | 400 if manifest not passed | implemented |
+| `AC-148` | `FR-140` | Grammar highlight-only | Editor lint | Lint click | Text unchanged; issues listed | implemented |
+
+### CR-021 Funnel & compose (FR-131–FR-150)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-131` | functional | P0 | implemented | Pipeline env defaults for compose + local | `AC-139` | CR-021 |
+| `FR-132` | functional | P1 | implemented | BM25+embedding pre-score before fit LLM | `AC-140` | CR-021 |
+| `FR-133` | functional | P0 | implemented | Strict local-only provider chain | `AC-141` | CR-021 |
+| `FR-134` | functional | P1 | implemented | Per-stage Ollama model selection | `AC-142` | CR-021 |
+| `FR-135` | functional | P1 | implemented | Scout-time seniority/years gate | `AC-143` | CR-021 |
+| `FR-136` | functional | P0 | implemented | Template-only cover letter hook in compose | `AC-144` | CR-021 |
+| `FR-137` | functional | P0 | implemented | Summary numeric grounding | `AC-145` | CR-021 |
+| `FR-138` | functional | P1 | implemented | Draft manifest claim source trace | `AC-146` | CR-021 |
+| `FR-139` | functional | P1 | implemented | PDF compile blocked without verification | `AC-147` | CR-021 |
+| `FR-140` | functional | P2 | implemented | WebGPU grammar issues without rewrite | `AC-148` | CR-021 |
+| `FR-141` | functional | P0 | implemented | Block legacy_llm when LOCAL_ONLY_MODE | `AC-149` | CR-021 |
+| `FR-142` | functional | P1 | implemented | JdProfile disk cache per submission | `AC-150` | CR-021 |
+| `FR-143` | functional | P1 | implemented | Claim embeddings build script + cache refresh | `AC-151` | CR-021 |
+| `FR-144` | functional | P2 | implemented | Draft linter JSON-only (no rewrite) | `AC-152` | CR-021 |
+| `FR-145` | functional | P1 | implemented | Anti-claim phrase verification | `AC-153` | CR-021 |
+| `FR-146` | functional | P0 | implemented | Verb + numeric grounding on compose bullets | `AC-154` | CR-021 |
+| `FR-147` | functional | P2 | implemented | ATS watchlist scout channel | `AC-155` | CR-021 |
+| `FR-148` | functional | P1 | implemented | GitHub Actions pipeline smoke | `AC-156` | CR-021 |
+| `FR-149` | functional | P1 | implemented | BM25-pruned fit + JSON schema fit eval | `AC-157` | CR-021 |
+| `FR-150` | functional | P1 | implemented | RESEARCH_MODE local/skip/cloud routing | `AC-158` | CR-021 |
+
+| `AC-149` | `FR-141` | legacy_llm blocked | LOCAL_ONLY + legacy_llm | compose entry | RuntimeError with clear message | implemented |
+| `AC-150` | `FR-142` | JdProfile cache | Same JD re-draft | Read cache file | `jd_profile_cache.json` hash matches | implemented |
+| `AC-151` | `FR-143` | Embeddings build | Run build script | claim_embeddings.json | All ACC IDs have vectors | implemented |
+| `AC-152` | `FR-144` | Linter no rewrite | lint_draft_text | Output | issues list only; text unchanged | implemented |
+| `AC-153` | `FR-145` | Anti-claim | DO NOT phrase in output | verify chain | ValueError | implemented |
+| `AC-154` | `FR-146` | Verb gate | Invented verb bullet | validate_bullet_for_local | Rejected | implemented |
+| `AC-155` | `FR-147` | ATS watchlist | config file present | Scout run | ATS source in health log | implemented |
+| `AC-156` | `FR-148` | CI smoke | Push to main | workflow | smoke_draft_compiler passes | implemented |
+| `AC-157` | `FR-149` | Fit BM25+schema | Batch fit call | Logs | Uses pruned context + JSON schema | implemented |
+| `AC-158` | `FR-150` | Research mode | LOCAL_ONLY research | fetch | SearXNG/local path, no Perplexity required | implemented |
+
+### CR-024 Cover conversion engine (FR-157–FR-163)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-157` | functional | P0 | implemented | Cover conversion engine v1 — `cover_letter_compiler.py` Match Brief (JD + catalog, micro-narrative slots, audit loop) when `COVER_ENGINE=v1` | `AC-164`, `AC-166` | `CR-024` |
+| `FR-158` | functional | P0 | implemented | Independent cover pipeline — cover claim selection SHALL NOT read `Resume.md` or resume-stage bullet dict | `AC-165` | `CR-024` |
+| `FR-159` | functional | P1 | implemented | `cover_letter_plan.json` — traceability for claim IDs, ranked needs, themes per submission | `AC-165` | `CR-024` |
+| `FR-160` | functional | P0 | implemented | Application-first cover opener — “I am applying for…”; audit bans “{Company} is hiring” | `AC-164` | `CR-024` |
+| `FR-161` | functional | P0 | implemented | Theme prose formatting — `format_themes_for_prose()` prevents chained “and” in resume summary and cover theme lines | `AC-167` | `CR-024` |
+| `FR-162` | functional | P1 | implemented | Cover letter conversion audit — weighted rubric in `cover_letter_audit.py` (word band, metrics, buzzwords) | `AC-164` | `CR-024` |
+| `FR-163` | functional | P1 | implemented | JD `ranked_needs` extraction — responsibilities/requirements clauses for cover proof mapping; excludes salary lines | `AC-169` | `CR-024` |
+
+| `AC-164` | `FR-157`, `FR-160`, `FR-162` | Cover engine v1 | `COVER_ENGINE=v1` regen | Letter opens with application; audit Pass | implemented |
+| `AC-165` | `FR-158`, `FR-159` | Cover plan | Read `cover_letter_plan.json` | claim_ids + needs; no resume input | implemented |
+| `AC-166` | `FR-157` | Batch covers | `regenerate_all_cover_letters.py` | 11 folders PDF+md | implemented |
+| `AC-167` | `FR-161` | Summary themes | Themes with internal “and” | `build_summary_deterministic` | No triple-and chain | implemented |
+| `AC-168` | `FR-157` | Cover numeric audit | Cover-only verify | Uses claim catalog corpus | Metrics from claims pass | implemented |
+| `AC-169` | `FR-163` | Forbes pilot | Forbes JD | Cover letter | JD-specific match narrative | implemented |
 
 ## Non-Functional Requirements
 

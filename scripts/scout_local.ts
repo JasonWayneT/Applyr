@@ -47,6 +47,47 @@ const titleMatchesBlocked = (title: string, term: string): boolean => {
 };
 
 const FRESHNESS_CUTOFF_EPOCH = Math.floor(Date.now() / 1000) - (FRESHNESS_DAYS * 24 * 60 * 60);
+const MAX_EXPERIENCE_YEARS: number = prefs.experience_range?.max ?? 7;
+
+/** CR-021: years required in JD vs prefs max (scout ingest when description present). */
+const parseMaxYearsRequired = (text: string): number | null => {
+    const patterns = [
+        /(?:minimum|min\.?|at least|requires?)\s*(\d+)\s*\+?\s*(?:years?|yrs?)/gi,
+        /(\d+)\s*\+\s*years?/gi,
+        /(\d+)\s*[-–]\s*(\d+)\s*years?/gi,
+        /(\d+)\s+years?\s+(?:of\s+)?experience/gi,
+    ];
+    const found: number[] = [];
+    for (const pat of patterns) {
+        let m: RegExpExecArray | null;
+        const re = new RegExp(pat.source, pat.flags);
+        while ((m = re.exec(text)) !== null) {
+            const nums = m.slice(1).filter(Boolean).map((g) => parseInt(g, 10));
+            if (nums.length === 1) found.push(nums[0]);
+            else if (nums.length >= 2) found.push(Math.max(...nums));
+        }
+    }
+    return found.length ? Math.max(...found) : null;
+};
+
+const passesSeniorityGate = (job: ScrapedJob): boolean => {
+    const title = (job.title || '').trim();
+    for (const term of TITLE_BLOCKLIST) {
+        if (titleMatchesBlocked(title, term)) {
+            console.log(`[REJECT] ${title} at ${job.company} — title_blocked:${term}`);
+            return false;
+        }
+    }
+    const desc = (job.description || '').trim();
+    if (desc.length >= 80) {
+        const required = parseMaxYearsRequired(`${title}\n${desc}`);
+        if (required !== null && required > MAX_EXPERIENCE_YEARS) {
+            console.log(`[REJECT] ${title} at ${job.company} — required_years_${required}_exceeds_max_${MAX_EXPERIENCE_YEARS}`);
+            return false;
+        }
+    }
+    return true;
+};
 
 // Implements FR-055 — free-tier rate guard: 25 req/min, 250 req/day
 const MAX_ADZUNA_CALLS_PER_RUN = 10;
@@ -861,6 +902,59 @@ const scoutTheMuse = async (): Promise<ScrapedJob[]> => {
 };
 
 // ---------------------------------------------------------------------------
+// ATS watchlist (CR-021) — optional local careers pages
+// ---------------------------------------------------------------------------
+
+const scoutAtsWatchlist = async (): Promise<ScrapedJob[]> => {
+    const candidates = [
+        path.resolve('data/ats_watchlist.json'),
+        path.resolve('config/ats_watchlist.json'),
+        path.resolve('config/ats_watchlist.example.json'),
+    ];
+    let raw: string | null = null;
+    for (const p of candidates) {
+        if (fs.existsSync(p)) {
+            raw = fs.readFileSync(p, 'utf-8');
+            break;
+        }
+    }
+    if (!raw) return [];
+
+    const jobs: ScrapedJob[] = [];
+    try {
+        const data = JSON.parse(raw) as { companies?: { name: string; careers_url?: string }[] };
+        for (const entry of data.companies || []) {
+            if (!entry.careers_url || !entry.name) continue;
+            try {
+                const res = await fetch(entry.careers_url, { signal: AbortSignal.timeout(12000) });
+                const html = await res.text();
+                const linkRe = /href="([^"]*\/jobs\/[^"]+|[^"]*greenhouse[^"]+)"/gi;
+                let m: RegExpExecArray | null;
+                let count = 0;
+                while ((m = linkRe.exec(html)) !== null && count < 5) {
+                    let url = m[1];
+                    if (url.startsWith('/')) {
+                        const base = new URL(entry.careers_url);
+                        url = `${base.origin}${url}`;
+                    }
+                    const title = TARGET_ROLE;
+                    if (!passesTitleBlocklist(title)) continue;
+                    const stub: ScrapedJob = { company: entry.name, title, url, description: '', source: 'ATS Watchlist' };
+                    if (!passesSeniorityGate(stub)) continue;
+                    jobs.push(stub);
+                    count++;
+                }
+            } catch (e) {
+                console.log(`[WARN] ATS watchlist fetch failed for ${entry.name}: ${e}`);
+            }
+        }
+    } catch (e) {
+        console.log(`[WARN] ATS watchlist parse error: ${e}`);
+    }
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
 // Source I: Adzuna (Paid API, aggregates many boards)
 // ---------------------------------------------------------------------------
 
@@ -960,9 +1054,12 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
         opResult.health, remotiveResult.health, remoteOkResult.health, wwrResult.health,
         himalayasResult.health, theMuseResult.health, adzunaResult.health,
     );
+    const atsJobs = await scoutAtsWatchlist();
+    healthLog.push({ name: 'ATS Watchlist', status: atsJobs.length ? 'ok' : 'skipped', found: atsJobs.length, durationMs: 0 });
+
     const apiJobs = [
         ...opResult.jobs, ...remotiveResult.jobs, ...remoteOkResult.jobs, ...wwrResult.jobs,
-        ...himalayasResult.jobs, ...theMuseResult.jobs, ...adzunaResult.jobs,
+        ...himalayasResult.jobs, ...theMuseResult.jobs, ...adzunaResult.jobs, ...atsJobs,
     ];
 
     // --- Phase 2: Browser sources (LinkedIn + BuiltIn + Levels.fyi) run sequentially ---
@@ -1006,10 +1103,13 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
         return true;
     });
 
-    // Apply geographic boundary pre-gate
+    // Apply geographic + seniority pre-gates (CR-021)
     const gatedJobs = uniqueJobs.filter(j => {
         if (!passesGeographicGate(j)) {
             console.log(`[REJECT] ${j.title} at ${j.company} (${j.source}) - [GEOGRAPHIC REJECT]`);
+            return false;
+        }
+        if (!passesSeniorityGate(j)) {
             return false;
         }
         return true;

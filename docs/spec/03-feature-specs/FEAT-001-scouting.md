@@ -5,7 +5,8 @@
 - Feature ID: `FEAT-001`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-001`, `BMAD-SRC-004`
-- Related requirements: `FR-001`, `FR-002`, `FR-003`, `FR-004`, `FR-005`
+- Related requirements: `FR-001`, `FR-002`, `FR-003`, `FR-004`, `FR-005`, `FR-109`, `FR-135`, `FR-147`
+- Related change requests: `CR-019`, `CR-021`
 
 ## Problem statement
 
@@ -31,6 +32,8 @@ Finding relevant job postings across multiple siloed platforms (LinkedIn, BuiltI
 | `FR-001` | Multi-source discovery | Uses Playwright/Chromium |
 | `FR-002` | OpenPostings scraper | Reads from external SQLite |
 | `FR-003` | Deduplication | Uses URL hashing |
+| `FR-135` | Scout-time seniority gate | Title blocklist + max-years when description present (`CR-021`) |
+| `FR-147` | ATS watchlist | Optional `config/ats_watchlist.json` careers scrape (`CR-021`) |
 
 ## Acceptance criteria
 

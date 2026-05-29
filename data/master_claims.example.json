@@ -1,0 +1,162 @@
+{
+  "ACC-101-TECH": {
+    "employer": "cision",
+    "project_id": "ACC-101",
+    "lens": "technical",
+    "tags": ["Platform", "Monitoring", "Reliability"],
+    "metrics": [],
+    "text": "Implemented proactive monitoring and alerting for a legacy B2B SaaS platform to reduce recurring outages."
+  },
+  "ACC-101-PM": {
+    "employer": "cision",
+    "project_id": "ACC-101",
+    "lens": "product",
+    "tags": ["Reliability", "Platform Stability"],
+    "metrics": [],
+    "text": "Stabilized a legacy platform by driving infrastructure capacity monitoring and proactive account cleanup initiatives."
+  },
+  "ACC-102-TECH": {
+    "employer": "cision",
+    "project_id": "ACC-102",
+    "lens": "technical",
+    "tags": ["Data Integrity", "ETL", "Platform Architecture"],
+    "metrics": ["40%"],
+    "text": "Engineered a structural bypass of failing legacy ETL pipelines, integrating the core B2B SaaS platform with the upstream database to eliminate a 40% data drop-off rate."
+  },
+  "ACC-102-BUS": {
+    "employer": "cision",
+    "project_id": "ACC-102",
+    "lens": "business",
+    "tags": ["Customer Retention", "Product Quality"],
+    "metrics": ["40%"],
+    "text": "Protected retention across an enterprise platform by resolving a 40% data drop-off issue and eliminating stale-contact complaints."
+  },
+  "ACC-103-PM": {
+    "employer": "cision",
+    "project_id": "ACC-103",
+    "lens": "product",
+    "tags": ["Roadmap", "Security", "Prioritization"],
+    "metrics": ["90%"],
+    "text": "Triaged a large security vulnerability backlog and resolved 90% of high-severity items while balancing roadmap delivery."
+  },
+  "ACC-104-OPS": {
+    "employer": "cision",
+    "project_id": "ACC-104",
+    "lens": "operations",
+    "tags": ["Migration", "Rollout", "Platform"],
+    "metrics": ["700"],
+    "text": "Built phased migration tooling and transitioned approximately 700 legacy accounts to a new corporate platform at renewal."
+  },
+  "ACC-105-EXEC": {
+    "employer": "cision",
+    "project_id": "ACC-105",
+    "lens": "execution",
+    "tags": ["Prioritization", "Delivery", "Roadmap"],
+    "metrics": [],
+    "text": "Enforced strict prioritization and capacity discipline across engineering teams to balance platform stability and roadmap delivery."
+  },
+  "ACC-106-DATA": {
+    "employer": "cision",
+    "project_id": "ACC-106",
+    "lens": "data",
+    "tags": ["Analytics", "Data Integration", "Metrics"],
+    "metrics": [],
+    "text": "Expanded platform analytics by integrating new audience metrics into the customer-facing application."
+  },
+  "ACC-107-PLATFORM": {
+    "employer": "cision",
+    "project_id": "ACC-107",
+    "lens": "platform",
+    "tags": ["Compliance", "Governance", "Workflows"],
+    "metrics": [],
+    "text": "Architected platform-level compliance safeguards to process data removal requests and regional licensing rules."
+  },
+  "ACC-108-OPS": {
+    "employer": "cision",
+    "project_id": "ACC-108",
+    "lens": "operations",
+    "tags": ["Operations", "Triage", "Support"],
+    "metrics": [],
+    "text": "Streamlined support operations by implementing a priority-scoring matrix for inbound customer issues."
+  },
+  "ACC-109-PROCESS": {
+    "employer": "cision",
+    "project_id": "ACC-109",
+    "lens": "process",
+    "tags": ["Agile", "Planning", "Alignment"],
+    "metrics": [],
+    "text": "Led quarterly planning cycles to align cross-functional engineering and go-to-market stakeholders on a single roadmap."
+  },
+  "ACC-110-RESILIENCE": {
+    "employer": "cision",
+    "project_id": "ACC-110",
+    "lens": "resilience",
+    "tags": ["Knowledge Transfer", "Continuity", "Operations"],
+    "metrics": [],
+    "text": "Established cross-training initiatives across engineering teams to reduce single points of failure on legacy components."
+  },
+  "ACC-201-PROCESS": {
+    "employer": "sterkly",
+    "project_id": "ACC-201",
+    "lens": "process",
+    "tags": ["Process", "Requirements", "Operations"],
+    "metrics": [],
+    "text": "Standardized requirements gathering and resolved resource conflicts across internal delivery workflows."
+  },
+  "ACC-202-REQUIREMENTS": {
+    "employer": "sterkly",
+    "project_id": "ACC-202",
+    "lens": "requirements",
+    "tags": ["Product Specs", "Agile", "Translation"],
+    "metrics": [],
+    "text": "Translated business constraints and operational requirements into engineering-ready product specs for rapid execution."
+  },
+  "ACC-203-TECH": {
+    "employer": "sterkly",
+    "project_id": "ACC-203",
+    "lens": "technical",
+    "tags": ["Tooling", "Automation", "Delivery"],
+    "metrics": [],
+    "text": "Resolved a distribution bottleneck by architecting an in-house certificate procurement workflow for a security product."
+  },
+  "ACC-204-QA": {
+    "employer": "sterkly",
+    "project_id": "ACC-204",
+    "lens": "qa",
+    "tags": ["QA", "Quality", "Backlog"],
+    "metrics": [],
+    "text": "Improved release quality by formalizing QA checkpoints and backlog grooming for client deliverables."
+  },
+  "ACC-301-AUTO": {
+    "employer": "zero_to_sixty",
+    "project_id": "ACC-301",
+    "lens": "automation",
+    "tags": ["Automation", "Scaling", "Scripting"],
+    "metrics": ["100+"],
+    "text": "Replaced manual setup with an automated deployment script, scaling throughput from 10 manual setups per day to 100+ unattended."
+  },
+  "ACC-302-OPS": {
+    "employer": "zero_to_sixty",
+    "project_id": "ACC-302",
+    "lens": "operations",
+    "tags": ["CRM", "Onboarding", "Workflow"],
+    "metrics": [],
+    "text": "Optimized an internal onboarding automation tool that streamlined customer data mapping into Salesforce."
+  },
+  "ACC-303-GTM": {
+    "employer": "zero_to_sixty",
+    "project_id": "ACC-303",
+    "lens": "gtm",
+    "tags": ["Go-to-Market", "Lead Generation", "Funnel"],
+    "metrics": [],
+    "text": "Built an automated prospect onboarding funnel integrating a website builder with Salesforce to capture leads."
+  },
+  "ACC-303-CONVERSION": {
+    "employer": "zero_to_sixty",
+    "project_id": "ACC-303",
+    "lens": "conversion",
+    "tags": ["Conversion", "Sales Automation", "CRM"],
+    "metrics": ["40%"],
+    "text": "Automated the sales pipeline and increased estimated prospect-to-customer conversion rates by approximately 40%."
+  }
+}

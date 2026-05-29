@@ -13,6 +13,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Bootstrap CI data fixtures
+        run: |
+          cp data/candidate_preferences.example.json data/candidate_preferences.json
+          cp data/master_claims.example.json data/master_claims.json
       - name: Smoke draft compiler (no LLM)
         run: python scripts/smoke_draft_compiler.py
       - name: Smoke regression

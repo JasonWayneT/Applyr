@@ -47,6 +47,21 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.15
+Applyr Release
+May 28, 2026
+
+Version 6.2.15, deployed on May 28, 2026
+
+Previous
+Applyr 6.2.14
+
+**Fixed**
+- **CI smoke workflow:** GitHub Actions now installs Python deps, bootstraps `master_claims.example.json` and `candidate_preferences.example.json` before running pipeline smoke tests (`FR-148`, `AC-156`).
+
+**Developer**
+- Added `data/master_claims.example.json` — generic claim catalog template for CI and local scaffolding.
+
 ### 6.2.14
 Applyr Release
 May 28, 2026

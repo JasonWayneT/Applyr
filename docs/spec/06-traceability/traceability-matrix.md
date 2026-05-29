@@ -154,6 +154,12 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-162` | CR-024 | Cover audit rubric | `scripts/cover_letter_audit.py` | implemented |
 | `FR-163` | CR-024 | Ranked JD needs | `scripts/cover_jd_needs.py` | implemented |
 | `IMP-CR-024` | CR-024 | FEAT-013 | `docs/spec/08-implementation/IMP-CR-024-cover-letter-engine.md` | completed |
+| `FR-164` | CR-025 | Subprocess hardening | `server/middleware.ts`, `server/routes/jobs.ts` | implemented |
+| `FR-165` | CR-025 | Evaluate SSE contract | `server/routes/pipeline.ts`, `src/hooks/usePipeline.ts` | implemented |
+| `FR-166` | CR-025 | PDF fail-closed | `scripts/drafting_engine.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-167` | CR-025 | Pipeline mutex | `server/middleware.ts`, `server/routes/pipeline.ts` | implemented |
+| `FR-168` | CR-025 | FTS sync | `server/db.ts`, `server/routes/jobs.ts` | implemented |
+| `FR-169` | CR-025 | Company slug sanitize | `scripts/company_slug.py`, `server/shared.ts` | implemented |
 
 
 ## Coverage checklist

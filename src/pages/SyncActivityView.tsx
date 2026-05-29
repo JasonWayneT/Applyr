@@ -213,7 +213,7 @@ const SyncActivityView: React.FC = () => {
         mode === 'remove'
           ? { status: 'No Longer Available' }
           : {
-              status: 'Rejected',
+              status: 'Closed',
               rejection_type: 'Self-Rejected',
               outcome_notes: 'Dismissed from Scout — not pursuing',
             };

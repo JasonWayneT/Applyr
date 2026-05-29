@@ -351,6 +351,22 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-168` | `FR-157` | Cover numeric audit | Cover-only verify | Uses claim catalog corpus | Metrics from claims pass | implemented |
 | `AC-169` | `FR-163` | Forbes pilot | Forbes JD | Cover letter | JD-specific match narrative | implemented |
 
+### CR-025 Audit remediation (FR-164–FR-169)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-164` | functional | P0 | implemented | Subprocess hardening — server routes use `spawn` with array args, never shell-interpolated user input | `AC-170` | `CR-025` |
+| `FR-165` | functional | P0 | implemented | Evaluate SSE `done` event includes score, company, title, url, summary from pipeline stdout | `AC-171` | `CR-025` |
+| `FR-166` | functional | P0 | implemented | PDF export fail-closed — `generate_pdf` raises; manifest only after PDF exists | `AC-172` | `CR-025` |
+| `FR-167` | functional | P1 | implemented | Pipeline mutex — concurrent sync/evaluate/draft returns 409 when busy | `AC-173` | `CR-025` |
+| `FR-168` | functional | P1 | implemented | FTS sync on job write — `syncJobFts` after INSERT/PATCH | `AC-174` | `CR-025` |
+| `FR-169` | functional | P1 | implemented | Company slug sanitization — shared `company_slug.py` / `sanitizeCompanySlug()` blocks traversal | `AC-170` | `CR-025` |
+
+| `AC-170` | `FR-164`, `FR-169` | No shell injection | POST rerank, GET skill-gap | spawn args only | implemented |
+| `AC-171` | `FR-165` | Evaluate done payload | POST /api/evaluate SSE | done event has score | implemented |
+| `AC-172` | `FR-166` | PDF gate | draft_compiler | Missing PDF raises | implemented |
+| `AC-173` | `FR-167` | Pipeline lock | POST /api/sync while busy | 409 response | implemented |
+| `AC-174` | `FR-168` | FTS sync | POST /api/jobs | jobs_fts row updated | implemented |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

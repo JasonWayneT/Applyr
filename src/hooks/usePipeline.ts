@@ -40,12 +40,6 @@ export const usePipeline = () => {
     setStages(prev => prev.map(s => ({ ...s, status: 'pending', summary: undefined })));
 
     return new Promise((resolve) => {
-      const evtSource = new EventSource(
-        api(`/api/evaluate?company=${encodeURIComponent(company)}&url=${encodeURIComponent(url ?? '')}`),
-      );
-
-      // POST the JD body via fetch first, then stream via SSE
-      // (SSE is GET-only — we use a two-step approach: POST to queue, then GET to stream)
       fetch(api('/api/evaluate'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

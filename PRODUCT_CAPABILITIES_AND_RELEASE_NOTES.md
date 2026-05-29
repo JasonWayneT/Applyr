@@ -47,6 +47,33 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.16
+Applyr Release
+May 28, 2026
+
+Version 6.2.16, deployed on May 28, 2026
+
+Previous
+Applyr 6.2.15
+
+**Fixed**
+- **Command injection:** Rerank, skill-gap, ai-rewrite, and file compile routes use `spawn` with array args — no shell interpolation (`FR-164`).
+- **Evaluate flow:** SSE `done` event now includes score, company, title, url, and summary from pipeline output (`FR-165`).
+- **Skill gap:** Single route returns `{ success, output }`; duplicate dead handler removed.
+- **PDF export:** `generate_pdf` raises on failure; manifest written only after PDFs exist (`FR-166`).
+- **Document editor:** AI rewrite restores content on stream failure.
+
+**Changed**
+- **Pipeline mutex:** Concurrent sync/evaluate/draft returns HTTP 409 when pipeline is busy (`FR-167`).
+- **FTS search:** Job insert/update syncs `jobs_fts` index (`FR-168`).
+- **Company slugs:** Shared sanitization blocks path traversal (`FR-169`, `scripts/company_slug.py`).
+- **CORS:** Restricted to localhost origins; optional `APPLYR_API_TOKEN` for mutating routes when set.
+- **Scout dismiss:** Self-reject from sync view uses `Closed` + `Self-Rejected` (Tuning Log consistent).
+- **CI:** Smoke workflow runs `npm run build`.
+
+**Developer**
+- New: `server/middleware.ts`, `CR-025`, `FR-164`–`FR-169`.
+
 ### 6.2.15
 Applyr Release
 May 28, 2026

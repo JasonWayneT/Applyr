@@ -35,6 +35,7 @@ from local_draft_stages import (
 )
 from pipeline_env import resume_bullet_quotas, resume_only_mode
 from quality_checker import HEADER_BLOCK, check_resume, check_and_repair_cover_letter, repair_resume_markdown
+from company_slug import company_submission_dir
 from utils import (
     load_file,
     load_llm_settings,
@@ -208,9 +209,7 @@ def run(
         raise DraftingPipelineError("No LLM provider configured for drafting")
 
     display = (display_name or company_name).strip()
-    company_folder = company_folder or os.path.join(
-        SUBMISSIONS_DIR, company_name.lower().replace(" ", "_")
-    )
+    company_folder = company_folder or company_submission_dir(SUBMISSIONS_DIR, company_name)
     os.makedirs(company_folder, exist_ok=True)
 
     print(f"    [Compiler] CR-017 compose pipeline v{PIPELINE_VERSION} for {display}")
@@ -418,7 +417,8 @@ def run(
         if not qa_ok:
             raise DraftingPipelineError(f"Resume QA failed: {qa_msg}")
         print(f"    [Compiler] Resume QA: {qa_msg}")
-        generate_pdf(resume_md_path, os.path.join(company_folder, "Resume.pdf"))
+        resume_pdf = os.path.join(company_folder, "Resume.pdf")
+        generate_pdf(resume_md_path, resume_pdf)
     else:
         print("    [Compiler] COVER_ONLY=1 — resume PDF unchanged.")
 
@@ -427,9 +427,15 @@ def run(
         if not cl_ok:
             raise DraftingPipelineError(f"Cover letter QA failed: {cl_msg}")
         print(f"    [Compiler] Cover QA: {cl_msg}")
-        generate_pdf(cl_md_path, os.path.join(company_folder, "CoverLetter.pdf"))
+        cover_pdf = os.path.join(company_folder, "CoverLetter.pdf")
+        generate_pdf(cl_md_path, cover_pdf)
     elif resume_only_mode():
         print("    [Compiler] RESUME_ONLY=1 — cover letter files left unchanged.")
+
+    if not cover_only and not os.path.isfile(os.path.join(company_folder, "Resume.pdf")):
+        raise DraftingPipelineError("Resume PDF missing after export")
+    if not skip_cover and not cover_only and not os.path.isfile(os.path.join(company_folder, "CoverLetter.pdf")):
+        raise DraftingPipelineError("Cover letter PDF missing after export")
 
     import hashlib
 

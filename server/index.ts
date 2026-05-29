@@ -1,8 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
+import path from 'path';
+import { spawn } from 'child_process';
 import { logActivity } from './db.js';
-import { ARCHIVE_DIR, SUBMISSION_DIR } from './shared.js';
+import { ARCHIVE_DIR, SUBMISSION_DIR, PROJECT_ROOT, SCRIPTS_DIR } from './shared.js';
+import { buildSpawnEnv } from './middleware.js';
 import { reconcileActiveSubmissionFolders } from './submissionFolders.js';
 import systemRouter   from './routes/system.js';
 import jobsRouter     from './routes/jobs.js';
@@ -23,8 +26,21 @@ if (startupReconcile.archived.length || startupReconcile.removed.length) {
 const app  = express();
 const PORT = 3000;
 
-app.use(cors());
-app.use(express.json());
+const corsOrigins = [
+  /^http:\/\/localhost:\d+$/,
+  /^http:\/\/127\.0\.0\.1:\d+$/,
+];
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || corsOrigins.some((re) => re.test(origin))) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+}));
+app.use(express.json({ limit: '2mb' }));
 
 app.use('/', systemRouter);
 app.use('/', jobsRouter);
@@ -36,17 +52,19 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`  JobAgent Server  🚀  Listening on all interfaces (0.0.0.0:${PORT})`);
   console.log(`${'='.repeat(48)}\n`);
   logActivity('INFO', 'Server', 'System initialized. Ready for local and Tailscale syncing.');
-  
-  // Schedule auto-pruning database
+
   setInterval(() => {
-    import('child_process').then(({ exec }) => {
-      exec('python scripts/auto_prune_db.py', (err, stdout, stderr) => {
-        if (err) {
-          logActivity('ERROR', 'System', `Auto-pruning failed: ${err.message}`);
-        } else {
-          logActivity('INFO', 'System', 'Auto-pruning completed.');
-        }
-      });
+    const proc = spawn('python', [path.join(SCRIPTS_DIR, 'auto_prune_db.py')], {
+      cwd: PROJECT_ROOT,
+      shell: false,
+      env: buildSpawnEnv(),
     });
-  }, 12 * 60 * 60 * 1000); // 12 hours
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        logActivity('ERROR', 'System', `Auto-pruning failed with exit code ${code}`);
+      } else {
+        logActivity('INFO', 'System', 'Auto-pruning completed.');
+      }
+    });
+  }, 12 * 60 * 60 * 1000);
 });

@@ -794,7 +794,10 @@ const SettingsView: React.FC = () => {
                   </div>
                   <div className="bg-surface-container-low border border-outline-variant/10 p-5 rounded-2xl text-primary">
                     <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Active</p>
-                    <p className="text-2xl font-headline font-extrabold">{stats.byStatus.find(s => s.status === 'Ready to Apply' || s.status === 'Backlog')?.count || 0}</p>
+                    <p className="text-2xl font-headline font-extrabold">{
+                      (stats.byStatus.find(s => s.status === 'Backlog')?.count || 0) +
+                      (stats.byStatus.find(s => s.status === 'Drafted')?.count || 0)
+                    }</p>
                   </div>
                 </div>
 

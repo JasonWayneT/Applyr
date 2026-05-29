@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { exec, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import AdmZip from 'adm-zip';
-import { db, logActivity } from '../db.js';
+import { db, logActivity, syncJobFts, deleteJobFts } from '../db.js';
 import {
-  buildPythonEnv, resolveCompanyFolder,
+  resolveCompanyFolder,
   SUBMISSION_DIR, ARCHIVE_DIR, SCRIPTS_DIR, PROJECT_ROOT,
   ALLOWED_JOB_FIELDS,
 } from '../shared.js';
@@ -16,8 +16,20 @@ import {
   jobHasPdfAssets,
   reconcileActiveSubmissionFolders,
 } from '../submissionFolders.js';
+import {
+  formatSkillGapOutput,
+  isSafeHttpUrl,
+  isValidJobId,
+  requireApiToken,
+  runPythonScript,
+  buildSpawnEnv,
+  tryAcquirePipeline,
+  releasePipeline,
+} from '../middleware.js';
 
 const router = Router();
+
+router.use(requireApiToken);
 
 const ACTIVE_STATUSES = new Set(['Backlog', 'Drafted']);
 
@@ -59,12 +71,16 @@ router.post('/api/jobs', (req, res) => {
   try {
     const { id, company, title, url, score, summary, status } = req.body;
     if (!company || !title) return res.status(400).json({ error: 'company and title are required' });
+    if (url && !isSafeHttpUrl(url)) return res.status(400).json({ error: 'url must be http or https' });
+    const jobId = id && isValidJobId(id) ? id : randomUUID();
     db.prepare(`
       INSERT INTO jobs (id, company, title, url, score, status, summary, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(id || randomUUID(), company, title, url || null, score || null, status || 'Drafted', summary || null);
+    `).run(jobId, company, title, url || null, score || null, status || 'Drafted', summary || null);
+    const row = db.prepare('SELECT rowid FROM jobs WHERE id = ?').get(jobId) as { rowid: number };
+    if (row?.rowid) syncJobFts(row.rowid);
     logActivity('INFO', 'System', `Manually added job "${company}" to drafted.`);
-    res.json({ success: true });
+    res.json({ success: true, id: jobId });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to add job' });
@@ -105,10 +121,19 @@ router.get('/api/jobs/stats', (_req, res) => {
 router.patch('/api/jobs/:id/status', (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    if (!isValidJobId(id)) return res.status(400).json({ error: 'Invalid job id' });
+    let { status } = req.body;
 
-    const job = db.prepare('SELECT company, status FROM jobs WHERE id = ?').get(id) as any;
+    const job = db.prepare('SELECT company, status, rowid FROM jobs WHERE id = ?').get(id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    // Normalize scout dismissals to Closed + rejection metadata (CR-025)
+    const rejectionType = req.body.rejection_type as string | undefined;
+    const rejectionStage = req.body.rejection_stage as string | undefined;
+    const outcomeNotes = req.body.outcome_notes as string | undefined;
+    if (status === 'Rejected' && rejectionType) {
+      status = 'Closed';
+    }
 
     const activePath  = resolveCompanyFolder(job.company, SUBMISSION_DIR);
     const archivePath = resolveCompanyFolder(job.company, ARCHIVE_DIR);
@@ -120,6 +145,7 @@ router.patch('/api/jobs/:id/status', (req, res) => {
       }
       if (fs.existsSync(activePath))  fs.rmSync(activePath,  { recursive: true, force: true });
       if (fs.existsSync(archivePath)) fs.rmSync(archivePath, { recursive: true, force: true });
+      deleteJobFts(job.rowid);
       db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
       logActivity('INFO', 'System', `Job "${job.company}" marked No Longer Available and completely deleted.`);
       return res.json({ success: true, deleted: true });
@@ -131,6 +157,7 @@ router.patch('/api/jobs/:id/status', (req, res) => {
     if (isNowArchived && !wasArchived) archiveActiveSubmission(job.company);
     if (!isNowArchived && wasArchived) restoreArchivedSubmission(job.company);
 
+    const isClosed = status === 'Closed';
     db.prepare(`
       UPDATE jobs
       SET status          = ?,
@@ -140,9 +167,9 @@ router.patch('/api/jobs/:id/status', (req, res) => {
       WHERE id = ?
     `).run(
       status,
-      status === 'Closed' ? (req.body.rejection_stage || job.status) : null,
-      status === 'Closed' ? req.body.rejection_type   : null,
-      status === 'Closed' ? req.body.outcome_notes    : null,
+      isClosed ? (rejectionStage || job.status) : null,
+      isClosed ? rejectionType : null,
+      isClosed ? outcomeNotes : null,
       id,
     );
     logActivity('INFO', 'System', `Job "${job.company}" status changed to ${status}`);
@@ -162,6 +189,10 @@ router.patch('/api/jobs/:id', (req, res) => {
     if (keys.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
     const setClause = keys.map(k => `${k} = ?`).join(', ');
     db.prepare(`UPDATE jobs SET ${setClause} WHERE id = ?`).run(...keys.map(k => updates[k]), id);
+    if (keys.some(k => ['company', 'title', 'summary', 'url'].includes(k))) {
+      const row = db.prepare('SELECT rowid FROM jobs WHERE id = ?').get(id) as { rowid: number } | undefined;
+      if (row?.rowid) syncJobFts(row.rowid);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -202,30 +233,37 @@ router.get('/api/jobs/:id/files/:filename', (req, res) => {
   }
 });
 
-router.get('/api/jobs/:id/skill-gap', (req, res) => {
+router.get('/api/jobs/:id/skill-gap', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidJobId(id)) return res.status(400).json({ success: false, error: 'Invalid job id' });
+
     const scriptPath = path.join(SCRIPTS_DIR, 'skill_gap.py');
     const dbPath = path.join(PROJECT_ROOT, 'jobagent.sqlite');
-    
-    exec(`python "${scriptPath}" "${dbPath}" "${id}"`, (err, stdout, stderr) => {
-      if (err) {
-        console.error(stderr);
-        return res.status(500).json({ error: 'Failed to analyze skill gap' });
+    const { code, stdout, stderr } = await runPythonScript([scriptPath, dbPath, id]);
+
+    if (code !== 0) {
+      console.error(stderr);
+      return res.status(500).json({ success: false, error: 'Failed to analyze skill gap' });
+    }
+
+    try {
+      const parsed = JSON.parse(stdout.trim());
+      const formatted = formatSkillGapOutput(parsed);
+      if (!formatted.success) {
+        return res.status(404).json(formatted);
       }
-      try {
-        const result = JSON.parse(stdout);
-        res.json(result);
-      } catch (parseErr) {
-        res.status(500).json({ error: 'Invalid JSON returned from model' });
-      }
-    });
+      res.json({ success: true, output: formatted.output });
+    } catch {
+      res.status(500).json({ success: false, error: 'Invalid JSON returned from skill-gap script' });
+    }
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
-router.put('/api/jobs/:id/files/:filename', (req, res) => {
+router.put('/api/jobs/:id/files/:filename', async (req, res) => {
   try {
     const { id, filename } = req.params;
     const { text } = req.body;
@@ -239,11 +277,9 @@ router.put('/api/jobs/:id/files/:filename', (req, res) => {
     const filePath     = path.join(folder, safeFilename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
 
-    fs.writeFileSync(filePath, text, 'utf8');
-
-    if (safeFilename.endsWith('.md')) {
+    if (safeFilename.endsWith('.md') && (safeFilename === 'Resume.md' || safeFilename === 'CoverLetter.md')) {
       const manifestPath = path.join(folder, 'draft_manifest.json');
-      if (fs.existsSync(manifestPath) && (safeFilename === 'Resume.md' || safeFilename === 'CoverLetter.md')) {
+      if (fs.existsSync(manifestPath)) {
         try {
           const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
           if (manifest.verification_passed !== true) {
@@ -255,20 +291,29 @@ router.put('/api/jobs/:id/files/:filename', (req, res) => {
           return res.status(400).json({ error: 'Invalid draft_manifest.json' });
         }
       }
-      const pdfPath      = path.join(folder, safeFilename.replace('.md', '.pdf'));
-      const guardScript  = path.join(SCRIPTS_DIR, 'style_compliance_guard.py');
-      const compileScript = path.join(SCRIPTS_DIR, 'compile_single.py');
-      exec(`python "${guardScript}" "${filePath}" && python "${compileScript}" "${filePath}" "${pdfPath}"`, (_err, _stdout, stderr) => {
-        if (_err) {
-          logActivity('ERROR', 'System', `Failed to validate and compile PDF for "${job.company}": ${stderr || _err.message}`);
-          return res.status(500).json({ error: 'Document saved but validation or compilation failed' });
-        }
-        logActivity('INFO', 'System', `Successfully validated and compiled PDF for "${job.company}"`);
-        res.json({ success: true, compiled: true });
-      });
-    } else {
-      res.json({ success: true, compiled: false });
     }
+
+    fs.writeFileSync(filePath, text, 'utf8');
+
+    if (safeFilename.endsWith('.md')) {
+      const pdfPath       = path.join(folder, safeFilename.replace('.md', '.pdf'));
+      const guardScript   = path.join(SCRIPTS_DIR, 'style_compliance_guard.py');
+      const compileScript = path.join(SCRIPTS_DIR, 'compile_single.py');
+      const guard = await runPythonScript([guardScript, filePath]);
+      if (guard.code !== 0) {
+        logActivity('ERROR', 'System', `Style guard failed for "${job.company}": ${guard.stderr}`);
+        return res.status(500).json({ error: 'Document saved but validation failed' });
+      }
+      const compiled = await runPythonScript([compileScript, filePath, pdfPath]);
+      if (compiled.code !== 0) {
+        logActivity('ERROR', 'System', `PDF compile failed for "${job.company}": ${compiled.stderr}`);
+        return res.status(500).json({ error: 'Document saved but PDF compilation failed' });
+      }
+      logActivity('INFO', 'System', `Successfully validated and compiled PDF for "${job.company}"`);
+      return res.json({ success: true, compiled: true });
+    }
+
+    res.json({ success: true, compiled: false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to save file' });
@@ -279,7 +324,7 @@ router.put('/api/jobs/:id/files/:filename', (req, res) => {
 // AI rewrite
 // ---------------------------------------------------------------------------
 
-router.post('/api/jobs/:id/ai-rewrite', (req, res) => {
+router.post('/api/jobs/:id/ai-rewrite', async (req, res) => {
   try {
     const { id } = req.params;
     const { instruction, text } = req.body;
@@ -293,18 +338,22 @@ router.post('/api/jobs/:id/ai-rewrite', (req, res) => {
     fs.writeFileSync(instrFile, instruction, 'utf8');
     fs.writeFileSync(textFile,  text,        'utf8');
 
-    exec(`python "${path.join(SCRIPTS_DIR, 'ai_rewrite.py')}" "${instrFile}" "${textFile}"`, (_err, stdout, stderr) => {
-      try {
-        if (fs.existsSync(instrFile)) fs.unlinkSync(instrFile);
-        if (fs.existsSync(textFile))  fs.unlinkSync(textFile);
-      } catch (cleanErr) { console.error('Failed to clean up temp files:', cleanErr); }
+    const { code, stdout, stderr } = await runPythonScript([
+      path.join(SCRIPTS_DIR, 'ai_rewrite.py'),
+      instrFile,
+      textFile,
+    ]);
 
-      if (_err) {
-        console.error(`AI rewrite error: ${stderr || _err.message}`);
-        return res.status(500).json({ error: 'AI rewrite execution failed' });
-      }
-      res.json({ text: stdout.trim() });
-    });
+    try {
+      if (fs.existsSync(instrFile)) fs.unlinkSync(instrFile);
+      if (fs.existsSync(textFile))  fs.unlinkSync(textFile);
+    } catch (cleanErr) { console.error('Failed to clean up temp files:', cleanErr); }
+
+    if (code !== 0) {
+      console.error(`AI rewrite error: ${stderr}`);
+      return res.status(500).json({ error: 'AI rewrite execution failed' });
+    }
+    res.json({ text: stdout.trim() });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to execute AI rewrite' });
@@ -348,16 +397,16 @@ router.post('/api/jobs/:id/draft', (req, res) => {
     const job = db.prepare('SELECT company, url, score, status FROM jobs WHERE id = ?').get(id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
+    const label = `Drafting assets for ${job.company}`;
+    if (!tryAcquirePipeline(label)) {
+      return res.status(409).json({ error: 'Pipeline is already running. Try again when sync/evaluate completes.' });
+    }
+
     const draftOnly =
       job.score != null &&
       job.score >= 72 &&
       ['Needs Retry', 'Backlog', 'Drafted'].includes(job.status);
 
-    db.prepare(`UPDATE system_status SET status = 'drafting', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(
-      draftOnly
-        ? `Drafting assets for ${job.company} (using saved fit score ${job.score})`
-        : `Generating tailored assets for ${job.company}`,
-    );
     logActivity(
       'INFO',
       'Pipeline',
@@ -375,7 +424,8 @@ router.post('/api/jobs/:id/draft', (req, res) => {
 
     const proc = spawn('python', procArgs, {
       cwd: PROJECT_ROOT,
-      env: { ...process.env, ...buildPythonEnv() },
+      shell: false,
+      env: buildSpawnEnv(),
     });
     proc.stdin.write('');
     proc.stdin.end();
@@ -396,7 +446,7 @@ router.post('/api/jobs/:id/draft', (req, res) => {
 
     proc.on('close', (code) => {
       logActivity(code === 0 ? 'INFO' : 'ERROR', 'Pipeline', `Draft for "${job.company}" exited with code ${code}`);
-      db.prepare(`UPDATE system_status SET status = 'completed', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Completed asset generation for ${job.company}`);
+      releasePipeline(`Completed asset generation for ${job.company}`);
     });
 
     res.json({ success: true, message: `Drafting started for ${job.company}` });
@@ -405,49 +455,27 @@ router.post('/api/jobs/:id/draft', (req, res) => {
   }
 });
 
-router.post('/api/jobs/rerank', (req, res) => {
+router.post('/api/jobs/rerank', async (req, res) => {
   try {
     const { query, threshold } = req.body;
-    if (!query) return res.status(400).json({ error: 'Query is required' });
-    
+    if (!query || typeof query !== 'string') return res.status(400).json({ error: 'Query is required' });
+
     logActivity('INFO', 'System', `Reranking backlog for query: "${query}"`);
-    const env = buildPythonEnv();
     const scriptPath = path.join(SCRIPTS_DIR, 'rerank_backlog.py');
     const args = [scriptPath, '--query', query];
-    if (threshold) {
-      args.push('--threshold', threshold.toString());
+    if (threshold !== undefined && threshold !== null) {
+      args.push('--threshold', String(threshold));
     }
 
-    exec(`python ${args.join(' ')}`, { env }, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Rerank error: ${stderr || error.message}`);
-        return res.status(500).json({ error: 'Failed to rerank backlog' });
-      }
-      res.json({ success: true, output: stdout.trim() });
-    });
+    const { code, stdout, stderr } = await runPythonScript(args);
+    if (code !== 0) {
+      console.error(`Rerank error: ${stderr}`);
+      return res.status(500).json({ error: 'Failed to rerank backlog' });
+    }
+    res.json({ success: true, output: stdout.trim() });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error during rerank' });
-  }
-});
-
-router.get('/api/jobs/:id/skill-gap', (req, res) => {
-  try {
-    const { id } = req.params;
-    const dbPath = path.join(PROJECT_ROOT, 'data', 'applyr.db');
-    const scriptPath = path.join(SCRIPTS_DIR, 'skill_gap.py');
-    const env = buildPythonEnv();
-
-    exec(`python ${scriptPath} --db_path ${dbPath} --job_id ${id}`, { env }, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Skill gap error: ${stderr || error.message}`);
-        return res.status(500).json({ error: 'Failed to compute skill gap' });
-      }
-      res.json({ success: true, output: stdout.trim() });
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error during skill gap analysis' });
   }
 });
 

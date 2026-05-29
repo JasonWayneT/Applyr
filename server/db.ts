@@ -145,3 +145,34 @@ export const logActivity = (
   db.prepare('INSERT INTO activity_log (level, source, message, meta) VALUES (?, ?, ?, ?)')
     .run(level, source, message, meta ? JSON.stringify(meta) : null);
 };
+
+/** Keep FTS5 index in sync after jobs table mutations (BUG-011 follow-up, CR-025). */
+export function syncJobFts(jobRowid: number) {
+  try {
+    db.prepare('DELETE FROM jobs_fts WHERE rowid = ?').run(jobRowid);
+    const job = db.prepare(
+      'SELECT company, title, summary, url FROM jobs WHERE rowid = ?',
+    ).get(jobRowid) as { company: string; title: string; summary: string | null; url: string | null } | undefined;
+    if (!job) return;
+    db.prepare(`
+      INSERT INTO jobs_fts(rowid, company, title, summary, url)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      jobRowid,
+      job.company ?? '',
+      job.title ?? '',
+      job.summary ?? '',
+      job.url ?? '',
+    );
+  } catch (err) {
+    console.warn('[db] syncJobFts failed:', err);
+  }
+}
+
+export function deleteJobFts(jobRowid: number) {
+  try {
+    db.prepare('DELETE FROM jobs_fts WHERE rowid = ?').run(jobRowid);
+  } catch {
+    /* ignore */
+  }
+}

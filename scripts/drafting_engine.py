@@ -3,6 +3,7 @@ import re
 import subprocess
 import verify_claims as determinator
 from utils import load_file, SUBMISSIONS_DIR, RESUME_MASTER_FILE, WORK_EXP_FILE
+from company_slug import company_submission_dir
 # --- Hard Fact Validation (Deterministic Post-Generation Guard) ---
 # Extracts known ground-truth facts from the master resume and verifies
 # they were not hallucinated or substituted in the generated output.
@@ -345,7 +346,7 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
 def run_research(company_name, jd_text):
     from pipeline_env import research_mode
 
-    folder = os.path.join(SUBMISSIONS_DIR, company_name.lower().replace(" ", "_"))
+    folder = company_submission_dir(SUBMISSIONS_DIR, company_name)
     packet_path = os.path.join(folder, "Research_Packet.json")
     if os.path.exists(packet_path):
         print(f"    [Research] Found cached intelligence for {company_name}. Using local packet.")
@@ -376,18 +377,20 @@ def run_research(company_name, jd_text):
 def generate_pdf(md_path, output_path):
     # Enforces Single-Column, ATS-Optimized typography using Playwright
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    try:
-        subprocess.run(["python", os.path.join(script_dir, "compile_single.py"), md_path, output_path], check=True)
-        print(f"    [Export] Saved ATS-Optimized PDF: {output_path}")
-    except Exception as e:
-        print(f"    [Export Error] Failed to generate PDF: {e}")
+    subprocess.run(
+        ["python", os.path.join(script_dir, "compile_single.py"), md_path, output_path],
+        check=True,
+    )
+    if not os.path.exists(output_path) or os.path.getsize(output_path) < 100:
+        raise RuntimeError(f"PDF export failed or empty: {output_path}")
+    print(f"    [Export] Saved ATS-Optimized PDF: {output_path}")
 
 
 def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result, display_name=None):
     """Unified entry: draft compiler only. Implements FR-089, FR-103 (CR-014, CR-017)."""
     display = (display_name or company_name).strip()
     print(f"  -> Initializing Drafting Engine for {display}")
-    company_folder = os.path.join(SUBMISSIONS_DIR, company_name.lower().replace(" ", "_"))
+    company_folder = company_submission_dir(SUBMISSIONS_DIR, company_name)
     os.makedirs(company_folder, exist_ok=True)
 
     try:

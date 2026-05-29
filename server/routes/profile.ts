@@ -6,8 +6,11 @@ import {
   buildPythonEnv, materializeJobSearchPrefs,
   WORK_EXPERIENCE_PATH, PROJECT_ROOT,
 } from '../shared.js';
+import { buildSpawnEnv, requireApiToken } from '../middleware.js';
 
 const router = Router();
+
+router.use(requireApiToken);
 
 // ---------------------------------------------------------------------------
 // Proof-code assignment for workExperience.md (Implements SDD anti-hallucination contract)
@@ -157,8 +160,8 @@ router.post('/api/experience', (req, res) => {
     // Implements FR-064: regenerate scoring summary in background — fire and forget
     const summaryProc = spawn('python', ['scripts/generate_experience_summary.py'], {
       cwd: PROJECT_ROOT,
-      shell: true,
-      env: { ...process.env, ...buildPythonEnv() },
+      shell: false,
+      env: buildSpawnEnv(),
       detached: true,
       stdio: 'ignore',
     });

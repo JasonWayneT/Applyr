@@ -20,6 +20,7 @@ Agents editing `scripts/batch_pipeline.py`, `scripts/draft_compiler.py`, scoutin
 | `COVER_HOOK_MODE` | `template` | Legacy path only when `COVER_ENGINE` ≠ `v1` |
 | `COVER_ENGINE` | `v1` | CR-024 Match Brief (`cover_letter_compiler.py`); independent of resume |
 | `COVER_ONLY` | `0` | `1` = regenerate `CoverLetter.md` / PDF only |
+| `APPLYR_API_TOKEN` | *(unset)* | When set, require `X-Applyr-Token` header on API routes (CR-025) |
 | `RESEARCH_MODE` | `local` | SearXNG + local summarizer; use `skip` if offline |
 | `CHEAT_SHEET_MODE` | `template` | Template cheat sheet when cloud research unavailable |
 

@@ -56,9 +56,17 @@ export function buildPythonEnv(): Record<string, string> {
   };
 }
 
+export function sanitizeCompanySlug(company: string): string {
+  const slug = company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!slug || slug.includes('..') || slug.startsWith('.')) {
+    throw new Error(`Invalid company name for folder slug: ${company}`);
+  }
+  return slug;
+}
+
 // Fuzzy-matches a company name to its folder under baseDir (handles slug variants).
 export function resolveCompanyFolder(company: string, baseDir: string): string {
-  const companySlug = company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const companySlug = sanitizeCompanySlug(company);
   const standardPath = path.join(baseDir, companySlug);
   if (fs.existsSync(standardPath)) return standardPath;
 

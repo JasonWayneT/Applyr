@@ -91,10 +91,14 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
     try {
       const res = await fetch(api(`/api/jobs/${job.id}/skill-gap`));
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.output) {
         setSkillGap(data.output);
+      } else if (Array.isArray(data)) {
+        setSkillGap(data.map((item: { gap?: string; strategy?: string }) =>
+          item.strategy ? `• ${item.gap}: ${item.strategy}` : `• ${item.gap}`,
+        ).join('\n'));
       } else {
-        setSkillGap("Failed to compute skill gap.");
+        setSkillGap(data.error || "Failed to compute skill gap.");
       }
     } catch {
       setSkillGap("Error communicating with server.");

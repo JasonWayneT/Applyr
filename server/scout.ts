@@ -1,5 +1,6 @@
 import { db, logActivity } from './db.js';
 import { buildPythonEnv, PROJECT_ROOT } from './shared.js';
+import { buildSpawnEnv, isPipelineBusy } from './middleware.js';
 import { spawn } from 'child_process';
 
 /**
@@ -16,8 +17,8 @@ function spawnProcessAsync(
     try {
       const child = spawn(command, args, {
         cwd: PROJECT_ROOT,
-        shell: true,
-        env: { ...process.env, ...env },
+        shell: false,
+        env: buildSpawnEnv(env),
       });
 
       child.stdout.on('data', (chunk) => onStdout(chunk.toString()));
@@ -80,6 +81,16 @@ function handleStderr(source: string, stderr: string) {
 }
 
 export const runScoutSync = async () => {
+  if (isPipelineBusy()) {
+    logActivity('WARN', 'Scout', 'Sync skipped — pipeline already running.');
+    return;
+  }
+
+  db.prepare(`
+    UPDATE system_status SET status = 'scout_running', current_item = 'Scout pipeline starting...',
+    updated_at = CURRENT_TIMESTAMP WHERE id = 'global'
+  `).run();
+
   const extraEnv = buildPythonEnv();
 
   // Phase 1: Resumption Assessment

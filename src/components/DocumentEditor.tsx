@@ -90,18 +90,18 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     if (!aiInstruction.trim()) return;
     setAiStatus('running');
 
-    try {
-      const editorInstance = editorRef.current?.getInstance();
-      if (!editorInstance) return;
+    const editorInstance = editorRef.current?.getInstance();
+    if (!editorInstance) return;
+    const backupMarkdown = editorInstance.getMarkdown();
 
-      const currentMarkdown = editorInstance.getMarkdown();
+    try {
       editorInstance.setMarkdown(''); // Clear while generating
 
       const res = await fetch(api(`/api/stream/local-model`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `You are an AI document editor. Apply the following instruction to rewrite the text. Output ONLY the raw markdown of the final rewritten text, no explanations, no chat.\n\nINSTRUCTION: ${aiInstruction}\n\nORIGINAL TEXT:\n${currentMarkdown}`,
+          prompt: `You are an AI document editor. Apply the following instruction to rewrite the text. Output ONLY the raw markdown of the final rewritten text, no explanations, no chat.\n\nINSTRUCTION: ${aiInstruction}\n\nORIGINAL TEXT:\n${backupMarkdown}`,
         }),
       });
 
@@ -147,6 +147,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       setTimeout(() => setAiStatus('idle'), 2000);
     } catch {
       setAiStatus('error');
+      const editorInstance = editorRef.current?.getInstance();
+      if (editorInstance) {
+        editorInstance.setMarkdown(backupMarkdown);
+      }
     }
   };
 

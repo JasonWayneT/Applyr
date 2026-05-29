@@ -58,6 +58,22 @@ def _bootstrap_from_prefs():
         pass
     return _DEFAULT_JD_KEYWORDS, 72
 
+def get_min_fit_score(default: int = 72) -> int:
+    prefs = load_candidate_preferences()
+    try:
+        return int(prefs.get("min_fit_score", default))
+    except (TypeError, ValueError):
+        return default
+
+
+def get_jd_required_keywords(default: list | None = None) -> list:
+    prefs = load_candidate_preferences()
+    keywords = prefs.get("jd_required_keywords")
+    if isinstance(keywords, list) and keywords:
+        return keywords
+    return default if default is not None else list(_DEFAULT_JD_KEYWORDS)
+
+
 JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE = _bootstrap_from_prefs()
 
 

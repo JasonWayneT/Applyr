@@ -14,7 +14,8 @@ import concurrent.futures
 from utils import (
     load_file, call_llm, check_rate_limits, JOBS_DIR, PROJECT_ROOT, SUBMISSIONS_DIR,
     WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
-    SCORING_JD_MAX_CHARS, JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE, load_candidate_preferences,
+    SCORING_JD_MAX_CHARS, load_candidate_preferences,
+    get_jd_required_keywords, get_min_fit_score,
     unload_local_models, clean_jd_text, send_notification
 )
 from local_embeddings import get_embedding, cosine_similarity
@@ -194,7 +195,8 @@ def save_jd_vector(db_path: str, job_id_prefix: str, company_name: str, vector: 
 
 
 def _company_submission_dir(company_name: str) -> str:
-    return os.path.join(SUBMISSIONS_DIR, company_name.lower().replace(" ", "_"))
+    from company_slug import company_submission_dir
+    return company_submission_dir(SUBMISSIONS_DIR, company_name)
 
 
 def _resolve_display_company(db_path: str, company_name: str, job_id: str | None = None) -> str:
@@ -269,7 +271,7 @@ def _load_job_fit_from_db(db_path: str, job_id: str):
             "SELECT score, summary, status FROM jobs WHERE id = ?", (job_id,)
         ).fetchone()
         conn.close()
-        if row and row[0] is not None and int(row[0]) >= MIN_FIT_SCORE:
+        if row and row[0] is not None and int(row[0]) >= get_min_fit_score():
             return int(row[0]), (row[1] or ""), row[2]
     except Exception:
         pass
@@ -424,7 +426,7 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None) -> bool:
         return False
 
     lower = jd_text.lower()
-    return any(kw in lower for kw in JD_REQUIRED_KEYWORDS)
+    return any(kw in lower for kw in get_jd_required_keywords())
 
 
 def _pruned_work_exp_for_fit(jd_text: str, work_exp_summary: str, k: int = 8) -> str:
@@ -588,7 +590,7 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
         decision = result.get("Decision", "NO")
         summary = result.get("Summary", "")
 
-        if decision == "NO" or score < MIN_FIT_SCORE:
+        if decision == "NO" or score < get_min_fit_score():
             print(json.dumps({"id": "fit", "status": "done", "summary": f"Rejected (Score: {score}). {summary}"}))
             print(json.dumps({"score": score, "passed": False}))
             return
@@ -930,7 +932,7 @@ def process_batch():
         print(f"  -> Result: {decision} (Score: {score})")
         print(f"  -> Summary: {result.get('Summary')}")
 
-        if decision == "NO" or score < MIN_FIT_SCORE:
+        if decision == "NO" or score < get_min_fit_score():
             print(f"  -> [GATEKEEPER REJECT] JD scored below 72 or triggered hard stop.")
             if db_exists:
                 try:
@@ -946,7 +948,7 @@ def process_batch():
                         conn.close()
                         _mark_job_rejected(
                             db_path, job_id_prefix, company_name, url, title,
-                            f"Not a fit â€” score {score} below threshold ({MIN_FIT_SCORE})",
+                            f"Not a fit — score {score} below threshold ({get_min_fit_score()})",
                             score=score,
                         )
                         print(f"  -> Marked as '{STATUS_REJECTED}' (low fit score).")

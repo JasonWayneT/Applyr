@@ -48,6 +48,78 @@ _INCOMPLETE_PROOF_TAIL = re.compile(
 )
 MAX_BULLET_WORDS = 28
 
+# Canonical resume ### headers — one role title per employer (no slash-combined titles).
+EMPLOYER_EXPERIENCE_HEADERS: Dict[str, str] = {
+    "cision": (
+        "### Product Manager | Cision | September 2021 - January 2026\n"
+        "Full Remote\n"
+    ),
+    "sterkly": (
+        "### Product Manager | Sterkly | February 2019 - August 2021\n"
+        "San Diego, CA\n"
+    ),
+    "zero_to_sixty": (
+        "### Product Owner | Zero to Sixty | June 2017 - January 2019\n"
+        "San Diego, CA\n"
+    ),
+}
+
+
+def experience_skeleton() -> Dict[str, str]:
+    return dict(EMPLOYER_EXPERIENCE_HEADERS)
+
+
+def normalize_employer_job_titles(text: str) -> str:
+    """Enforce single canonical title per employer on ### experience lines."""
+    zts_combined = (
+        r"Product Owner\s*/\s*Account Manager",
+        r"Account Manager\s*/\s*Product Owner",
+        r"Product Owner\s*/\s*Product Manager",
+        r"Account Manager\s*/\s*Product Manager",
+    )
+    cision_hybrid = (
+        "Product Owner / Functional Product Manager",
+        "Product Owner / Platform Product Manager",
+        "Product Owner (Functionally Product Manager)",
+        "Product Owner (Functional Scope)",
+        "Product Owner → Product Manager (Functional Scope)",
+        "Product Owner -> Product Manager (Functional Scope)",
+        "Product Owner / Product Manager",
+        "Product Owner",
+    )
+    lines: List[str] = []
+    for line in text.split("\n"):
+        low = line.lower()
+        if "zero to sixty" in low or "zero to 60" in low:
+            for pat in zts_combined:
+                line = re.sub(pat, "Product Owner", line, flags=re.I)
+            if re.search(r"\bAccount Manager\b", line, re.I):
+                line = re.sub(r"\bAccount Manager\b", "Product Owner", line, flags=re.I)
+        elif "cision" in low:
+            for ugly in cision_hybrid:
+                line = re.sub(re.escape(ugly), "Product Manager", line, flags=re.I)
+            line = re.sub(
+                r"Product Manager\s*/\s*Product Manager",
+                "Product Manager",
+                line,
+                flags=re.I,
+            )
+            line = re.sub(
+                r"Product Manager\s*/\s*Platform Product Manager",
+                "Product Manager",
+                line,
+                flags=re.I,
+            )
+        elif "sterkly" in low:
+            line = re.sub(
+                r"Product Manager\s*/\s*Product Owner|Product Owner\s*/\s*Product Manager",
+                "Product Manager",
+                line,
+                flags=re.I,
+            )
+        lines.append(line)
+    return "\n".join(lines)
+
 
 def project_id_for_claim(claim_id: str) -> str:
     m = re.match(r"^(ACC-\d+)", claim_id or "")

@@ -132,7 +132,7 @@ def check_resume(file_path):
         messages.append("[R-005 FAIL] Missing core career history experience: Cision")
     if "sterkly" not in lower_content:
         messages.append("[R-005 FAIL] Missing core career history experience: Sterkly")
-    if "zero to sixty" not in lower_content and "zero to 60" not in lower_content and "account manager" not in lower_content:
+    if "zero to sixty" not in lower_content and "zero to 60" not in lower_content:
         messages.append("[R-005 FAIL] Missing core career history experience: Zero to Sixty")
 
     try:
@@ -207,14 +207,16 @@ def repair_resume_markdown(content: str, education_block: str | None = None) -> 
         content = content.rstrip() + "\n\n" + edu.strip() + "\n"
 
     lower = content.lower()
-    if "cision" not in lower:
-        content += "\n### Product Manager | Cision\n* Platform and ingestion systems delivery.\n"
-    if "sterkly" not in lower:
-        content += "\n### Product Manager | Sterkly\n"
-    if "zero to sixty" not in lower and "zero to 60" not in lower:
-        content += "\n### Product Owner / Account Manager | Zero to Sixty\n"
+    from local_draft_stages import EMPLOYER_EXPERIENCE_HEADERS, normalize_employer_job_titles
 
-    return content
+    if "cision" not in lower:
+        content += "\n" + EMPLOYER_EXPERIENCE_HEADERS["cision"].split("\n")[0] + "\n* Platform and ingestion systems delivery.\n"
+    if "sterkly" not in lower:
+        content += "\n" + EMPLOYER_EXPERIENCE_HEADERS["sterkly"].split("\n")[0] + "\n"
+    if "zero to sixty" not in lower and "zero to 60" not in lower:
+        content += "\n" + EMPLOYER_EXPERIENCE_HEADERS["zero_to_sixty"].split("\n")[0] + "\n"
+
+    return normalize_employer_job_titles(content)
 
 
 def run_quality_checks(company_dir):

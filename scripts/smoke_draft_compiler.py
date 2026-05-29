@@ -204,6 +204,24 @@ def test_cover_proof_format_and_picker():
     assert any("migrat" in p.lower() for p in picked)
 
 
+def test_employer_job_title_normalization():
+    from local_draft_stages import normalize_employer_job_titles, experience_skeleton
+
+    sk = experience_skeleton()
+    assert "Product Owner / Account Manager" not in sk["zero_to_sixty"]
+    assert "Product Owner | Zero to Sixty" in sk["zero_to_sixty"]
+    assert sk["cision"].startswith("### Product Manager | Cision")
+    assert sk["sterkly"].startswith("### Product Manager | Sterkly")
+
+    raw = "### Product Owner / Account Manager | Zero to Sixty | June 2017 - January 2019\n"
+    fixed = normalize_employer_job_titles(raw)
+    assert "Account Manager" not in fixed
+    assert "Product Owner | Zero to Sixty" in fixed
+
+    cision = "### Product Owner / Product Manager | Cision | 2021\n"
+    assert "Product Manager | Cision" in normalize_employer_job_titles(cision)
+
+
 def test_tone_guard_rewrites_layoffs():
     from tone_guard import sanitize_submission_tone, tone_violations, assert_submission_tone_clean
 
@@ -241,5 +259,6 @@ if __name__ == "__main__":
     test_select_claims_meets_quota()
     test_summary_grounding_fallback()
     test_cover_proof_format_and_picker()
+    test_employer_job_title_normalization()
     test_tone_guard_rewrites_layoffs()
     print("smoke_draft_compiler: all passed")

@@ -47,6 +47,21 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.17
+Applyr Release
+May 28, 2026
+
+Version 6.2.17, deployed on May 28, 2026
+
+Previous
+Applyr 6.2.16
+
+**Fixed**
+- **Employer job titles:** Canonical headers — Cision/Sterkly use **Product Manager** only; Zero to Sixty uses **Product Owner** only (no slash-combined titles). Shared `EMPLOYER_EXPERIENCE_HEADERS` + `normalize_employer_job_titles()` (extends `FR-075`).
+
+**Changed**
+- Batch resume regen applies corrected experience headers across submission folders.
+
 ### 6.2.16
 Applyr Release
 May 28, 2026

@@ -207,36 +207,12 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
         print(f"    [GUARD] Blocked tone detected; rewriting to constraints language.")
     corrected = sanitize_submission_tone(corrected)
 
-    # 3b. MANDATORY TITLE CONSISTENCY GUARD — Enforce Cision is strictly "Product Manager"
-    lines = corrected.split('\n')
-    new_lines = []
-    cision_healed = False
-    for line in lines:
-        if 'cision' in line.lower() and any(kw in line.lower() for kw in ['product owner', 'functional product manager']):
-            ugly_titles = [
-                "Product Owner / Functional Product Manager",
-                "Product Owner / Platform Product Manager",
-                "Product Owner (Functionally Product Manager)",
-                "Product Owner (Functional Scope)",
-                "Product Owner → Product Manager (Functional Scope)",
-                "Product Owner -> Product Manager (Functional Scope)",
-                "Product Owner / Product Manager",
-                "Product Owner"
-            ]
-            for ugly in ugly_titles:
-                pattern = re.compile(re.escape(ugly), re.IGNORECASE)
-                if pattern.search(line):
-                    line = pattern.sub("Product Manager", line)
-                    cision_healed = True
-            
-            line = re.sub(r'Product Manager\s*/\s*Product Manager', 'Product Manager', line, flags=re.IGNORECASE)
-            line = re.sub(r'Product Manager\s*/\s*Platform Product Manager', 'Product Manager', line, flags=re.IGNORECASE)
-            
-        new_lines.append(line)
-    
-    if cision_healed:
-        corrected = '\n'.join(new_lines)
-        print("    [GUARD] Enforced strict 'Product Manager' title consistency for Cision.")
+    from local_draft_stages import normalize_employer_job_titles
+
+    before_titles = corrected
+    corrected = normalize_employer_job_titles(corrected)
+    if corrected != before_titles:
+        print("    [GUARD] Normalized employer job titles (single role per company).")
 
     # 4. METRIC INTEGRITY — scan for any number patterns and verify against approved list
     numeric_pattern = re.compile(r'(?:\$[\d,]+(?:M|K|B)?|\d+(?:,\d{3})*(?:\.\d+)?\s*%|\d{1,3}(?:,\d{3})+|\b\d{2,}\b)')

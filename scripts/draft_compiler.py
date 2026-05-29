@@ -30,6 +30,8 @@ from local_draft_stages import (
     audit_text_against_bullet_corpus,
     enforce_resume_char_budget,
     ensure_employer_quotas,
+    experience_skeleton,
+    normalize_employer_job_titles,
     select_claims_deterministic,
     select_claims_per_employer_local,
 )
@@ -75,20 +77,7 @@ def _extract_education_from_style(style_md: str) -> str:
 
 
 def _experience_skeleton() -> dict:
-    return {
-        "cision": (
-            "### Product Manager (Platform & Ingestion Systems) | Cision | September 2021 - January 2026\n"
-            "Full Remote\n"
-        ),
-        "sterkly": (
-            "### Product Manager | Sterkly | February 2019 - August 2021\n"
-            "San Diego, CA\n"
-        ),
-        "zero_to_sixty": (
-            "### Product Owner / Account Manager | Zero to Sixty | June 2017 - January 2019\n"
-            "San Diego, CA\n"
-        ),
-    }
+    return experience_skeleton()
 
 
 def _assemble_resume(
@@ -273,6 +262,7 @@ def run(
 
         resume_md = _assemble_resume(summary, bullets_by_company, education, skeleton, bullets_with_ids=bullets)
         resume_md = repair_resume_markdown(resume_md, education)
+        resume_md = normalize_employer_job_titles(resume_md)
         resume_md = enforce_resume_char_budget(resume_md)
         resume_md = strip_all_metadata_tokens(resume_md)
         with open(resume_md_path, "w", encoding="utf-8") as f:

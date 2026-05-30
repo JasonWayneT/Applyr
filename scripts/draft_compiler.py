@@ -206,6 +206,16 @@ def run(
     style_md = load_file(RESUME_STYLE_REF_FILE)
     master_resume = load_file(RESUME_MASTER_FILE)
     catalog = load_catalog()
+    from catalog_validator import validate_catalog
+    from pipeline_env import strict_catalog_drift, strict_cover_audit
+
+    cat_val = validate_catalog()
+    if not cat_val.ok:
+        preview = "; ".join(cat_val.errors[:3])
+        if strict_catalog_drift():
+            raise DraftingPipelineError(f"Catalog validation failed: {preview}")
+        print(f"    [Compiler] Catalog validation warnings: {preview}")
+
     valid_ids = catalog.truth_map() if catalog.claims else determinator.load_valid_ids(WORK_EXP_FILE)
     fit = _fit_summary(evaluation_result)
 
@@ -278,6 +288,7 @@ def run(
     cl_md_path = os.path.join(company_folder, "CoverLetter.md")
     cl_stripped = ""
     cover_plan_dict = None
+    cover_result = None
     if not skip_cover:
         claim_corpus = (
             "\n".join(catalog.raw_truth_lines.values())
@@ -298,6 +309,11 @@ def run(
             )
             if cover_result.audit_issues:
                 print(f"    [Compiler] Cover audit notes: {cover_result.audit_issues[:3]}")
+            if strict_cover_audit() and cover_result.audit_grade != "Pass":
+                issues = "; ".join(cover_result.audit_issues[:5]) or "audit grade below Pass"
+                raise DraftingPipelineError(
+                    f"Cover letter audit failed (STRICT_COVER_AUDIT=1): {cover_result.audit_grade} — {issues}"
+                )
         else:
             proof = pick_cover_bullets(bullets, valid_ids, profile, jd_text, k=2)
             try:
@@ -429,7 +445,28 @@ def run(
 
     import hashlib
 
+    from claim_composer import strip_bridge_prefix
+
+    claim_strength: dict[str, str] = {}
+    for cid, text in bullets.items():
+        raw = (catalog.raw_truth_lines.get(cid) or "").strip()
+        stripped = strip_bridge_prefix(text).strip()
+        if stripped != text.strip() and text.strip() != raw:
+            claim_strength[cid] = "reasonable_reframe"
+        else:
+            claim_strength[cid] = "verified"
+
+    from pipeline_env import allow_fit_summary
+
     jd_hash = hashlib.sha256(jd_text.encode("utf-8")).hexdigest()[:16]
+    cover_audit_meta = None
+    if cover_result is not None:
+        cover_audit_meta = {
+            "grade": cover_result.audit_grade,
+            "score": cover_result.audit_score,
+            "passed": cover_result.audit_grade == "Pass",
+            "issues": cover_result.audit_issues[:5],
+        }
     manifest = {
         "pipeline_version": PIPELINE_VERSION,
         "draft_mode": os.environ.get("DRAFT_MODE", "compose"),
@@ -450,7 +487,9 @@ def run(
         "employer_counts": {
             e: sum(1 for cid in bullets if _employer_for(cid) == e) for e in EMPLOYERS
         },
-        "fit_summary_used": bool(fit),
+        "fit_summary_used": bool(fit) and allow_fit_summary(),
+        "claim_strength": claim_strength,
+        "cover_audit": cover_audit_meta,
         "verification_passed": True,
     }
     manifest_path = os.path.join(company_folder, "draft_manifest.json")

@@ -47,6 +47,38 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.19
+
+**Changed**
+- **Draft quality gates (CR-031 / FR-174–FR-179):** Added `approved_metrics.py` as the single numeric allowlist; `catalog_validator.py` for catalog checks and anti-claim hint loading; `baseline_quality_gates.py` for pre-flight reports; optional strict flags (`STRICT_COVER_AUDIT`, `STRICT_METRICS`, `STRICT_ANTI_CLAIMS`, `STRICT_CATALOG_DRIFT`); claim-strength metadata in `draft_manifest.json`; fit-summary append gated by `ALLOW_FIT_SUMMARY`; Document Editor saves run light verification before PDF recompile.
+
+**Developer**
+- CI smoke copies `workExperience.example.md` and runs `verify_master_claims.py`.
+- Strict gates default **off** — run `python scripts/baseline_quality_gates.py` before enabling.
+
+### 6.2.18
+Applyr Release
+May 30, 2026
+
+Version 6.2.18, deployed on May 30, 2026
+
+Previous
+Applyr 6.2.17
+
+**Fixed**
+- **Industry blocklist:** Job Search `industryBlocklist` now enforced at scout ingest and batch zero-token evaluation — was saved to prefs but ignored (`FR-170`, CR-027).
+- **Keyword gate:** Zero-token filter respects `must_have_keywords` (AND) and `signal_keywords` (OR); removed overly broad default `"product"` match (`FR-171`, CR-028).
+- **Levels.fyi scout:** Stops inventing `"Product Manager"` when card text cannot be parsed (`FR-173`).
+- **Remote-only geo:** Empty-description stubs from non-remote boards are rejected instead of bypassing geographic gate (`FR-173`).
+
+**Changed**
+- **Preferences materialization:** Preserves `signal_keywords`, `must_have_keywords`, and `required_anchors` across UI saves (ADR-005).
+- **Optional anchor gate:** Set `ANCHOR_GATE_ENABLED=1` to require two `required_anchors` hits before LLM fit (default off) (`FR-172`).
+
+**Developer**
+- New modules: `scripts/industry_gate.py`, `scripts/anchor_gate.py`; regression tests REG-08–REG-14 in `test_smoke_regression.py`.
+- SDD: `CR-027`, `CR-028`, `IMP-CR-027-028-collection-quality-gates.md`, collection-quality section in `SDD_PROCESS.md`.
+
 ### 6.2.17
 Applyr Release
 May 28, 2026

@@ -73,6 +73,18 @@ Applied automatically via `apply_quality_batch_defaults()` — **no action neede
 | `LOCAL_LINT` | `0` to skip phi3.5 JSON lint in `draft_linter.py` |
 | `localModelFit` (SQLite) | Override fit model; default `qwen2.5:7b-instruct-q4_K_M` |
 
+### Strict quality gates (CR-031 — default **off**)
+
+Run `python scripts/baseline_quality_gates.py` before enabling.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `STRICT_COVER_AUDIT` | `0` | Fail compile when cover audit grade ≠ Pass |
+| `STRICT_METRICS` | `0` | Raise on unapproved numerics in verification chain |
+| `STRICT_ANTI_CLAIMS` | `0` | Fail when workExperience `ANTI:` hints appear in output |
+| `STRICT_CATALOG_DRIFT` | `0` | Fail compile on catalog validation errors |
+| `ALLOW_FIT_SUMMARY` | `0` | Allow fit-eval sentence in resume summary |
+
 ---
 
 ## 4) Drafting invariants (do not break)
@@ -82,7 +94,8 @@ Applied automatically via `apply_quality_batch_defaults()` — **no action neede
 3. **Resume summary themes** use `format_themes_for_prose` — no chained “and” from compound JD theme strings (`FR-161`).
 4. **`draft_manifest.json`** must record `verification_passed: true` before UI PDF compile (`FR-139`); may include `cover_letter_plan` when `COVER_ENGINE=v1`.
 5. **WebGPU grammar** lists issues only — never auto-rewrite resume/cover text (`FR-140`).
-6. **Scout** applies title + max-years gate when job description is present (`FR-135`).
+6. **Scout** applies title + max-years gate when job description is present (`FR-135`); industry blocklist on company/title (`FR-170`).
+7. **Zero-token batch gate** enforces industry (`FR-170`), must-have/signal keywords (`FR-171`), optional anchors when `ANCHOR_GATE_ENABLED=1` (`FR-172`).
 
 ---
 
@@ -90,6 +103,8 @@ Applied automatically via `apply_quality_batch_defaults()` — **no action neede
 
 ```bash
 python scripts/smoke_draft_compiler.py
+python scripts/verify_master_claims.py
+python scripts/baseline_quality_gates.py
 python scripts/build_claim_embeddings.py
 python scripts/test_smoke_regression.py
 ```

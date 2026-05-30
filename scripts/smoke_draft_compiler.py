@@ -240,6 +240,53 @@ def test_tone_guard_rewrites_layoffs():
     assert not ok and "Blocked tone" in (err or "")
 
 
+def test_approved_metrics_excludes_phone_fragments():
+    from approved_metrics import find_unapproved_metrics
+
+    header = "San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL]"
+    assert find_unapproved_metrics(header) == []
+    bad = find_unapproved_metrics("Delivered $999M in savings.")
+    assert bad
+
+
+def test_anti_claim_hints_load():
+    from catalog_validator import load_anti_claim_hints
+
+    hints = load_anti_claim_hints()
+    assert isinstance(hints, list)
+
+
+def test_catalog_validate_example():
+    from catalog_validator import validate_catalog
+
+    result = validate_catalog()
+    assert result.ok, result.errors[:3]
+
+
+def test_strict_flags_default_off():
+    from pipeline_env import strict_anti_claims, strict_cover_audit, strict_metrics
+
+    assert strict_cover_audit() is False
+    assert strict_metrics() is False
+    assert strict_anti_claims() is False
+
+
+def test_verify_editor_rejects_invented_metric():
+    from verify_editor_save import verify_editor_save
+    import tempfile
+
+    cat = load_catalog()
+    if not cat.raw_truth_lines:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        ok, _err = verify_editor_save(
+            "I saved $999 trillion by deploying Kubernetes everywhere.",
+            "Resume.md",
+            tmp,
+        )
+        assert not ok
+
+
 if __name__ == "__main__":
     test_pipeline_env_defaults()
     test_catalog_loads_acc()
@@ -260,5 +307,10 @@ if __name__ == "__main__":
     test_summary_grounding_fallback()
     test_cover_proof_format_and_picker()
     test_employer_job_title_normalization()
+    test_approved_metrics_excludes_phone_fragments()
+    test_anti_claim_hints_load()
+    test_catalog_validate_example()
+    test_strict_flags_default_off()
+    test_verify_editor_rejects_invented_metric()
     test_tone_guard_rewrites_layoffs()
     print("smoke_draft_compiler: all passed")

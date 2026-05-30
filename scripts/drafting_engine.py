@@ -79,24 +79,7 @@ SENIORITY_INFLATION_PHRASES = [
     "Built ML", "Built AI", "AI pipeline", "ML pipeline",
 ]
 
-# Approved verified metrics from workExperience.md — exact values only
-# Any numeric claim in the output must match one of these to pass.
-APPROVED_METRICS = [
-    "$40", "40M", "40,000,000",  # MET-01: $40M ARR
-    "3,500", "3500",              # MET-02: 3,500 active accounts
-    "25,000", "25000",            # MET-03: 25,000 active users
-    "7%",                         # MET-04: 7% churn
-    "$1M", "$2M", "1,000,000", "2,000,000",  # MET-05: infra savings
-    "40%",                 # MET-06: data drop-off
-    "100%",                       # MET-07: drop-off resolved
-    "90%",                        # MET-08: security backlog
-    "200",                        # MET-09: SQL databases
-    "700",                        # MET-10: migrations
-    "$288", "288,000",            # MET-11: fulfillment contracts
-    "$8,500", "8500",             # MET-11: quarterly savings
-    "$22,100", "22,100",          # MET-12: onboarding savings
-    "6+", "6 years",              # tenure
-]
+from approved_metrics import APPROVED_METRICS, find_unapproved_metrics, metric_integrity_message
 
 
 def validate_hard_facts(generated_text, master_resume_text, target_company=None, doc_type='resume'):
@@ -215,22 +198,10 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
         print("    [GUARD] Normalized employer job titles (single role per company).")
 
     # 4. METRIC INTEGRITY — scan for any number patterns and verify against approved list
-    numeric_pattern = re.compile(r'(?:\$[\d,]+(?:M|K|B)?|\d+(?:,\d{3})*(?:\.\d+)?\s*%|\d{1,3}(?:,\d{3})+|\b\d{2,}\b)')
-    found_numbers = numeric_pattern.findall(corrected)
-    unapproved = []
-    for num in found_numbers:
-        clean = num.strip()
-        if not any(approved.lower() in clean.lower() or clean.lower() in approved.lower()
-                   for approved in APPROVED_METRICS):
-            unapproved.append(clean)
+    unapproved = find_unapproved_metrics(corrected)
     if unapproved:
-        real_violations = [n for n in unapproved if not re.match(r'^(?:20\d{2}|760|619|858|2026|2025|2024|2023|2022|2021|2019|2017|\d{1,2})$', n.replace(',', '').strip())]
-        if real_violations:
-            warnings.append(
-                f"METRIC INTEGRITY: Unverified numeric claims found (not in approved metrics list): "
-                f"{', '.join(real_violations)}"
-            )
-            print(f"    [GUARD] Unverified metrics detected: {real_violations}")
+        warnings.append(metric_integrity_message(unapproved))
+        print(f"    [GUARD] Unverified metrics detected: {unapproved}")
 
     # 5. Verify education facts are present & Auto-heal if missing (resume only)
     if doc_type == 'resume':

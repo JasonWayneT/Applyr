@@ -104,6 +104,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `BUG-010` | Subprocess Stderr / Local Audit | `BUG-010` | `server/scout.ts`, `scripts/drafting_engine.py` | implemented |
 | `BUG-011` | Pipeline Stall / Queue Clog | `BUG-011` | `scripts/batch_pipeline.py` | in_progress |
 | `BUG-012` | Sync stage error vs pipeline done | `BUG-012` | `server/scout.ts`, `scripts/batch_pipeline.py` | fixed |
+| `BUG-015` | Windows sync `spawn npx ENOENT` | `BUG-015` | `server/scout.ts`, `server/shared.ts` | fixed |
+| `CR-026` | Job Search evaluate-stage visibility | `CR-026` | `src/pages/SyncActivityView.tsx`, `server/scout.ts`, `server/middleware.ts` | implemented |
 | `CR-011` | Pipeline status vocabulary + auto-requeue | `CR-011` | `scripts/requeue_needs_retry.ts`, `scripts/batch_pipeline.py`, `server/scout.ts`, UI | implemented |
 | `FR-111` | CR-020 | Local Optimizations | `scripts/local_embeddings.py` | implemented |
 | `FR-112` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
@@ -142,6 +144,16 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-148` | CR-021 | CI smoke workflow | `.github/workflows/smoke.yml` | implemented |
 | `FR-149` | CR-021 | BM25 fit + JSON schema | `scripts/batch_pipeline.py` | implemented |
 | `FR-150` | CR-021 | RESEARCH_MODE routing | `scripts/drafting_engine.py`, `research-engine.py` | implemented |
+| `FR-170` | CR-027 | Industry blocklist gate | `scripts/industry_gate.py`, `scripts/scout_local.ts`, `scripts/batch_pipeline.py` | implemented |
+| `FR-171` | CR-028 | Must-have/signal keyword gate | `scripts/utils.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-172` | CR-028 | Required anchors + optional gate | `scripts/anchor_gate.py`, `server/shared.ts`, `data/candidate_preferences.example.json` | implemented |
+| `FR-173` | CR-028 | Scout Levels + Remote geo | `scripts/scout_local.ts` | implemented |
+| `FR-174` | CR-031 | Approved metrics module | `scripts/approved_metrics.py` | implemented |
+| `FR-175` | CR-031 | Catalog + anti-claim validation | `scripts/catalog_validator.py` | implemented |
+| `FR-176` | CR-031 | Strict quality flags | `scripts/pipeline_env.py` | implemented |
+| `FR-177` | CR-031 | Editor light verify | `scripts/verify_editor_save.py` | implemented |
+| `FR-178` | CR-031 | Claim strength manifest | `scripts/draft_compiler.py` | implemented |
+| `FR-179` | CR-031 | Baseline quality report | `scripts/baseline_quality_gates.py` | implemented |
 | `FR-128` | CR-020 | Local Optimizations | `scripts/compile_single.py` | implemented |
 | `FR-129` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
 | `FR-130` | CR-020 | Local Optimizations | `scripts/pii_redact.py` | implemented |

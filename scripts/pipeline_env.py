@@ -55,6 +55,11 @@ def skip_metadata_tagger() -> bool:
     return batch_fast_mode()
 
 
+def anchor_gate_enabled() -> bool:
+    """Implements FR-172 (CR-028) — deterministic two-anchor gate; default off."""
+    return _flag("ANCHOR_GATE_ENABLED") in ("1", "true", "yes")
+
+
 def skip_duplicate_vector_check() -> bool:
     if _flag("SKIP_DUPLICATE_VECTOR") in ("1", "true", "yes"):
         return True
@@ -178,6 +183,31 @@ def fit_eval_top_n() -> int | None:
         return n if n > 0 else None
     except ValueError:
         return None
+
+
+def strict_cover_audit() -> bool:
+    """CR-031 — block export when cover_letter_audit grade != Pass."""
+    return _flag("STRICT_COVER_AUDIT") in ("1", "true", "yes")
+
+
+def strict_metrics() -> bool:
+    """CR-031 — raise on unapproved numeric tokens in verification chain."""
+    return _flag("STRICT_METRICS") in ("1", "true", "yes")
+
+
+def strict_anti_claims() -> bool:
+    """CR-031 — enforce workExperience anti-claim hints."""
+    return _flag("STRICT_ANTI_CLAIMS") in ("1", "true", "yes")
+
+
+def strict_catalog_drift() -> bool:
+    """CR-031 — fail compile when master_claims drifts from workExperience."""
+    return _flag("STRICT_CATALOG_DRIFT") in ("1", "true", "yes")
+
+
+def allow_fit_summary() -> bool:
+    """When false (default), do not append fit-eval sentence to resume summary."""
+    return _flag("ALLOW_FIT_SUMMARY") in ("1", "true", "yes")
 
 
 def assert_draft_mode_allowed() -> None:

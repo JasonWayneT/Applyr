@@ -291,6 +291,15 @@ router.put('/api/jobs/:id/files/:filename', async (req, res) => {
           return res.status(400).json({ error: 'Invalid draft_manifest.json' });
         }
       }
+
+      const verifyScript = path.join(SCRIPTS_DIR, 'verify_editor_save.py');
+      const verified = await runPythonScript([verifyScript, folder, safeFilename], { stdin: text });
+      if (verified.code !== 0) {
+        const detail = (verified.stdout || verified.stderr || '').trim();
+        return res.status(400).json({
+          error: detail || 'Editor verification failed (numeric/tone/metrics gate).',
+        });
+      }
     }
 
     fs.writeFileSync(filePath, text, 'utf8');

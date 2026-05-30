@@ -530,7 +530,12 @@ def build_summary_deterministic(
         _append_proof_from_pool(cision_bullets)
 
     fit_clean = (fit_summary or "").strip()
-    if fit_clean and len(fit_clean) > 20 and len(sentences) < 4:
+    try:
+        from pipeline_env import allow_fit_summary
+    except ImportError:
+        allow_fit_summary = lambda: False  # type: ignore
+
+    if allow_fit_summary() and fit_clean and len(fit_clean) > 20 and len(sentences) < 4:
         fit_sent = fit_clean.split(".")[0].strip()
         if len(fit_sent) > SUMMARY_PROOF_MAX_CHARS:
             fit_sent = fit_sent[:SUMMARY_PROOF_MAX_CHARS].rsplit(" ", 1)[0]

@@ -188,6 +188,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-028` | `FR-028` | Dual Pane | User is editing | Editor workspace opens | Left pane renders PDF iframe and right pane renders editor | accepted |
 | `AC-029` | `FR-029` | AI Assistance | User triggers instruction | AI key is saved and text is submitted | The LLM processes the prompt and applies changes to Markdown | accepted |
 | `AC-035` | `FR-035` | Background Sync | Jobs added as New | Background pipeline triggers | Descriptions are scraped, fit is evaluated, assets are drafted, and SQLite status is updated to Backlog | verified |
+| `AC-175` | `FR-035` | Evaluate visibility | Full sync in Stage 4 | Job Search shows Step 2 active, batch progress N/M, and current job line | verified |
+| `AC-176` | `FR-035` | Gate log level | JD fails zero-token gate | Activity log records `[ZERO-TOKEN REJECT]` as INFO, not ERROR | verified |
 | `AC-036` | `FR-036` | Conformity Check | Resume draft edited/saved | Compliance guard runs | Standardizes HTML wrapper, converts markdown headers, and strips backslashes | verified |
 | `AC-037` | `FR-037` | Auto-Codification | User saves work experience | POST /api/experience is called | Sequential VOC/MET/ACC IDs are automatically prepended to lines | verified |
 | `AC-038` | `FR-038` | CL Enforcement | Cover letter generated/saved | Compliance guard runs | Applies Cover Letter Best Practices layout margins and line heights | verified |
@@ -366,6 +368,33 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-172` | `FR-166` | PDF gate | draft_compiler | Missing PDF raises | implemented |
 | `AC-173` | `FR-167` | Pipeline lock | POST /api/sync while busy | 409 response | implemented |
 | `AC-174` | `FR-168` | FTS sync | POST /api/jobs | jobs_fts row updated | implemented |
+
+### CR-027 / CR-028 Collection quality gates (FR-170–FR-173)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-170` | functional | P1 | implemented | Deterministic `blocked_industries` gate at scout + batch zero-token | `AC-175`–`AC-178` | `CR-027` |
+| `FR-171` | functional | P1 | implemented | `must_have_keywords` (AND) + `signal_keywords` (OR) in zero-token gate | `AC-179` | `CR-028` |
+| `FR-172` | functional | P2 | implemented | `required_anchors` preserved in prefs; optional `ANCHOR_GATE_ENABLED` two-anchor gate | `AC-180` | `CR-028` |
+| `FR-173` | functional | P1 | implemented | Levels.fyi skip without title; Remote-only geo bypass tightened | `AC-181`, `AC-182` | `CR-028` |
+
+| `AC-175` | `FR-170` | Industry blocklist | Company Crypto.com, block Crypto | Scout ingest | Rejected `industry_blocked:Crypto` | implemented |
+| `AC-176` | `FR-170` | Industry batch header | DraftKings header, block Sports Betting | Zero-token gate | Rejected before LLM | implemented |
+| `AC-177` | `FR-170` | Empty blocklist | No blocked industries | Gates run | No-op | implemented |
+| `AC-178` | `FR-170` | B2B pass | Salesforce, no blocked term | Gates run | Passes | implemented |
+| `AC-179` | `FR-171` | Must-have AND | must_have saas+b2b, JD agile only | Keyword gate | Reject `missing_must_have` | implemented |
+| `AC-180` | `FR-172` | Anchor gate | ANCHOR_GATE_ENABLED=1, 1 hit | Batch gate | Reject `anchor_hits_1` | implemented |
+| `AC-181` | `FR-173` | Levels parse | Empty title from card | Scout | Skip row | implemented |
+| `AC-182` | `FR-173` | Remote geo | Remote work_setting, BuiltIn stub | Scout geo | Reject not bypass | implemented |
+
+### CR-031 Draft quality gates (FR-174–FR-179)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-174` | functional | P1 | implemented | Unified approved metrics module | `approved_metrics.py` imported by guards | `CR-031` |
+| `FR-175` | functional | P1 | implemented | Catalog validation + anti-claim hints | `catalog_validator.py`, `claim_catalog.py` | `CR-031` |
+| `FR-176` | functional | P1 | implemented | Optional strict fail-closed flags | `pipeline_env.py` STRICT_* | `CR-031` |
+| `FR-177` | functional | P1 | implemented | Document Editor light verify | `verify_editor_save.py`, jobs route | `CR-031` |
+| `FR-178` | functional | P2 | implemented | Claim strength in draft manifest | `draft_compiler.py` | `CR-031` |
+| `FR-179` | functional | P2 | implemented | Baseline quality gate report | `baseline_quality_gates.py` | `CR-031` |
 
 ## Non-Functional Requirements
 

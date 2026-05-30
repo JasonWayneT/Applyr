@@ -14,7 +14,7 @@ const SECRET_ENV_KEYS = new Set([
   'ADZUNA_APP_ID',
 ]);
 
-const BUSY_STATUSES = new Set(['drafting', 'scout_running']);
+const BUSY_STATUSES = new Set(['drafting', 'scout_running', 'evaluate_running']);
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -29,7 +29,10 @@ export function requireApiToken(req: Request, res: Response, next: NextFunction)
 }
 
 export function isValidJobId(id: string): boolean {
-  return UUID_RE.test(id);
+  if (!id || id.length > 128) return false;
+  if (id.includes('..') || id.includes('/') || id.includes('\\')) return false;
+  if (UUID_RE.test(id)) return true;
+  return /^[a-zA-Z0-9_-]+$/.test(id);
 }
 
 export function isSafeHttpUrl(url: string | null | undefined): boolean {
@@ -54,7 +57,7 @@ export function tryAcquirePipeline(currentItem: string): boolean {
   const result = db.prepare(`
     UPDATE system_status
     SET status = 'drafting', current_item = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = 'global' AND status NOT IN ('drafting', 'scout_running')
+    WHERE id = 'global' AND status NOT IN ('drafting', 'scout_running', 'evaluate_running')
   `).run(currentItem);
   return result.changes > 0;
 }

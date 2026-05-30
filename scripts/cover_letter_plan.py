@@ -32,3 +32,23 @@ class CoverLetterPlan:
         d = asdict(self)
         d["proofs"] = [asdict(p) for p in self.proofs]
         return d
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "CoverLetterPlan":
+        proofs = [
+            CoverProofSlot(**p) if isinstance(p, dict) else p
+            for p in (data.get("proofs") or [])
+        ]
+        return cls(
+            company_display=data.get("company_display", ""),
+            role_title=data.get("role_title", ""),
+            ranked_needs=list(data.get("ranked_needs") or []),
+            match_thesis=data.get("match_thesis", ""),
+            interest_via_match=data.get("interest_via_match", ""),
+            opening_variant=data.get("opening_variant", "problem_first"),
+            proofs=proofs,
+            archetype_id=data.get("archetype_id", "standard"),
+            jd_goal=data.get("jd_goal", ""),
+            research_hook=data.get("research_hook"),
+            theme_keywords=list(data.get("theme_keywords") or []),
+        )

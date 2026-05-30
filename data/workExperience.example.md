@@ -17,6 +17,9 @@ human_readable: true
 
 ## Work Experience
 
+### Anti-claims (DO NOT use in resumes or cover letters)
+ANTI: Snowflake, Kubernetes, or FHIR clinical workflows — not part of verified experience.
+
 ### Company Name
 **Job Title**
 *Date - Date*

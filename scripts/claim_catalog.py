@@ -70,7 +70,17 @@ def load_catalog(path: Optional[str] = None) -> ClaimCatalog:
         print(f"    [Error] Failed to load {path}: {e}", file=sys.stderr)
 
     _sync_embeddings(catalog, path)
+    catalog.anti_claim_hints = _load_anti_claim_hints()
     return catalog
+
+
+def _load_anti_claim_hints() -> List[str]:
+    try:
+        from catalog_validator import load_anti_claim_hints
+
+        return load_anti_claim_hints()
+    except Exception:
+        return []
 
 def _sync_embeddings(catalog: ClaimCatalog, source_path: str):
     """Load or generate cached embeddings for all claims in the catalog."""

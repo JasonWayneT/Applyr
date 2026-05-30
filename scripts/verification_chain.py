@@ -14,6 +14,19 @@ from claim_catalog import load_catalog
 from drafting_engine import validate_hard_facts
 from recruiter_qa import run_recruiter_qa
 
+def _enforce_strict_warnings(warnings: List[str]) -> None:
+    """Raise when STRICT_* pipeline flags are enabled (CR-031)."""
+    from pipeline_env import strict_anti_claims, strict_metrics
+
+    if strict_metrics():
+        for w in warnings:
+            if w.startswith("METRIC INTEGRITY"):
+                raise ValueError(w)
+    if strict_anti_claims():
+        for w in warnings:
+            if "Anti-claim" in w or "ANTI" in w.upper():
+                raise ValueError(w)
+
 JD_INFLATION = re.compile(
     r"(?:led|manage|managed|hire|hiring)\s+(?:a\s+)?team\s+of|"
     r"direct\s+reports|people\s+management|"
@@ -116,6 +129,9 @@ def verify_document_bundle(
     )
     warnings.extend(w2)
 
+    _enforce_strict_warnings(w1)
+    _enforce_strict_warnings(w2)
+
     from local_draft_stages import audit_text_against_bullet_corpus
     from quality_checker import HEADER_BLOCK
 
@@ -179,6 +195,8 @@ def verify_resume_only_bundle(
     )
     warnings.extend(w1)
 
+    _enforce_strict_warnings(w1)
+
     from local_draft_stages import audit_text_against_bullet_corpus
     from quality_checker import HEADER_BLOCK
 
@@ -240,6 +258,8 @@ def verify_cover_only_bundle(
         cover_md, master_resume, target_company=target_company, doc_type="cover_letter"
     )
     warnings.extend(w2)
+
+    _enforce_strict_warnings(w2)
 
     from local_draft_stages import audit_text_against_bullet_corpus
     from quality_checker import HEADER_BLOCK

@@ -9,11 +9,11 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
       - name: Install Python dependencies
@@ -26,6 +26,9 @@ jobs:
         run: |
           cp data/candidate_preferences.example.json data/candidate_preferences.json
           cp data/master_claims.example.json data/master_claims.json
+          cp data/workExperience.example.md data/workExperience.md
+      - name: Verify master claims catalog
+        run: python scripts/verify_master_claims.py
       - name: Smoke draft compiler (no LLM)
         run: python scripts/smoke_draft_compiler.py
       - name: Smoke regression (unit)

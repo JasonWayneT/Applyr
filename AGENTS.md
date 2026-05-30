@@ -18,11 +18,14 @@ This repository uses BMAD-informed Spec Driven Development. All AI agents must f
 
 ## Required reading order
 
-1. `docs/spec/00-project-constitution.md`
-2. `docs/spec/01-bmad-intake.md`
+1. `docs/ACTIVE_WORKFLOW.md` — runtime truth (scout, evaluate, draft, verify)
+2. `docs/spec/00-project-constitution.md`
 3. `docs/spec/02-requirements-registry.md`
 4. Relevant files under `docs/spec/03-feature-specs/`
 5. `docs/spec/06-traceability/traceability-matrix.md`
+6. `docs/spec/01-bmad-intake.md` (historical sources only)
+
+**Deprecated for active work:** `.agent/archive/**`, `.agent/workflows/*` stubs, `JobAgent_WebApp_PRD 5.0.md`
 
 ## The Three-Layer Rule
 

@@ -14,13 +14,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from batch_pipeline import MIN_FIT_SCORE, evaluate_job_fit, _load_jd_for_job
+from batch_pipeline import evaluate_job_fit, _load_jd_for_job
 from utils import (
     FIT_ENGINE_FILE,
     JOBS_DIR,
     PROJECT_ROOT,
     WORK_EXP_SUMMARY_FILE,
     WORK_EXP_FILE,
+    get_min_fit_score,
     load_candidate_preferences,
     load_file,
 )
@@ -79,7 +80,8 @@ def main():
         print(f"  {company}: {decision} score={score} (was {old_score}) — {summary[:60]}...")
 
         conn = sqlite3.connect(DB)
-        if decision == "YES" and score >= MIN_FIT_SCORE:
+        min_score = get_min_fit_score()
+        if decision == "YES" and score >= min_score:
             conn.execute(
                 "UPDATE jobs SET status = 'New', score = ?, summary = ? WHERE id = ?",
                 (score, summary[:500], job_id),
@@ -93,7 +95,7 @@ def main():
         conn.commit()
         conn.close()
 
-    print(f"Done. {passed} job(s) moved to New for re-draft (score >= {MIN_FIT_SCORE}).")
+    print(f"Done. {passed} job(s) moved to New for re-draft (score >= {get_min_fit_score()}).")
 
 
 if __name__ == "__main__":

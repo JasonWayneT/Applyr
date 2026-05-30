@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Stage, StageStatus } from '../components/PipelineTracker';
-import { api } from '../lib/api';
+import { apiFetch } from '../lib/apiClient';
+import { parseSseChunk } from '../lib/sse';
 
 export const usePipeline = () => {
   const [isRunning, setIsRunning] = useState(false);
@@ -40,7 +41,7 @@ export const usePipeline = () => {
     setStages(prev => prev.map(s => ({ ...s, status: 'pending', summary: undefined })));
 
     return new Promise((resolve) => {
-      fetch(api('/api/evaluate'), {
+      apiFetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ company, jd, url }),
@@ -61,43 +62,40 @@ export const usePipeline = () => {
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          const blocks = buffer.split('\n\n');
-          buffer = blocks.pop() ?? '';
+          const parsed = parseSseChunk(buffer);
+          buffer = parsed.remainder;
 
-          for (const block of blocks) {
-            if (!block.startsWith('event:')) continue;
-            const lines = block.split('\n');
-            const eventName = lines[0].replace('event: ', '').trim();
-            const dataLine = lines.find(l => l.startsWith('data:'));
-            if (!dataLine) continue;
-
-            try {
-              const payload = JSON.parse(dataLine.replace('data: ', ''));
-
-              if (eventName === 'stage') {
-                updateStage(payload.id, payload.status, payload.summary);
-                if (payload.status === 'error') {
-                  setIsRunning(false);
-                  setIsRejected(true);
-                  resolve(undefined);
-                  return;
-                }
-              } else if (eventName === 'done') {
-                const finalResult = { 
-                  score: payload.score ?? 0, 
-                  passed: payload.passed ?? false,
-                  company: payload.company,
-                  title: payload.title,
-                  url: payload.url,
-                  summary: payload.summary
-                };
+          for (const { event: eventName, data: payload } of parsed.events) {
+            if (eventName === 'stage' && payload && typeof payload === 'object') {
+              const stage = payload as { id: string; status: StageStatus; summary?: string };
+              updateStage(stage.id, stage.status, stage.summary);
+              if (stage.status === 'error') {
                 setIsRunning(false);
-                setResult(finalResult);
-                resolve(finalResult);
+                setIsRejected(true);
+                resolve(undefined);
                 return;
               }
-            } catch {
-              // Non-JSON line — ignore
+            } else if (eventName === 'done' && payload && typeof payload === 'object') {
+              const done = payload as {
+                score?: number;
+                passed?: boolean;
+                company?: string;
+                title?: string;
+                url?: string;
+                summary?: string;
+              };
+              const finalResult = {
+                score: done.score ?? 0,
+                passed: done.passed ?? false,
+                company: done.company,
+                title: done.title,
+                url: done.url,
+                summary: done.summary,
+              };
+              setIsRunning(false);
+              setResult(finalResult);
+              resolve(finalResult);
+              return;
             }
           }
         }

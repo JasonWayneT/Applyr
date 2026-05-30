@@ -4,6 +4,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from utils import init_pipeline_prefs
+init_pipeline_prefs()
+
 from jd_tailoring import build_jd_profile_deterministic, score_claim_for_jd, _substring_valid
 from local_draft_stages import (
     assert_summary_grounded,

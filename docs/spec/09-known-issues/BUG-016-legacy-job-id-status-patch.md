@@ -5,7 +5,7 @@
 - Bug ID: `BUG-016`
 - Status: fixed
 - Severity: high
-- Component: `server/middleware.ts`, `server/routes/jobs.ts`
+- Component: `server/middleware.ts`, `server/routes/jobs/`
 - Related requirements: `FR-030`, `SEC-001` (CR-025 regression)
 
 ## Description

@@ -9,7 +9,7 @@ Welcome to the definitive product capabilities registry and release ledger for *
 Applyr is a highly specialized, local-first intelligence platform designed to automate the job search lifecycle—from automated discovery and deterministic fit filtering to bespoke resume drafting, WYSIWYG visual asset editing, and application lifecycle tracking. All provider credentials and search preferences live in a local SQLite database configured through the Settings UI—no `.env` file required.
 
 ### 1. Automated Job Scouting & Crawling Pipeline
-*   **Multi-Platform Scraping Engine:** Orchestrates automated web crawls across major networks (LinkedIn, Built In, and direct company career portals) using localized selenium/playwright tasks.
+*   **Multi-Platform Scraping Engine:** Orchestrates automated crawls across Built In, public job APIs, optional Adzuna/OpenPostings, and ATS watchlists via Playwright where needed. LinkedIn ingestion is **decommissioned** (CR-010).
 *   **Intelligent URL Backfilling:** Allows manual URL injection that automatically scrapes raw job descriptions on the fly, feeding them straight into the evaluation pipeline.
 *   **Company DNA Perplexity Intelligence:** Executes targeted real-time Perplexity queries to extract company missions, problem spaces, financial status, and competitor matrices into a `Research_Packet.md` file.
 
@@ -46,6 +46,33 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 ---
 
 ## Part 2: Release Ledger
+
+### 6.2.23
+
+**Fixed**
+- **CI `npm ci`:** Added repo `.npmrc` with `legacy-peer-deps=true` so GitHub Actions installs succeed with React 19 while `@toast-ui/react-editor` declares React 17 peers (same as local installs).
+- **`.gitignore`:** Scoped pipeline queue to `/jobs/` (root only) so `server/routes/jobs/` is tracked after the CR-ARCH-005 route split.
+
+**Developer**
+- README notes `.npmrc` for contributors; `npm test` (Vitest) remains in `smoke.yml`.
+
+### 6.2.22
+
+**Changed**
+- **Documentation cleanup (CR-032):** Added `docs/ACTIVE_WORKFLOW.md` as runtime source of truth; archived chat-era `.agent` workflows; aligned README/FEAT-001 with LinkedIn decommission (CR-010) and `min_fit_score` (default 72); `claim_verifier` rule is reference-only; manual draft uses `readMinFitScore()` from prefs.
+
+**Developer**
+- CR index: `docs/spec/05-change-requests/README.md` · stubs at `.agent/DEPRECATED.md`
+
+### 6.2.21
+
+**Developer**
+- **Architecture refactor (CR-ARCH-004–006):** `server/pipeline/processRunner.ts` centralizes Python spawn (`spawnPython`, `runBuffered`, `runStreamLines`, `runDetached`); evaluate SSE and manual draft use ProcessRunner; jobs API split into `server/routes/jobs/{crud,files,draft}.ts` with `rerank` before `/:id`; frontend `sse.ts` + `apiClient.ts` + Vitest in CI.
+
+### 6.2.20
+
+**Developer**
+- **Architecture refactor (CR-ARCH-000–002):** Spawn inventory doc; Phase 0 CI tests (`test_verify_chain.py`, `test_batch_gate.py`, `check_spawn_paths.py`, REG-15); fixed `re_score_jobs.py` `MIN_FIT_SCORE` import; `server/domain/` for `ACTIVE_STATUSES` and `materializeJobSearchPrefs`; explicit `init_pipeline_prefs()` at smoke/batch entrypoints.
 
 ### 6.2.19
 

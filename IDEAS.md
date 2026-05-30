@@ -1,19 +1,21 @@
 # JobAgent Future Ideas & Roadmap
 
-This file is to track ideas and enhancements that we want to implement in the future.
+> **Note (CR-032):** This file is a scratchpad, not the product backlog. Shipped items are struck through. Use GitHub issues for tracked work.
 
-## Features to Implement
-- [ ] **Geographic Filtering:** Implement proper location parsing from the OpenPostings database to support UI dropdowns for "Fully Remote", "Hybrid", and "On-site" filtering.
-- [ ] **City-Level Filtering:** Expand the location filter from country-level (USA) down to specific city support.
-- [ ] **Dynamic Search UI:** Build out the top-bar search experience in the "Find new jobs" view to allow runtime filtering of the firehose.
-- [ ] **LLM Integration:** Connect the "Prepare" pipeline stages to OpenAI/Gemini to actually generate the Cover Letters and Resumes dynamically.
-- [ ] **Automated Cron Scheduling:** Move the "Manual Sync" trigger to a true background Cron job that runs daily at 4:00 AM.
-- [ ] **Smart Silent Period Tracking:** Re-implement logic tracking how many days a company has been "silent" after an application, hooking it to actual DB timestamps.
-- [ ] **Last Mile Handheld Apply:** Add functionality to pre-fill application forms or copy specific role assets to the clipboard when the "Apply" link is clicked.
-- [ ] **Granular Interview Tracking:** Expand the "In Conversation" status into sub-stages (Recruiter, Manager, Case Study, Panel) with tailored preparation guides for each.
-- [ ] **Cloud Migration (1:1 Multi-Device Sync):** 
-    - [ ] **Universal Database (Turso):** Migrate from local SQLite to Turso for live sync between desktop, laptop, and cloud.
-    - [ ] **Cloud Hosting (Railway):** Deploy the dashboard and pipeline server to Railway for "always-on" access.
-    - [ ] **Authentication Layer:** Secure the dashboard with a password/token for private remote access.
-    - [ ] **Cloud Persistence:** Configure Railway Volumes to preserve the `archive/` and `submissions/` folders.
-    - [ ] **Hybrid Scouting:** Maintain local scouting (desktop) for IP/cookie safety while syncing results to the cloud DB.
+## Shipped (remove from active planning)
+
+- ~~**LLM Integration:** Connect Prepare pipeline to generate cover letters and resumes~~ — implemented (`batch_pipeline`, compose mode).
+- Core scout + evaluate + draft via WebApp sync.
+
+## Still open
+
+- [ ] **Geographic Filtering:** Location parsing from OpenPostings for UI dropdowns (Remote / Hybrid / On-site).
+- [ ] **City-Level Filtering:** Beyond country-level USA.
+- [ ] **Dynamic Search UI:** Runtime filtering in Find new jobs view.
+- [ ] **Automated Cron Scheduling:** Daily background sync (e.g. 4:00 AM).
+- [ ] **Smart Silent Period Tracking:** Days since application from DB timestamps.
+- [ ] **Last Mile Handheld Apply:** Pre-fill or clipboard helpers on Apply click.
+- [ ] **Granular Interview Tracking:** Sub-stages under In Conversation.
+- [ ] **Cloud Migration:** Turso / Railway / auth — conflicts with constitution `NG-001` unless scope changes.
+
+See [docs/spec/05-change-requests/README.md](docs/spec/05-change-requests/README.md) for formal feature work.

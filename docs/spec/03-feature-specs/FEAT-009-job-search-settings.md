@@ -75,7 +75,7 @@ The following SQLite profile keys are retired and no longer written or read:
 | `datePosted` | `date_posted` | Direct |
 | `datePosted` | `freshness_days` | Mapped: "Past 24 hours"→1, "Past 3 days"→3, "Past week"→7, "Past month"→30 |
 | `titleBlocklist` | `blocked_titles` | Split on comma, trim, filter empty |
-| `industryBlocklist` | `blocked_industries` | Split on comma, trim, filter empty |
+| `industryBlocklist` | `blocked_industries` | Split on comma, trim, filter empty; **enforced** at scout + batch (`FR-170` / CR-027) |
 | `minSalary` | `min_salary` | Direct |
 | *(not in UI)* | `min_fit_score` | Preserved from existing JSON; default 72 |
 | *(not in UI)* | `jd_required_keywords` | Preserved from existing JSON; default list |

@@ -4,7 +4,9 @@ import json
 import traceback
 
 from style_compliance_guard import clean_escapes
-from utils import load_candidate_preferences, CANDIDATE_PREFERENCES_FILE, load_file
+from utils import init_pipeline_prefs, load_candidate_preferences, CANDIDATE_PREFERENCES_FILE, load_file
+
+init_pipeline_prefs()
 
 print("==================================================================")
 print("  STARTING QA SUITE: SMOKE & REGRESSION TESTS")
@@ -46,6 +48,64 @@ prefs = load_candidate_preferences()
 assert_test("REG-05: Dynamic preferences JSON structure",
             isinstance(prefs, dict) and "blocked_titles" in prefs,
             f"Expected dict with blocked_titles, got: {prefs}")
+
+# REG-08–REG-14: Collection quality gates (CR-027 / CR-028) — no network
+from industry_gate import scout_industry_blocked, batch_industry_blocked
+from utils import passes_keyword_gate
+from anchor_gate import count_anchor_hits, check_anchor_gate
+
+blocked, term = scout_industry_blocked("Crypto.com", "Product Manager", "", {"blocked_industries": ["Crypto"]})
+assert_test("REG-08: Scout industry block (company name)",
+            blocked and term == "Crypto",
+            f"Expected block Crypto, got blocked={blocked} term={term}")
+
+blocked, term = scout_industry_blocked("Salesforce", "Product Manager", "", {"blocked_industries": ["Gaming"]})
+assert_test("REG-09: Scout industry pass (B2B employer)",
+            not blocked,
+            f"Expected pass, got blocked={blocked} term={term}")
+
+blocked, term = batch_industry_blocked("DraftKings", "Title: Product Manager\nAbout DraftKings sports betting platform.", {"blocked_industries": ["Sports Betting"]})
+assert_test("REG-10: Batch industry block (header)",
+            blocked and term == "Sports Betting",
+            f"Expected Sports Betting, got {term}")
+
+ok, reason = passes_keyword_gate("We use agile and roadmap practices.", {"must_have_keywords": ["saas", "b2b"]})
+assert_test("REG-11: Must-have keywords AND gate reject",
+            not ok and "missing_must_have" in reason,
+            f"Expected missing_must_have, got ok={ok} reason={reason}")
+
+ok, reason = passes_keyword_gate("B2B SaaS platform product roadmap.", {"must_have_keywords": ["saas", "b2b"]})
+assert_test("REG-12: Must-have keywords AND gate pass",
+            ok,
+            f"Expected pass, got reason={reason}")
+
+hits, matched = count_anchor_hits("B2B SaaS platform and cross-functional roadmap.", ["b2b saas", "platform", "cross-functional"])
+assert_test("REG-13: Anchor hit counting",
+            hits >= 2,
+            f"Expected >=2 hits, got {hits} matched={matched}")
+
+import os
+os.environ["ANCHOR_GATE_ENABLED"] = "1"
+ok, reason = check_anchor_gate("Only one anchor: platform.", {"required_anchors": ["platform", "roadmap", "b2b saas"]})
+os.environ.pop("ANCHOR_GATE_ENABLED", None)
+assert_test("REG-14: Anchor gate rejects <2 hits when enabled",
+            not ok and "anchor_hits" in reason,
+            f"Expected anchor_hits reject, got ok={ok} reason={reason}")
+
+# REG-15: Title gate parity (batch path uses seniority_gate — same as ingest semantics)
+from seniority_gate import passes_title_gate
+
+_jd_director = "Title: Director of Product\nB2B SaaS roadmap."
+_ok, _reason = passes_title_gate(_jd_director, {"blocked_titles": ["Director"]})
+assert_test("REG-15: Batch title gate blocks Director",
+            not _ok and "title_blocked" in _reason,
+            f"Expected title_blocked, got ok={_ok} reason={_reason}")
+
+_jd_pm = "Title: Product Manager\nB2B SaaS platform roadmap."
+_ok2, _reason2 = passes_title_gate(_jd_pm, {"blocked_titles": ["Director"]})
+assert_test("REG-15: Batch title gate passes PM",
+            _ok2,
+            f"Expected pass, got reason={_reason2}")
 
 # -------------------------------------------------------------------
 # SMOKE TESTS (Layer 3: API & Endpoints)

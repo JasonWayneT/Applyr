@@ -6,6 +6,7 @@ import {
   ARCHIVE_DIR,
   resolveCompanyFolder,
 } from './shared.js';
+import { isActivePipelineStatus } from './domain/jobStatus.js';
 
 /** Implements FR-030 — slug used for new folders; fuzzy match for existing ones. */
 export function companySlug(company: string): string {
@@ -80,8 +81,6 @@ function findJobsForFolder(folderName: string): { company: string; status: strin
   return rows.filter(j => folderNamesMatch(companySlug(j.company), folderName));
 }
 
-const ACTIVE_STATUSES = new Set(['Backlog', 'Drafted']);
-
 /**
  * Ensures submissions/ only holds active pipeline workspaces.
  * Archives folders tied to Applied+ jobs; removes orphan stubs.
@@ -97,7 +96,7 @@ export function reconcileActiveSubmissionFolders(): { archived: string[]; remove
     if (!fs.statSync(activePath).isDirectory()) continue;
 
     const matches = findJobsForFolder(folderName);
-    const inactive = matches.length > 0 && matches.every(j => !ACTIVE_STATUSES.has(j.status));
+    const inactive = matches.length > 0 && matches.every(j => !isActivePipelineStatus(j.status));
     const orphanStub = matches.length === 0 && !hasResumeAndCoverPdfs(activePath);
 
     if (!inactive && !orphanStub) continue;
@@ -115,7 +114,7 @@ export function reconcileActiveSubmissionFolders(): { archived: string[]; remove
 }
 
 export function jobHasPdfAssets(company: string, status: string): boolean {
-  const base = ACTIVE_STATUSES.has(status) ? SUBMISSION_DIR : ARCHIVE_DIR;
+  const base = isActivePipelineStatus(status) ? SUBMISSION_DIR : ARCHIVE_DIR;
   const folder = resolveCompanyFolder(company, base);
   if (!fs.existsSync(folder)) return false;
   try {

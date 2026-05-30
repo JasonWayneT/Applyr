@@ -9,9 +9,9 @@ Paste or summarize BMAD outputs here. This is the staging area before requiremen
 | `BMAD-SRC-001` | Architecture & PRD | PM/Arch | 2024-05 | `JobAgent_Architecture_and_PRD.md` | imported |
 | `BMAD-SRC-002` | Applyr Design System | UX | 2024-05 | `DESIGN.md` | imported |
 | `BMAD-SRC-003` | WebApp PRD 5.0 | PM | 2024-05 | `JobAgent_WebApp_PRD 5.0.md` | imported |
-| `BMAD-SRC-004` | Pipeline Controller | Dev | 2024-05 | `.agent/Instructions.md` | imported |
+| `BMAD-SRC-004` | Pipeline Controller | Dev | 2024-05 | `.agent/archive/Instructions.md` | archived → `docs/ACTIVE_WORKFLOW.md` |
 | `BMAD-SRC-005` | Job-Fit Engine | PM | 2024-05 | `.agent/rules/job_fit_engine.md` | imported |
-| `BMAD-SRC-006` | Claim Verifier | PM | 2024-05 | `.agent/rules/claim_verifier.md` | imported |
+| `BMAD-SRC-006` | Claim Verifier | PM | 2024-05 | `.agent/rules/claim_verifier.md` | reference; enforced in `verification_chain.py` |
 | `BMAD-SRC-007` | Research Contract | PM | 2024-05 | `.agent/rules/Research_Packet_Contract.md` | imported |
 
 ## Artifact mapping
@@ -28,7 +28,7 @@ Paste or summarize BMAD outputs here. This is the staging area before requiremen
 
 - **Import Log (2024-05-04):** Retroactive import of all existing project documentation.
 - **Assumptions:** Existing Python scripts are treated as the baseline implementation of these requirements.
-- **Conflicts:** None found; PRD and code are currently in sync regarding the 6-stage pipeline.
+- **Conflicts:** Resolved in CR-032 — legacy chat workflows and 78-point threshold docs archived; runtime truth is `docs/ACTIVE_WORKFLOW.md` and `min_fit_score` (default 72).
 
 ## Import log
 

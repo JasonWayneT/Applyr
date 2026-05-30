@@ -20,9 +20,54 @@ interface JobMatch {
   has_assets?: boolean;
 }
 
+type PipelineStatus = 'idle' | 'scout_running' | 'evaluate_running' | 'drafting' | 'completed';
+
 interface SystemStatus {
-  status: 'idle' | 'scout_running' | 'drafting' | 'completed';
+  status: PipelineStatus;
   current_item: string;
+  items_completed?: number;
+  items_total?: number;
+}
+
+/** CR-026 / FR-035 — gate rejections logged as ERROR for legacy rows; display as INFO in UI. */
+function displayLogLevel(log: ActivityLog): ActivityLog['level'] {
+  if (log.level !== 'ERROR') return log.level;
+  const msg = log.message;
+  if (
+    msg.includes('[ZERO-TOKEN REJECT]') ||
+    msg.includes('keyword pre-filter') ||
+    msg.includes("Marked as 'Rejected'")
+  ) {
+    return 'INFO';
+  }
+  return log.level;
+}
+
+function isPipelineActive(status: PipelineStatus): boolean {
+  return status === 'scout_running' || status === 'evaluate_running' || status === 'drafting';
+}
+
+function isEvaluatePhase(status: PipelineStatus): boolean {
+  return status === 'evaluate_running' || status === 'drafting';
+}
+
+function pipelineStatusLabel(status: PipelineStatus): string {
+  switch (status) {
+    case 'scout_running': return 'Scouting';
+    case 'evaluate_running': return 'Evaluating & drafting';
+    case 'drafting': return 'Drafting';
+    case 'completed': return 'Complete';
+    case 'idle': return 'Idle';
+    default: return status;
+  }
+}
+
+function runButtonLabel(status: PipelineStatus, isSyncing: boolean): string {
+  if (isSyncing) return 'Starting...';
+  if (status === 'scout_running') return 'Scouting...';
+  if (status === 'evaluate_running') return 'Evaluating...';
+  if (status === 'drafting') return 'Drafting...';
+  return 'Run Job Search';
 }
 
 interface JobSearchSettings {
@@ -238,7 +283,11 @@ const SyncActivityView: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const isRunning = isSyncing || systemStatus.status === 'scout_running';
+  const isRunning = isSyncing || isPipelineActive(systemStatus.status);
+  const evaluateProgress =
+    (systemStatus.items_total ?? 0) > 0
+      ? Math.min(100, Math.round(((systemStatus.items_completed ?? 0) / systemStatus.items_total!) * 100))
+      : null;
 
   return (
     <div className="space-y-6 pb-10">
@@ -261,7 +310,7 @@ const SyncActivityView: React.FC = () => {
             className="btn-primary flex items-center gap-2"
           >
             <span className={`material-symbols-outlined text-base ${isRunning ? 'animate-spin' : ''}`}>radar</span>
-            {isRunning ? 'Scouting...' : 'Run Job Search'}
+            {runButtonLabel(systemStatus.status, isSyncing)}
           </button>
         </div>
       </div>
@@ -466,17 +515,22 @@ const SyncActivityView: React.FC = () => {
             systemStatus.status === 'completed' ? 'badge-primary' :
             systemStatus.status === 'idle' ? 'badge-secondary' : 'bg-secondary/10 text-secondary'
           }`}>
-            {systemStatus.status.toUpperCase().replace('_', ' ')}
+            {pipelineStatusLabel(systemStatus.status)}
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { key: 'scout_running', icon: 'search_spark', label: 'Step 1: Scouting & Matching', desc: 'Crawling job feeds and applying your search criteria' },
-            { key: 'drafting',      icon: 'edit_note',    label: 'Step 2: Drafting Tailored Assets', desc: 'Generating resume, cover letter & cheat sheet' },
+            { key: 'drafting',      icon: 'edit_note',    label: 'Step 2: Evaluating & Drafting', desc: 'Fit scoring, gate filters, resume, cover letter & cheat sheet' },
             { key: 'completed',    icon: 'check_circle',  label: 'Step 3: Ready for Action', desc: 'All processes finished. Check your matches to apply' },
           ].map(step => {
-            const active = systemStatus.status === step.key;
+            const active =
+              step.key === 'scout_running'
+                ? systemStatus.status === 'scout_running'
+                : step.key === 'drafting'
+                  ? isEvaluatePhase(systemStatus.status)
+                  : systemStatus.status === 'completed';
             return (
               <div key={step.key} className={`p-4 rounded-xl border flex items-start gap-3.5 select-none transition-all ${
                 active ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-outline/10 bg-surface-container-low opacity-60'
@@ -493,22 +547,45 @@ const SyncActivityView: React.FC = () => {
           })}
         </div>
 
-        <div className="p-4 bg-surface-container rounded-xl flex items-center justify-between border border-outline/5">
-          <div className="flex items-center gap-3">
-            {['scout_running', 'drafting'].includes(systemStatus.status) && (
-              <span className="material-symbols-outlined text-base animate-spin text-primary opacity-80">sync</span>
-            )}
+        <div className="p-4 bg-surface-container rounded-xl border border-outline/5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {isPipelineActive(systemStatus.status) && (
+                <span className="material-symbols-outlined text-base animate-spin text-primary opacity-80 shrink-0">sync</span>
+              )}
+              {systemStatus.status === 'completed' && (
+                <span className="material-symbols-outlined text-base text-primary shrink-0">done_all</span>
+              )}
+              <p className="text-sm text-on-surface font-headline font-bold truncate">
+                {systemStatus.current_item || 'No ongoing pipeline process'}
+              </p>
+            </div>
             {systemStatus.status === 'completed' && (
-              <span className="material-symbols-outlined text-base text-primary">done_all</span>
+              <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full flex items-center gap-1 animate-fade-in shrink-0">
+                <span className="material-symbols-outlined text-xs">verified</span> All Processes Complete
+              </span>
             )}
-            <p className="text-sm text-on-surface font-headline font-bold">
-              {systemStatus.current_item || 'No ongoing pipeline process'}
-            </p>
           </div>
-          {systemStatus.status === 'completed' && (
-            <span className="text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full flex items-center gap-1 animate-fade-in">
-              <span className="material-symbols-outlined text-xs">verified</span> All Processes Complete
-            </span>
+          {isEvaluatePhase(systemStatus.status) && evaluateProgress !== null && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-[11px] font-bold text-on-surface-variant uppercase tracking-wide">
+                <span>Batch evaluate & draft</span>
+                <span>
+                  {systemStatus.items_completed ?? 0} / {systemStatus.items_total} jobs
+                </span>
+              </div>
+              <div className="h-2 bg-surface-container-highest rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300 rounded-full"
+                  style={{ width: `${evaluateProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+          {systemStatus.status === 'completed' && (systemStatus.items_total ?? 0) > 0 && (
+            <p className="text-[11px] text-on-surface-variant">
+              Processed {systemStatus.items_completed ?? 0} of {systemStatus.items_total} queued jobs this run.
+            </p>
           )}
         </div>
       </div>
@@ -525,29 +602,36 @@ const SyncActivityView: React.FC = () => {
             </div>
           </div>
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 font-mono text-[12px] space-y-1.5 applyr-scrollbar">
-            {logs.map(log => (
+            {logs.map(log => {
+              const level = displayLogLevel(log);
+              return (
               <div key={log.id} className="flex gap-3 leading-relaxed">
                 <span className="text-inverse-on-surface/50 whitespace-nowrap">
                   [{new Date(log.timestamp + ' Z').toLocaleTimeString()}]
                 </span>
                 <span className={`font-bold w-12 ${
-                  log.level === 'ERROR' ? 'text-error-container' :
-                  log.level === 'WARN'  ? 'text-secondary-container' :
+                  level === 'ERROR' ? 'text-error-container' :
+                  level === 'WARN'  ? 'text-secondary-container' :
                   'text-primary-container'
-                }`}>{log.level}</span>
+                }`}>{level}</span>
                 <span className="text-inverse-on-surface/60 w-16">[{log.source}]</span>
                 <span className="text-inverse-on-surface break-all">{log.message}</span>
               </div>
-            ))}
-            {['scout_running', 'drafting'].includes(systemStatus.status) && (
+            );})}
+            {isPipelineActive(systemStatus.status) && (
               <div className="flex gap-3 leading-relaxed text-emerald-400 font-bold animate-pulse">
                 <span className="text-emerald-400/50 whitespace-nowrap">[{new Date().toLocaleTimeString()}]</span>
                 <span className="w-12">ACTIVE</span>
                 <span className="text-emerald-400/60 w-16">[System]</span>
-                <span className="break-all">{systemStatus.current_item || 'Processing...'}</span>
+                <span className="break-all">
+                  {systemStatus.current_item || 'Processing...'}
+                  {isEvaluatePhase(systemStatus.status) && evaluateProgress !== null && (
+                    <span className="text-emerald-400/80 font-normal"> ({systemStatus.items_completed}/{systemStatus.items_total})</span>
+                  )}
+                </span>
               </div>
             )}
-            {logs.length === 0 && !['scout_running', 'drafting'].includes(systemStatus.status) && (
+            {logs.length === 0 && !isPipelineActive(systemStatus.status) && (
               <div className="text-inverse-on-surface/40 animate-pulse italic">Waiting for activity console output...</div>
             )}
           </div>
@@ -588,7 +672,7 @@ const SyncActivityView: React.FC = () => {
                   {((job.status === 'Backlog' && !job.has_assets) || job.status === 'Drafted' || job.status === 'Needs Retry') && (
                     <button
                       onClick={() => handleDraftAssets(job.id)}
-                      disabled={draftingJobId === job.id || systemStatus.status === 'drafting'}
+                      disabled={draftingJobId === job.id || isEvaluatePhase(systemStatus.status)}
                       className="btn-secondary py-1 px-3 text-[11px] font-bold flex items-center gap-1.5 rounded-lg border border-amber-500/20 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
                     >
                       <span className={`material-symbols-outlined text-[13px] ${draftingJobId === job.id ? 'animate-spin' : ''}`}>auto_fix</span>

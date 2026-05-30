@@ -409,11 +409,14 @@ def _cleanup_staging_file(filepath: str, filename: str):
         pass
 
 
-def passes_jd_keyword_gate(jd_text: str, prefs: dict = None) -> bool:
-    """Zero-token pre-filter. Rejects JDs with blocked titles (title line only) or missing keywords."""
+def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str = "") -> bool:
+    """Zero-token pre-filter. Rejects JDs with blocked titles, industries, years, keywords, optional anchors."""
     from seniority_gate import check_years_gate, passes_title_gate
+    from industry_gate import check_industry_gate
+    from anchor_gate import check_anchor_gate
+    from utils import passes_keyword_gate
 
-    prefs = prefs or {}
+    prefs = prefs or load_candidate_preferences()
 
     ok, reason = passes_title_gate(jd_text, prefs)
     if not ok:
@@ -425,8 +428,24 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None) -> bool:
         print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
         return False
 
-    lower = jd_text.lower()
-    return any(kw in lower for kw in get_jd_required_keywords())
+    # Implements FR-170 (CR-027)
+    ok, reason = check_industry_gate(company_name or "", jd_text, prefs=prefs)
+    if not ok:
+        print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
+        return False
+
+    ok, reason = passes_keyword_gate(jd_text, prefs)
+    if not ok:
+        print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
+        return False
+
+    # Implements FR-172 (CR-028) — off unless ANCHOR_GATE_ENABLED=1
+    ok, reason = check_anchor_gate(jd_text, prefs)
+    if not ok:
+        print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
+        return False
+
+    return True
 
 
 def _pruned_work_exp_for_fit(jd_text: str, work_exp_summary: str, k: int = 8) -> str:
@@ -566,8 +585,8 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
             print(json.dumps({"id": "fit", "status": "error", "summary": "Draft-only requires an existing fit score ≥ 72 on this job."}))
             return
     # Zero-token keyword gate before any LLM call
-    if not passes_jd_keyword_gate(jd_text, prefs):
-        print(json.dumps({"id": "gate", "status": "done", "summary": "Rejected (keyword/title gate: blocked or no relevant signals)."}))
+    if not passes_jd_keyword_gate(jd_text, prefs, company_name=company or ""):
+        print(json.dumps({"id": "gate", "status": "done", "summary": "Rejected (zero-token gate: title/years/industry/keywords/anchors)."}))
         print(json.dumps({"score": 0, "passed": False}))
         return
 
@@ -847,8 +866,8 @@ def process_batch():
             if vec:
                 save_jd_vector(db_path, job_id_prefix, company_name, vec)
 
-        if not passes_jd_keyword_gate(jd_text, prefs):
-            print(f"  -> Skipping. JD failed keyword pre-filter (no relevant signals).")
+        if not passes_jd_keyword_gate(jd_text, prefs, company_name=company_name):
+            print(f"  -> Skipping. JD failed zero-token gate (keyword/title/industry/anchor).")
             if db_exists:
                 try:
                     conn = sqlite3.connect(db_path, timeout=30.0)
@@ -1065,6 +1084,8 @@ def process_batch():
         send_notification(msg, "jobagent_alerts")
 
 if __name__ == "__main__":
+    from utils import init_pipeline_prefs
+    init_pipeline_prefs()
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['batch', 'single'], default='batch')
     parser.add_argument('--company', type=str, help='Company name for single mode')

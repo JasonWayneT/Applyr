@@ -19,6 +19,7 @@ ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive")
 
 WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
 WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")
+# Legacy JSON job store — superseded by jobagent.sqlite (see docs/ACTIVE_WORKFLOW.md). Used only by scripts/archive/*.
 DB_FILE = os.path.join(DATA_DIR, "job_database.json")
 FIT_ENGINE_FILE = os.path.join(RULES_DIR, "job_fit_engine.md")
 CLAIM_VERIFIER_FILE = os.path.join(RULES_DIR, "claim_verifier.md")
@@ -67,14 +68,67 @@ def get_min_fit_score(default: int = 72) -> int:
 
 
 def get_jd_required_keywords(default: list | None = None) -> list:
+    """Legacy OR-list; prefers signal_keywords when set (FR-171)."""
     prefs = load_candidate_preferences()
+    signal = prefs.get("signal_keywords")
+    if isinstance(signal, list) and signal:
+        return signal
     keywords = prefs.get("jd_required_keywords")
     if isinstance(keywords, list) and keywords:
         return keywords
     return default if default is not None else list(_DEFAULT_JD_KEYWORDS)
 
 
-JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE = _bootstrap_from_prefs()
+def get_must_have_keywords() -> list:
+    """Implements FR-171 — all must match (AND) when non-empty."""
+    prefs = load_candidate_preferences()
+    raw = prefs.get("must_have_keywords")
+    if isinstance(raw, list) and raw:
+        return [str(k).strip().lower() for k in raw if str(k).strip()]
+    return []
+
+
+def get_signal_keywords() -> list:
+    """Implements FR-171 — at least one must match when must_have is empty."""
+    return [k.lower() for k in get_jd_required_keywords()]
+
+
+def passes_keyword_gate(jd_text: str, prefs: dict | None = None) -> tuple[bool, str]:
+    """Implements FR-171 / FR-006 — AND must-haves, else OR signals."""
+    prefs = prefs or load_candidate_preferences()
+    lower = (jd_text or "").lower()
+    if not lower.strip():
+        return False, "empty_jd"
+
+    must = [
+        str(k).strip().lower()
+        for k in (prefs.get("must_have_keywords") or [])
+        if str(k).strip()
+    ]
+    if must:
+        for kw in must:
+            if kw not in lower:
+                return False, f"missing_must_have:{kw}"
+        return True, ""
+
+    signal = prefs.get("signal_keywords") or prefs.get("jd_required_keywords")
+    if not isinstance(signal, list) or not signal:
+        signal = list(_DEFAULT_JD_KEYWORDS)
+    signal = [str(k).strip().lower() for k in signal if str(k).strip()]
+    if any(kw in lower for kw in signal):
+        return True, ""
+    return False, "no_signal_keywords"
+
+
+# Module-level compat vars — call init_pipeline_prefs() at CLI/smoke entry (CR-ARCH-003).
+JD_REQUIRED_KEYWORDS: list = list(_DEFAULT_JD_KEYWORDS)
+MIN_FIT_SCORE: int = 72
+
+
+def init_pipeline_prefs() -> None:
+    """Load jd_required_keywords and min_fit_score from candidate_preferences.json."""
+    global JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE
+    JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE = _bootstrap_from_prefs()
 
 
 def load_candidate_preferences():

@@ -3,7 +3,7 @@
 ## Metadata
 - **Status**: Fixed
 - **Severity**: P2
-- **Component**: `server/routes/jobs.ts`, `server/submissionFolders.ts`, `scripts/reconcile_submissions.py`
+- **Component**: `server/routes/jobs/`, `server/submissionFolders.ts`, `scripts/reconcile_submissions.py`
 - **Related requirements**: `FR-030`, `FR-034`
 
 ## Description

@@ -4,6 +4,8 @@ A locally-hosted, privacy-first platform that automates the full job search life
 
 Everything runs on your machine. No career data leaves your desktop except the API calls you explicitly configure.
 
+**Maintainers & agents:** Runtime workflow → [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md) · SDD changes → [AGENTS.md](AGENTS.md)
+
 ---
 
 ## Prerequisites
@@ -28,6 +30,8 @@ cd JobHuntAgent
 ```bash
 npm install
 ```
+
+> CI and clean installs use `npm ci`. The repo `.npmrc` sets `legacy-peer-deps` because `@toast-ui/react-editor` declares React 17 peers while this app uses React 19 (install still works at runtime).
 
 ### 3. Install Playwright browsers (for the scout engine)
 
@@ -108,11 +112,11 @@ Go to **Settings → API or Connections → Data Sources**. Enter your Adzuna Ap
 
 ### Scouting
 
-Go to **Job Search** and click **Run Scout**. The backend launches a parallel scrape across 7 sources using your saved criteria:
+Go to **Job Search** and click **Run Scout**. The backend launches a parallel scrape across active sources using your saved criteria:
 
 | Source | Type |
 |---|---|
-| LinkedIn | Playwright-based authenticated crawl |
+| LinkedIn | **Decommissioned** (CR-010 — security risk; skipped in `scout_local.ts`) |
 | BuiltIn | Playwright-based crawl |
 | RemoteOK | Public API |
 | Remotive | Public API |
@@ -134,7 +138,7 @@ Live progress streams to the Scout log console in real time.
 Each job is evaluated in two stages:
 
 1. **Fast gate (deterministic):** Instantly rejects roles that match your title blocklist, industry blocklist, or fall below your minimum salary. No LLM token spent.
-2. **LLM scoring:** Evaluates the JD across four vectors (leadership fit, seniority fit, technical depth, transition potential) against your summarized experience. Roles scoring at or above your threshold proceed to drafting.
+2. **LLM scoring:** Evaluates the JD across four vectors (leadership fit, seniority fit, technical depth, transition potential) against your summarized experience. Roles scoring at or above **`min_fit_score`** in `candidate_preferences.json` (default **72**) proceed to drafting.
 
 ### Drafting assets
 

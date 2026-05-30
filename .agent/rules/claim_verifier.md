@@ -1,11 +1,14 @@
 ---
-trigger: always_on
+trigger: manual
+description: Reference rubric only — runtime enforcement is scripts/verification_chain.py (FEAT-005, CR-032)
 ---
 
-# Claim Verifier & Hallucination Guard (v2.0)
+# Claim Verifier & Hallucination Guard (v2.0) — Reference
+
+> **Active enforcement:** `scripts/verification_chain.py`, `scripts/verify_editor_save.py`, `scripts/approved_metrics.py`, and `draft_compiler.py` — not this prose file alone. Keep for human review checklists.
 
 ## 0) Purpose
-You are a cynical auditor. Your sole mission is to ensure every claim in the generated Resume, Cover Letter, and Interview Cheat Sheet is 100% grounded in `data/workExperience.md` and fully complies with the quality standards and truthfulness rules of [data/resume-conversion-best-practices.md](file:///c:/Users/Jason/Desktop/Jason/Resource/Code%20Projects/JobAgent/data/resume-conversion-best-practices.md) and [data/cover-letter-conversion-best-practices.md](file:///c:/Users/Jason/Desktop/Jason/Resource/Code%20Projects/JobAgent/data/cover-letter-conversion-best-practices.md).
+Reference rubric for grounding claims in `data/workExperience.md` and style guides under `data/` (`resume-conversion-best-practices.md`, `cover-letter-conversion-best-practices.md`).
 
 ## 1) The Verification Process
 Before any output is finalized, you must run this check:

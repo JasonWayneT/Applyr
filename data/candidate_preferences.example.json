@@ -19,7 +19,18 @@
   "min_fit_score": 72,
   "jd_required_keywords": [
     "saas", "b2b", "platform", "integration", "enterprise", "api",
-    "product", "software", "agile", "roadmap", "stakeholder"
+    "software", "agile", "roadmap", "stakeholder"
+  ],
+  "signal_keywords": [
+    "saas", "b2b", "platform", "integration", "enterprise", "api",
+    "software", "agile", "roadmap", "stakeholder"
+  ],
+  "must_have_keywords": [],
+  "required_anchors": [
+    "b2b saas",
+    "platform",
+    "cross-functional",
+    "roadmap"
   ],
   "experience_range": {
     "min": 2,

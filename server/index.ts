@@ -1,14 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
-import path from 'path';
-import { spawn } from 'child_process';
 import { logActivity } from './db.js';
-import { ARCHIVE_DIR, SUBMISSION_DIR, PROJECT_ROOT, SCRIPTS_DIR } from './shared.js';
-import { buildSpawnEnv } from './middleware.js';
+import { ARCHIVE_DIR, SUBMISSION_DIR } from './shared.js';
+import { runBuffered, pythonScriptPath } from './pipeline/processRunner.js';
 import { reconcileActiveSubmissionFolders } from './submissionFolders.js';
 import systemRouter   from './routes/system.js';
-import jobsRouter     from './routes/jobs.js';
+import jobsRouter     from './routes/jobs/index.js';
 import profileRouter  from './routes/profile.js';
 import pipelineRouter from './routes/pipeline.js';
 
@@ -54,12 +52,7 @@ app.listen(PORT, '0.0.0.0', () => {
   logActivity('INFO', 'Server', 'System initialized. Ready for local and Tailscale syncing.');
 
   setInterval(() => {
-    const proc = spawn('python', [path.join(SCRIPTS_DIR, 'auto_prune_db.py')], {
-      cwd: PROJECT_ROOT,
-      shell: false,
-      env: buildSpawnEnv(),
-    });
-    proc.on('close', (code) => {
+    void runBuffered([pythonScriptPath('auto_prune_db.py')]).then(({ code }) => {
       if (code !== 0) {
         logActivity('ERROR', 'System', `Auto-pruning failed with exit code ${code}`);
       } else {

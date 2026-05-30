@@ -12,11 +12,24 @@ from typing import Optional, Tuple
 from local_embeddings import BM25, cosine_similarity, get_embedding
 
 
-def _anchor_embedding(work_exp_summary: str) -> Optional[list]:
-    anchor = (
-        "B2B SaaS product manager platform stability data integrity "
-        "customer migration roadmap cross-functional delivery"
-    )
+def _anchor_embedding(work_exp_summary: str, prefs: dict | None = None) -> Optional[list]:
+    # Implements FR-132 / FR-171 — prefer required_anchors from prefs when set
+    try:
+        from utils import load_candidate_preferences
+        p = prefs or load_candidate_preferences()
+        anchors = p.get("required_anchors") or []
+        if isinstance(anchors, list) and anchors:
+            anchor = " ".join(str(a).strip() for a in anchors[:8] if str(a).strip())
+        else:
+            anchor = (
+                "B2B SaaS product manager platform stability data integrity "
+                "customer migration roadmap cross-functional delivery"
+            )
+    except Exception:
+        anchor = (
+            "B2B SaaS product manager platform stability data integrity "
+            "customer migration roadmap cross-functional delivery"
+        )
     try:
         return get_embedding(anchor)
     except Exception:

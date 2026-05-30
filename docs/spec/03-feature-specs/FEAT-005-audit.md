@@ -11,6 +11,8 @@
 
 AI tends to "hallucinate" or inflate metrics to match JDs. This creates a trust issue. The system must hard-verify every claim against the source work experience. Additionally, small local models produce structurally corrupt output (forbidden sections, wrong name headers, unfilled placeholders, education sections in cover letters) that must be caught and corrected deterministically before PDFs are compiled.
 
+**Runtime enforcement (source of truth):** `scripts/verification_chain.py`, `scripts/verify_editor_save.py`, `scripts/approved_metrics.py`, `scripts/catalog_validator.py` — invoked from `draft_compiler.py` and editor save routes. `.agent/rules/claim_verifier.md` is a **reference rubric only** (CR-032).
+
 ## Goals
 
 - `GOAL-001`: Perform a deterministic sweep for metric mismatch.

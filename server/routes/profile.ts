@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import fs from 'fs';
-import { spawn } from 'child_process';
 import { db, logActivity } from '../db.js';
 import {
   buildPythonEnv, materializeJobSearchPrefs,
-  WORK_EXPERIENCE_PATH, PROJECT_ROOT,
+  WORK_EXPERIENCE_PATH,
 } from '../shared.js';
-import { buildSpawnEnv, requireApiToken } from '../middleware.js';
+import { requireApiToken } from '../middleware.js';
+import { runDetached, pythonScriptPath } from '../pipeline/processRunner.js';
 
 const router = Router();
 
@@ -158,14 +158,7 @@ router.post('/api/experience', (req, res) => {
     logActivity('INFO', 'System', 'workExperience.md updated and automatically codified under SDD with sequential IDs by user.');
 
     // Implements FR-064: regenerate scoring summary in background — fire and forget
-    const summaryProc = spawn('python', ['scripts/generate_experience_summary.py'], {
-      cwd: PROJECT_ROOT,
-      shell: false,
-      env: buildSpawnEnv(),
-      detached: true,
-      stdio: 'ignore',
-    });
-    summaryProc.unref();
+    runDetached([pythonScriptPath('generate_experience_summary.py')]);
     logActivity('INFO', 'System', 'Regenerating experience scoring summary in background...');
 
     res.json({ success: true, content: codified });

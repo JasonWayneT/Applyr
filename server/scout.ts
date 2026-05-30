@@ -1,35 +1,16 @@
 import { db, logActivity } from './db.js';
-import { buildPythonEnv, PROJECT_ROOT } from './shared.js';
-import { buildSpawnEnv, isPipelineBusy } from './middleware.js';
-import { spawn } from 'child_process';
+import { buildPythonEnv, buildTsxSpawn, PROJECT_ROOT } from './shared.js';
+import { isPipelineBusy } from './middleware.js';
+import { runStreamLines } from './pipeline/processRunner.js';
 
-/**
- * Standard Promise-wrapped Process Spawner to enforce isolated async execution boundaries.
- */
 function spawnProcessAsync(
   command: string,
   args: string[],
   env: Record<string, string>,
   onStdout: (data: string) => void,
-  onStderr: (data: string) => void
+  onStderr: (data: string) => void,
 ): Promise<number> {
-  return new Promise((resolve, reject) => {
-    try {
-      const child = spawn(command, args, {
-        cwd: PROJECT_ROOT,
-        shell: false,
-        env: buildSpawnEnv(env),
-      });
-
-      child.stdout.on('data', (chunk) => onStdout(chunk.toString()));
-      child.stderr.on('data', (chunk) => onStderr(chunk.toString()));
-
-      child.on('close', (code) => resolve(code ?? 1));
-      child.on('error', (err) => reject(err));
-    } catch (err) {
-      reject(err);
-    }
-  });
+  return runStreamLines(command, args, { env, onStdout, onStderr });
 }
 
 /**
@@ -65,6 +46,7 @@ function handleStderr(source: string, stderr: string) {
                    clean.includes('[HARD FACT AUDIT]') ||
                    clean.includes('[QA AUDIT PASS]') ||
                    clean.includes('[BATCH_SUMMARY]') ||
+                   clean.includes('[ZERO-TOKEN REJECT]') ||
                    clean.includes('Successfully audited') ||
                    clean.includes('Running Style Compliance Guard');
                    
@@ -128,7 +110,8 @@ export const runScoutSync = async () => {
       updateCheckpoint(runId, 'SCOUT', 'Crawling and scanning direct job feeds...');
       logActivity('INFO', 'Scout', 'Executing Stage 1/5: Crawling job feeds via TS Crawler.');
       
-      const code = await spawnProcessAsync('npx', ['tsx', 'scripts/scout_local.ts'], extraEnv, (output) => {
+      const scoutSpawn = buildTsxSpawn('scripts/scout_local.ts');
+      const code = await spawnProcessAsync(scoutSpawn.command, scoutSpawn.args, extraEnv, (output) => {
         const lines = output.trim().split('\n');
         for (const line of lines) {
           if (line.startsWith('[LOG]')) logActivity('INFO', 'Scout', line.replace('[LOG]', '').trim());
@@ -150,7 +133,8 @@ export const runScoutSync = async () => {
       updateCheckpoint(runId, 'BACKFILL', 'Reconciling URLs and executing backfills...');
       logActivity('INFO', 'Scout', 'Executing Stage 2/5: Reconciling missing URLs.');
 
-      const code = await spawnProcessAsync('npx', ['tsx', 'scripts/archive/backfill_urls.ts'], extraEnv, (output) => {
+      const backfillSpawn = buildTsxSpawn('scripts/archive/backfill_urls.ts');
+      const code = await spawnProcessAsync(backfillSpawn.command, backfillSpawn.args, extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Crawler', line.trim()));
       }, (stderr) => {
         handleStderr('Crawler', stderr);
@@ -165,7 +149,8 @@ export const runScoutSync = async () => {
       updateCheckpoint(runId, 'SCRAPE', 'Re-queuing jobs that need another pipeline pass...');
       logActivity('INFO', 'Scout', 'Executing Stage 3/5: Re-queuing Needs Retry jobs.');
 
-      const requeueCode = await spawnProcessAsync('npx', ['tsx', 'scripts/requeue_needs_retry.ts'], extraEnv, (output) => {
+      const requeueSpawn = buildTsxSpawn('scripts/requeue_needs_retry.ts');
+      const requeueCode = await spawnProcessAsync(requeueSpawn.command, requeueSpawn.args, extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Requeue', line.trim()));
       }, (stderr) => {
         handleStderr('Requeue', stderr);
@@ -176,7 +161,8 @@ export const runScoutSync = async () => {
       updateCheckpoint(runId, 'SCRAPE', 'Scraping job descriptions for new postings...');
       logActivity('INFO', 'Scout', 'Executing Stage 4/5: Scraping job descriptions.');
 
-      const code = await spawnProcessAsync('npx', ['tsx', 'scripts/scrape_new_jobs.ts'], extraEnv, (output) => {
+      const scrapeSpawn = buildTsxSpawn('scripts/scrape_new_jobs.ts');
+      const code = await spawnProcessAsync(scrapeSpawn.command, scrapeSpawn.args, extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Scraper', line.trim()));
       }, (stderr) => {
         handleStderr('Scraper', stderr);

@@ -1,0 +1,81 @@
+/**
+ * Projects job_search profile row to data/candidate_preferences.json (ADR-005).
+ * Moved from shared.ts (CR-ARCH-002).
+ */
+import fs from 'fs';
+import { CANDIDATE_PREFS_PATH, DATE_POSTED_TO_DAYS } from './paths.js';
+
+export { CANDIDATE_PREFS_PATH } from './paths.js';
+
+const DEFAULT_MIN_FIT_SCORE = 72;
+
+/** Read pass threshold from materialized prefs (FR-039 / CR-003). */
+export function readMinFitScore(defaultScore = DEFAULT_MIN_FIT_SCORE): number {
+  try {
+    if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
+      const prefs = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8')) as { min_fit_score?: unknown };
+      const score = prefs.min_fit_score;
+      if (typeof score === 'number' && Number.isFinite(score)) return score;
+    }
+  } catch {
+    /* use default */
+  }
+  return defaultScore;
+}
+
+const DEFAULT_JD_KEYWORDS = [
+  'saas', 'b2b', 'platform', 'integration', 'enterprise', 'api',
+  'product', 'software', 'agile', 'roadmap', 'stakeholder',
+];
+
+const DEFAULT_PIPELINE_PREFERENCES = {
+  no_people_management: true,
+  no_zero_to_one: true,
+  structured_team_required: true,
+  max_company_size_penalty_threshold: 50,
+};
+
+export function materializeJobSearchPrefs(jobSearch: Record<string, unknown>): void {
+  let existing: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
+      existing = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8'));
+    }
+  } catch { /* use defaults */ }
+
+  const targetRole = (jobSearch.targetRole as string) || 'Product Manager';
+  const searchTerms: string[] = [targetRole];
+  if (targetRole.toLowerCase().includes('product manager')) {
+    searchTerms.push('Product Owner', 'Technical Product Manager', 'Platform Product Manager', 'Digital Product Manager');
+  }
+
+  const blockedTitles = ((jobSearch.titleBlocklist as string) || '').split(',').map(s => s.trim()).filter(Boolean);
+  const blockedIndustries = ((jobSearch.industryBlocklist as string) || '').split(',').map(s => s.trim()).filter(Boolean);
+
+  const expRange = (existing.experience_range as Record<string, number>) || {};
+  const maxYears = (jobSearch.maxYearsRequired as number) ?? expRange.max ?? 7;
+  const minYears = (jobSearch.minYearsPreferred as number) ?? expRange.min ?? 2;
+  const totalYears = expRange.total_years_observed ?? 6;
+
+  const materialized = {
+    target_role: targetRole,
+    search_terms: searchTerms,
+    location_preference: (jobSearch.location as string) || 'United States',
+    work_setting: (jobSearch.workSetting as string) || 'Remote',
+    experience_levels: jobSearch.experienceLevels || [],
+    date_posted: (jobSearch.datePosted as string) || 'Past week',
+    freshness_days: DATE_POSTED_TO_DAYS[(jobSearch.datePosted as string)] ?? 7,
+    blocked_titles: blockedTitles,
+    blocked_industries: blockedIndustries,
+    min_salary: (jobSearch.minSalary as number) ?? 0,
+    min_fit_score: (existing.min_fit_score as number) ?? 72,
+    jd_required_keywords: (existing.jd_required_keywords as string[]) ?? DEFAULT_JD_KEYWORDS,
+    signal_keywords: (existing.signal_keywords as string[]) ?? (existing.jd_required_keywords as string[]) ?? DEFAULT_JD_KEYWORDS,
+    must_have_keywords: (existing.must_have_keywords as string[]) ?? [],
+    required_anchors: (existing.required_anchors as string[]) ?? [],
+    experience_range: { min: minYears, max: maxYears, total_years_observed: totalYears },
+    preferences: (existing.preferences as Record<string, unknown>) ?? DEFAULT_PIPELINE_PREFERENCES,
+  };
+
+  fs.writeFileSync(CANDIDATE_PREFS_PATH, JSON.stringify(materialized, null, 2), 'utf-8');
+}

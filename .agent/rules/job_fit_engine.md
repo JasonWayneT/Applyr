@@ -9,6 +9,9 @@ This file defines a deterministic YES/NO decision system for evaluating job desc
 ---
 
 ## 0) Purpose & Batch Logic
+
+**Pass threshold:** `candidate_preferences.json` → `min_fit_score` (default **72**). Python uses `get_min_fit_score()`; do not use legacy **78** from archived docs.
+
 1. **Initialize Sandbox:** Clear previous JD context; load only `workExperience.md` (Ground Truth) and `Candidate Preferences` (Targets).
 2. **Fast Gate:** Kill poor fits, seniority mismatches, blocked industries, or solo traps instantly using criteria from `Candidate Preferences`.
 3. **Transition Analysis & Scoring:** Score based on alignment with the Candidate's profile, experiences, and anchors.
@@ -34,7 +37,7 @@ If any of the following triggers are met, return **Score: 0**, **Decision: NO**,
 
 ### 2.2 Experience & Constraints
 - **Years Required:** Reject if required years of experience exceeds `experience_range.max` in Candidate Preferences.
-- **Blocked Industries:** Reject if the company operates in any of the `blocked_industries` listed in Candidate Preferences.
+- **Blocked Industries:** Reject if the company operates in any of the `blocked_industries` listed in Candidate Preferences. **Enforced deterministically** by `scripts/industry_gate.py` at scout ingest and batch zero-token gate (`FR-170` / CR-027) before this LLM stage runs.
 - **Domain Gate:** Reject if the role requires domain expertise explicitly marked as a "Soft Blocker" in the candidate's history (e.g., hands-on ML model training, Developer Auth) unless allowed.
 - **AI tools vs AI PM:** Do **not** reject because the JD mentions AI tools, Copilot, or workflow automation. Reject only when the role requires **owning ML model development** or being the primary AI/ML product owner.
 
@@ -75,7 +78,7 @@ If any of the following triggers are met, return **Score: 0**, **Decision: NO**,
 - **Small Startup:** Apply a -50 penalty if the company size is below `preferences.max_company_size_penalty_threshold` and has high risk of solo/founding trap.
 
 ### 4.2 The "Two-Anchor Room" (Mandatory)
-A **YES** decision requires at least **2 explicit overlaps** between the job description responsibilities and the `required_anchors` list in the Candidate Preferences.
+A **YES** decision requires at least **2 explicit overlaps** between the job description responsibilities and the `required_anchors` list in the Candidate Preferences. When `ANCHOR_GATE_ENABLED=1`, batch zero-token gate enforces this before LLM fit (`FR-172` / CR-028); default is LLM-only enforcement.
 
 ### 4.3 Final Decision
 - **Score ≥ 85:** YES (Strong Fit).

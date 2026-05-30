@@ -1,18 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
-import path from 'path';
+import type { ChildProcessWithoutNullStreams } from 'child_process';
 import { db } from './db.js';
-import { PROJECT_ROOT, SCRIPTS_DIR, buildPythonEnv } from './shared.js';
+import { SCRIPTS_DIR } from './shared.js';
+import { buildSpawnEnv, runBuffered } from './pipeline/processRunner.js';
 
-const SECRET_ENV_KEYS = new Set([
-  'GEMINI_API_KEY',
-  'GOOGLE_API_KEY',
-  'ANTHROPIC_API_KEY',
-  'PERPLEXITY_API_KEY',
-  'OPENAI_API_KEY',
-  'ADZUNA_APP_KEY',
-  'ADZUNA_APP_ID',
-]);
+export { buildSpawnEnv } from './pipeline/processRunner.js';
 
 const BUSY_STATUSES = new Set(['drafting', 'scout_running', 'evaluate_running']);
 
@@ -70,39 +62,11 @@ export function releasePipeline(message: string) {
   `).run(message);
 }
 
-export function buildSpawnEnv(extra: Record<string, string> = {}): Record<string, string> {
-  const env: Record<string, string> = { ...buildPythonEnv(), ...extra };
-  for (const [key, value] of Object.entries(process.env)) {
-    if (value === undefined || SECRET_ENV_KEYS.has(key)) continue;
-    if (key.startsWith('npm_') || key.startsWith('NODE_')) continue;
-    env[key] = value;
-  }
-  return env;
-}
-
 export function runPythonScript(
   args: string[],
   options: { cwd?: string; env?: Record<string, string>; stdin?: string } = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('python', args, {
-      cwd: options.cwd ?? PROJECT_ROOT,
-      shell: false,
-      env: options.env ?? buildSpawnEnv(),
-    });
-
-    let stdout = '';
-    let stderr = '';
-    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
-    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
-    if (options.stdin !== undefined) {
-      proc.stdin.write(options.stdin);
-    }
-    proc.stdin.end();
-
-    proc.on('error', reject);
-    proc.on('close', (code) => resolve({ code: code ?? 1, stdout, stderr }));
-  });
+  return runBuffered(args, options);
 }
 
 export function attachClientAbort(

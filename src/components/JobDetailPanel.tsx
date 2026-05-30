@@ -360,7 +360,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
               </div>
               
               <div className="bg-inverse-surface rounded-xl p-4 font-mono text-[11px] leading-relaxed overflow-hidden flex flex-col max-h-[180px] overflow-y-auto applyr-scrollbar">
-                {systemStatus && ['scout_running', 'drafting'].includes(systemStatus.status) && systemStatus.current_item?.toLowerCase().includes(job.company.toLowerCase()) && (
+                {systemStatus && ['scout_running', 'evaluate_running', 'drafting'].includes(systemStatus.status) && systemStatus.current_item?.toLowerCase().includes(job.company.toLowerCase()) && (
                   <div className="flex gap-2 text-emerald-400 font-bold animate-pulse border-b border-emerald-500/10 pb-1 mb-1">
                     <span className="text-emerald-400/50 shrink-0">
                       [{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}]

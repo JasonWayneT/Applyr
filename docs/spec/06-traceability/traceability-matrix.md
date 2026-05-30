@@ -27,7 +27,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-027` | `BMAD-SRC-001` | `FEAT-006` | `scripts/compile_single.py` | implemented |
 | `FR-028` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
 | `FR-029` | `BMAD-SRC-004` | `FEAT-006` | `src/components/DocumentEditor.tsx` | implemented |
-| `FR-030` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx`, `server/submissionFolders.ts`, `server/routes/jobs.ts` | implemented |
+| `FR-030` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx`, `server/submissionFolders.ts`, `server/routes/jobs/` | implemented |
 | `FR-031` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx` | implemented |
 | `FR-032` | `BMAD-SRC-003` | `FEAT-006` | `src/components/JobDetailPanel.tsx`, `src/pages/TodayView.tsx` | implemented |
 | `FR-033` | `BMAD-SRC-003` | `FEAT-006` | `server/index.ts` | implemented |
@@ -132,7 +132,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-136` | CR-021 | Template cover hook | `scripts/local_draft_stages.py` | implemented |
 | `FR-137` | CR-021 | Summary grounding | `scripts/local_draft_stages.py` | implemented |
 | `FR-138` | CR-021 | Manifest claim_sources | `scripts/draft_compiler.py` | implemented |
-| `FR-139` | CR-021 | PDF verification gate | `server/routes/jobs.ts` | implemented |
+| `FR-139` | CR-021 | PDF verification gate | `server/routes/jobs/` | implemented |
 | `FR-140` | CR-021 | Grammar highlight-only | `src/lib/grammarCheck.ts` | implemented |
 | `FR-141` | CR-021 | Block legacy_llm local-only | `scripts/claim_composer.py` | implemented |
 | `FR-142` | CR-021 | JdProfile cache | `scripts/jd_tailoring.py` | implemented |
@@ -166,11 +166,11 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-162` | CR-024 | Cover audit rubric | `scripts/cover_letter_audit.py` | implemented |
 | `FR-163` | CR-024 | Ranked JD needs | `scripts/cover_jd_needs.py` | implemented |
 | `IMP-CR-024` | CR-024 | FEAT-013 | `docs/spec/08-implementation/IMP-CR-024-cover-letter-engine.md` | completed |
-| `FR-164` | CR-025 | Subprocess hardening | `server/middleware.ts`, `server/routes/jobs.ts` | implemented |
+| `FR-164` | CR-025 | Subprocess hardening | `server/middleware.ts`, `server/routes/jobs/` | implemented |
 | `FR-165` | CR-025 | Evaluate SSE contract | `server/routes/pipeline.ts`, `src/hooks/usePipeline.ts` | implemented |
 | `FR-166` | CR-025 | PDF fail-closed | `scripts/drafting_engine.py`, `scripts/draft_compiler.py` | implemented |
 | `FR-167` | CR-025 | Pipeline mutex | `server/middleware.ts`, `server/routes/pipeline.ts` | implemented |
-| `FR-168` | CR-025 | FTS sync | `server/db.ts`, `server/routes/jobs.ts` | implemented |
+| `FR-168` | CR-025 | FTS sync | `server/db.ts`, `server/routes/jobs/` | implemented |
 | `FR-169` | CR-025 | Company slug sanitize | `scripts/company_slug.py`, `server/shared.ts` | implemented |
 
 

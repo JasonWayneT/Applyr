@@ -1,4 +1,7 @@
 # JobAgent — Web Application PRD
+
+> **ARCHIVED UX SPEC (April 2026).** Do not use for active development. Operational truth: [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md), [README.md](README.md). Fit threshold in this doc (**78**) is obsolete — use `min_fit_score` in `candidate_preferences.json` (default **72**).
+
 ### Full-Stack Job Search Portal
 
 | Field | Value |

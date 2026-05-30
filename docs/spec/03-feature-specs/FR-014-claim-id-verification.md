@@ -19,5 +19,6 @@ Every claim generated in a resume or cover letter must be anchored to a concrete
 - No external network calls; all processing is local.
 
 ## Traceability
-- Implements business rule **Claim‑ID Traceability** from `RULE[claim_verifier.md]`.
+- Enforced in code by `scripts/verification_chain.py` and catalog validators (FEAT-005, CR-032).
+- `.agent/rules/claim_verifier.md` — human reference rubric only.
 - Linked to `FR-014` in the traceability matrix.

@@ -9,7 +9,17 @@ export const SCRIPTS_DIR          = path.join(PROJECT_ROOT, 'scripts');
 export const SUBMISSION_DIR       = path.join(PROJECT_ROOT, 'submissions');
 export const ARCHIVE_DIR          = path.join(PROJECT_ROOT, 'archive/submissions');
 export const WORK_EXPERIENCE_PATH = path.join(PROJECT_ROOT, 'data/workExperience.md');
-export const CANDIDATE_PREFS_PATH = path.join(PROJECT_ROOT, 'data/candidate_preferences.json');
+// CANDIDATE_PREFS_PATH re-exported from ./domain/paths.js
+/** Local tsx CLI — used instead of `npx tsx` so Windows spawn works without shell (BUG-015 / FR-164). */
+export const TSX_CLI_PATH = path.join(PROJECT_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+
+/** Windows-safe tsx spawn: `node` + local cli.mjs + script path (no `npx`). */
+export function buildTsxSpawn(scriptRelativeToRoot: string, extraArgs: string[] = []): { command: string; args: string[] } {
+  return {
+    command: process.execPath,
+    args: [TSX_CLI_PATH, path.join(PROJECT_ROOT, scriptRelativeToRoot), ...extraArgs],
+  };
+}
 
 // Allowlist of columns that may be updated via the generic PATCH /api/jobs/:id endpoint
 export const ALLOWED_JOB_FIELDS = new Set([
@@ -18,24 +28,9 @@ export const ALLOWED_JOB_FIELDS = new Set([
   'rejection_stage', 'rejection_type', 'outcome_notes', 'interview_date',
 ]);
 
-export const DATE_POSTED_TO_DAYS: Record<string, number> = {
-  'Past 24 hours': 1,
-  'Past 3 days':   3,
-  'Past week':     7,
-  'Past month':    30,
-};
-
-const DEFAULT_JD_KEYWORDS = [
-  'saas', 'b2b', 'platform', 'integration', 'enterprise', 'api',
-  'product', 'software', 'agile', 'roadmap', 'stakeholder',
-];
-
-const DEFAULT_PIPELINE_PREFERENCES = {
-  no_people_management: true,
-  no_zero_to_one: true,
-  structured_team_required: true,
-  max_company_size_penalty_threshold: 50,
-};
+export { DATE_POSTED_TO_DAYS, CANDIDATE_PREFS_PATH } from './domain/paths.js';
+export { materializeJobSearchPrefs, readMinFitScore } from './domain/jobSearchPrefs.js';
+export { ACTIVE_STATUSES, isActivePipelineStatus, submissionBaseDir } from './domain/jobStatus.js';
 
 // Implements FR-095 / CR-015 — spawn flags only; secrets read from SQLite inside each script.
 export function buildPythonEnv(): Record<string, string> {
@@ -90,44 +85,3 @@ export function resolveCompanyFolder(company: string, baseDir: string): string {
   return standardPath;
 }
 
-// Implements ADR-005 — writes candidate_preferences.json as a projection of the job_search profile row.
-export function materializeJobSearchPrefs(jobSearch: any): void {
-  let existing: any = {};
-  try {
-    if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
-      existing = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8'));
-    }
-  } catch { /* use defaults */ }
-
-  const targetRole: string = jobSearch.targetRole || 'Product Manager';
-  const searchTerms: string[] = [targetRole];
-  if (targetRole.toLowerCase().includes('product manager')) {
-    searchTerms.push('Product Owner', 'Technical Product Manager', 'Platform Product Manager', 'Digital Product Manager');
-  }
-
-  const blockedTitles: string[]    = (jobSearch.titleBlocklist    || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-  const blockedIndustries: string[] = (jobSearch.industryBlocklist || '').split(',').map((s: string) => s.trim()).filter(Boolean);
-
-  const maxYears = jobSearch.maxYearsRequired ?? existing.experience_range?.max ?? 7;
-  const minYears = jobSearch.minYearsPreferred ?? existing.experience_range?.min ?? 2;
-  const totalYears = existing.experience_range?.total_years_observed ?? 6;
-
-  const materialized = {
-    target_role:          targetRole,
-    search_terms:         searchTerms,
-    location_preference:  jobSearch.location        || 'United States',
-    work_setting:         jobSearch.workSetting      || 'Remote',
-    experience_levels:    jobSearch.experienceLevels || [],
-    date_posted:          jobSearch.datePosted       || 'Past week',
-    freshness_days:       DATE_POSTED_TO_DAYS[jobSearch.datePosted] ?? 7,
-    blocked_titles:       blockedTitles,
-    blocked_industries:   blockedIndustries,
-    min_salary:           jobSearch.minSalary        ?? 0,
-    min_fit_score:        existing.min_fit_score     ?? 72,
-    jd_required_keywords: existing.jd_required_keywords ?? DEFAULT_JD_KEYWORDS,
-    experience_range:     { min: minYears, max: maxYears, total_years_observed: totalYears },
-    preferences:          existing.preferences       ?? DEFAULT_PIPELINE_PREFERENCES,
-  };
-
-  fs.writeFileSync(CANDIDATE_PREFS_PATH, JSON.stringify(materialized, null, 2), 'utf-8');
-}

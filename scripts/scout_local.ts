@@ -39,6 +39,42 @@ const TITLE_BLOCKLIST: string[]     = (prefs.blocked_titles || [
     'assistant', 'coordinator', 'intern', 'associate', 'entry', 'junior',
     'analyst', 'software engineer', 'developer', 'designer', 'marketer',
 ]).map((t: string) => t.toLowerCase().trim()).filter(Boolean);
+// Implements FR-170 (CR-027) — keep in sync with scripts/industry_gate.py
+const BLOCKED_INDUSTRIES: string[] = (prefs.blocked_industries || [])
+    .map((t: string) => String(t).trim())
+    .filter(Boolean);
+
+const industryTermMatches = (text: string, term: string): boolean => {
+    const phrase = term.trim();
+    if (!phrase || !text) return false;
+    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escaped}\\b`, 'i').test(text);
+};
+
+/** Implements FR-170 — scout scope: company, title, short listing snippet only. */
+const passesIndustryGate = (job: ScrapedJob): boolean => {
+    if (!BLOCKED_INDUSTRIES.length) return true;
+    for (const term of BLOCKED_INDUSTRIES) {
+        if (industryTermMatches(job.company || '', term)) {
+            console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - industry_blocked:${term}`);
+            return false;
+        }
+        if (industryTermMatches(job.title || '', term)) {
+            console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - industry_blocked:${term}`);
+            return false;
+        }
+    }
+    const desc = (job.description || '').trim();
+    if (desc.length > 0 && desc.length <= 120) {
+        for (const term of BLOCKED_INDUSTRIES) {
+            if (industryTermMatches(desc, term)) {
+                console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - industry_blocked:${term}`);
+                return false;
+            }
+        }
+    }
+    return true;
+};
 
 /** CR-019: whole-word title match (not substring in description). */
 const titleMatchesBlocked = (title: string, term: string): boolean => {
@@ -219,10 +255,15 @@ interface SourceHealth {
 function passesGeographicGate(job: ScrapedJob): boolean {
     const text = `${job.title} ${job.description || ''}`.toLowerCase();
     
-    // If description is placeholder or very short, bypass gate here to allow 
-    // the down-funnel scrape_new_jobs + batch_pipeline stages to evaluate fully.
+    // Implements FR-173 (CR-028): Remote-only seekers must not bypass geo on empty stubs from on-site boards.
     if ((job.description || '').trim().length < 50) {
-        return true; 
+        if (WORK_SETTING === 'Remote') {
+            const remoteOnlySources = ['Remotive', 'RemoteOK', 'WWR', 'Himalayas'];
+            if (remoteOnlySources.includes(job.source)) return true;
+            console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - [GEOGRAPHIC REJECT] remote_only_no_location_signal`);
+            return false;
+        }
+        return true;
     }
 
     const hasLocalSD = text.includes('san diego') || 
@@ -560,8 +601,11 @@ const scoutLevelsFyi = async (page: Page): Promise<ScrapedJob[]> => {
 
                 // Extract company and title if possible, or fallback
                 const parts = text.split('\n').map(p => p.trim()).filter(Boolean);
-                const title = parts[0] || 'Product Manager';
-                const company = parts[1] || 'Levels.fyi Candidate';
+                const title = parts[0] || '';
+                const company = parts[1] || '';
+                if (!title || !company) {
+                    continue;
+                }
 
                 if (!passesTitleBlocklist(title)) {
                     console.log(`[REJECT] ${title} at ${company} (Levels.fyi) - Title Blocklist`);
@@ -1105,6 +1149,9 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
 
     // Apply geographic + seniority pre-gates (CR-021)
     const gatedJobs = uniqueJobs.filter(j => {
+        if (!passesIndustryGate(j)) {
+            return false;
+        }
         if (!passesGeographicGate(j)) {
             console.log(`[REJECT] ${j.title} at ${j.company} (${j.source}) - [GEOGRAPHIC REJECT]`);
             return false;

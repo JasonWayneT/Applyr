@@ -38,7 +38,7 @@ Use this file to preserve project intent across agents, sessions, rebuilds, and 
 
 ### Goals
 
-- `GOAL-001`: Automate multi-source job scouting (LinkedIn, BuiltIn, OpenPostings).
+- `GOAL-001`: Automate multi-source job scouting (BuiltIn, APIs, OpenPostings; LinkedIn decommissioned per CR-010).
 - `GOAL-002`: Implement deterministic fit scoring to minimize LLM token waste.
 - `GOAL-003`: Generate application materials (Resume, Cover Letter) grounded in verified `workExperience.md`.
 - `GOAL-004`: Maintain absolute data privacy by running the core engine on `localhost`.

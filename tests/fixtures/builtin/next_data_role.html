@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<!-- Fixture: Built In Next.js page with __NEXT_DATA__ containing the full job description.
+     extractStructuredInBrowser() should find props.pageProps.job.description and return it
+     with confidence=high, skipping the DOM selector walk entirely. -->
+<html>
+<head><title>Platform Product Manager - NextCo | Built In</title></head>
+<body>
+  <script id="__NEXT_DATA__" type="application/json">
+  {
+    "props": {
+      "pageProps": {
+        "job": {
+          "id": 98765,
+          "title": "Platform Product Manager",
+          "company": { "name": "NextCo" },
+          "description": "About the Role\n\nNextCo is looking for a Platform Product Manager to drive the strategy and roadmap for our core API platform used by thousands of enterprise customers.\n\nResponsibilities\n- Own the end-to-end product roadmap for the platform tier.\n- Partner with engineering to define API contracts and developer experience standards.\n- Conduct user research with internal and external API consumers.\n- Write detailed product requirements documents (PRDs) and acceptance criteria.\n- Measure platform health via usage metrics, error rates, and developer satisfaction scores.\n- Present roadmap updates to executive leadership on a monthly basis.\n\nRequirements\n- 4+ years of product management experience, ideally with API or platform products.\n- Proven track record shipping developer-facing features in a B2B SaaS environment.\n- Strong technical acumen — comfortable reading API docs and reviewing OpenAPI specs.\n- Experience facilitating cross-functional planning with engineering and design teams.\n- Excellent written communication and stakeholder management skills.\n\nNice to Have\n- Experience with REST and GraphQL APIs.\n- Background in enterprise integrations or iPaaS products.\n\nBenefits\n- Fully remote, US-based.\n- Competitive base salary + equity.\n- 100% employer-paid health coverage.",
+          "location": "Remote",
+          "datePosted": "2026-05-29"
+        }
+      }
+    },
+    "page": "/job/[company]/[slug]/[id]",
+    "query": { "id": "98765" }
+  }
+  </script>
+  <!-- Intentionally empty job-description container to confirm structured path wins -->
+  <div data-id="job-description"></div>
+</body>
+</html>

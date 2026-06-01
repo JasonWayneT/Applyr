@@ -1,6 +1,20 @@
 import { chromium } from 'playwright-extra';
 import stealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { Page } from 'playwright';
+import {
+    extractJobDescriptionWithMeta,
+    MIN_JD_CHARS,
+    BUILTIN_MIN_JD_CHARS,
+} from './extract_job_page.js';
+import { hasRoleSignal } from './domain/jdQuality.js';
+import {
+    passesTitleBlocklist as _passesTitleBlocklist,
+    passesIndustryGate as _passesIndustryGate,
+    passesGeographicGate as _passesGeographicGate,
+    passesSeniorityGate as _passesSeniorityGate,
+    type ScrapedJob,
+    type GateConfig,
+} from './domain/gates.js';
 import path from 'path';
 import fs from 'fs';
 import Database from 'better-sqlite3';
@@ -44,85 +58,14 @@ const BLOCKED_INDUSTRIES: string[] = (prefs.blocked_industries || [])
     .map((t: string) => String(t).trim())
     .filter(Boolean);
 
-const industryTermMatches = (text: string, term: string): boolean => {
-    const phrase = term.trim();
-    if (!phrase || !text) return false;
-    const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`\\b${escaped}\\b`, 'i').test(text);
-};
-
-/** Implements FR-170 — scout scope: company, title, short listing snippet only. */
-const passesIndustryGate = (job: ScrapedJob): boolean => {
-    if (!BLOCKED_INDUSTRIES.length) return true;
-    for (const term of BLOCKED_INDUSTRIES) {
-        if (industryTermMatches(job.company || '', term)) {
-            console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - industry_blocked:${term}`);
-            return false;
-        }
-        if (industryTermMatches(job.title || '', term)) {
-            console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - industry_blocked:${term}`);
-            return false;
-        }
-    }
-    const desc = (job.description || '').trim();
-    if (desc.length > 0 && desc.length <= 120) {
-        for (const term of BLOCKED_INDUSTRIES) {
-            if (industryTermMatches(desc, term)) {
-                console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - industry_blocked:${term}`);
-                return false;
-            }
-        }
-    }
-    return true;
-};
-
-/** CR-019: whole-word title match (not substring in description). */
-const titleMatchesBlocked = (title: string, term: string): boolean => {
-    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`\\b${escaped}\\b`, 'i').test(title);
-};
-
 const FRESHNESS_CUTOFF_EPOCH = Math.floor(Date.now() / 1000) - (FRESHNESS_DAYS * 24 * 60 * 60);
 const MAX_EXPERIENCE_YEARS: number = prefs.experience_range?.max ?? 7;
 
-/** CR-021: years required in JD vs prefs max (scout ingest when description present). */
-const parseMaxYearsRequired = (text: string): number | null => {
-    const patterns = [
-        /(?:minimum|min\.?|at least|requires?)\s*(\d+)\s*\+?\s*(?:years?|yrs?)/gi,
-        /(\d+)\s*\+\s*years?/gi,
-        /(\d+)\s*[-–]\s*(\d+)\s*years?/gi,
-        /(\d+)\s+years?\s+(?:of\s+)?experience/gi,
-    ];
-    const found: number[] = [];
-    for (const pat of patterns) {
-        let m: RegExpExecArray | null;
-        const re = new RegExp(pat.source, pat.flags);
-        while ((m = re.exec(text)) !== null) {
-            const nums = m.slice(1).filter(Boolean).map((g) => parseInt(g, 10));
-            if (nums.length === 1) found.push(nums[0]);
-            else if (nums.length >= 2) found.push(Math.max(...nums));
-        }
-    }
-    return found.length ? Math.max(...found) : null;
-};
-
-const passesSeniorityGate = (job: ScrapedJob): boolean => {
-    const title = (job.title || '').trim();
-    for (const term of TITLE_BLOCKLIST) {
-        if (titleMatchesBlocked(title, term)) {
-            console.log(`[REJECT] ${title} at ${job.company} — title_blocked:${term}`);
-            return false;
-        }
-    }
-    const desc = (job.description || '').trim();
-    if (desc.length >= 80) {
-        const required = parseMaxYearsRequired(`${title}\n${desc}`);
-        if (required !== null && required > MAX_EXPERIENCE_YEARS) {
-            console.log(`[REJECT] ${title} at ${job.company} — required_years_${required}_exceeds_max_${MAX_EXPERIENCE_YEARS}`);
-            return false;
-        }
-    }
-    return true;
+const gateConfig: GateConfig = {
+    blockedIndustries: BLOCKED_INDUSTRIES,
+    titleBlocklist:    TITLE_BLOCKLIST,
+    workSetting:       WORK_SETTING,
+    maxExperienceYears: MAX_EXPERIENCE_YEARS,
 };
 
 // Implements FR-055 — free-tier rate guard: 25 req/min, 250 req/day
@@ -228,17 +171,6 @@ function loadApiConnections(db: Database.Database): { adzunaAppId: string; adzun
 
 const { adzunaAppId: ADZUNA_APP_ID, adzunaAppKey: ADZUNA_APP_KEY } = loadApiConnections(DB);
 
-interface ScrapedJob {
-    company: string;
-    title: string;
-    url: string;
-    description: string;
-    salary_range?: string;
-    recruiter_name?: string;
-    recruiter_url?: string;
-    source: string;
-}
-
 // Per-source observability record
 interface SourceHealth {
     name: string;
@@ -246,72 +178,6 @@ interface SourceHealth {
     found: number;
     durationMs: number;
     error?: string;
-}
-
-/**
- * Implements FR-070: Early Ingestion Location Gate
- * Prevents persisting job listings that are neither Remote nor local to San Diego/Carlsbad metro.
- */
-function passesGeographicGate(job: ScrapedJob): boolean {
-    const text = `${job.title} ${job.description || ''}`.toLowerCase();
-    
-    // Implements FR-173 (CR-028): Remote-only seekers must not bypass geo on empty stubs from on-site boards.
-    if ((job.description || '').trim().length < 50) {
-        if (WORK_SETTING === 'Remote') {
-            const remoteOnlySources = ['Remotive', 'RemoteOK', 'WWR', 'Himalayas'];
-            if (remoteOnlySources.includes(job.source)) return true;
-            console.log(`[REJECT] ${job.title} at ${job.company} (${job.source}) - [GEOGRAPHIC REJECT] remote_only_no_location_signal`);
-            return false;
-        }
-        return true;
-    }
-
-    const hasLocalSD = text.includes('san diego') || 
-                       text.includes('carlsbad') || 
-                       text.includes('la jolla') || 
-                       text.includes('encinitas') || 
-                       text.includes('del mar') || 
-                       text.includes('solana beach') ||
-                       text.includes('ca'); // Keep CA as soft local signal
-
-    const hasRemote = text.includes('remote') || 
-                      text.includes('anywhere in') || 
-                      text.includes('work from home') || 
-                      text.includes('telecommute');
-
-    // Explicit exclusion of major non-US geographies if no US indicators are present
-    const isExplicitForeign = (
-        text.includes('canada') || 
-        text.includes('united kingdom') || 
-        text.includes('london,') || 
-        text.includes('europe') || 
-        text.includes('germany') || 
-        text.includes('india') || 
-        text.includes('apac')
-    ) && !(
-        text.includes('united states') || 
-        text.includes('within the us') || 
-        text.includes('us citizen')
-    );
-
-    if (isExplicitForeign) {
-        return false;
-    }
-
-    // Accept if it has SD local bounds or is Remote
-    if (hasLocalSD || hasRemote) {
-        return true;
-    }
-
-    // Hardwired acceptance for remote-only sources
-    const explicitRemoteSources = ['Remotive', 'RemoteOK', 'WWR', 'Himalayas'];
-    if (explicitRemoteSources.includes(job.source)) {
-        return true;
-    }
-
-    // If it has neither remote nor local indicators, and it's from LinkedIn/BuiltIn,
-    // reject it as an out-of-bound on-site role.
-    return false;
 }
 
 // Wraps any source fn — catches unexpected throws, records timing + status
@@ -348,10 +214,11 @@ const isJobNewByCompanyTitle = (company: string, title: string): boolean =>
     !DB.prepare('SELECT id FROM jobs WHERE LOWER(company) = LOWER(?) AND LOWER(title) = LOWER(?)').get(company, title) &&
     !DB.prepare('SELECT url FROM stale_jobs WHERE LOWER(company) = LOWER(?) AND LOWER(title) = LOWER(?)').get(company, title);
 
-const passesTitleBlocklist = (title: string): boolean => {
-    if (!title) return true;
-    return !TITLE_BLOCKLIST.some(blocked => titleMatchesBlocked(title, blocked));
-};
+// Config-bound adapters — call sites unchanged throughout this file
+const passesTitleBlocklist  = (title: string)    => _passesTitleBlocklist(title, gateConfig);
+const passesIndustryGate    = (job: ScrapedJob)  => _passesIndustryGate(job, gateConfig);
+const passesGeographicGate  = (job: ScrapedJob)  => _passesGeographicGate(job, gateConfig);
+const passesSeniorityGate   = (job: ScrapedJob)  => _passesSeniorityGate(job, gateConfig);
 
 // ---------------------------------------------------------------------------
 // Shared browser utilities
@@ -493,79 +360,154 @@ const scoutOpenPostings = async (): Promise<ScrapedJob[]> => {
 // Source C: BuiltIn (Playwright, 7-day param in URL)
 // ---------------------------------------------------------------------------
 
+// Separate per-source cap — does not consume the aggregate 60-job slot budget.
+const BUILTIN_PER_SOURCE_CAP = 20;
+// Max listing pages per target URL. Start conservative; bot detection risk increases with pages.
+const BUILTIN_MAX_PAGES = 2;
+
+/** Strip common tracking params so URL dedup doesn't create false misses. */
+function canonicalizeBuiltInUrl(raw: string): string {
+    try {
+        const u = new URL(raw);
+        ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'ref', 'src', 'trk'].forEach(
+            p => u.searchParams.delete(p),
+        );
+        return u.toString();
+    } catch {
+        return raw;
+    }
+}
+
 const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
     console.log('[LOG] Built In: Scouting multiple target channels...');
     const jobs: ScrapedJob[] = [];
     const seenUrls = new Set<string>();
 
-    // Gather combined endpoints: Term-specific text search and legacy taxonomy fallback
+    // Gather combined endpoints: term-specific text search + legacy taxonomy fallback
     const targets: { url: string; label: string }[] = [];
     for (const term of SEARCH_TERMS) {
-        const urls = buildBuiltInUrlsForTerm(term);
-        for (const u of urls) {
+        for (const u of buildBuiltInUrlsForTerm(term)) {
             targets.push({ url: u, label: `Search: ${term}` });
         }
     }
     targets.push({ url: buildBuiltInTaxonomyUrl(), label: 'Taxonomy Fallback' });
 
     for (const target of targets) {
-        try {
-            console.log(`[LOG] Built In: Crawling ${target.label}...`);
-            await page.goto(target.url, { waitUntil: 'domcontentloaded' });
-            await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
-            await humanWait(2000, 4000);
-            
-            // Wait for either traditional .job-item OR modern div[data-id="job-card"]
-            await page.waitForSelector('.job-item, div[data-id="job-card"]', { timeout: 10000 }).catch(() => {});
+        if (jobs.length >= BUILTIN_PER_SOURCE_CAP) break;
 
-            const cards = await page.$$('.job-item, div[data-id="job-card"]');
-            console.log(`[LOG] Built In: ${cards.length} cards found for ${target.label}.`);
+        for (let pageNum = 1; pageNum <= BUILTIN_MAX_PAGES; pageNum++) {
+            if (jobs.length >= BUILTIN_PER_SOURCE_CAP) break;
 
-            for (const card of cards) {
-                if (jobs.length >= 60) break; // Aggregate safety cap
-                try {
-                    // Resilient Dual-Archetype Metadata Selectors
-                    const title = (await card.$eval('[data-id="job-card-title"], .card-alias-after-overlay', el => el.textContent).catch(() => '')).trim();
-                    
-                    // Extract company name using data-id, falling back to general anchor link
-                    const company = (await card.$eval('[data-id="company-title"]', el => el.textContent).catch(() => 
-                                     card.$eval('a[href^="/company/"]', el => el.textContent).catch(() => ''))).trim();
-                    
-                    const relUrl = await card.$eval('[data-id="job-card-title"], a.card-alias-after-overlay', el => el.getAttribute('href')).catch(() => '');
-                    
-                    if (!relUrl || !title || !company) {
-                        continue;
+            // All target URLs already contain query params — append page with &
+            const pageUrl = pageNum === 1 ? target.url : `${target.url}&page=${pageNum}`;
+
+            try {
+                console.log(`[LOG] Built In: Crawling ${target.label} (page ${pageNum})...`);
+                await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+                await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+                await humanWait(2000, 4000);
+
+                // Wait for either traditional .job-item OR modern div[data-id="job-card"]
+                await page.waitForSelector('.job-item, div[data-id="job-card"]', { timeout: 10000 }).catch(() => {});
+
+                const cards = await page.$$('.job-item, div[data-id="job-card"]');
+                console.log(`[LOG] Built In: ${cards.length} cards found for ${target.label} (page ${pageNum}).`);
+
+                if (cards.length === 0) break; // No more pages for this target
+
+                const prevSeenSize = seenUrls.size;
+
+                for (const card of cards) {
+                    if (jobs.length >= BUILTIN_PER_SOURCE_CAP) break;
+                    try {
+                        // Resilient Dual-Archetype Metadata Selectors
+                        const title = (await card.$eval(
+                            '[data-id="job-card-title"], .card-alias-after-overlay',
+                            el => el.textContent,
+                        ).catch(() => '')).trim();
+
+                        const company = (await card.$eval(
+                            '[data-id="company-title"]',
+                            el => el.textContent,
+                        ).catch(() =>
+                            card.$eval('a[href^="/company/"]', el => el.textContent).catch(() => ''),
+                        )).trim();
+
+                        const relUrl = await card.$eval(
+                            '[data-id="job-card-title"], a.card-alias-after-overlay',
+                            el => el.getAttribute('href'),
+                        ).catch(() => '');
+
+                        if (!relUrl || !title || !company) {
+                            console.log(`[LOG] Built In card skipped — missing title/company/url`);
+                            continue;
+                        }
+
+                        const rawUrl = relUrl.startsWith('http') ? relUrl : `https://builtin.com${relUrl}`;
+                        const url = canonicalizeBuiltInUrl(rawUrl);
+
+                        if (seenUrls.has(url)) continue;
+                        seenUrls.add(url);
+
+                        if (!passesTitleBlocklist(title)) {
+                            console.log(`[REJECT] ${title} at ${company} (Built In) - Title Blocklist`);
+                            continue;
+                        }
+                        if (!isJobNewByUrl(url)) {
+                            console.log(`[REJECT] ${title} at ${company} (Built In) - URL already exists`);
+                            continue;
+                        }
+                        if (!isJobNewByCompanyTitle(company, title)) {
+                            console.log(`[REJECT] ${title} at ${company} (Built In) - Company/Title already exists`);
+                            continue;
+                        }
+
+                        // FR-180 (CR-033): fetch full JD before ingest gates; use BUILTIN_MIN_JD_CHARS (500).
+                        console.log(`[LOG] Built In: Fetching JD for ${title}...`);
+                        const result = await extractJobDescriptionWithMeta(page.context(), url, BUILTIN_MIN_JD_CHARS);
+
+                        if (!result.text || result.text.length < BUILTIN_MIN_JD_CHARS) {
+                            console.log(`[REJECT] ${title} at ${company} (Built In) - DESCRIPTION_TOO_SHORT (${result.text.length} chars)`);
+                            continue;
+                        }
+
+                        console.log(`[LOG] Built In: JD fetched (${result.text.length} chars, confidence=${result.confidence})`);
+
+                        // Flag no-signal JDs but still ingest — quality flag recorded for downstream review.
+                        if (!hasRoleSignal(result.text)) {
+                            console.log(`[LOG] Built In: ${title} at ${company} — NO_REQUIREMENTS_SECTION (flagged, not rejected)`);
+                        }
+
+                        jobs.push({
+                            company,
+                            title,
+                            url,
+                            description: result.text,
+                            source: 'Built In',
+                            extraction_confidence: result.confidence,
+                            data_quality_flags: result.flags,
+                        });
+                        console.log(`[FOUND] ${title} at ${company} (Built In)`);
+                        await humanWait(1500, 3000);
+
+                    } catch (cardErr) {
+                        console.log(`[LOG] Built In card process failed: ${cardErr}`);
                     }
-
-                    const url = relUrl.startsWith('http') ? relUrl : `https://builtin.com${relUrl}`;
-
-                    if (seenUrls.has(url)) continue;
-                    seenUrls.add(url);
-
-                    if (!passesTitleBlocklist(title)) {
-                        console.log(`[REJECT] ${title} at ${company} (Built In) - Title Blocklist`);
-                        continue;
-                    }
-                    if (!isJobNewByUrl(url)) {
-                        console.log(`[REJECT] ${title} at ${company} (Built In) - URL already exists`);
-                        continue;
-                    }
-                    if (!isJobNewByCompanyTitle(company, title)) {
-                        console.log(`[REJECT] ${title} at ${company} (Built In) - Company/Title already exists`);
-                        continue;
-                    }
-
-                    jobs.push({ company, title, url, description: '', source: 'Built In' });
-                    console.log(`[FOUND] ${title} at ${company} (Built In)`);
-                } catch (cardErr) {
-                    console.log(`[LOG] Built In card process failed: ${cardErr}`);
                 }
+
+                // Repeat page detected (site returned same listings for page N) — stop paginating
+                if (pageNum > 1 && seenUrls.size === prevSeenSize) break;
+
+            } catch (err) {
+                console.log(`[LOG] Built In scrape failed for ${target.label} page ${pageNum}: ${err}`);
+                break; // Don't try page 2 if page 1 errored
             }
-        } catch (err) {
-            console.log(`[LOG] Built In scrape failed for ${target.label}: ${err}`);
+
+            // Pause between pages to protect browser session health
+            if (pageNum < BUILTIN_MAX_PAGES) await humanWait(2000, 4000);
         }
-        
-        // Pause briefly between endpoints to protect browser session health
+
+        // Pause between target URLs
         await humanWait(1500, 3000);
     }
 
@@ -1110,7 +1052,7 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
     let browserJobs: ScrapedJob[] = [];
     try {
         const context = await chromium.launchPersistentContext(CONTEXT_DIR, {
-            headless: false,
+            headless: true,
             viewport: { width: 1440, height: 900 },
             args: ['--disable-blink-features=AutomationControlled'],
         });
@@ -1163,16 +1105,31 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
     });
 
     const insert = DB.prepare(`
-        INSERT INTO jobs (id, company, title, url, status, salary_range, recruiter_name, recruiter_url, source_site, created_at)
-        VALUES (?, ?, ?, ?, 'New', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO jobs (id, company, title, url, status, salary_range, recruiter_name, recruiter_url, source_site, jd_text, extraction_confidence, data_quality_flags, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `);
+    const jobsDir = path.resolve('jobs');
+    if (!fs.existsSync(jobsDir)) fs.mkdirSync(jobsDir, { recursive: true });
 
     let saved = 0;
     for (const job of gatedJobs) {
         try {
-            insert.run(randomUUID(), job.company, job.title, job.url || null,
+            const id = randomUUID();
+            const desc = (job.description || '').trim();
+            const hasJd = desc.length >= MIN_JD_CHARS;
+            const status = hasJd ? 'Drafted' : 'New';
+            insert.run(
+                id, job.company, job.title, job.url || null, status,
                 job.salary_range || null, job.recruiter_name || null,
-                job.recruiter_url || null, job.source);
+                job.recruiter_url || null, job.source, hasJd ? desc : null,
+                job.extraction_confidence || null,
+                job.data_quality_flags ? JSON.stringify(job.data_quality_flags) : null,
+            );
+            if (hasJd && job.url) {
+                const companyFilename = job.company.replace(/[^a-z0-9]+/gi, '_').trim();
+                const jdPath = path.join(jobsDir, `${companyFilename}_${id.slice(0, 8)}.txt`);
+                fs.writeFileSync(jdPath, `URL: ${job.url}\n\n${desc}`, 'utf-8');
+            }
             saved++;
         } catch { /* UNIQUE URL constraint */ }
     }

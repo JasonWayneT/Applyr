@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!-- Fixture: Built In page with JSON-LD JobPosting schema.
+     extractStructuredInBrowser() should parse the ld+json script and return
+     JobPosting.description with confidence=high. -->
+<html>
+<head>
+  <title>Technical Product Manager - LdCo | Built In</title>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org/",
+    "@type": "JobPosting",
+    "title": "Technical Product Manager",
+    "datePosted": "2026-05-28",
+    "validThrough": "2026-06-28",
+    "description": "About the Role\n\nLdCo is seeking a Technical Product Manager to bridge engineering and business stakeholders for our data infrastructure platform.\n\nResponsibilities\n- Define and own the roadmap for our data pipeline and ETL infrastructure products.\n- Translate complex technical requirements into clear product specs.\n- Collaborate with data engineering, analytics, and platform teams.\n- Run sprint planning and backlog grooming sessions.\n- Deliver regular roadmap reviews to senior leadership.\n- Identify and resolve cross-team dependencies proactively.\n\nRequirements\n- 3–7 years of product management experience with technical products.\n- Hands-on familiarity with data pipelines, APIs, or infrastructure tooling.\n- Strong SQL skills; experience with dbt, Spark, or Airflow is a plus.\n- Exceptional written communication and documentation skills.\n- Experience in an agile engineering environment.\n\nBenefits\n- Remote-first, open to US candidates in any timezone.\n- Equity and performance bonuses.\n- Full benefits package including dental and vision.",
+    "hiringOrganization": {
+      "@type": "Organization",
+      "name": "LdCo"
+    },
+    "jobLocation": {
+      "@type": "Place",
+      "address": { "addressCountry": "US" }
+    },
+    "employmentType": "FULL_TIME",
+    "baseSalary": {
+      "@type": "MonetaryAmount",
+      "currency": "USD",
+      "value": { "@type": "QuantitativeValue", "minValue": 130000, "maxValue": 170000, "unitText": "YEAR" }
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- Intentionally no [data-id="job-description"] to confirm JSON-LD path wins -->
+  <main><p>Loading...</p></main>
+</body>
+</html>

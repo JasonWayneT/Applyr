@@ -103,6 +103,18 @@ for (const [col, typ] of [
   }
 }
 
+// CR-033 follow-up: extraction quality metadata
+for (const [col, typ] of [
+  ['extraction_confidence', 'TEXT'],
+  ['data_quality_flags', 'TEXT'],
+] as const) {
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN ${col} ${typ}`);
+  } catch {
+    /* exists */
+  }
+}
+
 // FTS5 search (CR-020 / CR-021) — standalone index; no UPDATE triggers (BUG-011 / FTS url mismatch)
 try {
   for (const trig of ['jobs_fts_ai', 'jobs_fts_ad', 'jobs_fts_au', 'jobs_ai', 'jobs_ad', 'jobs_au']) {
@@ -135,6 +147,38 @@ try {
 } catch (err) {
   console.warn('[db] jobs_fts repair skipped:', err);
 }
+
+// ---------------------------------------------------------------------------
+// Schema version tracking (additive — existing try/catch migrations remain).
+// Increment CURRENT_SCHEMA_VERSION when adding a new migration block below.
+// ---------------------------------------------------------------------------
+
+const CURRENT_SCHEMA_VERSION = 1;
+
+function getSchemaVersion(): number {
+  try {
+    const row = db.prepare(`SELECT value FROM profiles WHERE key = 'schema_version'`).get() as
+      | { value: string }
+      | undefined;
+    return row ? parseInt(row.value, 10) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setSchemaVersion(version: number): void {
+  db.prepare(`INSERT OR REPLACE INTO profiles (key, value) VALUES ('schema_version', ?)`).run(String(version));
+}
+
+const installedVersion = getSchemaVersion();
+if (installedVersion < CURRENT_SCHEMA_VERSION) {
+  // v1: baseline — all prior try/catch ADD COLUMN blocks handle the actual columns.
+  // This entry just records that the schema is at least v1 on this installation.
+  setSchemaVersion(CURRENT_SCHEMA_VERSION);
+  console.log(`[db] Schema version set to ${CURRENT_SCHEMA_VERSION} (was ${installedVersion}).`);
+}
+
+// ---------------------------------------------------------------------------
 
 export const logActivity = (
   level: 'INFO' | 'WARN' | 'ERROR',

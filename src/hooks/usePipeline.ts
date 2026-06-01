@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Stage, StageStatus } from '../components/PipelineTracker';
-import { apiFetch } from '../lib/apiClient';
+import { apiFetch } from '../lib/api';
 import { parseSseChunk } from '../lib/sse';
 
 export const usePipeline = () => {

@@ -11,10 +11,11 @@ const BUSY_STATUSES = new Set(['drafting', 'scout_running', 'evaluate_running'])
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** Optional API token — when APPLYR_API_TOKEN is set, require X-Applyr-Token on mutating routes. */
+/** Optional API token — when APPLYR_API_TOKEN is set, require X-Applyr-Token on mutating routes only (CR-025). */
 export function requireApiToken(req: Request, res: Response, next: NextFunction) {
   const token = process.env.APPLYR_API_TOKEN;
   if (!token) return next();
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
   const header = req.headers['x-applyr-token'];
   if (typeof header === 'string' && header === token) return next();
   return res.status(401).json({ error: 'Unauthorized' });

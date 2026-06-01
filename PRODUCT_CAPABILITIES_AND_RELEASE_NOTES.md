@@ -47,6 +47,15 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 
 ## Part 2: Release Ledger
 
+### 6.2.24
+
+**Fixed**
+- **Dev empty UI / fetch errors:** Vite proxies `/api` to the backend; `fetchJobs()` never treats error JSON as an array; GET routes exempt from `APPLYR_API_TOKEN` (mutations still protected).
+- **`tsx watch` exclude:** Uses `/jobs/**` so `server/routes/jobs/` is not ignored.
+
+**Developer**
+- `python scripts/bootstrap_local_data.py` — copy `data/*.example.*` when runtime files are missing.
+
 ### 6.2.23
 
 **Fixed**

@@ -7,7 +7,7 @@ import SyncActivityView from './pages/SyncActivityView';
 import JobDetailPanel from './components/JobDetailPanel';
 import NotificationPanel from './components/NotificationPanel';
 import { Job } from './types/job';
-import { api } from './lib/api';
+import { fetchJobs } from './lib/api';
 import TuningLogView from './pages/TuningLogView';
 import SettingsView from './components/SettingsView';
 
@@ -19,19 +19,15 @@ function App() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    const fetchJobs = async () => {
-      try {
-        const res = await fetch(api('/api/jobs'));
-        const data = await res.json();
-        setJobs(data);
-      } catch (err) {
-        console.error('Failed to fetch jobs in App.tsx:', err);
-      } finally {
-        setIsLoaded(true);
-      }
+    const loadJobs = async () => {
+      const data = await fetchJobs();
+      setJobs(data as Job[]);
+      setIsLoaded(true);
     };
-    fetchJobs();
-    const interval = setInterval(fetchJobs, 5000);
+    loadJobs();
+    const interval = setInterval(async () => {
+      setJobs((await fetchJobs()) as Job[]);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 

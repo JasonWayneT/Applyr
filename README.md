@@ -52,9 +52,20 @@ pip install -r requirements.txt
 npm run dev
 ```
 
-This starts both the React frontend (port `5173`) and the Express backend (port `3000`) together.
+This starts both the React frontend (Vite, usually port `5173` or `5174` if busy) and the Express backend (port `3000`).
 
-Open **[http://localhost:5173](http://localhost:5173)** in your browser.
+Open the **Local** URL printed by Vite (e.g. **[http://localhost:5173](http://localhost:5173)**). The UI proxies `/api` to the backend in dev.
+
+### Troubleshooting empty UI or startup errors
+
+| Symptom | Fix |
+|---------|-----|
+| Dashboard looks empty but you had jobs before | Your jobs are likely **Applied** / **Closed** — open **Opportunities** (all jobs). Dashboard highlights **Backlog** with PDFs. |
+| `jobs.filter is not a function` in browser console | Restart dev after pulling latest; API returned an error object instead of a list (fixed in `fetchJobs()`). |
+| `npm ci` / install fails on React peer deps | Repo `.npmrc` sets `legacy-peer-deps=true`. |
+| Missing `data/workExperience.md` after clone | Run `python scripts/bootstrap_local_data.py` then configure Settings. |
+| Wrong Vite port | Use the port Vite prints (not an old tab on 5173 if Vite moved to 5174). |
+| `APPLYR_API_TOKEN` set without `VITE_APPLYR_API_TOKEN` | POST requests need both, or unset the server token for local-only dev. GET routes work without a token. |
 
 > **No `.env` file required.** All API keys are configured through the UI under **Settings → API or Connections**. Keys are stored only in the local SQLite database and never written to any tracked file.
 

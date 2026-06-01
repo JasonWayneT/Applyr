@@ -148,6 +148,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-171` | CR-028 | Must-have/signal keyword gate | `scripts/utils.py`, `scripts/batch_pipeline.py` | implemented |
 | `FR-172` | CR-028 | Required anchors + optional gate | `scripts/anchor_gate.py`, `server/shared.ts`, `data/candidate_preferences.example.json` | implemented |
 | `FR-173` | CR-028 | Scout Levels + Remote geo | `scripts/scout_local.ts` | implemented |
+| `FR-180` | CR-033 | Built In detail-page JD ingest | `scripts/extract_job_page.ts`, `scripts/scout_local.ts`, `scripts/scrape_new_jobs.ts` | implemented |
 | `FR-174` | CR-031 | Approved metrics module | `scripts/approved_metrics.py` | implemented |
 | `FR-175` | CR-031 | Catalog + anti-claim validation | `scripts/catalog_validator.py` | implemented |
 | `FR-176` | CR-031 | Strict quality flags | `scripts/pipeline_env.py` | implemented |

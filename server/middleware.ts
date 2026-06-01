@@ -1,12 +1,10 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
-import { db } from './db.js';
 import { SCRIPTS_DIR } from './shared.js';
 import { buildSpawnEnv, runBuffered } from './pipeline/processRunner.js';
 
 export { buildSpawnEnv } from './pipeline/processRunner.js';
-
-const BUSY_STATUSES = new Set(['drafting', 'scout_running', 'evaluate_running']);
+export { isPipelineBusy, tryAcquirePipeline, releasePipeline } from './pipelineLock.js';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,31 +34,6 @@ export function isSafeHttpUrl(url: string | null | undefined): boolean {
   } catch {
     return false;
   }
-}
-
-export function isPipelineBusy(): boolean {
-  const row = db.prepare(`SELECT status FROM system_status WHERE id = 'global'`).get() as
-    | { status: string }
-    | undefined;
-  return BUSY_STATUSES.has(row?.status ?? '');
-}
-
-export function tryAcquirePipeline(currentItem: string): boolean {
-  if (isPipelineBusy()) return false;
-  const result = db.prepare(`
-    UPDATE system_status
-    SET status = 'drafting', current_item = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = 'global' AND status NOT IN ('drafting', 'scout_running', 'evaluate_running')
-  `).run(currentItem);
-  return result.changes > 0;
-}
-
-export function releasePipeline(message: string) {
-  db.prepare(`
-    UPDATE system_status
-    SET status = 'completed', current_item = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = 'global'
-  `).run(message);
 }
 
 export function runPythonScript(

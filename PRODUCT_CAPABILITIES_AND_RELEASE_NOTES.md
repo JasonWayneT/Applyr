@@ -9,7 +9,7 @@ Welcome to the definitive product capabilities registry and release ledger for *
 Applyr is a highly specialized, local-first intelligence platform designed to automate the job search lifecycle—from automated discovery and deterministic fit filtering to bespoke resume drafting, WYSIWYG visual asset editing, and application lifecycle tracking. All provider credentials and search preferences live in a local SQLite database configured through the Settings UI—no `.env` file required.
 
 ### 1. Automated Job Scouting & Crawling Pipeline
-*   **Multi-Platform Scraping Engine:** Orchestrates automated crawls across Built In, public job APIs, optional Adzuna/OpenPostings, and ATS watchlists via Playwright where needed. LinkedIn ingestion is **decommissioned** (CR-010).
+*   **Multi-Platform Scraping Engine:** Orchestrates automated crawls across Built In (detail-page JD before ingest gates), public job APIs, optional Adzuna/OpenPostings, and ATS watchlists via Playwright where needed. LinkedIn ingestion is **decommissioned** (CR-010).
 *   **Intelligent URL Backfilling:** Allows manual URL injection that automatically scrapes raw job descriptions on the fly, feeding them straight into the evaluation pipeline.
 *   **Company DNA Perplexity Intelligence:** Executes targeted real-time Perplexity queries to extract company missions, problem spaces, financial status, and competitor matrices into a `Research_Packet.md` file.
 
@@ -46,6 +46,14 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 ---
 
 ## Part 2: Release Ledger
+
+### 6.2.25
+
+**Fixed**
+- **Built In JD ingest (FR-180, CR-033):** Scout opens each new Built In job URL, extracts the full description, then runs geographic/seniority/industry gates on that text. Saves `jd_text`, writes staging `jobs/*.txt`, and marks rows `Drafted` so evaluate can run without a second scrape pass.
+
+**Developer**
+- Shared extractor: `scripts/extract_job_page.ts` (also used by `scrape_new_jobs.ts`).
 
 ### 6.2.24
 

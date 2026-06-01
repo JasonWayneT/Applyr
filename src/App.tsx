@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import TodayView from './pages/TodayView';
 import AllJobsView from './pages/AllJobsView';
@@ -6,35 +6,14 @@ import FindNewJobsView from './pages/FindNewJobsView';
 import SyncActivityView from './pages/SyncActivityView';
 import JobDetailPanel from './components/JobDetailPanel';
 import NotificationPanel from './components/NotificationPanel';
-import { Job } from './types/job';
-import { fetchJobs } from './lib/api';
 import TuningLogView from './pages/TuningLogView';
 import SettingsView from './components/SettingsView';
+import { useJobs } from './hooks/useJobs';
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    const loadJobs = async () => {
-      const data = await fetchJobs();
-      setJobs(data as Job[]);
-      setIsLoaded(true);
-    };
-    loadJobs();
-    const interval = setInterval(async () => {
-      setJobs((await fetchJobs()) as Job[]);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleStatusChange = (id: string, newStatus: string) => {
-    setJobs(prev => prev.map(j => j.id === id ? { ...j, status: newStatus as Job['status'] } : j));
-    setSelectedJob(null);
-  };
+  const { jobs, isLoaded, selectedJob, setSelectedJob, handleStatusChange } = useJobs();
 
   const renderPage = () => {
     switch (activeTab) {

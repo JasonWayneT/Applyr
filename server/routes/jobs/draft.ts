@@ -1,9 +1,6 @@
 import { Router } from 'express';
 import { db, logActivity } from '../../db.js';
-import {
-  tryAcquirePipeline,
-  releasePipeline,
-} from '../../middleware.js';
+import { tryAcquirePipeline, releasePipeline } from '../../pipelineLock.js';
 import { readMinFitScore } from '../../shared.js';
 import { spawnPython, pythonScriptPath } from '../../pipeline/processRunner.js';
 

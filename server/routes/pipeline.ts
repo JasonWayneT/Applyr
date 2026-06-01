@@ -2,13 +2,8 @@ import { Router } from 'express';
 import { db, logActivity } from '../db.js';
 import { runScoutSync } from '../scout.js';
 import { spawnPython, pythonScriptPath } from '../pipeline/processRunner.js';
-import {
-  attachClientAbort,
-  isPipelineBusy,
-  requireApiToken,
-  releasePipeline,
-  tryAcquirePipeline,
-} from '../middleware.js';
+import { attachClientAbort, requireApiToken } from '../middleware.js';
+import { isPipelineBusy, releasePipeline, tryAcquirePipeline } from '../pipelineLock.js';
 
 const router = Router();
 

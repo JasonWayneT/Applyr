@@ -386,6 +386,13 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-181` | `FR-173` | Levels parse | Empty title from card | Scout | Skip row | implemented |
 | `AC-182` | `FR-173` | Remote geo | Remote work_setting, BuiltIn stub | Scout geo | Reject not bypass | implemented |
 
+### CR-033 Built In detail-page JD (FR-180)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-180` | functional | P0 | implemented | Built In scout opens each new job URL and extracts full JD before industry/geo/seniority gates | `AC-183` | `CR-033` |
+
+| `AC-183` | `FR-180` | Built In JD | New card passes dedup | Scout detail fetch | Description ≥ 200 chars required; gates use full text; `jd_text` + staging file written | implemented |
+
 ### CR-031 Draft quality gates (FR-174–FR-179)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
 |---|---|---|---|---|---|---|

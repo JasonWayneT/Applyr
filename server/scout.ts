@@ -1,6 +1,6 @@
 import { db, logActivity } from './db.js';
 import { buildPythonEnv, buildTsxSpawn, PROJECT_ROOT } from './shared.js';
-import { isPipelineBusy } from './middleware.js';
+import { isPipelineBusy } from './pipelineLock.js';
 import { runStreamLines } from './pipeline/processRunner.js';
 
 function spawnProcessAsync(
@@ -133,7 +133,7 @@ export const runScoutSync = async () => {
       updateCheckpoint(runId, 'BACKFILL', 'Reconciling URLs and executing backfills...');
       logActivity('INFO', 'Scout', 'Executing Stage 2/5: Reconciling missing URLs.');
 
-      const backfillSpawn = buildTsxSpawn('scripts/archive/backfill_urls.ts');
+      const backfillSpawn = buildTsxSpawn('scripts/backfill_urls.ts');
       const code = await spawnProcessAsync(backfillSpawn.command, backfillSpawn.args, extraEnv, (output) => {
         output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Crawler', line.trim()));
       }, (stderr) => {

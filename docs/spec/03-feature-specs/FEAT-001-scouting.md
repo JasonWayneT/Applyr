@@ -5,8 +5,8 @@
 - Feature ID: `FEAT-001`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-001`, `BMAD-SRC-004`
-- Related requirements: `FR-001`, `FR-002`, `FR-003`, `FR-004`, `FR-005`, `FR-109`, `FR-135`, `FR-147`, `FR-170`, `FR-173`
-- Related change requests: `CR-010`, `CR-019`, `CR-021`, `CR-027`, `CR-028`
+- Related requirements: `FR-001`, `FR-002`, `FR-003`, `FR-004`, `FR-005`, `FR-109`, `FR-135`, `FR-147`, `FR-170`, `FR-173`, `FR-180`
+- Related change requests: `CR-010`, `CR-019`, `CR-021`, `CR-027`, `CR-028`, `CR-033`
 - **Runtime workflow:** [docs/ACTIVE_WORKFLOW.md](../../../ACTIVE_WORKFLOW.md)
 
 ## Problem statement
@@ -40,6 +40,7 @@ Finding relevant job postings across multiple siloed platforms is repetitive. Th
 | `FR-147` | ATS watchlist | Optional `config/ats_watchlist.json` |
 | `FR-170` | Industry blocklist gate | `passesIndustryGate()` (`CR-027`) |
 | `FR-173` | Levels.fyi + Remote geo | `CR-028` |
+| `FR-180` | Built In detail-page JD before gates | `CR-033` — `extract_job_page.ts`, `scoutBuiltIn()` |
 
 ## Acceptance criteria
 

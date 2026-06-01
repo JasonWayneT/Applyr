@@ -1,36 +1,46 @@
 {
-  "Module A": {
-    "Core Mission/Values": {
-      "Stated": "We keep customers protected and prepared, no matter what life may bring. By building great products, we provide the tools, support and services our customers need to stay protected.[5]",
-      "Observed": "Focus on product transformation leveraging new technologies to meet evolving customer needs in insurance.[5]"
+  "Module A: The Company DNA": {
+    "Core Mission/Values": "Allstate's mission is to protect people from life's uncertainties and help them realize their hopes and dreams [5, 8, 14, 16]. Their vision is to be the premier customer-focused insurer, providing the most trusted and reliable protection [5]. Core values include integrity, customer focus, respect, innovation, and teamwork [5, 8]. They also emphasize inclusive diversity & equity and collective success [14, 15].",
+    "Problem Space": "Allstate aims to protect individuals and families from life's uncertainties by providing insurance and financial services, helping them secure what matters most and prepare for the future [8, 14, 19].",
+    "Business Model": {
+      "Revenue Streams": "Allstate's revenue primarily comes from insurance premiums, supplemented by investment income and fee- or contract-based revenue from Protection Services [3, 10, 17, 18]. They also generate revenue from financial products, policy renewals, enterprise risk management services, dealer services, and roadside services [10]. In Q1 2026, total revenues were $16.9 billion [27].",
+      "Growth Stage": "Allstate is a mature, publicly traded company with significant market capitalization, indicating it is in a growth and maturity phase, focusing on expanding market share and operational efficiency [12, 42].",
+      "Current Financial Health": "As of Q1 2026, Allstate reported total revenues of $16.9 billion and net income of $2.4 billion [27]. Their market capitalization is approximately $54.76 billion as of May 26, 2026 [42]. They have a strong return on equity of 39.5% [12]."
     },
-    "Problem Space": "Allstate solves pain points in insurance by offering home, auto, accident and health insurance, and specialty products through agents and direct to consumers, addressing evolving customer needs for protection and preparation.[3][5]",
-    "Business Model": "Revenue from insurance premiums across distribution channels including independent agents and direct sales. Mature public company (part of Allstate Corporation) with focus on profitability, compliance, and growth in state-specific programs.[3]",
-    "Founding Story": "Limited data in results; Allstate Corporation is established insurer with National General integration for innovative insurance solutions.[3]"
+    "Founding Story": "Allstate was founded on April 17, 1931, by Sears, Roebuck and Co. [2, 4, 6, 7]. The initial concept was direct-mail auto insurance, proposed by insurance broker Carl L. Odell to Sears President Robert E. Wood, aiming to reduce costs by eliminating agent commissions [4, 6, 7]. The first policy insured a 1930 Studebaker for $41.60 [2, 4]. The name 'Allstate' was chosen from a contest among Sears employees and was previously a Sears tire brand [4, 7]."
   },
-  "Module B": {
-    "The Big 3 Competitors": "Not specified in results. Differentiators include innovative drive, state-specific product management for compliance and profitability, and digital modernization of core systems.[3][4]",
-    "Macro Trends": "Evolving customer needs, digital transformation in policy administration, regulatory compliance in insurance rates/forms, and technology leverage like AI/container workloads implied in product roles.[4][6][7]"
+  "Module B: Market & Competitors": {
+    "The \"Big 3\" Competitors": "Allstate operates in the highly competitive insurance market. Key competitors include State Farm, Progressive, Geico, and Berkshire Hathaway [24, 36]. Allstate differentiates itself through its multi-channel distribution strategy, including exclusive agents, independent agents, and direct digital channels, as well as its focus on 'Protection Services' beyond traditional insurance [3, 10, 17].",
+    "Macro Trends": "The insurance industry faces trends such as increasing catastrophe losses (wind, hail, wildfire), inflation impacting claim costs (auto repair, medical, litigation), regulatory scrutiny on pricing, and the growing importance of digital transformation and AI [22, 40, 41]. There's also a shift towards flexible and remote work policies, impacting operational models and talent acquisition [1, 11, 13, 26]."
   },
-  "Module C": {
-    "Financials/Funding": "No recent funding rounds (mature corp). Product Manager salaries: $160K-$211K (Levels.fyi), median $170K-$178K total comp; Indeed avg $125,550, range $125K-$207K.[1][2]",
-    "Organizational Shifts": "No specific layoffs/hiring surges/leadership changes in 90-day window noted.",
-    "Product/Partnership News": "Open roles in digital product management for Policy Administration system modernization, M365, Container Workloads; National General part of Allstate.[3][4][7]"
+  "Module C: Recent Intelligence (90-Day Window)": {
+    "Financials/Funding": "In Q1 2026, Allstate reported total revenues of $16.9 billion, a 3.0% increase year-over-year, and net income of $2.4 billion [27]. Adjusted net income was $2.8 billion [27]. They announced a $4 billion share repurchase program through 2028 and an 8% dividend increase [34].",
+    "Organizational Shifts": "Allstate has embraced a flexible work policy, with approximately 75% of US employees remaining primarily home-based and 24% in a hybrid model [1, 11]. They have also reduced their real estate footprint [13].",
+    "Product/Partnership News": "Allstate's Protection Services segment, including Protection Plans for mobile phones, electronics, appliances, and furniture, generated $613 million in revenue in Q1 2026, up 13.5% year-over-year [41]. They are also focusing on expanding market share through more affordable prices, new products, expanded benefits, and bundled offerings [27]."
   },
-  "Module D": {
-    "JD Analysis": {
-      "Keywords": "Drive revenue/profitability, analyze market trends, product roadmap execution, compliance with regulations, team leadership, digital enhancements, policy administration.[3][4][6]",
-      "Hidden Success Signals": "Strategic results-driven, cross-functional collaboration, data analysis for profitability/retention, brand championing.",
-      "Required vs Preferred": "Required: Strategic thinking, team leadership, market analysis. Preferred: Insurance domain knowledge, digital product experience.[3][4]"
-    },
-    "Hierarchy": "Product Manager or Associate Manager leads team, collaborates with Project Implementation, Product Management, Sales; reports implied to senior strategies.[3]",
-    "Hiring Manager Profile": "No specific profiles found in results."
+  "Module D: The Role & Org Chart": {
+    "JD Analysis": "A Product Manager role at Allstate involves defining product vision, strategy, and roadmaps, gathering requirements, writing user stories, collaborating with cross-functional teams (UX, engineering, business), analyzing metrics, conducting competitive analysis, and managing the product lifecycle [21, 29, 32, 37]. Key responsibilities include driving top-line revenue and bottom-line profitability, ensuring compliance, and supporting product refinement and innovation [21]. Keywords include product vision, roadmap, requirements, user stories, agile, data-driven decisions, market trends, and cross-functional collaboration.",
+    "Hierarchy": "Allstate operates with a Board of Directors at the top, followed by an Executive Leadership Team led by the CEO, Tom Wilson [25]. The company is structured into business segments, each with a President or CEO, such as Allstate Protection and Allstate Health and Benefits [25]. Product Management roles likely fall within these segments, with Product Managers reporting to Group Product Managers or Directors, and potentially leading teams [21, 29].",
+    "Hiring Manager Profile": "Hiring managers for Product Manager roles at Allstate likely seek candidates with strong analytical skills, a deep understanding of customer-centric design, experience in project management and Agile methodologies, and the ability to translate data into actionable insights [32]. They value strategic thinkers with technical understanding and business acumen who can drive product success in a fast-paced environment [37]. Experience in defining product vision, roadmaps, and collaborating with cross-functional teams is crucial [29, 37]."
   },
-  "Module E": {
-    "Sentiment Analysis": "No Glassdoor/Reddit/Blind data in results; career site promotes flexible opportunities and product innovation.[8]",
-    "Operational Style": "Northbrook, IL office (hybrid implied); 579 open jobs suggest hiring activity.[2][3]"
+  "Module E: Culture & Reality Check": {
+    "Sentiment Analysis": "Reviews suggest a mixed sentiment. While many employees appreciate the benefits, flexibility, and opportunities for growth, some cite mediocre pay, frustration with processes, and challenges in claims handling [20, 22, 38]. Some Reddit users express negative experiences with Allstate's claims process, describing it as slow and inefficient [22, 31]. However, others highlight the company's commitment to employee well-being and its flexible work policy as positive aspects [1, 11].",
+    "Operational Style": "Allstate has adopted a flexible work policy, with the majority of employees working remotely or in a hybrid model [1, 11, 13, 26]. This approach is intended to attract top talent and improve work-life balance [1, 11]. The company utilizes a multi-channel distribution model, including exclusive agents, independent agents, and direct digital channels [3, 10]."
   },
-  "Module F": {
-    "Priority Mapping": "Product roadmap/prioritization → Jason's Platform experience; Data performance analysis/integrity → Data Integrity expertise; Revenue/profitability systems → Revenue Systems background; Digital modernization/compliance → Platform/Data strengths.[3][4][6]"
+  "Module F: The Intersection (The \"Bridge\")": {
+    "Priority Mapping": [
+      {
+        "Jason's Experience": "Platform",
+        "Allstate Priority": "Digital transformation and modernizing technology ecosystems are key initiatives for Allstate [14]. Product Managers are responsible for defining and delivering digital products, including customer self-service tools and agent platforms [29]. The Architecture Compute, and Engineering organization provides a transformative platform ecosystem [37]."
+      },
+      {
+        "Jason's Experience": "Data Integrity",
+        "Allstate Priority": "Allstate leverages sophisticated analytics and data-driven decisions for product development and strategy [21, 29, 37]. They are focused on responsible data handling to maintain reputation and foster positive business relationships [15]. Their vision includes reinventing protection with embedded, data-driven products and services [8]."
+      },
+      {
+        "Jason's Experience": "Revenue Systems",
+        "Allstate Priority": "Driving top-line revenue and bottom-line profitability is a core responsibility for Product Managers [21]. Allstate's revenue model relies heavily on insurance premiums, investment income, and Protection Services [3, 10, 17]. They focus on strategies like bundling services, tiered pricing, and market share expansion to enhance revenue [17, 27, 40]."
+      }
+    ]
   }
 }

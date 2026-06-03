@@ -12,6 +12,8 @@ import {
     passesIndustryGate as _passesIndustryGate,
     passesGeographicGate as _passesGeographicGate,
     passesSeniorityGate as _passesSeniorityGate,
+    passesBuiltInPmTitleScope as _passesBuiltInPmTitleScope,
+    passesBuiltInStrictRemoteCard as _passesBuiltInStrictRemoteCard,
     type ScrapedJob,
     type GateConfig,
 } from './domain/gates.js';
@@ -83,63 +85,20 @@ function getTheMuseCategory(targetRole: string): string {
 }
 
 
-// Experience level → BuiltIn slug
-const BUILTIN_EXP_SLUGS: Record<string, string> = {
-    'Internship':             'internship',
-    'Entry Level (0-1 Years)': 'entry-level',
-    'Junior (1-2 Years)':     'entry-level',
-    'Mid Level (2-5 Years)':  'mid-level',
-    'Senior Level (5-9 Years)': 'senior-level',
-    'Expert/Leader (9+ Years)': 'senior-level',
-};
-
 // ---------------------------------------------------------------------------
 // URL builders
 // ---------------------------------------------------------------------------
 
-function buildBuiltInUrlsForTerm(term: string): string[] {
-    const workPrefix = WORK_SETTING === 'Hybrid' ? 'hybrid' : WORK_SETTING === 'On-site' ? '' : 'remote';
-    const expSlugs = EXPERIENCE_LEVELS.length > 0
-        ? [...new Set(EXPERIENCE_LEVELS.map(l => BUILTIN_EXP_SLUGS[l]).filter(Boolean))]
-        : [];
-
-    const targets: string[] = [];
-    const pathSegments = ['jobs'];
-    
-    if (workPrefix) pathSegments.push(workPrefix);
-    // Leverage first experience slug inside URL path, mirroring Built In's routing architecture
-    if (expSlugs.length > 0) pathSegments.push(expSlugs[0]);
-
-    const basePath = pathSegments.join('/');
-    
-    // Combine daysSinceUpdated and days_since_posted queries to ensure API routing coverage
-    let query = `?search=${encodeURIComponent(term)}&daysSinceUpdated=${FRESHNESS_DAYS}&days_since_posted=${FRESHNESS_DAYS}&country=USA&allLocations=true`;
-    
-    // Append remaining experience slugs as array params
-    if (expSlugs.length > 1) {
-        for (let i = 1; i < expSlugs.length; i++) {
-            query += `&experience%5B%5D=${expSlugs[i]}`;
-        }
-    }
-
-    targets.push(`https://builtin.com/${basePath}${query}`);
-    return targets;
-}
-
-function buildBuiltInTaxonomyUrl(): string {
-    const workPrefix = WORK_SETTING === 'Hybrid' ? 'hybrid' : WORK_SETTING === 'On-site' ? '' : 'remote';
-    const base = workPrefix
-        ? `https://builtin.com/jobs/${workPrefix}/product-management`
-        : 'https://builtin.com/jobs/product-management';
-
-    let url = `${base}?days_since_posted=${FRESHNESS_DAYS}`;
-
-    if (EXPERIENCE_LEVELS.length > 0) {
-        const slugs = [...new Set(EXPERIENCE_LEVELS.map(l => BUILTIN_EXP_SLUGS[l]).filter(Boolean))];
-        for (const slug of slugs) url += `&experience%5B%5D=${slug}`;
-    }
-
-    return url;
+// FR-182 (CR-034): strict Built In seed URL to avoid broad/non-remote crawls.
+// Mirrors known-good UI URL shape:
+// /jobs/remote/mid-level?search=Product+Manager&daysSinceUpdated=7&city=&state=&country=USA&allLocations=true
+function buildBuiltInStrictSeedUrl(): string {
+    const seedTerm = 'Product Manager';
+    return `https://builtin.com/jobs/remote/mid-level` +
+        `?search=${encodeURIComponent(seedTerm)}` +
+        `&daysSinceUpdated=${FRESHNESS_DAYS}` +
+        `&days_since_posted=${FRESHNESS_DAYS}` +
+        `&city=&state=&country=USA&allLocations=true`;
 }
 
 const DB = new Database(DB_PATH);
@@ -379,18 +338,14 @@ function canonicalizeBuiltInUrl(raw: string): string {
 }
 
 const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
-    console.log('[LOG] Built In: Scouting multiple target channels...');
+    console.log('[LOG] Built In: Scouting strict PM remote US channel...');
     const jobs: ScrapedJob[] = [];
     const seenUrls = new Set<string>();
 
-    // Gather combined endpoints: term-specific text search + legacy taxonomy fallback
-    const targets: { url: string; label: string }[] = [];
-    for (const term of SEARCH_TERMS) {
-        for (const u of buildBuiltInUrlsForTerm(term)) {
-            targets.push({ url: u, label: `Search: ${term}` });
-        }
-    }
-    targets.push({ url: buildBuiltInTaxonomyUrl(), label: 'Taxonomy Fallback' });
+    // FR-182: strict single target only (Product Manager + Remote + Mid-level + US + fresh window).
+    const targets: { url: string; label: string }[] = [
+        { url: buildBuiltInStrictSeedUrl(), label: 'Strict PM Remote Mid-level US' },
+    ];
 
     for (const target of targets) {
         if (jobs.length >= BUILTIN_PER_SOURCE_CAP) break;
@@ -437,6 +392,7 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
                             '[data-id="job-card-title"], a.card-alias-after-overlay',
                             el => el.getAttribute('href'),
                         ).catch(() => '');
+                        const cardText = ((await card.textContent()) || '').replace(/\s+/g, ' ').trim();
 
                         if (!relUrl || !title || !company) {
                             console.log(`[LOG] Built In card skipped — missing title/company/url`);
@@ -449,8 +405,16 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
                         if (seenUrls.has(url)) continue;
                         seenUrls.add(url);
 
+                        if (!_passesBuiltInPmTitleScope(title)) {
+                            console.log(`[REJECT] ${title} at ${company} (Built In) - not_pm_title_scope`);
+                            continue;
+                        }
                         if (!passesTitleBlocklist(title)) {
                             console.log(`[REJECT] ${title} at ${company} (Built In) - Title Blocklist`);
+                            continue;
+                        }
+                        if (WORK_SETTING === 'Remote' && !_passesBuiltInStrictRemoteCard(cardText)) {
+                            console.log(`[REJECT] ${title} at ${company} (Built In) - not_strict_remote_listing`);
                             continue;
                         }
                         if (!isJobNewByUrl(url)) {
@@ -471,6 +435,29 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
                             continue;
                         }
 
+                        // Preserve explicit listing-level location cues (remote / SD-area) so strict geo gate
+                        // can evaluate real signals even when detail-page body omits location chips.
+                        const cardTextLower = cardText.toLowerCase();
+                        const hasRemoteListingSignal =
+                            cardTextLower.includes('remote') ||
+                            cardTextLower.includes('work from home') ||
+                            cardTextLower.includes('anywhere in');
+                        const hasSdListingSignal =
+                            cardTextLower.includes('san diego') ||
+                            cardTextLower.includes('carlsbad') ||
+                            cardTextLower.includes('la jolla') ||
+                            cardTextLower.includes('encinitas') ||
+                            cardTextLower.includes('del mar') ||
+                            cardTextLower.includes('solana beach');
+                        const locationSignalPrefix = hasRemoteListingSignal
+                            ? 'Listing location signal: Remote'
+                            : hasSdListingSignal
+                                ? 'Listing location signal: San Diego area'
+                                : '';
+                        const enrichedDescription = locationSignalPrefix
+                            ? `${locationSignalPrefix}\n\n${result.text}`
+                            : result.text;
+
                         console.log(`[LOG] Built In: JD fetched (${result.text.length} chars, confidence=${result.confidence})`);
 
                         // Flag no-signal JDs but still ingest — quality flag recorded for downstream review.
@@ -482,7 +469,7 @@ const scoutBuiltIn = async (page: Page): Promise<ScrapedJob[]> => {
                             company,
                             title,
                             url,
-                            description: result.text,
+                            description: enrichedDescription,
                             source: 'Built In',
                             extraction_confidence: result.confidence,
                             data_quality_flags: result.flags,
@@ -888,14 +875,230 @@ const scoutTheMuse = async (): Promise<ScrapedJob[]> => {
 };
 
 // ---------------------------------------------------------------------------
-// ATS watchlist (CR-021) — optional local careers pages
+// Shared helper — PM title scope for general/broad-category sources
+// ---------------------------------------------------------------------------
+
+/** Filters non-PM product roles (marketing, design, analytics) from broad-category feeds. */
+function passesBroadPmTitleScope(title: string): boolean {
+    const t = (title || '').toLowerCase();
+    if (/\bproduct marketing\b/.test(t)) return false;
+    if (/\bproduct design/.test(t)) return false;
+    if (/\bproduct analyt/.test(t)) return false;
+    return (
+        /\bproduct manager\b/.test(t) ||
+        /\bproduct owner\b/.test(t) ||
+        /\b(technical|platform|data|ai|api|integration|enterprise|infrastructure) product\b/.test(t)
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Source J: Jobicy (Free public JSON API, remote-only board)
+// ---------------------------------------------------------------------------
+
+const scoutJobicy = async (): Promise<ScrapedJob[]> => {
+    console.log('[LOG] Jobicy: Fetching remote PM jobs...');
+    const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
+
+    for (const term of SEARCH_TERMS) {
+        try {
+            const tag = term.toLowerCase().replace(/\s+/g, '+');
+            const res = await fetch(
+                `https://jobicy.com/api/v2/remote-jobs?count=50&geo=usa&tag=${encodeURIComponent(tag)}`,
+                { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobAgent/1.0)' } },
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json() as any;
+            const postings = data.jobs || [];
+            console.log(`[LOG] Jobicy: ${postings.length} results for "${term}".`);
+
+            for (const p of postings) {
+                const title   = String(p.jobTitle || '').trim();
+                const company = String(p.companyName || '').trim();
+                const url     = String(p.url || '').trim();
+                const pubDate = p.pubDate ? new Date(p.pubDate) : null;
+
+                if (!title || !company || !url) continue;
+                if (seenUrls.has(url)) continue;
+                if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                    console.log(`[REJECT] ${title} at ${company} (Jobicy) - Stale`);
+                    continue;
+                }
+                if (!passesTitleBlocklist(title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Jobicy) - Title Blocklist`);
+                    continue;
+                }
+                if (!isJobNewByUrl(url)) {
+                    console.log(`[REJECT] ${title} at ${company} (Jobicy) - URL already exists`);
+                    continue;
+                }
+                if (!isJobNewByCompanyTitle(company, title)) {
+                    console.log(`[REJECT] ${title} at ${company} (Jobicy) - Company/Title already exists`);
+                    continue;
+                }
+
+                seenUrls.add(url);
+                const salary = p.annualSalaryMin && p.annualSalaryMax
+                    ? `$${Math.round(p.annualSalaryMin / 1000)}k - $${Math.round(p.annualSalaryMax / 1000)}k`
+                    : undefined;
+                const desc = String(p.jobDescription || '').replace(/<[^>]+>/g, '').slice(0, 1500);
+                jobs.push({ company, title, url, description: desc, salary_range: salary, source: 'Jobicy' });
+                console.log(`[FOUND] ${title} at ${company} (Jobicy)`);
+            }
+        } catch (err) {
+            console.log(`[WARN] Jobicy search failed for "${term}": ${err}`);
+        }
+    }
+
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
+// Source K: Working Nomads (Public JSON API, client-side PM filter)
+// ---------------------------------------------------------------------------
+
+const scoutWorkingNomads = async (): Promise<ScrapedJob[]> => {
+    console.log('[LOG] Working Nomads: Fetching remote jobs...');
+    const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
+
+    try {
+        const res = await fetch('https://www.workingnomads.com/api/exposed_jobs/', {
+            headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; JobAgent/1.0)' },
+            signal: AbortSignal.timeout(20000),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const postings = await res.json() as any[];
+        console.log(`[LOG] Working Nomads: ${postings.length} total jobs, filtering for PM roles...`);
+        let categoryHits = 0;
+
+        for (const p of postings) {
+            const title    = String(p.title || '').trim();
+            const company  = String(p.company_name || '').trim();
+            const url      = String(p.url || '').trim();
+            const category = String(p.category_name || '').toLowerCase();
+            const pubDate  = p.pub_date ? new Date(p.pub_date) : null;
+
+            if (!title || !company || !url) continue;
+            if (!category.includes('product') && !category.includes('management')) continue;
+            categoryHits++;
+            if (!passesBroadPmTitleScope(title)) {
+                console.log(`[REJECT] ${title} at ${company} (Working Nomads) - not_pm_title_scope`);
+                continue;
+            }
+            if (seenUrls.has(url)) continue;
+            if (pubDate && pubDate.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                console.log(`[REJECT] ${title} at ${company} (Working Nomads) - Stale`);
+                continue;
+            }
+            if (!passesTitleBlocklist(title)) {
+                console.log(`[REJECT] ${title} at ${company} (Working Nomads) - Title Blocklist`);
+                continue;
+            }
+            if (!isJobNewByUrl(url)) {
+                console.log(`[REJECT] ${title} at ${company} (Working Nomads) - URL already exists`);
+                continue;
+            }
+            if (!isJobNewByCompanyTitle(company, title)) {
+                console.log(`[REJECT] ${title} at ${company} (Working Nomads) - Company/Title already exists`);
+                continue;
+            }
+
+            seenUrls.add(url);
+            const desc = String(p.description || '').replace(/<[^>]+>/g, '').slice(0, 1500);
+            jobs.push({ company, title, url, description: desc, source: 'Working Nomads' });
+            console.log(`[FOUND] ${title} at ${company} (Working Nomads)`);
+        }
+        console.log(`[LOG] Working Nomads: ${categoryHits} matched product/management category → ${jobs.length} passed PM title scope.`);
+    } catch (err) {
+        console.log(`[WARN] Working Nomads failed: ${err}`);
+    }
+
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
+// Source L: JobsCollider / RemoteFirstJobs (RSS, hourly updates)
+// ---------------------------------------------------------------------------
+
+const scoutJobsCollider = async (): Promise<ScrapedJob[]> => {
+    console.log('[LOG] JobsCollider: Fetching remote product jobs via RSS...');
+    const jobs: ScrapedJob[] = [];
+    const seenUrls = new Set<string>();
+
+    // jobscollider.com/remote-product-jobs.rss redirects here
+    const feedUrl = 'https://remotefirstjobs.com/remote-product-jobs.rss';
+
+    const extract = (item: string, tag: string) => {
+        const m = item.match(new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`))
+            || item.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+        return m ? m[1].trim() : '';
+    };
+
+    try {
+        const res = await fetch(feedUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const xml = await res.text();
+
+        const items = xml.match(/<item>[\s\S]*?<\/item>/g) || [];
+        console.log(`[LOG] JobsCollider: ${items.length} RSS items from product feed.`);
+
+        for (const item of items) {
+            const rawTitle = extract(item, 'title');
+            const url      = extract(item, 'link');
+            const pubDate  = extract(item, 'pubDate');
+
+            // Title format from this feed: "Job Title at Company Name"
+            const lastAt = rawTitle.lastIndexOf(' at ');
+            const title   = lastAt > 0 ? rawTitle.slice(0, lastAt).trim() : rawTitle;
+            const company = lastAt > 0 ? rawTitle.slice(lastAt + 4).trim() : 'Unknown';
+
+            if (!title || !url) continue;
+            if (!passesBroadPmTitleScope(title)) {
+                console.log(`[REJECT] ${title} at ${company} (JobsCollider) - not_pm_title_scope`);
+                continue;
+            }
+            if (seenUrls.has(url)) continue;
+            if (pubDate) {
+                const d = new Date(pubDate);
+                if (d.getTime() < FRESHNESS_CUTOFF_EPOCH * 1000) {
+                    console.log(`[REJECT] ${title} at ${company} (JobsCollider) - Stale`);
+                    continue;
+                }
+            }
+            if (!passesTitleBlocklist(title)) {
+                console.log(`[REJECT] ${title} at ${company} (JobsCollider) - Title Blocklist`);
+                continue;
+            }
+            if (!isJobNewByUrl(url)) {
+                console.log(`[REJECT] ${title} at ${company} (JobsCollider) - URL already exists`);
+                continue;
+            }
+            if (!isJobNewByCompanyTitle(company, title)) {
+                console.log(`[REJECT] ${title} at ${company} (JobsCollider) - Company/Title already exists`);
+                continue;
+            }
+
+            seenUrls.add(url);
+            jobs.push({ company, title, url, description: '', source: 'JobsCollider' });
+            console.log(`[FOUND] ${title} at ${company} (JobsCollider)`);
+        }
+    } catch (err) {
+        console.log(`[WARN] JobsCollider RSS failed: ${err}`);
+    }
+
+    return jobs;
+};
+
+// ---------------------------------------------------------------------------
+// ATS watchlist (CR-021, FR-147) — optional local careers pages; FR-194: no .example fallback
 // ---------------------------------------------------------------------------
 
 const scoutAtsWatchlist = async (): Promise<ScrapedJob[]> => {
+    // User-owned watchlists only — never load .example.json (contains "Example Corp" demo URLs).
     const candidates = [
         path.resolve('data/ats_watchlist.json'),
         path.resolve('config/ats_watchlist.json'),
-        path.resolve('config/ats_watchlist.example.json'),
     ];
     let raw: string | null = null;
     for (const p of candidates) {
@@ -1022,33 +1225,52 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
 
 (async () => {
     const healthLog: SourceHealth[] = [];
-
-    console.log('[START] Multi-source scout run starting (9 sources)...');
-
-    // --- Phase 1: All API sources run in parallel (no browser needed) ---
-    const [opResult, remotiveResult, remoteOkResult, wwrResult, himalayasResult, theMuseResult, adzunaResult] = await Promise.all([
-        runWithHealth('OpenPostings', scoutOpenPostings),
-        runWithHealth('Remotive', scoutRemotive),
-        runWithHealth('RemoteOK', scoutRemoteOK),
-        runWithHealth('WWR', scoutWWR),
-        runWithHealth('Himalayas', scoutHimalayas),
-        runWithHealth('The Muse', scoutTheMuse),
-        runWithHealth('Adzuna', scoutAdzuna),
-    ]);
-
-    healthLog.push(
-        opResult.health, remotiveResult.health, remoteOkResult.health, wwrResult.health,
-        himalayasResult.health, theMuseResult.health, adzunaResult.health,
+    const builtinOnly = ['1', 'true', 'yes'].includes(
+        (process.env.SCOUT_BUILTIN_ONLY || '').toLowerCase(),
     );
-    const atsJobs = await scoutAtsWatchlist();
-    healthLog.push({ name: 'ATS Watchlist', status: atsJobs.length ? 'ok' : 'skipped', found: atsJobs.length, durationMs: 0 });
 
-    const apiJobs = [
-        ...opResult.jobs, ...remotiveResult.jobs, ...remoteOkResult.jobs, ...wwrResult.jobs,
-        ...himalayasResult.jobs, ...theMuseResult.jobs, ...adzunaResult.jobs, ...atsJobs,
-    ];
+    console.log(
+        builtinOnly
+            ? '[START] Built In-only scout run (SCOUT_BUILTIN_ONLY=1)...'
+            : '[START] Multi-source scout run starting (13 sources)...',
+    );
 
-    // --- Phase 2: Browser sources (LinkedIn + BuiltIn + Levels.fyi) run sequentially ---
+    let apiJobs: ScrapedJob[] = [];
+    if (!builtinOnly) {
+        // --- Phase 1: All API sources run in parallel (no browser needed) ---
+        const [
+            opResult, remotiveResult, remoteOkResult, wwrResult, himalayasResult,
+            theMuseResult, adzunaResult, jobicyResult, workingNomadsResult, jobsColliderResult,
+        ] = await Promise.all([
+            runWithHealth('OpenPostings', scoutOpenPostings),
+            runWithHealth('Remotive', scoutRemotive),
+            runWithHealth('RemoteOK', scoutRemoteOK),
+            runWithHealth('WWR', scoutWWR),
+            runWithHealth('Himalayas', scoutHimalayas),
+            runWithHealth('The Muse', scoutTheMuse),
+            runWithHealth('Adzuna', scoutAdzuna),
+            runWithHealth('Jobicy', scoutJobicy),
+            runWithHealth('Working Nomads', scoutWorkingNomads),
+            runWithHealth('JobsCollider', scoutJobsCollider),
+        ]);
+
+        healthLog.push(
+            opResult.health, remotiveResult.health, remoteOkResult.health, wwrResult.health,
+            himalayasResult.health, theMuseResult.health, adzunaResult.health,
+            jobicyResult.health, workingNomadsResult.health, jobsColliderResult.health,
+        );
+        const atsJobs = await scoutAtsWatchlist();
+        healthLog.push({ name: 'ATS Watchlist', status: atsJobs.length ? 'ok' : 'skipped', found: atsJobs.length, durationMs: 0 });
+
+        apiJobs = [
+            ...opResult.jobs, ...remotiveResult.jobs, ...remoteOkResult.jobs, ...wwrResult.jobs,
+            ...himalayasResult.jobs, ...theMuseResult.jobs, ...adzunaResult.jobs,
+            ...jobicyResult.jobs, ...workingNomadsResult.jobs, ...jobsColliderResult.jobs,
+            ...atsJobs,
+        ];
+    }
+
+    // --- Phase 2: Browser sources (BuiltIn; optional Levels.fyi) ---
     let browserJobs: ScrapedJob[] = [];
     try {
         const context = await chromium.launchPersistentContext(CONTEXT_DIR, {
@@ -1064,18 +1286,23 @@ const scoutAdzuna = async (): Promise<ScrapedJob[]> => {
         const biResult = await runWithHealth('BuiltIn', () => scoutBuiltIn(page));
         healthLog.push(biResult.health);
 
-        const lvResult = await runWithHealth('Levels.fyi', () => scoutLevelsFyi(page));
-        healthLog.push(lvResult.health);
-
-        browserJobs = [...biResult.jobs, ...lvResult.jobs];
+        if (!builtinOnly) {
+            const lvResult = await runWithHealth('Levels.fyi', () => scoutLevelsFyi(page));
+            healthLog.push(lvResult.health);
+            browserJobs = [...biResult.jobs, ...lvResult.jobs];
+        } else {
+            browserJobs = [...biResult.jobs];
+        }
         await context.close();
     } catch (err) {
-        console.log(`[WARN] Browser init failed. Skipping LinkedIn + BuiltIn + Levels.fyi: ${err}`);
+        console.log(`[WARN] Browser init failed. Skipping browser sources: ${err}`);
         healthLog.push(
-            { name: 'LinkedIn', status: 'skipped', found: 0, durationMs: 0, error: String(err) },
+            { name: 'LinkedIn', status: 'skipped', found: 0, durationMs: 0, error: 'Decommissioned' },
             { name: 'BuiltIn', status: 'skipped', found: 0, durationMs: 0, error: String(err) },
-            { name: 'Levels.fyi', status: 'skipped', found: 0, durationMs: 0, error: String(err) },
         );
+        if (!builtinOnly) {
+            healthLog.push({ name: 'Levels.fyi', status: 'skipped', found: 0, durationMs: 0, error: String(err) });
+        }
     }
 
     // --- Phase 3: Merge, dedup, save ---

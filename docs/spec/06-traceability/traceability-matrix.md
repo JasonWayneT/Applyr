@@ -140,7 +140,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-144` | CR-021 | Draft linter | `scripts/draft_linter.py` | implemented |
 | `FR-145` | CR-021 | Anti-claim check | `scripts/verification_chain.py` | implemented |
 | `FR-146` | CR-021 | Verb/numeric gates | `scripts/local_draft_stages.py` | implemented |
-| `FR-147` | CR-021 | ATS watchlist | `scripts/scout_local.ts`, `config/ats_watchlist.example.json` | implemented |
+| `FR-147` | CR-021 | ATS watchlist | `scripts/scout_local.ts`, `data/ats_watchlist.json` | implemented |
+| `FR-194` | CR-041 | ATS watchlist no example fallback | `scripts/scout_local.ts`, `config/ats_watchlist.example.json` | implemented |
 | `FR-148` | CR-021 | CI smoke workflow | `.github/workflows/smoke.yml` | implemented |
 | `FR-149` | CR-021 | BM25 fit + JSON schema | `scripts/batch_pipeline.py` | implemented |
 | `FR-150` | CR-021 | RESEARCH_MODE routing | `scripts/drafting_engine.py`, `research-engine.py` | implemented |
@@ -149,6 +150,19 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-172` | CR-028 | Required anchors + optional gate | `scripts/anchor_gate.py`, `server/shared.ts`, `data/candidate_preferences.example.json` | implemented |
 | `FR-173` | CR-028 | Scout Levels + Remote geo | `scripts/scout_local.ts` | implemented |
 | `FR-180` | CR-033 | Built In detail-page JD ingest | `scripts/extract_job_page.ts`, `scripts/scout_local.ts`, `scripts/scrape_new_jobs.ts` | implemented |
+| `FR-181` | CR-034 | Built In strict geo signal carry-through | `scripts/scout_local.ts`, `scripts/domain/gates.ts` | implemented |
+| `FR-182` | CR-034 | Built In strict seed URL targeting | `scripts/scout_local.ts` | implemented |
+| `FR-183` | CR-034 | Built In card PM + strict remote pre-filters | `scripts/domain/gates.ts`, `scripts/scout_local.ts`, `tests/unit/gates.test.ts` | implemented |
+| `FR-188` | CR-035 | Fit scoring hardening (location lock, anchor floor, scoring-only primary) | `scripts/fit_policy.py`, `scripts/batch_pipeline.py`, `scripts/zero_shot_classifier.py` | implemented |
+| `FR-189` | CR-036 | Solo PM trap gate + years policy lock | `scripts/solo_pm_gate.py`, `scripts/fit_policy.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-190` | CR-037 | Required vertical domain gate + fit cap | `scripts/domain_gate.py`, `scripts/fit_policy.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-191` | CR-038 | B2C role openness (prefs, keywords, fit prompt) | `scripts/fit_policy.py`, `scripts/batch_pipeline.py`, `data/candidate_preferences.example.json` | implemented |
+| `FR-192` | CR-039 | Transferable skills over domain/industry gate | `scripts/domain_gate.py`, `scripts/fit_policy.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-193` | CR-040 | Theme primary claims + cover/resume numeric corpus alignment | `scripts/theme_primaries.py`, `scripts/draft_compiler.py`, `scripts/jd_tailoring.py` | implemented |
+| `FR-184` | User Request | `FEAT-001` | `scripts/scout_local.ts` — `scoutJobicy()` | implemented |
+| `FR-185` | User Request | `FEAT-001` | `scripts/scout_local.ts` — `scoutWorkingNomads()` | implemented |
+| `FR-186` | User Request | `FEAT-001` | `scripts/scout_local.ts` — `scoutJobsCollider()` | implemented |
+| `FR-187` | User Request | `FEAT-001` | `scripts/scout_local.ts` — `passesBroadPmTitleScope()`, `scripts/domain/gates.ts` — `REMOTE_ONLY_SOURCES` | implemented |
 | `FR-174` | CR-031 | Approved metrics module | `scripts/approved_metrics.py` | implemented |
 | `FR-175` | CR-031 | Catalog + anti-claim validation | `scripts/catalog_validator.py` | implemented |
 | `FR-176` | CR-031 | Strict quality flags | `scripts/pipeline_env.py` | implemented |

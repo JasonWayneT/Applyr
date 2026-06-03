@@ -39,8 +39,8 @@ DEFAULT_MODEL = "gemini-2.5-flash-lite"
 SCORING_JD_MAX_CHARS = 1500
 
 _DEFAULT_JD_KEYWORDS = [
-    'saas', 'b2b', 'platform', 'integration', 'enterprise', 'api',
-    'product', 'software', 'agile', 'roadmap', 'stakeholder',
+    'saas', 'b2b', 'b2c', 'consumer', 'platform', 'integration', 'enterprise', 'api',
+    'product', 'software', 'agile', 'roadmap', 'stakeholder', 'mobile', 'app',
 ]
 
 def _bootstrap_from_prefs():

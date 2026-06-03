@@ -1,46 +1,112 @@
 {
+
   "target_role": "Product Manager",
+
   "search_terms": ["Product Manager", "Product Owner", "Technical Product Manager", "Platform Product Manager"],
+
   "location_preference": "United States",
+
   "work_setting": "Remote",
+
   "experience_levels": [],
+
   "date_posted": "Past week",
+
   "freshness_days": 7,
+
   "blocked_titles": [
+
     "Staff", "VP", "Head", "Principal", "Lead", "Director", "Group Product Manager", "GPM",
+
     "Growth", "Founding", "First", "Manager of", "Engineering Manager", "People Manager",
+
     "Assistant", "Coordinator", "Intern", "Associate", "Entry", "Junior",
+
     "Analyst", "Software Engineer", "Developer", "Designer", "Marketer"
+
   ],
+
   "blocked_industries": [
+
     "Gambling", "Sports Betting", "Gaming", "Ad Tech", "Crypto", "Web3"
+
   ],
+
   "min_salary": 0,
+
   "min_fit_score": 72,
+
   "jd_required_keywords": [
-    "saas", "b2b", "platform", "integration", "enterprise", "api",
-    "software", "agile", "roadmap", "stakeholder"
+
+    "saas", "b2b", "b2c", "consumer", "platform", "integration", "enterprise", "api",
+
+    "mobile", "app", "software", "agile", "roadmap", "stakeholder"
+
   ],
+
   "signal_keywords": [
-    "saas", "b2b", "platform", "integration", "enterprise", "api",
-    "software", "agile", "roadmap", "stakeholder"
+
+    "saas", "b2b", "b2c", "consumer", "platform", "integration", "enterprise", "api",
+
+    "mobile", "app", "software", "agile", "roadmap", "stakeholder"
+
   ],
+
   "must_have_keywords": [],
-  "required_anchors": [
+
+  "domain_experience": [
+
     "b2b saas",
+
+    "enterprise software",
+
     "platform",
-    "cross-functional",
-    "roadmap"
+
+    "software",
+
+    "integration"
+
   ],
+
+  "required_domain_min_years": 2,
+
+  "required_anchors": [
+
+    "saas",
+
+    "platform",
+
+    "cross-functional",
+
+    "roadmap"
+
+  ],
+
   "experience_range": {
+
     "min": 2,
+
     "max": 7,
+
     "total_years_observed": 6
+
   },
+
   "preferences": {
-    "no_people_management": true,
+
+    "open_to_b2c": true,
+    "score_on_transferable_skills": true,
+
+    "avoid_solo_pm_trap": true,
+
     "no_zero_to_one": true,
+
     "structured_team_required": true,
+
     "max_company_size_penalty_threshold": 50
+
   }
+
 }
+
+

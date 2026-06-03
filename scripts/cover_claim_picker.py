@@ -46,6 +46,9 @@ def _proof_score(claim_text: str, need: str, profile: JdProfile, jd_text: str) -
             score += 6
     if "data" in need_l and "data" in text_l:
         score += 4
+    if "security" in need_l or "security" in jd_text.lower():
+        if "security" in text_l or "vulnerab" in text_l:
+            score += 8
     if re.search(r"\d", claim_text):
         score += 3
     return score

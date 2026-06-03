@@ -107,6 +107,72 @@ assert_test("REG-15: Batch title gate passes PM",
             _ok2,
             f"Expected pass, got reason={_reason2}")
 
+# REG-16–REG-17: Location verdict lock-in (multi-city + Remote)
+from zero_shot_classifier import resolve_location_verdict, classify_onsite
+
+_brown_jd = (
+    "Brown & Brown is seeking Product Manager in Dallas, TX, Atlanta, GA, or Remote! "
+    "Agile roadmap stakeholder product management."
+)
+_verdict, _detail = resolve_location_verdict(_brown_jd)
+assert_test("REG-16: Multi-city + Remote resolves REMOTE_OK",
+            _verdict == "REMOTE_OK",
+            f"Expected REMOTE_OK, got {_verdict} ({_detail})")
+
+_reject, _reason = classify_onsite(_brown_jd)
+assert_test("REG-16: Multi-city + Remote does not onsite-reject",
+            not _reject,
+            f"Expected pass, got reject reason={_reason}")
+
+_onsite_only = (
+    "Title: Product Manager\nHybrid role based in Atlanta, GA. "
+    "3 days per week in-office. B2B SaaS roadmap."
+)
+_v2, _ = resolve_location_verdict(_onsite_only)
+_reject2, _reason2 = classify_onsite(_onsite_only)
+assert_test("REG-17: Hybrid outside SD without Remote rejects",
+            _v2 == "REJECT" and _reject2,
+            f"Expected REJECT, got verdict={_v2} reject={_reject2} reason={_reason2}")
+
+# REG-18–REG-19: Fit policy (CR-035 / FR-188)
+from fit_policy import apply_anchor_floor, detect_optional_domain_note
+
+_promoted = apply_anchor_floor(
+    {"Decision": "NO", "Score": 68, "Summary": "borderline"},
+    "B2B platform roadmap cross-functional agile",
+    {"required_anchors": ["platform", "roadmap", "cross-functional", "b2b saas"]},
+    72,
+)
+assert_test("REG-18: Anchor floor promotes 68 to 72",
+            _promoted and _promoted["Decision"] == "YES" and _promoted["Score"] == 72,
+            str(_promoted))
+
+assert_test("REG-19: Optional domain note detected",
+            bool(detect_optional_domain_note("Any experience in healthcare is a nice plus")),
+            "expected optional domain note")
+
+# REG-20–REG-21: Transferable skills / domain gaps (CR-039 / FR-192)
+from domain_gate import check_domain_gate, get_domain_gaps
+
+_cotiviti = (
+    "3-5 years of experience in the US healthcare industry, specifically in "
+    "healthcare payment analytics. B2B platform roadmap cross-functional."
+)
+_ok, _reason = check_domain_gate(_cotiviti, {"domain_experience": ["b2b saas", "platform"]})
+assert_test("REG-20: Required healthcare does not zero-token reject",
+            _ok,
+            f"expected pass, got reason={_reason}")
+_gaps = get_domain_gaps(_cotiviti, {"domain_experience": ["b2b saas", "platform"]})
+assert_test("REG-20b: Healthcare gap reported for scoring context",
+            any(g.get("vertical") == "healthcare" for g in _gaps),
+            str(_gaps))
+
+_ophelia = "You may not have experience in this treatment area. Any experience in healthcare is a nice plus!"
+_ok2, _reason2 = check_domain_gate(_ophelia, {"domain_experience": ["b2b saas"]})
+assert_test("REG-21: Optional healthcare language passes domain gate",
+            _ok2,
+            f"expected pass, got reason={_reason2}")
+
 # -------------------------------------------------------------------
 # SMOKE TESTS (Layer 3: API & Endpoints)
 # -------------------------------------------------------------------

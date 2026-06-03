@@ -414,6 +414,7 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str =
     from seniority_gate import check_years_gate, passes_title_gate
     from industry_gate import check_industry_gate
     from anchor_gate import check_anchor_gate
+    from solo_pm_gate import check_solo_pm_gate
     from utils import passes_keyword_gate
 
     prefs = prefs or load_candidate_preferences()
@@ -424,6 +425,12 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str =
         return False
 
     ok, reason = check_years_gate(jd_text, prefs)
+    if not ok:
+        print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
+        return False
+
+    # Implements FR-189 (CR-036)
+    ok, reason = check_solo_pm_gate(jd_text, prefs)
     if not ok:
         print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
         return False
@@ -472,33 +479,84 @@ def _pruned_work_exp_for_fit(jd_text: str, work_exp_summary: str, k: int = 8) ->
     return "\n\n".join(picked)
 
 
-def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
-    """Uses condensed summary and dynamic candidate preferences to minimize token cost."""
-    # Truncate JD — first 1500 chars contain ~90% of signal for scoring
-    truncated_jd = jd_text[:SCORING_JD_MAX_CHARS] if len(jd_text) > SCORING_JD_MAX_CHARS else jd_text
-    work_exp_for_fit = _pruned_work_exp_for_fit(truncated_jd, work_exp_summary)
+def _location_stripped_rubric(job_fit_rules: str) -> str:
+    """Remove §2.3 from rubric when location is pre-verified (local LLMs ignore prompt hints)."""
+    return re.sub(
+        r"### 2\.3 Location & Setting Gate.*?(?=\n---\n\n## 3\))",
+        "### 2.3 Location & Setting Gate\n"
+        "- **SKIPPED** — PRE-VERIFIED LOCATION POLICY already applied. Do not score or reject on location.\n",
+        job_fit_rules,
+        count=1,
+        flags=re.DOTALL,
+    )
 
-    prefs_str = json.dumps(prefs, indent=2) if prefs else "{}"
 
-    fit_schema = {
-        "type": "object",
-        "properties": {
-            "Decision": {"type": "string"},
-            "Score": {"type": "integer"},
-            "Confidence": {"type": "string"},
-            "Summary": {"type": "string"},
-            "TopFitReasons": {"type": "array", "items": {"type": "string"}},
-            "RiskFlags": {"type": "array", "items": {"type": "string"}},
-        },
-        "required": ["Decision", "Score", "Summary"],
-    }
+def _fit_cites_location_reject(result: dict) -> bool:
+    blob = " ".join([
+        str(result.get("Summary") or ""),
+        " ".join(result.get("TopFitReasons") or []),
+        " ".join(result.get("RiskFlags") or []),
+    ]).lower()
+    phrases = (
+        "location", "on-site", "onsite", "not remote", "remote role not",
+        "remote requirement", "outside san diego", "san diego", "dallas",
+        "atlanta", "hybrid", "in office", "in-office", "geograph",
+        "work setting", "preference not met",
+    )
+    return any(p in blob for p in phrases)
 
+
+def _fit_score_int(result: dict) -> int | None:
+    raw = result.get("Score")
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str) and raw.strip().isdigit():
+        return int(raw.strip())
+    return None
+
+
+def _looks_like_false_fast_gate(result: dict) -> bool:
+    """Local qwen often re-runs Stage A and returns score < 30 despite deterministic gates passing."""
+    if not result or str(result.get("Decision", "")).upper() != "NO":
+        return False
+    score = _fit_score_int(result)
+    return score is not None and score <= 35
+
+
+def _normalize_fit_result(result: dict) -> dict | None:
+    """Coerce common local-LLM JSON mistakes into a usable fit payload."""
+    if not result or not isinstance(result, dict):
+        return None
+    decision = result.get("Decision")
+    if isinstance(decision, dict):
+        decision = next(iter(decision.values()), "NO")
+    score = _fit_score_int(result)
+    summary = result.get("Summary")
+    if isinstance(summary, dict):
+        summary = next(iter(summary.values()), "")
+    if score is None or not str(decision).strip():
+        return None
+    out = dict(result)
+    out["Decision"] = str(decision).upper()
+    out["Score"] = score
+    out["Summary"] = str(summary or "").strip()
+    return out
+
+
+def _call_fit_llm(
+    truncated_jd,
+    work_exp_for_fit,
+    job_fit_rules,
+    prefs_str,
+    location_lock,
+    fit_schema,
+):
     prompt = f"""
     You are the JobAgent Job-Fit Decision Engine.
     
     CANDIDATE PREFERENCES:
     {prefs_str}
-
+    {location_lock}
     GROUND TRUTH (Jason Taylor's Profile — BM25-pruned):
     {work_exp_for_fit}
     
@@ -508,11 +566,12 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     RULES & SCORING PROTOCOL:
     {job_fit_rules}
     
-    Process the above JOB DESCRIPTION using the strictly defined RULES & SCORING PROTOCOL. 
-    First, check the Fast Gate (Hard Disqualifiers) based on the CANDIDATE PREFERENCES. If disqualified, return a score < 30 and Decision: NO.
+    IMPORTANT: Deterministic pre-filters already evaluated title blocklist, years, industry,
+    keywords, and location before this call. Do NOT re-run Stage A fast gate.
+    Start at Stage B (0-100 scoring). Never return score below 40 for location, title blocklist,
+    or remote/hybrid — those gates already passed.
     Senior in the title is allowed when required years are within experience_range.max.
     Do not reject solely for AI tools mentions; reject only for primary AI/ML model ownership roles.
-    Next, apply the 100-point scoring criteria.
     Apply the Two-Anchor rule using the anchors defined in CANDIDATE PREFERENCES.
     
     Return the response ONLY in a valid JSON object format precisely matching this schema:
@@ -547,13 +606,11 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
         return None
 
     try:
-        import re
-        # Extract the JSON object robustly from free-form response text
         match = re.search(r'\{.*\}', result, re.DOTALL)
         if match:
             output = match.group(0).strip()
             return json.loads(output)
-            
+
         output = result.strip()
         if output.startswith("```json"):
             output = output[7:-3].strip()
@@ -563,6 +620,183 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     except json.JSONDecodeError as e:
         print(json.dumps({"stage": "fit", "status": "error", "summary": f"Failed to parse LLM JSON: {e}"}))
         return None
+
+
+def _call_fit_scoring_only(
+    truncated_jd,
+    work_exp_for_fit,
+    prefs_str,
+    loc_verdict,
+    fit_schema,
+    scoring_context: str = "",
+):
+    """Stage-B-only scoring — primary path after deterministic gates pass (CR-035)."""
+    prompt = f"""
+    You are scoring job fit ONLY. Deterministic gates already passed (title, years, industry, keywords, location).
+    Location policy: {loc_verdict}. Ignore city/office/hybrid/remote mentions — location is NOT a scoring factor.
+
+    {scoring_context}
+
+    CANDIDATE PREFERENCES:
+    {prefs_str}
+
+    GROUND TRUTH (candidate profile excerpt):
+    {work_exp_for_fit}
+
+    JOB DESCRIPTION:
+    {truncated_jd}
+
+    Score alignment on: PM title match, years of experience, agile/roadmap/stakeholder work,
+    transferable PM skills (platform, cross-functional, data complexity) — not industry
+    vertical or B2C/B2B customer base alone, team structure, and required_anchors.
+    Product Manager and Senior Product Manager titles match target_role Product Manager when years fit.
+    Do NOT reject for location or optional domain/vertical gaps when DOMAIN_REQUIREMENT: OPTIONAL is set.
+
+    Return a single JSON object with string Decision ("YES" or "NO"), integer Score (0-100),
+    string Summary, and optional TopFitReasons / RiskFlags arrays. Do not nest values.
+    """
+    from llm_stages import call_llm_stage
+    from pipeline_env import fit_llm_timeout_sec, fit_model_override, fit_num_predict
+
+    fit_model = fit_model_override()
+    raw = call_llm_stage(
+        "fit",
+        "Output JSON strictly. Never cite location as a reject reason.",
+        prompt,
+        temperature=0.0,
+        response_mime_type="application/json",
+        response_schema=fit_schema,
+        model=fit_model,
+        options_override={"num_predict": fit_num_predict()},
+        request_timeout=fit_llm_timeout_sec(),
+    )
+    if not raw or not raw.strip():
+        return None
+    try:
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        payload = match.group(0).strip() if match else raw.strip()
+        return _normalize_fit_result(json.loads(payload))
+    except json.JSONDecodeError:
+        return None
+
+
+def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
+    """Uses condensed summary and dynamic candidate preferences to minimize token cost."""
+    from zero_shot_classifier import resolve_location_verdict, location_lock_prompt_block
+    from fit_policy import (
+        apply_anchor_floor,
+        build_fit_scoring_context,
+        gates_passed_rubric,
+        strip_false_years_penalty,
+        strip_location_risk_flags,
+        _fit_cites_years_reject,
+    )
+
+    # Truncate JD — first 1500 chars contain ~90% of signal for scoring
+    truncated_jd = jd_text[:SCORING_JD_MAX_CHARS] if len(jd_text) > SCORING_JD_MAX_CHARS else jd_text
+    work_exp_for_fit = _pruned_work_exp_for_fit(truncated_jd, work_exp_summary)
+
+    loc_verdict, loc_detail = resolve_location_verdict(truncated_jd)
+    if loc_verdict == "REJECT":
+        return {
+            "Decision": "NO",
+            "Score": 0,
+            "Confidence": "High",
+            "Summary": loc_detail[:120],
+            "TopFitReasons": [],
+            "RiskFlags": ["location_policy_reject"],
+        }
+
+    location_lock = location_lock_prompt_block(loc_verdict, loc_detail)
+    scoring_context = build_fit_scoring_context(
+        jd_text, prefs, loc_verdict, loc_detail, location_lock,
+    )
+    rules_for_fit = gates_passed_rubric(
+        _location_stripped_rubric(job_fit_rules)
+        if loc_verdict in ("REMOTE_OK", "SD_LOCAL_OK")
+        else job_fit_rules,
+    )
+
+    prefs_str = json.dumps(prefs, indent=2) if prefs else "{}"
+    min_score = get_min_fit_score()
+
+    fit_schema = {
+        "type": "object",
+        "properties": {
+            "Decision": {"type": "string"},
+            "Score": {"type": "integer"},
+            "Confidence": {"type": "string"},
+            "Summary": {"type": "string"},
+            "TopFitReasons": {"type": "array", "items": {"type": "string"}},
+            "RiskFlags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["Decision", "Score", "Summary"],
+    }
+
+    # Primary path: Stage-B scoring only (CR-035)
+    print("  -> [FIT] Scoring-only primary path (deterministic gates already passed).", file=sys.stderr)
+    result = _call_fit_scoring_only(
+        truncated_jd, work_exp_for_fit, prefs_str, loc_verdict, fit_schema, scoring_context,
+    )
+
+    if not result:
+        print("  -> [FIT] Scoring-only returned no result — fallback to Stage-B rubric LLM.", file=sys.stderr)
+        result = _call_fit_llm(
+            truncated_jd, work_exp_for_fit, rules_for_fit, prefs_str,
+            location_lock + "\n" + scoring_context, fit_schema,
+        )
+
+    if (
+        result
+        and loc_verdict in ("REMOTE_OK", "SD_LOCAL_OK")
+        and str(result.get("Decision", "")).upper() == "NO"
+        and _fit_cites_location_reject(result)
+    ):
+        print(
+            "  -> [FIT] Model cited location after REMOTE_OK — retry scoring-only.",
+            file=sys.stderr,
+        )
+        result = _call_fit_scoring_only(
+            truncated_jd, work_exp_for_fit, prefs_str, loc_verdict, fit_schema,
+            scoring_context + "\nRETRY: Do not cite location. Location is satisfied.\n",
+        )
+
+    if (
+        result
+        and str(result.get("Decision", "")).upper() == "NO"
+        and _looks_like_false_fast_gate(result)
+    ):
+        print(
+            "  -> [FIT] False fast-gate score detected — retry scoring-only.",
+            file=sys.stderr,
+        )
+        retry = _call_fit_scoring_only(
+            truncated_jd, work_exp_for_fit, prefs_str, loc_verdict, fit_schema, scoring_context,
+        )
+        if retry:
+            result = retry
+
+    if (
+        result
+        and str(result.get("Decision", "")).upper() == "NO"
+        and _fit_cites_years_reject(result)
+    ):
+        print(
+            "  -> [FIT] Model cited years/seniority after years gate passed — retry scoring-only.",
+            file=sys.stderr,
+        )
+        retry = _call_fit_scoring_only(
+            truncated_jd, work_exp_for_fit, prefs_str, loc_verdict, fit_schema,
+            scoring_context + "\nRETRY: Years are within cap. Do not penalize years or Senior title.\n",
+        )
+        if retry:
+            result = retry
+
+    result = _normalize_fit_result(result) if result else result
+    result = strip_false_years_penalty(result, truncated_jd, prefs)
+    result = strip_location_risk_flags(result, loc_verdict)
+    result = apply_anchor_floor(result, jd_text, prefs, min_score)
+    return _normalize_fit_result(result) if result else result
 
 def process_single(company, url, jd_text, job_id=None, draft_only=False):
     print(json.dumps({"id": "gate", "status": "running", "summary": "Checking keyword signals..."}))
@@ -587,6 +821,12 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
     # Zero-token keyword gate before any LLM call
     if not passes_jd_keyword_gate(jd_text, prefs, company_name=company or ""):
         print(json.dumps({"id": "gate", "status": "done", "summary": "Rejected (zero-token gate: title/years/industry/keywords/anchors)."}))
+        print(json.dumps({"score": 0, "passed": False}))
+        return
+
+    is_onsite, onsite_reason = classify_onsite(jd_text)
+    if is_onsite:
+        print(json.dumps({"id": "gate", "status": "done", "summary": f"Rejected (location gate: {onsite_reason})."}))
         print(json.dumps({"score": 0, "passed": False}))
         return
 

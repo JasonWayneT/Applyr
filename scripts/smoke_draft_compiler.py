@@ -183,6 +183,23 @@ def test_summary_no_chained_theme_ands():
     assert "platform reliability and data integrity" in summary.lower()
 
 
+def test_theme_primaries_inject_security_claim():
+    from theme_primaries import inject_theme_primaries, primary_claim_ids_for_jd
+    from jd_tailoring import build_jd_profile_deterministic
+
+    cat = load_catalog()
+    truth = cat.truth_map()
+    if "ACC-103-ROADMAP" not in truth:
+        return
+    jd = "Product Manager owning security vulnerability backlog and compliance risk reduction."
+    prof = build_jd_profile_deterministic(jd)
+    prim = primary_claim_ids_for_jd(jd, prof, truth)
+    assert "ACC-103-ROADMAP" in prim
+    base = [c for c in truth if c.startswith("ACC-1")][:5]
+    merged = inject_theme_primaries(base, truth, jd, prof)
+    assert "ACC-103-ROADMAP" in merged
+
+
 def test_cover_proof_format_and_picker():
     from claim_composer import format_cover_proof_sentence
     from jd_tailoring import build_jd_profile_deterministic, pick_cover_bullets

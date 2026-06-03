@@ -9,7 +9,7 @@ Welcome to the definitive product capabilities registry and release ledger for *
 Applyr is a highly specialized, local-first intelligence platform designed to automate the job search lifecycle—from automated discovery and deterministic fit filtering to bespoke resume drafting, WYSIWYG visual asset editing, and application lifecycle tracking. All provider credentials and search preferences live in a local SQLite database configured through the Settings UI—no `.env` file required.
 
 ### 1. Automated Job Scouting & Crawling Pipeline
-*   **Multi-Platform Scraping Engine:** Orchestrates automated crawls across Built In (detail-page JD before ingest gates), public job APIs, optional Adzuna/OpenPostings, and ATS watchlists via Playwright where needed. LinkedIn ingestion is **decommissioned** (CR-010).
+*   **Multi-Platform Scraping Engine:** Orchestrates automated crawls across Built In (detail-page JD before ingest gates), Levels.fyi (browser), and 10 API/RSS sources — Jobicy, Working Nomads, JobsCollider, Remotive, RemoteOK, We Work Remotely, Himalayas, The Muse, Adzuna, and OpenPostings — with optional **user-owned** ATS watchlists (`data/ats_watchlist.json` only; demo example file is never loaded). LinkedIn is **decommissioned** (CR-010). Sources with explicit automated-access bans in their ToS are evaluated and excluded before ship.
 *   **Intelligent URL Backfilling:** Allows manual URL injection that automatically scrapes raw job descriptions on the fly, feeding them straight into the evaluation pipeline.
 *   **Company DNA Perplexity Intelligence:** Executes targeted real-time Perplexity queries to extract company missions, problem spaces, financial status, and competitor matrices into a `Research_Packet.md` file.
 
@@ -24,7 +24,7 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 *   **Cover Conversion Engine (CR-024):** With `COVER_ENGINE=v1`, cover letters are a **separate pipeline** from resumes: JD-ranked needs, catalog proof selection, micro-narrative bodies, conversion audit — not resume bullet paste.
 *   **Per-Claim Tailoring with Fail-Closed Gates:** Compose-mode bullets pass numeric, tool-block, and seniority-inflation checks; failures use sanitized catalog text. `verify_content` errors block the pipeline instead of logging warnings only.
 *   **The "Hallucination" Guard:** `verify_content()` runs on resume text with claim IDs before tags are stripped; `validate_hard_facts()` and `style_compliance_guard` enforce ground truth from `data/workExperience.md` and the master resume. Cloud self-audit (`llm_verify_claims`) is retired for compiler output.
-*   **JD-Aware Selection:** `JdProfile` (validated JD extract) plus fit-engine `Summary` scores and ranks claims per employer before bullets are generated.
+*   **JD-Aware Selection:** `JdProfile` (validated JD extract) plus fit-engine `Summary` scores and ranks claims per employer before bullets are generated. **Theme primaries (CR-040):** security/platform/data themes force matching ACC claims onto the resume so cover-letter metrics stay corpus-aligned.
 *   **Audit Trail:** Each submission folder receives `draft_manifest.json` listing selected claim IDs, bullet IDs, fallback counts, and `pipeline_version` for reproducibility.
 *   **Resilient Batch Drafting:** `batch_pipeline.py` catches per-job drafting failures, marks jobs `Needs Retry` (up to 3 auto-retries), and continues the queue instead of halting the entire sync.
 *   **Research vs. Resume Separation:** Company DNA / Perplexity research feeds interview cheat sheets only—it is not injected into resume or cover letter body text.
@@ -46,6 +46,60 @@ Applyr is a highly specialized, local-first intelligence platform designed to au
 ---
 
 ## Part 2: Release Ledger
+
+### 6.2.29
+
+**New**
+- **Theme primary claims (FR-193, CR-040):** JD themes (`security`, `platform`, `data`, `roadmap`, `migration`) prepend the best matching ACC claim to resume Stage 2 selection; quota padding prefers the same IDs. Cover numeric audit uses resume bullets ∪ catalog truths so cover engine v1 no longer fails late on metrics like 90% / ~300 when the security claim is selected.
+
+**Fixed**
+- **ATS watchlist example leak (FR-194, CR-041):** Scout no longer loads `config/ats_watchlist.example.json` at runtime — eliminates **Example Corp** / Greenhouse demo jobs when you have not created `data/ats_watchlist.json`.
+- **Fit scoring false negatives (FR-188, CR-035):** Scoring-only primary path after deterministic gates; location lock when `REMOTE_OK`; anchor floor on full JD text; optional-domain prompt for “nice to have” verticals.
+- **Solo PM trap + years policy (FR-189, CR-036):** See 6.2.28 (included in this release bundle).
+- **Domain / B2C / transferable skills (FR-190–FR-192, CR-037–CR-039):** Required-domain zero-token gate (superseded for scoring by transferable-skills policy in CR-039); B2C openness prefs; fit scoring emphasizes transferable platform skills over customer-base rejection.
+
+**Changed**
+- **Cover proof scoring:** Security and compliance terms in the JD boost matching catalog proofs in `cover_claim_picker.py` and `pick_cover_bullets`.
+
+**Developer**
+- `scripts/theme_primaries.py`, `scripts/fit_policy.py`, `scripts/solo_pm_gate.py`, `scripts/domain_gate.py`
+- `scripts/test_solo_pm_gate.py`, `scripts/test_seniority_years_gate.py`, `scripts/test_fit_policy.py`, `scripts/test_domain_gate.py`
+- Specs: `CR-034`–`CR-041`, `IMP-CR-034`–`IMP-041`, registry `FR-188`–`FR-194`
+
+### 6.2.28
+
+**New**
+- **Solo PM trap gate (FR-189, CR-036):** Deterministic zero-token filter rejects founding/first/sole-only PM roles while allowing squad PMs, structured product orgs, and informal L1/L2 mentorship. Preference renamed from `no_people_management` to `avoid_solo_pm_trap`.
+
+**Fixed**
+- **Years boundary policy (FR-109, CR-036):** 7 years required passes when `experience_range.max=7`; 8+ fails at gate. Fit scoring injects `PRE-VERIFIED YEARS POLICY` and strips false “exceeds max” LLM penalties after gates pass.
+- **Years parser:** Handles `N years of …`, `N or more years`, and range patterns more reliably.
+
+**Developer**
+- `scripts/solo_pm_gate.py`, `scripts/test_solo_pm_gate.py`, `scripts/test_seniority_years_gate.py`
+- `scripts/fit_policy.py` — `years_lock_prompt_block`, `strip_false_years_penalty`
+
+### 6.2.27
+
+**New**
+- **Job Funnel Expansion — 12 Active Sources (FR-184, FR-185, FR-186):** Added three low-risk API/RSS sources: Jobicy (official free public JSON API, `geo=usa` filter), Working Nomads (public JSON endpoint, client-side PM category + title scope filter), and JobsCollider/RemoteFirstJobs (hourly RSS feed, PM category). Phase 1 now runs 10 parallel API/RSS sources; Phase 2 runs 2 browser sources (Built In, Levels.fyi). Net: 9 → 12 active sources.
+- **Broad PM Title Scope Gate (FR-187):** Added `passesBroadPmTitleScope()` in `scout_local.ts` — filters product marketing, product design, and product analytics titles from broad-category feeds before dedup and DB write. Used by Working Nomads and JobsCollider where the feed category is wider than PM only.
+
+**Changed**
+- **`REMOTE_ONLY_SOURCES` expanded:** Jobicy, Working Nomads, and JobsCollider added to the remote-only set in `gates.ts` — these boards are remote-only by definition so geographic gate is bypassed.
+- **Working Nomads category filter logging:** Scout now logs total jobs returned, how many matched the product/management category filter, and how many passed PM title scope — matching the observability depth of other API sources.
+
+**Developer**
+- Sources evaluated and excluded for ToS risk before ship: **4 Day Week** (explicit Section 10 ban: "bots, spiders, scrapers" + robots.txt disallows `/job/`), **Jobspresso** (no ToS accessible, medium-risk Playwright scrape). **Remote.co** deferred — Cloudflare protection blocks standard stealth reliably. Policy: sources with explicit automated-access prohibition are treated identically to LinkedIn (CR-010 precedent).
+
+### 6.2.26
+
+**Changed**
+- **Built In strict seed targeting (FR-182, CR-034):** Built In scout now starts from a single strict URL seed (`/jobs/remote/mid-level?search=Product+Manager&daysSinceUpdated=<freshness>&country=USA`) instead of broad multi-term + taxonomy targets, reducing noisy non-remote/non-PM crawl surface before detail-page extraction.
+- **Built In card pre-filters (FR-183, CR-034):** Before opening job detail pages, Built In cards must pass PM title scope and strict remote listing checks (rejects Product Owner/Marketing and hybrid/in-office listing labels when work setting is Remote).
+
+**Fixed**
+- **Years parser false positives:** Deterministic years extraction now ignores implausible large values (e.g., `90`, `100`) that previously produced false `required_years_*` rejects from non-years text.
 
 ### 6.2.25
 

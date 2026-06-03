@@ -18,6 +18,8 @@ _YEARS_PATTERNS = [
     re.compile(r"(\d+)\s*[-–]\s*(\d+)\s*years?", re.I),
     re.compile(r"(\d+)\s+to\s+(\d+)\s+years?", re.I),
     re.compile(r"(\d+)\s+years?\s+(?:of\s+)?experience", re.I),
+    re.compile(r"(\d+)\s+years?\s+of\s+", re.I),
+    re.compile(r"(\d+)\s+or\s+more\s+years?", re.I),
 ]
 
 

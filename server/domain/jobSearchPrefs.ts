@@ -29,7 +29,7 @@ const DEFAULT_JD_KEYWORDS = [
 ];
 
 const DEFAULT_PIPELINE_PREFERENCES = {
-  no_people_management: true,
+  avoid_solo_pm_trap: true,
   no_zero_to_one: true,
   structured_team_required: true,
   max_company_size_penalty_threshold: 50,
@@ -74,7 +74,12 @@ export function materializeJobSearchPrefs(jobSearch: Record<string, unknown>): v
     must_have_keywords: (existing.must_have_keywords as string[]) ?? [],
     required_anchors: (existing.required_anchors as string[]) ?? [],
     experience_range: { min: minYears, max: maxYears, total_years_observed: totalYears },
-    preferences: (existing.preferences as Record<string, unknown>) ?? DEFAULT_PIPELINE_PREFERENCES,
+    preferences: (() => {
+      const base = { ...DEFAULT_PIPELINE_PREFERENCES, ...((existing.preferences as Record<string, unknown>) ?? {}) };
+      delete base.no_people_management;
+      if (base.avoid_solo_pm_trap === undefined) base.avoid_solo_pm_trap = true;
+      return base;
+    })(),
   };
 
   fs.writeFileSync(CANDIDATE_PREFS_PATH, JSON.stringify(materialized, null, 2), 'utf-8');

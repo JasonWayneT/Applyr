@@ -4,6 +4,8 @@ import {
     passesIndustryGate,
     passesGeographicGate,
     passesSeniorityGate,
+    passesBuiltInPmTitleScope,
+    passesBuiltInStrictRemoteCard,
     parseMaxYearsRequired,
     titleMatchesBlocked,
     type ScrapedJob,
@@ -68,6 +70,12 @@ describe('parseMaxYearsRequired', () => {
     });
     it('returns the highest when multiple patterns match', () => {
         expect(parseMaxYearsRequired('3 years preferred, minimum 5 years required.')).toBe(5);
+    });
+    it('ignores implausible large years values (e.g. 90 days / 100%)', () => {
+        expect(parseMaxYearsRequired('Onboarding in 90 days. 100% remote role.')).toBeNull();
+    });
+    it('keeps plausible years while ignoring outliers', () => {
+        expect(parseMaxYearsRequired('Requires 8+ years; team supports 100+ products.')).toBe(8);
     });
 });
 
@@ -165,6 +173,42 @@ describe('passesGeographicGate', () => {
 // ---------------------------------------------------------------------------
 // passesSeniorityGate
 // ---------------------------------------------------------------------------
+
+describe('passesBuiltInPmTitleScope', () => {
+    it('accepts Product Manager', () => {
+        expect(passesBuiltInPmTitleScope('Product Manager')).toBe(true);
+    });
+    it('accepts Senior Product Manager', () => {
+        expect(passesBuiltInPmTitleScope('Senior Product Manager')).toBe(true);
+    });
+    it('rejects Product Owner only', () => {
+        expect(passesBuiltInPmTitleScope('Product Owner, CIS')).toBe(false);
+    });
+    it('allows Product Owner / Product Manager dual title', () => {
+        expect(passesBuiltInPmTitleScope('Product Owner / Product Manager')).toBe(true);
+    });
+    it('rejects Product Marketing Manager', () => {
+        expect(passesBuiltInPmTitleScope('Product Marketing Manager, SMB')).toBe(false);
+    });
+    it('rejects DevOps Engineer', () => {
+        expect(passesBuiltInPmTitleScope('DevOps Engineer')).toBe(false);
+    });
+});
+
+describe('passesBuiltInStrictRemoteCard', () => {
+    it('accepts plain Remote listing', () => {
+        expect(passesBuiltInStrictRemoteCard('Remote United States Mid level')).toBe(true);
+    });
+    it('rejects Remote or Hybrid', () => {
+        expect(passesBuiltInStrictRemoteCard('Remote or Hybrid United States')).toBe(false);
+    });
+    it('rejects In-Office or Remote', () => {
+        expect(passesBuiltInStrictRemoteCard('In-Office or Remote 10 Locations')).toBe(false);
+    });
+    it('accepts San Diego area listing', () => {
+        expect(passesBuiltInStrictRemoteCard('San Diego, CA, USA')).toBe(true);
+    });
+});
 
 describe('passesSeniorityGate', () => {
     it('passes a mid-level PM with 5 years required', () => {

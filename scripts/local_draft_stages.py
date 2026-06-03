@@ -365,7 +365,20 @@ def ensure_employer_quotas(
                 key=lambda cid: _jd_keyword_score(jd_lower, valid_ids.get(cid, "")),
                 reverse=True,
             )
-            candidates = pool + [
+            theme_first: List[str] = []
+            try:
+                from theme_primaries import primary_claim_ids_for_jd
+                from jd_tailoring import build_jd_profile_deterministic
+
+                prof = build_jd_profile_deterministic(jd_text)
+                theme_first = [
+                    c
+                    for c in primary_claim_ids_for_jd(jd_text, prof, valid_ids)
+                    if employer_for_claim_id(c) == employer
+                ]
+            except Exception:
+                theme_first = []
+            candidates = theme_first + pool + [
                 c for c in extra_ranked if employer_for_claim_id(c) == employer
             ]
             added = False

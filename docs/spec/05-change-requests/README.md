@@ -19,7 +19,13 @@
 | CR-028 | Keywords / anchors | Implemented |
 | CR-031 | Draft quality gates | Implemented |
 | CR-026 | Sync evaluate visibility | Implemented |
-| CR-032 | Doc & process cleanup | Implemented |
+| CR-035 | Fit scoring hardening | Implemented |
+| CR-036 | Solo PM trap + years policy lock | Implemented |
+| CR-037 | Required domain experience gate | Implemented |
+| CR-038 | B2C role openness | Implemented |
+| CR-039 | Transferable skills over domain gate | Implemented |
+| CR-040 | Theme primary claims (resume/cover numeric alignment) | Implemented |
+| CR-041 | ATS watchlist — no example.json at runtime | Implemented |
 
 ## Archive (implemented — do not treat as daily instructions)
 

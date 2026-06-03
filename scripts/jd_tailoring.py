@@ -229,6 +229,10 @@ def pick_cover_bullets(
             bonus += 4
         if "data" in jd_l and ("data" in tl or "analytics" in tl):
             bonus += 3
+        if "security" in jd_l and ("security" in tl or "vulnerab" in tl):
+            bonus += 8
+        if "compliance" in jd_l and ("compliance" in tl or "risk" in tl):
+            bonus += 4
         return base + bonus
 
     picked: List[str] = []

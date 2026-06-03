@@ -33,18 +33,22 @@ _FOREIGN_SIGNALS = (
     "india",
     "apac",
 )
-_US_SIGNALS = ("united states", "within the us", "us citizen", "usa")
+_US_SIGNALS = ("united states", "within the us", "us citizen", "usa", "remote---usa")
 
 
-def classify_onsite(jd_text: str) -> Tuple[bool, str]:
+def resolve_location_verdict(jd_text: str) -> Tuple[str, str]:
     """
-    Returns (should_reject, reason).
-    Rejects stealth on-site/hybrid roles that are not remote and not San Diego-local.
-    Mirrors scout geographic gate (FR-070) for scraped JD text.
+    Deterministic location eligibility for Remote + San Diego candidate.
+
+    Returns (verdict, detail):
+      REMOTE_OK   — explicit remote/WFH; multi-city + Remote listings qualify
+      SD_LOCAL_OK — San Diego-area on-site/hybrid signals
+      REJECT      — foreign-only or stealth on-site outside SD with no remote
+      UNKNOWN     — insufficient signal (do not auto-pass or auto-fail)
     """
     text = (jd_text or "").lower()
     if len(text.strip()) < 50:
-        return False, ""
+        return "UNKNOWN", "insufficient_jd_text"
 
     has_local_sd = any(k in text for k in _LOCAL_SD)
     has_remote = any(k in text for k in _REMOTE_SIGNALS)
@@ -53,10 +57,14 @@ def classify_onsite(jd_text: str) -> Tuple[bool, str]:
         k in text for k in _US_SIGNALS
     )
     if is_explicit_foreign:
-        return True, "Non-US location signals without US eligibility"
+        return "REJECT", "Non-US location signals without US eligibility"
 
-    if has_local_sd or has_remote:
-        return False, ""
+    # Remote anywhere in JD wins — even when other US cities are listed ("Dallas or Remote").
+    if has_remote:
+        return "REMOTE_OK", "Explicit remote / WFH signal in JD"
+
+    if has_local_sd:
+        return "SD_LOCAL_OK", "San Diego area location signal in JD"
 
     onsite_markers = re.search(
         r"\b(on[- ]?site|onsite|in[- ]?office|in office|hybrid|"
@@ -65,8 +73,41 @@ def classify_onsite(jd_text: str) -> Tuple[bool, str]:
     )
     if onsite_markers:
         loc = classify_location(jd_text)
-        return True, f"Location policy appears {loc or 'On-Site'} without remote or local SD"
+        return "REJECT", (
+            f"Location policy appears {loc or 'On-Site'} without remote or local SD"
+        )
 
+    return "UNKNOWN", "No remote, SD, or explicit onsite signal"
+
+
+def location_lock_prompt_block(verdict: str, detail: str) -> str:
+    """Inject into fit LLM prompt when location is pre-verified."""
+    if verdict not in ("REMOTE_OK", "SD_LOCAL_OK"):
+        return ""
+    multi_city_note = (
+        "Listings that offer Remote alongside other US cities "
+        '(e.g. "Dallas, TX, Atlanta, GA, or Remote") are REMOTE-ELIGIBLE; '
+        "do not instant-kill for non-SD city names when Remote is offered."
+    )
+    return f"""
+PRE-VERIFIED LOCATION POLICY: {verdict}
+Detail: {detail}
+IMPORTANT: Location eligibility was verified deterministically before this evaluation.
+Do NOT apply Stage A section 2.3 location instant-kill.
+{multi_city_note}
+Score location as satisfied; evaluate role fit on title, seniority, domain, and anchors only.
+"""
+
+
+def classify_onsite(jd_text: str) -> Tuple[bool, str]:
+    """
+    Returns (should_reject, reason).
+    Rejects stealth on-site/hybrid roles that are not remote and not San Diego-local.
+    Mirrors scout geographic gate (FR-070) for scraped JD text.
+    """
+    verdict, detail = resolve_location_verdict(jd_text)
+    if verdict == "REJECT":
+        return True, detail
     return False, ""
 
 

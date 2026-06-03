@@ -26,9 +26,13 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 ### Scouting & Ingestion (FR-001 to FR-005)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
 |---|---|---|---|---|---|---|
-| `FR-001` | functional | P0 | implemented | Multi-source job discovery via Playwright | `AC-001`, `AC-002` | `BMAD-SRC-001` |
+| `FR-001` | functional | P0 | implemented | Multi-source job discovery via Playwright + API/RSS (12 active sources) | `AC-001`, `AC-002` | `BMAD-SRC-001` |
 | `FR-002` | functional | P0 | implemented | OpenPostings SQLite database scraper | `AC-003` | `BMAD-SRC-001` |
 | `FR-003` | functional | P1 | implemented | Job deduplication via URL and Title/Company hash | `AC-004` | `BMAD-SRC-001` |
+| `FR-184` | functional | P1 | implemented | Jobicy official free JSON API source (`geo=usa`, per-term tag search, `passesTitleBlocklist`) | — | User Request |
+| `FR-185` | functional | P1 | implemented | Working Nomads public JSON API source (client-side PM category + `passesBroadPmTitleScope` filter) | — | User Request |
+| `FR-186` | functional | P1 | implemented | JobsCollider/RemoteFirstJobs hourly RSS source (PM category feed, `passesBroadPmTitleScope`, "Title at Company" parse) | — | User Request |
+| `FR-187` | functional | P1 | implemented | `passesBroadPmTitleScope()` — blocks product marketing, design, analytics from broad-category feeds; used by Working Nomads + JobsCollider | — | User Request |
 
 ### Evaluation & Gating (FR-006 to FR-010)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
@@ -36,6 +40,13 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-006` | functional | P0 | implemented | Deterministic Keyword Pre-Filter (Zero Token Gate) | `AC-006` | `BMAD-SRC-005` |
 | `FR-007` | functional | P0 | implemented | LLM-based 100-point Job Fit Scoring | `AC-007` | `BMAD-SRC-005` |
 | `FR-008` | functional | P0 | implemented | "Two-Anchor Room" validation for YES decisions | `AC-008` | `BMAD-SRC-005` |
+| `FR-188` | functional | P1 | implemented | Anchor floor + scoring-only fit path after deterministic gates (CR-035) | `AC-191`, `AC-192`, `AC-193` | CR-035 |
+| `FR-189` | functional | P1 | implemented | Solo PM trap zero-token gate + years policy lock for fit LLM (CR-036) | `AC-119`, `AC-119b`, `AC-194`, `AC-195`, `AC-196` | CR-036 |
+| `FR-190` | functional | P1 | implemented | Required vertical domain zero-token gate + fit cap when JD mandates industry years candidate lacks (CR-037) | `AC-197`, `AC-198`, `AC-199` | CR-037 |
+| `FR-191` | functional | P2 | implemented | B2C role openness via preferences, keywords, anchors, and fit prompt (CR-038) | `AC-200`, `AC-201`, `AC-202` | CR-038 |
+| `FR-192` | functional | P1 | implemented | Transferable skills scoring over industry/customer-base gating (CR-039 supersedes CR-037 gate) | `AC-203`, `AC-204`, `AC-205` | CR-039 |
+| `FR-193` | functional | P1 | implemented | Theme primary claims — force theme-matched ACC IDs on resume; align cover numeric audit corpus with resume bullets + catalog (CR-040) | `AC-206`, `AC-207` | CR-040 |
+| `FR-194` | functional | P1 | implemented | ATS watchlist must not load `ats_watchlist.example.json` at runtime (CR-041) | `AC-208` | CR-041 |
 | `FR-009` | functional | P1 | implemented | Context Firewall (Memory isolation between jobs) | `AC-009` | `BMAD-SRC-004` |
 
 ### Research & Intelligence (FR-011 to FR-013)
@@ -268,6 +279,11 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-115` | `FR-109` | Senior title allowed | Title Senior PM, JD 3-6 years | Title gate | Passes zero-token gate | implemented |
 | `AC-116` | `FR-109` | Lead blocked | Title Lead Product Manager | Title gate | Rejected title_blocked | implemented |
 | `AC-117` | `FR-109` | Years cap | JD requires 10+ years, max=7 | Years gate | Rejected before LLM | implemented |
+| `AC-119` | `FR-109`, `FR-189` | Years boundary pass | JD requires 7 years, max=7 | Years gate | Passes zero-token gate | implemented |
+| `AC-119b` | `FR-109`, `FR-189` | Years boundary fail | JD requires 8 years, max=7 | Years gate | Rejected before LLM | implemented |
+| `AC-194` | `FR-189` | Solo trap reject | JD "only product manager", no org signals | Solo PM gate | Rejected zero-token | implemented |
+| `AC-195` | `FR-189` | Squad PM pass | Squad + product org + mentorship | Solo PM gate | Passes zero-token gate | implemented |
+| `AC-196` | `FR-189` | Years lock fit | 4–7 years JD after gates pass | Fit scoring | No years-over-max penalty | implemented |
 | `AC-118` | `FR-110` | AI tools OK | JD mentions ChatGPT as plus | LLM fit | Not sole reject reason | implemented |
 | `AC-119` | `FR-111` | JD Deduplication via Vector Similarity | New JD arrives | Compare vector to existing | JD is deduplicated correctly | implemented |
 | `AC-120` | `FR-112` | I/O vs GPU Concurrency Splitting | Batch process starts | I/O and GPU tasks | Process concurrency is split safely | implemented |
@@ -392,6 +408,46 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-180` | functional | P0 | implemented | Built In scout opens each new job URL and extracts full JD before industry/geo/seniority gates | `AC-183` | `CR-033` |
 
 | `AC-183` | `FR-180` | Built In JD | New card passes dedup | Scout detail fetch | Description ≥ 200 chars required; gates use full text; `jd_text` + staging file written | implemented |
+
+### CR-034 Built In strict geo-signal hardening (FR-181)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-181` | functional | P1 | implemented | Built In scout preserves explicit card-level remote/SD location cues in description input so strict geo gate evaluates real evidence without source bypass | `AC-184`, `AC-185` | `CR-034` |
+| `FR-182` | functional | P1 | implemented | Built In scout starts from strict seed URL constrained to Remote + Mid-level + Product Manager + USA + freshness window | `AC-186` | `CR-034` |
+| `FR-183` | functional | P1 | implemented | Built In card pre-filter for PM title scope and strict remote listing before detail fetch | `AC-187`, `AC-188` | `CR-034` |
+
+| `AC-184` | `FR-181` | Built In remote card signal | Built In card text contains explicit `remote` cue | Scout detail fetch + gates | Description is prefixed with normalized listing location signal and geo gate may pass on explicit remote text | implemented |
+| `AC-185` | `FR-181` | Strict policy retained | Built In card lacks remote and SD cues | Scout geo | Job remains rejected out-of-bound | implemented |
+| `AC-186` | `FR-182` | Strict seed target | Built In scout starts | URL builder runs | Crawler uses strict single target URL (`/jobs/remote/mid-level?...search=Product Manager&country=USA`) without taxonomy fallback | implemented |
+| `AC-187` | `FR-183` | PM title scope | Built In card title is Product Marketing or Product Owner-only | Scout card loop | Reject before detail fetch | implemented |
+| `AC-188` | `FR-183` | Strict remote card | Built In card shows Remote or Hybrid / In-Office or Remote | Scout card loop (Remote prefs) | Reject before detail fetch | implemented |
+
+### CR-035 Fit scoring hardening (FR-188)
+| `AC-191` | `FR-188` | Location lock | JD lists US cities and Remote | Fit evaluate | `REMOTE_OK`; model must not reject on location | implemented |
+| `AC-192` | `FR-188` | Anchor floor | ≥2 anchors match; LLM score 65–71 | Fit post-process | Promote to YES at min_fit_score | implemented |
+| `AC-193` | `FR-188` | Optional domain | JD says "nice plus" for vertical | Fit prompt | Injects DOMAIN_REQUIREMENT: OPTIONAL | implemented |
+
+### CR-037 Required domain experience gate (FR-190)
+| `AC-197` | `FR-190` | Required domain | JD requires 3–5 years US healthcare; candidate lacks healthcare in domain_experience | Zero-token gate | Rejects with required_domain_missing:healthcare | implemented |
+| `AC-198` | `FR-190` | Optional domain preserved | JD says healthcare is nice plus / may not have experience | Zero-token + fit | Domain gate passes; optional note injected | implemented |
+| `AC-199` | `FR-190` | Fit cap | Cotiviti-class JD; LLM returns score 98 | Fit post-process | Forces NO when required domain gap | implemented |
+
+### CR-038 B2C role openness (FR-191)
+| `AC-200` | `FR-191` | B2C preference | open_to_b2c true | Fit prompt | Injects B2C openness note | implemented |
+| `AC-201` | `FR-191` | Consumer keywords | JD mentions consumer/mobile app | Keyword gate | Passes without b2b token | implemented |
+| `AC-202` | `FR-191` | Scoring neutrality | open_to_b2c true | Fit scoring-only | No B2B-only bridge reject instruction | implemented |
+
+### CR-039 Transferable skills over domain gate (FR-192)
+| `AC-203` | `FR-192` | No domain zero-token gate | Cotiviti-class required healthcare years | Zero-token pipeline | Passes gates; domain_gaps informational only | implemented |
+| `AC-204` | `FR-192` | Transferable skills prompt | Any JD through fit | Fit scoring context | Injects TRANSFERABLE SKILLS POLICY | implemented |
+| `AC-205` | `FR-192` | No domain cap | LLM score 98 on vertical gap | Fit post-process | No enforce_required_domain_cap | implemented |
+
+### CR-040 Theme primary claims (FR-193)
+| `AC-206` | `FR-193` | Security theme inject | JD mentions security backlog | Stage 2 selection | `ACC-103-ROADMAP` (or SEC/PM fallback) in selected claims | implemented |
+| `AC-207` | `FR-193` | Cover corpus union | Cover cites 90%/300; claim on resume or catalog | `verify_document_bundle` | Numeric audit passes | implemented |
+
+### CR-041 ATS watchlist no example (FR-194)
+| `AC-208` | `FR-194` | No example watchlist | No `data/ats_watchlist.json` | Scout run | Zero jobs from Example Corp / demo Greenhouse | implemented |
 
 ### CR-031 Draft quality gates (FR-174–FR-179)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |

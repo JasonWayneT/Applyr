@@ -229,6 +229,13 @@ def run(
 
     quotas = resume_bullet_quotas()
     selected = _select_claims(jd_text, valid_ids, profile)
+    from theme_primaries import inject_theme_primaries
+
+    prior = set(selected)
+    selected = inject_theme_primaries(selected, valid_ids, jd_text, profile, quotas=quotas)
+    added = [c for c in selected if c not in prior]
+    if added:
+        print(f"    [Compiler] Theme primaries: {', '.join(added[:4])}")
     jd_scores = {cid: score_claim_for_jd(valid_ids.get(cid, ""), profile, jd_text) for cid in selected}
     print(f"    [Compiler] Stage 2: {len(selected)} claims selected")
 
@@ -323,8 +330,9 @@ def run(
             except ValueError as e:
                 raise DraftingPipelineError(str(e)) from e
 
+        cover_audit_corpus = f"{bullet_corpus}\n{claim_corpus}\n{HEADER_BLOCK}"
         cl_ok_audit, cl_audit_err = audit_text_against_bullet_corpus(
-            cl_raw, f"{claim_corpus}\n{HEADER_BLOCK}"
+            cl_raw, cover_audit_corpus
         )
         if not cl_ok_audit:
             raise DraftingPipelineError(f"Cover letter numeric audit: {cl_audit_err}")
@@ -381,6 +389,11 @@ def run(
             )
             final_resume = resume_md
         else:
+            cover_verify_corpus = (
+                f"{bullet_corpus}\n{claim_corpus}"
+                if _cover_engine_v1() and catalog.claims
+                else bullet_corpus
+            )
             final_resume, final_cl, _warnings = verify_document_bundle(
                 resume_md,
                 cl_stripped,
@@ -393,7 +406,7 @@ def run(
                 cl_md_path,
                 bullets_by_company,
                 jd_text,
-                bullet_corpus,
+                cover_verify_corpus,
             )
     except ValueError as e:
         raise DraftingPipelineError(str(e)) from e

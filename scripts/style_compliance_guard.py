@@ -10,7 +10,7 @@ CL_MAX_CHARS = 1800
 # The allowed set is: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, EDUCATION.
 _FORBIDDEN_SECTION_RE = re.compile(
     r'^#{1,3}\s*(?:\*\*)?(?:'
-    r'Core\s+Competencies|Technical\s+Skills?\s*(?:&|and)?\s*Tools?|Technical\s+Proficiencies?|'
+    r'Technical\s+Skills?\s*(?:&|and)?\s*Tools?|Technical\s+Proficiencies?|'
     r'Key\s+Projects?(?:\s*(?:&|and)\s*Achievements?)?|Projects?\s*(?:&|and)\s*Achievements?|'
     r'Key\s+Achievements?\s+(?:&|and)\s+Impact(?:\s+Summary)?|Key\s+Achievements?|'
     r'Skills?\s*(?:&|and)\s*Tools?|Technical\s+Environment|Core\s+Expertise|'
@@ -239,14 +239,34 @@ def strip_html_wrappers(content):
 
 def normalize_resume_headers(content):
     """Normalize headers, contact info, level-1 headers, and legacy job titles."""
+    from utils import format_contact_header_block, load_identity_profile
+
+    profile = load_identity_profile()
+    name = (profile.get("name") or "John Doe").strip()
+    name_regex = r"\s+".join(re.escape(part) for part in name.split())
+    header_block = format_contact_header_block(profile)
+
     # 1. Find the name line — accept #, ##, ### or bold-only variants
     name_match = re.search(
-        r'^(?:#{1,3}\s*)?(?:\*\*)?JASON\s+TAYLOR(?:\*\*)?.*$',
+        rf'^(?:#{{1,3}}\s*)?(?:\*\*)?{name_regex}(?:\*\*)?.*$',
         content,
         re.MULTILINE | re.IGNORECASE,
     )
-    contact_pattern = r'(?:San Diego,\s*CA|[REDACTED_PHONE]|jason\.wayne\.t@gmail\.com)'
-    contact_match = re.search(r'^.*' + contact_pattern + r'.*$', content, re.MULTILINE | re.IGNORECASE)
+    contact_bits = [
+        profile.get("location"),
+        profile.get("phone"),
+        profile.get("email"),
+        profile.get("linkedin"),
+    ]
+    contact_bits = [re.escape(bit) for bit in contact_bits if bit]
+    contact_match = None
+    if contact_bits:
+        contact_pattern = "|".join(contact_bits)
+        contact_match = re.search(
+            rf'^.*(?:{contact_pattern}).*$',
+            content,
+            re.MULTILINE | re.IGNORECASE,
+        )
 
     if name_match and contact_match:
         name_str = name_match.group(0).strip()
@@ -256,24 +276,32 @@ def normalize_resume_headers(content):
         cleaned = content.replace(name_str, "").replace(contact_str, "").strip()
 
         # Also strip any remaining orphaned contact-like lines (duplicates after placeholder healing)
-        cleaned = re.sub(
-            r'(?m)^(?:San Diego,\s*CA\s*\|?\s*)?[REDACTED_PHONE].*linkedin\.com.*$\n?', '', cleaned
-        )
+        if profile.get("phone") and profile.get("linkedin"):
+            phone = re.escape(profile["phone"])
+            linkedin = re.escape(profile["linkedin"])
+            cleaned = re.sub(
+                rf'(?m)^.*{phone}.*{linkedin}.*$\n?',
+                '',
+                cleaned,
+            )
 
-        # Re-inject correctly at the very top
-        content = (
-            "# JASON TAYLOR\n\n"
-            "San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug\n\n"
-            + cleaned
-        )
+        content = header_block + cleaned
 
-    # 2. Convert any remaining ##+ headers to ## (except JASON TAYLOR which must stay #)
+    # 2. Convert any remaining ##+ headers to ## (except candidate name which must stay #)
     lines = content.splitlines()
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith("# ") and not re.search(r'^#\s*(?:\*\*)?JASON\s+TAYLOR', stripped, re.IGNORECASE):
+        if stripped.startswith("# ") and not re.search(
+            rf'^#\s*(?:\*\*)?{name_regex}',
+            stripped,
+            re.IGNORECASE,
+        ):
             lines[i] = "## " + stripped[2:].lstrip()
-        elif (stripped.startswith("#**") or stripped.startswith("# **")) and not re.search(r'JASON\s+TAYLOR', stripped, re.IGNORECASE):
+        elif (stripped.startswith("#**") or stripped.startswith("# **")) and not re.search(
+            name_regex,
+            stripped,
+            re.IGNORECASE,
+        ):
             lines[i] = "## " + re.sub(r'^#\s*\**', '', stripped).replace("**", "").strip()
     content = "\n".join(lines)
 

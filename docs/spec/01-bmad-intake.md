@@ -6,9 +6,9 @@ Paste or summarize BMAD outputs here. This is the staging area before requiremen
 
 | Source ID | BMAD artifact | Owner/agent | Date | Link or location | Status |
 |---|---|---|---|---|---|
-| `BMAD-SRC-001` | Architecture & PRD | PM/Arch | 2024-05 | `JobAgent_Architecture_and_PRD.md` | imported |
-| `BMAD-SRC-002` | Applyr Design System | UX | 2024-05 | `DESIGN.md` | imported |
-| `BMAD-SRC-003` | WebApp PRD 5.0 | PM | 2024-05 | `JobAgent_WebApp_PRD 5.0.md` | imported |
+| `BMAD-SRC-001` | Architecture & PRD | PM/Arch | 2024-05 | `docs/history/JobAgent_Architecture_and_PRD.md` | imported |
+| `BMAD-SRC-002` | Applyr Design System | UX | 2024-05 | `docs/DESIGN.md` | imported |
+| `BMAD-SRC-003` | WebApp PRD 5.0 | PM | 2024-05 | `docs/history/JobAgent_WebApp_PRD 5.0.md` | imported |
 | `BMAD-SRC-004` | Pipeline Controller | Dev | 2024-05 | `.agent/archive/Instructions.md` | archived → `docs/ACTIVE_WORKFLOW.md` |
 | `BMAD-SRC-005` | Job-Fit Engine | PM | 2024-05 | `.agent/rules/job_fit_engine.md` | imported |
 | `BMAD-SRC-006` | Claim Verifier | PM | 2024-05 | `.agent/rules/claim_verifier.md` | reference; enforced in `verification_chain.py` |

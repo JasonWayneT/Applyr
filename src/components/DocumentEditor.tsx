@@ -38,7 +38,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     const checkApiKey = async () => {
       try {
         const res = await fetch(api('/api/profile/identity'));
-        const profile = await res.json();
+        await res.json();
         // Assume active if they have entered profile identity, or check environment
         setHasAiKey(true); // Default to unlocked for local-first developer experience
       } catch {
@@ -135,7 +135,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   editorInstance.setMarkdown(accumulatedContent);
                 }
               }
-            } catch (e) {
+            } catch {
               // skip parse errors from incomplete ollama chunks
             }
           }
@@ -171,7 +171,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         setLintStatus('idle');
         setLintProgress('');
       }, 4000);
-    } catch (err) {
+    } catch {
       setLintStatus('error');
     }
   };
@@ -330,7 +330,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               {aiStatus === 'success' && (
                 <div className="flex items-center gap-2 text-[10px] text-primary bg-primary/10 border border-primary/20 px-3 py-2 rounded-xl">
                   <span className="material-symbols-outlined text-sm">done_all</span>
-                  AI rewrite applied to editor! Click "Compile & Save" to update PDF.
+                  AI rewrite applied to editor! Click &quot;Compile &amp; Save&quot; to update PDF.
                 </div>
               )}
               {aiStatus === 'error' && (

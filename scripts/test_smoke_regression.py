@@ -2,9 +2,10 @@ import os
 import requests
 import json
 import traceback
+import subprocess
 
 from style_compliance_guard import clean_escapes
-from utils import init_pipeline_prefs, load_candidate_preferences, CANDIDATE_PREFERENCES_FILE, load_file
+from utils import init_pipeline_prefs, load_candidate_preferences, CANDIDATE_PREFERENCES_FILE, load_file, PROJECT_ROOT
 
 init_pipeline_prefs()
 
@@ -106,6 +107,15 @@ _ok2, _reason2 = passes_title_gate(_jd_pm, {"blocked_titles": ["Director"]})
 assert_test("REG-15: Batch title gate passes PM",
             _ok2,
             f"Expected pass, got reason={_reason2}")
+
+# REG-22: Broad PM title scope (CR-045 / FR-240)
+result = subprocess.run(
+    ["npx", "vitest", "run", "tests/unit/gates.test.ts", "-t", "passesBroadPmTitleScope"],
+    capture_output=True, text=True, cwd=PROJECT_ROOT, shell=True
+)
+assert_test("REG-22: Broad PM title scope blocks adjacent roles",
+            result.returncode == 0,
+            result.stdout + result.stderr)
 
 # REG-16–REG-17: Location verdict lock-in (multi-city + Remote)
 from zero_shot_classifier import resolve_location_verdict, classify_onsite

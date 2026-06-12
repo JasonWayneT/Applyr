@@ -267,6 +267,94 @@ def load_llm_settings():
     return {}
 
 
+_DEFAULT_IDENTITY = {
+    "name": "John Doe",
+    "email": "email@example.com",
+    "phone": "555-019-9238",
+    "location": "City, State",
+    "linkedin": "linkedin.com/in/johndoe",
+    "portfolio": "johndoe.com",
+    "github": "",
+}
+
+
+def load_identity_profile() -> dict:
+    """Reads identity contact fields from SQLite profiles table."""
+    import sqlite3
+    import json
+
+    profile = dict(_DEFAULT_IDENTITY)
+    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    try:
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM profiles WHERE key = 'identity'")
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                data = json.loads(row[0])
+                for key, value in data.items():
+                    if value:
+                        profile[key] = value
+    except Exception as e:
+        print(f"Error loading identity profile from DB: {e}", file=sys.stderr)
+    return profile
+
+
+def format_contact_line(profile: dict | None = None) -> str:
+    """Single-line contact string for resume/cover letter headers."""
+    profile = profile or load_identity_profile()
+    parts = [
+        profile.get("location"),
+        profile.get("phone"),
+        profile.get("email"),
+        profile.get("linkedin"),
+        profile.get("portfolio"),
+    ]
+    return " | ".join(p for p in parts if p)
+
+
+def format_contact_header_block(profile: dict | None = None) -> str:
+    """Markdown header block: # NAME + contact line."""
+    profile = profile or load_identity_profile()
+    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    return f"# {name.upper()}\n\n{format_contact_line(profile)}\n\n"
+
+
+def contact_placeholder_map(profile: dict | None = None, target_company: str | None = None) -> dict:
+    """Template placeholder → profile values for draft post-processing."""
+    profile = profile or load_identity_profile()
+    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    name_upper = name.upper()
+    placeholders = {
+        "[Your Name]": name_upper,
+        "*[Your Name]*": name_upper,
+        "[Full Name]": name_upper,
+        "[Your Phone Number]": profile.get("phone", ""),
+        "[Phone Number]": profile.get("phone", ""),
+        "[Your Email Address]": profile.get("email", ""),
+        "[Your Email]": profile.get("email", ""),
+        "[Email Address]": profile.get("email", ""),
+        "[Your LinkedIn Profile URL]": profile.get("linkedin", ""),
+        "[LinkedIn Profile URL]": profile.get("linkedin", ""),
+        "[LinkedIn URL]": profile.get("linkedin", ""),
+        "[LinkedIn]": profile.get("linkedin", ""),
+        "## [Your Name]": f"# {name_upper}",
+        "[Your City, State]": profile.get("location", ""),
+        "[City, State]": profile.get("location", ""),
+        "[Hiring Manager Name]": "Hiring Team",
+        "[Hiring Manager]": "Hiring Team",
+        "[Dates]": "",
+        "*[Dates]*": "",
+    }
+    if target_company:
+        placeholders["[Company Name]"] = target_company
+        placeholders["*[Company Name]*"] = target_company
+        placeholders["[Target Company]"] = target_company
+    return placeholders
+
+
 # --- Implements FR-059: Provider configuration guard ---
 def _is_configured(provider: str, settings: dict) -> bool:
     """Returns True only if the given provider has a usable key or URL configured."""

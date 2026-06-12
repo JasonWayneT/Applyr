@@ -8,7 +8,7 @@
 | **Date** | 2026-05-13 |
 | **Status** | Implemented |
 | **Priority** | P0 |
-| **Author** | Jason Taylor |
+| **Author** | Applyr maintainer |
 | **Implements** | `FR-071`, `FR-072`, `FR-073`, `FR-074`, `FR-075` |
 
 ## Problem Statement
@@ -22,7 +22,7 @@ The pipeline produced structurally and factually corrupt output when a local sma
 5. **`validate_hard_facts()` lacked document-type awareness** — education presence checks ran on cover letters (which don't contain education sections), producing spurious warnings and occasionally triggering incorrect auto-injection.
 6. **Unfilled template placeholders leaked into output** — tokens like `[JD]`, `[Position Overview]`, `[Your City, State]` were not caught by any guard and reached final PDFs.
 7. **Style guard did not strip forbidden sections** — sections like "Core Competencies", "Technical Skills & Tools", "Key Projects & Achievements" appeared in final resumes despite being prohibited by R-005.
-8. **Name header normalization was incomplete** — the guard only caught `# JASON TAYLOR`; variants like `## JASON TAYLOR` and `**Jason Taylor**` passed through uncorrected.
+8. **Name header normalization was incomplete** — the guard only caught `# CANDIDATE NAME`; variants like `## CANDIDATE NAME` and `**Candidate Name**` passed through uncorrected.
 
 ## Solution Overview
 
@@ -57,7 +57,7 @@ When local is the active primary provider, route through `_generate_resume_local
 - `strip_forbidden_sections()` — removes 12 prohibited section types and all their content up to the next `##` boundary. Regex covers all capitalization and bold variants.
 - `strip_placeholders()` — strips `[CAPS TOKEN]` patterns (unfilled template tokens) from all doc types.
 - `normalize_resume_headers()` — name match regex expanded from `^#\s*` to `^(?:#{1,3}\s*)?(?:\*\*)?` to catch `## JASON TAYLOR` and `**Jason Taylor**` variants.
-- Duplicate contact line guard — `re.sub` removes any orphaned `[REDACTED_PHONE] | ... | linkedin.com` line after the canonical header is re-injected.
+- Duplicate contact line guard — `re.sub` removes any orphaned contact line after the canonical header is re-injected.
 - Education section stripped from cover letters via `re.sub` on the `## EDUCATION` boundary.
 - Artifact-only line removal — lines containing only `[\s,\-\*|•]+` are deleted.
 
@@ -85,6 +85,6 @@ When local is the active primary provider, route through `_generate_resume_local
 1. Trigger a drafting run with local provider as primary; confirm logs show `[LLM] Two-Phase Local Generation`.
 2. Inspect `[HARD FACT AUDIT]` output — target: 0 invented-number warnings (was 5+ before this CR).
 3. Run `style_compliance_guard.py` on a resume containing a "Core Competencies" section — verify it is stripped.
-4. Run guard on a resume with `## JASON TAYLOR` header — verify normalized to `# JASON TAYLOR`.
+4. Run guard on a resume with `## CANDIDATE NAME` header — verify normalized to `# CANDIDATE NAME`.
 5. Run guard on a cover letter with `## EDUCATION & CERTIFICATIONS` at bottom — verify stripped.
 6. Confirm all 29 submissions pass `quality_checker.py` with no R-005, R-007, R-008, R-009 violations.

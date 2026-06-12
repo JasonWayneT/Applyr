@@ -3,3 +3,4 @@ playwright
 Markdown
 requests
 types-requests
+pypdf

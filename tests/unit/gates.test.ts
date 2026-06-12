@@ -5,6 +5,7 @@ import {
     passesGeographicGate,
     passesSeniorityGate,
     passesBuiltInPmTitleScope,
+    passesBroadPmTitleScope,
     passesBuiltInStrictRemoteCard,
     parseMaxYearsRequired,
     titleMatchesBlocked,
@@ -192,6 +193,43 @@ describe('passesBuiltInPmTitleScope', () => {
     });
     it('rejects DevOps Engineer', () => {
         expect(passesBuiltInPmTitleScope('DevOps Engineer')).toBe(false);
+    });
+});
+
+describe('passesBroadPmTitleScope', () => {
+    it('accepts Product Manager', () => {
+        expect(passesBroadPmTitleScope('Product Manager')).toBe(true);
+    });
+    it('accepts Senior Product Manager', () => {
+        expect(passesBroadPmTitleScope('Senior Product Manager')).toBe(true);
+    });
+    it('accepts Product Owner', () => {
+        expect(passesBroadPmTitleScope('Product Owner - SEPA/Payments')).toBe(true);
+    });
+    it('accepts Technical Product Manager', () => {
+        expect(passesBroadPmTitleScope('Technical Product Manager')).toBe(true);
+    });
+    it('rejects Product Marketing', () => {
+        expect(passesBroadPmTitleScope('Product Marketing Consultant (part-time)')).toBe(false);
+    });
+    // Implements FR-240 (CR-045) — 2026-06-11 incident titles
+    it('rejects Sales Development Representative', () => {
+        expect(passesBroadPmTitleScope('Sales Development Representative')).toBe(false);
+    });
+    it('rejects Solutions Engineer', () => {
+        expect(passesBroadPmTitleScope('Solutions Engineer / Network Automation Consultant')).toBe(false);
+    });
+    it('rejects Program Manager', () => {
+        expect(passesBroadPmTitleScope('Program Manager Time Migration')).toBe(false);
+    });
+    it('rejects Support Operations Program Manager', () => {
+        expect(passesBroadPmTitleScope('Support Operations Program Manager (SaaS) REMOTE')).toBe(false);
+    });
+    it('rejects Account Executive', () => {
+        expect(passesBroadPmTitleScope('Account Executive')).toBe(false);
+    });
+    it('rejects Customer Success Manager', () => {
+        expect(passesBroadPmTitleScope('Senior Customer Success Manager')).toBe(false);
     });
 });
 

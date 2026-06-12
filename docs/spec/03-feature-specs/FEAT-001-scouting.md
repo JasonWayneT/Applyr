@@ -5,8 +5,8 @@
 - Feature ID: `FEAT-001`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-001`, `BMAD-SRC-004`
-- Related requirements: `FR-001`, `FR-002`, `FR-003`, `FR-004`, `FR-005`, `FR-109`, `FR-135`, `FR-147`, `FR-170`, `FR-173`, `FR-180`, `FR-181`, `FR-182`, `FR-183`, `FR-184`, `FR-185`, `FR-186`, `FR-187`, `FR-194`
-- Related change requests: `CR-010`, `CR-019`, `CR-021`, `CR-027`, `CR-028`, `CR-033`, `CR-034`, `CR-041`
+- Related requirements: `FR-001`, `FR-002`, `FR-003`, `FR-004`, `FR-005`, `FR-109`, `FR-135`, `FR-147`, `FR-170`, `FR-173`, `FR-180`, `FR-181`, `FR-182`, `FR-183`, `FR-184`, `FR-185`, `FR-186`, `FR-187`, `FR-194`, `FR-240`
+- Related change requests: `CR-010`, `CR-019`, `CR-021`, `CR-027`, `CR-028`, `CR-033`, `CR-034`, `CR-041`, `CR-045`
 - **Runtime workflow:** [docs/ACTIVE_WORKFLOW.md](../../../ACTIVE_WORKFLOW.md)
 
 ## Problem statement
@@ -49,6 +49,7 @@ Finding relevant job postings across multiple siloed platforms is repetitive. Th
 | `FR-185` | Working Nomads JSON API source | Public endpoint (`workingnomads.com/api/exposed_jobs/`), client-side PM category + `passesBroadPmTitleScope` filter |
 | `FR-186` | JobsCollider RSS source | Hourly RSS feed (`remotefirstjobs.com/remote-product-jobs.rss`), `passesBroadPmTitleScope` filter, "Title at Company" slug parse |
 | `FR-187` | Broad PM title scope gate | `passesBroadPmTitleScope()` in `scout_local.ts` — blocks product marketing, design, analytics from general-category feeds |
+| `FR-240` | Broad PM scope hardening | WWR + Himalayas broad PM scope; adjacent-role deny patterns; WWR management-finance feed removed (`CR-045`) |
 
 ## Acceptance criteria
 
@@ -57,6 +58,12 @@ Finding relevant job postings across multiple siloed platforms is repetitive. Th
 | `AC-001` | `FR-001` | Saved job-search prefs | Scout/sync runs | New jobs appear in SQLite with URLs and metadata |
 | `AC-004` | `FR-003` | A job URL already exists in DB | Ingestion runs | The job is ignored/skipped |
 | `AC-080` | `FR-080` | Routine scout | `scout_local.ts` runs | LinkedIn phase is skipped; no linkedin.com requests |
+| `AC-209` | `FR-240` | Title "Sales Development Representative" | WWR scout ingest | Rejected `not_pm_title_scope` |
+| `AC-210` | `FR-240` | Title "Solutions Engineer / Network Automation Consultant" | WWR scout ingest | Rejected `not_pm_title_scope` |
+| `AC-211` | `FR-240` | Title "Program Manager Time Migration" | WWR scout ingest | Rejected `not_pm_title_scope` |
+| `AC-212` | `FR-240` | Title "Product Manager, B2B SaaS" | WWR scout ingest | Accepted |
+| `AC-213` | `FR-240` | Title "Senior Product Manager" | Himalayas scout ingest | Accepted |
+| `AC-214` | `FR-240` | WWR scout runs | Feed list inspected | Only `remote-product-jobs.rss` is fetched |
 
 ## Implementation tasks
 
@@ -69,6 +76,7 @@ Finding relevant job postings across multiple siloed platforms is repetitive. Th
 | `TASK-005` | `FR-185` | Working Nomads API source — `scoutWorkingNomads()` | done |
 | `TASK-006` | `FR-186` | JobsCollider RSS source — `scoutJobsCollider()` | done |
 | `TASK-007` | `FR-187` | `passesBroadPmTitleScope()` helper + `REMOTE_ONLY_SOURCES` update | done |
+| `TASK-008` | `FR-240` | WWR + Himalayas broad PM scope | implemented |
 
 ## Verification plan
 

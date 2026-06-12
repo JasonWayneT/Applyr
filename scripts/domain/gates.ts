@@ -93,6 +93,34 @@ export function passesBuiltInPmTitleScope(title: string): boolean {
     return true;
 }
 
+/** FR-187 / FR-240: PM-family titles for broad-category RSS/API feeds (not Built In strict). */
+const BROAD_NON_PM_TITLE_PATTERNS: RegExp[] = [
+    /\bproduct marketing\b/i,
+    /\bproduct design/i,
+    /\bproduct analyt/i,
+    // FR-240 (CR-045): adjacent roles that leak through category/search feeds
+    /\bprogram manager\b/i,
+    /\bproject manager\b/i,
+    /\bsolutions engineer\b/i,
+    /\bsales development\b/i,
+    /\baccount executive\b/i,
+    /\bcustomer success\b/i,
+    /\binside sales\b/i,
+];
+
+export function passesBroadPmTitleScope(title: string): boolean {
+    const t = (title || '').trim();
+    if (!t) return false;
+    for (const pat of BROAD_NON_PM_TITLE_PATTERNS) {
+        if (pat.test(t)) return false;
+    }
+    return (
+        /\bproduct manager\b/i.test(t) ||
+        /\bproduct owner\b/i.test(t) ||
+        /\b(technical|platform|data|ai|api|integration|enterprise|infrastructure) product\b/i.test(t)
+    );
+}
+
 /** FR-183: listing card must show explicit remote (not hybrid/in-office combo labels). */
 const BUILTIN_HYBRID_OR_ONSITE_CARD =
     /\b(in[-\s]?office\s+or\s+remote|remote\s+or\s+hybrid|hybrid\s+or\s+remote|on[-\s]?site|in[-\s]?office)\b/i;

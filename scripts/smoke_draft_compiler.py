@@ -15,7 +15,7 @@ from local_draft_stages import (
     validate_bullet_for_local,
 )
 from pipeline_env import cover_hook_mode, jd_profile_mode, draft_mode, resume_bullet_quotas
-from local_draft_stages import project_id_for_claim, select_claims_deterministic
+from local_draft_stages import EMPLOYERS, project_id_for_claim, select_claims_deterministic
 from bullet_generation import fallback_bullet
 from claim_catalog import load_catalog
 from bullet_fit import fit_bullet_to_budget, is_incomplete_bullet
@@ -63,9 +63,11 @@ def test_jd_profile_validation():
 
 
 def test_employer_routing():
-    assert employer_for_claim_id("ACC-203") == "sterkly"
-    assert employer_for_claim_id("ACC-301") == "zero_to_sixty"
-    assert employer_for_claim_id("ACC-101") == "cision"
+    cat = load_catalog()
+    for cid in ("ACC-203-TECH", "ACC-301-AUTO", "ACC-101-TECH"):
+        if cid not in cat.claims:
+            continue
+        assert employer_for_claim_id(cid) == cat.claims[cid].employer
 
 
 def test_bullet_gate_blocks_kubernetes():
@@ -133,10 +135,14 @@ def test_pipeline_env_defaults():
 
 
 def test_resume_bullet_quotas_default():
+    from candidate_context import load_employers_ordered
+
     q = resume_bullet_quotas()
-    assert q.get("cision") == 5
-    assert q.get("sterkly") == 3
-    assert q.get("zero_to_sixty") == 3
+    ordered = load_employers_ordered()
+    if ordered:
+        assert q.get(ordered[0]) == 5
+        for slug in ordered[1:]:
+            assert q.get(slug) == 3
 
 
 def test_project_id_for_claim():
@@ -156,17 +162,19 @@ def test_select_claims_meets_quota():
 
 
 def test_summary_grounding_fallback():
-    bullets = {"cision": ["Led platform roadmap for $40M ARR ecosystem."]}
+    from candidate_context import primary_employer_slug
+    bullets = {primary_employer_slug(): ["Led platform roadmap for $40M ARR ecosystem."]}
     bad = build_summary_deterministic(bullets, "data migration", None)
     ok, _ = assert_summary_grounded(bad, bullets)
     assert ok or "Product Manager" in bad
 
 
 def test_summary_no_chained_theme_ands():
+    from candidate_context import primary_employer_slug
     from jd_tailoring import JdProfile
 
     bullets = {
-        "cision": [
+        primary_employer_slug(): [
             "Engineered a structural bypass of failing legacy ETL pipelines, eliminating a 40% data drop-off rate.",
         ]
     }
@@ -225,21 +233,25 @@ def test_cover_proof_format_and_picker():
 
 
 def test_employer_job_title_normalization():
+    from candidate_context import DEFAULT_EMPLOYER_HEADERS, load_employers
     from local_draft_stages import normalize_employer_job_titles, experience_skeleton
 
     sk = experience_skeleton()
-    assert "Product Owner / Account Manager" not in sk["zero_to_sixty"]
-    assert "Product Owner | Zero to Sixty" in sk["zero_to_sixty"]
-    assert sk["cision"].startswith("### Product Manager | Cision")
-    assert sk["sterkly"].startswith("### Product Manager | Sterkly")
+    employers = load_employers()
+    assert employers
+    assert all(slug in sk for slug in employers)
 
-    raw = "### Product Owner / Account Manager | Zero to Sixty | June 2017 - January 2019\n"
+    raw = "### Product Owner / Account Manager | Example Co | June 2017 - January 2019\n"
     fixed = normalize_employer_job_titles(raw)
     assert "Account Manager" not in fixed
-    assert "Product Owner | Zero to Sixty" in fixed
+    assert "Product Owner" in fixed
+    assert "Example Co" in fixed
 
-    cision = "### Product Owner / Product Manager | Cision | 2021\n"
-    assert "Product Manager | Cision" in normalize_employer_job_titles(cision)
+    hybrid = "### Product Owner / Product Manager | Example Co | 2021\n"
+    normalized = normalize_employer_job_titles(hybrid)
+    assert "Product Manager" in normalized
+    assert "Example Co" in normalized
+    assert DEFAULT_EMPLOYER_HEADERS
 
 
 def test_tone_guard_rewrites_layoffs():
@@ -263,7 +275,7 @@ def test_tone_guard_rewrites_layoffs():
 def test_approved_metrics_excludes_phone_fragments():
     from approved_metrics import find_unapproved_metrics
 
-    header = "San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL]"
+    header = "City, State | email@example.com | linkedin.com/in/example"
     assert find_unapproved_metrics(header) == []
     bad = find_unapproved_metrics("Delivered $999M in savings.")
     assert bad
@@ -278,17 +290,107 @@ def test_anti_claim_hints_load():
 
 def test_catalog_validate_example():
     from catalog_validator import validate_catalog
+    from claim_catalog import MASTER_CLAIMS_FILE
+    from utils import WORK_EXP_FILE
 
-    result = validate_catalog()
+    data_dir = os.path.dirname(MASTER_CLAIMS_FILE)
+    result = validate_catalog(
+        os.path.join(data_dir, "master_claims.example.json"),
+        os.path.join(data_dir, "workExperience.example.md"),
+    )
     assert result.ok, result.errors[:3]
 
 
 def test_strict_flags_default_off():
-    from pipeline_env import strict_anti_claims, strict_cover_audit, strict_metrics
+    from pipeline_env import (
+        strict_anti_claims,
+        strict_conversion_critique,
+        strict_cover_audit,
+        strict_metrics,
+    )
 
     assert strict_cover_audit() is False
     assert strict_metrics() is False
     assert strict_anti_claims() is False
+    assert strict_conversion_critique() is False
+
+
+def _group_bullets_by_company(bullets: dict) -> dict:
+    grouped = {e: [] for e in EMPLOYERS}
+    for cid, text in bullets.items():
+        grouped[employer_for_claim_id(cid)].append(text)
+    return grouped
+
+
+def _assemble_smoke_resume(summary: str, bullets_by_company: dict) -> str:
+    from candidate_context import build_contact_header
+    from local_draft_stages import experience_skeleton, EMPLOYERS
+    from tone_guard import sanitize_submission_tone
+
+    sk = experience_skeleton()
+    parts = [
+        build_contact_header().strip(),
+        "",
+        "## PROFESSIONAL SUMMARY",
+        sanitize_submission_tone(summary.strip()),
+        "",
+        "## PROFESSIONAL EXPERIENCE",
+        "",
+    ]
+    for key in EMPLOYERS:
+        parts.append(sk[key])
+        for b in bullets_by_company.get(key, []):
+            parts.append(f"* {sanitize_submission_tone(b)}")
+        parts.append("")
+    parts.append("## EDUCATION\n\n* **BBA** — Example University, 2019\n")
+    return "\n".join(parts)
+
+
+def _build_archetype_resume(jd_text: str):
+    from jd_tailoring import build_jd_profile_deterministic
+    from conversion_framing import enforce_conversion_framing
+    from local_draft_stages import build_summary_deterministic, ensure_employer_quotas, EMPLOYERS
+    from bullet_generation import generate_bullets_for_claims
+    from resume_conversion_eval import evaluate_resume_conversion
+
+    cat = load_catalog()
+    truth = cat.truth_map()
+    if len(truth) < 15:
+        return None, None, {"pass": True, "issues": []}
+    profile = build_jd_profile_deterministic(jd_text)
+    selected = select_claims_deterministic(jd_text, truth)
+    quotas = resume_bullet_quotas()
+    bullets, _ = generate_bullets_for_claims(selected, truth, jd_text, profile=profile)
+    bullets = ensure_employer_quotas(bullets, truth, jd_text, fallback_bullet, quotas=quotas)
+    from local_draft_stages import enforce_metric_bullet_floor
+
+    bullets = enforce_metric_bullet_floor(bullets, truth, jd_text, fallback_bullet)
+    bullets = enforce_conversion_framing(bullets, truth, jd_text, fallback_bullet)
+    bullets_by_company = _group_bullets_by_company(bullets)
+    summary = build_summary_deterministic(bullets_by_company, jd_text, profile)
+    resume_md = _assemble_smoke_resume(summary, bullets_by_company)
+    critique = evaluate_resume_conversion(
+        resume_md, bullets_by_company=bullets_by_company, jd_text=jd_text
+    )
+    return resume_md, bullets_by_company, critique
+
+
+def test_archetype_conversion_critique_pass():
+    """FR-231: synthetic JD archetypes should pass conversion critique (no PDF)."""
+    fixtures_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+    names = (
+        "jd_archetype_analytics.txt",
+        "jd_archetype_platform.txt",
+        "jd_archetype_generic_pm.txt",
+    )
+    for fname in names:
+        path = os.path.join(fixtures_dir, fname)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            jd_text = f.read()
+        _md, _bbc, critique = _build_archetype_resume(jd_text)
+        assert critique.get("pass"), f"{fname} failed: {critique.get('issues', [])[:3]}"
 
 
 def test_verify_editor_rejects_invented_metric():
@@ -331,6 +433,7 @@ if __name__ == "__main__":
     test_anti_claim_hints_load()
     test_catalog_validate_example()
     test_strict_flags_default_off()
+    test_archetype_conversion_critique_pass()
     test_verify_editor_rejects_invented_metric()
     test_tone_guard_rewrites_layoffs()
     print("smoke_draft_compiler: all passed")

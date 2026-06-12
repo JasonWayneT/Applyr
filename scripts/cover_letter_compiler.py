@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from claim_catalog import load_catalog
-from cover_claim_picker import pick_cover_proofs
+from cover_claim_picker import dedupe_cover_proofs, pick_cover_proofs
 from cover_letter_audit import audit_cover_letter
 from cover_letter_plan import CoverLetterPlan
 from cover_letter_renderer import render_cover_letter, word_count_report
@@ -26,7 +26,11 @@ class CoverLetterResult:
 
 
 def _claim_corpus(catalog) -> str:
-    return "\n".join(catalog.raw_truth_lines.values())
+    parts = list(catalog.raw_truth_lines.values())
+    for rec in catalog.claims.values():
+        if rec.cover_story:
+            parts.append(rec.cover_story)
+    return "\n".join(parts)
 
 
 def compile_cover_letter(
@@ -34,10 +38,19 @@ def compile_cover_letter(
     company_display: str,
     research_packet_path: Optional[str] = None,
     max_retries: int = 2,
+    bullet_corpus: str = "",
 ) -> CoverLetterResult:
     catalog = load_catalog()
-    plan = build_cover_plan(jd_text, company_display, catalog, research_packet_path)
+    plan = build_cover_plan(
+        jd_text,
+        company_display,
+        catalog,
+        research_packet_path,
+        bullet_corpus=bullet_corpus,
+    )
+    plan.proofs = dedupe_cover_proofs(plan.proofs)
     corpus = _claim_corpus(catalog)
+    target_k = max(len(plan.proofs), 3)
 
     for attempt in range(max_retries + 1):
         md = render_cover_letter(plan, catalog, jd_text=jd_text)
@@ -55,15 +68,15 @@ def compile_cover_letter(
                 audit_issues=audit.issues,
                 word_count=wc,
             )
-        if attempt < max_retries and len(plan.proofs) >= 2:
+        if attempt < max_retries:
             from jd_tailoring import build_jd_profile_deterministic
 
             profile = build_jd_profile_deterministic(jd_text)
             alt_proofs = pick_cover_proofs(
-                catalog, plan.ranked_needs, profile, jd_text, k=2
+                catalog, plan.ranked_needs, profile, jd_text, k=target_k
             )
-            if alt_proofs and alt_proofs[-1].claim_id != plan.proofs[-1].claim_id:
-                plan.proofs[-1] = alt_proofs[-1]
+            if alt_proofs:
+                plan.proofs = dedupe_cover_proofs(alt_proofs)
                 continue
         break
 

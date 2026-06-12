@@ -10,6 +10,10 @@ from typing import List, Tuple
 # Longest-first rewrite chains (applied before hard block checks on output).
 _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
     (
+        re.compile(r"\bPartnered\s+closely\s+with\b", re.IGNORECASE),
+        "Coordinated with",
+    ),
+    (
         re.compile(
             r"multiple\s+rounds\s+of\s+layoffs?\s+and\s+attrition",
             re.IGNORECASE,
@@ -40,6 +44,7 @@ _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
 
 # Patterns that must not appear in finalized resume / cover letter text.
 _BLOCKED_TONE_PATTERNS: List[re.Pattern] = [
+    re.compile(r"\bPartnered\s+closely\b", re.IGNORECASE),
     re.compile(r"\blayoffs?\b", re.IGNORECASE),
     re.compile(r"\blaid[\s-]off\b", re.IGNORECASE),
     re.compile(r"\battrition\b", re.IGNORECASE),

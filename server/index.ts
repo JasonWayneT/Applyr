@@ -9,6 +9,7 @@ import systemRouter   from './routes/system.js';
 import jobsRouter     from './routes/jobs/index.js';
 import profileRouter  from './routes/profile.js';
 import pipelineRouter from './routes/pipeline.js';
+import sourcesRouter  from './routes/sources.js';
 
 // Ensure workspace dirs exist before status transitions (FR-030)
 if (!fs.existsSync(ARCHIVE_DIR)) fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
@@ -44,6 +45,7 @@ app.use('/', systemRouter);
 app.use('/', jobsRouter);
 app.use('/', profileRouter);
 app.use('/', pipelineRouter);
+app.use('/', sourcesRouter);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n${'='.repeat(48)}`);

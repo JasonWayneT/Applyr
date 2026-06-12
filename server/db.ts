@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { runMigrations } from './migrationRunner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DB_PATH = path.join(__dirname, '../jobagent.sqlite');
@@ -147,6 +148,12 @@ try {
 } catch (err) {
   console.warn('[db] jobs_fts repair skipped:', err);
 }
+
+// ---------------------------------------------------------------------------
+// Numbered migration runner — applies server/migrations/*.sql in order.
+// The schema_migrations table is bootstrapped by the runner itself.
+// ---------------------------------------------------------------------------
+runMigrations(db, path.join(__dirname, 'migrations'));
 
 // ---------------------------------------------------------------------------
 // Schema version tracking (additive — existing try/catch migrations remain).

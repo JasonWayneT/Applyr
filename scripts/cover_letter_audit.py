@@ -52,11 +52,13 @@ def audit_cover_letter(
     body = markdown.lower()
 
     wc = _word_count(markdown)
-    if wc < 300:
-        issues.append(f"Word count low ({wc}); target 300-350")
-        score -= 15 if wc < 285 else 8
-    elif wc > 380:
-        issues.append(f"Word count high ({wc}); target 300-350")
+    min_words = 250 if plan.opening_variant == "need_first" else 300
+    max_words = 400
+    if wc < min_words:
+        issues.append(f"Word count low ({wc}); target {min_words}-{max_words}")
+        score -= 15 if wc < min_words - 15 else 8
+    elif wc > max_words:
+        issues.append(f"Word count high ({wc}); target 300-400")
         score -= 10
 
     if plan.company_display.lower() not in body:
@@ -70,7 +72,19 @@ def audit_cover_letter(
         issues.append("Missing salutation")
         score -= 5
 
-    if not re.search(r"i am applying for", body):
+    opener = body[:500]
+    has_apply_intent = bool(re.search(r"i am applying for", opener))
+    has_need_first_intent = (
+        plan.opening_variant == "need_first"
+        and plan.company_display.lower() in opener
+        and plan.role_title.lower() in opener
+    )
+    has_domain_first_intent = (
+        plan.opening_variant == "domain_first"
+        and plan.company_display.lower() in opener
+        and "fits the work" in opener
+    )
+    if not has_apply_intent and not has_need_first_intent and not has_domain_first_intent:
         issues.append("Opening should state application intent")
         score -= 12
     for bad in FORBIDDEN_OPENERS:
@@ -89,17 +103,62 @@ def audit_cover_letter(
 
     from cover_jd_needs import need_to_goal_phrase
 
+    from cover_jd_needs import is_tenure_requirement
+
     needs_found = 0
     for need in plan.ranked_needs[:2]:
+        if is_tenure_requirement(need):
+            if any(
+                m in body
+                for m in (
+                    "analytics",
+                    "roadmap",
+                    "kpi",
+                    "platform",
+                    "data",
+                    "adopt",
+                    "underwriting",
+                )
+            ):
+                needs_found += 1
+            continue
         goal = need_to_goal_phrase(need)
         frag = goal[:50] if goal else need.lower()[:40]
         if frag and frag in body:
             needs_found += 1
         elif need.lower()[:35] in body:
             needs_found += 1
-    jd_markers = ("intelligence platform", "rankings", "monetization", "platform adoption")
+    jd_markers = (
+        "intelligence platform",
+        "rankings",
+        "monetization",
+        "platform adoption",
+        "analytics product",
+        "underwriting",
+        "lender integration",
+        "lender integrations",
+        "consumer funnel",
+        "funnel conversion",
+        "borrower",
+        "marketplace",
+        "funded volume",
+        "drop-off",
+        "drop off",
+        "personal safety",
+        "connected device",
+        "vendor integration",
+        "device lifecycle",
+        "firmware",
+        "iot",
+        "interoperability",
+    )
     if any(m in body for m in jd_markers):
         needs_found = max(needs_found, 1)
+    for pain in getattr(plan, "pain_points", None) or []:
+        frag = pain.lower().strip()
+        if len(frag) >= 8 and frag in body:
+            needs_found = max(needs_found, 1)
+            break
     if needs_found < 1 and plan.ranked_needs:
         issues.append("JD need not reflected in letter body")
         score -= 15

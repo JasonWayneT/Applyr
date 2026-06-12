@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { ChildProcessWithoutNullStreams } from 'child_process';
 import { SCRIPTS_DIR } from './shared.js';
-import { buildSpawnEnv, runBuffered } from './pipeline/processRunner.js';
+import { runBuffered } from './pipeline/processRunner.js';
 
 export { buildSpawnEnv } from './pipeline/processRunner.js';
 export { isPipelineBusy, tryAcquirePipeline, releasePipeline } from './pipelineLock.js';

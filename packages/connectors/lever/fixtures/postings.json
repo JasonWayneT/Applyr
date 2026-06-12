@@ -1,0 +1,36 @@
+[
+  {
+    "id": "abc-123-def-456",
+    "text": "Product Manager, Platform",
+    "state": "published",
+    "hostedUrl": "https://jobs.lever.co/netflix/abc-123-def-456",
+    "applyUrl": "https://jobs.lever.co/netflix/abc-123-def-456/apply",
+    "createdAt": 1780272000000,
+    "updatedAt": 1780358400000,
+    "categories": {
+      "team": "Product",
+      "department": "Product",
+      "location": "Remote, United States",
+      "allLocations": ["Remote, United States"]
+    },
+    "description": "<div><p>Join the Platform team as a Product Manager.</p></div>",
+    "lists": []
+  },
+  {
+    "id": "xyz-789-uvw-012",
+    "text": "Data Scientist",
+    "state": "published",
+    "hostedUrl": "https://jobs.lever.co/netflix/xyz-789-uvw-012",
+    "applyUrl": "https://jobs.lever.co/netflix/xyz-789-uvw-012/apply",
+    "createdAt": 1780272000000,
+    "updatedAt": 1780272000000,
+    "categories": {
+      "team": "Data Science",
+      "department": "Engineering",
+      "location": "Los Angeles, CA",
+      "allLocations": ["Los Angeles, CA"]
+    },
+    "description": "<div><p>Analyze viewer behavior patterns.</p></div>",
+    "lists": []
+  }
+]

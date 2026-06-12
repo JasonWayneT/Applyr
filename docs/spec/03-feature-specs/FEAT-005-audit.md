@@ -50,5 +50,5 @@ Scans the resume line by line. When a `##` or `###` header matches `_FORBIDDEN_S
 |---|---|---|---|---|
 | `TEST-005` | `FR-019` | integration | Audit report flags any metric not found in `workExperience.md` | verified |
 | `TEST-073` | `FR-073`, `AC-075` | unit | `preserves_core_facts("3,500 accounts", "5,000 accounts")` returns `(False, ["5,000"])` | verified |
-| `TEST-074` | `FR-074`, `AC-076` | integration | Guard run on resume with `## Core Competencies` section strips it; `# JASON TAYLOR` header restored from `## JASON TAYLOR` variant | verified |
+| `TEST-074` | `FR-074`, `AC-076` | integration | Guard run on resume with `## Core Competencies` section strips it; `# CANDIDATE NAME` header restored from `## CANDIDATE NAME` variant | verified |
 | `TEST-075` | `FR-075`, `AC-077` | integration | `validate_hard_facts(cl_text, master, doc_type='cover_letter')` produces zero "MISSING FACT: Education" warnings | verified |

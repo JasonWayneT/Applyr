@@ -1,0 +1,6 @@
+Senior Product Manager — Analytics Platform
+
+We are hiring a Product Manager to own our analytics product delivery roadmap.
+You will define KPI dashboards, experiment design, and data-driven product decisions
+for enterprise customers. Requirements include SQL literacy, A/B testing experience,
+and shipping analytics features that improve customer retention and revenue insights.

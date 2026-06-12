@@ -181,6 +181,12 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                   <span className="material-symbols-outlined text-base">domain</span>
                   {job.company}
                 </span>
+                {job.sources && job.sources.length > 0 && (
+                  <span className="flex items-center gap-1 text-[10px] bg-surface-container-high px-2 py-0.5 rounded-md text-on-surface-variant font-mono">
+                    <span className="material-symbols-outlined text-[11px]">travel_explore</span>
+                    Found on: {job.sources.join(', ')}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 mt-3">
                 <StatusChip status={job.status} long />
@@ -250,6 +256,63 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                 </p>
               </section>
             )}
+
+            {/* Score Breakdown Section */}
+            <section className="bg-surface-container-low p-6 rounded-2xl">
+              <h3 className="text-lg font-headline font-bold text-on-surface mb-3 flex items-center justify-between">
+                <span>Scoring Transparency</span>
+                <span className="text-sm bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-mono">
+                  {job.score_total !== undefined && job.score_total !== null ? `${job.score_total}/100` : 'Unscored'}
+                </span>
+              </h3>
+              
+              {job.score_breakdown_json ? (() => {
+                try {
+                  const b = JSON.parse(job.score_breakdown_json) as Record<string, number>;
+                  const metrics = [
+                    { label: 'Role Family Match', key: 'role_family_match', max: 30 },
+                    { label: 'Domain Match', key: 'domain_match', max: 20 },
+                    { label: 'Seniority Match', key: 'seniority_match', max: 15 },
+                    { label: 'Work Arrangement', key: 'work_arrangement', max: 15 },
+                    { label: 'Company Desirability', key: 'company_desirability', max: 10 },
+                    { label: 'Location Compatibility', key: 'location_compatibility', max: 5 },
+                    { label: 'Compensation Signal', key: 'compensation_signal', max: 5 },
+                  ];
+
+                  return (
+                    <div className="space-y-3 mt-4">
+                      {metrics.map(m => {
+                        const val = b[m.key] ?? b[m.label] ?? 0;
+                        const pct = Math.min(100, Math.max(0, (val / m.max) * 100));
+                        return (
+                          <div key={m.key} className="space-y-1">
+                            <div className="flex justify-between text-[11px] font-bold text-on-surface-variant">
+                              <span>{m.label}</span>
+                              <span>{val} / {m.max}</span>
+                            </div>
+                            <div className="h-1.5 bg-surface-container rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-secondary rounded-full transition-all"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {job.reason_summary && (
+                        <div className="mt-4 pt-3 border-t border-outline-variant/10 text-xs text-on-surface-variant italic leading-relaxed">
+                          {job.reason_summary}
+                        </div>
+                      )}
+                    </div>
+                  );
+                } catch {
+                  return <p className="text-xs text-on-surface-variant italic">Failed to parse score breakdown details.</p>;
+                }
+              })() : (
+                <p className="text-xs text-on-surface-variant italic">Not yet scored or no breakdown details available.</p>
+              )}
+            </section>
 
             {/* Skill Gap Analysis */}
             <section className="bg-surface-container-low p-6 rounded-2xl mb-4">

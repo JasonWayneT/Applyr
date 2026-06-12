@@ -202,6 +202,8 @@ def _company_submission_dir(company_name: str) -> str:
 def _resolve_display_company(db_path: str, company_name: str, job_id: str | None = None) -> str:
     """Implements FR-103 (CR-017): use DB company title for cover letter, not folder slug."""
     if not db_path or not os.path.exists(db_path):
+        if "_" in company_name and " " not in company_name:
+            return company_name.replace("_", " ").title()
         return company_name
     try:
         conn = sqlite3.connect(db_path)
@@ -212,14 +214,16 @@ def _resolve_display_company(db_path: str, company_name: str, job_id: str | None
             ).fetchone()
         else:
             row = conn.execute(
-                "SELECT company FROM jobs WHERE LOWER(company) = LOWER(?) LIMIT 1",
-                (company_name,),
+                "SELECT company FROM jobs WHERE LOWER(company) = LOWER(?) OR LOWER(company) = LOWER(?) LIMIT 1",
+                (company_name, company_name.replace("_", " ")),
             ).fetchone()
         conn.close()
         if row and row[0] and str(row[0]).strip():
             return str(row[0]).strip()
     except sqlite3.Error:
         pass
+    if "_" in company_name and " " not in company_name:
+        return company_name.replace("_", " ").title()
     return company_name
 
 
@@ -253,10 +257,20 @@ def _find_staging_jd(company: str, job_id: str | None = None) -> str:
 
 
 def _load_jd_for_job(company: str, job_id: str | None = None) -> str:
-    """Staging file first, then saved Original_JD.txt from a prior draft attempt."""
+    """Staging file first, then DB jd_text, then saved Original_JD.txt from a prior draft attempt."""
     jd_text = _find_staging_jd(company, job_id)
     if jd_text and len(jd_text.strip()) >= 100:
         return jd_text
+    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    if job_id and os.path.exists(db_path):
+        try:
+            conn = sqlite3.connect(db_path, timeout=10.0)
+            row = conn.execute("SELECT jd_text FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            conn.close()
+            if row and row[0] and len(str(row[0]).strip()) >= 100:
+                return str(row[0])
+        except sqlite3.Error:
+            pass
     original = os.path.join(_company_submission_dir(company), "Original_JD.txt")
     if os.path.exists(original):
         return load_file(original)
@@ -277,6 +291,33 @@ def _load_job_fit_from_db(db_path: str, job_id: str):
         pass
     return None
 
+
+def save_job_score(db_path: str, job_id: str, score_total: int, score_breakdown_json: str, reason_summary: str, review_state: str = None):
+    """Saves score details to job_scores using a 2-step is_latest transaction."""
+    import uuid
+    try:
+        conn = sqlite3.connect(db_path, timeout=30.0)
+        cursor = conn.cursor()
+        cursor.execute("BEGIN TRANSACTION")
+        
+        # Step 1: Set is_latest = 0 on all existing scores for this job
+        cursor.execute("UPDATE job_scores SET is_latest = 0 WHERE job_id = ?", (job_id,))
+        
+        # Step 2: Insert new score row with is_latest = 1
+        new_id = str(uuid.uuid4())
+        scored_at = datetime.utcnow().isoformat() + "Z"
+        cursor.execute(
+            """
+            INSERT INTO job_scores (id, job_id, score_total, score_breakdown_json, reason_summary, review_state, scored_at, is_latest)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+            """,
+            (new_id, job_id, score_total, score_breakdown_json, reason_summary, review_state, scored_at)
+        )
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  -> Error saving job score to job_scores table: {e}")
 
 def _update_job_row(db_path, job_id_prefix, company_name, status, score=None, summary=None):
     conn = sqlite3.connect(db_path, timeout=30.0)
@@ -590,9 +631,15 @@ def _call_fit_llm(
     from pipeline_env import fit_llm_timeout_sec, fit_model_override, fit_num_predict
 
     fit_model = fit_model_override()
+    system_instruction = (
+        "You are the Job-Fit Decision Engine. Output JSON strictly.\n"
+        "STRICT POLICY: Do NOT penalize the candidate for vertical industry or customer-base (B2C vs B2B) differences. "
+        "Score on transferable PM craft skills (platform stability, roadmap, cross-functional delivery, system complexity). "
+        "Respect the pre-verified location and years gates. Do not penalize or reject for location or years."
+    )
     result = call_llm_stage(
         "fit",
-        "You are the Job-Fit Decision Engine. Output JSON strictly.",
+        system_instruction,
         prompt,
         temperature=0.0,
         response_mime_type="application/json",
@@ -659,9 +706,15 @@ def _call_fit_scoring_only(
     from pipeline_env import fit_llm_timeout_sec, fit_model_override, fit_num_predict
 
     fit_model = fit_model_override()
+    system_instruction = (
+        "You are scoring job fit ONLY. Output JSON strictly.\n"
+        "STRICT POLICY: Do NOT penalize or reject the candidate for vertical industry or customer-base (B2C vs B2B) differences. "
+        "Score on transferable PM craft skills (platform stability, roadmap, cross-functional delivery, system complexity). "
+        "Never cite location or years of experience as a reject reason, as they are pre-verified."
+    )
     raw = call_llm_stage(
         "fit",
-        "Output JSON strictly. Never cite location as a reject reason.",
+        system_instruction,
         prompt,
         temperature=0.0,
         response_mime_type="application/json",
@@ -696,7 +749,7 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     truncated_jd = jd_text[:SCORING_JD_MAX_CHARS] if len(jd_text) > SCORING_JD_MAX_CHARS else jd_text
     work_exp_for_fit = _pruned_work_exp_for_fit(truncated_jd, work_exp_summary)
 
-    loc_verdict, loc_detail = resolve_location_verdict(truncated_jd)
+    loc_verdict, loc_detail = resolve_location_verdict(jd_text)
     if loc_verdict == "REJECT":
         return {
             "Decision": "NO",
@@ -1280,6 +1333,39 @@ def process_batch():
                     ),
                 )
                 print(f"  -> Database status updated to 'Backlog' (Ready to Apply) with score {score}.")
+                
+                # Fetch full job ID from DB to write score details
+                conn = sqlite3.connect(db_path, timeout=30.0)
+                cursor = conn.cursor()
+                if job_id_prefix:
+                    cursor.execute("SELECT id FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",))
+                else:
+                    cursor.execute("SELECT id FROM jobs WHERE LOWER(company) = LOWER(?)", (company_name,))
+                db_job_row = cursor.fetchone()
+                conn.close()
+                if db_job_row:
+                    actual_job_id = db_job_row[0]
+                    # Route to priority review state based on score
+                    review_state = "high_priority" if score >= 85 else ("review_queue" if score >= 70 else ("low_priority" if score >= 50 else "hidden"))
+                    
+                    # Extract raw component scores or map default breakdown
+                    breakdown = {
+                        "role_family_match": result.get("role_family_match", int(score * 0.3)),
+                        "domain_match": result.get("domain_match", int(score * 0.2)),
+                        "seniority_match": result.get("seniority_match", int(score * 0.15)),
+                        "work_arrangement": result.get("work_arrangement", int(score * 0.15)),
+                        "company_desirability": result.get("company_desirability", int(score * 0.1)),
+                        "location_compatibility": result.get("location_compatibility", int(score * 0.05)),
+                        "compensation_signal": result.get("compensation_signal", int(score * 0.05)),
+                    }
+                    save_job_score(
+                        db_path,
+                        actual_job_id,
+                        score,
+                        json.dumps(breakdown),
+                        result.get("Summary", ""),
+                        review_state=review_state
+                    )
             except Exception as e:
                 print(f"  -> Error updating database: {e}")
                 job_failures_local += 1

@@ -100,7 +100,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           {getGreeting()}{firstName ? `, ${firstName}` : ''}.
         </h1>
         <p className="text-on-surface-variant text-lg">
-          You have <span className="text-secondary font-bold">{activeJobs.length} submitted applications</span> in progress. Let's keep the momentum going.
+          You have <span className="text-secondary font-bold">{activeJobs.length} submitted applications</span> in progress. Let&apos;s keep the momentum going.
         </p>
       </section>
 
@@ -175,7 +175,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
             <div className="bg-surface-container-lowest rounded-[2rem] p-8 flex-1 flex flex-col justify-center items-center editorial-shadow text-center">
               <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 mb-3">event_available</span>
               <h3 className="text-lg font-headline font-bold text-on-surface mb-1">No interviews yet</h3>
-              <p className="text-sm text-on-surface-variant">Keep applying and you'll land one soon.</p>
+              <p className="text-sm text-on-surface-variant">Keep applying and you&apos;ll land one soon.</p>
             </div>
           )}
         </div>

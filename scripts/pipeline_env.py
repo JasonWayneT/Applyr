@@ -69,9 +69,11 @@ def skip_duplicate_vector_check() -> bool:
 def resume_bullet_quotas() -> dict[str, int]:
     """
     Target bullets per employer on composed resumes (default 5 / 3 / 3).
-    Override: RESUME_BULLET_QUOTAS=cision:5,sterkly:3,zero_to_sixty:3
+    Override: RESUME_BULLET_QUOTAS=acme_corp:5,example_inc:3,startup_co:3
     """
-    defaults = {"cision": 5, "sterkly": 3, "zero_to_sixty": 3}
+    from candidate_context import default_resume_bullet_quotas
+
+    defaults = default_resume_bullet_quotas()
     raw = os.environ.get("RESUME_BULLET_QUOTAS", "").strip()
     if not raw:
         return defaults
@@ -190,6 +192,11 @@ def strict_cover_audit() -> bool:
     return _flag("STRICT_COVER_AUDIT") in ("1", "true", "yes")
 
 
+def block_cover_pdf_on_audit_fail() -> bool:
+    """Skip CoverLetter.pdf when cover audit grade != Pass (default on)."""
+    return _flag("ALLOW_COVER_AUDIT_FAIL") not in ("1", "true", "yes")
+
+
 def strict_metrics() -> bool:
     """CR-031 — raise on unapproved numeric tokens in verification chain."""
     return _flag("STRICT_METRICS") in ("1", "true", "yes")
@@ -205,6 +212,21 @@ def strict_catalog_drift() -> bool:
     return _flag("STRICT_CATALOG_DRIFT") in ("1", "true", "yes")
 
 
+def strict_conversion_critique() -> bool:
+    """CR-042 — block export when conversion_critique.pass is false."""
+    return _flag("STRICT_CONVERSION_CRITIQUE") in ("1", "true", "yes")
+
+
+def conversion_retry_max() -> int:
+    """CR-042 — max auto-retry attempts before strict gate (default 2)."""
+    raw = (os.environ.get("CONVERSION_RETRY_MAX") or "2").strip()
+    try:
+        n = int(raw)
+        return max(1, min(n, 5))
+    except ValueError:
+        return 2
+
+
 def allow_fit_summary() -> bool:
     """When false (default), do not append fit-eval sentence to resume summary."""
     return _flag("ALLOW_FIT_SUMMARY") in ("1", "true", "yes")
@@ -216,3 +238,39 @@ def assert_draft_mode_allowed() -> None:
             "DRAFT_MODE=legacy_llm is blocked when LOCAL_ONLY_MODE=1. "
             "Use DRAFT_MODE=compose for fact-grounded bullets."
         )
+
+
+def submission_mode() -> bool:
+    """True when SUBMISSION_MODE=1 is set.
+
+    Activates all strict guards for real employer submissions:
+      - STRICT_METRICS=1      (unapproved numbers are hard errors)
+      - STRICT_COVER_AUDIT=1  (cover letter must pass audit or pipeline fails)
+      - STRICT_ANTI_CLAIMS=1  (anti-claim violations block export)
+      - USE_BRIDGE_PREFIXES=0 (JD-derived reframing disabled)
+      - ALLOW_FIT_SUMMARY=0   (LLM fit sentence blocked from summary)
+      - DRAFT_MODE=compose    (deterministic bullets only)
+      - COVER_HOOK_MODE=template (no LLM cover hook)
+
+    Equivalent to setting all of the above individually. Prefer this flag
+    for all real application runs to avoid forgetting a guard.
+    """
+    return _flag("SUBMISSION_MODE") in ("1", "true", "yes")
+
+
+def apply_submission_defaults() -> None:
+    """Enforce all strict guards when SUBMISSION_MODE=1.
+
+    Call early in any pipeline entry point. Uses setdefault so explicit
+    overrides in the environment still take precedence.
+    """
+    if not submission_mode():
+        return
+    os.environ.setdefault("STRICT_METRICS", "1")
+    os.environ.setdefault("STRICT_COVER_AUDIT", "1")
+    os.environ.setdefault("STRICT_ANTI_CLAIMS", "1")
+    os.environ.setdefault("STRICT_CONVERSION_CRITIQUE", "1")
+    os.environ.setdefault("USE_BRIDGE_PREFIXES", "0")
+    os.environ.setdefault("ALLOW_FIT_SUMMARY", "0")
+    os.environ.setdefault("DRAFT_MODE", "compose")
+    os.environ.setdefault("COVER_HOOK_MODE", "template")

@@ -29,7 +29,108 @@ def canonical_lens(lens: str) -> str:
     return LENS_ALIAS.get(key, key or "operations")
 
 
-def _proof_score(claim_text: str, need: str, profile: JdProfile, jd_text: str) -> int:
+def dedupe_cover_proofs(proofs: List[CoverProofSlot]) -> List[CoverProofSlot]:
+    """Drop duplicate claim_ids while preserving order."""
+    seen: Set[str] = set()
+    out: List[CoverProofSlot] = []
+    for slot in proofs:
+        if slot.claim_id in seen:
+            continue
+        seen.add(slot.claim_id)
+        out.append(slot)
+    return out
+
+
+def is_product_domain_jd(jd_text: str) -> bool:
+    """PM roles emphasizing domain ownership, roadmap, and feature strategy."""
+    jd_body = _strip_jd_industry_tags(jd_text).lower()
+    markers = (
+        "product domain",
+        "own a key product",
+        "feature development",
+        "long-term product strategy",
+        "long term strateg",
+        "product backlog",
+        "prioritization of new features",
+        "driving requirements",
+        "functional spec",
+    )
+    hits = sum(1 for m in markers if m in jd_body)
+    return hits >= 2 or ("product domain" in jd_body and "feature" in jd_body)
+
+
+def is_connected_devices_jd(jd_text: str) -> bool:
+    """IoT / personal safety device / hardware integration JDs."""
+    jd_body = _strip_jd_industry_tags(jd_text).lower()
+    if any(
+        token in jd_body
+        for token in (
+            "personal safety device",
+            "connected device",
+            "connected devices",
+            "iot ecosystem",
+            "device vendor",
+            "hardware vendor",
+            "firmware update",
+            "firmware",
+        )
+    ):
+        return True
+    return "iot" in jd_body and "device" in jd_body
+
+
+def is_marketplace_fintech_jd(need: str, jd_text: str) -> bool:
+    """True when JD signals marketplace / lending / funnel context (CR-047)."""
+    return _fintech_jd_context(need, jd_text)
+
+
+def _strip_jd_industry_tags(jd_text: str) -> str:
+    """Drop job-board industry tag lines (e.g. 'Fintech • Payments • Software')."""
+    lines = []
+    for line in jd_text.splitlines():
+        stripped = line.strip()
+        if stripped.count("•") >= 2 and len(stripped) < 120:
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _fintech_jd_context(need: str, jd_text: str) -> bool:
+    """Marketplace/lending JD — ignore industry-tag footers and standalone 'fintech'."""
+    jd_body = _strip_jd_industry_tags(jd_text)
+    combined = f"{need} {jd_body}".lower()
+    strong_markers = (
+        "lender",
+        "borrower",
+        "loan product",
+        "personal loan",
+    )
+    if any(token in combined for token in strong_markers):
+        return True
+    if "marketplace" in combined and any(
+        token in combined
+        for token in ("lender", "borrower", "loan", "lending", "funded volume")
+    ):
+        return True
+    if "funnel" in combined and any(
+        token in combined
+        for token in ("lender", "borrower", "loan", "funded volume", "approval rate")
+    ):
+        return True
+    if "underwriting" in combined and any(
+        token in combined for token in ("lender", "borrower", "loan", "fintech", "marketplace")
+    ):
+        return True
+    return False
+
+
+def _proof_score(
+    claim_text: str,
+    need: str,
+    profile: JdProfile,
+    jd_text: str,
+    cover_story: str | None = None,
+) -> int:
     score = score_claim_for_jd(claim_text, profile, jd_text)
     text_l = claim_text.lower()
     need_l = need.lower()
@@ -51,7 +152,88 @@ def _proof_score(claim_text: str, need: str, profile: JdProfile, jd_text: str) -
             score += 8
     if re.search(r"\d", claim_text):
         score += 3
+    if cover_story:
+        score += 10
+        story_l = cover_story.lower()
+        for token in re.findall(r"[a-z]{5,}", need_l):
+            if token in story_l:
+                score += 2
+    if is_product_domain_jd(jd_text):
+        story_l = (cover_story or "").lower()
+        combined = f"{text_l} {story_l}"
+        for sig, bonus in (
+            ("capacity", 10),
+            ("backlog", 9),
+            ("roadmap", 9),
+            ("stakeholder", 8),
+            ("priorit", 8),
+            ("trade-off", 7),
+            ("trade off", 7),
+            ("churn", 6),
+            ("retention", 6),
+        ):
+            if sig in combined:
+                score += bonus
+    if is_connected_devices_jd(jd_text):
+        story_l = (cover_story or "").lower()
+        combined = f"{text_l} {story_l}"
+        for sig, bonus in (
+            ("secur", 10),
+            ("compliance", 8),
+            ("integrat", 8),
+            ("vendor", 7),
+            ("firmware", 6),
+            ("device", 6),
+            ("penetration", 8),
+            ("vulnerab", 8),
+        ):
+            if sig in combined:
+                score += bonus
+    if _fintech_jd_context(need, jd_text):
+        story_l = (cover_story or "").lower()
+        combined = f"{text_l} {story_l}"
+        for sig, bonus in (
+            ("drop-off", 12),
+            ("drop off", 12),
+            ("integrat", 8),
+            ("funnel", 8),
+            ("convers", 7),
+            ("experiment", 6),
+            ("marketplace", 7),
+            ("api", 5),
+            ("onboard", 5),
+            ("partner", 4),
+            ("match", 4),
+        ):
+            if sig in combined:
+                score += bonus
     return score
+
+
+def _refill_proofs_to_k(
+    proofs: List[CoverProofSlot],
+    k: int,
+    ranked_needs: List[str],
+    best_for_need,
+) -> List[CoverProofSlot]:
+    """After dedupe or metric swaps, top up proof slots without repeating claim_ids."""
+    proofs = dedupe_cover_proofs(proofs)
+    while len(proofs) < k:
+        need_i = ranked_needs[len(proofs) % len(ranked_needs)]
+        used_projects = {p.project_id for p in proofs if p.project_id}
+        used_ids = {p.claim_id for p in proofs}
+        extra = best_for_need(
+            need_i,
+            used_projects,
+            min_score=6,
+            exclude_claim_ids=used_ids,
+        )
+        if not extra:
+            break
+        proofs.append(extra[1])
+        if extra[1].project_id:
+            used_projects.add(extra[1].project_id)
+    return proofs[:k]
 
 
 def pick_cover_proofs(
@@ -68,13 +250,19 @@ def pick_cover_proofs(
     need1 = ranked_needs[1] if len(ranked_needs) > 1 else ranked_needs[0]
 
     def best_for_need(
-        need: str, exclude_projects: Set[str], min_score: int
+        need: str,
+        exclude_projects: Set[str],
+        min_score: int,
+        exclude_claim_ids: Set[str] | None = None,
     ) -> Tuple[int, CoverProofSlot] | None:
         best: Tuple[int, CoverProofSlot] | None = None
+        blocked_ids = exclude_claim_ids or set()
         for cid, rec in catalog.claims.items():
+            if cid in blocked_ids:
+                continue
             if rec.project_id and rec.project_id in exclude_projects:
                 continue
-            sc = _proof_score(rec.body, need, profile, jd_text)
+            sc = _proof_score(rec.body, need, profile, jd_text, cover_story=rec.cover_story)
             if sc < min_score:
                 continue
             slot = CoverProofSlot(
@@ -101,10 +289,18 @@ def pick_cover_proofs(
         second = best_for_need(need1, used_projects, min_score=8)
         if second and second[1].claim_id != (proofs[0].claim_id if proofs else ""):
             proofs.append(second[1])
+            if second[1].project_id:
+                used_projects.add(second[1].project_id)
         elif proofs:
             alt = best_for_need(need1, set(), min_score=8)
             if alt and alt[1].claim_id != proofs[0].claim_id:
                 proofs.append(alt[1])
+
+    if k >= 3 and proofs:
+        need2 = ranked_needs[2] if len(ranked_needs) > 2 else need1
+        third = best_for_need(need2, used_projects, min_score=6)
+        if third and third[1].claim_id not in {p.claim_id for p in proofs}:
+            proofs.append(third[1])
 
     proofs = proofs[:k]
 
@@ -118,7 +314,7 @@ def pick_cover_proofs(
         for cid, rec in catalog.claims.items():
             if not re.search(r"\d", rec.body):
                 continue
-            sc = _proof_score(rec.body, need0, profile, jd_text)
+            sc = _proof_score(rec.body, need0, profile, jd_text, cover_story=rec.cover_story)
             slot = CoverProofSlot(
                 claim_id=cid,
                 lens=canonical_lens(rec.title),
@@ -139,7 +335,7 @@ def pick_cover_proofs(
                 continue
             if rec.project_id and rec.project_id == proofs[0].project_id:
                 continue
-            sc = _proof_score(rec.body, need1, profile, jd_text)
+            sc = _proof_score(rec.body, need1, profile, jd_text, cover_story=rec.cover_story)
             slot = CoverProofSlot(
                 claim_id=cid,
                 lens=canonical_lens(rec.title),
@@ -152,4 +348,46 @@ def pick_cover_proofs(
         if best_m2:
             proofs[1] = best_m2[1]
 
-    return proofs
+    if is_product_domain_jd(jd_text):
+        return _product_domain_proofs(catalog, ranked_needs, k)
+
+    return _refill_proofs_to_k(proofs, k, ranked_needs, best_for_need)
+
+
+def _product_domain_proofs(
+    catalog: ClaimCatalog,
+    ranked_needs: List[str],
+    k: int,
+) -> List[CoverProofSlot]:
+    """Fixed proof stack for domain-ownership PM roles: capacity → trust → extras."""
+    need0 = ranked_needs[0] if ranked_needs else ""
+    need1 = ranked_needs[1] if len(ranked_needs) > 1 else need0
+    slots: List[CoverProofSlot] = []
+    for cid, need in (
+        ("ACC-105-PROCESS", need0),
+        ("ACC-102-BUS", need1),
+    ):
+        rec = catalog.claims.get(cid)
+        if not rec:
+            continue
+        slots.append(
+            CoverProofSlot(
+                claim_id=cid,
+                lens=canonical_lens(rec.title),
+                jd_need=need,
+                employer=rec.employer,
+                project_id=rec.project_id or "",
+            )
+        )
+    rec101 = catalog.claims.get("ACC-101-PM")
+    if rec101 and len(slots) < k:
+        slots.append(
+            CoverProofSlot(
+                claim_id="ACC-101-PM",
+                lens=canonical_lens(rec101.title),
+                jd_need=need1,
+                employer=rec101.employer,
+                project_id=rec101.project_id or "",
+            )
+        )
+    return slots[:k]

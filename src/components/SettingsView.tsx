@@ -25,6 +25,7 @@ interface LlmSettings {
 interface ApiConnections {
   adzunaAppId: string;
   adzunaAppKey: string;
+  theirstackApiKey?: string;
 }
 
 interface EnvStatus {
@@ -59,7 +60,7 @@ const SettingsView: React.FC = () => {
     localModel: 'llama3',
     perplexityApiKey: '',
   });
-  const [apiConnections, setApiConnections] = useState<ApiConnections>({ adzunaAppId: '', adzunaAppKey: '' });
+  const [apiConnections, setApiConnections] = useState<ApiConnections>({ adzunaAppId: '', adzunaAppKey: '', theirstackApiKey: '' });
   const [experience, setExperience] = useState('');
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -236,8 +237,8 @@ const SettingsView: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-4 border-t border-outline-variant/10">
               {[
-                { label: 'Full Name', key: 'name', type: 'text', placeholder: 'Jason Taylor' },
-                { label: 'Email Address', key: 'email', type: 'email', placeholder: '[REDACTED_EMAIL]' },
+                { label: 'Full Name', key: 'name', type: 'text', placeholder: 'John Doe' },
+                { label: 'Email Address', key: 'email', type: 'email', placeholder: 'email@example.com' },
                 { label: 'Phone Number', key: 'phone', type: 'text', placeholder: '+1 (555) 019-2834' },
                 { label: 'Location', key: 'location', type: 'text', placeholder: 'City, State' },
                 { label: 'LinkedIn URL', key: 'linkedin', type: 'text', placeholder: 'https://linkedin.com/in/...' },
@@ -437,7 +438,7 @@ const SettingsView: React.FC = () => {
                         <p className="text-[11px] text-on-surface-variant leading-relaxed">
                           <strong className="text-on-surface">Never delete a coded line entirely.</strong> If a claim is no longer accurate,
                           unlink it by removing the code tag — the text stays as context but the AI will not cite it.
-                          Retire, don't delete.
+                          Retire, don&apos;t delete.
                         </p>
                       </div>
 
@@ -764,6 +765,37 @@ const SettingsView: React.FC = () => {
                   </div>
                 )}
                 <p className="text-[9px] text-on-surface-variant italic">Auto-saves to local database. Register at developer.adzuna.com — free tier only.</p>
+              </div>
+
+              {/* TheirStack Connection Card */}
+              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="material-symbols-outlined text-on-surface-variant text-lg">database</span>
+                    <div>
+                      <p className="text-xs font-bold text-on-surface">TheirStack Job Search API</p>
+                      <p className="text-[10px] text-on-surface-variant mt-0.5">Scrapes tech stacks and job listings. Requires an API key.</p>
+                    </div>
+                  </div>
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${apiConnections.theirstackApiKey ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant'}`}>
+                    {apiConnections.theirstackApiKey ? 'Connected' : 'Not Connected'}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
+                  <input
+                    type="password"
+                    value={apiConnections.theirstackApiKey ?? ''}
+                    onChange={(e) => {
+                      const next = { ...apiConnections, theirstackApiKey: e.target.value };
+                      setApiConnections(next);
+                      debouncedSave('api_connections', next);
+                    }}
+                    className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                    placeholder="••••••••••••••••"
+                  />
+                </div>
+                <p className="text-[9px] text-on-surface-variant italic">Auto-saves to local database. Register at theirstack.com for an API key.</p>
               </div>
             </div>
           </div>

@@ -163,12 +163,50 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-185` | User Request | `FEAT-001` | `scripts/scout_local.ts` — `scoutWorkingNomads()` | implemented |
 | `FR-186` | User Request | `FEAT-001` | `scripts/scout_local.ts` — `scoutJobsCollider()` | implemented |
 | `FR-187` | User Request | `FEAT-001` | `scripts/scout_local.ts` — `passesBroadPmTitleScope()`, `scripts/domain/gates.ts` — `REMOTE_ONLY_SOURCES` | implemented |
+| `FR-240` | `CR-045` | `FEAT-001` | `scripts/domain/gates.ts`, `scripts/scout_local.ts` | implemented |
 | `FR-174` | CR-031 | Approved metrics module | `scripts/approved_metrics.py` | implemented |
 | `FR-175` | CR-031 | Catalog + anti-claim validation | `scripts/catalog_validator.py` | implemented |
 | `FR-176` | CR-031 | Strict quality flags | `scripts/pipeline_env.py` | implemented |
 | `FR-177` | CR-031 | Editor light verify | `scripts/verify_editor_save.py` | implemented |
 | `FR-178` | CR-031 | Claim strength manifest | `scripts/draft_compiler.py` | implemented |
 | `FR-179` | CR-031 | Baseline quality report | `scripts/baseline_quality_gates.py` | implemented |
+| `FR-195` | Phase-1-Resume | Core Competencies section assembly | `scripts/local_draft_stages.py`, `scripts/draft_compiler.py`, `scripts/style_compliance_guard.py`, `scripts/quality_checker.py`, `data/skills_catalog.json` | implemented |
+| `FR-196` | Phase-1-Resume | JD requirements section extraction | `scripts/jd_tailoring.py` | implemented |
+| `FR-197` | Phase-3-Resume | Conversion signal detection | `scripts/quality_checker.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-198` | Phase-3-Resume | Manifest conversion warning log | `scripts/draft_compiler.py` | implemented |
+| `FR-199` | Phase-2-Resume | Summary opener accuracy and breadth framing | `scripts/local_draft_stages.py` | implemented |
+| `FR-200` | FEAT-015 | Rubric scoring gate | `scripts/resume_rubric.py` | implemented |
+| `FR-201` | FEAT-015 | Rubric threshold flag and console print | `scripts/resume_rubric.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-202` | FEAT-015 | Rubric score manifest logging | `scripts/draft_compiler.py` | implemented |
+| `FR-208` | Phase-5-Resume | Projects section injection | `scripts/local_draft_stages.py`, `scripts/draft_compiler.py`, `data/projects_catalog.json` | implemented |
+| `FR-209` | Phase-5-Resume | AI-role signal detection | `scripts/jd_tailoring.py` | implemented |
+| `FR-210` | FEAT-015 | Outcome-rubric correlation logging | `server/routes/jobs/crud.ts` | implemented |
+| `FR-211` | CR-024-CL | JD pain-point extraction | `scripts/jd_tailoring.py`, `scripts/cover_plan_builder.py`, `scripts/cover_letter_plan.py` | implemented |
+| `FR-212` | CR-024-CL | CSI cover story catalog | `data/master_claims.json`, `scripts/claim_catalog.py`, `scripts/cover_claim_picker.py`, `scripts/cover_narrative_templates.py` | implemented |
+| `FR-213` | CR-024-CL | Cover letter conversion signal detection | `scripts/quality_checker.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-214` | CR-025 | Metric bullet floor enforcement | `scripts/local_draft_stages.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-215` | CR-025 | PDF page-count guard | `scripts/drafting_engine.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-216` | CR-026 | Conversion framing guards | `scripts/conversion_framing.py`, `scripts/quality_checker.py`, `scripts/resume_rubric.py` | implemented |
+| `FR-217` | CR-026 | Sterkly metric anchor | `scripts/conversion_framing.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-218` | CR-026 | Activity cap per employer | `scripts/conversion_framing.py` | implemented |
+| `FR-219` | CR-026 | Impact pyramid enforcer | `scripts/conversion_framing.py` | implemented |
+| `FR-220` | CR-027 | Human-mirror conversion critique | `scripts/resume_conversion_eval.py`, `scripts/quality_checker.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-221` | CR-027 | PDF experience header flex layout | `scripts/compile_single.py` | implemented |
+| `FR-222` | CR-027 | Sterkly context bridge enforcer | `scripts/conversion_framing.py` | implemented |
+| `FR-223` | CR-027 | One-proof summary + CW-013 prose guard | `scripts/local_draft_stages.py`, `scripts/resume_conversion_eval.py` | implemented |
+| `FR-224` | CR-027 | Experience-backed themes + transferable cover bridge | `scripts/experience_theme_guard.py`, `scripts/match_thesis_builder.py`, `scripts/local_draft_stages.py` | implemented |
+| `FR-225` | CR-027 | Attribution payoff + Sterkly weak-claim swap | `scripts/local_draft_stages.py`, `scripts/conversion_framing.py`, `scripts/resume_conversion_eval.py` | implemented |
+| `FR-226` | CR-042 | Strict conversion critique gate | `scripts/pipeline_env.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-227` | CR-042 | SUBMISSION_MODE enables strict critique | `scripts/pipeline_env.py` | implemented |
+| `FR-228` | CR-042 | Conversion critique auto-retry loop | `scripts/draft_compiler.py` | implemented |
+| `FR-229` | CR-042 | Critique retry action map | `scripts/critique_retry.py` | implemented |
+| `FR-230` | CR-042 | Retry telemetry + remediation hints | `scripts/critique_retry.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-231` | CR-042 | Golden JD archetype smoke tests | `scripts/smoke_draft_compiler.py`, `scripts/fixtures/` | implemented |
+| `FR-232` | CR-042 | Fleet conversion quality report | `scripts/fleet_conversion_report.py` | implemented |
+| `FR-233` | CR-043 | Cover voice phrasing | `scripts/cover_phrasing.py` | implemented |
+| `FR-234` | CR-043 | Cover word band 300–400 | `scripts/cover_letter_renderer.py`, `scripts/cover_letter_audit.py` | implemented |
+| `FR-235` | CR-043 | Proof paragraph no robot bridge | `scripts/cover_narrative_templates.py` | implemented |
+| `FR-236` | CR-043 | JD presence opener + cover_story tone | `scripts/cover_phrasing.py`, `data/master_claims.json` | implemented |
 | `FR-128` | CR-020 | Local Optimizations | `scripts/compile_single.py` | implemented |
 | `FR-129` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
 | `FR-130` | CR-020 | Local Optimizations | `scripts/pii_redact.py` | implemented |

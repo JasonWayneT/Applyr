@@ -36,6 +36,58 @@ _FOREIGN_SIGNALS = (
 _US_SIGNALS = ("united states", "within the us", "us citizen", "usa", "remote---usa")
 
 
+def is_actually_remote(text: str) -> bool:
+    """
+    Checks if the job description indicates the role itself is remote,
+    excluding mentions of "remote" in negative or team-only contexts.
+    """
+    # Explicit positive remote patterns
+    positive_patterns = [
+        r"\bwork\s+(?:remotely|from\s+home)\b",
+        r"\b(?:wfh|telecommute|telecommuting)\b",
+        r"\bremote[- ](?:first|eligible|friendly|only|based)\b",
+        r"\b(?:fully|100%|completely|mostly)\s+remote\b",
+        r"\b(?:position|role|job)\s+is\s+remote\b",
+        r"\b(?:open|option|opportunity)\s+to\s+work\s+remote\b",
+        r"\boption\s+for\s+remote\b",
+        r"\bopen\s+to\s+remote\b",
+        r"\bremote\s+(?:position|role|job|opportunity|work|status)\b",
+        r"\bremote\s*-\s*(?:usa?|united\s+states|us|canada)\b",
+    ]
+    for pat in positive_patterns:
+        if re.search(pat, text, re.I):
+            return True
+            
+    # Check for isolated "remote" on its own line (common in headers)
+    if "remote" in text:
+        for line in text.splitlines():
+            line_clean = line.strip().lower()
+            if re.match(r"^(?:location|setting|workplace)?\s*:?\s*remote(?:\s*,\s*[a-z\s]+)?$", line_clean):
+                return True
+                
+        # Exclude common negative context / team-only mentions
+        neg_patterns = [
+            r"\b(?:not|no|non|never)\s+remote\b",
+            r"\bnot\s+(?:eligible\s+for\s+|open\s+to\s+)?remote\b",
+            r"\bno\s+remote\b",
+            r"\bnot\s+open\s+to\s+remote\b",
+            r"\bcollaborate\s+(?:with|across)\s+remote\b",
+            r"\b(?:manage|lead|working\s+with|support|interaction\s+with)\s+remote\b",
+            r"\bremote\s+(?:teams?|workers?|colleagues?|counterparts?|locations?|offices?|support|access)\b",
+        ]
+        
+        all_remotes = list(re.finditer(r"\bremote\b", text, re.I))
+        negated_count = 0
+        for pat in neg_patterns:
+            for m in re.finditer(pat, text, re.I):
+                negated_count += m.group(0).lower().count("remote")
+                
+        if len(all_remotes) > 0 and negated_count < len(all_remotes):
+            return True
+            
+    return False
+
+
 def resolve_location_verdict(jd_text: str) -> Tuple[str, str]:
     """
     Deterministic location eligibility for Remote + San Diego candidate.
@@ -51,7 +103,7 @@ def resolve_location_verdict(jd_text: str) -> Tuple[str, str]:
         return "UNKNOWN", "insufficient_jd_text"
 
     has_local_sd = any(k in text for k in _LOCAL_SD)
-    has_remote = any(k in text for k in _REMOTE_SIGNALS)
+    has_remote = is_actually_remote(text)
 
     is_explicit_foreign = any(k in text for k in _FOREIGN_SIGNALS) and not any(
         k in text for k in _US_SIGNALS

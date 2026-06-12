@@ -58,14 +58,25 @@ Before editing `batch_pipeline.py`, gates, or draft compiler:
 
 ```bash
 npm ci   # uses repo .npmrc (legacy-peer-deps for Toast UI + React 19)
-python scripts/test_verify_chain.py
-python scripts/test_batch_gate.py
-python scripts/test_smoke_regression.py
-python scripts/smoke_draft_compiler.py
-python scripts/check_spawn_paths.py
-npm test
+npm test # runs the unified runner executing all python and vitest suites
 npm run build
 ```
+
+### Resume ship gate (CR-042)
+
+Real employer submissions should use **`SUBMISSION_MODE=1`**, which enables the strict bundle (`STRICT_METRICS`, `STRICT_COVER_AUDIT`, `STRICT_ANTI_CLAIMS`, **`STRICT_CONVERSION_CRITIQUE`**, compose-only drafts).
+
+| Check | Where | Pass condition |
+|-------|--------|----------------|
+| Conversion critique | `submissions/<co>/draft_manifest.json` → `conversion_critique.pass` | `true` before apply |
+| Cover audit | same manifest → `cover_letter_audit.grade` | `Pass` when `STRICT_COVER_AUDIT=1` |
+| Rubric (advisory) | `rubric_score.overall` | Review if `< 60` or `threshold_flag` |
+
+If critique fails after auto-retry (CR-042 Phase 1B), read `conversion_critique.retry_log` and fix root cause (catalog gap, JD/theme mismatch) — **regen**; do not hand-edit around guards.
+
+Fleet health (CR-042 Phase 2B): `python scripts/fleet_conversion_report.py`
+
+Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spec `docs/spec/03-feature-specs/cover_voice.example.md`; target 300–400 words.
 
 ---
 
@@ -75,6 +86,6 @@ npm run build
 
 **Material changes:** `CR-*` → registry → FEAT → traceability → code (cite `FR-*`) → verification → `PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md`.
 
-**Do not use for active work:** `.agent/archive/**`, `JobAgent_WebApp_PRD 5.0.md` (archived UX), chat `/scout` / `/evaluate` workflows.
+**Do not use for active work:** `.agent/archive/**`, `docs/history/JobAgent_WebApp_PRD 5.0.md` (archived UX), chat `/scout` / `/evaluate` workflows.
 
 **Change-request index:** [docs/spec/05-change-requests/README.md](spec/05-change-requests/README.md)

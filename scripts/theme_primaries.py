@@ -18,6 +18,12 @@ THEME_PRIMARY_CLAIM_IDS: Dict[str, List[str]] = {
     "data": ["ACC-105-PROCESS", "ACC-105-EXECUTION"],
     "roadmap": ["ACC-103-ROADMAP", "ACC-101-PM"],
     "migration": ["ACC-104-OPS", "ACC-104-CS"],
+    "integration": ["ACC-102-INT", "ACC-102-TECH", "ACC-102-LEAD"],
+    "api": ["ACC-102-INT", "ACC-102-TECH", "ACC-102-LEAD"],
+    "restful": ["ACC-102-INT", "ACC-102-TECH", "ACC-102-LEAD"],
+    "analytics": ["ACC-113-ADOPTION", "ACC-106-DATA", "ACC-102-INT"],
+    "kpi": ["ACC-113-ADOPTION", "ACC-105-PROCESS"],
+    "adoption": ["ACC-113-ADOPTION", "ACC-104-OPS"],
 }
 
 _THEME_KEY_FROM_PHRASE = {phrase: kw for kw, phrase in THEME_KEYWORDS}
@@ -56,8 +62,12 @@ def primary_claim_ids_for_jd(
     profile: JdProfile,
     valid_ids: Dict[str, str],
 ) -> List[str]:
+    from conversion_framing import has_security_jd_signal
+
     out: List[str] = []
     for key in active_theme_keys(jd_text, profile):
+        if key == "security" and not has_security_jd_signal(jd_text):
+            continue
         cid = resolve_primary_claim_id(key, valid_ids)
         if cid and cid not in out:
             out.append(cid)

@@ -21,6 +21,6 @@ def redact_pii(text: str) -> str:
     return text
 
 if __name__ == "__main__":
-    sample = "Contact me at [REDACTED_EMAIL] or call [REDACTED_PHONE]."
+    sample = "Contact me at user@example.com or call (555) 019-9238."
     print("Original:", sample)
     print("Redacted:", redact_pii(sample))

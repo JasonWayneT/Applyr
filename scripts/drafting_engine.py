@@ -2,7 +2,14 @@ import os
 import re
 import subprocess
 import verify_claims as determinator
-from utils import load_file, SUBMISSIONS_DIR, RESUME_MASTER_FILE, WORK_EXP_FILE
+from utils import (
+    contact_placeholder_map,
+    format_contact_header_block,
+    load_file,
+    SUBMISSIONS_DIR,
+    RESUME_MASTER_FILE,
+    WORK_EXP_FILE,
+)
 from company_slug import company_submission_dir
 # --- Hard Fact Validation (Deterministic Post-Generation Guard) ---
 # Extracts known ground-truth facts from the master resume and verifies
@@ -164,7 +171,10 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
         )
         for tool in tool_violations:
             pattern = r'(?<![\w-])' + re.escape(tool) + r'(?![\w-])'
-            corrected = re.sub(pattern, '[REDACTED]', corrected, flags=re.IGNORECASE)
+            corrected = re.sub(pattern, '', corrected, flags=re.IGNORECASE)
+        corrected = re.sub(r'\[REDACTED\]\s*', '', corrected, flags=re.IGNORECASE)
+        corrected = re.sub(r'\|\s*\|', '|', corrected)
+        corrected = re.sub(r'[ \t]{2,}', ' ', corrected)
         print(f"    [GUARD] Auto-redacted {len(tool_violations)} blocked tool(s): {tool_violations}")
 
     # 3. SENIORITY INFLATION — flag leadership/management claims
@@ -227,31 +237,11 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
                 warnings.append(f"MISSING FACT: Company '{company}' not found in generated output.")
 
     # 7. Auto-heal Contact & Template Info Placeholders (Hyper-Aggressive Local fallback sweeping)
-    placeholders = {
-        "[Your Name]": "JASON TAYLOR",
-        "*[Your Name]*": "JASON TAYLOR",
-        "[Full Name]": "JASON TAYLOR",
-        "[Your Phone Number]": "[REDACTED_PHONE]",
-        "[Phone Number]": "[REDACTED_PHONE]",
-        "[Your Email Address]": "[REDACTED_EMAIL]",
-        "[Your Email]": "[REDACTED_EMAIL]",
-        "[Email Address]": "[REDACTED_EMAIL]",
-        "[Your LinkedIn Profile URL]": "linkedin.com/in/redacted-linkedin-slug",
-        "[LinkedIn Profile URL]": "linkedin.com/in/redacted-linkedin-slug",
-        "[LinkedIn URL]": "linkedin.com/in/redacted-linkedin-slug",
-        "[LinkedIn]": "linkedin.com/in/redacted-linkedin-slug",
-        "## [Your Name]": "# JASON TAYLOR",
-        "[University Name]": "National University",
-        "[University]": "National University",
-        "[Hiring Manager Name]": "Hiring Team",
-        "[Hiring Manager]": "Hiring Team",
-        "[Dates]": "",  # Safe collapse for leftover template debris
-        "*[Dates]*": ""
-    }
-    if target_company:
-        placeholders["[Company Name]"] = target_company
-        placeholders["*[Company Name]*"] = target_company
-        placeholders["[Target Company]"] = target_company
+    placeholders = contact_placeholder_map(target_company=target_company)
+    if HARD_FACTS["education"]:
+        uni = HARD_FACTS["education"][0]
+        placeholders["[University Name]"] = uni
+        placeholders["[University]"] = uni
         
     placeholder_triggered = False
     for ph, val in placeholders.items():
@@ -270,7 +260,7 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
         name = HARD_FACTS["contact"][0]
         if name and name.upper() not in corrected[:300].upper():
             warnings.append(f"MISSING FACT: Name '{name}' not found at top of resume. Repairing header.")
-            header = f"# JASON TAYLOR\n\nSan Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug\n\n"
+            header = format_contact_header_block()
             corrected = header + corrected.lstrip()
             print("    [GUARD] Prepend-repaired missing Name/Contact header.")
 
@@ -319,6 +309,15 @@ def run_research(company_name, jd_text):
     except Exception as e:
         print(f"    [Research Error] {e}")
     return "No research data available."
+
+
+def get_pdf_page_count(pdf_path: str) -> int:
+    """Return the page count of a PDF file, or -1 on error."""
+    try:
+        import pypdf
+        return len(pypdf.PdfReader(pdf_path).pages)
+    except Exception:
+        return -1
 
 
 def generate_pdf(md_path, output_path):

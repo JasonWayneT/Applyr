@@ -13,6 +13,11 @@ PAIRS = [
     ("master_claims.example.json", "master_claims.json"),
     ("workExperience.example.md", "workExperience.md"),
     ("workExperience_summary.example.md", "workExperience_summary.md"),
+    ("Resume.example.md", "Resume.md"),
+    ("Cover_Letter_Reference.example.md", "Cover_Letter_Reference.md"),
+    ("Resume_Style_Reference.example.md", "Resume_Style_Reference.md"),
+    ("application_question_bank.example.md", "application_question_bank.md"),
+    ("bridge_phrases.example.json", "bridge_phrases.json"),
 ]
 
 

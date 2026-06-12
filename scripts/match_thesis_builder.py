@@ -14,10 +14,8 @@ def build_match_thesis(
     ranked_needs: List[str],
     themes: List[str],
 ) -> str:
-    return (
-        f"I have operated in similar B2B platform environments where roadmap discipline, "
-        f"structured data, and cross-functional delivery determined whether initiatives scaled."
-    )
+    """Deprecated — value-first opener carries fit; avoid stacking JD mirror sentences."""
+    return ""
 
 
 def build_interest_via_match(
@@ -37,14 +35,32 @@ def build_interest_via_match(
 
 
 def apply_match_blocks(
-    plan: CoverLetterPlan, profile: JdProfile, jd_text: str = ""
+    plan: CoverLetterPlan,
+    profile: JdProfile,
+    jd_text: str = "",
+    bullet_corpus: str = "",
 ) -> CoverLetterPlan:
-    themes = profile.priority_themes[:3] or ["B2B SaaS product execution"]
+    all_themes = profile.priority_themes[:6] or ["B2B SaaS product execution"]
+    from experience_theme_guard import (
+        build_transferable_bridge,
+        filter_experience_backed_themes,
+    )
+
+    backed = (
+        filter_experience_backed_themes(all_themes, bullet_corpus)
+        if bullet_corpus.strip()
+        else all_themes[:3]
+    )
+    resume_themes = backed[:3] or all_themes[:2]
     plan.match_thesis = build_match_thesis(
-        plan.company_display, plan.role_title, plan.ranked_needs, themes
+        plan.company_display, plan.role_title, plan.ranked_needs, resume_themes
     )
     plan.interest_via_match = build_interest_via_match(
-        plan.company_display, plan.role_title, plan.ranked_needs, themes, jd_text=jd_text
+        plan.company_display,
+        plan.role_title,
+        plan.ranked_needs,
+        resume_themes,
+        jd_text=jd_text,
     )
-    plan.theme_keywords = themes[:3]
+    plan.theme_keywords = all_themes[:3]
     return plan

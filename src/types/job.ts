@@ -13,4 +13,8 @@ export interface Job {
   summary: string | null;
   created_at: string;
   has_assets?: boolean;
+  sources?: string[];
+  score_total?: number | null;
+  score_breakdown_json?: string | null;
+  reason_summary?: string | null;
 }

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs';
 import { db, logActivity } from '../db.js';
 import {
-  buildPythonEnv, materializeJobSearchPrefs,
+  materializeJobSearchPrefs,
   WORK_EXPERIENCE_PATH,
 } from '../shared.js';
 import { requireApiToken } from '../middleware.js';

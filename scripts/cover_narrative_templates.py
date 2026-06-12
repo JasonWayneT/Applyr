@@ -32,21 +32,18 @@ def render_proof_paragraph(
     rec = catalog.claims.get(slot.claim_id)
     if not rec:
         return ""
-    body = format_cover_proof_sentence(rec.body)
+
     from cover_jd_needs import need_to_goal_phrase
 
-    need_phrase = need_to_goal_phrase(slot.jd_need)
-    metric = _first_metric_clause(rec.body)
+    if rec.cover_story:
+        story = rec.cover_story.strip()
+        if not story.endswith("."):
+            story += "."
+        from cover_phrasing import apply_voice_polish
 
-    if metric and metric.lower() not in body.lower():
-        action = body
-    else:
-        action = body
+        return apply_voice_polish(story)
 
-    bridge = (
-        f"That experience is directly relevant to {company}'s focus on {need_phrase}, "
-        f"and to the platform outcomes this role owns."
-    )
+    body = format_cover_proof_sentence(rec.body)
 
     if slot.lens in ("migration", "platform", "lifecycle", "customer_success"):
         context = (
@@ -62,7 +59,30 @@ def render_proof_paragraph(
     else:
         context = "In a complex cross-functional environment, I owned the problem through to measurable results."
 
-    return f"{context} {action} {bridge}"
+    from cover_phrasing import apply_voice_polish
+
+    return apply_voice_polish(f"{context} {body}")
+
+
+def render_value_first_opening(
+    company: str,
+    role_title: str,
+    primary_story: str,
+    jd_text: str,
+) -> str:
+    """Value-first opener: application line + strongest story claim (CR-044 / FR-237)."""
+    from cover_phrasing import (
+        apply_voice_polish,
+        dedupe_opening_paragraph,
+        value_lead_from_story,
+    )
+
+    from cover_phrasing import render_trust_hook
+
+    apply_line = f"I am applying for the {role_title} role at {company}."
+    value_line = render_trust_hook(primary_story) or value_lead_from_story(primary_story)
+    parts = [p for p in (apply_line, value_line) if p]
+    return apply_voice_polish(dedupe_opening_paragraph(" ".join(parts)))
 
 
 def render_application_first_opening(
@@ -71,28 +91,15 @@ def render_application_first_opening(
     ranked_need: str,
     themes: list,
     jd_text: str,
+    primary_story: str = "",
 ) -> str:
-    """Application-first opener: state intent, then JD match (never 'Company is hiring…')."""
-    from cover_jd_needs import need_to_goal_phrase
-    from cover_prose import format_themes_for_prose, posting_focus_phrase
+    """Backward-compatible entry; prefers value-first when a cover_story is available."""
+    if primary_story:
+        return render_value_first_opening(company, role_title, primary_story, jd_text)
+    apply_line = f"I am applying for the {role_title} role at {company}."
+    from cover_phrasing import apply_voice_polish
 
-    theme_str = format_themes_for_prose(themes, max_items=2)
-    focus = posting_focus_phrase(jd_text) if jd_text else "platform scale, structured data, and execution"
-    need_hint = need_to_goal_phrase(ranked_need) if ranked_need else ""
-
-    if need_hint and 20 < len(need_hint) < 90:
-        apply_line = (
-            f"I am applying for the {role_title} role at {company}, "
-            f"with direct experience in {need_hint}."
-        )
-    else:
-        apply_line = f"I am applying for the {role_title} role at {company}."
-
-    match_line = (
-        f"Your posting emphasizes {focus}; "
-        f"that aligns with my track record in {theme_str}."
-    )
-    return f"{apply_line} {match_line}"
+    return apply_voice_polish(apply_line)
 
 
 # Backward-compatible alias (CR-024 plan field name)

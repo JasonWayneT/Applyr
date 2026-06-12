@@ -27,7 +27,7 @@ If any trigger is met, return **Score: 0**, **Decision: NO**, and Terminate.
 - **Rule:** If required years of experience exceeds `experience_range.max` (deterministic years gate may already reject).
 - **Rule:** Do **not** reject solely because the JD mentions AI tools, Copilot, or "AI-native" workflow unless the role requires **owning ML model development**, training models, or being the primary AI/ML product owner.
 - **Rule:** If the company is in `blocked_industries`.
-- **Rule:** If the role requires domain expertise explicitly marked as a "Soft Blocker" in Jason's history (e.g., ML modeling, Developer Auth).
+- **Rule:** If the role requires domain expertise explicitly marked as a "Soft Blocker" in the candidate's history (e.g., ML modeling, Developer Auth).
 
 ---
 

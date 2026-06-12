@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { db, logActivity } from '../db.js';
+import { logActivity } from '../db.js';
 import { runScoutSync } from '../scout.js';
 import { spawnPython, pythonScriptPath } from '../pipeline/processRunner.js';
 import { attachClientAbort, requireApiToken } from '../middleware.js';
@@ -97,6 +97,30 @@ router.post('/api/evaluate', (req, res) => {
   attachClientAbort(req, res, proc, () => {
     logActivity('WARN', 'Pipeline', `Evaluation for "${company}" aborted by client disconnect`);
     releasePipeline('Evaluation cancelled');
+  });
+});
+
+// SSE client list for broadcasting pipeline sync updates
+let sseClients: any[] = [];
+
+export function broadcastSyncEvent(event: string, data: object) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  sseClients.forEach((client) => client.write(payload));
+}
+
+// ---------------------------------------------------------------------------
+// Sync SSE Stream endpoint
+// ---------------------------------------------------------------------------
+router.get('/api/sync/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  sseClients.push(res);
+
+  req.on('close', () => {
+    sseClients = sseClients.filter((client) => client !== res);
   });
 });
 

@@ -54,6 +54,14 @@ def title_blocked(title: str, blocked_titles: list) -> Optional[str]:
         return None
     for term in blocked_titles:
         if title_matches_blocked(title, term):
+            # Special exception: skip blocking "assistant" if it's part of a product name 
+            # (e.g. preceded by virtual, ai, intelligent, digital, voice, chat, smart)
+            if term.lower() == "assistant":
+                pattern = r"\b(virtual|ai|intelligent|digital|voice|chat|smart)\s+assistant\b"
+                all_matches = list(re.finditer(r"\bassistant\b", title, re.I))
+                product_matches = list(re.finditer(pattern, title, re.I))
+                if all_matches and len(all_matches) == len(product_matches):
+                    continue
             return term
     return None
 

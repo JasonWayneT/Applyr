@@ -1,0 +1,22 @@
+{
+  "data": [
+    {
+      "id": "ts-job-1",
+      "job_title": "Product Manager Growth",
+      "company_name": "Stripe",
+      "url": "https://theirstack.com/jobs/ts-job-1",
+      "posted_at": "2026-06-09T00:00:00.000Z",
+      "location": "Remote, US",
+      "description": "<p>Focus on Stripe growth loops and activation metrics.</p>"
+    },
+    {
+      "id": "ts-job-2",
+      "job_title": "Senior Solutions Architect",
+      "company_name": "Amazon",
+      "url": "https://theirstack.com/jobs/ts-job-2",
+      "posted_at": "2026-06-09T00:00:00.000Z",
+      "location": "Seattle, WA",
+      "description": "<p>Design distributed cloud architectures.</p>"
+    }
+  ]
+}

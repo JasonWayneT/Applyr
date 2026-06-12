@@ -75,7 +75,7 @@ export function materializeJobSearchPrefs(jobSearch: Record<string, unknown>): v
     required_anchors: (existing.required_anchors as string[]) ?? [],
     experience_range: { min: minYears, max: maxYears, total_years_observed: totalYears },
     preferences: (() => {
-      const base = { ...DEFAULT_PIPELINE_PREFERENCES, ...((existing.preferences as Record<string, unknown>) ?? {}) };
+      const base: Record<string, unknown> = { ...DEFAULT_PIPELINE_PREFERENCES, ...((existing.preferences as Record<string, unknown>) ?? {}) };
       delete base.no_people_management;
       if (base.avoid_solo_pm_trap === undefined) base.avoid_solo_pm_trap = true;
       return base;

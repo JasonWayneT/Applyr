@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Job } from '../types/job';
+import { api } from '../lib/api';
 
 interface SidebarProps {
   activeTab: string;
@@ -9,6 +10,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [accountLabel, setAccountLabel] = useState('Local account');
   const menuRef = useRef<HTMLDivElement>(null);
   
   const newJobsCount = jobs.filter(j => j.status === 'Backlog' && j.has_assets).length;
@@ -20,6 +22,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     { name: 'Add Job', icon: 'post_add' },
     { name: 'Tuning Log', icon: 'tune' },
   ];
+
+  useEffect(() => {
+    fetch(api('/api/profile/identity'))
+      .then(r => r.json())
+      .then(data => {
+        if (data?.email) setAccountLabel(data.email);
+        else if (data?.name) setAccountLabel(data.name);
+      })
+      .catch(() => {});
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -90,7 +102,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
             {/* Account Header */}
             <div className="px-3 py-2 border-b border-outline-variant/10 mb-1">
               <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest leading-none">Account</p>
-              <p className="text-xs text-on-surface truncate font-semibold mt-1">[REDACTED_EMAIL]</p>
+              <p className="text-xs text-on-surface truncate font-semibold mt-1">{accountLabel}</p>
             </div>
             
             {/* Menu Items */}

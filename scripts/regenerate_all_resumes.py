@@ -24,7 +24,7 @@ def _folder_to_company(folder: str) -> str:
 
 def regenerate_all_resumes():
     print("==================================================================")
-    print("   REGENERATING RESUMES ONLY (5/3/3 bullets + 4-sentence summary)   ")
+    print("   REGENERATING RESUMES ONLY (5/3/3 bullets + conversion critique)   ")
     print("==================================================================")
 
     work_exp = load_file(WORK_EXP_FILE)

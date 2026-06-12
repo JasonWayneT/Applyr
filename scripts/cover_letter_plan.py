@@ -27,6 +27,7 @@ class CoverLetterPlan:
     jd_goal: str = ""
     research_hook: Optional[str] = None
     theme_keywords: List[str] = field(default_factory=list)
+    pain_points: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -51,4 +52,5 @@ class CoverLetterPlan:
             jd_goal=data.get("jd_goal", ""),
             research_hook=data.get("research_hook"),
             theme_keywords=list(data.get("theme_keywords") or []),
+            pain_points=list(data.get("pain_points") or []),
         )

@@ -1,0 +1,24 @@
+{
+  "jobs": [
+    {
+      "id": 4001234,
+      "title": "Senior Product Manager",
+      "updated_at": "2026-06-01T10:00:00.000Z",
+      "content": "<p>Lead product strategy for the core payments platform.</p>",
+      "absolute_url": "https://boards.greenhouse.io/stripe/jobs/4001234",
+      "location": { "name": "Remote - US" },
+      "departments": [{ "id": 1, "name": "Product" }],
+      "offices": [{ "id": 1, "name": "San Francisco, CA" }]
+    },
+    {
+      "id": 4005678,
+      "title": "Software Engineer",
+      "updated_at": "2026-06-02T10:00:00.000Z",
+      "content": "<p>Build and scale backend systems.</p>",
+      "absolute_url": "https://boards.greenhouse.io/stripe/jobs/4005678",
+      "location": { "name": "New York, NY" },
+      "departments": [{ "id": 2, "name": "Engineering" }],
+      "offices": [{ "id": 1, "name": "New York, NY" }]
+    }
+  ]
+}

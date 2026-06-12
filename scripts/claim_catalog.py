@@ -28,6 +28,7 @@ class ClaimRecord:
     project_id: str = ""
     tags: List[str] = field(default_factory=list)
     metrics: List[str] = field(default_factory=list)
+    cover_story: Optional[str] = None
 
 @dataclass
 class ClaimCatalog:
@@ -62,6 +63,7 @@ def load_catalog(path: Optional[str] = None) -> ClaimCatalog:
                 project_id=val.get("project_id", "") or _project_id_from_claim_id(cid),
                 tags=val.get("tags", []),
                 metrics=val.get("metrics", []),
+                cover_story=val.get("cover_story") or None,
             )
             catalog.raw_truth_lines[cid] = val.get("text", "")
             

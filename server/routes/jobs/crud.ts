@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import fs from 'fs';
+import path from 'path';
 import { db, logActivity } from '../../db.js';
 import { resolveCompanyFolder, SUBMISSION_DIR, ARCHIVE_DIR } from '../../shared.js';
 import { ACTIVE_STATUSES } from '../../domain/jobStatus.js';
@@ -15,25 +16,68 @@ import { insertJob, patchJob, deleteJobRecord } from '../../repository/jobReposi
 
 const router = Router();
 
+/** Read rubric_score from draft_manifest.json for a company folder (FR-210).
+ *  Checks active submissions first, then archive (safe if folder already moved).
+ *  Returns null silently if the manifest is missing or malformed.
+ */
+function readManifestRubricScore(company: string): Record<string, any> | null {
+  for (const baseDir of [SUBMISSION_DIR, ARCHIVE_DIR]) {
+    try {
+      const folder = resolveCompanyFolder(company, baseDir);
+      const manifestPath = path.join(folder, 'draft_manifest.json');
+      if (fs.existsSync(manifestPath)) {
+        const raw = fs.readFileSync(manifestPath, 'utf-8');
+        const manifest = JSON.parse(raw);
+        return manifest?.rubric_score ?? null;
+      }
+    } catch {
+      // manifest missing or unreadable — continue to next base dir
+    }
+  }
+  return null;
+}
+
 router.get('/api/jobs', (req, res) => {
   try {
     const search = req.query.search as string;
-    let jobs;
+    let jobs: any[];
     if (search) {
       jobs = db.prepare(`
-        SELECT jobs.* 
+        SELECT jobs.*, js.score_total, js.score_breakdown_json, js.reason_summary
         FROM jobs 
         JOIN jobs_fts ON jobs.rowid = jobs_fts.rowid
+        LEFT JOIN job_scores js ON jobs.id = js.job_id AND js.is_latest = 1
         WHERE jobs_fts MATCH ? 
         ORDER BY rank
       `).all(`"${search}"*`) as any[];
     } else {
-      jobs = db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').all() as any[];
+      jobs = db.prepare(`
+        SELECT jobs.*, js.score_total, js.score_breakdown_json, js.reason_summary
+        FROM jobs 
+        LEFT JOIN job_scores js ON jobs.id = js.job_id AND js.is_latest = 1
+        ORDER BY jobs.created_at DESC
+      `).all() as any[];
     }
-    const enriched = jobs.map(job => ({
-      ...job,
-      has_assets: jobHasPdfAssets(job.company, job.status),
-    }));
+
+    const enriched = jobs.map(job => {
+      // Find sources through cluster deduplication tables
+      const links = db.prepare(`
+        SELECT s.name 
+        FROM job_source_links sl
+        JOIN job_clusters c ON sl.cluster_id = c.id
+        JOIN sources s ON sl.source_id = s.id
+        WHERE c.canonical_job_id = ?
+      `).all(job.id) as { name: string }[];
+
+      // Fallback to source_site if no links found
+      const sources = links.length > 0 ? links.map(l => l.name) : (job.source_site ? [job.source_site] : []);
+
+      return {
+        ...job,
+        sources,
+        has_assets: jobHasPdfAssets(job.company, job.status),
+      };
+    });
     res.json(enriched);
   } catch (err) {
     console.error(err);
@@ -123,6 +167,10 @@ router.patch('/api/jobs/:id/status', (req, res) => {
       status = 'Closed';
     }
 
+    // FR-210: read rubric score before archive moves the folder
+    const OUTCOME_STATUSES = new Set(['Closed', 'Screener', 'Interview', 'Offer']);
+    const rubricScore = OUTCOME_STATUSES.has(status) ? readManifestRubricScore(job.company) : null;
+
     const activePath  = resolveCompanyFolder(job.company, SUBMISSION_DIR);
     const archivePath = resolveCompanyFolder(job.company, ARCHIVE_DIR);
 
@@ -157,6 +205,23 @@ router.patch('/api/jobs/:id/status', (req, res) => {
       id,
     );
     logActivity('INFO', 'System', `Job "${job.company}" status changed to ${status}`);
+
+    // FR-210: log rubric score alongside outcome for calibration
+    if (rubricScore !== null) {
+      logActivity('INFO', 'RubricLog', `Outcome recorded for "${job.company}": ${status}`, {
+        event: 'outcome_rubric_log',
+        job_id: id,
+        company: job.company,
+        outcome: status,
+        rejection_stage: isClosed ? (rejectionStage || job.status) : null,
+        rejection_type: isClosed ? (rejectionType || null) : null,
+        rubric_overall: rubricScore.overall ?? null,
+        rubric_summary_score: rubricScore.summary?.score ?? null,
+        rubric_experience_score: rubricScore.experience?.score ?? null,
+        rubric_threshold_flag: rubricScore.threshold_flag ?? null,
+      });
+    }
+
     res.json({ success: true, status });
   } catch (err) {
     console.error(err);

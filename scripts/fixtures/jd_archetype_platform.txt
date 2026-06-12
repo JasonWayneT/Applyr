@@ -1,0 +1,6 @@
+Product Manager — Platform Reliability
+
+Own platform reliability and data integrity for our B2B SaaS ingestion stack.
+You will prioritize roadmap work across data pipelines, schema migrations, and
+customer-facing platform stability. Partner with engineering and DevOps to reduce
+incident volume and improve migration throughput for enterprise accounts.

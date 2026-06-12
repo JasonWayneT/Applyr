@@ -177,7 +177,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
                     Critique Reason
                   </span>
                   <p className="text-xs text-on-surface font-medium leading-relaxed italic">
-                    "{job.outcome_notes || 'No critique explanation provided.'}"
+                    &quot;{job.outcome_notes || 'No critique explanation provided.'}&quot;
                   </p>
                 </div>
 

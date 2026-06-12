@@ -31,6 +31,7 @@ APPROVED_METRICS: List[str] = [
     "10",
     "0",
     "5",
+    "$800,000", "800,000", "$800K", "800K",
 ]
 
 # Contact header, dates, and area codes — not résumé metrics.

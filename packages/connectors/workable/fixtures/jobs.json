@@ -1,0 +1,28 @@
+{
+  "jobs": [
+    {
+      "shortcode": "workable-job-1",
+      "title": "Platform Product Manager",
+      "published": "2026-06-07T10:00:00.000Z",
+      "description": "<p>Own developer tooling and infrastructure platform products.</p>",
+      "url": "https://apply.workable.com/linear/j/workable-job-1",
+      "location": {
+        "country": "United States",
+        "region": "California",
+        "city": "San Francisco"
+      }
+    },
+    {
+      "shortcode": "workable-job-2",
+      "title": "Staff Frontend Developer",
+      "published": "2026-06-08T10:00:00.000Z",
+      "description": "<p>Build high-fidelity user interfaces.</p>",
+      "url": "https://apply.workable.com/linear/j/workable-job-2",
+      "location": {
+        "country": "United States",
+        "region": "California",
+        "city": "San Francisco"
+      }
+    }
+  ]
+}

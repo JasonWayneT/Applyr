@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from pipeline_env import resume_bullet_quotas
 
+from candidate_context import primary_employer_slug
 from verify_claims import _verify_bullet_local, extract_numeric_tokens
 
 # Mirrors drafting_engine guards — kept here to avoid import cycles.
@@ -35,38 +36,39 @@ SENIORITY_INFLATION_PHRASES = [
     "built ml", "built ai", "ai pipeline", "ml pipeline",
 ]
 
-EMPLOYERS = ("cision", "sterkly", "zero_to_sixty")
+def _employers() -> tuple[str, ...]:
+    from candidate_context import load_employers
+    return load_employers()
+
+
+EMPLOYERS = _employers()
 MIN_BULLETS_PER_EMPLOYER = 2
 MAX_BULLETS_PER_EMPLOYER = 5
 RESUME_CHAR_BUDGET = 3800
 SUMMARY_MAX_CHARS = 780
 SUMMARY_MIN_SENTENCES = 3
-SUMMARY_PROOF_MAX_CHARS = 175
+SUMMARY_MAX_PROOF_SENTENCES = 1
+SUMMARY_PROOF_MAX_CHARS = 200
+_ATTRIBUTION_PAYOFF_RE = re.compile(
+    r",\s*producing a version reliable enough that[^.]+sought to adopt it\.?",
+    re.IGNORECASE,
+)
 _INCOMPLETE_PROOF_TAIL = re.compile(
     r"\b(?:to|and|or|by|for|with|across|against|in|on|of|the|a|an)\s*\.$",
     re.I,
 )
 MAX_BULLET_WORDS = 28
 
-# Canonical resume ### headers — one role title per employer (no slash-combined titles).
-EMPLOYER_EXPERIENCE_HEADERS: Dict[str, str] = {
-    "cision": (
-        "### Product Manager | Cision | September 2021 - January 2026\n"
-        "Full Remote\n"
-    ),
-    "sterkly": (
-        "### Product Manager | Sterkly | February 2019 - August 2021\n"
-        "San Diego, CA\n"
-    ),
-    "zero_to_sixty": (
-        "### Product Owner | Zero to Sixty | June 2017 - January 2019\n"
-        "San Diego, CA\n"
-    ),
-}
+def _employer_headers() -> Dict[str, str]:
+    from candidate_context import load_employer_headers
+    return load_employer_headers()
+
+
+EMPLOYER_EXPERIENCE_HEADERS: Dict[str, str] = _employer_headers()
 
 
 def experience_skeleton() -> Dict[str, str]:
-    return dict(EMPLOYER_EXPERIENCE_HEADERS)
+    return dict(_employer_headers())
 
 
 def normalize_employer_job_titles(text: str) -> str:
@@ -74,7 +76,6 @@ def normalize_employer_job_titles(text: str) -> str:
     zts_combined = (
         r"Product Owner\s*/\s*Account Manager",
         r"Account Manager\s*/\s*Product Owner",
-        r"Product Owner\s*/\s*Product Manager",
         r"Account Manager\s*/\s*Product Manager",
     )
     cision_hybrid = (
@@ -85,17 +86,13 @@ def normalize_employer_job_titles(text: str) -> str:
         "Product Owner → Product Manager (Functional Scope)",
         "Product Owner -> Product Manager (Functional Scope)",
         "Product Owner / Product Manager",
-        "Product Owner",
     )
     lines: List[str] = []
     for line in text.split("\n"):
         low = line.lower()
-        if "zero to sixty" in low or "zero to 60" in low:
+        if line.strip().startswith("### ") and "/" in line:
             for pat in zts_combined:
                 line = re.sub(pat, "Product Owner", line, flags=re.I)
-            if re.search(r"\bAccount Manager\b", line, re.I):
-                line = re.sub(r"\bAccount Manager\b", "Product Owner", line, flags=re.I)
-        elif "cision" in low:
             for ugly in cision_hybrid:
                 line = re.sub(re.escape(ugly), "Product Manager", line, flags=re.I)
             line = re.sub(
@@ -110,7 +107,6 @@ def normalize_employer_job_titles(text: str) -> str:
                 line,
                 flags=re.I,
             )
-        elif "sterkly" in low:
             line = re.sub(
                 r"Product Manager\s*/\s*Product Owner|Product Owner\s*/\s*Product Manager",
                 "Product Manager",
@@ -144,9 +140,15 @@ def _pick_diverse_claims(
         picked.append(cid)
         if len(picked) >= limit:
             return picked
+    # Fallback fills remaining slots while still respecting project diversity.
     for cid, _score in scored_pool:
         if cid in picked:
             continue
+        if diverse:
+            pid = project_id_for_claim(cid)
+            if pid in seen_projects:
+                continue
+            seen_projects.add(pid)
         picked.append(cid)
         if len(picked) >= limit:
             break
@@ -154,15 +156,9 @@ def _pick_diverse_claims(
 
 
 def employer_for_claim_id(claim_id: str) -> str:
-    """Tier 1: deterministic routing from workExperience.md ACC ranges."""
-    if claim_id.startswith("ACC-2"):
-        return "sterkly"
-    if claim_id.startswith("ACC-3"):
-        return "zero_to_sixty"
-    if claim_id.startswith("ACC-1"):
-        return "cision"
-    # VOC-* / MET-* default to Cision-era platform context
-    return "cision"
+    """Tier 1: deterministic routing from master_claims employer field."""
+    from candidate_context import employer_for_claim_id as _route
+    return _route(claim_id)
 
 
 def bucket_claim_ids(valid_ids: Dict[str, str]) -> Dict[str, List[str]]:
@@ -175,7 +171,9 @@ def bucket_claim_ids(valid_ids: Dict[str, str]) -> Dict[str, List[str]]:
 def _jd_keyword_score(jd_lower: str, text: str) -> int:
     words = set(re.findall(r"[a-z]{4,}", jd_lower))
     text_l = text.lower()
-    return sum(1 for w in words if w in text_l)
+    base = sum(1 for w in words if w in text_l)
+    metric_bonus = 3 if re.search(r"\d", text) else 0
+    return base + metric_bonus
 
 
 def select_claims_deterministic(
@@ -198,7 +196,7 @@ def select_claims_deterministic(
         )
         scored = [(cid, float(i)) for i, cid in enumerate(ranked)]
         selected.extend(
-            _pick_diverse_claims(scored, target, diverse=(employer == "cision"))
+            _pick_diverse_claims(scored, target, diverse=(employer == primary_employer_slug()))
         )
     return list(dict.fromkeys(selected))
 
@@ -255,15 +253,17 @@ def select_claims_per_employer_local(
         scored_pool = []
         for cid in pool:
             emb = claim_embeddings.get(cid)
+            body = valid_ids.get(cid, "")
+            metric_bonus = 0.05 if re.search(r"\d", body) else 0.0
             if emb:
-                score = cosine_similarity(jd_embedding, emb)
+                score = cosine_similarity(jd_embedding, emb) + metric_bonus
                 scored_pool.append((cid, score))
             else:
-                scored_pool.append((cid, -1.0))
+                scored_pool.append((cid, -1.0 + metric_bonus))
 
         scored_pool.sort(key=lambda x: x[1], reverse=True)
         picked = _pick_diverse_claims(
-            scored_pool, target, diverse=(employer == "cision")
+            scored_pool, target, diverse=(employer == primary_employer_slug())
         )
 
         if len(picked) < target:
@@ -386,7 +386,7 @@ def ensure_employer_quotas(
             for cid in candidates:
                 if cid in bullets or cid not in valid_ids:
                     continue
-                if employer == "cision" and project_id_for_claim(cid) in used_projects:
+                if employer == primary_employer_slug() and project_id_for_claim(cid) in used_projects:
                     continue
                 bullets[cid] = fallback_bullet_fn(valid_ids[cid])
                 grouped_ids[employer].append(cid)
@@ -398,11 +398,84 @@ def ensure_employer_quotas(
     return bullets
 
 
+METRIC_BULLET_FLOOR = 4  # minimum number of experience bullets that must contain a digit
+
+
+def enforce_metric_bullet_floor(
+    bullets: Dict[str, str],
+    valid_ids: Dict[str, str],
+    jd_text: str,
+    fallback_bullet_fn,
+) -> Dict[str, str]:
+    """Swap lowest-relevance non-metric bullets for metric-bearing alternatives (FR-214).
+
+    If the selected bullet set has fewer than METRIC_BULLET_FLOOR bullets containing
+    a digit, iteratively replace the lowest-JD-score non-metric bullet with the
+    highest-JD-score unselected metric-bearing claim from the same employer.
+    Only swaps when a better metric-bearing alternative actually exists.
+    """
+    jd_lower = jd_text.lower()
+
+    def _score(text: str) -> int:
+        return _jd_keyword_score(jd_lower, text)
+
+    def _has_digit(text: str) -> bool:
+        return bool(re.search(r"\d", text))
+
+    swaps = 0
+    for _ in range(6):
+        metric_count = sum(1 for text in bullets.values() if _has_digit(text))
+        if metric_count >= METRIC_BULLET_FLOOR:
+            break
+
+        selected_ids = set(bullets.keys())
+        non_metric = [
+            (cid, text) for cid, text in bullets.items() if not _has_digit(text)
+        ]
+        if not non_metric:
+            break
+
+        non_metric.sort(key=lambda x: _score(valid_ids.get(x[0], x[1])))
+        swap_out_cid, _ = non_metric[0]
+        swap_out_employer = employer_for_claim_id(swap_out_cid)
+
+        candidates = [
+            (cid, body)
+            for cid, body in valid_ids.items()
+            if cid not in selected_ids
+            and employer_for_claim_id(cid) == swap_out_employer
+            and _has_digit(body)
+        ]
+        if not candidates:
+            break
+
+        candidates.sort(key=lambda x: _score(x[1]), reverse=True)
+        swap_in_cid, swap_in_body = candidates[0]
+
+        if _score(swap_in_body) < _score(valid_ids.get(swap_out_cid, "")) - 5:
+            break
+
+        del bullets[swap_out_cid]
+        bullets[swap_in_cid] = fallback_bullet_fn(swap_in_body)
+        swaps += 1
+
+    if swaps:
+        import sys
+        print(f"    [Compiler] Metric floor: swapped {swaps} bullet(s) to reach {METRIC_BULLET_FLOOR} metric bullets.", file=sys.stderr)
+
+    return bullets
+
+
 def _summary_proof_from_bullet(bullet: str, max_chars: int = SUMMARY_PROOF_MAX_CHARS) -> str:
     """
     One grounded proof clause for the summary: must be a substring of the bullet.
     Strips compose bridge prefixes and caps length so the summary block is never mid-word truncated.
     """
+    from resume_conversion_eval import (
+        is_incomplete_summary_sentence,
+        is_participle_proof_fragment,
+    )
+
     b = bullet.strip()
     if not b:
         return ""
@@ -420,10 +493,15 @@ def _summary_proof_from_bullet(bullet: str, max_chars: int = SUMMARY_PROOF_MAX_C
     if not clauses:
         clauses = [b.split(".")[0].strip()]
 
+    # Long single-sentence bullets: include lead clause and trailing comma segments.
+    if len(clauses) == 1 and "," in clauses[0]:
+        comma_parts = [p.strip() for p in clauses[0].split(",") if p.strip()]
+        for part in comma_parts:
+            if len(part) <= max_chars:
+                clauses.append(part)
+
     def _prefer_metric(clause: str) -> bool:
         return bool(re.search(r"\d", clause))
-
-    ordered = sorted(clauses, key=lambda c: (0 if _prefer_metric(c) else 1, len(c)))
 
     def _finalize(clause: str) -> str:
         clause = clause.strip()
@@ -433,17 +511,68 @@ def _summary_proof_from_bullet(bullet: str, max_chars: int = SUMMARY_PROOF_MAX_C
             clause = clause[0].upper() + clause[1:]
         return clause if clause.endswith(".") else f"{clause}."
 
-    complete = [c for c in ordered if c and len(c) <= max_chars]
+    def _valid_proof(clause: str) -> bool:
+        if not clause or len(clause) > max_chars:
+            return False
+        finalized = _finalize(clause)
+        if is_incomplete_summary_sentence(finalized) or is_participle_proof_fragment(finalized):
+            return False
+        return True
+
+    # Prefer full attribution sentence with adoption payoff when grounded in bullet.
+    if clauses:
+        full_sentence = clauses[0]
+        if _ATTRIBUTION_PAYOFF_RE.search(b) and len(full_sentence) <= max_chars:
+            finalized_full = _finalize(full_sentence)
+            if not is_incomplete_summary_sentence(finalized_full) and not is_participle_proof_fragment(
+                finalized_full
+            ):
+                return finalized_full
+        payoff = _ATTRIBUTION_PAYOFF_RE.search(b)
+        if payoff:
+            lead = full_sentence.split(",")[0].strip() if "," in full_sentence else full_sentence
+            extended = f"{lead}{payoff.group(0)}"
+            if not extended.endswith("."):
+                extended += "."
+            if len(extended) <= max_chars and _valid_proof(extended.rstrip(".")):
+                finalized_ext = _finalize(extended.rstrip("."))
+                if not is_incomplete_summary_sentence(finalized_ext):
+                    return finalized_ext
+
+    ordered = sorted(clauses, key=lambda c: (0 if _prefer_metric(c) else 1, len(c)))
+
+    complete = [c for c in ordered if _valid_proof(c)]
     if complete:
-        return _finalize(max(complete, key=len))
+        chosen = _finalize(max(complete, key=len))
+        payoff = _ATTRIBUTION_PAYOFF_RE.search(b)
+        if payoff and "revenue outcomes" in chosen.lower() and "sought to adopt" not in chosen.lower():
+            extended = chosen.rstrip(".") + payoff.group(0)
+            if not extended.endswith("."):
+                extended += "."
+            if len(extended) <= max_chars:
+                ext_final = _finalize(extended.rstrip("."))
+                if not is_incomplete_summary_sentence(ext_final):
+                    return ext_final
+        return chosen
+
+    _BAD_TAIL_RE = re.compile(
+        r"[,;]$|,\s*$|\b(and|or|but|with|for|the|a|an|across|under|using|by|to|of|in|"
+        r"teams|platforms?|groups?|stakeholders?|"
+        r"resolve|coordinate|manage|drive|build|deliver|ensure|align)\s*\.?$",
+        re.IGNORECASE,
+    )
 
     for clause in ordered:
         if not clause:
             continue
         trimmed = clause[:max_chars].rsplit(" ", 1)[0].strip()
-        while trimmed and _INCOMPLETE_PROOF_TAIL.search(_finalize(trimmed)):
+        while trimmed and (
+            _INCOMPLETE_PROOF_TAIL.search(_finalize(trimmed))
+            or _BAD_TAIL_RE.search(trimmed)
+            or is_incomplete_summary_sentence(_finalize(trimmed))
+        ):
             trimmed = trimmed.rsplit(" ", 1)[0].strip()
-        if len(trimmed) >= 40:
+        if len(trimmed) >= 40 and _valid_proof(trimmed):
             return _finalize(trimmed)
     return ""
 
@@ -458,11 +587,19 @@ def build_summary_deterministic(
     jd_text: str,
     profile=None,
     fit_summary: str = "",
+    retry_opts: Optional[Dict] = None,
 ) -> str:
-    """Tier 4 v3: 3–4 grounded sentences; Cision bullets drive proof (no LLM)."""
+    """Tier 4 v3: 3–4 grounded sentences; primary employer bullets drive proof (no LLM)."""
+    retry_opts = retry_opts or {}
+    theme_skip = int(retry_opts.get("theme_skip") or 0)
+    proof_skip = int(retry_opts.get("proof_skip") or 0)
+    force_attribution_payoff = bool(retry_opts.get("force_attribution_payoff"))
+
+    from candidate_context import primary_employer_slug
     from local_embeddings import BM25
 
-    cision_bullets = list(bullets_by_company.get("cision", []))
+    primary = primary_employer_slug()
+    cision_bullets = list(bullets_by_company.get(primary, []))
     all_bullets = [b for bl in bullets_by_company.values() for b in bl]
 
     top_cision = None
@@ -470,77 +607,177 @@ def build_summary_deterministic(
     if cision_bullets:
         if jd_text:
             bm25 = BM25(cision_bullets)
-            hits = bm25.get_top_n(jd_text, n=min(2, len(cision_bullets)))
+            # Fetch up to 5 hits and reorder so metric-bearing bullets appear first
+            n_hits = min(5, len(cision_bullets))
+            hits = bm25.get_top_n(jd_text, n=n_hits)
             if hits:
-                top_cision = cision_bullets[hits[0][0]]
-                if len(hits) > 1:
-                    second_cision = cision_bullets[hits[1][0]]
+                metric_hits = [h for h in hits if re.search(r"\d", cision_bullets[h[0]])]
+                non_metric_hits = [h for h in hits if not re.search(r"\d", cision_bullets[h[0]])]
+                ordered_hits = metric_hits + non_metric_hits
+                top_cision = cision_bullets[ordered_hits[0][0]]
+                if len(ordered_hits) > 1:
+                    second_cision = cision_bullets[ordered_hits[1][0]]
         if not top_cision:
-            top_cision = cision_bullets[0]
+            top_cision = next(
+                (b for b in cision_bullets if re.search(r"\d", b)), cision_bullets[0]
+            )
         if not second_cision and len(cision_bullets) > 1:
-            second_cision = cision_bullets[1]
+            second_cision = next(
+                (b for b in cision_bullets if b != top_cision and re.search(r"\d", b)),
+                cision_bullets[1],
+            )
+
+    from conversion_framing import defensive_summary_violations, has_security_jd_signal
+    from resume_conversion_eval import (
+        is_incomplete_summary_sentence,
+        is_participle_proof_fragment,
+        score_summary_proof_candidate,
+    )
 
     blocked = {"zenoti", "airo", "spa", "medical aesthetics"}
     themes: List[str] = []
     if profile and getattr(profile, "priority_themes", None):
         themes = [
-            t for t in profile.priority_themes[:4]
+            t for t in profile.priority_themes[:6]
             if not any(b in t.lower() for b in blocked)
-        ][:3]
+        ]
+    if not has_security_jd_signal(jd_text):
+        themes = [
+            t for t in themes
+            if "security" not in t.lower() and "risk reduction" not in t.lower()
+        ]
 
-    if themes:
-        from cover_prose import format_themes_for_prose, _short_theme_label
+    bullet_corpus = " ".join(all_bullets)
+    from experience_theme_guard import summary_focus_phrase
 
-        theme_phrase = format_themes_for_prose(themes, max_items=2)
-        s1 = f"B2B SaaS Product Manager with 6+ years in {theme_phrase}."
+    theme_phrase = (
+        summary_focus_phrase(themes, bullet_corpus, max_items=2, theme_skip=theme_skip)
+        if themes
+        else None
+    )
+    if theme_phrase:
+        s1 = (
+            f"Product Manager with 6+ years of experience across enterprise SaaS platforms, "
+            f"technical workflows, and internal tooling, with recent focus on {theme_phrase}."
+        )
     else:
         s1 = (
-            "B2B SaaS Product Manager with 6+ years stabilizing revenue-bearing platforms "
-            "and cross-functional delivery."
+            "Product Manager with 6+ years of experience across enterprise SaaS platforms, "
+            "technical workflows, and internal tooling, most recently stabilizing a $40M ARR "
+            "legacy platform through data integrity, customer migration, and infrastructure cost reduction."
         )
 
     s2 = (
-        "Experienced partnering with engineering, DevOps, and customer-facing teams "
+        "Experienced partnering with engineering, DevOps, CX, and upgrade teams "
         "to ship reliable platform capabilities under resource constraints."
     )
-    if themes and len(themes) > 2:
-        from cover_prose import _short_theme_label
 
-        third = _short_theme_label(themes[2])
-        if len(third) > 55:
-            third = third[:52].rsplit(" ", 1)[0]
-        s2 = f"Focused on {third} in complex legacy B2B SaaS environments."
+    # Guard: prevent the 40% data failure stat from appearing in the proof
+    # sentence when it is already present as an experience bullet (avoids verbatim duplication).
+    _SUMMARY_STAT_BLOCKLIST = re.compile(
+        r"40%\s*data\s*failure|40%\s*data\s*drop|40%\s*drop.off",
+        re.IGNORECASE,
+    )
 
     sentences = [s1, s2]
 
-    def _append_proof(bullet: str) -> bool:
-        proof = _summary_proof_from_bullet(bullet)
-        if not proof:
+    def _proof_allowed(bullet: str, proof: str = "") -> bool:
+        if has_security_jd_signal(jd_text):
+            return True
+        if defensive_summary_violations(bullet, jd_text):
             return False
-        joined = " ".join(sentences).lower()
-        if proof.lower() in joined:
-            return False
-        trial = " ".join(sentences + [proof])
-        ok, _ = assert_summary_grounded(trial, bullets_by_company)
-        if not ok:
-            return False
-        sentences.append(proof)
+        # Block stat-duplicating bullets from appearing in the summary proof
+        # when the same stat already appears in an experience bullet.
+        all_body_bullets = [b for bl in bullets_by_company.values() for b in bl]
+        if _SUMMARY_STAT_BLOCKLIST.search(bullet):
+            if any(_SUMMARY_STAT_BLOCKLIST.search(b) for b in all_body_bullets):
+                return False
+        # Block verbatim-copy proof sentences: use the extracted proof (shorter than
+        # the full bullet) for token comparison so that a brief teaser of a long bullet
+        # isn't blocked while a full-length copy is.
+        check_text = proof if proof else bullet
+        check_tokens = set(re.findall(r"[a-z]{4,}", check_text.lower()))
+        if check_tokens:
+            for body_b in all_body_bullets:
+                body_tokens = set(re.findall(r"[a-z]{4,}", body_b.lower()))
+                if not body_tokens:
+                    continue
+                overlap = len(check_tokens & body_tokens) / len(check_tokens)
+                length_ratio = len(check_tokens) / max(1, len(body_tokens))
+                # Block when proof is both high-overlap AND nearly as long as the
+                # experience bullet (i.e. a near-verbatim copy, not a short teaser).
+                if overlap >= 0.80 and length_ratio >= 0.70:
+                    return False
         return True
 
-    def _append_proof_from_pool(pool: List[str]) -> bool:
+    def _best_summary_proof(pool: List[str]) -> str:
+        """Select one grounded proof sentence (FR-223): metric/outcome openers beat fragments."""
+        if force_attribution_payoff:
+            attr_pool = [b for b in pool if _ATTRIBUTION_PAYOFF_RE.search(b)]
+            if attr_pool:
+                pool = attr_pool
+        ranked: List[tuple] = []
         for bullet in pool:
-            if _append_proof(bullet):
-                return True
-        return False
+            proof = _summary_proof_from_bullet(bullet)
+            if not proof or is_incomplete_summary_sentence(proof):
+                continue
+            if not _proof_allowed(bullet, proof):
+                continue
+            if not has_security_jd_signal(jd_text) and defensive_summary_violations(proof, jd_text):
+                continue
+            if is_participle_proof_fragment(proof):
+                continue
+            trial = " ".join(sentences + [proof])
+            if not assert_summary_grounded(trial, bullets_by_company)[0]:
+                continue
+            ranked.append((score_summary_proof_candidate(proof, jd_text), proof))
+        if not ranked:
+            for bullet in pool:
+                proof = _summary_proof_from_bullet(bullet)
+                if not proof or is_incomplete_summary_sentence(proof):
+                    continue
+                if not _proof_allowed(bullet, proof):
+                    continue
+                trial = " ".join(sentences + [proof])
+                if assert_summary_grounded(trial, bullets_by_company)[0]:
+                    ranked.append((score_summary_proof_candidate(proof, jd_text), proof))
+        if not ranked:
+            return ""
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        if proof_skip:
+            ranked = ranked[proof_skip:]
+        if not ranked:
+            return ""
+        metric_ranked = [(s, p) for s, p in ranked if re.search(r"\d", p)]
+        if metric_ranked:
+            return metric_ranked[0][1]
+        return ranked[0][1]
 
+    proof_pool: List[str] = []
     if top_cision:
-        if not _append_proof(top_cision):
-            _append_proof_from_pool([b for b in cision_bullets if b != top_cision])
+        proof_pool.append(top_cision)
+    if second_cision and second_cision != top_cision:
+        proof_pool.append(second_cision)
+    for b in cision_bullets:
+        if b not in proof_pool:
+            proof_pool.append(b)
 
-    if len(sentences) < 4 and second_cision and second_cision != top_cision:
-        _append_proof(second_cision)
-    if len(sentences) < 4 and cision_bullets:
-        _append_proof_from_pool(cision_bullets)
+    best_proof = _best_summary_proof(proof_pool)
+    if best_proof:
+        sentences.append(best_proof)
+
+    if not has_security_jd_signal(jd_text):
+        sentences = [
+            s for s in sentences if not defensive_summary_violations(s, jd_text)
+        ]
+
+    sentences = sentences[: 2 + SUMMARY_MAX_PROOF_SENTENCES]
+    if sentences and sentences[-1].rstrip().endswith(("allocations.", "allocations", "compliance.", "teams.")):
+        sentences = sentences[:-1]
+    if len(sentences) < SUMMARY_MIN_SENTENCES and cision_bullets:
+        fallback_proof = _best_summary_proof(cision_bullets)
+        if fallback_proof and fallback_proof not in sentences:
+            sentences.append(fallback_proof)
 
     fit_clean = (fit_summary or "").strip()
     try:
@@ -548,7 +785,7 @@ def build_summary_deterministic(
     except ImportError:
         allow_fit_summary = lambda: False  # type: ignore
 
-    if allow_fit_summary() and fit_clean and len(fit_clean) > 20 and len(sentences) < 4:
+    if allow_fit_summary() and fit_clean and len(fit_clean) > 20 and len(sentences) <= 2 + SUMMARY_MAX_PROOF_SENTENCES:
         fit_sent = fit_clean.split(".")[0].strip()
         if len(fit_sent) > SUMMARY_PROOF_MAX_CHARS:
             fit_sent = fit_sent[:SUMMARY_PROOF_MAX_CHARS].rsplit(" ", 1)[0]
@@ -558,29 +795,313 @@ def build_summary_deterministic(
         if ok_fit:
             sentences.append(fit_sent)
 
-    summary = " ".join(sentences[:4])
+    sentences = [s for s in sentences if not is_incomplete_summary_sentence(s)]
+
+    sentences = [
+        s
+        for s in sentences
+        if not is_incomplete_summary_sentence(s) and not is_participle_proof_fragment(s)
+    ]
+    # Keep at most one proof after the two template sentences.
+    if len(sentences) > 2 + SUMMARY_MAX_PROOF_SENTENCES:
+        template = sentences[:2]
+        proofs = sentences[2:]
+        proofs.sort(key=lambda p: score_summary_proof_candidate(p, jd_text), reverse=True)
+        sentences = template + proofs[:SUMMARY_MAX_PROOF_SENTENCES]
+
+    summary = " ".join(sentences[: 2 + SUMMARY_MAX_PROOF_SENTENCES])
     ok, _ = assert_summary_grounded(summary, bullets_by_company)
     if not ok:
         summary = " ".join(sentences[:2])
-        for extra in sentences[2:4]:
-            trial = f"{summary} {extra}".strip()
-            if assert_summary_grounded(trial, bullets_by_company)[0]:
-                summary = trial
+        if len(sentences) > 2:
+            extra = sentences[2]
+            if not is_incomplete_summary_sentence(extra) and not is_participle_proof_fragment(extra):
+                trial = f"{summary} {extra}".strip()
+                if assert_summary_grounded(trial, bullets_by_company)[0]:
+                    summary = trial
 
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", summary.strip()) if p.strip()]
+    parts = [
+        p
+        for p in parts
+        if not is_incomplete_summary_sentence(p) and not is_participle_proof_fragment(p)
+    ]
     while len(summary) > SUMMARY_MAX_CHARS and len(parts) > SUMMARY_MIN_SENTENCES:
         parts.pop()
         summary = " ".join(parts)
 
     if len(parts) < SUMMARY_MIN_SENTENCES and cision_bullets:
-        _append_proof_from_pool(cision_bullets)
-        summary = " ".join(sentences[:4])
-        parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", summary.strip()) if p.strip()]
-        while len(summary) > SUMMARY_MAX_CHARS and len(parts) > SUMMARY_MIN_SENTENCES:
-            parts.pop()
-            summary = " ".join(parts)
+        fallback_proof = _best_summary_proof(cision_bullets)
+        if fallback_proof:
+            trial_parts = parts + [fallback_proof]
+            summary = " ".join(trial_parts[: 2 + SUMMARY_MAX_PROOF_SENTENCES])
+            parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", summary.strip()) if p.strip()]
+            while len(summary) > SUMMARY_MAX_CHARS and len(parts) > SUMMARY_MIN_SENTENCES:
+                parts.pop()
+                summary = " ".join(parts)
+
+    if len(parts) < SUMMARY_MIN_SENTENCES and cision_bullets:
+        for bullet in cision_bullets:
+            proof = _summary_proof_from_bullet(bullet)
+            if not proof or is_incomplete_summary_sentence(proof):
+                continue
+            if any(proof.lower() in p.lower() or p.lower() in proof.lower() for p in parts):
+                continue
+            if not _proof_allowed(bullet, proof):
+                continue
+            trial_parts = parts + [proof]
+            trial_summary = " ".join(trial_parts[: 2 + SUMMARY_MAX_PROOF_SENTENCES])
+            trial_parts = [
+                p.strip()
+                for p in re.split(r"(?<=[.!?])\s+", trial_summary.strip())
+                if p.strip()
+            ]
+            if len(trial_parts) >= SUMMARY_MIN_SENTENCES:
+                parts = trial_parts
+                summary = " ".join(parts)
+                break
 
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Core Competencies section builder (FR-195)
+# ---------------------------------------------------------------------------
+
+_SKILL_LABELS: Dict[str, str] = {
+    # Roadmap / planning
+    "Roadmap": "Product Roadmap",
+    "Roadmap Prioritization": "Product Roadmap",
+    # Agile
+    "Agile": "Agile / Scrum",
+    "Agile Planning": "Agile / Scrum",
+    "Agile Ceremonies": "Agile / Scrum",
+    "PI Planning": "PI Planning",
+    "Sprint Planning": "Sprint Planning",
+    # Backlog
+    "Backlog Grooming": "Backlog Management",
+    "Backlog Management": "Backlog Management",
+    "Backlog Prioritization": "Backlog Management",
+    # Stakeholder / cross-functional
+    "Stakeholder Management": "Stakeholder Management",
+    "Cross-functional": "Cross-functional Alignment",
+    "Cross-functional Alignment": "Cross-functional Alignment",
+    "Organization-wide Alignment": "Stakeholder Management",
+    # Requirements / specs
+    "Requirements Gathering": "Requirements Gathering",
+    "Product Specs": "PRD / Spec Writing",
+    "Business Translation": "PRD / Spec Writing",
+    "User Story Writing": "User Story Writing",
+    "Synthesis": "Requirements Synthesis",
+    # Capacity / planning
+    "Capacity Modeling": "Capacity Planning",
+    "Capacity Planning": "Capacity Planning",
+    "Resource Allocation": "Resource Planning",
+    # Platform / data / integration
+    "Platform Stability": "Platform Stability",
+    "Platform Stabilization": "Platform Stability",
+    "Data Integrity": "Data Integrity",
+    "Data Pipeline": "Data Pipeline Management",
+    "Content Pipeline": "Content Pipeline Management",
+    "Content Licensing": "Content Licensing",
+    "API / Integration": "API & Integration",
+    "Technical Product Management": "Technical Product Management",
+    # Migration / retention
+    "Migration Planning": "Migration Strategy",
+    "Migrations": "Migration Strategy",
+    "Customer Retention": "Customer Retention",
+    "Retention": "Customer Retention",
+    "Product Lifecycle": "Product Lifecycle Management",
+    # Compliance / risk
+    "Compliance": "Compliance Workflows",
+    "Risk Mitigation": "Risk Management",
+    "Change Management": "Change Management",
+    "Privacy": "Privacy & Compliance",
+    "GDPR/CCPA": "Privacy & Compliance",
+    # Go-to-market / analytics
+    "Go-to-Market": "Go-to-Market",
+    "Competitive Analysis": "Competitive Analysis",
+    "Executive Presentation": "Executive Communication",
+    # Delivery / process
+    "Prioritization": "Prioritization",
+    "Process Improvement": "Process Improvement",
+    "Process Optimization": "Process Improvement",
+    "SDLC": "SDLC",
+    "QA": "QA & Release",
+    "Quality Assurance": "QA & Release",
+    "Release Management": "QA & Release",
+    # Engineering / technical collaboration
+    "Engineering Alignment": "Engineering Collaboration",
+    "Technical Problem Solving": "Technical Problem Solving",
+    "Technical Resilience": "Technical Resilience",
+}
+
+_SKIP_TAGS: set = {
+    # Outcomes (not skills)
+    "Cost Reduction", "Cost Savings", "Revenue Protection", "Churn Prevention",
+    "Churn Rate", "Churn Reduction", "ROI", "Conversion Rate", "Scaling",
+    "Competitive Advantage", "Competitive Gap", "Feature Launch",
+    "Product Adoption", "Product Continuity",
+    # Too vague / not resume-ready
+    "Velocity", "Collaboration", "Communication", "Continuity", "Initiative",
+    "Problem Identification", "Delivery", "Alignment",
+    # Too technical for PM row 1
+    "macOS", "Scripting", "Automation", "Tooling", "GDPR/CCPA",
+    "SLA", "Alerting", "Monitoring", "Access Control", "Governance",
+    "ETL", "API Integration", "Platform Migration", "Platform Architecture",
+    "Platform Scale", "Third-Party Integration", "Third-Party Terms",
+    "Vendor Terms", "Vendor Management", "Vendor Failure Recovery",
+    "Storage Optimization", "Infrastructure Deprecation", "Infrastructure",
+    "Technical Debt", "Sunsetting", "Phased Rollout",
+    "Operational Delivery", "Engineering Support", "Engineering Operations",
+    "Operations", "CS Alignment", "Onboarding",
+    # Already covered by tools row
+    "Google Analytics", "Jira", "Salesforce", "CRM", "CRM Integration",
+    "PR Attribution", "Global Coordination", "Distributed Teams",
+    # Misc duplicates resolved above
+    "Custom Requirements", "Multi-Platform Ownership",
+}
+
+
+def build_skills_section(
+    bullets_with_ids: Dict[str, str],
+    jd_text: str = "",
+    profile=None,
+) -> str:
+    """Build the ## CORE COMPETENCIES two-row section (FR-195).
+
+    Row 1: PM methodology skills harvested from the tags of selected claims.
+           Sorted by (evidence frequency + JD requirements-section boost).
+           Capped at 12 items.
+    Row 2: Static verified tools from data/skills_catalog.json.
+           Sorted by JD requirements-section token match.
+
+    Returns empty string when no claims are selected (safe no-op).
+    """
+    import json
+    import os
+    from utils import PROJECT_ROOT
+
+    if not bullets_with_ids:
+        return ""
+
+    # Load catalog to resolve claim IDs → tags
+    try:
+        from claim_catalog import load_catalog
+        catalog = load_catalog()
+        claims_data = catalog.claims if catalog.claims else {}
+    except Exception:
+        claims_data = {}
+
+    # Get requirements subsection for JD-aware sorting
+    from jd_tailoring import extract_req_section
+    req_section = extract_req_section(jd_text) if jd_text else ""
+    req_lower = req_section.lower()
+
+    _GENERIC_TOKENS = {"technical", "literacy", "suite", "google", "microsoft"}
+
+    def _jd_boost(label: str) -> int:
+        tokens = re.findall(r"[a-z]{3,}", label.lower())
+        filtered = [t for t in tokens if t not in _GENERIC_TOKENS]
+        return sum(1 for t in filtered if t in req_lower)
+
+    # Harvest tags from selected claims and count frequency
+    tag_counts: Dict[str, int] = {}
+    for cid in bullets_with_ids:
+        claim = claims_data.get(cid)
+        if not claim:
+            continue
+        tags = claim.tags if hasattr(claim, "tags") else (claim.get("tags", []) if isinstance(claim, dict) else [])
+        for tag in tags:
+            if tag not in _SKIP_TAGS:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+    # Map tags to display labels, merge duplicates, score by frequency + JD boost
+    label_scores: Dict[str, int] = {}
+    for tag, count in tag_counts.items():
+        label = _SKILL_LABELS.get(tag, tag)
+        score = count + _jd_boost(label) * 2
+        if label not in label_scores or score > label_scores[label]:
+            label_scores[label] = score
+
+    row1_skills = sorted(label_scores.keys(), key=lambda l: -label_scores[l])[:10]
+
+    if not row1_skills:
+        return ""
+
+    # Load static tools list
+    skills_path = os.path.join(PROJECT_ROOT, "data", "skills_catalog.json")
+    row2_tools: List[str] = []
+    if os.path.exists(skills_path):
+        try:
+            with open(skills_path, encoding="utf-8") as f:
+                sc = json.load(f)
+
+            # Gather all tools from catalog, filtering to those anchored in
+            # claim tags (evidence-backed) OR surfaced in the JD req section
+            # (role-relevant). This prevents the full tool list from shipping
+            # regardless of what bullets were actually selected.
+            claim_tags_lower: set = set()
+            if bullets_with_ids:
+                try:
+                    from claim_catalog import load_catalog
+                    cat = load_catalog()
+                    for cid in bullets_with_ids:
+                        rec = cat.claims.get(cid)
+                        if rec:
+                            claim_tags_lower.update(t.lower() for t in rec.tags)
+                except Exception:
+                    pass
+
+            req_lower = req_section.lower()
+            all_tools: List[str] = []
+            for category_tools in sc.values():
+                if isinstance(category_tools, list):
+                    for tool in category_tools:
+                        tool_lower = tool.lower()
+                        # Include if: present in req section OR mentioned in claim tags
+                        # OR JD boost score > 0 (means req section matched something)
+                        jd_hit = _jd_boost(tool) > 0
+                        tag_hit = any(tl in tool_lower or tool_lower in tl for tl in claim_tags_lower)
+                        if jd_hit or tag_hit:
+                            all_tools.append(tool)
+
+            # Floor: if filtering produces fewer than 4 tools, backfill with
+            # the next highest-JD-scoring tools not already included.
+            if len(all_tools) < 4:
+                for category_tools in sc.values():
+                    if isinstance(category_tools, list):
+                        for tool in category_tools:
+                            if tool not in all_tools:
+                                all_tools.append(tool)
+                            if len(all_tools) >= 4:
+                                break
+                    if len(all_tools) >= 4:
+                        break
+
+            def _tool_allowed(label: str) -> bool:
+                return not any(
+                    re.search(
+                        r"(?<![\w-])" + re.escape(blocked) + r"(?![\w-])",
+                        label,
+                        re.I,
+                    )
+                    for blocked in BLOCKED_TOOLS
+                )
+
+            all_tools = [t for t in all_tools if _tool_allowed(t)]
+            all_tools.sort(key=lambda t: -_jd_boost(t))
+            row2_tools = all_tools[:8]  # cap at 8 to keep row visually balanced
+        except Exception:
+            pass
+
+    parts = ["## CORE COMPETENCIES", ""]
+    parts.append(" | ".join(row1_skills))
+    if row2_tools:
+        parts.append("")
+        parts.append(" | ".join(row2_tools))
+    parts.append("")
+    return "\n".join(parts)
 
 
 def assert_summary_grounded(summary: str, bullets_by_company: Dict[str, List[str]]) -> Tuple[bool, Optional[str]]:
@@ -647,8 +1168,11 @@ def _jd_hook_sentence(jd_text: str, company_name: str, profile=None) -> str:
     from utils import call_llm
 
     if cover_hook_mode() != "template" and jd_text:
+        from utils import load_identity_profile
+
+        candidate_name = (load_identity_profile().get("name") or "the candidate").strip()
         system_prompt = (
-            "You are a professional technical recruiter writing an opening hook for a cover letter for Jason Taylor. "
+            f"You are a professional technical recruiter writing an opening hook for a cover letter for {candidate_name}. "
             "Write exactly ONE sentence. "
             f"Format strictly: 'I am applying for the [Job Title] role at {company_name}, where my background in [1-2 key skills from JD] aligns with your focus on [1 key goal from JD].' "
             "Do not include any greeting or signature. Output ONLY the single sentence."
@@ -727,10 +1251,11 @@ def assemble_cover_letter_deterministic(
         "Thank you for your consideration."
     )
     body = "\n\n".join(paras)
-    header = header_block.strip() if header_block.strip() else (
-        "# JASON TAYLOR\n\n"
-        "San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug"
-    )
+    if header_block.strip():
+        header = header_block.strip()
+    else:
+        from utils import format_contact_header_block
+        header = format_contact_header_block().strip()
     return f"{header}\n\n{body}\n"
 
 
@@ -739,8 +1264,11 @@ def audit_text_against_bullet_corpus(text: str, bullet_corpus: str) -> Tuple[boo
     corpus_nums = extract_numeric_tokens(bullet_corpus.replace(",", ""))
     text_nums = extract_numeric_tokens(text.replace(",", ""))
     invented = {n for n in text_nums if len(n) > 1 and n not in corpus_nums}
-    # allow common tenure and contact-header fragments [REDACTED_PHONE])
-    invented -= {"2017", "2018", "2019", "2021", "2026", "760", "317", "8264"}
+    # allow common tenure digits and phone fragments from the configured contact header
+    from utils import load_identity_profile
+    phone_digits = re.sub(r"\D", "", load_identity_profile().get("phone", ""))
+    phone_fragments = {phone_digits[i:i + 3] for i in range(0, len(phone_digits), 3)} if phone_digits else set()
+    invented -= {"2017", "2018", "2019", "2021", "2026", *phone_fragments}
     if invented:
         return False, f"Document introduces numbers not in bullet corpus: {sorted(invented)}"
     return True, None
@@ -757,18 +1285,63 @@ def enforce_resume_char_budget(content: str, max_chars: int = RESUME_CHAR_BUDGET
     return "\n".join(lines).strip() + "\n"
 
 
+def build_projects_section(jd_text: str = "") -> str:
+    """Build the optional PROJECTS section for AI/LLM-role JDs (FR-208).
+
+    Reads data/projects_catalog.json and returns a formatted markdown block
+    containing only entries where ai_relevant=True. Returns an empty string
+    when no entries match or the catalog is missing.
+    """
+    import os
+
+    from utils import PROJECT_ROOT
+
+    catalog_path = os.path.join(PROJECT_ROOT, "data", "projects_catalog.json")
+    try:
+        with open(catalog_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return ""
+
+    MAX_PROJECTS = 3
+    all_projects = [p for p in data.get("projects", []) if p.get("ai_relevant")]
+    projects = sorted(all_projects, key=lambda p: p.get("priority", 99))[:MAX_PROJECTS]
+    if not projects:
+        return ""
+
+    lines = ["## PROJECTS", ""]
+    for proj in projects:
+        name = proj.get("name", "")
+        stack = proj.get("stack", "")
+        outcome = proj.get("outcome", "")
+        if not name or not outcome:
+            continue
+        lines.append(f"**{name}** | {stack}")
+        lines.append(f"* {outcome}")
+        lines.append("")
+
+    if len(lines) <= 2:
+        return ""
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def count_bullets_by_employer(content: str) -> Dict[str, int]:
     """Count bullets under each employer section for QA."""
-    counts = {e: 0 for e in EMPLOYERS}
+    from candidate_context import employer_display_name, load_employer_headers, load_employers
+
+    employers = load_employers()
+    counts = {e: 0 for e in employers}
+    headers = load_employer_headers()
     current = None
     for line in content.splitlines():
         low = line.lower()
-        if "###" in line and "cision" in low:
-            current = "cision"
-        elif "###" in line and "sterkly" in low:
-            current = "sterkly"
-        elif "###" in line and ("zero" in low or "sixty" in low):
-            current = "zero_to_sixty"
+        if line.strip().startswith("### "):
+            for slug in employers:
+                name = employer_display_name(slug, headers).lower()
+                if name in low or slug.replace("_", " ") in low:
+                    current = slug
+                    break
         elif line.startswith("* ") and current:
             counts[current] += 1
     return counts

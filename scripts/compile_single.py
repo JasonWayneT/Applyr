@@ -29,13 +29,47 @@ def main():
         # Convert standard Markdown to HTML
         html_content = markdown.markdown(md_text, extensions=['extra', 'tables'])
 
-        # Find the h1 element and format the contact info paragraph right below it
-        # The contact info is typically the first paragraph after h1
-        # Convert '<h3>Company — Dates</h3>' into side-by-side layout (float dates right)
+        # Experience headers: Title | Company | Dates (three segments).
+        # Use flex layout — float:right breaks print order (company/title sink to page bottom).
+        def _role_header_three(match):
+            title = match.group(1).strip()
+            company = match.group(2).strip()
+            dates = match.group(3).strip()
+            return (
+                '<h3 class="role-header">'
+                f'<span class="role-left"><span class="role-title">{title}</span>'
+                f'<span class="role-sep"> | </span>'
+                f'<span class="role-company">{company}</span></span>'
+                f'<span class="role-dates">{dates}</span>'
+                '</h3>'
+            )
+
         html_content = re.sub(
-            r'<h3>\s*(?:<strong[^>]*>)?(.*?)(?:</strong>)?\s*(?:\||—|-)\s*(?:<strong[^>]*>)?(.*?)(?:</strong>)?\s*</h3>',
-            r'<h3>\1 <span class="date">\2</span></h3>',
-            html_content
+            r'<h3>\s*(?:<strong[^>]*>)?(.*?)(?:</strong>)?\s*\|\s*'
+            r'(?:<strong[^>]*>)?(.*?)(?:</strong>)?\s*\|\s*'
+            r'(?:<strong[^>]*>)?(.*?)(?:</strong>)?\s*</h3>',
+            _role_header_three,
+            html_content,
+            flags=re.IGNORECASE,
+        )
+
+        # Legacy two-segment headers: Title | Dates
+        html_content = re.sub(
+            r'<h3(?![^>]*class="role-header")\s*>\s*'
+            r'(?:<strong[^>]*>)?(.*?)(?:</strong>)?\s*(?:\||—|-)\s*'
+            r'(?:<strong[^>]*>)?(.*?)(?:</strong>)?\s*</h3>',
+            r'<h3 class="role-header"><span class="role-left"><span class="role-title">\1</span></span>'
+            r'<span class="role-dates">\2</span></h3>',
+            html_content,
+            flags=re.IGNORECASE,
+        )
+
+        # Location line under each role header (Full Remote, San Diego, CA)
+        html_content = re.sub(
+            r'(<h3 class="role-header">.*?</h3>)\s*<p>',
+            r'\1<p class="role-location">',
+            html_content,
+            flags=re.IGNORECASE,
         )
 
         is_cover_letter = "CoverLetter" in os.path.basename(md_path) or "cover" in os.path.basename(md_path).lower()
@@ -110,20 +144,39 @@ def main():
             font-weight: 700;
             color: #2d3748;
             margin: 14px 0 2px 0;
-            display: block;
-            position: relative;
         }}
         h2 + h3 {{
             margin-top: 6px;
         }}
-        h3 span.date {{
-            float: right;
+        h3.role-header {{
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 4px 12px;
+            clear: both;
+        }}
+        h3.role-header .role-left {{
+            flex: 1 1 auto;
+            min-width: 0;
+        }}
+        h3.role-header .role-title,
+        h3.role-header .role-company {{
+            font-weight: 700;
+            color: #2d3748;
+        }}
+        h3.role-header .role-sep {{
+            font-weight: 500;
+            color: #4a5568;
+        }}
+        h3.role-header .role-dates {{
+            flex: 0 0 auto;
             font-weight: 500;
             color: #4a5568;
             font-size: 9.5pt;
+            white-space: nowrap;
         }}
-        /* Job Title paragraph directly following h3 */
-        h3 + p {{
+        p.role-location {{
             font-size: 9.5pt;
             font-weight: 500;
             color: #4a5568;

@@ -1,10 +1,59 @@
-# Applyr — Curated Job Hunt Agent
+---
+title: "Applyr"
+description: "A locally-hosted job search platform that automates discovery, scoring, and application drafting — with every generated claim grounded in verified work history."
+author: "Jason Taylor"
+role: "Product Manager"
+status: "in-progress"
+ai_role: "code generation within spec, document drafting from user templates and grounded work history, pipeline execution under operator direction"
+tech_stack: ["React", "TypeScript", "Node.js", "Express", "SQLite", "Python", "Playwright", "Vite", "TailwindCSS"]
+pm_skills: ["spec-driven development", "requirements management", "anti-hallucination architecture", "iterative development", "traceability design"]
+keywords: ["job search automation", "resume generation", "cover letter", "AI pipeline", "local-first", "career tools", "BMAD"]
+date_completed: "2026-06"
+---
 
-A locally-hosted, privacy-first platform that automates the full job search lifecycle: stealth scouting across 7 job sources → deterministic fit scoring → bespoke resume, cover letter, and interview cheat sheet drafting grounded in your verified work history.
+# Applyr — Job Search Platform
+
+> A locally-hosted job search platform I built during my own job search. Every generated document traces back to verified work history. The AI can't invent claims. Got to screener stage.
 
 Everything runs on your machine. No career data leaves your desktop except the API calls you explicitly configure.
 
-**Maintainers & agents:** Runtime workflow → [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md) · SDD changes → [AGENTS.md](AGENTS.md)
+---
+
+## What This Is
+
+Applyr has three layers: a background scout that surfaces qualified roles, a tailoring engine that generates targeted resumes and cover letters, and a tracker for the full application pipeline.
+
+The decision everything else builds on: the AI works from your complete work history, not your current resume. A resume is a lossy snapshot. Experience directly relevant to this role might never have made it in. Applyr pulls from the full picture. Nothing it generates can be fabricated.
+
+This works for anyone with real experience to draw from: corporate roles, freelance and volunteer work, or non-traditional backgrounds where transferable skills get buried by standard resume formats. If it happened and it's relevant to the role, the system finds it.
+
+**My role:** Problem definition, product requirements (BMAD methodology), requirements registry with traceable IDs, anti-hallucination architecture, evaluation of every generated output.
+**AI's role:** Code generation within my spec, document drafting from my templates and grounded work history, pipeline execution under my direction.
+
+**What this is not:**
+- A job board or listing aggregator you browse manually
+- A resume builder without a job in mind — all drafts are generated against a specific posting
+- A hosted SaaS product — nothing is stored outside your machine except the API calls you configure
+- A system for mass-applying without review — every asset is reviewed and edited before submission
+
+---
+
+## Status
+
+| Field | Value |
+|---|---|
+| **Phase** | Dogfood |
+| **Stability** | Active development — breaking changes possible between versions |
+| **Last updated** | June 2026 |
+
+---
+
+## Results & Impact
+
+- **Real-world use:** Daily operational tool throughout a 6-month active job search — not a demo project.
+- **Application outcomes:** Got to screener stage on roles Applyr identified and drafted.
+- **Development pace:** Six major versions over 5 months, from CLI scraper to full local web platform.
+- **What I learned:** The anti-hallucination architecture matters more than AI generation quality. A structured, codified source of truth is the product — the prompts are secondary.
 
 ---
 
@@ -135,6 +184,11 @@ Go to **Job Search** and click **Run Scout**. The backend launches a parallel sc
 | Himalayas | Public API |
 | The Muse | Public API (role-aware category routing) |
 | Adzuna | Aggregator API (optional, key required) |
+| Greenhouse | Lane 1 ATS API |
+| Lever | Lane 1 ATS API |
+| Ashby | Lane 1 ATS API |
+| Workable | Lane 1 ATS API |
+| TheirStack | Lane 2 API (optional, key required, 200 credit guard) |
 
 The pipeline runs in four sequential stages automatically:
 1. **Scout** — discover new job URLs across all sources
@@ -142,7 +196,7 @@ The pipeline runs in four sequential stages automatically:
 3. **Scrape** — fetch full job description text for new listings
 4. **Evaluate & Draft** — score every new job and generate assets for those that pass
 
-Live progress streams to the Scout log console in real time.
+Live progress and source metrics (fetched, filtered, and passed counts), along with source health badges, stream to the Scout log console in real time via Server-Sent Events (SSE).
 
 ### Fit scoring
 
@@ -264,3 +318,48 @@ These scripts are not part of the automated pipeline but are useful for maintena
 | `scripts/test_smoke_regression.py` | Run smoke tests against the live pipeline |
 
 Run these directly with `python scripts/<name>.py` or `npx tsx scripts/<name>.ts`.
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [CHANGELOG.md](./CHANGELOG.md) | Release history — major milestones and what changed |
+| [AGENTS.md](./AGENTS.md) | Agent operating rules — methodology, coding standards, testing |
+| [SDD_PROCESS.md](./SDD_PROCESS.md) | Three-layer change enforcement — the process every code change must follow |
+| [docs/spec/00-project-constitution.md](./docs/spec/00-project-constitution.md) | Project scope, operating mode, technical defaults, constraints |
+| [docs/spec/02-requirements-registry.md](./docs/spec/02-requirements-registry.md) | Canonical requirement IDs — source of truth for all FR/NFR/SEC/DATA/INT requirements |
+| [docs/spec/06-traceability/traceability-matrix.md](./docs/spec/06-traceability/traceability-matrix.md) | Requirement → spec → code → status mapping |
+| [docs/ACTIVE_WORKFLOW.md](./docs/ACTIVE_WORKFLOW.md) | Runtime workflow for operators — scout, evaluate, draft, verify |
+---
+
+## Challenges & Decisions
+
+### Full work history as source of truth, not the current resume
+**Problem:** AI resume tools hallucinate experience or generate generic claims that don't fit the role. The root cause is the resume as source of truth — it's already a lossy, role-specific snapshot.
+**Decision:** Work from a complete, codified work history with stable proof codes (`ACC-NNN`, `VOC-XX`, `MET-XX`). Every claim in every generated document must trace back to a code in that file.
+**Tradeoff:** Higher setup friction. Users have to invest time structuring their work history before getting any value out of the system.
+**Outcome:** Zero hallucination in generated documents. The AI cannot claim experience that isn't in the source file.
+
+### Local-first, no hosted service
+**Problem:** Job search data is sensitive — target companies, salary expectations, interview notes. Sending it to a third-party service creates a real privacy problem.
+**Decision:** Everything runs on the user's machine. No data leaves the desktop except the API calls they explicitly configure.
+**Tradeoff:** Higher setup barrier. Requires Node.js, Python, and a local database. Not consumer-grade onboarding.
+**Outcome:** Complete privacy ownership. The product delivers something a hosted SaaS can't credibly promise.
+
+### Spec-first under active development pressure
+**Problem:** During an active job search, the temptation is to ship fast and skip the process. Every day without a working scout is a missed opportunity.
+**Decision:** Held the spec-first process regardless — BMAD brief, PRD, requirement IDs assigned before any code. Every change request goes through the same gate.
+**Tradeoff:** Slower initial velocity. Writing specs when you're urgently job hunting is discipline, not preference.
+**Outcome:** A codebase that stayed coherent across 6 major versions. Every breaking change was traceable to a requirement. Bugs were diagnosed against specs, not guesses.
+
+---
+
+## How This Was Built
+
+I started this as a CLI scraper in January 2026, the month I was laid off. Six major versions later it's a full local web platform. The problem is personal: I needed a structured, repeatable job search process that wouldn't hallucinate my credentials or waste time on roles I'd never get.
+
+I wrote product requirements before any code. Brief, PRD, architecture decisions first. Every code change cites a traceable requirement ID (`FR-*`, `CR-*`, etc.) from the requirements registry. Nothing ships without a spec entry. Release milestones are in [`CHANGELOG.md`](./CHANGELOG.md); full spec traceability is in [`docs/spec/`](./docs/spec/).
+
+`docs/spec/` is the source of truth. If the code and the spec disagree, the spec wins.

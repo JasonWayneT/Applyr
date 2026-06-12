@@ -29,6 +29,18 @@ THEME_KEYWORDS = (
     ("intelligence", "intelligence and analytics platform evolution"),
     ("media", "media and audience data products"),
     ("franchise", "scalable franchise and vertical expansion"),
+    ("integration", "API integration and cross-system workflows"),
+    ("restful", "API integration and cross-system workflows"),
+    ("api", "API integration and cross-system workflows"),
+    ("analytics", "analytics product delivery and adoption"),
+    ("kpi", "KPI-driven product delivery"),
+    ("adoption", "product adoption and measurable outcomes"),
+    ("underwriting", "analytics for sales and underwriting workflows"),
+    ("fintech", "fintech product delivery and marketplace infrastructure"),
+    ("lender", "lender integrations and partner onboarding"),
+    ("funnel", "consumer funnel optimization and conversion"),
+    ("marketplace", "marketplace infrastructure and partner matching"),
+    ("borrower", "borrower experience and offer optimization"),
 )
 
 
@@ -58,8 +70,49 @@ def _substring_valid(phrase: str, jd_text: str) -> bool:
     return _normalize_ws(phrase) in _normalize_ws(jd_text)
 
 
+_REQ_SECTION_RE = re.compile(
+    r"^(requirements?|qualifications?|what\s+you.{0,8}bring|"
+    r"what\s+we.{0,8}looking|what\s+you.{0,8}need|"
+    r"preferred\s+qualifications?|basic\s+qualifications?|"
+    r"required\s+qualifications?|key\s+requirements?|"
+    r"minimum\s+qualifications?|must\s+have|you\s+bring|"
+    r"what\s+you\s+offer)(?:[^\n]{0,20})?\s*:?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+_NEXT_SECTION_RE = re.compile(
+    r"\n\s*\n[A-Z][A-Z\s]{3,}\n|\n##\s",
+    re.MULTILINE,
+)
+
+
+def extract_req_section(jd_text: str) -> str:
+    """Return the requirements/qualifications subsection of a JD (FR-196).
+
+    Searches for common requirement-section headings and returns the text
+    that follows, up to the next major section break. Falls back to the
+    full JD text when no heading is found, so callers can always use this
+    safely without a None check.
+    """
+    m = _REQ_SECTION_RE.search(jd_text)
+    if not m:
+        return jd_text
+    remainder = jd_text[m.end():]
+    boundary = _NEXT_SECTION_RE.search(remainder)
+    if boundary and boundary.start() > 100:
+        return remainder[: boundary.start()].strip()
+    trimmed = remainder[:2000].strip()
+    return trimmed if trimmed else jd_text
+
+
+def _jd_body_for_themes(jd_text: str) -> str:
+    """Theme detection body — excludes trailing job-board category tag footers."""
+    return jd_text[: max(1, int(len(jd_text) * 0.72))]
+
+
 def build_jd_profile_deterministic(jd_text: str, fit_summary: str = "") -> JdProfile:
-    jd_lower = jd_text.lower()
+    theme_source = _jd_body_for_themes(jd_text)
+    jd_lower = theme_source.lower()
     themes = []
     for kw, phrase in THEME_KEYWORDS:
         if kw in jd_lower and phrase not in themes:
@@ -276,6 +329,108 @@ def pick_cover_bullets(
             sigs_seen.add(sig)
 
     return picked[:k]
+
+
+_AI_SIGNAL_RE = re.compile(
+    r"\b(ai|llm|large\s+language\s+model|genai|generative\s+ai|"
+    r"agentic|agent[- ]based|chatgpt|gpt[-\s]?\d|openai|anthropic|gemini|"
+    r"claude|langchain|rag|retrieval[- ]augmented|vector\s+search|"
+    r"embedding|fine[- ]tun|prompt\s+engineer|machine\s+learning|ml\s+model|"
+    r"copilot|ai[- ]powered|ai[- ]native|ai[- ]first|nlp|"
+    r"natural\s+language\s+processing|transformer)\b",
+    re.IGNORECASE,
+)
+
+
+def has_ai_signal(jd_text: str) -> bool:
+    """Return True when the JD body contains AI/LLM role indicators (FR-209).
+
+    Only scans the first 80% of the text to avoid triggering on industry
+    category tag footers common on job board pages (e.g. BuiltIn's
+    'Machine Learning  Generative AI' tag line).
+    """
+    from conversion_framing import _jd_body_for_signals
+
+    return bool(_AI_SIGNAL_RE.search(_jd_body_for_signals(jd_text)))
+
+
+_ROLE_DESC_SECTION_RE = re.compile(
+    r"^(what\s+you.{0,10}do|responsibilities|the\s+role|your\s+impact|"
+    r"what\s+you.{0,10}own|key\s+responsibilities|what\s+you.{0,10}build|"
+    r"day[- ]to[- ]day|in\s+this\s+role)(?:[^\n]{0,20})?\s*:?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+_PAIN_SIGNAL_PATTERNS: List[re.Pattern] = [
+    re.compile(p, re.IGNORECASE)
+    for p in [
+        r"\bhelp\s+us\s+(\w+(?:\s+\w+){0,3})",
+        r"\breduce\s+(\w+(?:\s+\w+){0,4})\b",
+        r"\bimprove\s+(\w+(?:\s+\w+){0,4})\b",
+        r"\bscale\s+(?:the\s+|our\s+)?(\w+(?:\s+\w+){0,4})\b",
+        r"\bgrow\s+(?:the\s+|our\s+)?(\w+(?:\s+\w+){0,4})\b",
+        r"\bdrive\s+(\w+(?:\s+\w+){0,4})\b",
+        r"\bbuild\s+(?:a\s+|the\s+)?(\w+(?:\s+\w+){0,4})\b",
+        r"\bincrease\s+(\w+(?:\s+\w+){0,4})\b",
+        r"\bsolve\s+(?:complex\s+)?(\w+(?:\s+\w+){0,4})\b",
+        r"\bown\s+(?:the\s+)?(\w+(?:\s+\w+){0,4})\b",
+        r"\b(?:lender|borrower|consumer|funnel)\s+(\w+(?:\s+\w+){0,3})\b",
+        r"\b(?:run|launch)\s+(\w+(?:\s+\w+){0,4})\b",
+    ]
+]
+
+_PAIN_STOP_WORDS = frozenset({
+    "a", "an", "the", "our", "your", "their", "this", "that", "these",
+    "and", "or", "but", "with", "for", "on", "in", "at", "to", "of",
+    "we", "you", "they", "us", "team", "role", "company",
+})
+
+
+def _extract_role_desc_section(jd_text: str) -> str:
+    m = _ROLE_DESC_SECTION_RE.search(jd_text)
+    if m:
+        remainder = jd_text[m.end():]
+        boundary = _NEXT_SECTION_RE.search(remainder)
+        if boundary and boundary.start() > 80:
+            return remainder[: boundary.start()].strip()
+        return remainder[:2000].strip()
+    return jd_text[:3000]
+
+
+def extract_jd_pain_points(jd_text: str, max_results: int = 5) -> List[str]:
+    """Extract short hiring-signal phrases from the JD role description (FR-211).
+
+    Returns up to `max_results` short strings (3-7 words) like
+    "reduce churn", "scale the platform", "help us grow" that are
+    grounded as literal substrings of the JD. Used for cover story
+    selection scoring and opener framing.
+    """
+    section = _extract_role_desc_section(jd_text)
+    section_l = section.lower()
+    seen: set = set()
+    results: List[str] = []
+
+    for pat in _PAIN_SIGNAL_PATTERNS:
+        for m in pat.finditer(section_l):
+            captured = m.group(1).strip()
+            words = captured.split()
+            if not words or words[0] in _PAIN_STOP_WORDS:
+                continue
+            while words and words[-1].lower() in _PAIN_STOP_WORDS:
+                words.pop()
+            if not words:
+                continue
+            verb_part = m.group(0).split(captured)[0].strip()
+            full_phrase = f"{verb_part} {' '.join(words)}".strip()
+            key = full_phrase[:50]
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(full_phrase)
+            if len(results) >= max_results:
+                return results
+
+    return results
 
 
 def bridge_hints_for_jd(jd_text: str) -> str:

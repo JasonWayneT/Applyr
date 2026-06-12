@@ -80,7 +80,7 @@ export function resolveCompanyFolder(company: string, baseDir: string): string {
         return path.join(baseDir, d);
       }
     }
-  } catch (_) {}
+  } catch {}
 
   return standardPath;
 }

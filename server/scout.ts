@@ -1,7 +1,8 @@
 import { db, logActivity } from './db.js';
-import { buildPythonEnv, buildTsxSpawn, PROJECT_ROOT } from './shared.js';
+import { buildPythonEnv, buildTsxSpawn } from './shared.js';
 import { isPipelineBusy } from './pipelineLock.js';
 import { runStreamLines } from './pipeline/processRunner.js';
+import { runConnectorOrchestration } from './services/scoutOrchestrator.js';
 
 function spawnProcessAsync(
   command: string,
@@ -62,6 +63,8 @@ function handleStderr(source: string, stderr: string) {
   }
 }
 
+import { broadcastSyncEvent } from './routes/pipeline.js';
+
 export const runScoutSync = async () => {
   if (isPipelineBusy()) {
     logActivity('WARN', 'Scout', 'Sync skipped — pipeline already running.');
@@ -107,29 +110,16 @@ export const runScoutSync = async () => {
   try {
     // --- STAGE 1: SCOUT ---
     if (activeStage === 'SCOUT') {
-      updateCheckpoint(runId, 'SCOUT', 'Crawling and scanning direct job feeds...');
-      logActivity('INFO', 'Scout', 'Executing Stage 1/5: Crawling job feeds via TS Crawler.');
-      
-      const scoutSpawn = buildTsxSpawn('scripts/scout_local.ts');
-      const code = await spawnProcessAsync(scoutSpawn.command, scoutSpawn.args, extraEnv, (output) => {
-        const lines = output.trim().split('\n');
-        for (const line of lines) {
-          if (line.startsWith('[LOG]')) logActivity('INFO', 'Scout', line.replace('[LOG]', '').trim());
-          else if (line.startsWith('[FOUND]')) logActivity('INFO', 'Scout', `Match Found: ${line.replace('[FOUND]', '').trim()}`);
-          else if (line.startsWith('[ACTION]')) logActivity('WARN', 'Scout', `USER ACTION: ${line.replace('[ACTION]', '').trim()}`);
-          else if (line.startsWith('[REJECT]')) logActivity('INFO', 'Scout', `Skipped: ${line.replace('[REJECT]', '').trim()}`);
-          else if (line.trim()) logActivity('INFO', 'Scout', line.trim());
-        }
-      }, (stderr) => {
-        handleStderr('Scout', stderr);
-      });
-
-      if (code !== 0) throw new Error(`Scout stage exited with non-zero code ${code}`);
+      broadcastSyncEvent('stage_handoff', { type: 'stage_handoff', from: 'NONE', to: 'SCOUT', total_passed: 0 });
+      updateCheckpoint(runId, 'SCOUT', 'Running connector orchestration...');
+      logActivity('INFO', 'Scout', 'Executing Stage 1/5: Running job connector orchestration.');
+      await runConnectorOrchestration();
       activeStage = 'BACKFILL';
     }
 
     // --- STAGE 2: BACKFILL ---
     if (activeStage === 'BACKFILL') {
+      broadcastSyncEvent('stage_handoff', { type: 'stage_handoff', from: 'SCOUT', to: 'BACKFILL', total_passed: 0 });
       updateCheckpoint(runId, 'BACKFILL', 'Reconciling URLs and executing backfills...');
       logActivity('INFO', 'Scout', 'Executing Stage 2/5: Reconciling missing URLs.');
 
@@ -146,6 +136,7 @@ export const runScoutSync = async () => {
 
     // --- STAGE 3: SCRAPE (requeue Needs Retry, then scrape New) ---
     if (activeStage === 'SCRAPE') {
+      broadcastSyncEvent('stage_handoff', { type: 'stage_handoff', from: 'BACKFILL', to: 'SCRAPE', total_passed: 0 });
       updateCheckpoint(runId, 'SCRAPE', 'Re-queuing jobs that need another pipeline pass...');
       logActivity('INFO', 'Scout', 'Executing Stage 3/5: Re-queuing Needs Retry jobs.');
 
@@ -174,6 +165,7 @@ export const runScoutSync = async () => {
 
     // --- STAGE 4: EVALUATE ---
     if (activeStage === 'EVALUATE') {
+      broadcastSyncEvent('stage_handoff', { type: 'stage_handoff', from: 'SCRAPE', to: 'EVALUATE', total_passed: 0 });
       updateCheckpoint(runId, 'EVALUATE', 'Evaluating fit and generating PDF assets...');
       logActivity('INFO', 'Scout', 'Executing Stage 5/5: Evaluating fit and drafting assets.');
 
@@ -226,11 +218,26 @@ export const runScoutSync = async () => {
     db.prepare(`UPDATE system_status SET status = 'completed', current_item = 'Completed end-to-end sync successfully!', updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run();
     logActivity('INFO', 'Scout', `Pipeline ${runId} fully completed.`);
 
+    // Find warned/errored sources
+    const sourcesWarned = db.prepare("SELECT name FROM sources WHERE status IN ('warning', 'error')").all().map((s: any) => s.name);
+    broadcastSyncEvent('run_complete', {
+      type: 'run_complete',
+      total_fetched: 0,
+      total_passed: 0,
+      sources_warned: sourcesWarned,
+    });
+
   } catch (err: any) {
     const errMsg = err.message || String(err);
     logActivity('ERROR', 'Scout', `Pipeline ${runId} aborted due to failure: ${errMsg}`);
     
     db.prepare(`UPDATE pipeline_runs SET status = 'FAILED', last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE run_id = ?`).run(errMsg, runId);
     db.prepare(`UPDATE system_status SET status = 'idle', current_item = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'`).run(`Sync stopped: ${errMsg}`);
+
+    broadcastSyncEvent('connector_error', {
+      type: 'connector_error',
+      source: 'Scout',
+      error: errMsg,
+    });
   }
 };

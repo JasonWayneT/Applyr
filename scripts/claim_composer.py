@@ -24,6 +24,13 @@ MAX_BRIDGE_BULLETS = 1
 def _draft_mode() -> str:
     return os.environ.get("DRAFT_MODE", "compose").lower()
 
+def _bridge_prefixes_enabled() -> bool:
+    """Bridge prefixes add JD-derived framing not present in source claims.
+    Disabled by default to prevent ungrounded reframing in employer submissions.
+    Set USE_BRIDGE_PREFIXES=1 to re-enable for experimental runs only.
+    """
+    return os.environ.get("USE_BRIDGE_PREFIXES", "0").strip() == "1"
+
 def pick_bridge_prefix(jd_text: str) -> str:
     """At most one bridge clause per job (first matching JD keyword)."""
     phrases = load_bridge_phrases()
@@ -95,8 +102,16 @@ def compose_bullet(
     
     if not valid:
         import sys
-        print(f"    [Warning] Local validation failed for {claim_id}: {err}. Falling back to raw text.", file=sys.stderr)
-        return core.strip()
+        # Return the catalog source text directly rather than the prefix-modified
+        # version that failed validation. This preserves claim accuracy while
+        # discarding only the JD-bridge reframing that triggered the violation.
+        source_text = catalog.raw_truth_lines.get(claim_id, core).strip()
+        print(
+            f"    [Warning] Local validation failed for {claim_id}: {err}. "
+            f"Shipping catalog source text (bridge prefix dropped).",
+            file=sys.stderr,
+        )
+        return source_text
         
     return bullet
 
@@ -129,7 +144,8 @@ def generate_bullets_compose(
 
     for claim_id in selected_ids:
         bullet = compose_bullet(
-            claim_id, catalog, jd_text, profile, use_bridge=claim_id in bridge_ids
+            claim_id, catalog, jd_text, profile,
+            use_bridge=(_bridge_prefixes_enabled() and claim_id in bridge_ids)
         )
         if not bullet:
             fallback_count += 1

@@ -26,6 +26,8 @@
 | CR-039 | Transferable skills over domain gate | Implemented |
 | CR-040 | Theme primary claims (resume/cover numeric alignment) | Implemented |
 | CR-041 | ATS watchlist — no example.json at runtime | Implemented |
+| CR-042 | Resume quality enforcement (strict gate + retry + fleet proof) | Implemented |
+| CR-043 | Deterministic cover letter voice | Implemented |
 
 ## Archive (implemented — do not treat as daily instructions)
 

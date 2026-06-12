@@ -27,9 +27,16 @@ Generate **conversion-oriented** cover letters that complement resumes: JD match
 3. Two body paragraphs: context → claim proof → employer bridge.
 4. Plan file documents which claims and JD needs were used.
 
+## Cover voice (CR-043)
+
+- Deterministic phrasing via `scripts/cover_phrasing.py` — see `cover_voice.example.md`
+- Word band **300–400**; proof bodies are `cover_story` without robot JD bridges
+- No LLM voice rewrite on submission path
+
 ## Out of scope (v1)
 
 - Full-letter local LLM prose
+- LLM voice rewrite pass
 - Gemini/cloud cover generation
 - Reading resume for complement selection (optional overlap **warning** only, post-hoc)
 

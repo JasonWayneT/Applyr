@@ -16,8 +16,13 @@
 
     /* Linting */
     "strict": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Path aliases */
+    "paths": {
+      "shared/*": ["./shared/*"]
+    }
   },
-  "include": ["src", "server"],
+  "include": ["src", "server", "shared", "packages"],
   "exclude": ["scripts", "**/*.test.ts"]
 }

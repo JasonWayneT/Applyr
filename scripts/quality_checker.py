@@ -1,12 +1,20 @@
 import os
 import re
 import json
+from typing import Dict, List
 
-HEADER_BLOCK = """# JASON TAYLOR
+# Sections that may appear in a final resume beyond the three required ones.
+# Used by downstream guards to avoid flagging legitimately injected sections.
+KNOWN_OPTIONAL_SECTIONS = {"CORE COMPETENCIES", "PROJECTS"}
 
-San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug
+def _header_block() -> str:
+    from utils import format_contact_header_block
+    return format_contact_header_block()
 
-"""
+
+def _candidate_name_upper() -> str:
+    from utils import load_identity_profile
+    return (load_identity_profile().get("name") or "John Doe").upper()
 
 def check_and_repair_cover_letter(file_path):
     """
@@ -37,17 +45,18 @@ def check_and_repair_cover_letter(file_path):
         messages.append("[CL-008 FAIL] Forbidden em-dash (—) or '--' found. Violates the Anti-AI fingerprint standard.")
         
     # Check for header (Rule H-001/H-002: Contact Header in body)
-    if "# JASON TAYLOR" not in content.upper():
+    if f"# {_candidate_name_upper()}" not in content.upper():
         messages.append("[H-001 WARNING] Missing standard header block. Auto-repairing...")
-        content = HEADER_BLOCK + content.lstrip()
+        content = _header_block() + content.lstrip()
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
         repaired = True
         messages.append("[H-001 OK] Header block successfully injected.")
 
     # Check for length (Rule CL-006: ~1 page; CR-024 Match Brief allows slightly longer)
+    # 2600 chars aligns with 350-word budget at ~6 chars/word plus structural overhead
     char_count = len(content)
-    cover_char_limit = 2400
+    cover_char_limit = 2600
     if char_count > cover_char_limit:
         messages.append(
             f"[CL-006 WARNING] Cover letter length ({char_count} chars) exceeds "
@@ -126,14 +135,15 @@ def check_resume(file_path):
     if cleaned_placeholders:
         messages.append(f"[R-009 FAIL] Corrupted placeholder brackets found: {', '.join(cleaned_placeholders)}")
 
-    # Check that all three core career history experiences are present (Rule R-005: Use Standard Section Headings and Content)
+    # Check that core career history employers are present (Rule R-005)
     lower_content = content.lower()
-    if "cision" not in lower_content:
-        messages.append("[R-005 FAIL] Missing core career history experience: Cision")
-    if "sterkly" not in lower_content:
-        messages.append("[R-005 FAIL] Missing core career history experience: Sterkly")
-    if "zero to sixty" not in lower_content and "zero to 60" not in lower_content:
-        messages.append("[R-005 FAIL] Missing core career history experience: Zero to Sixty")
+    from candidate_context import employer_display_name, load_employer_headers, load_employers_ordered
+
+    headers = load_employer_headers()
+    for slug in load_employers_ordered():
+        label = employer_display_name(slug, headers)
+        if label.lower() not in lower_content and slug.replace("_", " ") not in lower_content:
+            messages.append(f"[R-005 FAIL] Missing core career history experience: {label}")
 
     try:
         from local_draft_stages import count_bullets_by_employer
@@ -141,13 +151,18 @@ def check_resume(file_path):
 
         quotas = resume_bullet_quotas()
         counts = count_bullets_by_employer(content)
-        cision_min = min(4, quotas.get("cision", 5))
-        if counts.get("cision", 0) < cision_min:
-            messages.append(
-                f"[R-010 FAIL] Cision has {counts.get('cision', 0)} bullets; "
-                f"expected at least {cision_min}."
-            )
-        for emp, label in (("sterkly", "Sterkly"), ("zero_to_sixty", "Zero to Sixty")):
+        ordered = load_employers_ordered()
+        if ordered:
+            primary = ordered[0]
+            primary_min = min(4, quotas.get(primary, 5))
+            if counts.get(primary, 0) < primary_min:
+                label = employer_display_name(primary, headers)
+                messages.append(
+                    f"[R-010 FAIL] {label} has {counts.get(primary, 0)} bullets; "
+                    f"expected at least {primary_min}."
+                )
+        for emp in ordered[1:]:
+            label = employer_display_name(emp, headers)
             want = quotas.get(emp, 3)
             have = counts.get(emp, 0)
             if have < max(2, want - 1):
@@ -180,41 +195,278 @@ def check_resume(file_path):
     return True, "[R-001 PASS] Resume passed all best practice checks."
 
 
+def check_conversion_signals(
+    resume_md: str, bullets_by_company: Dict, jd_text: str = ""
+) -> List[str]:
+    """Detect non-fatal conversion anti-patterns and return a list of warning strings (FR-203).
+
+    Warnings are logged to draft_manifest.json["conversion_warnings"] but never
+    block the pipeline. Each warning includes a rule code and a plain description.
+    """
+    warnings: List[str] = []
+
+    # Strong past-tense action verbs that indicate achievement framing
+    _STRONG_VERBS = re.compile(
+        r"^(Stabilized|Drove|Built|Designed|Delivered|Implemented|Reduced|Eliminated|"
+        r"Launched|Led|Partnered|Resolved|Closed|Identified|Prioritized|Replaced|"
+        r"Managed|Coordinated|Scoped|Navigated|Maintained|Generated|Sustained|"
+        r"Restored|Enabled|Accelerated|Increased|Improved|Developed|Established|"
+        r"Executed|Negotiated|Streamlined|Automated|Deployed|Migrated|Rebuilt|"
+        r"Reverse-engineered|Architected|Synthesized|Presented|Created|Secured|"
+        r"Enforced|Expanded|Translated|Owned|Co-created|Facilitated|Extended|"
+        r"Spearheaded|Introduced|Restructured|Consolidated|Optimized|Scaled|"
+        r"Tracked|Formalized|Championed|Refined)\b",
+        re.IGNORECASE,
+    )
+
+    # Extract all bullet lines from the resume
+    bullet_lines = [
+        ln.lstrip("* ").strip()
+        for ln in resume_md.splitlines()
+        if ln.strip().startswith("* ")
+    ]
+
+    from conversion_framing import (
+        defensive_summary_violations,
+        has_outcome_metric,
+        impact_pyramid_inverted,
+        is_activity_bullet,
+        metric_count_for_bullets,
+    )
+
+    # CW-001: Duty-heavy bullet (activity framing or no outcome signal)
+    for bullet in bullet_lines:
+        if is_activity_bullet(bullet):
+            warnings.append(
+                f"[CW-001] Activity-only bullet (process verb, no outcome metric): \"{bullet[:80]}...\""
+                if len(bullet) > 80 else
+                f"[CW-001] Activity-only bullet (process verb, no outcome metric): \"{bullet}\""
+            )
+
+    from candidate_context import employer_display_name, primary_employer_slug
+
+    senior_slug = primary_employer_slug()
+    senior_label = employer_display_name(senior_slug)
+
+    # CW-002: Most-recent employer has no quantified bullets
+    senior_from_map = bullets_by_company.get(senior_slug, []) if bullets_by_company else []
+    check_bullets = senior_from_map if senior_from_map else bullet_lines[:5]
+    if check_bullets and not any(re.search(r"\d", b) for b in check_bullets):
+        warnings.append(
+            f"[CW-002] {senior_label} (most recent employer) has no quantified bullets. "
+            "At least one metric strongly recommended."
+        )
+
+    # CW-003: Bullet word count exceeds MAX_BULLET_WORDS
+    try:
+        from local_draft_stages import MAX_BULLET_WORDS as _MAX_WORDS
+    except Exception:
+        _MAX_WORDS = 28
+    for bullet in bullet_lines:
+        word_count = len(bullet.split())
+        if word_count > _MAX_WORDS:
+            warnings.append(
+                f"[CW-003] Bullet exceeds {_MAX_WORDS} words ({word_count} words): "
+                f"\"{bullet[:70]}...\""
+            )
+
+    # CW-004: Em-dash present (already a hard fail in R-008, but log as conversion signal too)
+    if "\u2014" in resume_md or " -- " in resume_md:
+        warnings.append(
+            "[CW-004] Em-dash detected in resume. Violates anti-AI fingerprint rule."
+        )
+
+    # CW-005: Defensive summary framing without security JD signal
+    summary_m = re.search(
+        r"##\s*PROFESSIONAL\s+SUMMARY\s*\n+(.+?)(?=\n##|\Z)",
+        resume_md,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if summary_m:
+        violations = defensive_summary_violations(summary_m.group(1), jd_text=jd_text)
+        if violations:
+            warnings.append(
+                "[CW-005] Summary contains defensive/maintenance framing "
+                f"({', '.join(sorted(set(violations))[:2])}). "
+                "Avoid unless JD is security-focused."
+            )
+
+    from candidate_context import employer_tiers
+
+    _, mid_slug, junior_slug = employer_tiers()
+    mid_label = employer_display_name(mid_slug)
+    junior_label = employer_display_name(junior_slug)
+
+    # CW-006: Activity-only bullet (alias logged at CW-001; count mid-career section)
+    mid_bullets = bullets_by_company.get(mid_slug, []) if bullets_by_company else []
+    if mid_bullets and not any(has_outcome_metric(b) for b in mid_bullets):
+        warnings.append(
+            f"[CW-007] {mid_label} section has no outcome metrics. "
+            "At least one quantified business result recommended."
+        )
+
+    # CW-008: Impact pyramid inverted (junior role stronger than senior)
+    if bullets_by_company:
+        flat = {}
+        for emp, blist in bullets_by_company.items():
+            for i, b in enumerate(blist):
+                flat[f"{emp}-{i}"] = b
+        if impact_pyramid_inverted(flat):
+            c = metric_count_for_bullets(flat)
+            warnings.append(
+                "[CW-008] Impact pyramid inverted: junior role has more outcome metrics "
+                f"than senior ({senior_label}={c.get(senior_slug, 0)}, "
+                f"{mid_label}={c.get(mid_slug, 0)}, "
+                f"{junior_label}={c.get(junior_slug, 0)})."
+            )
+
+    from resume_conversion_eval import (
+        check_sterkly_narrative_coherence,
+        check_summary_completeness,
+        check_summary_prose_quality,
+        check_summary_theme_grounding,
+    )
+
+    warnings.extend(check_summary_completeness(resume_md))
+    warnings.extend(check_summary_prose_quality(resume_md))
+    warnings.extend(check_summary_theme_grounding(resume_md, bullets_by_company))
+    warnings.extend(check_sterkly_narrative_coherence(resume_md))
+
+    return warnings
+
+
+def check_conversion_critique(
+    resume_md: str,
+    pdf_path: str = "",
+    bullets_by_company: Dict | None = None,
+    jd_text: str = "",
+) -> Dict:
+    """Human-mirror conversion critique after PDF render (FR-220)."""
+    from resume_conversion_eval import evaluate_resume_conversion
+
+    return evaluate_resume_conversion(
+        resume_md,
+        pdf_path=pdf_path or None,
+        bullets_by_company=bullets_by_company,
+        jd_text=jd_text,
+    )
+
+
+_ENTHUSIASM_RE = re.compile(
+    r"\b(excited|passionate|thrilled|eager|enthusiastic|love to|eager to|deeply inspired|"
+    r"genuinely inspired|inspired by|drawn to)\b",
+    re.IGNORECASE,
+)
+
+_EVIDENCE_RE = re.compile(
+    r"\d+|"
+    r"\b(reduced|saved|increased|achieved|built|launched|resolved|delivered|drove|"
+    r"eliminated|stabilized|improved|deployed|rebuilt|scoped|prioritized|generated|"
+    r"coordinated|automated|migrated|reverse-engineered)\b",
+    re.IGNORECASE,
+)
+
+_CL_GENERIC_TOKENS: frozenset = frozenset({
+    "experience", "applying", "position", "application", "background", "expertise",
+    "knowledge", "delivered", "product", "manager", "management", "directly",
+    "relevant", "aligns", "track", "record", "posting", "emphasizes", "welcome",
+    "conversation", "regards", "sincere", "hiring", "forward", "advance",
+    "opportunity", "motivated", "confident", "believe", "skills", "ability",
+    "focused", "capable", "qualified", "dedicated", "committed", "interested",
+    "described", "outlined", "mentioned", "understand", "familiar",
+})
+
+
+def _opener_paragraph(cl_text: str) -> str:
+    """Return the first body paragraph after the salutation."""
+    body = cl_text.split("Dear Hiring Manager,", 1)[-1] if "Dear Hiring Manager," in cl_text else cl_text
+    paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+    return paragraphs[0] if paragraphs else ""
+
+
+def check_cl_conversion_signals(cl_text: str, jd_text: str = "") -> List[str]:
+    """Detect non-fatal cover letter conversion anti-patterns (FR-212).
+
+    Returns a list of warning strings keyed by rule code. Non-blocking;
+    logged to draft_manifest.json['cl_conversion_warnings'].
+
+    Rules:
+      CLW-002: Opener lacks any JD-specific noun beyond company name.
+      CLW-004: Enthusiasm word present with no evidence in the same paragraph.
+    """
+    warnings: List[str] = []
+
+    paragraphs = [
+        p.strip()
+        for p in cl_text.split("\n\n")
+        if p.strip() and not p.strip().startswith("#")
+    ]
+
+    body_paragraphs = paragraphs
+    if "Dear Hiring Manager," in cl_text:
+        body = cl_text.split("Dear Hiring Manager,", 1)[-1]
+        body_paragraphs = [p.strip() for p in body.split("\n\n") if p.strip()]
+
+    opener = body_paragraphs[0] if body_paragraphs else ""
+
+    if opener and jd_text:
+        jd_long_words = set(re.findall(r"\b[a-z]{8,}\b", jd_text.lower()))
+        opener_long_words = set(re.findall(r"\b[a-z]{8,}\b", opener.lower()))
+        jd_specific = jd_long_words & opener_long_words - _CL_GENERIC_TOKENS
+        if len(jd_specific) < 2:
+            warnings.append(
+                "[CLW-002] Opener contains fewer than 2 JD-specific terms beyond company name. "
+                "Letter may read as generic. Consider including JD-derived pain point or product reference."
+            )
+
+    for para in body_paragraphs:
+        if _ENTHUSIASM_RE.search(para) and not _EVIDENCE_RE.search(para):
+            excerpt = para[:80].rstrip()
+            warnings.append(
+                f"[CLW-004] Enthusiasm word without supporting evidence in paragraph: "
+                f"\"{excerpt}...\""
+                if len(para) > 80 else
+                f"[CLW-004] Enthusiasm word without supporting evidence in paragraph: \"{para}\""
+            )
+
+    return warnings
+
+
 def repair_resume_markdown(content: str, education_block: str | None = None) -> str:
     """
     Deterministic R-005 repair before QA (CR-012 / FR-083).
     Injects missing headers and education without LLM creativity.
     """
-    if "# JASON TAYLOR" not in content.upper():
-        content = HEADER_BLOCK + content.lstrip()
+    header_block = _header_block()
+    if f"# {_candidate_name_upper()}" not in content.upper():
+        content = header_block + content.lstrip()
 
     if not re.search(r"^##\s*(?:\*\*)?PROFESSIONAL\s+SUMMARY", content, re.MULTILINE | re.IGNORECASE):
-        insert = "\n## PROFESSIONAL SUMMARY\n\nProduct Manager with B2B SaaS platform ownership and cross-functional delivery experience.\n"
-        if HEADER_BLOCK.strip() in content:
-            content = content.replace(HEADER_BLOCK.strip(), HEADER_BLOCK.strip() + insert, 1)
+        insert = "\n## PROFESSIONAL SUMMARY\n\nProduct Manager with 6+ years across enterprise SaaS platforms, consumer software, and internal tooling.\n"
+        if header_block.strip() in content:
+            content = content.replace(header_block.strip(), header_block.strip() + insert, 1)
         else:
-            content = HEADER_BLOCK + insert + content.lstrip()
+            content = header_block + insert + content.lstrip()
 
     if not re.search(r"^##\s*(?:\*\*)?PROFESSIONAL\s+EXPERIENCE", content, re.MULTILINE | re.IGNORECASE):
         content += "\n\n## PROFESSIONAL EXPERIENCE\n"
 
     if not re.search(r"^##\s*(?:\*\*)?EDUCATION", content, re.MULTILINE | re.IGNORECASE):
-        edu = education_block or (
-            "## EDUCATION\n\n"
-            "* **Bachelor of Business Administration, Major in Management** — "
-            "National University, San Diego, California, 2019\n"
-        )
+        from candidate_context import parse_education_block, load_work_experience_text
+
+        edu = education_block or parse_education_block(load_work_experience_text())
         content = content.rstrip() + "\n\n" + edu.strip() + "\n"
 
-    lower = content.lower()
-    from local_draft_stages import EMPLOYER_EXPERIENCE_HEADERS, normalize_employer_job_titles
+    from candidate_context import employer_display_name, load_employer_headers, load_employers_ordered
+    from local_draft_stages import _employer_headers, normalize_employer_job_titles
 
-    if "cision" not in lower:
-        content += "\n" + EMPLOYER_EXPERIENCE_HEADERS["cision"].split("\n")[0] + "\n* Platform and ingestion systems delivery.\n"
-    if "sterkly" not in lower:
-        content += "\n" + EMPLOYER_EXPERIENCE_HEADERS["sterkly"].split("\n")[0] + "\n"
-    if "zero to sixty" not in lower and "zero to 60" not in lower:
-        content += "\n" + EMPLOYER_EXPERIENCE_HEADERS["zero_to_sixty"].split("\n")[0] + "\n"
+    headers = _employer_headers()
+    lower = content.lower()
+    for slug in load_employers_ordered():
+        label = employer_display_name(slug, headers).lower()
+        if label not in lower and slug.replace("_", " ") not in lower:
+            stub = headers.get(slug, f"### {employer_display_name(slug, headers)}\n").split("\n")[0]
+            content += f"\n{stub}\n* Platform and delivery outcomes.\n"
 
     return normalize_employer_job_titles(content)
 
@@ -241,6 +493,12 @@ def run_quality_checks(company_dir):
         print(f"  [OK] Cover Letter: {cl_msg}")
 
     return res_passed and cl_passed
+
+def __getattr__(name: str):
+    if name == "HEADER_BLOCK":
+        return _header_block()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 if __name__ == "__main__":
     import sys

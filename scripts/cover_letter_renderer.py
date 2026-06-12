@@ -1,4 +1,4 @@
-"""Render CoverLetterPlan to markdown (CR-024 / FR-097)."""
+"""Render CoverLetterPlan to markdown (CR-024 / FR-097; voice CR-043; structure CR-047)."""
 from __future__ import annotations
 
 import re
@@ -6,11 +6,10 @@ from typing import Tuple
 
 from claim_catalog import ClaimCatalog
 from cover_letter_plan import CoverLetterPlan
-from cover_narrative_templates import render_application_first_opening, render_proof_paragraph
-from quality_checker import HEADER_BLOCK
+from cover_phrasing import CHAR_MAX, WORD_MAX, WORD_MIN, apply_voice_polish
 
-WORD_MIN = 300
-WORD_MAX = 350
+COVER_PAGE_CHAR_LIMIT = 2600
+from quality_checker import HEADER_BLOCK
 
 
 def _word_count(body: str) -> int:
@@ -18,12 +17,11 @@ def _word_count(body: str) -> int:
 
 
 def _trim_words(text: str, target_reduction: int) -> str:
-    """Remove filler phrases to approach word budget."""
+    """Remove filler phrases to approach word budget (never strip metrics)."""
     fillers = (
         " directly",
         " measurable",
         " end to end",
-        " cross-functional",
     )
     out = text
     for f in fillers:
@@ -35,56 +33,62 @@ def _trim_words(text: str, target_reduction: int) -> str:
     return re.sub(r"\s+", " ", out).strip()
 
 
-def render_cover_letter(
-    plan: CoverLetterPlan, catalog: ClaimCatalog, jd_text: str = ""
+def _render_block_letter(
+    plan: CoverLetterPlan, catalog: ClaimCatalog, jd_text: str
 ) -> str:
-    company = plan.company_display
-    bodies = []
-    for slot in plan.proofs:
-        para = render_proof_paragraph(slot, catalog, company)
-        if para:
-            bodies.append(para)
+    from cover_letter_structure import build_cover_blocks, blocks_to_prose
 
-    need0 = plan.ranked_needs[0] if plan.ranked_needs else plan.jd_goal
-    opening = render_application_first_opening(
-        company,
-        plan.role_title,
-        need0,
-        plan.theme_keywords,
-        jd_text,
-    )
-    if plan.match_thesis and plan.match_thesis not in opening:
-        opening = f"{opening} {plan.match_thesis}"
-    # Ensure ranked need appears in body for audit (opening covers platform mandate)
-    if plan.research_hook:
-        opening = f"{plan.research_hook} {opening}"
-
-    close = (
-        f"I would welcome a conversation about how this background can help {company} "
-        f"advance {plan.jd_goal.rstrip('.')}, with the same discipline on metrics, "
-        f"stakeholder alignment, and platform delivery described above."
-    )
-
-    bridge_para = (
-        f"Together, these examples reflect how I work with Engineering, Data, and "
-        f"commercial stakeholders to translate platform requirements into shipped, measurable outcomes, "
-        f"aligned with the Engineering and Data partnership model in your posting."
-    )
-    prose_blocks = [opening] + bodies + [bridge_para, close]
-    body_text = "\n\n".join(prose_blocks)
+    blocks = build_cover_blocks(plan, catalog, jd_text)
+    body_text = blocks_to_prose(blocks)
     wc = _word_count(body_text)
     if wc > WORD_MAX:
         excess = wc - WORD_MAX
-        bodies = [_trim_words(b, min(3, excess // max(len(bodies), 1))) for b in bodies]
-        body_text = "\n\n".join([opening] + bodies + [close])
+        prose_parts = body_text.split("\n\n")
+        if len(prose_parts) > 2:
+            prose_parts = [
+                prose_parts[0],
+                *[
+                    _trim_words(
+                        p, min(3, excess // max(len(prose_parts) - 2, 1))
+                    )
+                    for p in prose_parts[1:-1]
+                ],
+                prose_parts[-1],
+            ]
+            body_text = "\n\n".join(prose_parts)
+
+    if len(body_text) > CHAR_MAX:
+        prose_parts = body_text.split("\n\n")
+        if len(prose_parts) > 2:
+            body_text = "\n\n".join([prose_parts[0], *prose_parts[1:-1], prose_parts[-1]])
+
+    if len(body_text) > COVER_PAGE_CHAR_LIMIT:
+        parts = body_text.split("\n\n")
+        while len("\n\n".join(parts)) > COVER_PAGE_CHAR_LIMIT and len(parts) > 2:
+            drop_idx = min(range(1, len(parts) - 1), key=lambda i: len(parts[i]))
+            parts.pop(drop_idx)
+        body_text = "\n\n".join(parts)
+
+    from utils import load_identity_profile
 
     salutation = "Dear Hiring Manager,"
-    signoff = "Best regards,\n\nJason Taylor"
+    candidate_name = (load_identity_profile().get("name") or "Candidate").strip()
+    signoff = f"Best regards,\n\n{candidate_name}"
     letter = f"{HEADER_BLOCK.strip()}\n\n{salutation}\n\n{body_text}\n\n{signoff}\n"
-    return letter
+    return apply_voice_polish(letter)
+
+
+def render_cover_letter(
+    plan: CoverLetterPlan, catalog: ClaimCatalog, jd_text: str = ""
+) -> str:
+    return _render_block_letter(plan, catalog, jd_text)
 
 
 def word_count_report(markdown: str) -> Tuple[int, bool]:
-    body = markdown.split("Dear Hiring Manager,")[-1] if "Dear Hiring Manager" in markdown else markdown
+    body = (
+        markdown.split("Dear Hiring Manager,")[-1]
+        if "Dear Hiring Manager" in markdown
+        else markdown
+    )
     wc = _word_count(body)
     return wc, WORD_MIN <= wc <= WORD_MAX

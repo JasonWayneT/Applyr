@@ -115,9 +115,19 @@ const EXP_OPTIONS = [
   'Expert/Leader (9+ Years)',
 ];
 
+interface SourceEntry {
+  id: string;
+  name: string;
+  type: 'ats_api' | 'vendor_api' | 'crawl';
+  status: 'active' | 'warning' | 'error' | 'paused';
+  last_success_at: string | null;
+  last_error_at: string | null;
+}
+
 const SyncActivityView: React.FC = () => {
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [matchedJobs, setMatchedJobs] = useState<JobMatch[]>([]);
+  const [sources, setSources] = useState<SourceEntry[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
     status: 'idle',
     current_item: 'No active pipeline run',
@@ -218,6 +228,16 @@ const SyncActivityView: React.FC = () => {
     } catch { /* ignore */ }
   };
 
+  const fetchSources = async () => {
+    try {
+      const res = await fetch(api('/api/sources'));
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setSources(data);
+      }
+    } catch { /* ignore */ }
+  };
+
   const fetchSystemStatus = async () => {
     try {
       const res = await fetch(api('/api/system-status'));
@@ -274,14 +294,161 @@ const SyncActivityView: React.FC = () => {
   useEffect(() => {
     fetchLogs();
     fetchMatchedJobs();
+    fetchSources();
     fetchSystemStatus();
     const interval = setInterval(() => {
       fetchLogs();
       fetchMatchedJobs();
+      fetchSources();
       fetchSystemStatus();
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  const connectSSE = useCallback(() => {
+    if (eventSourceRef.current) return;
+
+    const es = new EventSource(api('/api/sync/stream'));
+    eventSourceRef.current = es;
+
+    es.addEventListener('stage_handoff', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        let nextStatus: PipelineStatus = 'scout_running';
+        let currentItem = '';
+        if (data.to === 'EVALUATE') {
+          nextStatus = 'evaluate_running';
+          currentItem = 'Evaluating fit and drafting assets';
+        } else if (data.to === 'SCOUT') {
+          nextStatus = 'scout_running';
+          currentItem = 'Running job connector orchestration';
+        } else if (data.to === 'BACKFILL') {
+          nextStatus = 'scout_running';
+          currentItem = 'Reconciling URLs and executing backfills';
+        } else if (data.to === 'SCRAPE') {
+          nextStatus = 'scout_running';
+          currentItem = 'Crawling and scraping full descriptions';
+        }
+
+        setSystemStatus((prev) => ({
+          ...prev,
+          status: nextStatus,
+          current_item: currentItem || prev.current_item,
+        }));
+        fetchLogs();
+        fetchMatchedJobs();
+      } catch (err) {
+        console.error('Failed to parse stage_handoff SSE event:', err);
+      }
+    });
+
+    es.addEventListener('source_progress', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        // Add log entry locally to show immediate progress
+        const localLog: ActivityLog = {
+          id: Date.now(),
+          timestamp: new Date().toISOString().replace('Z', ''),
+          level: 'INFO',
+          source: data.source,
+          message: `${data.source}: ${data.fetched} fetched, ${data.passed} saved`,
+          meta: null,
+        };
+        setLogs((prev) => [...prev, localLog]);
+        
+        // Update source entry status and progress dynamically in source registry
+        setSources((prev) =>
+          prev.map((s) => {
+            if (s.id === data.source || s.name === data.source) {
+              return {
+                ...s,
+                status: 'active',
+                last_success_at: new Date().toISOString(),
+              };
+            }
+            return s;
+          })
+        );
+        fetchLogs();
+      } catch (err) {
+        console.error('Failed to parse source_progress SSE event:', err);
+      }
+    });
+
+    es.addEventListener('source_health', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        setSources((prev) =>
+          prev.map((s) => {
+            if (s.id === data.source || s.name === data.source) {
+              return {
+                ...s,
+                status: data.status,
+                last_success_at: data.status === 'active' ? new Date().toISOString() : s.last_success_at,
+                last_error_at: ['warning', 'error'].includes(data.status) ? new Date().toISOString() : s.last_error_at,
+              };
+            }
+            return s;
+          })
+        );
+      } catch (err) {
+        console.error('Failed to parse source_health SSE event:', err);
+      }
+    });
+
+    es.addEventListener('connector_error', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        const localLog: ActivityLog = {
+          id: Date.now(),
+          timestamp: new Date().toISOString().replace('Z', ''),
+          level: 'ERROR',
+          source: data.source,
+          message: `Connector failed: ${data.error}`,
+          meta: null,
+        };
+        setLogs((prev) => [...prev, localLog]);
+        fetchLogs();
+      } catch (err) {
+        console.error('Failed to parse connector_error SSE event:', err);
+      }
+    });
+
+    es.addEventListener('run_complete', (e: MessageEvent) => {
+      try {
+        setSystemStatus({
+          status: 'completed',
+          current_item: 'Completed end-to-end sync successfully!',
+        });
+        setIsSyncing(false);
+        fetchLogs();
+        fetchMatchedJobs();
+        fetchSources();
+      } catch (err) {
+        console.error('Failed to parse run_complete SSE event:', err);
+      }
+    });
+
+    es.onerror = () => {
+      console.warn('SSE connection encountered an error.');
+    };
+  }, []);
+
+  const disconnectSSE = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    connectSSE();
+    return () => {
+      disconnectSSE();
+    };
+  }, [connectSSE, disconnectSSE]);
 
   const isRunning = isSyncing || isPipelineActive(systemStatus.status);
   const evaluateProgress =
@@ -501,6 +668,44 @@ const SyncActivityView: React.FC = () => {
             </div>
             <p className="text-[10px] text-on-surface-variant mt-1 italic">Annual salary in USD. Set to 0 to disable.</p>
           </div>
+        </div>
+      </div>
+
+      {/* Source Health Registry Section */}
+      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl editorial-shadow space-y-4">
+        <div>
+          <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-1">Source Registries</span>
+          <h2 className="text-base font-headline font-bold text-on-surface">Integrated Job Sources & Health Status</h2>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {sources.map(src => {
+            let badgeClass = 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border border-emerald-500/20';
+            let statusText = 'Active';
+            if (src.status === 'warning') {
+              badgeClass = 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20 animate-pulse';
+              statusText = 'Warning';
+            } else if (src.status === 'error') {
+              badgeClass = 'bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400 border border-red-500/20';
+              statusText = 'Error';
+            } else if (src.status === 'paused') {
+              badgeClass = 'bg-slate-500/10 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400 border border-slate-500/20';
+              statusText = 'Paused';
+            }
+            return (
+              <div key={src.id} className="p-3 bg-surface-container-low border border-outline-variant/10 rounded-xl flex flex-col justify-between hover:border-primary/20 transition-all select-none">
+                <span className="text-xs font-bold text-on-surface truncate">{src.name}</span>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[9px] text-on-surface-variant font-mono uppercase">{src.type.replace('_', ' ')}</span>
+                  <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded capitalize ${badgeClass}`}>
+                    {statusText}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          {sources.length === 0 && (
+            <div className="col-span-full py-4 text-center text-xs text-on-surface-variant italic">No configured sources found.</div>
+          )}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,7 +53,10 @@ export function buildPythonEnv(): Record<string, string> {
 }
 
 export function sanitizeCompanySlug(company: string): string {
-  const slug = company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  let slug = company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!slug) {
+    slug = 'company_' + crypto.createHash('md5').update(company).digest('hex').slice(0, 12);
+  }
   if (!slug || slug.includes('..') || slug.startsWith('.')) {
     throw new Error(`Invalid company name for folder slug: ${company}`);
   }

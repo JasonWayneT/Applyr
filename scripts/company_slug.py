@@ -7,6 +7,9 @@ import re
 
 def sanitize_company_slug(company: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", (company or "").lower()).strip("_")
+    if not slug:
+        import hashlib
+        slug = "company_" + hashlib.md5(company.encode("utf-8")).hexdigest()[:12]
     if not slug or ".." in slug or slug.startswith("."):
         raise ValueError(f"Invalid company name for folder slug: {company!r}")
     return slug

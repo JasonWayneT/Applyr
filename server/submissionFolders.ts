@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { db } from './db.js';
 import {
   SUBMISSION_DIR,
@@ -10,7 +11,11 @@ import { isActivePipelineStatus } from './domain/jobStatus.js';
 
 /** Implements FR-030 — slug used for new folders; fuzzy match for existing ones. */
 export function companySlug(company: string): string {
-  return company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  let slug = company.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!slug) {
+    slug = 'company_' + crypto.createHash('md5').update(company).digest('hex').slice(0, 12);
+  }
+  return slug;
 }
 
 function folderNamesMatch(a: string, b: string): boolean {

@@ -4,6 +4,9 @@ import json
 import traceback
 import subprocess
 
+import bootstrap_local_data
+bootstrap_local_data.main()
+
 from style_compliance_guard import clean_escapes
 from utils import init_pipeline_prefs, load_candidate_preferences, CANDIDATE_PREFERENCES_FILE, load_file, PROJECT_ROOT
 

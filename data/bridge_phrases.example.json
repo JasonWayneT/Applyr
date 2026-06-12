@@ -1,1 +1,11 @@
-{}
+{
+  "platform_stability": "supporting user scale and retention",
+  "latency": "improving reliability for customers",
+  "outage": "reducing service disruptions",
+  "data_pipeline": "data integrity and ingestion",
+  "etl": "data integrity and ingestion",
+  "migration": "customer migration and retention",
+  "security": "risk reduction and compliance",
+  "roadmap": "prioritized delivery against roadmap goals",
+  "cross_functional": "cross-functional alignment with engineering and CX"
+}

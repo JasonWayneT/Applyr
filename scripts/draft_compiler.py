@@ -370,6 +370,7 @@ def run(
     cl_stripped = ""
     cover_plan_dict = None
     cover_result = None
+    claim_corpus = ""
     if not skip_cover:
         claim_corpus = (
             "\n".join(catalog.raw_truth_lines.values())
@@ -773,7 +774,7 @@ def run(
         cover_audit_failed = (
             cover_result is not None and cover_result.audit_grade != "Pass"
         )
-        if cover_audit_failed and block_cover_pdf_on_audit_fail():
+        if cover_result is not None and cover_audit_failed and block_cover_pdf_on_audit_fail():
             print(
                 f"    [Compiler] Cover PDF skipped — audit grade "
                 f"{cover_result.audit_grade} (score {cover_result.audit_score})"

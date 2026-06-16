@@ -206,7 +206,20 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-233` | CR-043 | Cover voice phrasing | `scripts/cover_phrasing.py` | implemented |
 | `FR-234` | CR-043 | Cover word band 300–400 | `scripts/cover_letter_renderer.py`, `scripts/cover_letter_audit.py` | implemented |
 | `FR-235` | CR-043 | Proof paragraph no robot bridge | `scripts/cover_narrative_templates.py` | implemented |
-| `FR-236` | CR-043 | JD presence opener + cover_story tone | `scripts/cover_phrasing.py`, `data/master_claims.json` | implemented |
+| `FR-237` | CR-048 | Cover grammar defect guard CLW-005 | `scripts/cover_phrasing.py`, `scripts/cover_letter_audit.py`, `scripts/quality_checker.py` | implemented |
+| `FR-238` | CR-048 | Company display name from JD/DB | `scripts/company_slug.py`, `scripts/draft_compiler.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-239` | CR-048 | Metric-preserving bullet word budget | `scripts/bullet_fit.py`, `scripts/claim_composer.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-240` | CR-048 | Cover close overlapping target dedupe | `scripts/cover_phrasing.py` | implemented |
+| `FR-241` | CR-049 | Metric-collision bullet dedupe | `scripts/local_draft_stages.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-242` | CR-049 | Canonical employer headers with dates | `scripts/candidate_context.py`, `scripts/local_draft_stages.py` | implemented |
+| `FR-243` | CR-049 | Summary proof hardening (no truncation / max 1 proof) | `scripts/local_draft_stages.py` | implemented |
+| `FR-244` | CR-049 | R-012 conversion gate + SKIP_PDF_EXPORT resume regen | `scripts/quality_checker.py`, `scripts/draft_compiler.py`, `scripts/regenerate_all_resumes.py` | implemented |
+| `FR-245` | CR-049 | Em-dash sanitize on retry assembly path | `scripts/drafting_engine.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-246` | CR-050 | Fleet document QA ranker | `scripts/fleet_document_qa.py` | implemented |
+| `FR-247` | CR-050 | CW-016 summary/bullet overlap gate | `scripts/resume_conversion_eval.py`, `scripts/local_draft_stages.py` | implemented |
+| `FR-248` | CR-050 | Sterkly CW-012 hardening + pre-write guard | `scripts/conversion_framing.py`, `scripts/draft_compiler.py` | implemented |
+| `FR-249` | CR-050 | Activity bullet auto-swap | `scripts/conversion_framing.py` | implemented |
+| `FR-250` | CR-050 | Summary proof overlap penalty | `scripts/local_draft_stages.py`, `scripts/resume_conversion_eval.py` | implemented |
 | `FR-128` | CR-020 | Local Optimizations | `scripts/compile_single.py` | implemented |
 | `FR-129` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
 | `FR-130` | CR-020 | Local Optimizations | `scripts/pii_redact.py` | implemented |

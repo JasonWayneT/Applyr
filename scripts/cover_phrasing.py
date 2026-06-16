@@ -38,15 +38,23 @@ BANNED_ROBOT_PHRASES: tuple[str, ...] = (
     "with the same discipline on metrics, stakeholder alignment, and platform delivery described above",
 )
 
+# Cover grammar defects the pipeline must never ship (CLW-005).
+_COVER_GRAMMAR_DEFECTS: tuple[re.Pattern, ...] = (
+    re.compile(r"\bhad no documentation remained\b", re.I),
+    re.compile(r"\bno documentation remained and\b", re.I),
+)
+
 # Formal words Jason does not use in covers (replace with plain alternatives)
 _COVER_PHRASE_POLISH: tuple[tuple[str, str], ...] = (
     ("unreliable ETL processes", "failing ETL processes"),
     ("actively breaking mid-project", "becoming unstable during the migration"),
-    ("no surviving documentation", "no documentation remained"),
+    # Longer phrase first — avoids "had no surviving documentation" → ungrammatical seam.
+    ("had no surviving documentation", "had no documentation left"),
+    ("no surviving documentation", "no documentation left"),
     ("job-to-be-done failure", "product trust problem"),
     (
         "Business and customer wins moved together",
-        "customer trust and the business outcome improved together",
+        "Customer trust and the business outcome improved together",
     ),
     ("credible successor path", "realistic migration path"),
     ("was costing us", "was hurting"),
@@ -146,7 +154,7 @@ def render_trust_hook(story: str) -> str:
     if "product trust problem" not in out.lower():
         out = re.sub(
             r"\.\s*$",
-            ", I treated it as a product trust problem, not a minor data bug.",
+            ". I treated it as a product trust problem, not a minor data bug.",
             out.rstrip(),
         )
     if not out.endswith("."):
@@ -258,6 +266,35 @@ def _format_outcome_chain(outcomes: list[str]) -> str:
     return f"{', '.join(outcomes[:-1])}, and {outcomes[-1]}"
 
 
+def _dedupe_overlapping_targets(targets: list[str]) -> list[str]:
+    """Drop redundant JD targets (e.g. 'product adoption' inside 'analytics product adoption')."""
+    if len(targets) < 2:
+        return targets
+    kept: list[str] = []
+    for t in sorted(targets, key=len, reverse=True):
+        tl = t.lower()
+        if any(tl in k.lower() or k.lower() in tl for k in kept if k.lower() != tl):
+            continue
+        kept.append(t)
+    order = {t: i for i, t in enumerate(targets)}
+    kept.sort(key=lambda x: order.get(x, 99))
+    return kept
+
+
+def check_cover_grammar_defects(text: str) -> list[str]:
+    """Return CLW-005 issues for cover grammar seams introduced by phrase polish."""
+    issues: list[str] = []
+    for pat in _COVER_GRAMMAR_DEFECTS:
+        m = pat.search(text or "")
+        if m:
+            issues.append(
+                "[CLW-005] Cover grammar defect (phrase-polish seam): "
+                f"\"{m.group(0)}\""
+            )
+            break
+    return issues
+
+
 def render_structured_close(
     company: str, jd_text: str, archetype_id: str = ""
 ) -> str:
@@ -283,22 +320,49 @@ def render_structured_close(
             f"measurable product outcomes that depend on trust and reliable execution."
         )
 
-    targets = extract_role_targets(jd_text, max_n=2)
+    targets = _dedupe_overlapping_targets(extract_role_targets(jd_text, max_n=2))
     outcomes = extract_role_outcomes(jd_text, max_n=3)
+
+    # Remove outcomes that duplicate or overlap a target — prevents circular closes.
+    def _overlaps_target(phrase: str) -> bool:
+        pl = phrase.lower()
+        return any(
+            pl == t.lower() or pl in t.lower() or t.lower() in pl for t in targets
+        )
+
+    outcomes = [o for o in outcomes if not _overlaps_target(o)]
+
     outcome_chain = _format_outcome_chain(outcomes)
     jd_l = jd_text.lower()
+
+    # When no JD-specific outcomes were found the fallback "measurable product outcomes"
+    # would produce "the product outcomes that drive measurable product outcomes" — circular.
+    # Use a non-circular alternative that still closes forward.
+    _GENERIC_FALLBACK = "measurable product outcomes"
 
     if len(targets) >= 2:
         t1, t2 = targets[0], targets[1]
         if archetype_id == "marketplace_fintech" and "borrower" in jd_l and "offer experience" in jd_l:
             if "borrower offer" not in t2.lower():
                 t2 = "the borrower offer experience"
+        if outcome_chain == _GENERIC_FALLBACK:
+            return (
+                f"I would welcome the opportunity to discuss how this background could help "
+                f"{company} improve {t1}, strengthen {t2}, and deliver measurable outcomes "
+                f"across the priorities in your posting."
+            )
         return (
             f"I would welcome the opportunity to discuss how this background could help "
             f"{company} improve {t1}, strengthen {t2}, and improve "
             f"the product outcomes that drive {outcome_chain}."
         )
     if targets:
+        if outcome_chain == _GENERIC_FALLBACK:
+            return (
+                f"I would welcome the opportunity to discuss how this background could help "
+                f"{company} improve {targets[0]} and deliver measurable outcomes "
+                f"across the priorities in your posting."
+            )
         return (
             f"I would welcome the opportunity to discuss how this background could help "
             f"{company} improve {targets[0]} and the product outcomes that drive "

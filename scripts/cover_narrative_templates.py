@@ -45,17 +45,19 @@ def render_proof_paragraph(
 
     body = format_cover_proof_sentence(rec.body)
 
-    if slot.lens in ("migration", "platform", "lifecycle", "customer_success"):
+    if slot.lens in ("migration", "platform", "lifecycle", "customer_success", "integration", "rebuild"):
         context = (
             "On a large B2B platform with legacy constraints, I focused on scalable migration "
             "and platform delivery without customer friction."
         )
-    elif slot.lens in ("data", "technical"):
+    elif slot.lens in ("data", "technical", "security", "compliance"):
         context = "When data integrity threatened product quality and retention, I drove a cross-functional fix end to end."
-    elif slot.lens in ("business", "gtm", "finance"):
+    elif slot.lens in ("business", "gtm", "finance", "cost"):
         context = "Where revenue and retention were at risk, I prioritized fixes that protected the business outcome."
-    elif slot.lens in ("roadmap", "execution", "leadership"):
+    elif slot.lens in ("roadmap", "execution", "leadership", "executive", "synthesis", "agile", "process", "pm", "delivery"):
         context = "Under tight capacity and competing mandates, I enforced prioritization that kept delivery on track."
+    elif slot.lens in ("requirements",):
+        context = "Working directly with cross-functional stakeholders, I translated business needs into engineering-ready specs."
     else:
         context = "In a complex cross-functional environment, I owned the problem through to measurable results."
 

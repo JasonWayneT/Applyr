@@ -11,6 +11,7 @@ from utils import load_file, WORK_EXP_FILE, SUBMISSIONS_DIR
 from draft_compiler import run as run_compiler
 
 os.environ.setdefault("RESUME_ONLY", "1")
+os.environ.setdefault("SKIP_PDF_EXPORT", "1")
 os.environ.setdefault("DRAFT_MODE", "compose")
 os.environ.setdefault("LOCAL_ONLY_MODE", "1")
 os.environ.setdefault("JD_PROFILE_MODE", "deterministic")
@@ -58,7 +59,13 @@ def regenerate_all_resumes():
             continue
 
         company_slug = _folder_to_company(folder)
-        display = folder.replace("_", " ").title()
+        from company_slug import resolve_company_display_name
+
+        display = resolve_company_display_name(
+            company_slug,
+            company_folder=folder_path,
+            jd_text=jd_text,
+        )
         print(f"\n---> {folder} ({display})")
 
         evaluation = {

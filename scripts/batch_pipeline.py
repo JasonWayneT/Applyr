@@ -201,30 +201,13 @@ def _company_submission_dir(company_name: str) -> str:
 
 def _resolve_display_company(db_path: str, company_name: str, job_id: str | None = None) -> str:
     """Implements FR-103 (CR-017): use DB company title for cover letter, not folder slug."""
-    if not db_path or not os.path.exists(db_path):
-        if "_" in company_name and " " not in company_name:
-            return company_name.replace("_", " ").title()
-        return company_name
-    try:
-        conn = sqlite3.connect(db_path)
-        if job_id:
-            row = conn.execute(
-                "SELECT company FROM jobs WHERE id LIKE ? LIMIT 1",
-                (f"{job_id[:8]}%",),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT company FROM jobs WHERE LOWER(company) = LOWER(?) OR LOWER(company) = LOWER(?) LIMIT 1",
-                (company_name, company_name.replace("_", " ")),
-            ).fetchone()
-        conn.close()
-        if row and row[0] and str(row[0]).strip():
-            return str(row[0]).strip()
-    except sqlite3.Error:
-        pass
-    if "_" in company_name and " " not in company_name:
-        return company_name.replace("_", " ").title()
-    return company_name
+    from company_slug import resolve_company_display_name
+
+    return resolve_company_display_name(
+        company_name,
+        db_path=db_path,
+        job_id=job_id,
+    )
 
 
 def _has_required_pdfs(company_name: str) -> bool:

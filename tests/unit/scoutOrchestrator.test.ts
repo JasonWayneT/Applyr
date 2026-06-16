@@ -21,6 +21,14 @@ vi.mock('../../server/repository/jobRepository.js', () => ({
   insertJob: vi.fn().mockReturnValue('mock-uuid'),
 }));
 
+vi.mock('../../server/services/jobStaging.js', () => ({
+  writeJobStagingFile: vi.fn(),
+}));
+
+vi.mock('../../server/routes/pipeline.js', () => ({
+  broadcastSyncEvent: vi.fn(),
+}));
+
 // Dynamic imports after mocks are hoisted
 const { runConnectorOrchestration } = await import('../../server/services/scoutOrchestrator.js');
 const { logActivity } = await import('../../server/db.js');
@@ -31,12 +39,17 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function makeRawJob(id: string, title = 'Product Manager', company = 'Acme'): RawJobPayload {
+function makeRawJob(
+  id: string,
+  title = 'Product Manager',
+  company = 'Acme',
+  description = 'Remote product manager role in the United States. B2B SaaS platform experience preferred.',
+): RawJobPayload {
   return {
     external_job_id: id,
     url: `https://example.com/jobs/${id}`,
     source_id: 'test',
-    raw_data: { title, company },
+    raw_data: { title, company, description },
   };
 }
 
@@ -52,6 +65,7 @@ function makeConnector(id: string, jobs: RawJobPayload[] = []): JobConnector {
       company: String((raw.raw_data as Record<string, unknown>)['company'] ?? ''),
       url: raw.url,
       source_site: id,
+      description: String((raw.raw_data as Record<string, unknown>)['description'] ?? ''),
     })),
   };
 }
@@ -174,6 +188,20 @@ describe('runConnectorOrchestration', () => {
 
     const rejectCalls = vi.mocked(logActivity).mock.calls.filter(
       ([, , msg]) => typeof msg === 'string' && msg.includes('[REJECT]') && msg.includes('Title Blocklist'),
+    );
+    expect(rejectCalls.length).toBeGreaterThan(0);
+  });
+
+  it('rejects titles outside target role scope (e.g. Account Executive)', async () => {
+    const raw = makeRawJob('ae-1', 'Account Executive', 'Acme');
+    const connector = makeConnector('src', [raw]);
+
+    await runConnectorOrchestration([connector]);
+
+    expect(vi.mocked(insertJob)).not.toHaveBeenCalled();
+
+    const rejectCalls = vi.mocked(logActivity).mock.calls.filter(
+      ([, , msg]) => typeof msg === 'string' && msg.includes('target_role_scope'),
     );
     expect(rejectCalls.length).toBeGreaterThan(0);
   });

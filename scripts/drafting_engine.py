@@ -89,6 +89,18 @@ SENIORITY_INFLATION_PHRASES = [
 from approved_metrics import APPROVED_METRICS, find_unapproved_metrics, metric_integrity_message
 
 
+def sanitize_em_dashes(text: str, warnings: list | None = None) -> str:
+    """Replace em-dashes with comma breaks (R-008 / Anti-AI fingerprint)."""
+    if "\u2014" not in text and " -- " not in text:
+        return text
+    if warnings is not None:
+        warnings.append("STYLE VIOLATION: Em-dash detected. Replacing with comma or clause break.")
+    corrected = text.replace("\u2014", ", ").replace(" -- ", ", ")
+    if warnings is not None:
+        print("    [GUARD] Em-dash auto-corrected.")
+    return corrected
+
+
 def validate_hard_facts(generated_text, master_resume_text, target_company=None, doc_type='resume'):
     """
     Deterministic post-generation check. Compares generated output against
@@ -227,7 +239,7 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
             corrected = re.sub(r'##\s*Education & Certifications\s*(?:\n\s*)*', '', corrected, flags=re.IGNORECASE)
 
             edu_cert_block = "\n\n## EDUCATION\n\n" \
-                             "* **Bachelor of Business Administration, Major in Management** — National University, San Diego, California, 2019\n"
+                             "* **Bachelor of Business Administration, Major in Management**, National University, San Diego, California, 2019\n"
             corrected = corrected.rstrip() + edu_cert_block
             print("    [GUARD] Auto-injected verified Education block.")
 
@@ -265,10 +277,7 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
             print("    [GUARD] Prepend-repaired missing Name/Contact header.")
 
     # 8. Anti-AI fingerprint: catch em-dashes
-    if '\u2014' in corrected or ' -- ' in corrected:
-        warnings.append("STYLE VIOLATION: Em-dash detected. Replacing with comma or clause break.")
-        corrected = corrected.replace('\u2014', ', ').replace(' -- ', ', ')
-        print("    [GUARD] Em-dash auto-corrected.")
+    corrected = sanitize_em_dashes(corrected, warnings)
 
     if warnings:
         print(f"    [HARD FACT AUDIT] {len(warnings)} issue(s) found & actively defended:")
@@ -322,6 +331,9 @@ def get_pdf_page_count(pdf_path: str) -> int:
 
 def generate_pdf(md_path, output_path):
     # Enforces Single-Column, ATS-Optimized typography using Playwright
+    if os.environ.get("SKIP_PDF_EXPORT", "").strip().lower() in ("1", "true", "yes"):
+        print(f"    [Export] SKIP_PDF_EXPORT=1 — skipping PDF: {output_path}")
+        return
     script_dir = os.path.dirname(os.path.abspath(__file__))
     subprocess.run(
         ["python", os.path.join(script_dir, "compile_single.py"), md_path, output_path],

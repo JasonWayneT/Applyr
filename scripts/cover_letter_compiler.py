@@ -84,6 +84,14 @@ def compile_cover_letter(
     md = sanitize_submission_tone(md)
     audit = audit_cover_letter(md, plan, jd_text, corpus)
     wc, _ = word_count_report(md)
+    _CRITICAL_WORD_COUNT = 80
+    if wc < _CRITICAL_WORD_COUNT:
+        from drafting_errors import DraftingPipelineError
+
+        raise DraftingPipelineError(
+            f"Cover letter body is critically short ({wc} words, minimum {_CRITICAL_WORD_COUNT}). "
+            "Likely caused by empty proof list — check ranked_needs extraction and catalog coverage."
+        )
     return CoverLetterResult(
         markdown=md,
         plan=plan,

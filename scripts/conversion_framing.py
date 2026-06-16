@@ -232,7 +232,11 @@ def enforce_activity_cap(
         if employer == mid_slug and any(has_outcome_metric(bullets[c]) for c in emp_cids):
             # Keep one context-bridge bullet (e.g. ACC-202-DELIVERY) alongside metric anchors.
             cap = 1 if any(c in _STERKLY_CONTEXT_CLAIMS for c in emp_cids) else 0
-        activity = [c for c in emp_cids if is_activity_bullet(bullets[c])]
+        activity = [
+            c
+            for c in emp_cids
+            if is_activity_bullet(bullets[c]) and c not in _STERKLY_CONTEXT_CLAIMS
+        ]
         while len(activity) > cap:
             victim = min(activity, key=lambda c: _jd_keyword_score(jd_lower, bullets[c]))
             del bullets[victim]
@@ -243,7 +247,16 @@ def enforce_activity_cap(
                 if employer_for_claim_id(cid) == employer
                 and cid not in bullets
                 and cid not in _STERKLY_WEAK_CLAIMS
-                and is_outcome_bullet(body)
+                and (
+                    is_outcome_bullet(body)
+                    or (
+                        employer == mid_slug
+                        and (
+                            cid in _STERKLY_CONTEXT_CLAIMS
+                            or _STERKLY_CONTEXT_SIGNAL_RE.search(body)
+                        )
+                    )
+                )
             ]
             if not pool:
                 break
@@ -304,13 +317,38 @@ def enforce_impact_pyramid(
     return bullets
 
 
+def _sterkly_texts_fail_cw012(texts: List[str]) -> bool:
+    jargon = sum(1 for t in texts if _STERKLY_DOMAIN_JARGON_RE.search(t))
+    has_context = any(_STERKLY_CONTEXT_SIGNAL_RE.search(t) for t in texts)
+    return jargon >= 2 and not has_context
+
+
+def _best_sterkly_context_claim(
+    valid_ids: Dict[str, str],
+    mid_slug: str,
+    jd_lower: str,
+) -> Optional[str]:
+    from local_draft_stages import employer_for_claim_id
+
+    ranked: List[tuple] = []
+    for cid, body in valid_ids.items():
+        if employer_for_claim_id(cid) != mid_slug:
+            continue
+        if cid in _STERKLY_CONTEXT_CLAIMS or _STERKLY_CONTEXT_SIGNAL_RE.search(body):
+            ranked.append((_jd_keyword_score(jd_lower, body), cid))
+    if not ranked:
+        return None
+    ranked.sort(reverse=True)
+    return ranked[0][1]
+
+
 def enforce_sterkly_context(
     bullets: Dict[str, str],
     valid_ids: Dict[str, str],
     jd_text: str,
     fallback_bullet_fn,
 ) -> Dict[str, str]:
-    """Ensure mid-career employer has a PM-context bullet when domain jargon dominates (FR-222)."""
+    """Ensure mid-career employer has a PM-context bullet when domain jargon dominates (FR-222 / FR-248)."""
     from candidate_context import employer_tiers
     from local_draft_stages import employer_for_claim_id
 
@@ -320,32 +358,40 @@ def enforce_sterkly_context(
         return bullets
 
     texts = [bullets[c] for c in mid_claims]
-    jargon = sum(1 for t in texts if _STERKLY_DOMAIN_JARGON_RE.search(t))
-    has_context = any(
-        c in _STERKLY_CONTEXT_CLAIMS or _STERKLY_CONTEXT_SIGNAL_RE.search(bullets[c])
-        for c in mid_claims
-    )
-    if jargon < 2 or has_context:
+    if not _sterkly_texts_fail_cw012(texts):
         return bullets
 
     jd_lower = jd_text.lower()
-    for context_id in ("ACC-202-DELIVERY", "ACC-201-ALIGNMENT"):
-        if context_id in bullets or context_id not in valid_ids:
-            continue
+    context_id = _best_sterkly_context_claim(valid_ids, mid_slug, jd_lower)
+    if not context_id:
+        return bullets
+
+    if context_id in bullets:
+        return bullets
+
+    victims = sorted(
+        [
+            c
+            for c in mid_claims
+            if _STERKLY_DOMAIN_JARGON_RE.search(bullets[c])
+            or is_activity_bullet(bullets[c])
+        ],
+        key=lambda c: (
+            1 if c in _STERKLY_METRIC_ANCHORS and has_outcome_metric(bullets[c]) and "$" in bullets[c] else 0,
+            0 if _STERKLY_DOMAIN_JARGON_RE.search(bullets[c]) else 1,
+            _jd_keyword_score(jd_lower, bullets[c]),
+        ),
+    )
+    if not victims:
         victims = sorted(
-            [
-                c
-                for c in mid_claims
-                if c not in _STERKLY_METRIC_ANCHORS
-                and _STERKLY_DOMAIN_JARGON_RE.search(bullets[c])
-            ],
+            [c for c in mid_claims if c not in ("ACC-203-BUS",)],
             key=lambda c: _jd_keyword_score(jd_lower, bullets[c]),
         )
-        if not victims:
-            break
-        del bullets[victims[0]]
-        bullets[context_id] = fallback_bullet_fn(valid_ids[context_id])
-        break
+    if not victims:
+        return bullets
+
+    del bullets[victims[0]]
+    bullets[context_id] = fallback_bullet_fn(valid_ids[context_id])
     return bullets
 
 
@@ -375,6 +421,69 @@ def enforce_sterkly_weak_claim_swap(
     return bullets
 
 
+def ensure_sterkly_narrative_pass(
+    bullets: Dict[str, str],
+    valid_ids: Dict[str, str],
+    jd_text: str,
+    fallback_bullet_fn,
+    max_passes: int = 3,
+) -> Dict[str, str]:
+    """Repeat Sterkly context swap until CW-012 would pass (FR-248)."""
+    for _ in range(max_passes):
+        from candidate_context import employer_tiers
+        from local_draft_stages import employer_for_claim_id
+
+        _, mid_slug, _ = employer_tiers()
+        mid_claims = [c for c in bullets if employer_for_claim_id(c) == mid_slug]
+        if not mid_claims:
+            break
+        texts = [bullets[c] for c in mid_claims]
+        if not _sterkly_texts_fail_cw012(texts):
+            break
+        before = dict(bullets)
+        bullets = enforce_sterkly_context(bullets, valid_ids, jd_text, fallback_bullet_fn)
+        if bullets == before:
+            break
+    return bullets
+
+
+def enforce_activity_metric_swap(
+    bullets: Dict[str, str],
+    valid_ids: Dict[str, str],
+    jd_text: str,
+    fallback_bullet_fn,
+) -> Dict[str, str]:
+    """Swap one activity-only bullet per employer when a metric claim is available (FR-249)."""
+    from local_draft_stages import employer_for_claim_id, EMPLOYERS
+
+    jd_lower = jd_text.lower()
+    for employer in EMPLOYERS:
+        emp_cids = [c for c in bullets if employer_for_claim_id(c) == employer]
+        activity = [
+            c
+            for c in emp_cids
+            if is_activity_bullet(bullets[c]) and c not in _STERKLY_CONTEXT_CLAIMS
+        ]
+        if not activity:
+            continue
+        pool = [
+            cid
+            for cid, body in valid_ids.items()
+            if employer_for_claim_id(cid) == employer
+            and cid not in bullets
+            and has_outcome_metric(body)
+            and is_outcome_bullet(body)
+        ]
+        if not pool:
+            continue
+        victim = min(activity, key=lambda c: _jd_keyword_score(jd_lower, bullets[c]))
+        pool.sort(key=lambda cid: _jd_keyword_score(jd_lower, valid_ids[cid]), reverse=True)
+        del bullets[victim]
+        swap = pool[0]
+        bullets[swap] = fallback_bullet_fn(valid_ids[swap])
+    return bullets
+
+
 def enforce_conversion_framing(
     bullets: Dict[str, str],
     valid_ids: Dict[str, str],
@@ -384,7 +493,8 @@ def enforce_conversion_framing(
     """Run all conversion framing enforcers in dependency order."""
     bullets = enforce_sterkly_metric_anchor(bullets, valid_ids, jd_text, fallback_bullet_fn)
     bullets = enforce_impact_pyramid(bullets, valid_ids, jd_text, fallback_bullet_fn)
-    bullets = enforce_sterkly_context(bullets, valid_ids, jd_text, fallback_bullet_fn)
     bullets = enforce_activity_cap(bullets, valid_ids, jd_text, fallback_bullet_fn)
+    bullets = enforce_activity_metric_swap(bullets, valid_ids, jd_text, fallback_bullet_fn)
     bullets = enforce_sterkly_weak_claim_swap(bullets, valid_ids, jd_text, fallback_bullet_fn)
+    bullets = ensure_sterkly_narrative_pass(bullets, valid_ids, jd_text, fallback_bullet_fn)
     return bullets

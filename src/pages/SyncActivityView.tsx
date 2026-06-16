@@ -456,6 +456,52 @@ const SyncActivityView: React.FC = () => {
       ? Math.min(100, Math.round(((systemStatus.items_completed ?? 0) / systemStatus.items_total!) * 100))
       : null;
 
+  const scoutQueue = matchedJobs.filter(j => j.status === 'Drafted');
+  const evaluatedJobs = matchedJobs.filter(j => j.status === 'Backlog' || j.status === 'Needs Retry');
+  const readyCount = evaluatedJobs.filter(j => j.status === 'Backlog' && j.has_assets).length;
+
+  const renderJobCard = (job: JobMatch) => (
+    <div key={job.id} className="p-4 bg-surface-container-low hover:bg-surface-container rounded-xl flex flex-col gap-1.5 transition-all border border-outline/5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold text-primary uppercase tracking-widest">{job.company}</span>
+        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${
+          job.status === 'Backlog' && job.has_assets
+            ? 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
+            : job.status === 'Drafted'
+              ? 'bg-sky-500/10 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400'
+              : 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
+        }`}>
+          {job.status === 'Needs Retry'
+            ? 'Needs retry'
+            : job.status === 'Drafted'
+              ? 'Awaiting evaluation'
+              : job.status === 'Backlog' && job.has_assets
+                ? 'Ready to Apply'
+                : 'Pending Assets'}
+        </span>
+      </div>
+      <h4 className="text-sm font-headline font-bold text-on-surface leading-tight">{job.title}</h4>
+      <div className="flex items-center justify-between mt-1 text-xs text-on-surface-variant">
+        <span>Score: {job.score || 'N/A'}</span>
+        <span>Discovered: {new Date(job.created_at).toLocaleDateString()}</span>
+      </div>
+      <div className="mt-2.5 flex flex-wrap justify-end gap-2">
+        {((job.status === 'Backlog' && !job.has_assets) || job.status === 'Needs Retry') && (
+          <button
+            onClick={() => handleDraftAssets(job.id)}
+            disabled={draftingJobId === job.id || isEvaluatePhase(systemStatus.status)}
+            className="btn-secondary py-1 px-3 text-[11px] font-bold flex items-center gap-1.5 rounded-lg border border-amber-500/20 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+          >
+            <span className={`material-symbols-outlined text-[13px] ${draftingJobId === job.id ? 'animate-spin' : ''}`}>auto_fix</span>
+            {draftingJobId === job.id ? 'Drafting...' : 'Draft Assets'}
+          </button>
+        )}
+        <button type="button" onClick={() => handleDismissJob(job.id, 'not_a_fit')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Not a fit</button>
+        <button type="button" onClick={() => handleDismissJob(job.id, 'remove')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Remove</button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 pb-10">
       {/* Header */}
@@ -845,52 +891,43 @@ const SyncActivityView: React.FC = () => {
         <div className="bg-surface-container-lowest rounded-2xl overflow-hidden flex flex-col h-[450px] border border-outline/10 editorial-shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-headline font-extrabold text-on-surface tracking-tight">Active Matched Roles</h2>
-              <p className="text-xs text-on-surface-variant">Roles passing the gate and evaluation pipeline</p>
+              <h2 className="text-lg font-headline font-extrabold text-on-surface tracking-tight">Pipeline Roles</h2>
+              <p className="text-xs text-on-surface-variant">
+                Evaluated matches for {settings.targetRole || 'your target role'}
+              </p>
             </div>
-            <span className="badge badge-secondary">{matchedJobs.filter(j => j.status === 'Backlog' && j.has_assets).length} ready to apply</span>
+            <span className="badge badge-secondary">{readyCount} ready to apply</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-3 pr-1 applyr-scrollbar">
-            {matchedJobs.map(job => (
-              <div key={job.id} className="p-4 bg-surface-container-low hover:bg-surface-container rounded-xl flex flex-col gap-1.5 transition-all border border-outline/5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-primary uppercase tracking-widest">{job.company}</span>
-                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${
-                    job.status === 'Backlog' && job.has_assets
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
-                      : 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
-                  }`}>
-                    {job.status === 'Needs Retry'
-                      ? 'Needs retry'
-                      : job.status === 'Backlog' && job.has_assets
-                        ? 'Ready to Apply'
-                        : 'Pending Assets'}
-                  </span>
-                </div>
-                <h4 className="text-sm font-headline font-bold text-on-surface leading-tight">{job.title}</h4>
-                <div className="flex items-center justify-between mt-1 text-xs text-on-surface-variant">
-                  <span>Score: {job.score || 'N/A'}</span>
-                  <span>Discovered: {new Date(job.created_at).toLocaleDateString()}</span>
-                </div>
-                <div className="mt-2.5 flex flex-wrap justify-end gap-2">
-                  {((job.status === 'Backlog' && !job.has_assets) || job.status === 'Drafted' || job.status === 'Needs Retry') && (
-                    <button
-                      onClick={() => handleDraftAssets(job.id)}
-                      disabled={draftingJobId === job.id || isEvaluatePhase(systemStatus.status)}
-                      className="btn-secondary py-1 px-3 text-[11px] font-bold flex items-center gap-1.5 rounded-lg border border-amber-500/20 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
-                    >
-                      <span className={`material-symbols-outlined text-[13px] ${draftingJobId === job.id ? 'animate-spin' : ''}`}>auto_fix</span>
-                      {draftingJobId === job.id ? 'Drafting...' : 'Draft Assets'}
-                    </button>
-                  )}
-                  <button type="button" onClick={() => handleDismissJob(job.id, 'not_a_fit')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Not a fit</button>
-                  <button type="button" onClick={() => handleDismissJob(job.id, 'remove')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Remove</button>
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1 applyr-scrollbar">
+            <div>
+              <h3 className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-2">
+                Evaluated ({evaluatedJobs.length})
+              </h3>
+              <div className="space-y-3">
+                {evaluatedJobs.map(renderJobCard)}
+                {evaluatedJobs.length === 0 && (
+                  <p className="text-xs text-on-surface-variant/70 italic py-2">No evaluated roles yet.</p>
+                )}
+              </div>
+            </div>
+
+            {scoutQueue.length > 0 && (
+              <div className="pt-2 border-t border-outline/10">
+                <h3 className="text-[11px] font-bold uppercase tracking-widest text-on-surface-variant mb-1">
+                  Scout queue ({scoutQueue.length})
+                </h3>
+                <p className="text-[10px] text-on-surface-variant/70 mb-2">
+                  Discovered by connectors — runs through evaluation on the next sync.
+                </p>
+                <div className="space-y-3">
+                  {scoutQueue.map(renderJobCard)}
                 </div>
               </div>
-            ))}
+            )}
+
             {matchedJobs.length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+              <div className="h-full flex flex-col items-center justify-center text-center opacity-40 py-8">
                 <span className="material-symbols-outlined text-3xl mb-1 text-on-surface-variant">verified_user</span>
                 <p className="text-xs text-on-surface">No matching jobs discovered yet.</p>
               </div>

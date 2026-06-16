@@ -352,11 +352,17 @@ def check_summary_prose_quality(resume_md: str) -> List[str]:
     return issues
 
 
-def score_summary_proof_candidate(proof: str, jd_text: str = "") -> int:
-    """Rank proof clauses: outcome opener + metrics beat participle fragments."""
+def score_summary_proof_candidate(
+    proof: str,
+    jd_text: str = "",
+    body_bullets: Optional[List[str]] = None,
+) -> int:
+    """Rank proof clauses: outcome opener + metrics beat participle fragments and body dup."""
     p = (proof or "").strip()
     if not p or is_incomplete_summary_sentence(p):
         return -100
+    if body_bullets and summary_proof_overlaps_body(p, body_bullets):
+        return -50
     score = 0
     if re.search(r"[\$%]|\b\d{1,3}%|\b\d{4,}\b", p):
         score += 5
@@ -372,6 +378,42 @@ def score_summary_proof_candidate(proof: str, jd_text: str = "") -> int:
         jd_words = set(re.findall(r"[a-z]{4,}", jd_text.lower()))
         score += min(4, sum(1 for w in jd_words if w in p.lower()))
     return score
+
+
+def summary_proof_overlaps_body(proof: str, body_bullets: List[str], min_chars: int = 24) -> bool:
+    """True when proof text is a contiguous substring of any experience bullet (FR-247)."""
+    pn = (proof or "").strip().lower().rstrip(".")
+    if len(pn) < min_chars:
+        return False
+    for bullet in body_bullets:
+        bl = (bullet or "").strip().lower()
+        if pn in bl:
+            return True
+    return False
+
+
+def check_summary_bullet_overlap(resume_md: str) -> List[str]:
+    """CW-016: summary proof must not verbatim-copy an experience bullet."""
+    summary = _summary_text(resume_md)
+    if not summary:
+        return []
+    sents = _summary_sentences(summary)
+    proof_sents = sents[SUMMARY_TEMPLATE_SENTENCES:]
+    if not proof_sents:
+        return []
+    body_bullets: List[str] = []
+    for block in _experience_blocks(resume_md):
+        body_bullets.extend(block.get("bullets") or [])
+    issues: List[str] = []
+    for sent in proof_sents[:SUMMARY_MAX_PROOF_SENTENCES]:
+        if summary_proof_overlaps_body(sent, body_bullets):
+            issues.append(
+                f"[CW-016] Summary proof duplicates experience bullet text: "
+                f"\"{sent[:90]}...\""
+                if len(sent) > 90
+                else f"[CW-016] Summary proof duplicates experience bullet text: \"{sent}\""
+            )
+    return issues
 
 
 def check_sterkly_narrative_coherence(resume_md: str) -> List[str]:
@@ -435,6 +477,7 @@ def evaluate_resume_conversion(
     issues: List[str] = []
     issues.extend(check_summary_completeness(resume_md))
     issues.extend(check_summary_prose_quality(resume_md))
+    issues.extend(check_summary_bullet_overlap(resume_md))
     issues.extend(check_summary_theme_grounding(resume_md, bullets_by_company))
     issues.extend(check_summary_proof_payoff(resume_md, bullets_by_company))
     if pdf_path:
@@ -453,7 +496,7 @@ def evaluate_resume_conversion(
         if re.search(r"\b\d{1,3}\s*(?:to|–|-)\s*\d{2,}\+?\b|\b\d{2,}\+\b", joined):
             strengths.append(f"{junior_label} section includes a scaling or volume metric.")
 
-    blocking_codes = ("CW-009", "CW-011", "CW-012", "CW-013", "CW-014", "CW-015")
+    blocking_codes = ("CW-009", "CW-011", "CW-012", "CW-013", "CW-014", "CW-015", "CW-016")
     hard_fail = [i for i in issues if any(i.startswith(f"[{c}]") for c in blocking_codes)]
 
     return {

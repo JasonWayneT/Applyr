@@ -13,8 +13,12 @@ const DOMAIN = 'levels.fyi';
 const SEED_URL = 'https://www.levels.fyi/jobs?jobId=1';
 const JOB_CAP = 10;
 
+import { passesTargetRoleTitleScope } from '../../../shared/domain/gates.js';
+
 interface LevelsFyiConfig {
   contextDir?: string;
+  targetRole?: string;
+  searchTerms?: string[];
   /** Injected at runtime from server/middleware/crawlPolicy. Tests pass a mock. */
   policyChecker?: (domain: string) => { status: string };
 }
@@ -25,6 +29,10 @@ const humanWait = (min = 2000, max = 5000) =>
 export function createLevelsFyiConnector(config?: LevelsFyiConfig): JobConnector {
   const contextDir = config?.contextDir ?? 'data/browser_context';
   const policyChecker = config?.policyChecker ?? (() => ({ status: 'unknown' as const }));
+  const targetPrefs = {
+    targetRole: config?.targetRole?.trim() || 'Product Manager',
+    searchTerms: config?.searchTerms?.length ? config.searchTerms : ['Product Manager'],
+  };
 
   return {
     sourceId: 'levelsfyi',
@@ -65,6 +73,7 @@ export function createLevelsFyiConnector(config?: LevelsFyiConfig): JobConnector
             const title = parts[0] ?? '';
             const company = parts[1] ?? '';
             if (!title || !company) continue;
+            if (!passesTargetRoleTitleScope(title, targetPrefs, 'levelsfyi')) continue;
 
             results.push({
               external_job_id: fullUrl,

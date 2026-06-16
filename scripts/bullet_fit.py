@@ -69,3 +69,52 @@ def is_incomplete_bullet(bullet: str) -> bool:
     if b.endswith((",", ";", ":")):
         return True
     return False
+
+
+def enforce_bullet_word_budget(
+    bullets: dict,
+    valid_ids: dict,
+    max_words: int = DEFAULT_MAX_BULLET_WORDS,
+) -> dict:
+    """
+    Fit resume bullets to word budget when possible without dropping grounded metrics (CR-048).
+
+    Catalog lines may exceed MAX_BULLET_WORDS; blind truncation at commas drops outcomes.
+    Only replace a bullet when the fitted version validates and preserves source numerics.
+    """
+    from local_draft_stages import validate_bullet_for_local
+    from verify_claims import extract_numeric_tokens
+
+    def _nums(text: str) -> set:
+        return set(extract_numeric_tokens((text or "").replace(",", "")))
+
+    out: dict = {}
+    for claim_id, bullet in bullets.items():
+        source = valid_ids.get(claim_id, bullet)
+        words = len(bullet.split())
+        if words <= max_words:
+            out[claim_id] = bullet
+            continue
+
+        src_nums = _nums(source)
+        best = bullet
+        for candidate in (bullet, source):
+            fitted = fit_bullet_to_budget(candidate, max_words)
+            if is_incomplete_bullet(fitted):
+                continue
+            fit_nums = _nums(fitted)
+            if src_nums and not (fit_nums & src_nums):
+                continue
+            valid, _ = validate_bullet_for_local(source, fitted)
+            if valid:
+                best = fitted
+                break
+            if (
+                fitted != bullet
+                and not is_incomplete_bullet(fitted)
+                and (not src_nums or (fit_nums & src_nums))
+            ):
+                best = fitted
+                break
+        out[claim_id] = best
+    return out

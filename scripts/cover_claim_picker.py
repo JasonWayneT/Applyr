@@ -236,6 +236,12 @@ def _refill_proofs_to_k(
     return proofs[:k]
 
 
+_FALLBACK_NEEDS = [
+    "product roadmap and cross-functional stakeholder alignment",
+    "platform delivery and customer-facing product outcomes",
+]
+
+
 def pick_cover_proofs(
     catalog: ClaimCatalog,
     ranked_needs: List[str],
@@ -243,8 +249,12 @@ def pick_cover_proofs(
     jd_text: str,
     k: int = 2,
 ) -> List[CoverProofSlot]:
-    if not catalog.claims or not ranked_needs:
+    if not catalog.claims:
         return []
+    # When no needs were extracted from the JD, fall back to generic PM themes
+    # rather than returning an empty proof list (which produces an empty letter body).
+    if not ranked_needs:
+        ranked_needs = _FALLBACK_NEEDS
 
     need0 = ranked_needs[0]
     need1 = ranked_needs[1] if len(ranked_needs) > 1 else ranked_needs[0]

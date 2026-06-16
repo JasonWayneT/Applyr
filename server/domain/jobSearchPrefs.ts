@@ -5,6 +5,8 @@
 import fs from 'fs';
 import { CANDIDATE_PREFS_PATH, DATE_POSTED_TO_DAYS } from './paths.js';
 
+import { deriveSearchTermsFromTargetRole } from '../../shared/domain/scoutPrefs.js';
+
 export { CANDIDATE_PREFS_PATH } from './paths.js';
 
 const DEFAULT_MIN_FIT_SCORE = 72;
@@ -44,10 +46,7 @@ export function materializeJobSearchPrefs(jobSearch: Record<string, unknown>): v
   } catch { /* use defaults */ }
 
   const targetRole = (jobSearch.targetRole as string) || 'Product Manager';
-  const searchTerms: string[] = [targetRole];
-  if (targetRole.toLowerCase().includes('product manager')) {
-    searchTerms.push('Product Owner', 'Technical Product Manager', 'Platform Product Manager', 'Digital Product Manager');
-  }
+  const searchTerms = deriveSearchTermsFromTargetRole(targetRole);
 
   const blockedTitles = ((jobSearch.titleBlocklist as string) || '').split(',').map(s => s.trim()).filter(Boolean);
   const blockedIndustries = ((jobSearch.industryBlocklist as string) || '').split(',').map(s => s.trim()).filter(Boolean);

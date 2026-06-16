@@ -181,5 +181,11 @@ def audit_cover_letter(
         issues.append("Em-dash forbidden")
         score -= 5
 
+    from cover_phrasing import check_cover_grammar_defects
+
+    for defect in check_cover_grammar_defects(markdown):
+        issues.append(defect)
+        score -= 20
+
     grade = "Pass" if score >= 80 else ("Needs Revision" if score >= 65 else "Rewrite")
     return CoverAuditResult(score=max(0, score), grade=grade, issues=issues)

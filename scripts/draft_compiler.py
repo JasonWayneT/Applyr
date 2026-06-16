@@ -33,10 +33,14 @@ from local_draft_stages import (
     build_skills_section,
     enforce_resume_char_budget,
     ensure_employer_quotas,
+    ensure_experience_skeleton_headers,
     experience_skeleton,
+    dedupe_metric_collision_bullets,
     normalize_employer_job_titles,
     select_claims_deterministic,
     select_claims_per_employer_local,
+    dedupe_metric_collision_bullets,
+    ensure_experience_skeleton_headers,
 )
 from pipeline_env import apply_submission_defaults, resume_bullet_quotas, resume_only_mode
 
@@ -77,7 +81,7 @@ def _extract_education_from_style(style_md: str) -> str:
         return "## EDUCATION\n" + m.group(2).strip() + "\n"
     return (
         "## EDUCATION\n\n"
-        "* **Bachelor of Business Administration, Major in Management** — "
+        "* **Bachelor of Business Administration, Major in Management**, "
         "National University, San Diego, California, 2019\n"
     )
 
@@ -230,16 +234,22 @@ def run(
     """
     from claim_catalog import load_catalog
     from verification_chain import strip_all_metadata_tokens, verify_document_bundle
+    from company_slug import resolve_company_display_name
 
     settings = load_llm_settings()
     if not _get_configured_providers(settings):
         raise DraftingPipelineError("No LLM provider configured for drafting")
 
-    display = (display_name or company_name).strip()
-    if "_" in display and " " not in display:
-        display = display.replace("_", " ").title()
     company_folder = company_folder or company_submission_dir(SUBMISSIONS_DIR, company_name)
     os.makedirs(company_folder, exist_ok=True)
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jobagent.sqlite")
+    display = resolve_company_display_name(
+        company_name,
+        company_folder=company_folder,
+        jd_text=jd_text,
+        db_path=db_path,
+        explicit_display=display_name,
+    )
 
     print(f"    [Compiler] CR-017 compose pipeline v{PIPELINE_VERSION} for {display}")
 
@@ -286,6 +296,13 @@ def run(
 
     bullets = enforce_metric_bullet_floor(bullets, valid_ids, jd_text, fallback_bullet)
     bullets = enforce_conversion_framing(bullets, valid_ids, jd_text, fallback_bullet)
+    from conversion_framing import ensure_sterkly_narrative_pass
+
+    bullets = ensure_sterkly_narrative_pass(bullets, valid_ids, jd_text, fallback_bullet)
+    from bullet_fit import enforce_bullet_word_budget
+
+    bullets = dedupe_metric_collision_bullets(bullets, valid_ids, jd_text, profile)
+    bullets = enforce_bullet_word_budget(bullets, valid_ids)
     print(f"    [Compiler] Stage 3: {len(bullets)} bullets ({fallback_count} fallbacks)")
 
     bullets_by_company = _bullets_by_company_ordered(bullets, valid_ids, profile, jd_text)
@@ -352,6 +369,7 @@ def run(
         )
         resume_md = repair_resume_markdown(resume_md, education)
         resume_md = normalize_employer_job_titles(resume_md)
+        resume_md = ensure_experience_skeleton_headers(resume_md, skeleton)
         resume_md = enforce_resume_char_budget(resume_md)
         resume_md = strip_all_metadata_tokens(resume_md)
         with open(resume_md_path, "w", encoding="utf-8") as f:
@@ -619,6 +637,9 @@ def run(
             )
             md = repair_resume_markdown(md, education)
             md = normalize_employer_job_titles(md)
+            from drafting_engine import sanitize_em_dashes
+
+            md = sanitize_em_dashes(md)
             md = enforce_resume_char_budget(md)
             md = strip_all_metadata_tokens(md)
             md = _post_format_resume(md)
@@ -676,9 +697,14 @@ def run(
             _pdf_page_prune()
 
             try:
+                skip_pdf = os.environ.get("SKIP_PDF_EXPORT", "").strip().lower() in (
+                    "1",
+                    "true",
+                    "yes",
+                )
                 conversion_critique = check_conversion_critique(
                     load_file(resume_md_path) or "",
-                    pdf_path=resume_pdf,
+                    pdf_path="" if skip_pdf else resume_pdf,
                     bullets_by_company=bullets_by_company,
                     jd_text=jd_text,
                 )
@@ -784,7 +810,11 @@ def run(
     elif resume_only_mode():
         print("    [Compiler] RESUME_ONLY=1 — cover letter files left unchanged.")
 
-    if not cover_only and not os.path.isfile(os.path.join(company_folder, "Resume.pdf")):
+    if (
+        not cover_only
+        and not os.path.isfile(os.path.join(company_folder, "Resume.pdf"))
+        and os.environ.get("SKIP_PDF_EXPORT", "").strip().lower() not in ("1", "true", "yes")
+    ):
         raise DraftingPipelineError("Resume PDF missing after export")
     cover_pdf_expected = (
         not skip_cover

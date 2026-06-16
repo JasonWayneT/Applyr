@@ -92,6 +92,41 @@ class TestSummaryProse(unittest.TestCase):
         self.assertEqual(issues, [])
 
 
+class TestSummaryBulletOverlap(unittest.TestCase):
+    def test_cw016_flags_verbatim_proof(self):
+        bullet = (
+            "Replaced reactive sprint planning with a capacity model using T-shirt sizing "
+            "and uncertainty bands."
+        )
+        resume = (
+            "# JOHN DOE\n\n## PROFESSIONAL SUMMARY\n"
+            "Product Manager with 6+ years across enterprise SaaS platforms. "
+            "Experienced partnering with engineering teams. "
+            f"{bullet}\n\n"
+            "## PROFESSIONAL EXPERIENCE\n\n"
+            "### Product Manager | Cision | 2021 - 2026\nRemote\n\n"
+            f"* {bullet}\n"
+        )
+        from resume_conversion_eval import check_summary_bullet_overlap, evaluate_resume_conversion
+
+        issues = check_summary_bullet_overlap(resume)
+        self.assertTrue(any("[CW-016]" in i for i in issues))
+        critique = evaluate_resume_conversion(resume)
+        self.assertFalse(critique["pass"])
+
+    def test_cw016_passes_distinct_proof(self):
+        resume = (
+            "# JOHN DOE\n\n## PROFESSIONAL SUMMARY\n"
+            "Product Manager with 6+ years across enterprise SaaS platforms. "
+            "Experienced partnering with engineering teams. "
+            "Rebuilt a B2B PR attribution feature that let customers trace revenue outcomes.\n\n"
+            "## PROFESSIONAL EXPERIENCE\n\n* Different experience bullet here.\n"
+        )
+        from resume_conversion_eval import check_summary_bullet_overlap
+
+        self.assertEqual(check_summary_bullet_overlap(resume), [])
+
+
 from unittest.mock import patch
 
 @patch("candidate_context.employer_tiers", return_value=("acme_corp", "example_inc", "startup_co"))

@@ -13,6 +13,7 @@ from cover_phrasing import (
     audit_need_fragment,
     jd_presence_clause,
     render_forward_close,
+    render_structured_close,
     strip_opener_hook_from_body,
     value_lead_from_story,
 )
@@ -88,6 +89,85 @@ class TestCoverPhrasing(unittest.TestCase):
         self.assertIn("welcome a conversation", c.lower())
         self.assertIn("adopt", c.lower())
         self.assertNotIn("priorities in your posting", c.lower())
+
+
+class TestStructuredClose(unittest.TestCase):
+    def test_no_circular_outcome_with_generic_fallback(self):
+        """When no JD-specific outcomes are found, close must not say 'the product outcomes
+        that drive measurable product outcomes'."""
+        jd = (
+            "Product Manager\n"
+            "What You'll Do\n"
+            "- Own roadmap prioritization and stakeholder alignment.\n"
+            "- Improve roadmap clarity and cross-functional delivery.\n"
+        )
+        close = render_structured_close("HiBob", jd)
+        self.assertNotIn(
+            "product outcomes that drive measurable product outcomes",
+            close.lower(),
+            "Circular 'product outcomes that drive measurable product outcomes' in close",
+        )
+        self.assertIn("hibob", close.lower())
+
+    def test_no_circular_outcome_when_target_equals_outcome(self):
+        """When a target and an outcome are the same phrase, the close must not repeat it
+        (e.g., 'improve product adoption … drive product adoption')."""
+        jd = (
+            "Product Manager\n"
+            "What You'll Do\n"
+            "- Drive product adoption across the platform.\n"
+            "- Improve product adoption metrics and KPIs.\n"
+        )
+        close = render_structured_close("OXIO", jd)
+        # "product adoption" may appear once (as the target), but not in both target and outcome
+        self.assertNotIn(
+            "product outcomes that drive product adoption",
+            close.lower(),
+            "Target-equals-outcome circularity in close",
+        )
+        self.assertIn("oxio", close.lower())
+
+    def test_specific_jd_outcomes_still_rendered(self):
+        """When the JD has specific outcome signals (funnel conversion, funded volume),
+        the 'the product outcomes that drive …' pattern should still appear."""
+        jd = (
+            "Product Manager — Lending Marketplace\n"
+            "What You'll Do\n"
+            "- Own lender integration quality and funnel conversion.\n"
+            "- Drive funded volume growth through borrower-lender matching.\n"
+        )
+        close = render_structured_close("Splash Financial", jd, archetype_id="marketplace_fintech")
+        self.assertIn("funnel conversion", close.lower())
+        self.assertIn("funded volume", close.lower())
+        self.assertIn("the product outcomes that drive", close.lower())
+
+    def test_dedupes_overlapping_jd_targets_in_close(self):
+        """Analytics product adoption + product adoption should not both appear."""
+        jd = (
+            "CVS Health\n"
+            "Product Manager\n"
+            "What You'll Do\n"
+            "- Own analytics product delivery and product adoption across teams.\n"
+            "- Improve analytics product adoption metrics and KPIs.\n"
+        )
+        close = render_structured_close("CVS Health", jd)
+        self.assertNotIn(
+            "strengthen product adoption",
+            close.lower(),
+            "Redundant overlapping targets in close",
+        )
+        self.assertIn("analytics product adoption", close.lower())
+
+
+class TestCoverPhrasePolish(unittest.TestCase):
+    def test_documentation_phrase_not_ungrammatical(self):
+        raw = (
+            "The B2B PR attribution tool had no surviving documentation and was "
+            "becoming unstable during the migration."
+        )
+        out = apply_voice_polish(raw)
+        self.assertNotIn("had no documentation remained", out.lower())
+        self.assertIn("had no documentation left", out.lower())
 
 
 class TestOpenerHookDedup(unittest.TestCase):

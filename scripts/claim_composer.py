@@ -106,12 +106,20 @@ def compose_bullet(
         # version that failed validation. This preserves claim accuracy while
         # discarding only the JD-bridge reframing that triggered the violation.
         source_text = catalog.raw_truth_lines.get(claim_id, core).strip()
+        from bullet_fit import fit_bullet_to_budget, is_incomplete_bullet
+        from local_draft_stages import MAX_BULLET_WORDS
+
+        fitted = fit_bullet_to_budget(source_text, MAX_BULLET_WORDS)
+        if not is_incomplete_bullet(fitted):
+            valid_f, _ = validate_bullet_for_local(source_line, fitted)
+            if valid_f:
+                return fitted
         print(
             f"    [Warning] Local validation failed for {claim_id}: {err}. "
-            f"Shipping catalog source text (bridge prefix dropped).",
+            f"Shipping word-budget fit of catalog source (bridge prefix dropped).",
             file=sys.stderr,
         )
-        return source_text
+        return fitted
         
     return bullet
 

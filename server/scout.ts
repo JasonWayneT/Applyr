@@ -166,6 +166,18 @@ export const runScoutSync = async () => {
     // --- STAGE 4: EVALUATE ---
     if (activeStage === 'EVALUATE') {
       broadcastSyncEvent('stage_handoff', { type: 'stage_handoff', from: 'SCRAPE', to: 'EVALUATE', total_passed: 0 });
+      updateCheckpoint(runId, 'EVALUATE', 'Exporting staged jobs from database...');
+      logActivity('INFO', 'Scout', 'Executing Stage 5/5: Exporting DB jobs to staging before evaluate.');
+
+      const exportSpawn = buildTsxSpawn('scripts/export_staging_from_db.ts');
+      const exportCode = await spawnProcessAsync(exportSpawn.command, exportSpawn.args, extraEnv, (output) => {
+        output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Export', line.trim()));
+      }, (stderr) => {
+        handleStderr('Export', stderr);
+      });
+
+      if (exportCode !== 0) throw new Error(`Export staging stage exited with non-zero code ${exportCode}`);
+
       updateCheckpoint(runId, 'EVALUATE', 'Evaluating fit and generating PDF assets...');
       logActivity('INFO', 'Scout', 'Executing Stage 5/5: Evaluating fit and drafting assets.');
 

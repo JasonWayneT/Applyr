@@ -6,6 +6,7 @@ import {
     passesSeniorityGate,
     passesBuiltInPmTitleScope,
     passesBroadPmTitleScope,
+    passesTargetRoleTitleScope,
     passesBuiltInStrictRemoteCard,
     parseMaxYearsRequired,
     titleMatchesBlocked,
@@ -230,6 +231,22 @@ describe('passesBroadPmTitleScope', () => {
     });
     it('rejects Customer Success Manager', () => {
         expect(passesBroadPmTitleScope('Senior Customer Success Manager')).toBe(false);
+    });
+});
+
+describe('passesTargetRoleTitleScope', () => {
+    const pmPrefs = { targetRole: 'Product Manager', searchTerms: ['Product Manager', 'Product Owner'] };
+
+    it('accepts Product Manager for PM target', () => {
+        expect(passesTargetRoleTitleScope('Senior Product Manager', pmPrefs)).toBe(true);
+    });
+    it('rejects Account Executive for PM target', () => {
+        expect(passesTargetRoleTitleScope('Account Executive', pmPrefs)).toBe(false);
+    });
+    it('uses search terms only for non-PM targets', () => {
+        const aePrefs = { targetRole: 'Account Executive', searchTerms: ['Account Executive', 'AE'] };
+        expect(passesTargetRoleTitleScope('Account Executive', aePrefs)).toBe(true);
+        expect(passesTargetRoleTitleScope('Product Manager', aePrefs)).toBe(false);
     });
 });
 

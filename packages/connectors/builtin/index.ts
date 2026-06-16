@@ -15,12 +15,14 @@ const MAX_PAGES = 2;
 interface BuiltInConfig {
   freshnessDays?: number;
   contextDir?: string;
+  /** Primary search term from Job Search prefs (defaults to Product Manager). */
+  searchTerms?: string[];
   /** Injected at runtime from server/middleware/crawlPolicy. Tests pass a mock. */
   policyChecker?: (domain: string) => { status: string };
 }
 
-function buildSeedUrl(freshnessDays: number): string {
-  const term = 'Product Manager';
+function buildSeedUrl(freshnessDays: number, searchTerm: string): string {
+  const term = searchTerm.trim() || 'Product Manager';
   return (
     `https://builtin.com/jobs/remote/mid-level` +
     `?search=${encodeURIComponent(term)}` +
@@ -49,6 +51,7 @@ export function createBuiltInConnector(config?: BuiltInConfig): JobConnector {
   const freshnessDays = config?.freshnessDays ?? 7;
   const contextDir = config?.contextDir ?? 'data/browser_context';
   const policyChecker = config?.policyChecker ?? (() => ({ status: 'unknown' as const }));
+  const primarySearchTerm = config?.searchTerms?.[0]?.trim() || 'Product Manager';
 
   return {
     sourceId: 'builtin',
@@ -61,7 +64,7 @@ export function createBuiltInConnector(config?: BuiltInConfig): JobConnector {
 
       const results: RawJobPayload[] = [];
       const seenUrls = new Set<string>();
-      const seedUrl = buildSeedUrl(freshnessDays);
+      const seedUrl = buildSeedUrl(freshnessDays, primarySearchTerm);
 
       const context = await chromium.launchPersistentContext(contextDir, {
         headless: true,

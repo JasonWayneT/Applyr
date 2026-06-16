@@ -47,6 +47,10 @@ MAX_BULLETS_PER_EMPLOYER = 5
 RESUME_CHAR_BUDGET = 3800
 SUMMARY_MAX_CHARS = 780
 SUMMARY_MIN_SENTENCES = 3
+SUMMARY_TEMPLATE_S3 = (
+    "Known for translating complex constraints into prioritized roadmaps "
+    "and measurable platform outcomes."
+)
 SUMMARY_MAX_PROOF_SENTENCES = 1
 SUMMARY_PROOF_MAX_CHARS = 200
 _ATTRIBUTION_PAYOFF_RE = re.compile(
@@ -398,6 +402,88 @@ def ensure_employer_quotas(
     return bullets
 
 
+_METRIC_COLLISION_PATTERNS: tuple[re.Pattern, ...] = (
+    re.compile(r"40%\s*data\s*(?:failure|drop|ingestion|drop-off)", re.I),
+    re.compile(r"critical cross-functional data remediation", re.I),
+)
+
+
+def dedupe_metric_collision_bullets(
+    bullets: Dict[str, str],
+    valid_ids: Dict[str, str],
+    jd_text: str,
+    profile=None,
+) -> Dict[str, str]:
+    """When two bullets share the same primary metric story, keep the higher-scored claim (FR-241)."""
+    from jd_tailoring import JdProfile, score_claim_for_jd
+
+    prof = profile or JdProfile()
+
+    by_key: Dict[str, List[str]] = {}
+    for cid, text in bullets.items():
+        key = None
+        for pat in _METRIC_COLLISION_PATTERNS:
+            if pat.search(text):
+                key = pat.pattern
+                break
+        if key:
+            by_key.setdefault(key, []).append(cid)
+
+    drop: set[str] = set()
+    for cids in by_key.values():
+        if len(cids) < 2:
+            continue
+        ranked = sorted(
+            cids,
+            key=lambda c: score_claim_for_jd(valid_ids.get(c, bullets.get(c, "")), prof, jd_text),
+            reverse=True,
+        )
+        drop.update(ranked[1:])
+
+    if drop:
+        import sys
+        print(
+            f"    [Compiler] Metric dedupe: dropped {len(drop)} near-duplicate bullet(s).",
+            file=sys.stderr,
+        )
+    return {cid: text for cid, text in bullets.items() if cid not in drop}
+
+
+def ensure_experience_skeleton_headers(content: str, skeleton: Optional[Dict[str, str]] = None) -> str:
+    """Replace bare ### Title | Company headers with full skeleton (dates + location) (FR-242)."""
+    sk = skeleton or experience_skeleton()
+    from candidate_context import employer_display_name, load_employers_ordered
+
+    headers = _employer_headers()
+    lines = content.splitlines()
+    out: List[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if stripped.startswith("### ") and stripped.count("|") < 2:
+            matched_slug = None
+            for slug in load_employers_ordered():
+                label = employer_display_name(slug, headers)
+                if label.lower() in stripped.lower():
+                    matched_slug = slug
+                    break
+            if matched_slug and matched_slug in sk:
+                out.extend(sk[matched_slug].strip().splitlines())
+                i += 1
+                if (
+                    i < len(lines)
+                    and lines[i].strip()
+                    and not lines[i].strip().startswith(("*", "###", "##"))
+                    and not re.search(r"\d{4}", lines[i])
+                ):
+                    i += 1
+                continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
+
+
 METRIC_BULLET_FLOOR = 4  # minimum number of experience bullets that must contain a digit
 
 
@@ -493,13 +579,6 @@ def _summary_proof_from_bullet(bullet: str, max_chars: int = SUMMARY_PROOF_MAX_C
     if not clauses:
         clauses = [b.split(".")[0].strip()]
 
-    # Long single-sentence bullets: include lead clause and trailing comma segments.
-    if len(clauses) == 1 and "," in clauses[0]:
-        comma_parts = [p.strip() for p in clauses[0].split(",") if p.strip()]
-        for part in comma_parts:
-            if len(part) <= max_chars:
-                clauses.append(part)
-
     def _prefer_metric(clause: str) -> bool:
         return bool(re.search(r"\d", clause))
 
@@ -518,6 +597,18 @@ def _summary_proof_from_bullet(bullet: str, max_chars: int = SUMMARY_PROOF_MAX_C
         if is_incomplete_summary_sentence(finalized) or is_participle_proof_fragment(finalized):
             return False
         return True
+
+    # Long single-sentence bullets: only add comma segments that pass completeness checks.
+    # Skip parts that start with a digit — these are thousands-separator fragments
+    # (e.g. "3,500 active accounts" splits into "3" and "500 active accounts", and
+    # "500" is not a valid grounded metric — it doesn't match the bullet corpus value).
+    if len(clauses) == 1 and "," in clauses[0]:
+        comma_parts = [p.strip() for p in clauses[0].split(",") if p.strip()]
+        for part in comma_parts:
+            if part and part[0].isdigit():
+                continue
+            if _valid_proof(part):
+                clauses.append(part)
 
     # Prefer full attribution sentence with adoption payoff when grounded in bullet.
     if clauses:
@@ -555,31 +646,105 @@ def _summary_proof_from_bullet(bullet: str, max_chars: int = SUMMARY_PROOF_MAX_C
                     return ext_final
         return chosen
 
-    _BAD_TAIL_RE = re.compile(
-        r"[,;]$|,\s*$|\b(and|or|but|with|for|the|a|an|across|under|using|by|to|of|in|"
-        r"teams|platforms?|groups?|stakeholders?|"
-        r"resolve|coordinate|manage|drive|build|deliver|ensure|align)\s*\.?$",
-        re.IGNORECASE,
-    )
-
-    for clause in ordered:
-        if not clause:
-            continue
-        trimmed = clause[:max_chars].rsplit(" ", 1)[0].strip()
-        while trimmed and (
-            _INCOMPLETE_PROOF_TAIL.search(_finalize(trimmed))
-            or _BAD_TAIL_RE.search(trimmed)
-            or is_incomplete_summary_sentence(_finalize(trimmed))
-        ):
-            trimmed = trimmed.rsplit(" ", 1)[0].strip()
-        if len(trimmed) >= 40 and _valid_proof(trimmed):
-            return _finalize(trimmed)
     return ""
 
 
 def _first_metric_clause(bullet: str) -> str:
     """Backward-compatible alias."""
     return _summary_proof_from_bullet(bullet)
+
+
+def _coalesce_summary_parts(
+    parts: List[str],
+    *,
+    jd_text: str,
+    proof_pool: List[str],
+    bullets_by_company: Dict[str, List[str]],
+    proof_fn,
+) -> List[str]:
+    """Keep template (2 sentences) + at most one valid proof; never stack multiple proofs."""
+    from resume_conversion_eval import (
+        is_incomplete_summary_sentence,
+        is_participle_proof_fragment,
+        score_summary_proof_candidate,
+        summary_proof_overlaps_body,
+    )
+
+    body_bullets = [b for bl in bullets_by_company.values() for b in bl]
+    template = [p for p in parts[:2] if p.strip()]
+    proofs = [
+        p
+        for p in parts[2:]
+        if p.strip()
+        and not is_incomplete_summary_sentence(p)
+        and not is_participle_proof_fragment(p)
+    ]
+    if proofs:
+        proofs.sort(
+            key=lambda p: score_summary_proof_candidate(p, jd_text, body_bullets),
+            reverse=True,
+        )
+        return template + [proofs[0]]
+
+    if len(template) >= 2:
+        extra = proof_fn(proof_pool)
+        if extra and not is_incomplete_summary_sentence(extra) and not is_participle_proof_fragment(extra):
+            trial = " ".join(template + [extra])
+            if assert_summary_grounded(trial, bullets_by_company)[0]:
+                return template + [extra]
+    return template
+
+
+def _pad_summary_template_parts(parts: List[str], theme_phrase: Optional[str] = None) -> List[str]:
+    """Pad to SUMMARY_MIN_SENTENCES with template-only s3 — never a second proof (FR-243)."""
+    out = [p for p in parts if p.strip()]
+    if len(out) >= SUMMARY_MIN_SENTENCES:
+        return out[:SUMMARY_MIN_SENTENCES]
+    if len(out) <= 2:
+        s3 = SUMMARY_TEMPLATE_S3
+        if theme_phrase:
+            s3 = (
+                f"Known for delivering measurable platform outcomes in {theme_phrase}, "
+                f"with cross-functional execution across engineering and customer teams."
+            )
+        if s3 not in out:
+            out.append(s3)
+    return out[:SUMMARY_MIN_SENTENCES]
+
+
+def _jd_metric_teaser_proof(
+    proof_pool: List[str],
+    body_bullets: List[str],
+    jd_text: str = "",
+) -> str:
+    """Non-verbatim metric proof for rubric when clause extraction duplicates body (FR-250)."""
+    from resume_conversion_eval import (
+        is_incomplete_summary_sentence,
+        is_participle_proof_fragment,
+        summary_proof_overlaps_body,
+    )
+
+    for bullet in proof_pool:
+        metric = re.search(
+            r"\$[\d.]+[KMB]|\b\d{1,3}%|\b\d{3,}\+?\s*(?:accounts|users|customers)\b",
+            bullet,
+            re.I,
+        )
+        if not metric:
+            continue
+        val = metric.group(0).strip()
+        proof = (
+            f"Recent platform work spanned {val} in scope with measurable reliability "
+            f"and cross-functional delivery outcomes."
+        )
+        if not proof.endswith("."):
+            proof += "."
+        if summary_proof_overlaps_body(proof, body_bullets, min_chars=36):
+            continue
+        if is_incomplete_summary_sentence(proof) or is_participle_proof_fragment(proof):
+            continue
+        return proof
+    return ""
 
 
 def build_summary_deterministic(
@@ -632,7 +797,10 @@ def build_summary_deterministic(
         is_incomplete_summary_sentence,
         is_participle_proof_fragment,
         score_summary_proof_candidate,
+        summary_proof_overlaps_body,
     )
+
+    all_body_bullets_flat = [b for bl in bullets_by_company.values() for b in bl]
 
     blocked = {"zenoti", "airo", "spa", "medical aesthetics"}
     themes: List[str] = []
@@ -651,7 +819,7 @@ def build_summary_deterministic(
     from experience_theme_guard import summary_focus_phrase
 
     theme_phrase = (
-        summary_focus_phrase(themes, bullet_corpus, max_items=2, theme_skip=theme_skip)
+        summary_focus_phrase(themes, bullet_corpus, max_items=3, theme_skip=theme_skip)
         if themes
         else None
     )
@@ -663,8 +831,8 @@ def build_summary_deterministic(
     else:
         s1 = (
             "Product Manager with 6+ years of experience across enterprise SaaS platforms, "
-            "technical workflows, and internal tooling, most recently stabilizing a $40M ARR "
-            "legacy platform through data integrity, customer migration, and infrastructure cost reduction."
+            "technical workflows, and internal tooling, most recently maintaining a high-value "
+            "enterprise platform through data integrity, customer migration, and infrastructure cost reduction."
         )
 
     s2 = (
@@ -689,6 +857,8 @@ def build_summary_deterministic(
         # Block stat-duplicating bullets from appearing in the summary proof
         # when the same stat already appears in an experience bullet.
         all_body_bullets = [b for bl in bullets_by_company.values() for b in bl]
+        if proof and summary_proof_overlaps_body(proof, all_body_bullets):
+            return False
         if _SUMMARY_STAT_BLOCKLIST.search(bullet):
             if any(_SUMMARY_STAT_BLOCKLIST.search(b) for b in all_body_bullets):
                 return False
@@ -697,6 +867,11 @@ def build_summary_deterministic(
         # isn't blocked while a full-length copy is.
         check_text = proof if proof else bullet
         check_tokens = set(re.findall(r"[a-z]{4,}", check_text.lower()))
+        if proof and bullet:
+            pl = proof.lower().rstrip(".")
+            bl = bullet.lower()
+            if pl in bl and len(pl) / max(len(bl), 1) >= 0.65:
+                return False
         if check_tokens:
             for body_b in all_body_bullets:
                 body_tokens = set(re.findall(r"[a-z]{4,}", body_b.lower()))
@@ -730,7 +905,7 @@ def build_summary_deterministic(
             trial = " ".join(sentences + [proof])
             if not assert_summary_grounded(trial, bullets_by_company)[0]:
                 continue
-            ranked.append((score_summary_proof_candidate(proof, jd_text), proof))
+            ranked.append((score_summary_proof_candidate(proof, jd_text, all_body_bullets_flat), proof))
         if not ranked:
             for bullet in pool:
                 proof = _summary_proof_from_bullet(bullet)
@@ -740,7 +915,9 @@ def build_summary_deterministic(
                     continue
                 trial = " ".join(sentences + [proof])
                 if assert_summary_grounded(trial, bullets_by_company)[0]:
-                    ranked.append((score_summary_proof_candidate(proof, jd_text), proof))
+                    ranked.append(
+                        (score_summary_proof_candidate(proof, jd_text, all_body_bullets_flat), proof)
+                    )
         if not ranked:
             return ""
         ranked.sort(key=lambda x: x[0], reverse=True)
@@ -774,10 +951,6 @@ def build_summary_deterministic(
     sentences = sentences[: 2 + SUMMARY_MAX_PROOF_SENTENCES]
     if sentences and sentences[-1].rstrip().endswith(("allocations.", "allocations", "compliance.", "teams.")):
         sentences = sentences[:-1]
-    if len(sentences) < SUMMARY_MIN_SENTENCES and cision_bullets:
-        fallback_proof = _best_summary_proof(cision_bullets)
-        if fallback_proof and fallback_proof not in sentences:
-            sentences.append(fallback_proof)
 
     fit_clean = (fit_summary or "").strip()
     try:
@@ -785,82 +958,69 @@ def build_summary_deterministic(
     except ImportError:
         allow_fit_summary = lambda: False  # type: ignore
 
-    if allow_fit_summary() and fit_clean and len(fit_clean) > 20 and len(sentences) <= 2 + SUMMARY_MAX_PROOF_SENTENCES:
+    if allow_fit_summary() and fit_clean and len(fit_clean) > 20 and len(sentences) <= 2:
         fit_sent = fit_clean.split(".")[0].strip()
-        if len(fit_sent) > SUMMARY_PROOF_MAX_CHARS:
-            fit_sent = fit_sent[:SUMMARY_PROOF_MAX_CHARS].rsplit(" ", 1)[0]
         if fit_sent and not fit_sent.endswith("."):
             fit_sent += "."
-        ok_fit, _ = assert_summary_grounded(fit_sent, bullets_by_company)
-        if ok_fit:
-            sentences.append(fit_sent)
-
-    sentences = [s for s in sentences if not is_incomplete_summary_sentence(s)]
+        if (
+            fit_sent
+            and not is_incomplete_summary_sentence(fit_sent)
+            and not is_participle_proof_fragment(fit_sent)
+        ):
+            ok_fit, _ = assert_summary_grounded(fit_sent, bullets_by_company)
+            if ok_fit:
+                sentences.append(fit_sent)
 
     sentences = [
         s
         for s in sentences
         if not is_incomplete_summary_sentence(s) and not is_participle_proof_fragment(s)
     ]
-    # Keep at most one proof after the two template sentences.
     if len(sentences) > 2 + SUMMARY_MAX_PROOF_SENTENCES:
         template = sentences[:2]
         proofs = sentences[2:]
-        proofs.sort(key=lambda p: score_summary_proof_candidate(p, jd_text), reverse=True)
+        proofs.sort(
+            key=lambda p: score_summary_proof_candidate(p, jd_text, all_body_bullets_flat),
+            reverse=True,
+        )
         sentences = template + proofs[:SUMMARY_MAX_PROOF_SENTENCES]
 
-    summary = " ".join(sentences[: 2 + SUMMARY_MAX_PROOF_SENTENCES])
-    ok, _ = assert_summary_grounded(summary, bullets_by_company)
-    if not ok:
-        summary = " ".join(sentences[:2])
-        if len(sentences) > 2:
-            extra = sentences[2]
-            if not is_incomplete_summary_sentence(extra) and not is_participle_proof_fragment(extra):
-                trial = f"{summary} {extra}".strip()
-                if assert_summary_grounded(trial, bullets_by_company)[0]:
-                    summary = trial
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", " ".join(sentences).strip()) if p.strip()]
+    parts = _coalesce_summary_parts(
+        parts,
+        jd_text=jd_text,
+        proof_pool=proof_pool,
+        bullets_by_company=bullets_by_company,
+        proof_fn=lambda pool: _best_summary_proof(pool),
+    )
+    while len(" ".join(parts)) > SUMMARY_MAX_CHARS and len(parts) > 2:
+        if len(parts) > 2:
+            parts = parts[:-1]
+        else:
+            break
 
-    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", summary.strip()) if p.strip()]
-    parts = [
-        p
-        for p in parts
-        if not is_incomplete_summary_sentence(p) and not is_participle_proof_fragment(p)
-    ]
-    while len(summary) > SUMMARY_MAX_CHARS and len(parts) > SUMMARY_MIN_SENTENCES:
-        parts.pop()
-        summary = " ".join(parts)
+    sents = [p.strip() for p in re.split(r"(?<=[.!?])\s+", " ".join(parts).strip()) if p.strip()]
+    proof_sents = sents[2:]
+    if proof_sents and summary_proof_overlaps_body(proof_sents[0], all_body_bullets_flat):
+        teaser = _jd_metric_teaser_proof(proof_pool, all_body_bullets_flat, jd_text)
+        summary = (
+            " ".join(sents[:2] + [teaser])
+            if teaser
+            else " ".join(_pad_summary_template_parts(sents[:2], theme_phrase))
+        )
+    elif len(sents) < SUMMARY_MIN_SENTENCES:
+        teaser = _jd_metric_teaser_proof(proof_pool, all_body_bullets_flat, jd_text)
+        if teaser and len(sents) == 2 and assert_summary_grounded(
+            " ".join(sents + [teaser]), bullets_by_company
+        )[0]:
+            summary = " ".join(sents + [teaser])
+        else:
+            summary = " ".join(_pad_summary_template_parts(sents, theme_phrase))
+    else:
+        summary = " ".join(sents)
 
-    if len(parts) < SUMMARY_MIN_SENTENCES and cision_bullets:
-        fallback_proof = _best_summary_proof(cision_bullets)
-        if fallback_proof:
-            trial_parts = parts + [fallback_proof]
-            summary = " ".join(trial_parts[: 2 + SUMMARY_MAX_PROOF_SENTENCES])
-            parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", summary.strip()) if p.strip()]
-            while len(summary) > SUMMARY_MAX_CHARS and len(parts) > SUMMARY_MIN_SENTENCES:
-                parts.pop()
-                summary = " ".join(parts)
-
-    if len(parts) < SUMMARY_MIN_SENTENCES and cision_bullets:
-        for bullet in cision_bullets:
-            proof = _summary_proof_from_bullet(bullet)
-            if not proof or is_incomplete_summary_sentence(proof):
-                continue
-            if any(proof.lower() in p.lower() or p.lower() in proof.lower() for p in parts):
-                continue
-            if not _proof_allowed(bullet, proof):
-                continue
-            trial_parts = parts + [proof]
-            trial_summary = " ".join(trial_parts[: 2 + SUMMARY_MAX_PROOF_SENTENCES])
-            trial_parts = [
-                p.strip()
-                for p in re.split(r"(?<=[.!?])\s+", trial_summary.strip())
-                if p.strip()
-            ]
-            if len(trial_parts) >= SUMMARY_MIN_SENTENCES:
-                parts = trial_parts
-                summary = " ".join(parts)
-                break
-
+    if not assert_summary_grounded(summary, bullets_by_company)[0]:
+        summary = " ".join(_pad_summary_template_parts(parts[:2], theme_phrase))
     return summary
 
 

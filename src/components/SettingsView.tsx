@@ -43,6 +43,64 @@ interface StatsData {
   byRejectionType: { rejection_type: string; count: number }[];
 }
 
+function SettingsCard({
+  label,
+  title,
+  description,
+  children,
+  action,
+  className = '',
+}: {
+  label?: string;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`bg-surface-container-lowest border border-outline/8 rounded-2xl p-6 md:p-7 shadow-sm ${className}`}>
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <div>
+          {label && (
+            <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.14em] mb-1.5">{label}</p>
+          )}
+          <h3 className="text-lg font-headline font-bold text-on-surface tracking-tight">{title}</h3>
+          {description && <p className="text-xs text-on-surface-variant mt-1.5 leading-relaxed max-w-2xl">{description}</p>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SettingsField({
+  label,
+  children,
+  hint,
+  className = '',
+}: {
+  label: string;
+  children: React.ReactNode;
+  hint?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`space-y-2 ${className}`}>
+      <label className="block text-[11px] font-semibold text-on-surface-variant">{label}</label>
+      {children}
+      {hint && <p className="text-[10px] text-on-surface-variant/80 leading-snug">{hint}</p>}
+    </div>
+  );
+}
+
+const inputClass =
+  'w-full text-sm px-4 py-2.5 rounded-xl bg-surface border border-outline/12 text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/35 focus:ring-2 focus:ring-primary/10 transition-colors';
+
+const providerConfigClass = `${inputClass} font-mono text-xs w-full max-w-xl`;
+const providerConfigWrapClass = 'w-full max-w-xl';
+
 const SettingsView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('Profile');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -176,105 +234,154 @@ const SettingsView: React.FC = () => {
   const isExperienceEmpty = experience.trim().length < 100;
 
   const tabs = [
-    { id: 'Profile', icon: 'account_circle' },
-    { id: 'Experience', icon: 'work' },
-    { id: 'API or Connections', icon: 'hub' },
-    { id: 'Analytics', icon: 'analytics' },
+    { id: 'Profile', icon: 'account_circle', short: 'Profile' },
+    { id: 'Experience', icon: 'work', short: 'Experience' },
+    { id: 'API or Connections', icon: 'hub', short: 'Integrations' },
+    { id: 'Analytics', icon: 'analytics', short: 'Analytics' },
   ];
 
-  return (
-    <div className="flex flex-col md:flex-row gap-8 min-h-[calc(100vh-12rem)] animate-fade-in text-on-surface">
-      
-      {/* Left Sidebar Menu */}
-      <div className="w-full md:w-64 shrink-0 flex flex-col gap-4">
-        <div className="bg-surface-container-lowest border border-outline-variant/10 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-base font-headline font-extrabold text-on-surface tracking-tight">Settings</h2>
-            {saveStatus === 'saving' && (
-              <span className="text-[10px] bg-secondary/10 text-secondary border border-secondary/20 font-bold px-2 py-0.5 rounded-full animate-pulse">Saving...</span>
-            )}
-            {saveStatus === 'saved' && (
-              <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 font-bold px-2 py-0.5 rounded-full animate-fade-in">Saved</span>
-            )}
-          </div>
-          <nav className="space-y-1.5">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 py-2.5 px-4 rounded-xl text-xs font-semibold transition-all duration-200 text-left ${
-                  activeTab === tab.id
-                    ? 'bg-primary/10 text-primary border-l-2 border-primary'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low'
-                }`}
-              >
-                <span className="material-symbols-outlined text-base leading-none">{tab.icon}</span>
-                {tab.id}
-                {tab.id === 'Experience' && experienceDirty && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-secondary" title="Unsaved changes"></span>
-                )}
-              </button>
-            ))}
-          </nav>
-        </div>
+  const primaryProviderLabel =
+    llmSettings.primaryProvider === 'gemini' ? 'Google Gemini'
+    : llmSettings.primaryProvider === 'claude' ? 'Anthropic Claude'
+    : llmSettings.primaryProvider === 'perplexity' ? 'Perplexity'
+    : 'Local LLM';
 
-        {/* Informational Card */}
-        <div className="bg-surface-container-low/60 border border-outline-variant/10 rounded-2xl p-5 text-[11px] text-on-surface-variant leading-relaxed">
-          <p className="font-bold mb-1 text-on-surface">Local Workspace Mode</p>
-          All configurations save automatically and reside inside your secure, local-first SQLite database.
+  const saveBadge = saveStatus === 'saving' ? (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-on-surface-variant bg-surface-container px-3 py-1 rounded-full border border-outline/10">
+      <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
+      Saving
+    </span>
+  ) : saveStatus === 'saved' ? (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+      Saved
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+      Local
+    </span>
+  );
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6 pb-10 animate-fade-in text-on-surface">
+      {/* Page header — Tavily-style */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <p className="text-xs text-on-surface-variant mb-1">
+            Settings <span className="text-on-surface-variant/50 mx-1">/</span> {activeTab}
+          </p>
+          <h1 className="text-3xl font-headline font-extrabold tracking-tight text-on-surface">{activeTab}</h1>
+          <p className="text-sm text-on-surface-variant mt-1.5 max-w-xl">
+            {activeTab === 'Profile' && 'Contact details and links used across resumes and applications.'}
+            {activeTab === 'Experience' && 'Source of truth for accomplishments, metrics, and proof codes.'}
+            {activeTab === 'API or Connections' && 'AI providers and optional job board API connections.'}
+            {activeTab === 'Analytics' && 'Pipeline throughput and rejection telemetry.'}
+          </p>
         </div>
+        {saveBadge}
       </div>
 
-      {/* Right Content Workspace */}
-      <div className="flex-1 bg-surface-container-lowest border border-outline-variant/10 rounded-2xl p-8 shadow-sm">
-        
+      {/* Sub-navigation pills */}
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all border ${
+              activeTab === tab.id
+                ? 'bg-on-surface text-surface border-on-surface shadow-sm'
+                : 'bg-surface-container-lowest text-on-surface-variant border-outline/10 hover:border-outline/25 hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[15px]">{tab.icon}</span>
+            {tab.short}
+            {tab.id === 'Experience' && experienceDirty && (
+              <span className="w-1.5 h-1.5 rounded-full bg-secondary" title="Unsaved changes" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content — stacked cards */}
+      <div className="space-y-5">
+
         {/* Profile Tab */}
         {activeTab === 'Profile' && (
-          <div className="space-y-6 animate-fade-in">
-            <div>
-              <h3 className="text-base font-headline font-bold text-on-surface">Professional Profile</h3>
-              <p className="text-xs text-on-surface-variant mt-1">Configure your personal contact details, portfolio sites, and code links used for matching.</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-4 border-t border-outline-variant/10">
-              {[
-                { label: 'Full Name', key: 'name', type: 'text', placeholder: 'John Doe' },
-                { label: 'Email Address', key: 'email', type: 'email', placeholder: 'email@example.com' },
-                { label: 'Phone Number', key: 'phone', type: 'text', placeholder: '+1 (555) 019-2834' },
-                { label: 'Location', key: 'location', type: 'text', placeholder: 'City, State' },
-                { label: 'LinkedIn URL', key: 'linkedin', type: 'text', placeholder: 'https://linkedin.com/in/...' },
-                { label: 'Portfolio Link', key: 'portfolio', type: 'text', placeholder: 'https://portfolio.me' },
-              ].map(({ label, key, type, placeholder }) => (
-                <div key={key} className="space-y-1.5">
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">{label}</label>
-                  <input
-                    type={type}
-                    value={(profile as any)[key] ?? ''}
-                    placeholder={placeholder}
-                    onChange={(e) => {
-                      const next = { ...profile, [key]: e.target.value };
-                      setProfile(next);
-                      debouncedSave('identity', next);
-                    }}
-                    className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 transition-colors"
-                  />
-                </div>
-              ))}
-              <div className="md:col-span-2 space-y-1.5">
-                <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">GitHub Profile Link</label>
-                <input
-                  type="text"
-                  value={profile.github ?? ''}
-                  placeholder="https://github.com/..."
-                  onChange={(e) => {
-                    const next = { ...profile, github: e.target.value };
-                    setProfile(next);
-                    debouncedSave('identity', next);
-                  }}
-                  className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 transition-colors"
-                />
+          <>
+            <section className="rounded-2xl border border-outline/8 p-6 md:p-8 bg-gradient-to-br from-primary/8 via-surface-container-lowest to-secondary/5 shadow-sm">
+              <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.14em] mb-2">Current profile</p>
+              <h2 className="text-2xl md:text-3xl font-headline font-extrabold text-on-surface tracking-tight">
+                {profile.name?.trim() || 'Your name'}
+              </h2>
+              <p className="text-sm text-on-surface-variant mt-2">
+                {[profile.email, profile.location].filter(Boolean).join(' · ') || 'Add contact details below'}
+              </p>
+            </section>
+
+            <SettingsCard
+              label="Contact"
+              title="Personal details"
+              description="Used on generated resumes, cover letters, and application headers."
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {[
+                  { label: 'Full name', key: 'name', type: 'text', placeholder: 'Jason Thomas' },
+                  { label: 'Email', key: 'email', type: 'email', placeholder: 'you@email.com' },
+                  { label: 'Phone', key: 'phone', type: 'text', placeholder: '+1 (555) 000-0000' },
+                  { label: 'Location', key: 'location', type: 'text', placeholder: 'San Diego, CA' },
+                ].map(({ label, key, type, placeholder }) => (
+                  <SettingsField key={key} label={label}>
+                    <input
+                      type={type}
+                      value={profile[key as keyof ProfileData] ?? ''}
+                      placeholder={placeholder}
+                      onChange={(e) => {
+                        const next = { ...profile, [key]: e.target.value };
+                        setProfile(next);
+                        debouncedSave('identity', next);
+                      }}
+                      className={inputClass}
+                    />
+                  </SettingsField>
+                ))}
               </div>
-            </div>
-          </div>
+            </SettingsCard>
+
+            <SettingsCard
+              label="Links"
+              title="Online presence"
+              description="Portfolio and social links included where relevant in application materials."
+            >
+              <div className="grid grid-cols-1 gap-5">
+                {[
+                  { label: 'LinkedIn', key: 'linkedin', placeholder: 'https://linkedin.com/in/...' },
+                  { label: 'Portfolio', key: 'portfolio', placeholder: 'https://yoursite.com' },
+                  { label: 'GitHub', key: 'github', placeholder: 'https://github.com/...' },
+                ].map(({ label, key, placeholder }) => (
+                  <SettingsField key={key} label={label}>
+                    <input
+                      type="text"
+                      value={profile[key as keyof ProfileData] ?? ''}
+                      placeholder={placeholder}
+                      onChange={(e) => {
+                        const next = { ...profile, [key]: e.target.value };
+                        setProfile(next);
+                        debouncedSave('identity', next);
+                      }}
+                      className={inputClass}
+                    />
+                  </SettingsField>
+                ))}
+              </div>
+            </SettingsCard>
+
+            <SettingsCard label="Workspace" title="Local-first storage">
+              <p className="text-sm text-on-surface-variant leading-relaxed">
+                All settings auto-save to your local SQLite database. Nothing syncs to git or the cloud unless you configure it.
+              </p>
+            </SettingsCard>
+          </>
         )}
 
         {/* Experience Tab */}
@@ -500,333 +607,232 @@ const SettingsView: React.FC = () => {
 
         {/* API or Connections Tab — Implements FR-059, FR-060, FR-061, FR-062, FR-063 */}
         {activeTab === 'API or Connections' && (
-          <div className="space-y-6 animate-fade-in">
-            <div>
-              <h3 className="text-base font-headline font-bold text-on-surface">LLM Providers</h3>
-              <p className="text-xs text-on-surface-variant mt-1">Configure one or more AI providers. The primary is tried first; others serve as automatic fallback. Only providers with a configured key will be called.</p>
-            </div>
+          <>
+            <section className="rounded-2xl border border-outline/8 p-6 md:p-8 bg-gradient-to-br from-primary/8 via-surface-container-lowest to-surface-container-low shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.14em] mb-2">Primary provider</p>
+                  <h2 className="text-2xl font-headline font-extrabold text-on-surface">{primaryProviderLabel}</h2>
+                  <p className="text-sm text-on-surface-variant mt-1.5">Tried first for fit scoring and drafting. Others serve as automatic fallback.</p>
+                </div>
+                <span className="self-start text-[11px] font-semibold text-primary bg-primary/10 px-3 py-1.5 rounded-full border border-primary/15">
+                  {llmSettings.primaryProvider} · primary
+                </span>
+              </div>
+            </section>
 
-            <div className="space-y-4 pt-4 border-t border-outline-variant/10">
+            <SettingsCard
+              label="AI providers"
+              title="API keys"
+              description="Only providers with a configured key are called. Keys stay in your local database."
+            >
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full min-w-[640px] text-left border-collapse">
+                  <thead>
+                    <tr className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider border-b border-outline/10">
+                      <th className="pb-3 pr-4 font-bold">Provider</th>
+                      <th className="pb-3 pr-4 font-bold">Role</th>
+                      <th className="pb-3 pr-4 font-bold">Status</th>
+                      <th className="pb-3 font-bold">Configuration</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-outline/8">
+                    {/* Local — listed first */}
+                    <tr className="align-top">
+                      <td className="py-4 pr-4 w-40">
+                        <p className="text-sm font-semibold text-on-surface">Local LLM</p>
+                      </td>
+                      <td className="py-4 pr-4">
+                        {llmSettings.primaryProvider === 'local' ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-on-surface text-surface">Primary</span>
+                        ) : (
+                          <button type="button" onClick={() => { const next = { ...llmSettings, primaryProvider: 'local' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }} className="text-[10px] font-semibold text-on-surface-variant hover:text-primary">Set primary</button>
+                        )}
+                      </td>
+                      <td className="py-4 pr-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${llmSettings.localUrl ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                          {llmSettings.localUrl ? 'Configured' : 'Not set'}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        <div className={`${providerConfigWrapClass} space-y-2`}>
+                          <input type="text" value={llmSettings.localUrl ?? ''} onChange={(e) => { const next = { ...llmSettings, localUrl: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }} className={providerConfigClass} placeholder="http://localhost:11434" />
+                          <input type="text" value={llmSettings.localModel ?? ''} onChange={(e) => { const next = { ...llmSettings, localModel: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }} className={providerConfigClass} placeholder="llama3" />
+                        </div>
+                      </td>
+                    </tr>
 
-              {/* Gemini Card */}
-              {(() => {
-                const isPrimary = llmSettings.primaryProvider === 'gemini';
-                const isConnected = Boolean(llmSettings.geminiApiKey);
-                return (
-                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-primary text-lg">google</span>
-                        <div>
-                          <p className="text-xs font-bold text-on-surface">Google Gemini</p>
-                          <p className="text-[10px] text-on-surface-variant mt-0.5">Fast cloud model with Google Search grounding. Recommended primary.</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
-                        <button
-                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'gemini' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
-                        >
-                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
-                      {envStatus.gemini ? (
-                        <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[14px]">lock</span>
-                          Managed via Doppler / Environment
-                        </div>
-                      ) : (
-                        <>
+                    {/* Gemini */}
+                    <tr className="align-top">
+                      <td className="py-4 pr-4 w-40">
+                        <p className="text-sm font-semibold text-on-surface">Google Gemini</p>
+                      </td>
+                      <td className="py-4 pr-4">
+                        {llmSettings.primaryProvider === 'gemini' ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-on-surface text-surface">Primary</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { const next = { ...llmSettings, primaryProvider: 'gemini' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                            className="text-[10px] font-semibold text-on-surface-variant hover:text-primary"
+                          >
+                            Set primary
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-4 pr-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.geminiApiKey || envStatus.gemini) ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                          {(llmSettings.geminiApiKey || envStatus.gemini) ? 'Connected' : 'Not set'}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        {envStatus.gemini ? (
+                          <div className={`${providerConfigWrapClass} text-xs px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/15 text-primary font-medium flex items-center gap-2`}>
+                            <span className="material-symbols-outlined text-sm">lock</span>
+                            Doppler / env
+                          </div>
+                        ) : (
                           <input
                             type="password"
                             value={llmSettings.geminiApiKey ?? ''}
                             onChange={(e) => { const next = { ...llmSettings, geminiApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                            className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
+                            className={providerConfigClass}
                             placeholder="AIzaSy..."
                           />
-                          <p className={`text-[9px] italic transition-colors duration-300 flex items-center gap-1 ${saveStatus === 'saved' ? 'text-primary font-bold' : 'text-on-surface-variant'}`}>
-                            {saveStatus === 'saved' && <span className="material-symbols-outlined text-[10px]">check</span>}
-                            {saveStatus === 'saved' ? 'Key successfully synchronized to local storage.' : 'Get a key at the provider portal. Auto-saves to local database.'}
-                          </p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
+                        )}
+                      </td>
+                    </tr>
 
-              {/* Claude Card */}
-              {(() => {
-                const isPrimary = llmSettings.primaryProvider === 'claude';
-                const isConnected = Boolean(llmSettings.claudeApiKey);
-                return (
-                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-primary text-lg">psychology</span>
-                        <div>
-                          <p className="text-xs font-bold text-on-surface">Anthropic Claude</p>
-                          <p className="text-[10px] text-on-surface-variant mt-0.5">Premium reasoning model. Serves as automatic fallback if Gemini fails.</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {(isConnected || envStatus.claude) && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
-                        <button
-                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'claude' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
-                        >
-                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
-                      {envStatus.claude ? (
-                        <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[14px]">lock</span>
-                          Managed via Doppler / Environment
-                        </div>
-                      ) : (
-                        <>
-                          <input
-                            type="password"
-                            value={llmSettings.claudeApiKey ?? ''}
-                            onChange={(e) => { const next = { ...llmSettings, claudeApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                            className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                            placeholder="sk-ant-api03..."
-                          />
-                          <p className="text-[9px] text-on-surface-variant italic">Get a key at console.anthropic.com. Auto-saves to local database.</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
+                    {/* Claude */}
+                    <tr className="align-top">
+                      <td className="py-4 pr-4 w-40">
+                        <p className="text-sm font-semibold text-on-surface">Anthropic Claude</p>
+                      </td>
+                      <td className="py-4 pr-4">
+                        {llmSettings.primaryProvider === 'claude' ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-on-surface text-surface">Primary</span>
+                        ) : (
+                          <button type="button" onClick={() => { const next = { ...llmSettings, primaryProvider: 'claude' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }} className="text-[10px] font-semibold text-on-surface-variant hover:text-primary">Set primary</button>
+                        )}
+                      </td>
+                      <td className="py-4 pr-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.claudeApiKey || envStatus.claude) ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                          {(llmSettings.claudeApiKey || envStatus.claude) ? 'Connected' : 'Not set'}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        {envStatus.claude ? (
+                          <div className={`${providerConfigWrapClass} text-xs px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/15 text-primary font-medium flex items-center gap-2`}>
+                            <span className="material-symbols-outlined text-sm">lock</span>
+                            Doppler / env
+                          </div>
+                        ) : (
+                          <input type="password" value={llmSettings.claudeApiKey ?? ''} onChange={(e) => { const next = { ...llmSettings, claudeApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }} className={providerConfigClass} placeholder="sk-ant-api03..." />
+                        )}
+                      </td>
+                    </tr>
 
-              {/* Local LLM Card */}
-              {(() => {
-                const isPrimary = llmSettings.primaryProvider === 'local';
-                const isConnected = Boolean(llmSettings.localUrl);
-                return (
-                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-primary text-lg">terminal</span>
-                        <div>
-                          <p className="text-xs font-bold text-on-surface">Local LLM (Ollama / LM Studio)</p>
-                          <p className="text-[10px] text-on-surface-variant mt-0.5">100% private, runs on your machine. No API key required.</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {isConnected && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Configured</span>}
-                        <button
-                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'local' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
-                        >
-                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Endpoint Base URL</label>
-                        <input
-                          type="text"
-                          value={llmSettings.localUrl ?? ''}
-                          onChange={(e) => { const next = { ...llmSettings, localUrl: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                          className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                          placeholder="http://localhost:11434"
-                        />
-                        <p className="text-[9px] text-on-surface-variant italic">Ollama: localhost:11434 · LM Studio: localhost:1234/v1</p>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">Model Name</label>
-                        <input
-                          type="text"
-                          value={llmSettings.localModel ?? ''}
-                          onChange={(e) => { const next = { ...llmSettings, localModel: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                          className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                          placeholder="llama3"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Perplexity Card — Implements FR-061, FR-062, SEC-004 */}
-              {(() => {
-                const isPrimary = llmSettings.primaryProvider === 'perplexity';
-                const isConnected = Boolean(llmSettings.perplexityApiKey);
-                return (
-                  <div className={`rounded-2xl border p-5 space-y-4 transition-all ${isPrimary ? 'border-primary bg-primary/5' : 'border-outline-variant/20 bg-surface-container-low'}`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="material-symbols-outlined text-primary text-lg">travel_explore</span>
-                        <div>
-                          <p className="text-xs font-bold text-on-surface">Perplexity AI</p>
-                          <p className="text-[10px] text-on-surface-variant mt-0.5">Web-native LLM — used automatically for company research if configured.</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {(isConnected || envStatus.perplexity) && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">Connected</span>}
-                        <button
-                          onClick={() => { const next = { ...llmSettings, primaryProvider: 'perplexity' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                          className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all ${isPrimary ? 'bg-primary text-on-primary border-primary' : 'border-outline-variant/40 text-on-surface-variant hover:border-primary/40 hover:text-primary'}`}
-                        >
-                          {isPrimary ? 'Primary ✓' : 'Set Primary'}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
-                      {envStatus.perplexity ? (
-                        <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[14px]">lock</span>
-                          Managed via Doppler / Environment
-                        </div>
-                      ) : (
-                        <>
-                          <input
-                            type="password"
-                            value={llmSettings.perplexityApiKey ?? ''}
-                            onChange={(e) => { const next = { ...llmSettings, perplexityApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
-                            className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                            placeholder="pplx-..."
-                          />
-                          <p className="text-[9px] text-on-surface-variant italic">Get a key at perplexity.ai/settings/api. Auto-saves to local database.</p>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+                    {/* Perplexity */}
+                    <tr className="align-top">
+                      <td className="py-4 pr-4 w-40">
+                        <p className="text-sm font-semibold text-on-surface">Perplexity</p>
+                      </td>
+                      <td className="py-4 pr-4">
+                        {llmSettings.primaryProvider === 'perplexity' ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-on-surface text-surface">Primary</span>
+                        ) : (
+                          <button type="button" onClick={() => { const next = { ...llmSettings, primaryProvider: 'perplexity' as const }; setLlmSettings(next); debouncedSave('llm_settings', next); }} className="text-[10px] font-semibold text-on-surface-variant hover:text-primary">Set primary</button>
+                        )}
+                      </td>
+                      <td className="py-4 pr-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.perplexityApiKey || envStatus.perplexity) ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                          {(llmSettings.perplexityApiKey || envStatus.perplexity) ? 'Connected' : 'Not set'}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        {envStatus.perplexity ? (
+                          <div className={`${providerConfigWrapClass} text-xs px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/15 text-primary font-medium flex items-center gap-2`}>
+                            <span className="material-symbols-outlined text-sm">lock</span>
+                            Doppler / env
+                          </div>
+                        ) : (
+                          <input type="password" value={llmSettings.perplexityApiKey ?? ''} onChange={(e) => { const next = { ...llmSettings, perplexityApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }} className={providerConfigClass} placeholder="pplx-..." />
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </SettingsCard>
 
             {/* Data Sources — Implements FR-054, SEC-002 */}
-            <div className="pt-6 border-t border-outline-variant/10 space-y-4">
-              <div>
-                <h3 className="text-base font-headline font-bold text-on-surface">Data Sources</h3>
-                <p className="text-xs text-on-surface-variant mt-1">Optional job board API connections. Keys are stored only in the local database and never synced to git.</p>
-              </div>
+            <SettingsCard
+              label="Job boards"
+              title="Data source APIs"
+              description="Optional connectors for scout. Keys never sync to git."
+            >
+              <div className="space-y-6">
+                <div className="rounded-xl border border-outline/10 bg-surface p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-on-surface">Adzuna</p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                      {(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'Connected' : 'Not connected'}
+                    </span>
+                  </div>
+                  {envStatus.adzuna ? (
+                    <div className="text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/15 text-primary font-medium flex items-center gap-2">
+                      <span className="material-symbols-outlined text-sm">lock</span>
+                      Doppler / env
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <SettingsField label="App ID">
+                        <input type="text" value={apiConnections.adzunaAppId} onChange={(e) => { const next = { ...apiConnections, adzunaAppId: e.target.value }; setApiConnections(next); debouncedSave('api_connections', next); }} className={`${inputClass} font-mono text-xs`} placeholder="a1b2c3d4" />
+                      </SettingsField>
+                      <SettingsField label="App key">
+                        <input type="password" value={apiConnections.adzunaAppKey} onChange={(e) => { const next = { ...apiConnections, adzunaAppKey: e.target.value }; setApiConnections(next); debouncedSave('api_connections', next); }} className={`${inputClass} font-mono text-xs`} placeholder="••••••••••••••••" />
+                      </SettingsField>
+                    </div>
+                  )}
+                </div>
 
-              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-on-surface-variant text-lg">work_history</span>
-                    <div>
-                      <p className="text-xs font-bold text-on-surface">Adzuna Job Search API</p>
-                      <p className="text-[10px] text-on-surface-variant mt-0.5">Aggregates listings from thousands of boards. Free tier: 250 requests/day.</p>
-                    </div>
+                <div className="rounded-xl border border-outline/10 bg-surface p-5 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-on-surface">TheirStack</p>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${apiConnections.theirstackApiKey ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                      {apiConnections.theirstackApiKey ? 'Connected' : 'Not connected'}
+                    </span>
                   </div>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-                    {(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'Connected' : 'Not Connected'}
-                  </span>
+                  <SettingsField label="API key">
+                    <input type="password" value={apiConnections.theirstackApiKey ?? ''} onChange={(e) => { const next = { ...apiConnections, theirstackApiKey: e.target.value }; setApiConnections(next); debouncedSave('api_connections', next); }} className={`${inputClass} font-mono text-xs`} placeholder="••••••••••••••••" />
+                  </SettingsField>
                 </div>
-                {envStatus.adzuna ? (
-                  <div className="w-full text-xs px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[14px]">lock</span>
-                    Adzuna Credentials Managed via Doppler / Environment
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App ID</label>
-                      <input
-                        type="text"
-                        value={apiConnections.adzunaAppId}
-                        onChange={(e) => {
-                          const next = { ...apiConnections, adzunaAppId: e.target.value };
-                          setApiConnections(next);
-                          debouncedSave('api_connections', next);
-                        }}
-                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                        placeholder="a1b2c3d4"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">App Key</label>
-                      <input
-                        type="password"
-                        value={apiConnections.adzunaAppKey}
-                        onChange={(e) => {
-                          const next = { ...apiConnections, adzunaAppKey: e.target.value };
-                          setApiConnections(next);
-                          debouncedSave('api_connections', next);
-                        }}
-                        className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                        placeholder="••••••••••••••••"
-                      />
-                    </div>
-                  </div>
-                )}
-                <p className="text-[9px] text-on-surface-variant italic">Auto-saves to local database. Register at developer.adzuna.com — free tier only.</p>
               </div>
-
-              {/* TheirStack Connection Card */}
-              <div className="rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 space-y-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-on-surface-variant text-lg">database</span>
-                    <div>
-                      <p className="text-xs font-bold text-on-surface">TheirStack Job Search API</p>
-                      <p className="text-[10px] text-on-surface-variant mt-0.5">Scrapes tech stacks and job listings. Requires an API key.</p>
-                    </div>
-                  </div>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${apiConnections.theirstackApiKey ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant'}`}>
-                    {apiConnections.theirstackApiKey ? 'Connected' : 'Not Connected'}
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-wider">API Key</label>
-                  <input
-                    type="password"
-                    value={apiConnections.theirstackApiKey ?? ''}
-                    onChange={(e) => {
-                      const next = { ...apiConnections, theirstackApiKey: e.target.value };
-                      setApiConnections(next);
-                      debouncedSave('api_connections', next);
-                    }}
-                    className="w-full text-xs px-4 py-2.5 rounded-xl bg-surface-container border border-outline-variant/10 text-on-surface focus:outline-none focus:border-primary/40 font-mono"
-                    placeholder="••••••••••••••••"
-                  />
-                </div>
-                <p className="text-[9px] text-on-surface-variant italic">Auto-saves to local database. Register at theirstack.com for an API key.</p>
-              </div>
-            </div>
-          </div>
+            </SettingsCard>
+          </>
         )}
 
         {/* Analytics Tab */}
         {activeTab === 'Analytics' && (
-          <div className="space-y-6 animate-fade-in">
-            <div>
-              <h3 className="text-base font-headline font-bold text-on-surface">Pipeline Analytics</h3>
-              <p className="text-xs text-on-surface-variant mt-1">Real-time statistics on your job search status and application throughput.</p>
-            </div>
-
+          <>
             {stats ? (
-              <div className="space-y-6 pt-4 border-t border-outline-variant/10">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="bg-surface-container-low border border-outline-variant/10 p-5 rounded-2xl">
-                    <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Total Leads</p>
-                    <p className="text-2xl font-headline font-extrabold text-primary">{stats.total}</p>
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Total leads</p>
+                    <p className="text-3xl font-headline font-extrabold text-primary">{stats.total}</p>
                   </div>
-                  <div className="bg-surface-container-low border border-outline-variant/10 p-5 rounded-2xl text-error">
-                    <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Rejected</p>
-                    <p className="text-2xl font-headline font-extrabold">{stats.byRejectionType.find(t => t.rejection_type === 'Rejected')?.count || 0}</p>
+                  <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Rejected</p>
+                    <p className="text-3xl font-headline font-extrabold text-error">{stats.byRejectionType.find(t => t.rejection_type === 'Rejected')?.count || 0}</p>
                   </div>
-                  <div className="bg-surface-container-low border border-outline-variant/10 p-5 rounded-2xl text-on-surface-variant">
-                    <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Ghosted</p>
-                    <p className="text-2xl font-headline font-extrabold">{stats.byRejectionType.find(t => t.rejection_type === 'Ghosted')?.count || 0}</p>
+                  <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Ghosted</p>
+                    <p className="text-3xl font-headline font-extrabold text-on-surface-variant">{stats.byRejectionType.find(t => t.rejection_type === 'Ghosted')?.count || 0}</p>
                   </div>
-                  <div className="bg-surface-container-low border border-outline-variant/10 p-5 rounded-2xl text-primary">
-                    <p className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Active</p>
-                    <p className="text-2xl font-headline font-extrabold">{
+                  <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Active</p>
+                    <p className="text-3xl font-headline font-extrabold text-primary">{
                       (stats.byStatus.find(s => s.status === 'Backlog')?.count || 0) +
                       (stats.byStatus.find(s => s.status === 'Drafted')?.count || 0)
                     }</p>
@@ -834,39 +840,37 @@ const SettingsView: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="bg-surface-container-low border border-outline-variant/10 p-6 rounded-2xl">
-                    <h4 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-4">By Submission Status</h4>
+                  <SettingsCard label="Pipeline" title="By status">
                     <div className="space-y-3">
                       {stats.byStatus.map((row, i) => (
-                        <div key={i} className="flex justify-between items-center text-xs">
-                          <span className="text-on-surface-variant font-medium">{row.status}</span>
-                          <span className="font-bold text-on-surface bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/10">{row.count}</span>
+                        <div key={i} className="flex justify-between items-center text-sm py-1">
+                          <span className="text-on-surface-variant">{row.status}</span>
+                          <span className="font-semibold text-on-surface bg-surface px-2.5 py-1 rounded-lg border border-outline/10">{row.count}</span>
                         </div>
                       ))}
                     </div>
-                  </div>
-                  <div className="bg-surface-container-low border border-outline-variant/10 p-6 rounded-2xl">
-                    <h4 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-4">By Rejection Stage</h4>
+                  </SettingsCard>
+                  <SettingsCard label="Outcomes" title="By rejection stage">
                     <div className="space-y-3">
                       {stats.byRejectionStage.map((row, i) => (
-                        <div key={i} className="flex justify-between items-center text-xs">
-                          <span className="text-on-surface-variant font-medium">{row.rejection_stage || 'N/A'}</span>
-                          <span className="font-bold text-on-surface bg-surface-container-lowest px-2.5 py-1 rounded-lg border border-outline-variant/10">{row.count}</span>
+                        <div key={i} className="flex justify-between items-center text-sm py-1">
+                          <span className="text-on-surface-variant">{row.rejection_stage || 'N/A'}</span>
+                          <span className="font-semibold text-on-surface bg-surface px-2.5 py-1 rounded-lg border border-outline/10">{row.count}</span>
                         </div>
                       ))}
                       {stats.byRejectionStage.length === 0 && (
-                        <p className="text-xs italic text-on-surface-variant py-4">No rejection stage telemetry logged yet.</p>
+                        <p className="text-sm italic text-on-surface-variant py-2">No rejection telemetry yet.</p>
                       )}
                     </div>
-                  </div>
+                  </SettingsCard>
                 </div>
-              </div>
+              </>
             ) : (
-              <div className="p-10 bg-surface-container-low border border-outline-variant/10 rounded-2xl text-center text-xs text-on-surface-variant animate-pulse">
+              <div className="p-12 bg-surface-container-lowest border border-outline/8 rounded-2xl text-center text-sm text-on-surface-variant animate-pulse">
                 Loading pipeline statistics...
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
       

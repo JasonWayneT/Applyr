@@ -180,7 +180,11 @@ def render_proof_ladder(
 
 def _story_body_after_hook(story: str, hook: str) -> str:
     body = strip_opener_hook_from_body(story, hook)
-    body = strip_opener_hook_from_body(body, value_lead_from_story(story))
+    # Only strip the value lead when this story was actually used in the opener.
+    # Secondary proofs (hook="") must keep their first sentence or the body
+    # will start with a pronoun whose antecedent is missing.
+    if hook:
+        body = strip_opener_hook_from_body(body, value_lead_from_story(story))
     return body.strip()
 
 
@@ -594,6 +598,15 @@ def build_cover_blocks(
             omit_scale = bool(
                 legacy_slots and plan.archetype_id != "marketplace_fintech"
             )
+            # Also omit scale when another main slot's cover_story will repeat it,
+            # preventing "Repeated $40M ARR" recruiter QA failures.
+            if not omit_scale:
+                scale = _employer_scale_phrase(catalog, slot.employer)
+                if scale and any(
+                    scale in (getattr(catalog.claims.get(s.claim_id), "cover_story", "") or "")
+                    for s in main_slots[1:]
+                ):
+                    omit_scale = True
             parts.append(
                 render_work_history_bridge(
                     slot, catalog, include_scale=not omit_scale
@@ -626,7 +639,7 @@ def build_cover_blocks(
             legacy_text = render_proof_body(
                 legacy_slots[0], catalog, plan.archetype_id
             )
-        blocks.append(CoverBlock("proof", legacy_text))
+        blocks.append(CoverBlock("legacy_proof", legacy_text))
 
     close = render_structured_close(plan.company_display, jd_text, plan.archetype_id)
     blocks.append(CoverBlock("close", close))
@@ -662,6 +675,7 @@ def _valid_opener_context_phrase(text: str) -> bool:
     if any(
         tl.startswith(prefix)
         for prefix in (
+            # Articles / prepositions
             "build ",
             "and ",
             "with ",
@@ -670,6 +684,52 @@ def _valid_opener_context_phrase(text: str) -> bool:
             "for ",
             "in an ",
             "in a ",
+            # JD imperative verb starters — responsibility bullets, not pain points
+            # infinitive, 3rd-person singular, and -ing (gerund/participial) forms
+            "drive ", "drives ", "driving ",
+            "own ", "owns ", "owning ",
+            "solve ", "solves ", "solving ",
+            "scale ", "scales ", "scaling ",
+            "grow ", "grows ", "growing ",
+            "lead ", "leads ", "leading ",
+            "run ", "runs ", "running ",
+            "engage ", "engages ", "engaging ",
+            "deliver ", "delivers ", "delivering ",
+            "develop ", "develops ", "developing ",
+            "manage ", "manages ", "managing ",
+            "expand ", "expands ", "expanding ",
+            "ensure ", "ensures ", "ensuring ",
+            "support ", "supports ", "supporting ",
+            "improve ", "improves ", "improving ",
+            "establish ", "establishes ", "establishing ",
+            "partner ", "partners ", "partnering ",
+            "help ", "helps ", "helping ",
+            "reduce ", "reduces ", "reducing ",
+            "create ", "creates ", "creating ",
+            "define ", "defines ", "defining ",
+            "collaborate ", "collaborates ", "collaborating ",
+            "execute ", "executes ", "executing ",
+            "identify ", "identifies ", "identifying ",
+            "design ", "designs ", "designing ",
+            "plan ", "plans ", "planning ",
+            "coordinate ", "coordinates ", "coordinating ",
+            "maintain ", "maintains ", "maintaining ",
+            "track ", "tracks ", "tracking ",
+            "review ", "reviews ", "reviewing ",
+            "build ", "builds ", "building ",
+            "leverage ", "leverages ", "leveraging ",
+            "thrive ", "thrives ", "thriving ",
+            "work ", "works ", "working ",
+            "adapt ", "adapts ", "adapting ",
+            # Candidate-fit / culture phrases common in JD postings
+            "interested ", "excited ", "passionate ",
+            "you will ", "you'll ", "you are ",
+            "we are ", "we're ", "our team ",
+            "this role ", "the role ", "the ideal ",
+            "we're looking ", "we are looking ", "looking for ",
+            "experience ",
+            "candidates ",
+            "product ",
         )
     ):
         return False
@@ -694,15 +754,22 @@ def _expand_opener_with_jd_context(
             and pain.lower() not in opener.lower()
         ):
             candidates.append(pain.rstrip("."))
-    if plan.ranked_needs:
-        from cover_jd_needs import need_to_goal_phrase
+    from cover_jd_needs import need_to_goal_phrase
 
-        goal = need_to_goal_phrase(plan.ranked_needs[0]).strip()
-        if len(goal) >= 24 and goal.lower() not in opener.lower():
+    for need in plan.ranked_needs or []:
+        goal = need_to_goal_phrase(need).strip()
+        if (
+            len(goal) >= 24
+            and goal.lower() not in opener.lower()
+            and _valid_opener_context_phrase(goal)
+        ):
             candidates.append(goal.rstrip("."))
+            break
     if not candidates:
         return opener
-    return f"{opener.rstrip()} {candidates[0]}."
+    cand = candidates[0]
+    cand = cand[0].upper() + cand[1:] if cand else cand
+    return f"{opener.rstrip()} {cand}."
 
 
 def _insert_proof_before_close(blocks: List[CoverBlock], text: str) -> None:
@@ -745,12 +812,12 @@ def pad_cover_blocks_to_min(
 
     if legacy_slots and current_wc() < target:
         for i, block in enumerate(blocks):
-            if block.kind == "proof" and block.text.startswith(LEGACY_SHORT_PREFIX):
+            if block.kind in ("proof", "legacy_proof") and block.text.startswith(LEGACY_SHORT_PREFIX):
                 full = render_proof_body(
                     legacy_slots[0], catalog, plan.archetype_id
                 )
                 if full and full != block.text:
-                    blocks[i] = CoverBlock("proof", full)
+                    blocks[i] = CoverBlock("legacy_proof", full)
                 break
 
     proof_count = sum(1 for b in blocks if b.kind == "proof")
@@ -771,5 +838,56 @@ def pad_cover_blocks_to_min(
             _insert_proof_before_close(blocks, " ".join(parts))
             rendered_main_ids.add(slot.claim_id)
             proof_count += 1
+
+    # Expand the legacy_proof block to its full cover_story when still below target.
+    # The initial render strips the lead sentence; restoring it adds ~25-30 words for
+    # platform_standard letters where the opener does not use that story's trust hook.
+    if current_wc() < target and legacy_slots and plan.archetype_id == "platform_standard":
+        slot0 = legacy_slots[0]
+        rec0 = catalog.claims.get(slot0.claim_id)
+        if rec0 and rec0.cover_story:
+            full_body = apply_voice_polish(
+                apply_cover_phrase_polish(rec0.cover_story.strip())
+            )
+            for i, block in enumerate(blocks):
+                if block.kind == "legacy_proof":
+                    if _word_count_text(full_body) > _word_count_text(block.text):
+                        blocks[i] = CoverBlock("legacy_proof", full_body)
+                    break
+
+    # Render any unrendered legacy slots as additional proof blocks when still below target.
+    if current_wc() < target and len(legacy_slots) > 1:
+        rendered_legacy_ids = {legacy_slots[0].claim_id}
+        for slot in legacy_slots[1:]:
+            if current_wc() >= target:
+                break
+            if slot.claim_id in rendered_legacy_ids:
+                continue
+            rec = catalog.claims.get(slot.claim_id)
+            employer = employer_display_name(slot.employer)
+            if rec and rec.cover_story:
+                full_story = apply_voice_polish(
+                    apply_cover_phrase_polish(rec.cover_story.strip())
+                )
+                scale = _employer_scale_phrase(catalog, slot.employer)
+                if scale:
+                    connector = (
+                        f"At {employer}, on a {scale} B2B platform, the same period of "
+                        f"platform stewardship also required managing retention and churn "
+                        f"outcomes with the same discipline as the product roadmap and "
+                        f"stability work."
+                    )
+                else:
+                    connector = (
+                        f"At {employer}, that same period of platform stewardship also "
+                        f"required managing retention and churn outcomes with the same "
+                        f"discipline as the product roadmap and stability work."
+                    )
+                body = f"{connector} {full_story}"
+            else:
+                body = render_proof_body(slot, catalog, plan.archetype_id)
+            if body:
+                _insert_proof_before_close(blocks, body)
+                rendered_legacy_ids.add(slot.claim_id)
 
     return blocks

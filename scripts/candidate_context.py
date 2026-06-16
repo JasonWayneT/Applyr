@@ -15,9 +15,16 @@ DEFAULT_EMPLOYER_HEADERS: Dict[str, str] = {
     "startup_co": "### Product Owner | Startup Co | June 2017 - January 2019\nCity, State\n",
 }
 
+# Production employer blocks when workExperience.md headers are not parsed (FR-242).
+CANONICAL_EMPLOYER_HEADERS: Dict[str, str] = {
+    "cision": "### Product Manager | Cision | September 2021 - January 2026\nFull Remote\n",
+    "sterkly": "### Product Manager | Sterkly | February 2019 - August 2021\nSan Diego, CA\n",
+    "zero_to_sixty": "### Product Owner | Zero To Sixty | June 2017 - January 2019\nSan Diego, CA\n",
+}
+
 DEFAULT_EDUCATION_BLOCK = (
     "## EDUCATION\n\n"
-    "* **Bachelor of Business Administration** — Example University, City, State, 2019\n"
+    "* **Bachelor of Business Administration**, Example University, City, State, 2019\n"
 )
 
 
@@ -59,6 +66,7 @@ def load_employer_headers() -> Dict[str, str]:
     catalog_slugs = sorted({rec.employer for rec in catalog.claims.values() if rec.employer})
     parsed = parse_experience_headers(load_work_experience_text())
     merged = dict(DEFAULT_EMPLOYER_HEADERS)
+    merged.update(CANONICAL_EMPLOYER_HEADERS)
     merged.update(parsed)
     for slug in catalog_slugs:
         if slug not in merged:

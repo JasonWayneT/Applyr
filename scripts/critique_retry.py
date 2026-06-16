@@ -9,7 +9,7 @@ import re
 from typing import Any, Callable, Dict, List, Optional
 
 FIXABLE_CODES: frozenset[str] = frozenset(
-    {"CW-009", "CW-011", "CW-012", "CW-013", "CW-014", "CW-015"}
+    {"CW-009", "CW-011", "CW-012", "CW-013", "CW-014", "CW-015", "CW-016"}
 )
 
 REMEDIATION_HINTS: Dict[str, str] = {
@@ -19,6 +19,7 @@ REMEDIATION_HINTS: Dict[str, str] = {
     "CW-013": "Multiple or fragment proof sentences — keep one outcome-led proof in summary.",
     "CW-014": "Summary theme not experience-backed — move JD-only theme to cover letter bridge.",
     "CW-015": "Attribution proof missing adoption payoff — use full Cision bullet clause when grounded.",
+    "CW-016": "Summary proof duplicates experience bullet — pick different proof or use template s3.",
 }
 
 
@@ -119,14 +120,25 @@ def apply_critique_fixes(
         changed = True
         actions.append("force_attribution_payoff")
 
-    if "CW-011" in codes or "CW-013" in codes:
+    if "CW-011" in codes or "CW-013" in codes or "CW-016" in codes:
         retry_opts["proof_skip"] = retry_opts.get("proof_skip", 0) + 1
         changed = True
         actions.append("proof_rotate")
 
+    if "CW-016" in codes:
+        changed = True
+        actions.append("drop_dup_proof")
+
     pdf_only = False
     if "CW-009" in codes and not any(
-        a in actions for a in ("reframe_sterkly", "theme_skip", "force_attribution_payoff", "proof_rotate")
+        a in actions
+        for a in (
+            "reframe_sterkly",
+            "theme_skip",
+            "force_attribution_payoff",
+            "proof_rotate",
+            "drop_dup_proof",
+        )
     ):
         actions.append("pdf_recompile_only")
         changed = True
@@ -141,7 +153,7 @@ def apply_critique_fixes(
     }
 
     rebuild_summary = any(
-        c in codes for c in ("CW-011", "CW-013", "CW-014", "CW-015", "CW-012")
+        c in codes for c in ("CW-011", "CW-013", "CW-014", "CW-015", "CW-012", "CW-016")
     )
 
     return {

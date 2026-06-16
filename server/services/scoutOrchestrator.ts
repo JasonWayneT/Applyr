@@ -1,5 +1,3 @@
-import fs from 'fs';
-import path from 'path';
 import { db, logActivity } from '../db.js';
 import { insertJob } from '../repository/jobRepository.js';
 import { checkCrawlPolicy } from '../middleware/crawlPolicy.js';
@@ -21,35 +19,19 @@ import { createLeverConnector } from '../../packages/connectors/lever/index.js';
 import { createAshbyConnector } from '../../packages/connectors/ashby/index.js';
 import { createWorkableConnector } from '../../packages/connectors/workable/index.js';
 import { createTheirstackConnector } from '../../packages/connectors/theirstack/index.js';
+import {
+  passesTargetRoleTitleScope,
+  passesIndustryGate,
+  passesGeographicGate,
+  titleMatchesBlocked,
+  type GateConfig,
+  type ScrapedJob,
+} from '../../shared/domain/gates.js';
+import { loadMaterializedScoutPrefs } from '../../shared/domain/scoutPrefs.js';
+import { writeJobStagingFile } from './jobStaging.js';
+import { broadcastSyncEvent } from '../routes/pipeline.js';
 
 const MIN_JD_CHARS = 200;
-
-const DEFAULT_TITLE_BLOCKLIST = [
-  'staff', 'vp', 'head', 'principal', 'lead', 'director',
-  'group product manager', 'gpm', 'growth', 'founding', 'first',
-  'manager of', 'engineering manager', 'people manager',
-  'assistant', 'coordinator', 'intern', 'associate', 'entry', 'junior',
-  'analyst', 'software engineer', 'developer', 'designer', 'marketer',
-];
-
-interface Prefs {
-  search_terms?: string[];
-  blocked_titles?: string[];
-}
-
-function loadPrefs(): { searchTerms: string[]; titleBlocklist: string[] } {
-  let prefs: Prefs = {};
-  try {
-    const raw = fs.readFileSync(path.resolve('data/candidate_preferences.json'), 'utf-8');
-    prefs = JSON.parse(raw) as Prefs;
-  } catch { /* use built-in defaults when file is absent */ }
-
-  const searchTerms = prefs.search_terms?.length ? prefs.search_terms : ['Product Manager'];
-  const blockedTitles = prefs.blocked_titles?.length ? prefs.blocked_titles : DEFAULT_TITLE_BLOCKLIST;
-  const titleBlocklist = blockedTitles.map((t) => t.toLowerCase().trim()).filter(Boolean);
-
-  return { searchTerms, titleBlocklist };
-}
 
 function loadAdzunaCredentials(): { appId: string; appKey: string } {
   if (process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY) {
@@ -67,13 +49,8 @@ function loadAdzunaCredentials(): { appId: string; appKey: string } {
   return { appId: '', appKey: '' };
 }
 
-function titleMatchesBlockedTerm(title: string, term: string): boolean {
-  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`\\b${escaped}\\b`, 'i').test(title);
-}
-
 function passesTitleBlocklist(title: string, blocklist: string[]): boolean {
-  return !blocklist.some((term) => titleMatchesBlockedTerm(title, term));
+  return !blocklist.some((term) => titleMatchesBlocked(title, term));
 }
 
 function isUrlKnown(url: string): boolean {
@@ -98,40 +75,59 @@ export function buildDefaultConnectors(): JobConnector[] {
   const builtinOnly = ['1', 'true', 'yes'].includes(
     (process.env.SCOUT_BUILTIN_ONLY ?? '').toLowerCase(),
   );
+  const prefs = loadMaterializedScoutPrefs();
   if (builtinOnly) {
-    return [createBuiltInConnector({ policyChecker: checkCrawlPolicy })];
+    return [
+      createBuiltInConnector({
+        policyChecker: checkCrawlPolicy,
+        searchTerms: prefs.searchTerms,
+        freshnessDays: prefs.freshnessDays,
+      }),
+    ];
   }
 
-  const { searchTerms } = loadPrefs();
   const adzuna = loadAdzunaCredentials();
 
   return [
-    createRemotiveConnector({ searchTerms }),
-    createRemoteokConnector({ searchTerms }),
+    createRemotiveConnector({ searchTerms: prefs.searchTerms }),
+    createRemoteokConnector({ searchTerms: prefs.searchTerms }),
     createWeworkremotelyConnector(),
-    createHimalayasConnector({ searchTerms }),
+    createHimalayasConnector({ searchTerms: prefs.searchTerms }),
     createThemuseConnector(),
-    createJobicyConnector({ searchTerms }),
+    createJobicyConnector({ searchTerms: prefs.searchTerms }),
     createWorkingnomadsConnector(),
     createJobscolliderConnector(),
-    createAdzunaConnector({ appId: adzuna.appId, appKey: adzuna.appKey, searchTerms }),
-    createOpenPostingsConnector({ searchTerms }),
-    createBuiltInConnector({ policyChecker: checkCrawlPolicy }),
-    createLevelsFyiConnector({ policyChecker: checkCrawlPolicy }),
-    createGreenhouseConnector({ searchTerms }),
-    createLeverConnector({ searchTerms }),
-    createAshbyConnector({ searchTerms }),
-    createWorkableConnector({ searchTerms }),
-    createTheirstackConnector({ searchTerms }),
+    createAdzunaConnector({ appId: adzuna.appId, appKey: adzuna.appKey, searchTerms: prefs.searchTerms }),
+    createOpenPostingsConnector({ searchTerms: prefs.searchTerms }),
+    createBuiltInConnector({
+      policyChecker: checkCrawlPolicy,
+      searchTerms: prefs.searchTerms,
+      freshnessDays: prefs.freshnessDays,
+    }),
+    createLevelsFyiConnector({
+      policyChecker: checkCrawlPolicy,
+      targetRole: prefs.targetRole,
+      searchTerms: prefs.searchTerms,
+    }),
+    createGreenhouseConnector({ searchTerms: prefs.searchTerms }),
+    createLeverConnector({ searchTerms: prefs.searchTerms }),
+    createAshbyConnector({ searchTerms: prefs.searchTerms }),
+    createWorkableConnector({ searchTerms: prefs.searchTerms }),
+    createTheirstackConnector({ searchTerms: prefs.searchTerms }),
   ];
 }
-
-import { broadcastSyncEvent } from '../routes/pipeline.js';
 
 export async function runConnectorOrchestration(
   connectors: JobConnector[] = buildDefaultConnectors(),
 ): Promise<void> {
-  const { titleBlocklist } = loadPrefs();
+  const prefs = loadMaterializedScoutPrefs();
+  const gateConfig: GateConfig = {
+    blockedIndustries: prefs.blockedIndustries,
+    titleBlocklist: prefs.titleBlocklist,
+    workSetting: prefs.workSetting,
+    maxExperienceYears: prefs.maxExperienceYears,
+  };
+  const targetPrefs = { targetRole: prefs.targetRole, searchTerms: prefs.searchTerms };
   let totalSaved = 0;
 
   for (const connector of connectors) {
@@ -150,9 +146,35 @@ export async function runConnectorOrchestration(
             continue;
           }
 
-          if (!passesTitleBlocklist(job.title, titleBlocklist)) {
+          if (!passesTitleBlocklist(job.title, prefs.titleBlocklist)) {
             filtered++;
             logActivity('INFO', source, `[REJECT] ${job.title} at ${job.company} - Title Blocklist`);
+            continue;
+          }
+
+          if (!passesTargetRoleTitleScope(job.title, targetPrefs, source)) {
+            filtered++;
+            logActivity(
+              'INFO',
+              source,
+              `[REJECT] ${job.title} at ${job.company} - target_role_scope:${prefs.targetRole}`,
+            );
+            continue;
+          }
+
+          const scraped: ScrapedJob = {
+            company: job.company,
+            title: job.title,
+            url: job.url ?? '',
+            description: job.description ?? '',
+            source,
+          };
+          if (!passesIndustryGate(scraped, gateConfig)) {
+            filtered++;
+            continue;
+          }
+          if (!passesGeographicGate(scraped, gateConfig)) {
+            filtered++;
             continue;
           }
 
@@ -172,7 +194,7 @@ export async function runConnectorOrchestration(
           const hasJd = desc.length >= MIN_JD_CHARS;
 
           try {
-            insertJob({
+            const jobId = insertJob({
               company: job.company,
               title: job.title,
               url: job.url ?? null,
@@ -181,21 +203,21 @@ export async function runConnectorOrchestration(
               source_site: job.source_site,
               jd_text: hasJd ? desc : null,
             });
+            if (hasJd) {
+              writeJobStagingFile(jobId, job.company, job.url, desc);
+            }
             saved++;
             logActivity('INFO', source, `[FOUND] ${job.title} at ${job.company}`);
           } catch {
             filtered++;
-            /* UNIQUE url constraint — expected for duplicates */
           }
         } catch {
           filtered++;
-          /* malformed row — skip */
         }
       }
       logActivity('INFO', 'Scout', `${source}: ${rawJobs.length} fetched, ${saved} saved`);
       totalSaved += saved;
 
-      // Emit source progress SSE
       broadcastSyncEvent('source_progress', {
         type: 'source_progress',
         source,
@@ -205,7 +227,9 @@ export async function runConnectorOrchestration(
       });
 
       try {
-        const prevStatusRow = db.prepare('SELECT status FROM sources WHERE id = ?').get(source) as { status: string } | undefined;
+        const prevStatusRow = db.prepare('SELECT status FROM sources WHERE id = ?').get(source) as
+          | { status: string }
+          | undefined;
         db.prepare(`
           UPDATE sources 
           SET last_success_at = ?, consecutive_failures = 0, status = 'active'
@@ -226,7 +250,6 @@ export async function runConnectorOrchestration(
       const msg = err instanceof Error ? err.message : String(err);
       logActivity('ERROR', source, `Connector failed: ${msg}`);
 
-      // Emit connector error SSE
       broadcastSyncEvent('connector_error', {
         type: 'connector_error',
         source,

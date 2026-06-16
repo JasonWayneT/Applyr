@@ -183,10 +183,28 @@ def check_resume(file_path):
     except Exception:
         pass
 
+    try:
+        from resume_conversion_eval import evaluate_resume_conversion
+
+        critique = evaluate_resume_conversion(content)
+        for issue in critique.get("issues") or []:
+            if issue.startswith("[CW-011]") or issue.startswith("[CW-013]") or issue.startswith("[CW-014]") or issue.startswith("[CW-016]"):
+                messages.append(issue.replace("[CW-", "[R-012 FAIL] CW-"))
+    except Exception:
+        pass
+
+    try:
+        for msg in check_conversion_signals(content, {}, jd_text=""):
+            if msg.startswith("[CW-003]"):
+                messages.append(msg.replace("[CW-003]", "[R-013 FAIL] CW-003"))
+    except Exception:
+        pass
+
     from drafting_errors import SelfCorrectionError
     
     if any(
-        "[R-005 FAIL]" in msg or "[R-008 FAIL]" in msg or "[R-009 FAIL]" in msg or "[R-010 FAIL]" in msg or "[R-011 FAIL]" in msg
+        "[R-005 FAIL]" in msg or "[R-008 FAIL]" in msg or "[R-009 FAIL]" in msg or "[R-010 FAIL]" in msg
+        or "[R-011 FAIL]" in msg or "[R-012 FAIL]" in msg or "[R-013 FAIL]" in msg
         for msg in messages
     ):
         raise SelfCorrectionError(" | ".join(messages))
@@ -429,6 +447,10 @@ def check_cl_conversion_signals(cl_text: str, jd_text: str = "") -> List[str]:
                 f"[CLW-004] Enthusiasm word without supporting evidence in paragraph: \"{para}\""
             )
 
+    from cover_phrasing import check_cover_grammar_defects
+
+    warnings.extend(check_cover_grammar_defects(cl_text))
+
     return warnings
 
 
@@ -458,7 +480,7 @@ def repair_resume_markdown(content: str, education_block: str | None = None) -> 
         content = content.rstrip() + "\n\n" + edu.strip() + "\n"
 
     from candidate_context import employer_display_name, load_employer_headers, load_employers_ordered
-    from local_draft_stages import _employer_headers, normalize_employer_job_titles
+    from local_draft_stages import _employer_headers, ensure_experience_skeleton_headers, normalize_employer_job_titles
 
     headers = _employer_headers()
     lower = content.lower()
@@ -468,6 +490,7 @@ def repair_resume_markdown(content: str, education_block: str | None = None) -> 
             stub = headers.get(slug, f"### {employer_display_name(slug, headers)}\n").split("\n")[0]
             content += f"\n{stub}\n* Platform and delivery outcomes.\n"
 
+    content = ensure_experience_skeleton_headers(content)
     return normalize_employer_job_titles(content)
 
 

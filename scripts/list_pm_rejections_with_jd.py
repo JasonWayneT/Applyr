@@ -1,4 +1,4 @@
-"""List PM rejections (7 days) that have JD text — review queue."""
+﻿"""List PM rejections (7 days) that have JD text — review queue."""
 import json
 import sqlite3
 from datetime import datetime, timedelta
@@ -45,7 +45,7 @@ ORDER = [
     "rejected_null_score",
 ]
 
-conn = sqlite3.connect("jobagent.sqlite")
+conn = sqlite3.connect("data/jobagent.sqlite")
 conn.row_factory = sqlite3.Row
 rows = conn.execute(
     """

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Phase 0/1 quality gate baseline — reports pass/fail without changing pipeline behavior.
 
@@ -24,7 +24,7 @@ from pipeline_env import strict_anti_claims, strict_cover_audit, strict_metrics
 from utils import PROJECT_ROOT, SUBMISSIONS_DIR
 from verification_chain import check_anti_claims
 
-SUBMISSIONS = os.path.join(PROJECT_ROOT, "submissions")
+SUBMISSIONS = os.path.join(PROJECT_ROOT, "data", "submissions")
 
 
 def _load_text(path: str) -> str:

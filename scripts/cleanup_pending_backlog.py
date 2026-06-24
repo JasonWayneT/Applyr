@@ -1,4 +1,4 @@
-"""
+﻿"""
 Clean up pending-assets backlog: close duplicate rows, restore archive PDFs, draft missing assets.
 
 Operational script (read/write DB + filesystem). Safe to re-run.
@@ -15,9 +15,9 @@ import sys
 import time
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
-SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
-ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive", "submissions")
+DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
+SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
+ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "data", "archive", "submissions")
 
 # Junk / duplicate Backlog rows identified in pending-assets audit
 CLOSE_JOB_IDS: list[tuple[str, str]] = [

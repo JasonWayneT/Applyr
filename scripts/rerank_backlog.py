@@ -1,10 +1,10 @@
-import sqlite3
+﻿import sqlite3
 import argparse
 import sys
 import json
 from local_embeddings import get_embedding, cosine_similarity
 
-DB_PATH = "jobagent.sqlite"
+DB_PATH = "data/jobagent.sqlite"
 
 def rerank_backlog(query: str, threshold: float = 0.82):
     print(f"Generating query vector for: '{query}'...")

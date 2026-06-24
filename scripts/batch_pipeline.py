@@ -1,4 +1,4 @@
-# Implements FR-132, FR-133, FR-149, FR-150 (CR-021); FR-006–FR-009, FR-109 (CR-019).
+﻿# Implements FR-132, FR-133, FR-149, FR-150 (CR-021); FR-006–FR-009, FR-109 (CR-019).
 # Pipeline defaults: FR-131 via pipeline_env / setdefault below.
 import os
 import json
@@ -244,7 +244,7 @@ def _load_jd_for_job(company: str, job_id: str | None = None) -> str:
     jd_text = _find_staging_jd(company, job_id)
     if jd_text and len(jd_text.strip()) >= 100:
         return jd_text
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
     if job_id and os.path.exists(db_path):
         try:
             conn = sqlite3.connect(db_path, timeout=10.0)
@@ -839,7 +839,7 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
 
     fit_rules = load_file(FIT_ENGINE_FILE)
     prefs = load_candidate_preferences()
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
     if not jd_text:
         jd_text = _load_jd_for_job(company, job_id)
@@ -1005,7 +1005,7 @@ def process_batch():
             "2s between jobs, models stay loaded, cached tag embeddings."
         )
 
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
     db_exists = os.path.exists(db_path)
     if db_exists:
         ensure_jobs_schema(db_path)

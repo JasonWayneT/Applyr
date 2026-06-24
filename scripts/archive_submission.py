@@ -1,13 +1,13 @@
-import os
+﻿import os
 import sys
 import shutil
 import datetime
 import sqlite3
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
-ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive", "submissions")
-DB_PATH = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
+ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "data", "archive", "submissions")
+DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 
 def get_timestamp():

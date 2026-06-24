@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import json
 import requests
@@ -93,7 +93,7 @@ def fetch_company_intel(company, role, contract_path=None):
         import sqlite3
         import os
         from utils import PROJECT_ROOT
-        db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+        db_path = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
         competitors = []
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path, timeout=30.0)

@@ -1,9 +1,9 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
+const db = new Database(path.join(__dirname, '../data/jobagent.sqlite'));
 
 console.log("--- Top 40 Drafted Jobs ordered by most recently inserted/updated? ---");
 // Let's peek schema first to know the column name for timestamp.

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unified draft compiler — single pipeline for all LLM providers.
 
 Implements FR-089, FR-092, FR-100–FR-104 (CR-014, CR-017);
@@ -242,7 +242,7 @@ def run(
 
     company_folder = company_folder or company_submission_dir(SUBMISSIONS_DIR, company_name)
     os.makedirs(company_folder, exist_ok=True)
-    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jobagent.sqlite")
+    db_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "jobagent.sqlite")
     display = resolve_company_display_name(
         company_name,
         company_folder=company_folder,

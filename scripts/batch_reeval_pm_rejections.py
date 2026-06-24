@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Batch re-evaluate PM rejections (7d) that have JD text. FR-189 / review tooling."""
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def first_failing_gate(gates: dict) -> str | None:
 
 def queue() -> list[dict]:
     cutoff = (datetime(2026, 6, 2) - timedelta(days=7)).strftime("%Y-%m-%d")
-    conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "jobagent.sqlite"))
+    conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite"))
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         """

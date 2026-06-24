@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+﻿import { spawn, ChildProcess } from 'child_process';
 import path from 'path';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
 // --- Configuration ---
 const OPENPOSTINGS_DIR = path.resolve('OpenPostings-extracted/OpenPostings-main');
 const OPENPOSTINGS_PORT = 3010;
-const DB_PATH = path.resolve('jobagent.sqlite');
+const DB_PATH = path.resolve('data/jobagent.sqlite');
 const DB = new Database(DB_PATH);
 
 // Freshness: 7 days

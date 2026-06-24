@@ -1,12 +1,12 @@
-"""Close all Pending Assets jobs (Backlog/New/Needs Retry/Drafted without full PDFs)."""
+﻿"""Close all Pending Assets jobs (Backlog/New/Needs Retry/Drafted without full PDFs)."""
 import os
 import re
 import shutil
 import sqlite3
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(ROOT, "jobagent.sqlite")
-SUB = os.path.join(ROOT, "submissions")
+DB = os.path.join(ROOT, "data", "jobagent.sqlite")
+SUB = os.path.join(ROOT, "data", "submissions")
 ACTIVE = {"Backlog", "New", "Needs Retry", "Drafted"}
 
 

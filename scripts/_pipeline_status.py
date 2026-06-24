@@ -1,9 +1,9 @@
-import glob
+﻿import glob
 import os
 import sqlite3
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(ROOT, "jobagent.sqlite")
+DB = os.path.join(ROOT, "data", "jobagent.sqlite")
 conn = sqlite3.connect(DB)
 
 print("Staging (jobs/*.txt):", len(glob.glob(os.path.join(ROOT, "jobs", "*.txt"))))

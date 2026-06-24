@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import markdown
 from style_compliance_guard import run_guard
@@ -6,7 +6,7 @@ from playwright.sync_api import sync_playwright
 
 # Define path constants
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
+SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
 
 import re
 

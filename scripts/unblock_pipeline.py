@@ -1,4 +1,4 @@
-"""
+﻿"""
 Reset stuck RUNNING pipeline runs and set system_status to idle.
 
 Use when evaluate stage hung (e.g. Ollama fit timeout) and UI shows Job 4/15 forever.
@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(ROOT, "jobagent.sqlite")
+DB_PATH = os.path.join(ROOT, "data", "jobagent.sqlite")
 
 
 def main() -> int:

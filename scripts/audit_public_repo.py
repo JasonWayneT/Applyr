@@ -18,7 +18,8 @@ PII_PATTERNS = [
 ]
 
 BLOCKED_TRACKED_PREFIXES = (
-    "archive/",
+    "data/archive/",
+    "data/submissions/",
     "docs/reports/",
     "docs/legacy/",
     "data/workExperience.md",
@@ -56,7 +57,7 @@ def main() -> int:
     errors: list[str] = []
 
     for path in files:
-        if path.startswith("submissions/") and path != "submissions/.gitkeep":
+        if path.startswith("data/submissions/") and path != "data/submissions/.gitkeep":
             errors.append(f"tracked path should be gitignored: {path}")
             continue
         for prefix in BLOCKED_TRACKED_PREFIXES:

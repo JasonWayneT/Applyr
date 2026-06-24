@@ -1,4 +1,4 @@
-"""
+﻿"""
 Re-run fit evaluation on Rejected jobs (CR-019).
 
 Usage:
@@ -26,7 +26,7 @@ from utils import (
     load_file,
 )
 
-DB = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+DB = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 
 def main():

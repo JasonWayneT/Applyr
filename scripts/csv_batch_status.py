@@ -1,9 +1,9 @@
-"""Summarize status for CSV-imported companies."""
+﻿"""Summarize status for CSV-imported companies."""
 import os
 import sqlite3
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+DB = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 COMPANIES = [
     "Ladders", "CentralSquare Technologies", "OptionMetrics", "MeridianLink",

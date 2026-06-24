@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Backfill jobs/*.txt staging files from Drafted rows (jd_text in DB).
  * Optional --purge closes Drafted rows that fail target_role title scope.
  */
@@ -15,7 +15,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.join(__dirname, '..');
-const DB_PATH = path.join(PROJECT_ROOT, 'jobagent.sqlite');
+const DB_PATH = path.join(PROJECT_ROOT, 'data/jobagent.sqlite');
 
 const purge = process.argv.includes('--purge');
 

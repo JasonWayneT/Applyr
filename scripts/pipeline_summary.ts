@@ -1,9 +1,9 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
+const db = new Database(path.join(__dirname, '../data/jobagent.sqlite'));
 
 console.log("--- Job Status Breakdown ---");
 const counts = db.prepare("SELECT status, COUNT(*) as count FROM jobs GROUP BY status").all();
@@ -14,7 +14,7 @@ counts.forEach(row => {
 console.log("\n--- Submissions Stats ---");
 // Check submissions directory contents
 import fs from 'fs';
-const submissionsDir = path.join(__dirname, '../submissions');
+const submissionsDir = path.join(__dirname, '../data/submissions');
 if (fs.existsSync(submissionsDir)) {
   const dirs = fs.readdirSync(submissionsDir).filter(f => fs.statSync(path.join(submissionsDir, f)).isDirectory());
   console.log(`Total Companies in Submissions folder: ${dirs.length}`);

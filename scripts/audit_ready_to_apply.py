@@ -1,12 +1,12 @@
-"""Audit Backlog/Drafted jobs for apply-readiness (BUG-016 follow-up)."""
+﻿"""Audit Backlog/Drafted jobs for apply-readiness (BUG-016 follow-up)."""
 import re
 import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DB = ROOT / "jobagent.sqlite"
-SUB = ROOT / "submissions"
-ARCH = ROOT / "archive" / "submissions"
+DB = ROOT / "data" / "jobagent.sqlite"
+SUB = ROOT / "data" / "submissions"
+ARCH = ROOT / "data" / "archive" / "submissions"
 
 UUID = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",

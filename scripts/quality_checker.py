@@ -1,4 +1,4 @@
-import os
+﻿import os
 import re
 import json
 from typing import Dict, List
@@ -554,6 +554,6 @@ if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1:
         company = sys.argv[1]
-        run_quality_checks(os.path.join("submissions", company))
+        run_quality_checks(os.path.join("data", "submissions", company))
     else:
         print("Please provide a company name.")

@@ -1,10 +1,10 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
+const db = new Database(path.join(__dirname, '../data/jobagent.sqlite'));
 
 // Find recently added stale jobs (those created in the last hour, or just check count)
 const recentStale = db.prepare("SELECT * FROM stale_jobs WHERE created_at >= '2026-05-11 20:50:00'").all() as any[];

@@ -1,7 +1,7 @@
-import sqlite3
+﻿import sqlite3
 from datetime import datetime, timedelta
 
-conn = sqlite3.connect("jobagent.sqlite")
+conn = sqlite3.connect("data/jobagent.sqlite")
 rows = conn.execute(
     """
     SELECT company, title, status, score, pre_score,

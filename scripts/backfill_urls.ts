@@ -1,11 +1,11 @@
-import { chromium } from 'playwright-extra';
+﻿import { chromium } from 'playwright-extra';
 import stealth from 'puppeteer-extra-plugin-stealth';
 import Database from 'better-sqlite3';
 
 chromium.use(stealth());
 
 async function run() {
-  const db = new Database('jobagent.sqlite');
+  const db = new Database('data/jobagent.sqlite');
   const jobs = db.prepare('SELECT id, company FROM jobs WHERE url IS NULL OR url = \'\'').all() as any[];
 
   if (jobs.length === 0) {

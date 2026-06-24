@@ -1,4 +1,4 @@
-"""
+﻿"""
 Regenerate all Backlog submission folders with compose + CR-018 polish.
 Implements FR-100–FR-108 (CR-017, CR-018).
 """
@@ -16,7 +16,7 @@ os.environ.setdefault("LOCAL_ONLY_MODE", "1")
 os.environ.setdefault("CHEAT_SHEET_MODE", "template")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+DB = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from batch_pipeline import process_single  # noqa: E402

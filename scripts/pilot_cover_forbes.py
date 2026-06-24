@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Pilot CR-024 cover engine on Forbes submission (FR-097)."""
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cover_letter_compiler import compile_cover_letter, write_cover_bundle
 from utils import PROJECT_ROOT
 
-FORBES_DIR = os.path.join(PROJECT_ROOT, "submissions", "forbes")
+FORBES_DIR = os.path.join(PROJECT_ROOT, "data", "submissions", "forbes")
 
 
 def main() -> int:

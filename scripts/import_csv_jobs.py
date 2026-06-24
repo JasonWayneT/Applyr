@@ -1,4 +1,4 @@
-import csv
+﻿import csv
 import os
 import sys
 import sqlite3
@@ -40,7 +40,7 @@ def import_jobs(csv_paths):
     Import jobs from one or more CSV files into the pipeline.
     Each CSV must have columns: Company, Position, URL (optional), Job Description
     """
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
     jobs_dir = os.path.join(PROJECT_ROOT, "jobs")
     os.makedirs(jobs_dir, exist_ok=True)
 

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Re-queues jobs marked "Needs Retry" into the pipeline before scrape/evaluate.
  * Implements CR-011, FR-035.
  */
@@ -9,9 +9,9 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.join(__dirname, '..');
-const DB_PATH = path.join(PROJECT_ROOT, 'jobagent.sqlite');
+const DB_PATH = path.join(PROJECT_ROOT, 'data/jobagent.sqlite');
 const JOBS_DIR = path.join(PROJECT_ROOT, 'jobs');
-const SUBMISSIONS_DIR = path.join(PROJECT_ROOT, 'submissions');
+const SUBMISSIONS_DIR = path.join(PROJECT_ROOT, 'data/submissions');
 const MAX_AUTO_RETRIES = 3;
 
 function resolveSubmissionFolder(company: string): string | null {

@@ -1,4 +1,4 @@
-import sqlite3
+﻿import sqlite3
 import argparse
 import sys
 
@@ -37,7 +37,7 @@ def prune_stale_data(db_path: str, days_old: int = 45):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Auto-prune stale JD blobs to keep DB lightweight.")
-    parser.add_argument("--db", default="jobagent.sqlite", help="Path to SQLite DB")
+    parser.add_argument("--db", default="data/jobagent.sqlite", help="Path to SQLite DB")
     parser.add_argument("--days", type=int, default=45, help="Age in days to consider stale")
     args = parser.parse_args()
     

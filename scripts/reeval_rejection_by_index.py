@@ -1,4 +1,4 @@
-"""Re-evaluate a rejected job by DB id or queue index (JD-required queue)."""
+﻿"""Re-evaluate a rejected job by DB id or queue index (JD-required queue)."""
 import json
 import sqlite3
 import sys
@@ -48,7 +48,7 @@ ORDER = [
 
 def queue():
     cutoff = (datetime(2026, 6, 2) - timedelta(days=7)).strftime("%Y-%m-%d")
-    conn = sqlite3.connect(__import__("os").path.join(PROJECT_ROOT, "jobagent.sqlite"))
+    conn = sqlite3.connect(os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite"))
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         """

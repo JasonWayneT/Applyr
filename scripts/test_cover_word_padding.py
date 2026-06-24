@@ -1,4 +1,4 @@
-"""Word-count padding tests (CR-047 extension)."""
+﻿"""Word-count padding tests (CR-047 extension)."""
 import os
 import re
 import sys
@@ -133,7 +133,7 @@ Requirements
 
     def test_splash_need_first_reaches_lower_band(self):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        jd_path = os.path.join(root, "submissions", "splash_financial", "Original_JD.txt")
+        jd_path = os.path.join(root, "data", "submissions", "splash_financial", "Original_JD.txt")
         if not os.path.exists(jd_path):
             self.skipTest("Splash JD not present")
         with open(jd_path, encoding="utf-8") as f:

@@ -1,4 +1,4 @@
-"""
+﻿"""
 One-time refresh of Backlog job summaries (FR-107 / CR-018).
 """
 from __future__ import annotations
@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from batch_pipeline import _draft_success_summary, _resolve_display_company
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
-SUBMISSIONS = os.path.join(PROJECT_ROOT, "submissions")
+DB = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
+SUBMISSIONS = os.path.join(PROJECT_ROOT, "data", "submissions")
 
 
 def _fit_from_manifest(company_slug: str) -> str:

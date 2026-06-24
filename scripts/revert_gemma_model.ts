@@ -1,9 +1,9 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
+const db = new Database(path.join(__dirname, '../data/jobagent.sqlite'));
 
 // Revert to standard working model (ministral-3-14b, ~9-10GB VRAM, strong instruction following)
 const workingModel = 'ministral-3-14b:latest';

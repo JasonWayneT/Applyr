@@ -1,4 +1,4 @@
-"""Everbridge / connected-devices cover tests."""
+﻿"""Everbridge / connected-devices cover tests."""
 import os
 import re
 import sys
@@ -16,7 +16,7 @@ from cover_letter_structure import detect_archetype
 
 def _load_everbridge_jd() -> str:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path = os.path.join(root, "submissions", "everbridge", "Original_JD.txt")
+    path = os.path.join(root, "data", "submissions", "everbridge", "Original_JD.txt")
     with open(path, encoding="utf-8") as f:
         jd = f.read()
     if jd.startswith("URL:"):

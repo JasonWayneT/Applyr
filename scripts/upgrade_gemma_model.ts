@@ -1,9 +1,9 @@
-import Database from 'better-sqlite3';
+﻿import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
+const db = new Database(path.join(__dirname, '../data/jobagent.sqlite'));
 
 // Upgrade to highest-quality local model (requires ~14GB VRAM free)
 // Only run this when on desktop with no other GPU-heavy tasks active.

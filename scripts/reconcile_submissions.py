@@ -1,4 +1,4 @@
-"""
+﻿"""
 One-shot / manual reconciliation of submissions/ vs job statuses (FR-030).
 Archives folders for Applied+ jobs; removes orphan stubs without full PDFs.
 """
@@ -8,9 +8,9 @@ import shutil
 import sqlite3
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
-ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive", "submissions")
-DB_PATH = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
+ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "data", "archive", "submissions")
+DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 ACTIVE = {"Backlog", "Drafted"}
 
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { runMigrations } from './migrationRunner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '../jobagent.sqlite');
+const DB_PATH = path.join(__dirname, '../data/jobagent.sqlite');
 
 export const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');

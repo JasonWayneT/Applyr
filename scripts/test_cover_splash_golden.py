@@ -1,4 +1,4 @@
-"""Golden structural tests for Splash / marketplace_fintech covers (CR-047)."""
+﻿"""Golden structural tests for Splash / marketplace_fintech covers (CR-047)."""
 import os
 import sys
 import unittest
@@ -12,7 +12,7 @@ from cover_letter_renderer import render_cover_letter
 
 def _load_splash_jd() -> str:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path = os.path.join(root, "submissions", "splash_financial", "Original_JD.txt")
+    path = os.path.join(root, "data", "submissions", "splash_financial", "Original_JD.txt")
     with open(path, encoding="utf-8") as f:
         jd = f.read()
     if jd.startswith("URL:"):

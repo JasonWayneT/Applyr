@@ -1,4 +1,4 @@
-"""One-off audit of jobs DB + submissions folders (CR-017/018)."""
+﻿"""One-off audit of jobs DB + submissions folders (CR-017/018)."""
 import json
 import os
 import re
@@ -11,8 +11,8 @@ from bullet_fit import is_incomplete_bullet
 from jd_tailoring import load_bridge_phrases
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
-SUBMISSIONS = os.path.join(PROJECT_ROOT, "submissions")
+DB = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
+SUBMISSIONS = os.path.join(PROJECT_ROOT, "data", "submissions")
 
 ID_TOKEN = re.compile(r"\b(ACC|MET|VOC)-\d+\b|\|\s*(ACC|MET|VOC)-\d+\s*\|", re.I)
 SLUG = re.compile(r"\b[A-Z][a-z]+(?:_[A-Z][a-z0-9]+)+_?(?:Inc|LLC)?\b")

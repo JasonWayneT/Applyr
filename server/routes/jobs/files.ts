@@ -44,7 +44,7 @@ router.get('/api/jobs/:id/skill-gap', async (req, res) => {
     if (!isValidJobId(id)) return res.status(400).json({ success: false, error: 'Invalid job id' });
 
     const scriptPath = path.join(SCRIPTS_DIR, 'skill_gap.py');
-    const dbPath = path.join(PROJECT_ROOT, 'jobagent.sqlite');
+    const dbPath = path.join(PROJECT_ROOT, 'data/jobagent.sqlite');
     const { code, stdout, stderr } = await runPythonScript([scriptPath, dbPath, id]);
 
     if (code !== 0) {

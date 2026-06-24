@@ -1,9 +1,9 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 import sqlite3
 import os
 import re
 
-DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "jobagent.sqlite")
+DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "jobagent.sqlite")
 c = sqlite3.connect(DB)
 
 print("=== JOB_PROGRESS timeline (this run) ===")

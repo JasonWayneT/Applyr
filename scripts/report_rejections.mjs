@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Generate rejection breakdown from jobagent.sqlite (no Python required).
  */
 import Database from 'better-sqlite3';
@@ -6,7 +6,7 @@ import fs from 'fs';
 import path from 'path';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
-const DB = path.join(ROOT, 'jobagent.sqlite');
+const DB = path.join(ROOT, 'data/jobagent.sqlite');
 const OUT = path.join(ROOT, 'docs', 'reports', 'rejection-analysis-2026-06-02.md');
 const SCOUT_LOG = path.join(ROOT, 'logs', 'builtin-scout-run.txt');
 

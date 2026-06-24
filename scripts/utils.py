@@ -1,4 +1,4 @@
-"""
+﻿"""
 Shared utilities for the JobAgent pipeline.
 Centralizes file I/O, LLM calls with retry logic, and path constants.
 """
@@ -14,12 +14,13 @@ JOBS_DIR = os.path.join(PROJECT_ROOT, "jobs")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 AGENT_DIR = os.path.join(PROJECT_ROOT, ".agent")
 RULES_DIR = os.path.join(AGENT_DIR, "rules")
-SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
-ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive", "submissions")
+SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
+ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "data", "archive", "submissions")
+DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
 WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")
-# Legacy JSON job store — superseded by jobagent.sqlite (see docs/ACTIVE_WORKFLOW.md). Used only by scripts/archive/*.
+# Legacy JSON job store â€” superseded by jobagent.sqlite (see docs/ACTIVE_WORKFLOW.md). Used only by scripts/archive/*.
 DB_FILE = os.path.join(DATA_DIR, "job_database.json")
 FIT_ENGINE_FILE = os.path.join(RULES_DIR, "job_fit_engine.md")
 CLAIM_VERIFIER_FILE = os.path.join(RULES_DIR, "claim_verifier.md")
@@ -31,7 +32,7 @@ RESUME_BEST_PRACTICES = os.path.join(DATA_DIR, "resume-conversion-best-practices
 CL_BEST_PRACTICES = os.path.join(DATA_DIR, "cover-letter-conversion-best-practices.md")
 CANDIDATE_PREFERENCES_FILE = os.path.join(DATA_DIR, "candidate_preferences.json")
 
-# Default cloud model — must have non-zero free-tier quota on the user's AI Studio project.
+# Default cloud model â€” must have non-zero free-tier quota on the user's AI Studio project.
 # gemini-2.0-flash often returns limit:0 on free tier (see BUG-009); 2.5-flash-lite works.
 DEFAULT_MODEL = "gemini-2.5-flash-lite"
 
@@ -80,7 +81,7 @@ def get_jd_required_keywords(default: list | None = None) -> list:
 
 
 def get_must_have_keywords() -> list:
-    """Implements FR-171 — all must match (AND) when non-empty."""
+    """Implements FR-171 â€” all must match (AND) when non-empty."""
     prefs = load_candidate_preferences()
     raw = prefs.get("must_have_keywords")
     if isinstance(raw, list) and raw:
@@ -89,12 +90,12 @@ def get_must_have_keywords() -> list:
 
 
 def get_signal_keywords() -> list:
-    """Implements FR-171 — at least one must match when must_have is empty."""
+    """Implements FR-171 â€” at least one must match when must_have is empty."""
     return [k.lower() for k in get_jd_required_keywords()]
 
 
 def passes_keyword_gate(jd_text: str, prefs: dict | None = None) -> tuple[bool, str]:
-    """Implements FR-171 / FR-006 — AND must-haves, else OR signals."""
+    """Implements FR-171 / FR-006 â€” AND must-haves, else OR signals."""
     prefs = prefs or load_candidate_preferences()
     lower = (jd_text or "").lower()
     if not lower.strip():
@@ -120,7 +121,7 @@ def passes_keyword_gate(jd_text: str, prefs: dict | None = None) -> tuple[bool, 
     return False, "no_signal_keywords"
 
 
-# Module-level compat vars — call init_pipeline_prefs() at CLI/smoke entry (CR-ARCH-003).
+# Module-level compat vars â€” call init_pipeline_prefs() at CLI/smoke entry (CR-ARCH-003).
 JD_REQUIRED_KEYWORDS: list = list(_DEFAULT_JD_KEYWORDS)
 MIN_FIT_SCORE: int = 72
 
@@ -154,7 +155,7 @@ def check_rate_limits(provider: str) -> bool:
         return True
         
     import sqlite3
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = DB_PATH
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path, timeout=10.0)
@@ -233,7 +234,7 @@ def load_api_connections():
     """Reads api_connections from SQLite profiles table. Returns dict or empty dict on failure."""
     import sqlite3
     import json
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = DB_PATH
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path)
@@ -252,7 +253,7 @@ def load_llm_settings():
     """Reads llm_settings from SQLite profiles table dynamically. Returns dict or empty dict on failure."""
     import sqlite3
     import json
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = DB_PATH
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path)
@@ -284,7 +285,7 @@ def load_identity_profile() -> dict:
     import json
 
     profile = dict(_DEFAULT_IDENTITY)
-    db_path = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+    db_path = DB_PATH
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path)
@@ -323,7 +324,7 @@ def format_contact_header_block(profile: dict | None = None) -> str:
 
 
 def contact_placeholder_map(profile: dict | None = None, target_company: str | None = None) -> dict:
-    """Template placeholder → profile values for draft post-processing."""
+    """Template placeholder â†’ profile values for draft post-processing."""
     profile = profile or load_identity_profile()
     name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
     name_upper = name.upper()
@@ -670,7 +671,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
                 response_mime_type, tools, max_retries
             )
         elif provider == 'claude':
-            # Claude does not support google_search tools — tools param intentionally omitted
+            # Claude does not support google_search tools â€” tools param intentionally omitted
             result = _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries)
         elif provider == 'local':
             result = _call_local(
@@ -721,3 +722,4 @@ def send_notification(message: str, topic: str = "jobagent_alerts"):
     except Exception as e:
         import sys
         print(f"    [Warning] Failed to send notification: {e}", file=sys.stderr)
+

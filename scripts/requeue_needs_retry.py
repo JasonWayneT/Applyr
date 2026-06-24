@@ -1,12 +1,12 @@
-"""Re-queue Needs Retry jobs (Python fallback when tsx/better-sqlite3 unavailable)."""
+﻿"""Re-queue Needs Retry jobs (Python fallback when tsx/better-sqlite3 unavailable)."""
 import os
 import re
 import sqlite3
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 JOBS_DIR = os.path.join(PROJECT_ROOT, "jobs")
-SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
+SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
 MAX_AUTO_RETRIES = 3
 
 

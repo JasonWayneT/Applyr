@@ -1,4 +1,4 @@
-"""Dignifi / product_domain cover tests."""
+﻿"""Dignifi / product_domain cover tests."""
 import os
 import re
 import sys
@@ -16,7 +16,7 @@ from cover_letter_structure import build_cover_blocks, blocks_to_prose, detect_a
 
 def _load_dignifi_jd() -> str:
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    path = os.path.join(root, "submissions", "dignifi", "Original_JD.txt")
+    path = os.path.join(root, "data", "submissions", "dignifi", "Original_JD.txt")
     with open(path, encoding="utf-8") as f:
         jd = f.read()
     if jd.startswith("URL:"):

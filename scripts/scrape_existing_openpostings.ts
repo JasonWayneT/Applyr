@@ -1,10 +1,10 @@
-import path from 'path';
+﻿import path from 'path';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'crypto';
 
 // --- Configuration ---
 const OPENPOSTINGS_DB_PATH = path.resolve('OpenPostings-extracted/OpenPostings-main/jobs.db');
-const MAIN_DB_PATH = path.resolve('jobagent.sqlite');
+const MAIN_DB_PATH = path.resolve('data/jobagent.sqlite');
 
 const OP_DB = new Database(OPENPOSTINGS_DB_PATH);
 const MAIN_DB = new Database(MAIN_DB_PATH);

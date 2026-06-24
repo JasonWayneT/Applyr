@@ -1,4 +1,4 @@
-"""Generate detailed rejection report for CSV-imported jobs."""
+﻿"""Generate detailed rejection report for CSV-imported jobs."""
 import csv
 import os
 import re
@@ -15,7 +15,7 @@ from anchor_gate import check_anchor_gate
 from utils import passes_keyword_gate
 
 CSV_PATH = r"C:\Users\Jason\Downloads\Job Evaluation 1 - Sheet1 (1).csv"
-DB_PATH = os.path.join(PROJECT_ROOT, "jobagent.sqlite")
+DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 LOG_PATH = os.path.join(
     os.path.expanduser("~"),
     ".cursor",

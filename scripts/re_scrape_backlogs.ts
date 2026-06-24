@@ -1,4 +1,4 @@
-import { chromium } from 'playwright-extra';
+﻿import { chromium } from 'playwright-extra';
 import stealth from 'puppeteer-extra-plugin-stealth';
 import Database from 'better-sqlite3';
 import fs from 'fs';
@@ -10,7 +10,7 @@ chromium.use(stealth());
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function run() {
-  const db = new Database(path.join(__dirname, '../jobagent.sqlite'));
+  const db = new Database(path.join(__dirname, '../data/jobagent.sqlite'));
   
   // Find all jobs in 'Backlog' status
   const jobs = db.prepare("SELECT id, company, title, url FROM jobs WHERE status = 'Backlog'").all() as any[];

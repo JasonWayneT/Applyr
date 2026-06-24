@@ -7,7 +7,7 @@ If you discover a security issue, report it privately before opening a public Gi
 ## Secrets and personal data
 
 - API keys belong in **Settings → API or Connections** (stored in local `jobagent.sqlite` only).
-- Never commit `.env`, `jobagent.sqlite`, `submissions/`, `archive/`, or personal files under `data/` (except `*.example.*` templates).
+- Never commit `.env`, `data/jobagent.sqlite`, `data/submissions/`, `data/archive/`, or personal files under `data/` (except `*.example.*` templates).
 - Run `python scripts/audit_public_repo.py` before pushing to a public remote.
 
 ## Fresh clone setup

@@ -15,7 +15,7 @@
 | 4 | Review **Sync / Opportunities** | Scores, gate rejects, backlog |
 | 5 | Optional **Evaluate** (paste JD) | SSE stages → submission folder |
 | 6 | **Edit** assets → save | Verify + PDF recompile |
-| 7 | **Status** transitions | `submissions/` or `archive/submissions/` |
+| 7 | **Status** transitions | `data/submissions/` or `data/archive/submissions/` |
 
 ### Scout pipeline (code order)
 
@@ -39,8 +39,8 @@
 | Experience | `data/workExperience.md` |
 | Fit summary | `data/workExperience_summary.md` |
 | Search prefs | `data/candidate_preferences.json` |
-| Jobs DB | `jobagent.sqlite` |
-| Submissions | `submissions/`, `archive/submissions/` |
+| Jobs DB | `data/jobagent.sqlite` |
+| Submissions | `data/submissions/`, `data/archive/submissions/` |
 
 ---
 

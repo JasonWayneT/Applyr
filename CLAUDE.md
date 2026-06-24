@@ -123,18 +123,18 @@ No bullet points in cover letters. No em dashes anywhere.
 
 ## Submission Folder Structure
 
-Every complete submission lives at `submissions/{company_name}/` and must contain:
+Every complete submission lives at `data/submissions/{company_name}/` and must contain:
 
 ```
-submissions/
+data/submissions/
   {company_name}/
-    Original_JD.txt         — raw job description (required)
-    Resume.md               — tailored resume in Markdown
-    CoverLetter.md          — tailored cover letter in Markdown
-    Resume.pdf              — compiled PDF (via compile_single.py)
-    CoverLetter.pdf         — compiled PDF
-    cover_letter_plan.json  — pipeline plan metadata (pipeline-generated)
-    jd_profile_cache.json   — parsed JD profile (pipeline-generated)
+    Original_JD.txt          — raw job description (required)
+    Resume.md                — tailored resume in Markdown
+    CoverLetter.md           — tailored cover letter in Markdown
+    Resume.pdf               — compiled PDF (via compile_single.py)
+    CoverLetter.pdf          — compiled PDF
+    cover_letter_plan.json   — pipeline plan metadata (pipeline-generated)
+    jd_profile_cache.json    — parsed JD profile (pipeline-generated)
     Interview_Cheat_Sheet.md — Q&A prep (pipeline-generated)
 ```
 

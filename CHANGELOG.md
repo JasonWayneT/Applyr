@@ -11,6 +11,25 @@ Full granular release history (60+ patch versions) is in [PRODUCT_CAPABILITIES_A
 
 ---
 
+## [7.1.0] — 2026-06-24
+
+### Changed
+- **Cross-device data portability** — All private data (`submissions/`, `archive/`, `jobagent.sqlite`) consolidated under `data/`. Google Drive sync of one folder (`data/`) is now sufficient to move the full application state between devices. No hosted database required.
+- **Repo hygiene** — Removed root-level duplicate docs, stale `data/job_fit_engine.md`, accidental `=` file, and 18 files that should never have been tracked (`data/thinking/`, `_bmad-output/`). CI smoke tests now pass reliably after fixing step-ordering bug that caused `python: command not found` on ubuntu-latest.
+
+### Fixed
+- `server/routes/system.ts` — local-model streaming route no longer crashes; reads LLM settings from SQLite `profiles` table instead of missing `.agent/llm_settings.json`.
+- `scripts/utils.py` — `ARCHIVE_DIR` constant aligned to `data/archive/submissions` (was `archive/`, now matches the active archive path used by all scripts).
+- README doc links in root table pointed at deleted root copies of `AGENTS.md` and `SDD_PROCESS.md`; corrected to `docs/` canonical versions.
+- Example files moved to live next to their real counterparts in `data/`: `ats_watchlist.example.json`, `cover_voice.example.md`.
+
+### Developer
+- 64-file path refactor updating every `submissions/`, `archive/`, and `jobagent.sqlite` reference across Python scripts, TypeScript scripts, server files, CI config, audit script, and `.gitignore`.
+- `package.json` `dev:server` tsx watch exclusions simplified — single `--exclude "data/**"` replaces four separate patterns.
+- `scripts/regeneration_log.txt` added to `.gitignore` (was untracked runtime output).
+
+---
+
 ## [7.0.0] — 2026-06-12
 
 ### Added

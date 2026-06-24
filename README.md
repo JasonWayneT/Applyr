@@ -120,6 +120,38 @@ Open the **Local** URL printed by Vite (e.g. **[http://localhost:5173](http://lo
 
 ---
 
+## Moving between devices
+
+All private data lives in a single folder: **`data/`**. To move Applyr to another machine, sync `data/` — everything else (code, deps) comes from git.
+
+**Recommended: Google Drive**
+
+Add `data/` to Google Drive sync (Backup & Sync mode). Exclude `data/browser_context/`, `data/jobs/`, and `data/__pycache__/` — these are large, device-specific, and regenerated at runtime.
+
+On the new device:
+
+```bash
+git clone https://github.com/JasonWayneT/JobHuntAgent.git
+cd JobHuntAgent
+npm install
+pip install -r requirements.txt
+npx playwright install chromium
+```
+
+Wait for Google Drive to finish syncing `data/`, then `npm run dev`. The app reads all credentials, work history, submissions, and archive directly from `data/`.
+
+**What lives where**
+
+| Location | Contents | How to sync |
+|---|---|---|
+| `data/` | Database, submissions, archive, personal files | Google Drive |
+| Git (public) | All code, specs, examples | `git push jobhunt main` |
+| Nothing | API keys, credentials | Stored in `data/jobagent.sqlite` — synced via Drive |
+
+> `data/` is fully gitignored (except public example files). Nothing personal ever reaches GitHub.
+
+---
+
 ## First-time configuration
 
 Complete these steps in order before running your first scout.

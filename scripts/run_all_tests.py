@@ -107,6 +107,14 @@ def main() -> int:
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(project_root)
 
+    # Bootstrap data files if missing (required in fresh clones like CI)
+    sys.path.insert(0, os.path.join(project_root, "scripts"))
+    try:
+        import bootstrap_local_data
+        bootstrap_local_data.main()
+    except Exception as e:
+        print(f"Warning: Failed to bootstrap local data: {e}", file=sys.stderr)
+
     print("==================================================================")
     print("  APPLYR UNIFIED TEST RUNNER")
     print("==================================================================")

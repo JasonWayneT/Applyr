@@ -84,7 +84,7 @@ Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spe
 
 **Reading order:** `AGENTS.md` → constitution → registry → relevant `FEAT-*` → traceability → **this file**.
 
-**Material changes:** `CR-*` → registry → FEAT → traceability → code (cite `FR-*`) → verification → `PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md`.
+**Material changes:** `CR-*` → registry → FEAT → traceability → code (cite `FR-*`) → verification → `CHANGELOG.md` + `PRODUCT_CAPABILITIES.md`.
 
 **Do not use for active work:** `.agent/archive/**`, `docs/history/JobAgent_WebApp_PRD 5.0.md` (archived UX), chat `/scout` / `/evaluate` workflows.
 

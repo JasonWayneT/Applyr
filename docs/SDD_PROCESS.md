@@ -49,4 +49,4 @@ When improving job opportunity collection (not drafting/research):
    - New prefs fields must be **preserved** in `materializeJobSearchPrefs()` (ADR-005), not only in example JSON.
    - Aggressive gates (`ANCHOR_GATE_ENABLED`, `must_have_keywords`) ship **off by default** with env flags.
 4. **Verify:** Extend `scripts/test_smoke_regression.py` with offline gate fixtures (REG-08+); manual sync log check for `[REJECT] industry_blocked:` / `[ZERO-TOKEN REJECT]`.
-5. **Release:** Append Firefox-style notes to `PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md` before push.
+5. **Release:** Append release entry to `CHANGELOG.md` before push; update `PRODUCT_CAPABILITIES.md` if any capability changes.

@@ -31,7 +31,7 @@ BLOCKED_TRACKED_PREFIXES = (
     "data/candidate_preferences.json",
     "data/master_claims.json",
     "data/workExperience_summary.md",
-    "PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md",
+    "PRODUCT_CAPABILITIES.md",
 )
 
 

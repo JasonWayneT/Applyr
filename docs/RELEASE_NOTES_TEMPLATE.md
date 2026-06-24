@@ -1,6 +1,6 @@
 # Applyr Release Notes Template (Firefox Style)
 
-Use this template when appending new entries to the Release Ledger inside `PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md`.
+Use this template when appending new entries to `CHANGELOG.md`.
 
 Copy and paste the markdown below, substituting the placeholders `[Your Version]`, `[Your Date]`, and relevant sections.
 

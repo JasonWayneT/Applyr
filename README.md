@@ -70,8 +70,8 @@ This works for anyone with real experience to draw from: corporate roles, freela
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/JasonWayneT/JobHuntAgent.git
-cd JobHuntAgent
+git clone https://github.com/JasonWayneT/Applyr.git
+cd Applyr
 ```
 
 ### 2. Install Node dependencies
@@ -131,8 +131,8 @@ Add `data/` to Google Drive sync (Backup & Sync mode). Exclude `data/browser_con
 On the new device:
 
 ```bash
-git clone https://github.com/JasonWayneT/JobHuntAgent.git
-cd JobHuntAgent
+git clone https://github.com/JasonWayneT/Applyr.git
+cd Applyr
 npm install
 pip install -r requirements.txt
 npx playwright install chromium

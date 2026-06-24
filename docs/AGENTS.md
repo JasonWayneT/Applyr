@@ -40,7 +40,7 @@ Every code change must cite at least one requirement ID (`FR-*`, `NFR-*`, `BUG-*
 
 ## GitHub & Release Notes Rule
 
-When pushing changes to GitHub, agents MUST generate and append a Firefox-style release note to `PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md` before or immediately after the push. All significant changes (New, Fixed, Changed, Developer) must be documented following the established template.
+When pushing changes to GitHub, agents MUST append a release entry to `CHANGELOG.md` before or immediately after the push. All significant changes (New, Fixed, Changed, Developer) must be documented following the established template. The local-only `PRODUCT_CAPABILITIES.md` should also be updated if any capability section changes.
 
 ## Prohibited behavior
 
@@ -128,7 +128,7 @@ A component is complete when:
 
 ## CHANGELOG format
 
-All significant changes are appended to `PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md` before or immediately after a push to GitHub.
+All significant changes are appended to `CHANGELOG.md` before or immediately after a push to GitHub.
 
 Use this format:
 

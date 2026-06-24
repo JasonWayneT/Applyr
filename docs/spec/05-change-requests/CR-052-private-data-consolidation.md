@@ -73,7 +73,7 @@ Google Drive sync of `data/` is now sufficient to move the full application stat
 ## Cross-Device Setup (Post-CR)
 
 New device setup:
-1. `git clone https://github.com/JasonWayneT/JobHuntAgent.git`
+1. `git clone https://github.com/JasonWayneT/Applyr.git`
 2. `npm install && pip install -r requirements.txt`
 3. Copy `data/` from Google Drive (or wait for sync)
 4. `npm run dev`

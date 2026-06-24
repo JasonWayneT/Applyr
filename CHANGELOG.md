@@ -3,7 +3,7 @@
 All notable changes are documented here at the major milestone level.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-Full granular release history (60+ patch versions) is in [PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md](./PRODUCT_CAPABILITIES_AND_RELEASE_NOTES.md).
+System capabilities reference (what the app can do today) is in [PRODUCT_CAPABILITIES.md](./PRODUCT_CAPABILITIES.md) (local only, gitignored).
 
 ---
 

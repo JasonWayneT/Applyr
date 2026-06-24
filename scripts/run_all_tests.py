@@ -13,6 +13,9 @@ import time
 from typing import List, Tuple
 
 PYTHON_TEST_SCRIPTS = [
+    "scripts/audit_public_repo.py",
+    "scripts/check_spawn_paths.py",
+    "scripts/smoke_draft_compiler.py",
     "scripts/test_batch_gate.py",
     "scripts/test_candidate_context.py",
     "scripts/test_cover_voice.py",
@@ -25,6 +28,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_smoke_regression.py",
     "scripts/test_solo_pm_gate.py",
     "scripts/test_verify_chain.py",
+    "scripts/verify_master_claims.py",
 ]
 
 
@@ -44,8 +48,11 @@ def run_python_test(script_path: str, verbose: bool) -> Tuple[bool, float, str]:
     """Run a single python test script and return (passed, duration, output)."""
     start_time = time.time()
     try:
+        args: List[str] = []
+        if "verify_master_claims.py" in script_path:
+            args = ["data/master_claims.example.json", "data/workExperience.example.md"]
         result = subprocess.run(
-            [sys.executable, script_path],
+            [sys.executable, script_path] + args,
             capture_output=True,
             text=True,
             errors="replace",

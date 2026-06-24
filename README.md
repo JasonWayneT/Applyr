@@ -326,8 +326,8 @@ Run these directly with `python scripts/<name>.py` or `npx tsx scripts/<name>.ts
 | Document | Purpose |
 |---|---|
 | [CHANGELOG.md](./CHANGELOG.md) | Release history — major milestones and what changed |
-| [AGENTS.md](./AGENTS.md) | Agent operating rules — methodology, coding standards, testing |
-| [SDD_PROCESS.md](./SDD_PROCESS.md) | Three-layer change enforcement — the process every code change must follow |
+| [docs/AGENTS.md](./docs/AGENTS.md) | Agent operating rules — methodology, coding standards, testing |
+| [docs/SDD_PROCESS.md](./docs/SDD_PROCESS.md) | Three-layer change enforcement — the process every code change must follow |
 | [docs/spec/00-project-constitution.md](./docs/spec/00-project-constitution.md) | Project scope, operating mode, technical defaults, constraints |
 | [docs/spec/02-requirements-registry.md](./docs/spec/02-requirements-registry.md) | Canonical requirement IDs — source of truth for all FR/NFR/SEC/DATA/INT requirements |
 | [docs/spec/06-traceability/traceability-matrix.md](./docs/spec/06-traceability/traceability-matrix.md) | Requirement → spec → code → status mapping |

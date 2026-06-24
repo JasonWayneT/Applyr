@@ -154,10 +154,15 @@ def employer_for_claim_id(claim_id: str) -> str:
 def default_resume_bullet_quotas() -> Dict[str, int]:
     ordered = load_employers_ordered()
     if not ordered:
-        return {"acme_corp": 5, "example_inc": 3, "startup_co": 3}
+        return {"acme_corp": 5, "example_inc": 3, "startup_co": 2}
     quotas: Dict[str, int] = {}
     for i, slug in enumerate(ordered):
-        quotas[slug] = 5 if i == 0 else 3
+        if i == 0:
+            quotas[slug] = 5
+        elif i == 1:
+            quotas[slug] = 3
+        else:
+            quotas[slug] = 2
     return quotas
 
 

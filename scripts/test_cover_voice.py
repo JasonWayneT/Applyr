@@ -75,7 +75,7 @@ class TestCoverPhrasing(unittest.TestCase):
             RETENTION_STORY,
             "analytics products adopted not demoed",
         )
-        self.assertIn("I am applying for", opener)
+        self.assertIn("drew me to the", opener)
         self.assertNotIn("I bring 5+ years", opener)
         self.assertNotIn("your posting emphasizes", opener.lower())
         self.assertNotIn("track record in platform", opener.lower())

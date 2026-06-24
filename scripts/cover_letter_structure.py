@@ -477,6 +477,72 @@ def _marketplace_proof_order(proofs: List[CoverProofSlot]) -> List[CoverProofSlo
     return sorted(proofs, key=key)
 
 
+def _need_based_hook(ranked_needs: List[str], jd_text: str) -> str:
+    """Return a role-specific hook sentence derived from JD content.
+
+    Varies the opener by what the JD is actually about so the same ACC-102
+    trust-hook does not appear in every cover letter. Returns empty string
+    when no specific pattern matches, letting the caller fall through to the
+    claim-based hook.
+    """
+    jd_l = jd_text.lower()
+
+    if any(k in jd_l for k in (
+        "customer journey", "claims journey", "customer experience",
+        "support escalation", "escalation ticket",
+    )):
+        return (
+            "Customer-facing friction rarely announces itself on the roadmap. "
+            "It shows up first as a support escalation, a missed renewal, or a "
+            "churn signal the business has been misreading for a quarter."
+        )
+
+    if any(k in jd_l for k in (
+        "workflow orchestration", "governance", "operational visibility",
+        "delivery coordination", "distributed teams",
+    )):
+        return (
+            "Enterprise platforms for workflow coordination don't fail because the "
+            "technology is wrong — they fail because the stakeholder inputs that "
+            "should shape the roadmap never make it in coherently."
+        )
+
+    if any(k in jd_l for k in (
+        "student engagement", "communication workflow", "campaign automation",
+        "sms", "messaging platform", "student communication",
+    )):
+        return (
+            "Communication and engagement platforms fail in a specific way: the "
+            "friction shows up first as support escalations — students who didn't "
+            "receive a message, staff who can't find a workflow, teams that can't "
+            "see whether a campaign actually reached anyone."
+        )
+
+    if any(k in jd_l for k in (
+        "api integration", "integration layer", "data pipeline",
+        "ingestion", "etl", "schema", "data integrity",
+    )):
+        return (
+            "Most teams treat their API integrations and data pipelines as "
+            "infrastructure problems — something Engineering owns, something that "
+            "gets fixed reactively when it breaks. The better framing is that the "
+            "integration layer is the product."
+        )
+
+    if any(k in jd_l for k in (
+        "self-service", "admin portal", "identity", "user management",
+        "access control", "compliance program",
+    )):
+        return (
+            "The friction that builds up in a product's identity and admin layer "
+            "doesn't stay invisible for long — it arrives as Customer Service "
+            "escalation tickets, customers who can't get themselves unstuck, and "
+            "support overhead that scales faster than the user base."
+        )
+
+    return ""
+
+
 def render_opener_block(
     plan: CoverLetterPlan,
     jd_text: str,
@@ -498,6 +564,13 @@ def render_opener_block(
                 plan.company_display, plan.role_title, jd_text
             )
         )
+
+    # For application_first: try a JD-derived hook before falling through to
+    # the claim-based hook so the same sentence doesn't appear in every letter.
+    need_hook = _need_based_hook(plan.ranked_needs, jd_text)
+    if need_hook:
+        anchor = f"That's what drew me to the {plan.role_title} role at {plan.company_display}."
+        return apply_voice_polish(f"{need_hook} {anchor}")
 
     from cover_narrative_templates import render_application_first_opening
 
@@ -618,11 +691,21 @@ def build_cover_blocks(
         if plan.archetype_id == "product_domain" and i == 1:
             body = _render_domain_trust_intro_body()
         else:
+            # Pass opener_hook to whichever slot contributed the primary_story,
+            # regardless of its position. This strips the hook sentence from the
+            # proof body so it doesn't repeat the opener paragraph verbatim.
+            slot_rec = catalog.claims.get(slot.claim_id)
+            slot_has_primary = bool(
+                primary_story
+                and slot_rec
+                and slot_rec.cover_story
+                and slot_rec.cover_story.strip() == primary_story.strip()
+            )
             body = render_proof_body(
                 slot,
                 catalog,
                 plan.archetype_id,
-                opener_hook=opener_hook if i == 0 else "",
+                opener_hook=opener_hook if slot_has_primary else "",
             )
         if body:
             parts.append(body)
@@ -757,6 +840,10 @@ def _expand_opener_with_jd_context(
     from cover_jd_needs import need_to_goal_phrase
 
     for need in plan.ranked_needs or []:
+        # Skip job-announcement lines like "[Company] is seeking [role]..." —
+        # these are JD boilerplate, not pain points or business needs.
+        if re.search(r"\bis seeking\b|\bare seeking\b|\bwe are hiring\b", need, re.I):
+            continue
         goal = need_to_goal_phrase(need).strip()
         if (
             len(goal) >= 24
@@ -855,7 +942,9 @@ def pad_cover_blocks_to_min(
                         blocks[i] = CoverBlock("legacy_proof", full_body)
                     break
 
-    # Render any unrendered legacy slots as additional proof blocks when still below target.
+    # Render at most one unrendered legacy slot as an additional proof block when
+    # still below target. Adding more than one risks consecutive paragraphs from
+    # the same employer telling essentially the same story.
     if current_wc() < target and len(legacy_slots) > 1:
         rendered_legacy_ids = {legacy_slots[0].claim_id}
         for slot in legacy_slots[1:]:
@@ -889,5 +978,38 @@ def pad_cover_blocks_to_min(
             if body:
                 _insert_proof_before_close(blocks, body)
                 rendered_legacy_ids.add(slot.claim_id)
+                break  # One additional legacy slot maximum
 
+    _dedupe_consecutive_proof_openers(blocks)
     return blocks
+
+
+def _dedupe_consecutive_proof_openers(blocks: List[CoverBlock]) -> None:
+    """Strip repeated boilerplate opener sentences from consecutive proof blocks.
+
+    When multiple claims with the same lens appear back-to-back, render_proof_paragraph
+    prepends the same context sentence to each. This removes the duplicate from the
+    second occurrence so consecutive paragraphs don't open with identical text.
+    """
+    proof_kinds = {"proof", "legacy_proof"}
+    prev_first_sentence: str = ""
+    for i, block in enumerate(blocks):
+        if block.kind not in proof_kinds:
+            prev_first_sentence = ""
+            continue
+        text = block.text.strip()
+        if not text:
+            continue
+        # Extract the first sentence (up to first period-space or end).
+        period_idx = text.find(". ")
+        first_sentence = text[: period_idx + 1].strip() if period_idx != -1 else text
+        if (
+            prev_first_sentence
+            and first_sentence.lower() == prev_first_sentence.lower()
+            and period_idx != -1
+        ):
+            # Remove the duplicate leading sentence from this block.
+            remainder = text[period_idx + 2:].strip()
+            if remainder:
+                blocks[i] = CoverBlock(block.kind, remainder)
+        prev_first_sentence = first_sentence

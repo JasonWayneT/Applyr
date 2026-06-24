@@ -72,7 +72,12 @@ def render_value_first_opening(
     primary_story: str,
     jd_text: str,
 ) -> str:
-    """Value-first opener: application line + strongest story claim (CR-044 / FR-237)."""
+    """Value-first opener: lead with trust hook, then ground with application context.
+
+    Recruiters skim openers in seconds; leading with 'I am applying for...' wastes
+    that first-line impression. The trust hook earns attention; the company/role
+    reference at the end confirms the application is targeted.
+    """
     from cover_phrasing import (
         apply_voice_polish,
         dedupe_opening_paragraph,
@@ -81,9 +86,14 @@ def render_value_first_opening(
 
     from cover_phrasing import render_trust_hook
 
-    apply_line = f"I am applying for the {role_title} role at {company}."
     value_line = render_trust_hook(primary_story) or value_lead_from_story(primary_story)
-    parts = [p for p in (apply_line, value_line) if p]
+    if value_line:
+        # Lead with the hook; anchor with a compact role reference at the end.
+        anchor = f"That's what drew me to the {role_title} role at {company}."
+        parts = [value_line, anchor]
+    else:
+        # No story available — fall back to the plain application line.
+        parts = [f"I am applying for the {role_title} role at {company}."]
     return apply_voice_polish(dedupe_opening_paragraph(" ".join(parts)))
 
 

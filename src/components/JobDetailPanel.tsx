@@ -3,6 +3,11 @@ import { Job } from '../types/job';
 import { api } from '../lib/api';
 import StatusChip from './StatusChip';
 import DocumentEditor from './DocumentEditor';
+import {
+  statusRequiresInterviewDateTime,
+  isValidInterviewDateTime,
+  toDatetimeLocalValue,
+} from 'shared/domain/jobPipeline';
 
 interface JobFile {
   name: string;
@@ -49,7 +54,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
   useEffect(() => {
     if (!job) return;
-    setInterviewDate(job.interview_date || '');
+    setInterviewDate(toDatetimeLocalValue(job.interview_date) || '');
     setShowClosureForm(false);
     setClosureData({ stage: job.status, type: 'Rejected', notes: '' });
     setErrorMsg(null);
@@ -122,20 +127,37 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
     }
   };
 
-  const updateStatus = async (newStatus: string, payload: any = {}) => {
+  const updateStatus = async (newStatus: string, payload: Record<string, unknown> = {}) => {
     setErrorMsg(null);
     try {
+      const body: Record<string, unknown> = { status: newStatus, ...payload };
+      if (statusRequiresInterviewDateTime(newStatus) && interviewDate) {
+        body.interview_date = interviewDate;
+      }
       const res = await fetch(api(`/api/jobs/${job.id}/status`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus, ...payload }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to update status');
+      }
       onStatusChange?.(job.id, newStatus);
       onClose();
-    } catch {
-      setErrorMsg('Failed to update status. Please try again.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to update status. Please try again.');
     }
+  };
+
+  const handleProgression = () => {
+    if (!progression) return;
+    const { next, label } = progression;
+    if (statusRequiresInterviewDateTime(next) && !isValidInterviewDateTime(interviewDate)) {
+      setErrorMsg(`Set date and time in Interview Schedule before "${label}".`);
+      return;
+    }
+    updateStatus(next);
   };
 
   const handleStartEdit = async (filename: string) => {
@@ -236,8 +258,14 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     value={interviewDate}
                     onChange={(e) => handleDateChange(e.target.value)}
                     className="input-applyr w-full text-sm rounded-xl py-2.5 px-4"
+                    required={!!progression && statusRequiresInterviewDateTime(progression.next)}
                   />
                 </div>
+                {progression && statusRequiresInterviewDateTime(progression.next) && (
+                  <p className="text-[11px] text-on-surface-variant">
+                    Required before &ldquo;{progression.label}&rdquo;
+                  </p>
+                )}
                 {interviewDate && (
                   <p className="text-[11px] text-primary font-medium flex items-center gap-1">
                     <span className="material-symbols-outlined text-sm">notifications_active</span>
@@ -573,7 +601,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
                 {progression && (
                   <button
-                    onClick={() => updateStatus(progression.next)}
+                    onClick={handleProgression}
                     className="btn-primary text-sm flex items-center gap-2"
                   >
                     <span className="material-symbols-outlined text-sm">{progression.icon}</span>

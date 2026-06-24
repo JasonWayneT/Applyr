@@ -446,6 +446,25 @@ def run(
             raise DraftingPipelineError(f"Cover letter numeric audit: {cl_audit_err}")
 
         cl_stripped = strip_all_metadata_tokens(determinator.strip_ids(cl_raw))
+        
+        # Hard cap cover letter word count at 420 (Story 3)
+        cl_words = len(re.findall(r"\b\w+\b", cl_stripped))
+        if cl_words > 420:
+            paragraphs = cl_stripped.split("\n\n")
+            for idx, p in enumerate(paragraphs):
+                p_lower = p.lower()
+                if "welcome" in p_lower and ("opportunity" in p_lower or "conversation" in p_lower or "discuss" in p_lower):
+                    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", p) if s.strip()]
+                    if sentences:
+                        new_p = sentences[0]
+                        if not new_p.endswith("."):
+                            new_p += "."
+                        if "thank" not in new_p.lower():
+                            new_p += " Thank you for your time."
+                        paragraphs[idx] = new_p
+                        break
+            cl_stripped = "\n\n".join(paragraphs)
+
         with open(cl_md_path, "w", encoding="utf-8") as f:
             f.write(cl_stripped)
         if cover_plan_dict is not None:

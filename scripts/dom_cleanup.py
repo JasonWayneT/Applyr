@@ -1,16 +1,21 @@
+import html
 import re
 
 def clean_html_to_text(raw_html: str) -> str:
     """
     DOM Cleanup Pre-Processor for JDs.
-    Removes garbage HTML code, invisible trackers, and formatting noise 
+    Removes garbage HTML code, invisible trackers, and formatting noise
     out of scraped job postings before the AI reads them.
     """
     if not raw_html:
         return ""
-    
+
+    # Decode HTML entities first so that entity-encoded HTML (e.g. &lt;p&gt;)
+    # is converted to real tags before the tag-stripping regexes run.
+    text = html.unescape(raw_html)
+
     # Remove script and style tags and their contents
-    text = re.sub(r'<(script|style).*?>.*?</\1>', '', raw_html, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r'<(script|style).*?>.*?</\1>', '', text, flags=re.IGNORECASE | re.DOTALL)
     
     # Remove hidden elements (e.g., style="display:none")
     text = re.sub(r'<[^>]*style=["\'][^"\']*display:\s*none[^"\']*["\'][^>]*>.*?</[^>]+>', '', text, flags=re.IGNORECASE | re.DOTALL)

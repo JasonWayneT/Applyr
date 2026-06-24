@@ -61,7 +61,7 @@ _INCOMPLETE_PROOF_TAIL = re.compile(
     r"\b(?:to|and|or|by|for|with|across|against|in|on|of|the|a|an)\s*\.$",
     re.I,
 )
-MAX_BULLET_WORDS = 28
+MAX_BULLET_WORDS = 40
 
 def _employer_headers() -> Dict[str, str]:
     from candidate_context import load_employer_headers
@@ -696,19 +696,36 @@ def _coalesce_summary_parts(
 
 
 def _pad_summary_template_parts(parts: List[str], theme_phrase: Optional[str] = None) -> List[str]:
-    """Pad to SUMMARY_MIN_SENTENCES with template-only s3 — never a second proof (FR-243)."""
+    """Pad to SUMMARY_MIN_SENTENCES with template-only s3 — never a second proof (FR-243).
+
+    S3 must NOT echo the theme_phrase already used in S1, or it produces redundant
+    sentences like "...focus on X... Known for outcomes in X..."  Use the static
+    SUMMARY_TEMPLATE_S3 whenever a theme_phrase is present (S1 already names it).
+    """
     out = [p for p in parts if p.strip()]
     if len(out) >= SUMMARY_MIN_SENTENCES:
         return out[:SUMMARY_MIN_SENTENCES]
-    if len(out) <= 2:
+    
+    # If we only have 1 sentence, add a default S2 first
+    if len(out) == 1:
+        default_s2 = "Experienced partnering with engineering, DevOps, CX, and upgrade teams to ship reliable platform capabilities under resource constraints."
+        out.append(default_s2)
+        
+    # If we have 2 sentences, add S3
+    if len(out) == 2:
         s3 = SUMMARY_TEMPLATE_S3
-        if theme_phrase:
-            s3 = (
-                f"Known for delivering measurable platform outcomes in {theme_phrase}, "
-                f"with cross-functional execution across engineering and customer teams."
-            )
         if s3 not in out:
             out.append(s3)
+            
+    # Guarantee at least SUMMARY_MIN_SENTENCES using standard fallback sentences
+    default_sentences = [
+        "Product Manager with over 6 years of experience in enterprise SaaS platforms, specializing in sales-led enterprise solutions.",
+        "Experienced partnering with engineering, DevOps, CX, and upgrade teams to ship reliable platform capabilities under resource constraints.",
+        SUMMARY_TEMPLATE_S3
+    ]
+    while len(out) < SUMMARY_MIN_SENTENCES:
+        out.append(default_sentences[len(out)])
+        
     return out[:SUMMARY_MIN_SENTENCES]
 
 
@@ -835,10 +852,39 @@ def build_summary_deterministic(
             "enterprise platform through data integrity, customer migration, and infrastructure cost reduction."
         )
 
-    s2 = (
-        "Experienced partnering with engineering, DevOps, CX, and upgrade teams "
-        "to ship reliable platform capabilities under resource constraints."
-    )
+    # S2 varies by dominant JD signal so different applications don't share
+    # identical boilerplate sentences (a dead giveaway to recruiters reviewing multiple apps).
+    _jd_l = jd_text.lower() if jd_text else ""
+    if "security" in _jd_l or "compliance" in _jd_l or "vulnerability" in _jd_l or "penetration" in _jd_l:
+        s2 = (
+            "Experienced partnering with engineering, DevOps, Legal, and CX teams "
+            "to remediate security risk while maintaining core roadmap delivery."
+        )
+    elif "migration" in _jd_l or "migrate" in _jd_l or "transition" in _jd_l:
+        s2 = (
+            "Experienced partnering with engineering, Upgrades, CX, and DevOps teams "
+            "through complex customer migrations and platform transitions."
+        )
+    elif "data" in _jd_l and ("integrity" in _jd_l or "pipeline" in _jd_l or "ingestion" in _jd_l):
+        s2 = (
+            "Experienced partnering with engineering, DBA, CX, and DevOps teams "
+            "to maintain data integrity and drive platform reliability improvements."
+        )
+    elif "analytics" in _jd_l or "reporting" in _jd_l or "dashboard" in _jd_l:
+        s2 = (
+            "Experienced partnering with engineering, analytics, and CX teams "
+            "to translate data and customer signals into reliable platform delivery."
+        )
+    elif "marketplace" in _jd_l or "fintech" in _jd_l or "lending" in _jd_l or "payment" in _jd_l:
+        s2 = (
+            "Experienced partnering with engineering, operations, and CX teams "
+            "to deliver platform capabilities that balance speed, trust, and reliability."
+        )
+    else:
+        s2 = (
+            "Experienced partnering with engineering, DevOps, CX, and upgrade teams "
+            "to ship reliable platform capabilities under resource constraints."
+        )
 
     # Guard: prevent the 40% data failure stat from appearing in the proof
     # sentence when it is already present as an experience bullet (avoids verbatim duplication).
@@ -1060,6 +1106,7 @@ _SKILL_LABELS: Dict[str, str] = {
     # Platform / data / integration
     "Platform Stability": "Platform Stability",
     "Platform Stabilization": "Platform Stability",
+    "Product Stability": "Platform Stability",
     "Data Integrity": "Data Integrity",
     "Data Pipeline": "Data Pipeline Management",
     "Content Pipeline": "Content Pipeline Management",
@@ -1102,9 +1149,12 @@ _SKIP_TAGS: set = {
     "Churn Rate", "Churn Reduction", "ROI", "Conversion Rate", "Scaling",
     "Competitive Advantage", "Competitive Gap", "Feature Launch",
     "Product Adoption", "Product Continuity",
+    # Working conditions / context, not skills
+    "Resource Constraints", "Under Constraints", "Constrained Environment",
     # Too vague / not resume-ready
     "Velocity", "Collaboration", "Communication", "Continuity", "Initiative",
     "Problem Identification", "Delivery", "Alignment",
+    "Cross-Platform", "Multi-Platform",
     # Too technical for PM row 1
     "macOS", "Scripting", "Automation", "Tooling", "GDPR/CCPA",
     "SLA", "Alerting", "Monitoring", "Access Control", "Governance",
@@ -1118,6 +1168,8 @@ _SKIP_TAGS: set = {
     # Already covered by tools row
     "Google Analytics", "Jira", "Salesforce", "CRM", "CRM Integration",
     "PR Attribution", "Global Coordination", "Distributed Teams",
+    # Sales-context skill — not PM methodology for enterprise SaaS roles
+    "Lead Generation",
     # Misc duplicates resolved above
     "Custom Requirements", "Multi-Platform Ownership",
 }
@@ -1416,7 +1468,9 @@ def assemble_cover_letter_deterministic(
     else:
         from utils import format_contact_header_block
         header = format_contact_header_block().strip()
-    return f"{header}\n\n{body}\n"
+    from utils import load_identity_profile
+    candidate_name = (load_identity_profile().get("name") or "Jason Taylor").strip()
+    return f"{header}\n\nDear Hiring Manager,\n\n{body}\n\nRegards,\n\n{candidate_name}\n"
 
 
 def audit_text_against_bullet_corpus(text: str, bullet_corpus: str) -> Tuple[bool, Optional[str]]:

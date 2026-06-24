@@ -13,6 +13,10 @@ import {
 import { isSafeHttpUrl, isValidJobId, runPythonScript } from '../../middleware.js';
 import { pythonScriptPath } from '../../pipeline/processRunner.js';
 import { insertJob, patchJob, deleteJobRecord } from '../../repository/jobRepository.js';
+import {
+  statusRequiresInterviewDateTime,
+  isValidInterviewDateTime,
+} from '../../../shared/domain/jobPipeline.js';
 
 const router = Router();
 
@@ -157,14 +161,29 @@ router.patch('/api/jobs/:id/status', (req, res) => {
     if (!isValidJobId(id)) return res.status(400).json({ error: 'Invalid job id' });
     let { status } = req.body;
 
-    const job = db.prepare('SELECT company, status, rowid FROM jobs WHERE id = ?').get(id) as any;
+    const job = db.prepare('SELECT company, status, interview_date, rowid FROM jobs WHERE id = ?').get(id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const rejectionType = req.body.rejection_type as string | undefined;
     const rejectionStage = req.body.rejection_stage as string | undefined;
     const outcomeNotes = req.body.outcome_notes as string | undefined;
+    const interviewDateFromBody = req.body.interview_date as string | undefined;
+
     if (status === 'Rejected' && rejectionType) {
       status = 'Closed';
+    }
+
+    if (statusRequiresInterviewDateTime(status)) {
+      const resolved =
+        (interviewDateFromBody && String(interviewDateFromBody).trim()) ||
+        (job.interview_date && String(job.interview_date).trim()) ||
+        '';
+      if (!isValidInterviewDateTime(resolved)) {
+        return res.status(400).json({
+          error:
+            'interview_date is required when moving to Recruiter Screen or Core Interviews. Set date and time first.',
+        });
+      }
     }
 
     // FR-210: read rubric score before archive moves the folder
@@ -190,18 +209,30 @@ router.patch('/api/jobs/:id/status', (req, res) => {
     if (!isNowArchived && wasArchived) restoreArchivedSubmission(job.company);
 
     const isClosed = status === 'Closed';
+    const interviewDateToPersist =
+      statusRequiresInterviewDateTime(status)
+        ? (interviewDateFromBody && String(interviewDateFromBody).trim()) ||
+          (job.interview_date && String(job.interview_date).trim()) ||
+          null
+        : interviewDateFromBody !== undefined
+          ? interviewDateFromBody || null
+          : undefined;
+
     db.prepare(`
       UPDATE jobs
       SET status          = ?,
           rejection_stage = COALESCE(?, rejection_stage),
           rejection_type  = COALESCE(?, rejection_type),
-          outcome_notes   = COALESCE(?, outcome_notes)
+          outcome_notes   = COALESCE(?, outcome_notes),
+          interview_date  = CASE WHEN ? IS NOT NULL THEN ? ELSE interview_date END
       WHERE id = ?
     `).run(
       status,
       isClosed ? (rejectionStage || job.status) : null,
       isClosed ? rejectionType : null,
       isClosed ? outcomeNotes : null,
+      interviewDateToPersist === undefined ? null : interviewDateToPersist,
+      interviewDateToPersist === undefined ? null : interviewDateToPersist,
       id,
     );
     logActivity('INFO', 'System', `Job "${job.company}" status changed to ${status}`);

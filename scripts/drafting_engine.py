@@ -368,7 +368,18 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result, disp
         work_exp,
         evaluation_result,
         company_folder,
-        display_name=display,
+        # Pass explicit_display only when the caller provided one; otherwise let
+        # resolve_company_display_name extract the name from the JD or SQLite.
+        display_name=display_name,
     )
+    
+    # Run post-compilation quality enhancement and self-healing tailoring (exactly 3 sentences, stage/motion fit)
+    try:
+        from audit_and_improve import audit_and_improve_company
+        print(f"    [Enhancement] Running automated self-healing and stage/motion tailoring for {display}...")
+        audit_and_improve_company(company_folder)
+    except Exception as e:
+        print(f"    [Enhancement Warning] Failed to run automated post-drafting quality check: {e}")
+        
     print(f"  -> Successfully generated and audited all assets for {company_name}")
 

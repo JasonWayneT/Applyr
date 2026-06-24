@@ -33,6 +33,45 @@ def _claim_corpus(catalog) -> str:
     return "\n".join(parts)
 
 
+def apply_cover_retry_fixes(markdown: str, issues: List[str]) -> str:
+    import re
+    out = markdown
+    for issue in issues:
+        if "Forbidden opener pattern" in issue or "Opening should state application intent" in issue:
+            out = re.sub(r"\bI am writing to express my interest in the\b", "I am applying for the", out, flags=re.I)
+            out = re.sub(r"\bI am writing to express my interest in\b", "I am applying for", out, flags=re.I)
+            out = re.sub(r"\bI am writing to express my interest\b", "I am applying", out, flags=re.I)
+            out = re.sub(r"\bI am writing to apply for the\b", "I am applying for the", out, flags=re.I)
+            out = re.sub(r"\bI am writing to apply for\b", "I am applying for", out, flags=re.I)
+            out = re.sub(r"\bI am writing to apply\b", "I am applying", out, flags=re.I)
+            out = re.sub(r"\b(?:is hiring a|is hiring)\b", "seeks a", out, flags=re.I)
+        
+        if "Buzzword:" in issue:
+            m = re.search(r"Buzzword:\s*(.+)", issue)
+            if m:
+                bw = m.group(1).strip()
+                if bw.lower() == "proven track record":
+                    out = re.sub(r"\bproven track record\b", "track record", out, flags=re.I)
+                elif bw.lower() == "seamless":
+                    out = re.sub(r"\bseamlessly\b", "successfully", out, flags=re.I)
+                    out = re.sub(r"\bseamless\b", "direct", out, flags=re.I)
+                elif bw.lower() == "transformative":
+                    out = re.sub(r"\btransformative\b", "meaningful", out, flags=re.I)
+                elif bw.lower() == "innovative":
+                    out = re.sub(r"\binnovative\b", "new", out, flags=re.I)
+                elif bw.lower() == "leverage":
+                    out = re.sub(r"\bleverage\b", "utilize", out, flags=re.I)
+                elif bw.lower() == "synergy":
+                    out = re.sub(r"\bsynergy\b", "collaboration", out, flags=re.I)
+                elif bw.lower() == "rockstar":
+                    out = re.sub(r"\brockstar\b", "key", out, flags=re.I)
+                elif bw.lower() == "thought leader":
+                    out = re.sub(r"\bthought leader\b", "expert", out, flags=re.I)
+                elif bw.lower() == "results-driven":
+                    out = re.sub(r"\bresults-driven\b", "focused", out, flags=re.I)
+    return out
+
+
 def compile_cover_letter(
     jd_text: str,
     company_display: str,
@@ -52,11 +91,27 @@ def compile_cover_letter(
     corpus = _claim_corpus(catalog)
     target_k = max(len(plan.proofs), 3)
 
+    best_md = None
+    best_score = -1
+    best_audit = None
+    best_wc = 0
+
     for attempt in range(max_retries + 1):
         md = render_cover_letter(plan, catalog, jd_text=jd_text)
         md = sanitize_submission_tone(md)
+        
+        if attempt > 0 and best_audit and best_audit.issues:
+            md = apply_cover_retry_fixes(md, best_audit.issues)
+            
         audit = audit_cover_letter(md, plan, jd_text, corpus)
         wc, _in_band = word_count_report(md)
+        
+        if audit.score > best_score:
+            best_score = audit.score
+            best_md = md
+            best_audit = audit
+            best_wc = wc
+
         if audit.passed and not any(
             "Invented numbers" in i for i in audit.issues
         ):
@@ -80,9 +135,9 @@ def compile_cover_letter(
                 continue
         break
 
-    md = render_cover_letter(plan, catalog, jd_text=jd_text)
+    md = best_md if best_md is not None else render_cover_letter(plan, catalog, jd_text=jd_text)
     md = sanitize_submission_tone(md)
-    audit = audit_cover_letter(md, plan, jd_text, corpus)
+    audit = best_audit if best_audit is not None else audit_cover_letter(md, plan, jd_text, corpus)
     wc, _ = word_count_report(md)
     _CRITICAL_WORD_COUNT = 80
     if wc < _CRITICAL_WORD_COUNT:

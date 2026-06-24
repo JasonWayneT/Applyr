@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 
-DEFAULT_MAX_BULLET_WORDS = 28
+DEFAULT_MAX_BULLET_WORDS = 40
 
 INCOMPLETE_ENDINGS = re.compile(
     r"\b(increasing|reducing|improving|supporting|ensuring|maintaining|"

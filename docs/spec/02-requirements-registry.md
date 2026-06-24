@@ -514,6 +514,11 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 |---|---|---|---|---|---|---|
 | `FR-241` | functional | P1 | accepted | Unified test runner that executes both Python unit tests and Vitest TypeScript tests with UTF-8 encoding support | `AC-215`, `AC-216`, `AC-217`, `AC-218`, `AC-219` | `CR-046` |
 
+### CR-051 Interview datetime gate (FR-251)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-251` | functional | P1 | implemented | Status transitions to Recruiter Screen or Core Interviews require a valid `interview_date` (UI block + API 400) | CR-051 acceptance criteria | `CR-051` |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

@@ -346,7 +346,23 @@ def extract_ranked_needs(jd_text: str, profile: JdProfile | None = None, limit: 
     return ranked
 
 
+_VAGUE_ROLE_PREFIXES = re.compile(
+    r"^(seasoned|experienced|accomplished|proven|dynamic|strong|talented|skilled|passionate)\s+",
+    re.I,
+)
+_GENERIC_ROLE_DESCRIPTORS = frozenset(
+    {"product leader", "product professional", "leader", "professional", "contributor"}
+)
+
+
 def extract_role_title(jd_text: str) -> str:
+    # Priority 1: structured h3 header (common in scraped JD HTML)
+    h3_match = re.search(r"<h3[^>]*>\s*([^<]{8,80}?)\s*</h3>", jd_text, re.I)
+    if h3_match:
+        candidate = re.sub(r"\s+", " ", h3_match.group(1).strip())
+        if re.search(r"\b(product manager|product owner|pm)\b", candidate, re.I):
+            return "Product Manager"
+
     patterns = (
         r"seeking a\s+([^.\n]{8,80}?)(?:\s+to\s+|\s+who\s+|\s+that\s+|\.)",
         r"looking for a\s+([^.\n]{8,80}?)(?:\s+to\s+|\s+who\s+|\.)",
@@ -355,10 +371,14 @@ def extract_role_title(jd_text: str) -> str:
         m = re.search(pat, jd_text, re.I)
         if m:
             title = re.sub(r"\s+", " ", m.group(1).strip())
-            if "product manager" in title.lower():
+            # Strip leading vague adjectives ("seasoned", "experienced", etc.)
+            title_clean = _VAGUE_ROLE_PREFIXES.sub("", title).strip()
+            if title_clean.lower() in _GENERIC_ROLE_DESCRIPTORS:
+                continue
+            if "product manager" in title.lower() or "product manager" in title_clean.lower():
                 return "Product Manager"
-            if 8 <= len(title) <= 48:
-                return title
+            if 8 <= len(title_clean) <= 48:
+                return title_clean
     if re.search(r"\bproduct manager\b", jd_text, re.I):
         return "Product Manager"
     return "Product Manager"

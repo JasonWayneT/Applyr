@@ -55,6 +55,8 @@ def load_catalog(path: Optional[str] = None) -> ClaimCatalog:
             data = json.load(f)
             
         for cid, val in data.items():
+            if val.get("disabled"):
+                continue
             catalog.claims[cid] = ClaimRecord(
                 claim_id=cid,
                 title=val.get("lens", ""),

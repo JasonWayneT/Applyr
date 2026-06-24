@@ -52,6 +52,19 @@ _COVER_PHRASE_POLISH: tuple[tuple[str, str], ...] = (
     ("had no surviving documentation", "had no documentation left"),
     ("no surviving documentation", "no documentation left"),
     ("job-to-be-done failure", "product trust problem"),
+    # JTBD jargon → plain language
+    ("a JTBD failure", "a product trust problem"),
+    ("JTBD failure", "product trust problem"),
+    # Comma-splice pattern from ACC-102 cover_story:
+    # "Customers told us X was wrong, that was a problem" → "When customers said X was wrong, I treated it as a problem"
+    (
+        "Customers told us the contact data in the product was wrong, that was a product trust problem, not a minor bug.",
+        "When customers said the contact data in the product was wrong, I treated it as a product trust problem, not a minor data bug.",
+    ),
+    (
+        "Customers told us the contact data in the product was wrong,",
+        "When customers said the contact data in the product was wrong,",
+    ),
     (
         "Business and customer wins moved together",
         "Customer trust and the business outcome improved together",
@@ -139,24 +152,26 @@ def jd_presence_clause(need: str) -> str:
 
 
 def render_trust_hook(story: str) -> str:
-    """Trust-principle hook from primary cover_story (CR-047)."""
+    """Trust-principle hook from primary cover_story (CR-047).
+
+    Returns the first sentence of the story with JTBD jargon converted to plain language.
+    Does NOT unconditionally append 'product trust problem' — that framing only belongs
+    when the story is about data quality / trust (ACC-102 pattern).  Appending it to
+    unrelated stories (cost-savings, platform deprecation) creates semantic mismatch and
+    duplicate phrases when ACC-102 appears as a proof paragraph in the same letter.
+    """
     lead = value_lead_from_story(story)
     if not lead:
         return ""
     out = lead.replace("—", ", ").replace(" -- ", ", ")
     out = re.sub(r"\bCustomers told us\b", "When customers said", out, flags=re.I)
+    # Convert inline JTBD jargon when present in the lead sentence
     out = re.sub(
         r",?\s*that was a job-to-be-done failure, not a minor bug\.?",
         ", I treated it as a product trust problem, not a minor data bug.",
         out,
         flags=re.I,
     )
-    if "product trust problem" not in out.lower():
-        out = re.sub(
-            r"\.\s*$",
-            ". I treated it as a product trust problem, not a minor data bug.",
-            out.rstrip(),
-        )
     if not out.endswith("."):
         out += "."
     return out

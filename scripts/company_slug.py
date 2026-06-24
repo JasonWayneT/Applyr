@@ -17,6 +17,21 @@ _JD_SKIP_LINES = frozenset(
         "remote",
         "hybrid",
         "onsite",
+        "about the job",
+        "about this role",
+        "about the role",
+        "about us",
+        "the position",
+        "overview",
+        "responsibilities",
+        "requirements",
+        "qualifications",
+        "description",
+        "listing location signal: remote",
+        "listing location signal: hybrid",
+        "listing location signal: on-site",
+        "listing location signal: onsite",
+        "listing location signal: in-office",
     }
 )
 
@@ -54,23 +69,56 @@ def company_name_from_jd(jd_text: str) -> Optional[str]:
     """Extract employer display name from the first plausible JD header line."""
     if not jd_text:
         return None
-    for raw in jd_text.splitlines()[:20]:
+    all_lines = jd_text.splitlines()[:30]
+    # Only scan the first 8 lines for a bare company-name header; beyond that
+    # we hit JD body text (bullets, sentences) that can look like company names.
+    lines = all_lines[:8]
+    for raw in lines:
         line = raw.strip()
         if not line or len(line) < 2 or len(line) > 80:
             continue
         low = line.lower()
         if low.startswith("url:") or line.startswith("http"):
             continue
-        if low in _JD_SKIP_LINES or low.startswith("job posted"):
+        if low in _JD_SKIP_LINES or low.startswith("job posted") or low.startswith("listing location signal"):
             continue
         if low.endswith("?"):
             continue
         if re.match(r"^\d", line):
             continue
+        # Skip metadata headers like "Title: Product Manager"
+        if re.match(r"^(title|role|position|location|type|level|salary|company)\s*:", low):
+            continue
         if re.match(r"^(product manager|software engineer|director|senior|staff)\b", low):
+            continue
+        if line.endswith(":"):
             continue
         if re.match(r"^[A-Z0-9]", line):
             return line.strip()
+    _NON_COMPANY_STARTERS = frozenset(
+        {"The", "This", "That", "There", "It", "A", "An", "These", "Those", "In", "At", "On", "We", "Our", "Your"}
+    )
+
+    # Fallback: look for "[Company] is seeking [role]" pattern in first 30 lines
+    for raw in all_lines:
+        line = raw.strip()
+        m = re.match(r"^([A-Z][A-Za-z0-9& ]{2,40}?)\s+is seeking\b", line)
+        if m:
+            candidate = m.group(1).strip()
+            first_word = candidate.split()[0] if candidate.split() else ""
+            if 3 <= len(candidate) <= 40 and first_word not in _NON_COMPANY_STARTERS:
+                return candidate
+
+    # Fallback: "[Company] is a [descriptor]" — catches "Cotiviti Healthcare is a leading..."
+    for raw in all_lines:
+        line = raw.strip()
+        m = re.match(r"^([A-Z][A-Za-z0-9& ]{2,40}?)\s+is a\b", line)
+        if m:
+            candidate = m.group(1).strip()
+            first_word = candidate.split()[0] if candidate.split() else ""
+            if 3 <= len(candidate) <= 40 and first_word not in _NON_COMPANY_STARTERS:
+                return candidate
+
     return None
 
 

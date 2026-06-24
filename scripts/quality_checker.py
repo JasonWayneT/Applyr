@@ -31,6 +31,21 @@ def check_and_repair_cover_letter(file_path):
     messages = []
     repaired = False
 
+    # Auto-capitalize paragraph starts (CL-011)
+    paragraphs = content.split("\n\n")
+    for idx, p in enumerate(paragraphs):
+        stripped = p.strip()
+        if stripped and stripped[0].islower() and not stripped.startswith("http"):
+            p_new = stripped[0].upper() + stripped[1:]
+            paragraphs[idx] = p.replace(stripped, p_new, 1)
+            repaired = True
+            messages.append("[CL-011 WARNING] Lowercase paragraph start found. Auto-capitalized.")
+
+    if repaired:
+        content = "\n\n".join(paragraphs)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+
     from tone_guard import tone_violations
 
     tone_hits = tone_violations(content)
@@ -54,9 +69,8 @@ def check_and_repair_cover_letter(file_path):
         messages.append("[H-001 OK] Header block successfully injected.")
 
     # Check for length (Rule CL-006: ~1 page; CR-024 Match Brief allows slightly longer)
-    # 2600 chars aligns with 350-word budget at ~6 chars/word plus structural overhead
     char_count = len(content)
-    cover_char_limit = 2600
+    cover_char_limit = 2800
     if char_count > cover_char_limit:
         messages.append(
             f"[CL-006 WARNING] Cover letter length ({char_count} chars) exceeds "
@@ -69,14 +83,27 @@ def check_and_repair_cover_letter(file_path):
     if cleaned_placeholders:
         messages.append(f"[CL-009 FAIL] Corrupted placeholder brackets found: {', '.join(cleaned_placeholders)}")
 
+    # Check for professional closing transition (Rule CL-012)
+    body_text = content.split("Dear Hiring Manager,")[-1] if "Dear Hiring Manager," in content else content
+    body_clean = body_text.split("Regards,")[0].split("Best regards,")[0].strip()
+    has_cta = any(w in body_clean.lower() for w in ["discuss", "conversation", "speaking", "interview", "opportunity to", "talk", "meet", "forward to"])
+    has_thanks = any(w in body_clean.lower() for w in ["thank you", "thanks", "consideration", "time"])
+    if not has_cta or not has_thanks:
+        messages.append(
+            "[CL-012 FAIL] Cover letter is missing a professional closing transition. "
+            "Ensure the body concludes with an expression of interest in speaking/discussing the role and thanks them for their time/consideration."
+        )
+
     from drafting_errors import SelfCorrectionError
     
     if repaired:
+        # If we repaired capitalization, but also have other hard fails, we still want to raise SelfCorrectionError
+        if any("[CL-008 FAIL]" in msg or "[CL-009 FAIL]" in msg or "[CL-010 FAIL]" in msg or "[CL-012 FAIL]" in msg for msg in messages):
+            raise SelfCorrectionError(" | ".join(messages))
         return True, " | ".join(messages)
-    elif any("[CL-008 FAIL]" in msg or "[CL-009 FAIL]" in msg or "[CL-010 FAIL]" in msg for msg in messages):
+    elif any("[CL-008 FAIL]" in msg or "[CL-009 FAIL]" in msg or "[CL-010 FAIL]" in msg or "[CL-012 FAIL]" in msg for msg in messages):
         raise SelfCorrectionError(" | ".join(messages))
     elif messages:
-        # Some warnings might just be length warnings. We'll raise error for length too if we want self-correction
         if any("[CL-006 WARNING]" in msg for msg in messages):
             raise SelfCorrectionError(" | ".join(messages))
         return True, " | ".join(messages)

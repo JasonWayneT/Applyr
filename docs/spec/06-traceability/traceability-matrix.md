@@ -220,6 +220,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-248` | CR-050 | Sterkly CW-012 hardening + pre-write guard | `scripts/conversion_framing.py`, `scripts/draft_compiler.py` | implemented |
 | `FR-249` | CR-050 | Activity bullet auto-swap | `scripts/conversion_framing.py` | implemented |
 | `FR-250` | CR-050 | Summary proof overlap penalty | `scripts/local_draft_stages.py`, `scripts/resume_conversion_eval.py` | implemented |
+| `FR-251` | CR-051 | Interview datetime required for Recruiter Screen / Core Interviews transitions | `shared/domain/jobPipeline.ts`, `server/routes/jobs/crud.ts`, `src/components/JobDetailPanel.tsx` | implemented |
 | `FR-128` | CR-020 | Local Optimizations | `scripts/compile_single.py` | implemented |
 | `FR-129` | CR-020 | Local Optimizations | `scripts/batch_pipeline.py` | implemented |
 | `FR-130` | CR-020 | Local Optimizations | `scripts/pii_redact.py` | implemented |

@@ -11,6 +11,7 @@ FORBIDDEN_OPENERS = (
     " is hiring a ",
     " is hiring ",
     "i am writing to apply",
+    "i am writing to express",
 )
 
 BUZZWORDS = (
@@ -23,6 +24,10 @@ BUZZWORDS = (
     "thought leader",
     "results-driven",
     "i am writing to apply",
+    "proven track record",
+    "seamless",
+    "transformative",
+    "innovative",
 )
 
 
@@ -74,6 +79,12 @@ def audit_cover_letter(
 
     opener = body[:500]
     has_apply_intent = bool(re.search(r"i am applying for", opener))
+    # Value-first opener: "That's what drew me to the <role> role at <company>."
+    has_value_first_intent = (
+        "drew me to the" in opener
+        and plan.company_display.lower() in opener
+        and plan.role_title.lower() in opener
+    )
     has_need_first_intent = (
         plan.opening_variant == "need_first"
         and plan.company_display.lower() in opener
@@ -84,7 +95,7 @@ def audit_cover_letter(
         and plan.company_display.lower() in opener
         and "fits the work" in opener
     )
-    if not has_apply_intent and not has_need_first_intent and not has_domain_first_intent:
+    if not has_apply_intent and not has_value_first_intent and not has_need_first_intent and not has_domain_first_intent:
         issues.append("Opening should state application intent")
         score -= 12
     for bad in FORBIDDEN_OPENERS:

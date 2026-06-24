@@ -57,12 +57,10 @@ def main() -> int:
     errors: list[str] = []
 
     for path in files:
-        if path.startswith("data/submissions/") and path != "data/submissions/.gitkeep":
-            errors.append(f"tracked path should be gitignored: {path}")
-            continue
         for prefix in BLOCKED_TRACKED_PREFIXES:
             if path == prefix or path.startswith(prefix):
-                errors.append(f"tracked path should be gitignored: {path}")
+                if not path.endswith("/.gitkeep"):
+                    errors.append(f"tracked path should be gitignored: {path}")
                 break
 
     for rel in files:

@@ -10,14 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Public repo audit (no PII in tracked files)
-        run: python scripts/audit_public_repo.py
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
+      - name: Public repo audit (no PII in tracked files)
+        run: python scripts/audit_public_repo.py
       - name: Install Python dependencies
         run: pip install -r requirements.txt
       - name: Install Node dependencies

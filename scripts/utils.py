@@ -15,7 +15,7 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 AGENT_DIR = os.path.join(PROJECT_ROOT, ".agent")
 RULES_DIR = os.path.join(AGENT_DIR, "rules")
 SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "submissions")
-ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive")
+ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "archive", "submissions")
 
 WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
 WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")

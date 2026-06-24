@@ -81,8 +81,8 @@ router.post('/api/stream/local-model', (req, res) => {
     return res.end();
   }
   
-  const settingsStr = fs.readFileSync(path.join(PROJECT_ROOT, '.agent', 'llm_settings.json'), 'utf8');
-  const settings = JSON.parse(settingsStr);
+  const settingsRow = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as { value: string } | undefined;
+  const settings = settingsRow ? JSON.parse(settingsRow.value) : {};
   const baseUrl = settings.localUrl || 'http://localhost:11434';
   
   fetch(`${baseUrl}/api/generate`, {

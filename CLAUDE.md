@@ -6,9 +6,10 @@ This file is automatically loaded when Claude Code opens this project. It maps e
 
 ## Who This Is For
 
-**Jason Taylor** — B2B SaaS Platform PM, 6+ years. Mid-level IC target (PM II). Based in San Diego, CA.
-- Email: [REDACTED_EMAIL] | Phone: [REDACTED_PHONE]
-- LinkedIn: https://www.linkedin.com/in/redacted-linkedin-slug/ | Portfolio: Taylorbuilt.me
+This workspace is configured for a **B2B SaaS Platform PM** with 6+ years of experience.
+To protect candidate privacy:
+- All real contact details (PII) are stored locally in the gitignored [data/workExperience.md](file:///c:/Users/Jason/Desktop/Jason/Resource/CodeProjects/Applyr/data/workExperience.md) (Section 1.0) and inside the gitignored SQLite database `jobagent.sqlite`.
+- Do NOT write or commit real names, emails, phone numbers, or LinkedIn URLs to tracked Git files.
 
 ---
 

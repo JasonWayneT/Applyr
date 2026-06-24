@@ -1,5 +1,12 @@
 # Master Career Context Spec (example)
 
+## Contact Information (Example)
+- Name: John Doe
+- Email: john.doe@example.com
+- Phone: (555) 019-9238
+- LinkedIn: https://www.linkedin.com/in/johndoe/
+- Portfolio: johndoe.com
+
 ## Professional Summary
 High-impact Product Manager specializing in B2B SaaS platforms and cross-functional delivery.
 

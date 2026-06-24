@@ -54,9 +54,9 @@ Modify [data/workExperience.md](file:///c:/Users/Jason/Desktop/Jason/Resource/Co
  
 +### 1.0 Contact Information (Gitignored Ground Truth)
 +- Name: Jason Taylor
-+- Email: [REDACTED_EMAIL]
-+- Phone: [REDACTED_PHONE]
-+- LinkedIn: https://www.linkedin.com/in/redacted-linkedin-slug/
++- Email: [CANDIDATE_EMAIL]
++- Phone: [CANDIDATE_PHONE]
++- LinkedIn: [CANDIDATE_LINKEDIN]
 +- Portfolio: Taylorbuilt.me
 +
  Jason Taylor is a **B2B SaaS Platform Product Manager** with 6+ years of experience...

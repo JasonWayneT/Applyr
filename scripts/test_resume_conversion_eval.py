@@ -165,10 +165,12 @@ class TestPdfHeaderOrder(unittest.TestCase):
                 [sys.executable, script, md_path, pdf_path],
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=120,
             )
             if result.returncode != 0:
-                self.skipTest(f"Playwright PDF compile unavailable: {result.stderr[:200]}")
+                err = (result.stderr or result.stdout or "unknown error")[:200]
+                self.skipTest(f"Playwright PDF compile unavailable: {err}")
 
             issues = check_pdf_experience_header_order(pdf_path, SAMPLE_RESUME)
             layout_issues = [i for i in issues if "[CW-009]" in i]

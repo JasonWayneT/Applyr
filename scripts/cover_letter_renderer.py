@@ -84,6 +84,50 @@ def render_cover_letter(
     return _render_block_letter(plan, catalog, jd_text)
 
 
+def render_cover_letter_v2(
+    jd_text: str = "",
+    pre_selected_claims: list = None,
+    hook: str = "",
+    gap_paragraph: str = "",
+    company_display: str = "",
+) -> str:
+    """v2 CL renderer using slot engine (Epic 2, Story 2.5).
+
+    Called when COVER_ENGINE=v2 and the v2 engine needs a standalone render
+    entry point separate from draft_compiler.py (e.g. from cover_letter_compiler.py).
+    """
+    from cover_letter_slots import generate_cl_slots, assemble_cl_from_slots, CLSlot
+    from utils import load_identity_profile
+
+    candidate_name = (load_identity_profile().get("name") or "Candidate").strip()
+    claim_texts = pre_selected_claims or []
+
+    if not hook and company_display:
+        hook = (
+            f"{company_display}'s role sits where I've done my best work: "
+            "platform reliability, data integrity, and cross-functional delivery."
+        )
+
+    slots = generate_cl_slots(
+        hook=hook,
+        pre_selected_claims=claim_texts,
+        jd_text=jd_text,
+    )
+
+    if gap_paragraph:
+        for i, s in enumerate(slots):
+            if s.slot_type == "PROOF_2":
+                slots[i] = CLSlot(
+                    slot_type="PROOF_2",
+                    content=gap_paragraph,
+                    attempts=1,
+                    passed_lint=True,
+                )
+                break
+
+    return assemble_cl_from_slots(slots, HEADER_BLOCK, candidate_name)
+
+
 def word_count_report(markdown: str) -> Tuple[int, bool]:
     body = (
         markdown.split("Dear Hiring Manager,")[-1]

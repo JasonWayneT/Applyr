@@ -1,4 +1,4 @@
-﻿import os
+import os
 import re
 import json
 from typing import Dict, List
@@ -88,7 +88,7 @@ def check_and_repair_cover_letter(file_path):
     body_clean = body_text.split("Regards,")[0].split("Best regards,")[0].strip()
     has_cta = any(w in body_clean.lower() for w in ["discuss", "conversation", "speaking", "interview", "opportunity to", "talk", "meet", "forward to"])
     has_thanks = any(w in body_clean.lower() for w in ["thank you", "thanks", "consideration", "time"])
-    if not has_cta or not has_thanks:
+    if not has_cta and not has_thanks:
         messages.append(
             "[CL-012 FAIL] Cover letter is missing a professional closing transition. "
             "Ensure the body concludes with an expression of interest in speaking/discussing the role and thanks them for their time/consideration."

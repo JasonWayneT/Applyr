@@ -433,6 +433,73 @@ def extract_jd_pain_points(jd_text: str, max_results: int = 5) -> List[str]:
     return results
 
 
+# ---------------------------------------------------------------------------
+# Epic 3 — Proof Point Pre-Selection
+# ---------------------------------------------------------------------------
+
+def score_all_claims(
+    jd_profile: "JdProfile",
+    catalog,
+    jd_text: str = "",
+) -> List[tuple]:
+    """Batch-score all active claims against the JD profile (Story 3.1).
+
+    Returns sorted list of (ClaimRecord, score) tuples, descending by score.
+    Disabled claims (catalog.claims with disabled=True or missing) are excluded.
+    """
+    scored = []
+    for claim_id, rec in catalog.claims.items():
+        # Skip disabled claims — master_claims.json marks them with "disabled": true
+        raw_text = catalog.raw_truth_lines.get(claim_id, "")
+        if not raw_text:
+            continue
+        # Also check the record body
+        body = rec.body or raw_text
+        score = score_claim_for_jd(body, jd_profile, jd_text)
+        scored.append((rec, score))
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored
+
+
+def select_cl_claims(
+    jd_profile: "JdProfile",
+    catalog,
+    resume_claim_ids: List[str],
+    jd_text: str = "",
+    n: int = 2,
+) -> List[object]:
+    """Pre-select top n claims for the CL, excluding resume-prominent claims (Story 3.2).
+
+    Claims that appear as the lead bullet for a given employer in the resume
+    are down-weighted so the CL introduces a different angle.
+
+    Returns list of ClaimRecord objects (top n).
+    """
+    scored = score_all_claims(jd_profile, catalog, jd_text)
+
+    # Identify claims to down-weight: those already used as lead resume bullets
+    lead_ids = set(resume_claim_ids[:3]) if resume_claim_ids else set()
+
+    results = []
+    for rec, score in scored:
+        if rec.claim_id in lead_ids:
+            continue  # skip resume-prominent claims
+        results.append(rec)
+        if len(results) >= n:
+            break
+
+    # If we didn't get enough, fill from lead claims as a last resort
+    if len(results) < n:
+        for rec, score in scored:
+            if rec in results:
+                continue
+            results.append(rec)
+            if len(results) >= n:
+                break
+
+    return results[:n]
+
+
 def bridge_hints_for_jd(jd_text: str) -> str:
     jd_l = jd_text.lower()
     phrases = load_bridge_phrases()

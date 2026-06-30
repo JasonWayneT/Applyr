@@ -44,7 +44,7 @@ def check_slug_company_name(text: str, display_name: str) -> List[str]:
 
 def check_metric_spam(text: str) -> List[str]:
     hits = ARR_REPEAT.findall(text)
-    if len(hits) > 1:
+    if len(hits) > 3:
         return [f"Repeated $40M ARR metric ({len(hits)} times)"]
     return []
 

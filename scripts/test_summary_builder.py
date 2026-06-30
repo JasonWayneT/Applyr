@@ -140,3 +140,126 @@ Remote
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Epic 4 — JD-adaptive summary builder tests (summary_builder.py)
+# ---------------------------------------------------------------------------
+
+try:
+    from summary_builder import (
+        classify_jd_context,
+        assemble_summary,
+        extract_summary_context,
+        build_jd_adaptive_summary,
+        SummaryContext,
+    )
+    _EPIC4_AVAILABLE = True
+except ImportError:
+    _EPIC4_AVAILABLE = False
+
+
+def _make_jd_profile(keywords=None, themes=None, requirements=None):
+    import types
+    p = types.SimpleNamespace()
+    p.keywords = keywords or []
+    p.priority_themes = themes or []
+    p.requirements = requirements or []
+    return p
+
+
+def _base_context():
+    return SummaryContext(
+        years_experience=6,
+        environment_type="enterprise SaaS",
+        focus_areas=["data quality", "platform reliability"],
+        company_name="Cision",
+        scope_description="a $40M ARR B2B media monitoring and contact database platform",
+        scale_metric="~3,500 enterprise and mid-market accounts",
+        partners=["Engineering", "Customer Experience", "Sales"],
+        outcome_1="eliminated a 40% data drop-off across the customer contact pipeline",
+        outcome_2="resolved 90% of a 300-item security backlog",
+    )
+
+
+@unittest.skipUnless(_EPIC4_AVAILABLE, "summary_builder not available")
+class TestClassifyJdContext(unittest.TestCase):
+    def test_enterprise_wins(self):
+        jd = _make_jd_profile(keywords=["enterprise", "b2b", "accounts", "churn"])
+        self.assertEqual(classify_jd_context(jd), "enterprise")
+
+    def test_consumer_wins(self):
+        jd = _make_jd_profile(keywords=["dau", "mau", "consumer", "self-serve"])
+        self.assertEqual(classify_jd_context(jd), "consumer")
+
+    def test_empty_returns_valid_type(self):
+        jd = _make_jd_profile(keywords=[])
+        result = classify_jd_context(jd)
+        self.assertIn(result, ("enterprise", "consumer", "neutral"))
+
+
+@unittest.skipUnless(_EPIC4_AVAILABLE, "summary_builder not available")
+class TestAssembleSummaryEpic4(unittest.TestCase):
+    def test_enterprise_no_b2b_saas_label(self):
+        result = assemble_summary(_base_context(), "enterprise")
+        self.assertNotIn("B2B SaaS", result, "Must not use 'B2B SaaS' as a label")
+
+    def test_consumer_no_b2b_saas_label(self):
+        ctx = _base_context()
+        ctx.environment_type = "SaaS platforms"
+        ctx.scale_metric = "~25,000 active users"
+        result = assemble_summary(ctx, "consumer")
+        self.assertNotIn("B2B SaaS", result)
+
+    def test_neutral_no_b2b_saas_label(self):
+        ctx = _base_context()
+        ctx.environment_type = "software products"
+        result = assemble_summary(ctx, "neutral")
+        self.assertNotIn("B2B SaaS", result)
+
+    def test_enterprise_contains_outcome(self):
+        result = assemble_summary(_base_context(), "enterprise")
+        self.assertTrue("40%" in result or "data drop-off" in result)
+
+    def test_consumer_uses_user_metric(self):
+        ctx = _base_context()
+        ctx.scale_metric = "~25,000 active users"
+        ctx.environment_type = "SaaS platforms"
+        result = assemble_summary(ctx, "consumer")
+        self.assertIn("25,000", result)
+
+
+@unittest.skipUnless(_EPIC4_AVAILABLE, "summary_builder not available")
+class TestBuildJdAdaptiveSummaryEpic4(unittest.TestCase):
+    def test_returns_string_for_enterprise_jd(self):
+        jd = _make_jd_profile(keywords=["enterprise", "b2b"])
+        result = build_jd_adaptive_summary(jd)
+        self.assertIsNotNone(result)
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 50)
+
+    def test_no_b2b_saas_in_any_variant(self):
+        for keywords in [
+            ["enterprise", "b2b", "accounts"],
+            ["consumer", "dau", "growth"],
+            [],
+        ]:
+            jd = _make_jd_profile(keywords=keywords)
+            result = build_jd_adaptive_summary(jd)
+            if result:
+                self.assertNotIn(
+                    "B2B SaaS", result,
+                    f"B2B SaaS label found for keywords={keywords}"
+                )
+
+    def test_enterprise_scale_in_output(self):
+        jd = _make_jd_profile(keywords=["enterprise", "b2b"])
+        result = build_jd_adaptive_summary(jd)
+        self.assertIsNotNone(result)
+        self.assertTrue("3,500" in result or "accounts" in result)
+
+    def test_consumer_scale_in_output(self):
+        jd = _make_jd_profile(keywords=["consumer", "dau", "mau", "self-serve"])
+        result = build_jd_adaptive_summary(jd)
+        self.assertIsNotNone(result)
+        self.assertTrue("25,000" in result or "users" in result)

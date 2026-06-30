@@ -61,6 +61,206 @@ from utils import (
 PIPELINE_VERSION = "CR-024-cover-engine"
 
 
+def _run_cover_engine_v2(
+    display: str,
+    jd_text: str,
+    bullets: dict,
+    valid_ids: dict,
+    profile,
+    catalog,
+    company_folder: str,
+) -> tuple:
+    """Full v2 CL pipeline: Epic 3 proof selection → Epic 5 few-shot → Epic 7 hook
+    → Epic 9 gap detection → Epic 2 skeleton → Epic 8 fast eval gate.
+
+    Returns (cl_raw: str, plan_dict: dict). cl_raw is empty string on failure.
+    Raises DraftingPipelineError on unrecoverable failure.
+    """
+    import json as _json
+
+    # --- Epic 5: Retrieve few-shot examples ---
+    few_shot_examples: list = []
+    try:
+        from tag_example import retrieve_examples
+        few_shot_examples = retrieve_examples(profile, "cover_letter", n=2)
+        if few_shot_examples:
+            print(f"    [v2 Engine] Few-shot: {len(few_shot_examples)} example(s) loaded.")
+    except Exception as _e5:
+        print(f"    [v2 Engine] Few-shot retrieval skipped ({_e5}).")
+
+    # --- Epic 3: Proof pre-selection ---
+    selected_claim_records: list = []
+    selected_cl_claims_meta: list = []
+    try:
+        from jd_tailoring import select_cl_claims, score_all_claims
+        resume_claim_ids = list(bullets.keys())[:5]  # top resume bullets
+        selected_claim_records = select_cl_claims(
+            profile, catalog, resume_claim_ids, jd_text, n=2
+        )
+        all_scored = {r.claim_id: s for r, s in score_all_claims(profile, catalog, jd_text)}
+        selected_cl_claims_meta = [
+            {"id": r.claim_id, "score": all_scored.get(r.claim_id, 0)}
+            for r in selected_claim_records
+        ]
+        print(
+            f"    [v2 Engine] Pre-selected claims: "
+            + ", ".join(r.claim_id for r in selected_claim_records)
+        )
+    except Exception as _e3:
+        print(f"    [v2 Engine] Proof pre-selection skipped ({_e3}).")
+
+    # Build claim text list for slot prompts
+    pre_selected_claim_texts: list = []
+    for rec in selected_claim_records:
+        story = rec.cover_story or rec.body or catalog.raw_truth_lines.get(rec.claim_id, "")
+        if story:
+            pre_selected_claim_texts.append(story[:300])
+
+    # Also inject few-shot examples into the claim context if available
+    if few_shot_examples:
+        pass  # available as context string injected in hook/slot prompts
+
+    # --- Epic 7: Hook generation ---
+    hook = ""
+    hook_attempts = 0
+    try:
+        from cover_letter_slots import extract_hook_facts, generate_validated_hook, HookGenerationError
+        hook_facts = extract_hook_facts(profile)
+        hook_facts["company_name"] = display
+        hook = generate_validated_hook(hook_facts, max_attempts=3)
+        hook_attempts = 1  # approximate; validation loop tracks internally
+        print(f"    [v2 Engine] Hook generated ({len(hook.split())} words).")
+    except Exception as _e7:
+        print(f"    [v2 Engine] Hook generation failed ({_e7}); using fallback.")
+        hook = f"{display}'s role sits where I've done my best work: platform reliability, data integrity, and cross-functional delivery with measurable outcomes."
+
+    # --- Epic 9: Gap detection ---
+    gap_paragraph: str = ""
+    detected_gaps_meta: list = []
+    gap_acknowledged = False
+    try:
+        from gap_detector import detect_soft_gaps, select_primary_gap, build_gap_paragraph
+        # Use a neutral fit score of 75 as a stand-in (full fit score not available here)
+        candidate_profile: dict = {}
+        gaps = detect_soft_gaps(profile, candidate_profile, overall_fit_score=75.0)
+        primary_gap = select_primary_gap(gaps)
+        if primary_gap:
+            gap_paragraph = build_gap_paragraph(primary_gap)
+            gap_acknowledged = True
+            detected_gaps_meta = [
+                {"gap_area": g.gap_area, "score": g.relevance_score} for g in gaps[:3]
+            ]
+            print(f"    [v2 Engine] Gap detected: {primary_gap.gap_area} — injecting acknowledgment as PROOF_2.")
+    except Exception as _e9:
+        print(f"    [v2 Engine] Gap detection skipped ({_e9}).")
+
+    # --- Epic 2: Slot generation ---
+    fast_eval_warning = False  # set True if Epic 8 gate fails persistently
+    try:
+        from cover_letter_slots import generate_cl_slots, assemble_cl_from_slots
+        from utils import load_identity_profile
+        candidate_name = (load_identity_profile().get("name") or "Jason Taylor").strip()
+
+        # If gap paragraph available, pass it as pre-baked PROOF_2
+        slots = generate_cl_slots(
+            hook=hook,
+            pre_selected_claims=pre_selected_claim_texts,
+            jd_text=jd_text,
+        )
+
+        # Override PROOF_2 with gap acknowledgment if one was detected
+        if gap_paragraph:
+            from cover_letter_slots import CLSlot
+            for i, s in enumerate(slots):
+                if s.slot_type == "PROOF_2":
+                    slots[i] = CLSlot(
+                        slot_type="PROOF_2",
+                        content=gap_paragraph,
+                        attempts=1,
+                        passed_lint=True,
+                    )
+                    break
+
+        # --- Epic 8: Fast eval gate ---
+        try:
+            from eval_submission import fast_eval_cl, FAST_EVAL_THRESHOLD
+            from cover_letter_slots import retry_slot_until_passing
+            assembled_preview = assemble_cl_from_slots(slots, HEADER_BLOCK, candidate_name)
+            fast_result = fast_eval_cl(assembled_preview, profile)
+            print(
+                f"    [v2 Engine] Fast eval: C1={fast_result.hook_score:.2f} "
+                f"C3={fast_result.proof_density_score:.2f} "
+                f"{'PASS' if fast_result.passed else 'FAIL'}"
+            )
+            if not fast_result.passed:
+                for cycle in range(2):
+                    for slot_type_fail in fast_result.failing_slots:
+                        # Find the slot and retry it
+                        for i, s in enumerate(slots):
+                            if s.slot_type == slot_type_fail or (slot_type_fail == "HOOK" and s.slot_type == "HOOK"):
+                                slots[i] = retry_slot_until_passing(
+                                    s,
+                                    jd_profile=profile,
+                                    accumulated_context="\n\n".join(
+                                        sl.content for sl in slots if sl.content and sl.slot_type != slot_type_fail
+                                    ),
+                                    threshold=FAST_EVAL_THRESHOLD,
+                                    max_attempts=3,
+                                    jd_text=jd_text,
+                                    claims=pre_selected_claim_texts,
+                                )
+                                break
+                    assembled_preview = assemble_cl_from_slots(slots, HEADER_BLOCK, candidate_name)
+                    fast_result = fast_eval_cl(assembled_preview, profile)
+                    print(
+                        f"    [v2 Engine] Fast eval retry {cycle+1}: "
+                        f"C1={fast_result.hook_score:.2f} C3={fast_result.proof_density_score:.2f} "
+                        f"{'PASS' if fast_result.passed else 'FAIL'}"
+                    )
+                    if fast_result.passed:
+                        break
+                if not fast_result.passed:
+                    fast_eval_warning = True
+                    print("    [v2 Engine] Fast eval: persistent failure after retries — flagged with warning.")
+        except Exception as _e8:
+            print(f"    [v2 Engine] Fast eval gate skipped ({_e8}).")
+
+        cl_raw = assemble_cl_from_slots(slots, HEADER_BLOCK, candidate_name)
+
+        # Build plan dict to return to caller (so draft_manifest.json is populated)
+        v2_plan: dict = {}
+        try:
+            plan_path = os.path.join(company_folder, "cover_letter_plan.json")
+            if os.path.exists(plan_path):
+                with open(plan_path, encoding="utf-8") as _pf:
+                    v2_plan = _json.load(_pf)
+        except Exception:
+            pass
+        v2_plan.update({
+            "cover_engine": "v2",
+            "generated_hook": hook,
+            "hook_attempts": hook_attempts,
+            "selected_cl_claims": selected_cl_claims_meta,
+            "detected_gaps": detected_gaps_meta,
+            "gap_acknowledged": gap_acknowledged,
+            "fast_eval_warning": fast_eval_warning,
+        })
+        try:
+            plan_path = os.path.join(company_folder, "cover_letter_plan.json")
+            with open(plan_path, "w", encoding="utf-8") as _pf:
+                _json.dump(v2_plan, _pf, indent=2)
+        except Exception as _ep:
+            print(f"    [v2 Engine] Plan save warning ({_ep}).")
+
+        return cl_raw, v2_plan
+
+    except DraftingPipelineError:
+        raise
+    except Exception as _e2:
+        print(f"    [v2 Engine] Slot generation failed ({_e2}); caller will fallback.")
+        return "", {}
+
+
 def _cover_engine_v1() -> bool:
     return os.environ.get("COVER_ENGINE", "v1").lower() in ("1", "v1", "true", "yes")
 
@@ -324,6 +524,7 @@ def run(
 
     if cover_only:
         resume_md = load_file(resume_md_path)
+        # NOTE: cover_only path skips all resume build steps below
         if not resume_md or len(resume_md.strip()) < 200:
             raise DraftingPipelineError("COVER_ONLY requires existing Resume.md")
 
@@ -355,9 +556,22 @@ def run(
     else:
         from local_draft_stages import build_summary_deterministic
 
-        summary = build_summary_deterministic(
-            bullets_by_company, jd_text, profile, fit_summary=fit
-        )
+        # Epic 4: Try JD-adaptive deterministic summary first; fall back to existing
+        summary = None
+        try:
+            from summary_builder import build_jd_adaptive_summary
+            summary = build_jd_adaptive_summary(profile)
+            if summary:
+                print("    [Compiler] Stage 4 summary: JD-adaptive template (Epic 4).")
+            else:
+                print("    [Compiler] Stage 4 summary: adaptive fallback (missing fields).")
+        except Exception as _sum_err:
+            print(f"    [Compiler] Stage 4 summary: adaptive error ({_sum_err}) — using deterministic.")
+
+        if not summary:
+            summary = build_summary_deterministic(
+                bullets_by_company, jd_text, profile, fit_summary=fit
+            )
         ok, err = audit_text_against_bullet_corpus(summary, bullet_corpus)
         if not ok:
             print(f"    [Compiler] Stage 4 summary audit: {err} — safe default.")
@@ -372,6 +586,25 @@ def run(
         resume_md = ensure_experience_skeleton_headers(resume_md, skeleton)
         resume_md = enforce_resume_char_budget(resume_md)
         resume_md = strip_all_metadata_tokens(resume_md)
+
+        # Epic 1 — Lint gate on resume
+        try:
+            from submission_linter import lint_document, write_lint_report
+            resume_lint = lint_document(resume_md, "resume")
+            write_lint_report(company_folder, resume_lint, filename="resume_lint_report.json")
+            if not resume_lint.passed:
+                issues = "; ".join(f"[{v.rule_id}] {v.message}" for v in resume_lint.blocks)
+                raise DraftingPipelineError(
+                    f"Resume failed lint pre-flight ({len(resume_lint.blocks)} block(s)): {issues}"
+                )
+            if resume_lint.warns:
+                for v in resume_lint.warns:
+                    print(f"    [Linter] Resume WARN [{v.rule_id}]: {v.message}")
+        except DraftingPipelineError:
+            raise
+        except Exception as _rl_err:
+            print(f"    [Linter] Resume lint warning ({_rl_err}); continuing.")
+
         with open(resume_md_path, "w", encoding="utf-8") as f:
             f.write(resume_md)
 
@@ -420,13 +653,29 @@ def run(
                     f"Cover letter audit failed (STRICT_COVER_AUDIT=1): {cover_result.audit_grade} — {issues}"
                 )
         else:
-            proof = pick_cover_bullets(bullets, valid_ids, profile, jd_text, k=2)
-            try:
-                cl_raw = assemble_cover_letter_deterministic(
-                    display, jd_text, bullets, HEADER_BLOCK, proof_bullets=proof, profile=profile
-                )
-            except ValueError as e:
-                raise DraftingPipelineError(str(e)) from e
+            # v2 CL engine — Epic 2 skeleton with Epics 3, 5, 7, 8, 9 integrations
+            cl_raw, _v2_plan = _run_cover_engine_v2(
+                display=display,
+                jd_text=jd_text,
+                bullets=bullets,
+                valid_ids=valid_ids,
+                profile=profile,
+                catalog=catalog,
+                company_folder=company_folder,
+            )
+            if _v2_plan:
+                cover_plan_dict = _v2_plan
+            if not cl_raw:
+                # Fallback to legacy deterministic if v2 fails
+                print("    [Compiler] v2 engine returned empty; falling back to deterministic.")
+                proof = pick_cover_bullets(bullets, valid_ids, profile, jd_text, k=2)
+                try:
+                    cl_raw = assemble_cover_letter_deterministic(
+                        display, jd_text, bullets, HEADER_BLOCK,
+                        proof_bullets=proof, profile=profile
+                    )
+                except ValueError as e:
+                    raise DraftingPipelineError(str(e)) from e
 
         if cover_plan_dict and catalog.claims:
             story_lines = []
@@ -446,7 +695,27 @@ def run(
             raise DraftingPipelineError(f"Cover letter numeric audit: {cl_audit_err}")
 
         cl_stripped = strip_all_metadata_tokens(determinator.strip_ids(cl_raw))
-        
+
+        # Epic 1 — Lint gate (draft_compiler path)
+        try:
+            from submission_linter import lint_document, write_lint_report
+            lint_result = lint_document(cl_stripped, "cover_letter")
+            write_lint_report(company_folder, lint_result, filename="cl_lint_report.json")
+            if not lint_result.passed:
+                issues = "; ".join(
+                    f"[{v.rule_id}] {v.message}" for v in lint_result.blocks
+                )
+                raise DraftingPipelineError(
+                    f"Cover letter failed lint pre-flight ({len(lint_result.blocks)} block(s)): {issues}"
+                )
+            if lint_result.warns:
+                for v in lint_result.warns:
+                    print(f"    [Linter] WARN [{v.rule_id}]: {v.message}")
+        except DraftingPipelineError:
+            raise
+        except Exception as _lint_err:
+            print(f"    [Linter] Warning: linter error ({_lint_err}); continuing.")
+
         # Hard cap cover letter word count at 420 (Story 3)
         cl_words = len(re.findall(r"\b\w+\b", cl_stripped))
         if cl_words > 420:

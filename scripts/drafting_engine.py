@@ -1,6 +1,7 @@
 import os
 import re
 import subprocess
+import sys
 import verify_claims as determinator
 from utils import (
     contact_placeholder_map,
@@ -309,7 +310,7 @@ def run_research(company_name, jd_text):
         env = os.environ.copy()
         env["RESEARCH_MODE"] = mode
         subprocess.run(
-            ["python", os.path.join(script_dir, "research-engine.py"), company_name, "Product Manager"],
+            [sys.executable, os.path.join(script_dir, "research-engine.py"), company_name, "Product Manager"],
             check=False,
             env=env,
         )
@@ -336,7 +337,7 @@ def generate_pdf(md_path, output_path):
         return
     script_dir = os.path.dirname(os.path.abspath(__file__))
     subprocess.run(
-        ["python", os.path.join(script_dir, "compile_single.py"), md_path, output_path],
+        [sys.executable, os.path.join(script_dir, "compile_single.py"), md_path, output_path],
         check=True,
     )
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 100:

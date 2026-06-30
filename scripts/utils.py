@@ -1,4 +1,4 @@
-﻿"""
+"""
 Shared utilities for the JobAgent pipeline.
 Centralizes file I/O, LLM calls with retry logic, and path constants.
 """
@@ -633,7 +633,6 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
     except ImportError:
         pass
     except Exception as e:
-        import sys
         print(f"    [Warning] Failed to run PII redaction: {e}", file=sys.stderr)
         
     try:

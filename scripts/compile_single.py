@@ -4,6 +4,39 @@ import re
 import markdown
 from playwright.sync_api import sync_playwright
 
+def _run_preflight_lint(md_path: str, md_text: str) -> None:
+    """Run submission linter before PDF generation. Exit(1) on HARD_BLOCK."""
+    import json as _json
+    try:
+        sys.path.insert(0, os.path.dirname(__file__))
+        from submission_linter import lint_document, write_lint_report, LintResult
+
+        fname = os.path.basename(md_path)
+        result: LintResult = lint_document(md_text, filename=fname)
+        folder = os.path.dirname(md_path)
+
+        # Always write the report
+        write_lint_report(folder, result)
+
+        if result.warns:
+            print(f"[Linter] {len(result.warns)} warning(s):", file=sys.stderr)
+            for v in result.warns:
+                loc = f" (line {v.line})" if v.line else ""
+                print(f"  [{v.rule_id}] {v.message}{loc}", file=sys.stderr)
+
+        if not result.passed:
+            print(f"[Linter] BLOCKED — {len(result.blocks)} hard rule(s) violated:", file=sys.stderr)
+            for v in result.blocks:
+                loc = f" (line {v.line})" if v.line else ""
+                print(f"  [{v.rule_id}] {v.message}{loc}", file=sys.stderr)
+                print(f"           → {v.suggestion}", file=sys.stderr)
+            sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"[Linter] Warning: linter failed ({e}); continuing.", file=sys.stderr)
+
+
 def main():
     if len(sys.argv) < 3:
         print("Usage: python compile_single.py <md_path> <pdf_path>", file=sys.stderr)
@@ -17,14 +50,34 @@ def main():
         sys.exit(1)
 
     try:
-        with open(md_path, "r", encoding="utf-8") as f:
+        with open(md_path, "r", encoding="utf-8-sig") as f:
             md_text = f.read()
+
+        _run_preflight_lint(md_path, md_text)
+        # Strip any remaining BOM.
+        md_text = md_text.lstrip("\ufeff")
+
+        # Strip legacy <div style="..."> wrappers that old cover letter templates
+        # injected around the whole document. Python-Markdown does not process
+        # Markdown syntax (e.g. # Heading) inside raw HTML blocks, so the name
+        # heading renders as literal "# Jason Taylor" text in the PDF.
+        md_text = re.sub(
+            r'^\s*<div[^>]*>\s*', '', md_text, flags=re.IGNORECASE
+        )
+        md_text = re.sub(
+            r'\s*</div>\s*$', '', md_text, flags=re.IGNORECASE
+        )
 
         # Ensure blank line before bullet lists that directly follow a paragraph line.
         # Python-Markdown requires a blank line between a <p> and a list; without it
         # the bullets get absorbed into the paragraph as literal text.
         # Match: a non-list, non-header line immediately followed by a "* " or "- " line.
         md_text = re.sub(r'(?m)^((?!\* |\- |#).+)\n(\* |\- )', r'\1\n\n\2', md_text)
+
+        # Ensure blank line between consecutive pipe-delimited lines (CORE COMPETENCIES rows).
+        # Without this, "Skills Row\nTools Row" merges into one paragraph and the section
+        # boundary between the two rows disappears (e.g. "...Product Roadmap Jira | SQL").
+        md_text = re.sub(r'(?m)^([^\n#\*\-].+\|.+)\n([^\n#\*\-].+\|.+)', r'\1\n\n\2', md_text)
 
         # Convert standard Markdown to HTML
         html_content = markdown.markdown(md_text, extensions=['extra', 'tables'])

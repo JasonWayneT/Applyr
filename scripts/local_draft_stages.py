@@ -1308,10 +1308,12 @@ def build_skills_section(
             pass
 
     parts = ["## CORE COMPETENCIES", ""]
-    parts.append(" | ".join(row1_skills))
     if row2_tools:
+        parts.append(" | ".join(row1_skills))
         parts.append("")
         parts.append(" | ".join(row2_tools))
+    else:
+        parts.append(" | ".join(row1_skills))
     parts.append("")
     return "\n".join(parts)
 

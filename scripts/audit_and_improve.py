@@ -3,6 +3,8 @@ import re
 import sys
 import json
 import subprocess
+from dataclasses import dataclass, field
+from typing import Optional
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "scripts"))
@@ -26,6 +28,43 @@ if not os.path.exists(GUIDELINES_PATH):
 GUIDELINES = load_file(GUIDELINES_PATH)
 MASTER_RESUME = load_file(RESUME_MASTER_FILE)
 VALID_IDS = determinator.load_valid_ids(WORK_EXP_FILE)
+
+_ASSET_NAMES = ("Resume.md", "CoverLetter.md", "Resume.pdf", "CoverLetter.pdf")
+
+
+@dataclass
+class AuditImproveResult:
+    """Return contract for post-drafting audit — Implements CR-054."""
+
+    converged: bool
+    attempts: int
+    final_issues: list[str] = field(default_factory=list)
+    skipped: bool = False
+
+
+def _snapshot_submission_assets(folder_path: str) -> dict[str, Optional[bytes]]:
+    """Capture pre-audit file bytes so failed runs can restore last-known-good."""
+    snapshot: dict[str, Optional[bytes]] = {}
+    for name in _ASSET_NAMES:
+        path = os.path.join(folder_path, name)
+        if os.path.isfile(path):
+            with open(path, "rb") as fh:
+                snapshot[name] = fh.read()
+        else:
+            snapshot[name] = None
+    return snapshot
+
+
+def _restore_submission_assets(folder_path: str, snapshot: dict[str, Optional[bytes]]) -> None:
+    """Restore submission files from a pre-audit snapshot — Implements CR-054."""
+    for name, content in snapshot.items():
+        path = os.path.join(folder_path, name)
+        if content is None:
+            if os.path.isfile(path):
+                os.remove(path)
+            continue
+        with open(path, "wb") as fh:
+            fh.write(content)
 
 def analyze_company_context(company_name, jd_text):
     """Classify the company stage, motion, and key info from the JD."""
@@ -166,7 +205,8 @@ def extract_bullets_text(resume_md):
     ]
     return "\n".join(bullet_lines)
 
-def audit_and_improve_company(folder_path):
+def audit_and_improve_company(folder_path) -> AuditImproveResult:
+    """Run post-drafting audit loop; return convergence contract — Implements CR-054."""
     company_name = os.path.basename(folder_path)
     resume_path = os.path.join(folder_path, "Resume.md")
     cl_path = os.path.join(folder_path, "CoverLetter.md")
@@ -174,10 +214,16 @@ def audit_and_improve_company(folder_path):
 
     if not os.path.exists(resume_path) or not os.path.exists(cl_path) or not os.path.exists(jd_path):
         print(f"  [Skip] Missing files for {company_name}")
-        return False
+        return AuditImproveResult(
+            converged=False,
+            attempts=0,
+            final_issues=["missing required submission files"],
+            skipped=True,
+        )
 
     print(f"Auditing & Improving {company_name}...")
-    
+    pre_audit_snapshot = _snapshot_submission_assets(folder_path)
+
     jd_text = load_file(jd_path)
     resume_md = load_file(resume_path)
     cl_md = load_file(cl_path)
@@ -190,6 +236,7 @@ def audit_and_improve_company(folder_path):
     attempts = 3
     summary_feedback = ""
     cl_feedback = ""
+    final_issues: list[str] = []
     for attempt in range(1, attempts + 1):
         print(f"    - Attempt {attempt} to generate and verify...")
         
@@ -213,6 +260,7 @@ def audit_and_improve_company(folder_path):
         if not cl_ok_audit:
             print(f"      [Audit Warning] Cover letter metric mismatch: {cl_audit_err}")
             cl_feedback = f"The previous cover letter draft contained metric errors: {cl_audit_err}. Remove or correct these numbers to match the resume bullets."
+            final_issues = [cl_feedback]
             continue
 
         # 6. Verify summary against experience bullets and sentence count
@@ -221,6 +269,7 @@ def audit_and_improve_company(folder_path):
         if not summary_ok:
             print(f"      [Audit Warning] Resume summary metric mismatch: {summary_err}")
             summary_feedback = f"The previous professional summary draft contained metric errors: {summary_err}. Remove or correct these numbers to match the experience bullets."
+            final_issues = [summary_feedback]
             continue
             
         clean_summary = re.sub(r'\b(Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec|vs|approx|eg|ie|ca|Inc|Co|B2B|SaaS|PM|PMs)\.', r'\1', summary_section, flags=re.IGNORECASE)
@@ -230,6 +279,7 @@ def audit_and_improve_company(folder_path):
         if len(sentences) != 3:
             print(f"      [Audit Warning] Resume summary has {len(sentences)} sentence(s) (expected exactly 3). Retrying...")
             summary_feedback = f"The previous professional summary had {len(sentences)} sentence(s). You MUST write EXACTLY 3 sentences. Here is the split we detected: {sentences}."
+            final_issues = [summary_feedback]
             continue
 
         # Saved if pass all checks
@@ -244,10 +294,11 @@ def audit_and_improve_company(folder_path):
         cl_pdf = os.path.join(folder_path, "CoverLetter.pdf")
         generate_pdf(resume_path, resume_pdf)
         generate_pdf(cl_path, cl_pdf)
-        return True
+        return AuditImproveResult(converged=True, attempts=attempt, final_issues=[])
 
     print(f"    [Failed] Could not align assets within constraints for {company_name} after {attempts} attempts.")
-    return False
+    _restore_submission_assets(folder_path, pre_audit_snapshot)
+    return AuditImproveResult(converged=False, attempts=attempts, final_issues=final_issues)
 
 def main():
     if not os.path.exists(SUBMISSIONS_DIR):
@@ -271,7 +322,8 @@ def main():
         if target_filter and os.path.basename(folder) != target_filter:
             continue
         total += 1
-        if audit_and_improve_company(folder):
+        result = audit_and_improve_company(folder)
+        if result.converged:
             success += 1
 
     print(f"\nDone! Audited & improved {success} out of {total} company portfolios.")

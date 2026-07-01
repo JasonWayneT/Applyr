@@ -9,6 +9,12 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 
 ## [Unreleased]
 
+### Fixed
+- **CR-054:** Post-drafting audit non-convergence no longer reports pipeline success. `audit_and_improve_company` returns an `AuditImproveResult` contract; `run_drafting_engine` raises on failure; pre-audit file snapshots restore on non-convergence so bad enhanced drafts cannot ship under normal filenames.
+
+### Developer
+- **CR-054 Epic 1:** Added `scripts/test_audit_convergence.py` regression coverage for audit failure propagation and disk restore policy.
+
 ---
 
 ## [7.1.0] — 2026-06-24

@@ -11,7 +11,7 @@ from submission_linter import lint_document, LintResult
 # ---------------------------------------------------------------------------
 
 CL_CLEAN = """# JASON TAYLOR
-[REDACTED_EMAIL]
+candidate@example.com
 
 Dear Hiring Manager,
 
@@ -29,7 +29,7 @@ Jason Taylor
 """
 
 RESUME_CLEAN = """# JASON TAYLOR
-[REDACTED_EMAIL]
+candidate@example.com
 
 ## PROFESSIONAL SUMMARY
 
@@ -120,15 +120,20 @@ def test_LR006_blocks_double_dash():
     assert any(v.rule_id == "LR-006" for v in r.blocks)
 
 
+_SAMPLE_EMAIL = "candidate@example.com"
+_PHONE_PLACEHOLDER = "[" + "REDACTED_" + "PHONE]"
+_EMAIL_PLACEHOLDER = "[" + "REDACTED_" + "EMAIL]"
+
+
 def test_LR007_blocks_redacted_phone():
-    text = CL_CLEAN.replace("[REDACTED_EMAIL]", "[REDACTED_PHONE]")
+    text = CL_CLEAN.replace(_SAMPLE_EMAIL, _PHONE_PLACEHOLDER)
     r = lint_document(text, "cover_letter")
     assert not r.passed
     assert any(v.rule_id == "LR-007" for v in r.blocks)
 
 
 def test_LR008_blocks_redacted_email():
-    text = CL_CLEAN.replace("[REDACTED_EMAIL]", "[REDACTED_EMAIL]")
+    text = CL_CLEAN.replace(_SAMPLE_EMAIL, _EMAIL_PLACEHOLDER)
     r = lint_document(text, "cover_letter")
     assert not r.passed
     assert any(v.rule_id == "LR-008" for v in r.blocks)

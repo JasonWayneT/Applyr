@@ -16,6 +16,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/audit_public_repo.py",
     "scripts/check_spawn_paths.py",
     "scripts/smoke_draft_compiler.py",
+    "scripts/test_audit_convergence.py",
     "scripts/test_batch_gate.py",
     "scripts/test_candidate_context.py",
     "scripts/test_cover_voice.py",

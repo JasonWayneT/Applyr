@@ -276,7 +276,7 @@ don't build a third version of this fix in the pipeline-quality-epics.md track.
 **Goal:** `audit_and_improve_company` failing to converge must make the run report `passed: false`,
 not get swallowed by a bare `except` two frames up while an unconditional success message prints anyway.
 
-- [ ] **Story 1.1 — Root cause, confirmed.** `scripts/drafting_engine.py:377-385`:
+- [x] **Story 1.1 — Root cause, confirmed.** `scripts/drafting_engine.py:377-385`:
       ```python
       try:
           from audit_and_improve import audit_and_improve_company
@@ -290,31 +290,18 @@ not get swallowed by a bare `except` two frames up while an unconditional succes
       and still return normally — no exception raised, no return value checked. The `except` never
       fires. The unconditional print two lines later claims success regardless. No further
       investigation needed on this story; the bug is confirmed by direct code read, not inferred.
-- [ ] **Story 1.2 — Give `audit_and_improve_company` a real return contract.** It must return
-      (or raise) something the caller can branch on — e.g. `{"converged": bool, "attempts": int,
-      "final_issues": list[str]}`. `[VERIFY]` current return type before changing — read the full
-      function body in `scripts/audit_and_improve.py`, not just the failure print line, since the
-      convergence loop and the 3-attempt cap need to be understood before deciding what "converged"
-      means precisely (e.g. does attempt 1 succeeding count differently from attempt 3 succeeding?
-      probably not for this purpose, but confirm).
-- [ ] **Story 1.3 — Propagate non-convergence to the caller.** `run_drafting_engine` must NOT print
-      "Successfully generated and audited all assets" when `converged=False`. Trace the call chain
-      back up to `batch_pipeline.py:837 process_single` and confirm `passed: false` actually reaches
-      the JSON the WebApp/CLI consumer reads (`{"score": score, "passed": false, ...}` pattern already
-      exists elsewhere in `process_single` — reuse it, don't invent a new shape).
-- [ ] **Story 1.4 — Decide what happens to a non-converged draft already on disk.** Two real cases
-      hit this session: (a) PHM — the bad enhanced `CoverLetter.md` was written to disk but the PDF
-      export failed separately, leaving a stale-but-clean PDF; (b) TE Connectivity — the bad
-      `CoverLetter.md` WAS exported to PDF. Decide and implement a consistent policy: either (i) never
-      overwrite the last-known-good Resume.md/CoverLetter.md with a non-converged draft, only ever the
-      JSON-reported failure, or (ii) write the failed draft somewhere clearly marked
-      (`CoverLetter.DRAFT_FAILED.md`) so a human reviewing the folder can't mistake it for ready output.
-      Do not just suppress the symptom — case (b) actually shipped a forbidden-phrase/fabricated-metric
-      document to disk under the normal filename with no marker.
-- [ ] **Story 1.5 — Regression test.** Force `audit_and_improve_company` to fail to converge (e.g. by
-      feeding a JD/claim combination known to trigger a metric-mismatch loop) and assert the pipeline
-      reports `passed: false` and does not silently overwrite `Resume.md`/`CoverLetter.md` with
-      unconverged content. This is the test that would have caught both of this session's live misses.
+- [x] **Story 1.2 — Give `audit_and_improve_company` a real return contract.** Returns
+      `AuditImproveResult(converged, attempts, final_issues, skipped)` dataclass from
+      `scripts/audit_and_improve.py`.
+- [x] **Story 1.3 — Propagate non-convergence to the caller.** `run_drafting_engine` raises
+      `RuntimeError` when `converged=False`; `batch_pipeline.process_single` already catches and
+      emits `{"score": score, "passed": false, ...}`.
+- [x] **Story 1.4 — Decide what happens to a non-converged draft already on disk.** Policy:
+      snapshot Resume.md/CoverLetter.md/PDFs before audit loop; restore snapshot on non-convergence
+      so enhanced-but-failed content never ships under normal filenames.
+- [x] **Story 1.5 — Regression test.** `scripts/test_audit_convergence.py` — forced non-convergence
+      asserts `converged=False`, file restore, `run_drafting_engine` raise, and `process_single`
+      `passed:false` JSON.
 
 ---
 

@@ -146,8 +146,8 @@ Rules to implement (document these in the rule config with IDs):
 | LR-004 | `proven track record` | Both |
 | LR-005 | `I am writing to express` | CL |
 | LR-006 | `—` (em dash character) | Both |
-| LR-007 | `[REDACTED_PHONE]` | Both |
-| LR-008 | `[REDACTED_EMAIL]` | Both |
+| LR-007 | phone redaction placeholder (LR-007) | Both |
+| LR-008 | email redaction placeholder (LR-008) | Both |
 | LR-009 | Keywords: leverage, passionate, dynamic, innovative, seamless, transformative, synergy, tapestry, revolutionize | Both |
 | LR-010 | Bullet point lines (`^\* ` or `^- `) | CL only |
 | LR-011 | Internal codenames: "Airo", "Platform Data Remediation", "Core B2B SaaS Platform", "Critical Save Program", "White Glove Accounts", "Centralized Contact Database" | Both |

@@ -44,7 +44,7 @@ This works for anyone with real experience to draw from: corporate roles, freela
 |---|---|
 | **Phase** | Dogfood |
 | **Stability** | Active development — breaking changes possible between versions |
-| **Last updated** | June 2026 |
+| **Last updated** | June 2026 (CR-053/054/055 fit & gate overhaul) |
 
 ---
 
@@ -113,6 +113,7 @@ Open the **Local** URL printed by Vite (e.g. **[http://localhost:5173](http://lo
 | `jobs.filter is not a function` in browser console | Restart dev after pulling latest; API returned an error object instead of a list (fixed in `fetchJobs()`). |
 | `npm ci` / install fails on React peer deps | Repo `.npmrc` sets `legacy-peer-deps=true`. |
 | Missing `data/workExperience.md` after clone | Run `python scripts/bootstrap_local_data.py` then configure Settings. |
+| Missing gate keys after upgrading (`blocked_role_titles`, etc.) | Run `npm run gate-rollout` **once** — merges from `candidate_preferences.example.json`. Not needed on every pull. |
 | Wrong Vite port | Use the port Vite prints (not an old tab on 5173 if Vite moved to 5174). |
 | `APPLYR_API_TOKEN` set without `VITE_APPLYR_API_TOKEN` | POST requests need both, or unset the server token for local-only dev. GET routes work without a token. |
 
@@ -139,6 +140,8 @@ npx playwright install chromium
 ```
 
 Wait for Google Drive to finish syncing `data/`, then `npm run dev`. The app reads all credentials, work history, submissions, and archive directly from `data/`.
+
+**Upgrading to CR-053+ on a synced machine:** If your `data/candidate_preferences.json` predates the gate overhaul (missing `blocked_role_titles`, `blocked_focus_area_words`, or `blocked_companies`), run the one-time migration below — not required on every pull.
 
 **What lives where**
 
@@ -194,6 +197,8 @@ Go to the **Job Search** tab. Configure:
 
 Click **Save**. This immediately materializes `data/candidate_preferences.json` which governs every scout run and pipeline evaluation.
 
+**Gate keys preserved on save:** UI edits update search targeting and the legacy `blocked_titles` list from the Title Blocklist field. Pipeline-only keys (`blocked_role_titles`, `blocked_focus_area_words`, `blocked_companies`, `min_confidence_score`) are **not** wiped when you save from the Job Search tab — they are merged from the existing JSON file.
+
 ### 5. (Optional) Connect Adzuna
 
 Go to **Settings → API or Connections → Data Sources**. Enter your Adzuna App ID and App Key. Get a free key at [developer.adzuna.com](https://developer.adzuna.com). If no key is provided, Adzuna is silently skipped. Usage is capped at 10 calls per run (well inside the 250/day free tier).
@@ -232,10 +237,15 @@ Live progress and source metrics (fetched, filtered, and passed counts), along w
 
 ### Fit scoring
 
-Each job is evaluated in two stages:
+Each job is evaluated in stages before any drafting tokens are spent:
 
-1. **Fast gate (deterministic):** Instantly rejects roles that match your title blocklist, industry blocklist, or fall below your minimum salary. No LLM token spent.
-2. **LLM scoring:** Evaluates the JD across four vectors (leadership fit, seniority fit, technical depth, transition potential) against your summarized experience. Roles scoring at or above **`min_fit_score`** in `candidate_preferences.json` (default **72**) proceed to drafting.
+1. **Fast gate (deterministic, zero LLM):** Rejects roles that match title tier blocklists, focus-area blocklists, blocked companies, industry blocklist, solo-PM trap, years-over-max, location (non–San Diego onsite/hybrid, Canada in-person, EST/CST-only remote), keyword gates, or minimum salary.
+2. **Structured fit (default):** Extracts must-have criteria from the JD, asks the LLM for per-criterion equivalence judgments only (`yes` / `partial` / `no` — no holistic score), then computes the 0–100 score in Python (`scripts/structured_fit.py`). Required-domain gaps apply a bounded penalty (max −10), not an instant kill. Set `STRUCTURED_FIT=0` to use the legacy holistic LLM rubric instead.
+3. **Threshold:** Roles at or above **`min_fit_score`** in `candidate_preferences.json` (default **72**) proceed to drafting. Optional **`min_confidence_score`** can route low-confidence structured results to manual review.
+
+Anchor keyword hits are recorded as risk flags only — scores are no longer force-promoted at the threshold.
+
+Rubric reference: `.agent/rules/job_fit_engine.md` (v5.0). Formal spec: `docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md`.
 
 ### Drafting assets
 
@@ -247,6 +257,8 @@ Roles that pass scoring automatically get a full asset pack drafted:
 4. An interview cheat sheet
 
 Output lands in `submissions/[company-name]/`. PDFs are compiled automatically.
+
+Post-draft audit must converge; a failed audit reports `passed: false` in the pipeline and restores pre-audit submission files so bad enhanced drafts cannot ship under normal filenames.
 
 You can also trigger a manual draft on any Backlog role from the **Opportunities** view.
 
@@ -280,7 +292,8 @@ To enable the OpenPostings scraper, extract `OpenPostings-main.zip` into `OpenPo
 ```
 server/
   index.ts          — Entry point: middleware, router mounts, app.listen (33 lines)
-  shared.ts         — Shared path constants, buildPythonEnv (PYTHONUNBUFFERED only), resolveCompanyFolder, materializeJobSearchPrefs
+  shared.ts         — Shared path constants, buildPythonEnv (PYTHONUNBUFFERED only), resolveCompanyFolder
+  domain/jobSearchPrefs.ts — materializeJobSearchPrefs + gate-key preservation (FR-248)
   scout.ts          — Scout orchestrator: spawns scout → backfill → scrape → evaluate
   db.ts             — SQLite init, logActivity helper
   routes/
@@ -293,6 +306,10 @@ scripts/
   scout_local.ts    — 7-source parallel job scraper (reads candidate_preferences.json)
   scrape_new_jobs.ts — Fetches full JD text for newly discovered jobs
   batch_pipeline.py — Fit scoring + asset generation engine (--mode batch | single)
+  structured_fit.py — Evidence-tiered fit scoring (default when STRUCTURED_FIT=1)
+  seniority_gate.py — Years + contextual title blocklist gates
+  zero_shot_classifier.py — Location zero-token gate
+  prefs_rollout.py / apply_gate_rollout.py — One-time gate-prefs migration (see Manual utilities)
   drafting_engine.py             — Entry + research + hard-fact guards (delegates to draft_compiler)
   draft_compiler.py              — Unified resume/cover compiler (CR-014)
   bullet_generation.py           — Per-claim bullets (Stage 3)
@@ -316,7 +333,10 @@ data/
   candidate_preferences.json    — Materialized search/scoring config (auto-written by server)
   workExperience.md             — Full codified work history (edited via Settings > Experience)
   workExperience_summary.md     — Condensed scoring brief (auto-generated on every experience save)
-  job_fit_engine.md             — Scoring rules and anchor criteria
+  candidate_preferences.example.json — Template for gate rollout keys (blocked_role_titles, etc.)
+
+.agent/rules/
+  job_fit_engine.md             — Scoring rubric loaded by Python fit path
   Resume.md                     — Master resume template
   Cover_Letter_Reference.md     — Master cover letter template
 ```
@@ -340,16 +360,21 @@ data/
 
 These scripts are not part of the automated pipeline but are useful for maintenance:
 
-| Script | Purpose |
+| Script / command | Purpose |
 |---|---|
+| `npm run gate-rollout` | **One-time** (not per `git pull`): merge missing gate keys from `candidate_preferences.example.json` into live prefs; dry-run location rescore on Backlog/New jobs |
+| `npm run gate-rollout:apply` | Same as above, but apply location rejects to the database |
+| `python scripts/calibration_harness.py` | Compare structured vs legacy fit scores on stored JDs |
+| `python scripts/rescore_location_gates.py` | Location-gate-only rescore utility |
 | `scripts/reconcile_submissions.py` | Archive or remove stale folders in `submissions/` (FR-030) |
 | `scripts/audit_all_submissions.py` | Audit quality of all generated assets |
 | `scripts/regenerate_all_submissions.py` | Bulk regenerate all resumes and cover letters |
 | `scripts/login_linkedin.ts` | Re-authenticate the LinkedIn Playwright session |
 | `scripts/test_llm.py` | Test LLM provider connectivity and response quality |
 | `scripts/test_smoke_regression.py` | Run smoke tests against the live pipeline |
+| `npm test` | Unified runner: all Python unit tests + Vitest |
 
-Run these directly with `python scripts/<name>.py` or `npx tsx scripts/<name>.ts`.
+Run Python/TS scripts directly with `python scripts/<name>.py` or `npx tsx scripts/<name>.ts`.
 
 ---
 
@@ -364,6 +389,8 @@ Run these directly with `python scripts/<name>.py` or `npx tsx scripts/<name>.ts
 | [docs/spec/02-requirements-registry.md](./docs/spec/02-requirements-registry.md) | Canonical requirement IDs — source of truth for all FR/NFR/SEC/DATA/INT requirements |
 | [docs/spec/06-traceability/traceability-matrix.md](./docs/spec/06-traceability/traceability-matrix.md) | Requirement → spec → code → status mapping |
 | [docs/ACTIVE_WORKFLOW.md](./docs/ACTIVE_WORKFLOW.md) | Runtime workflow for operators — scout, evaluate, draft, verify |
+| [docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md](./docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md) | CR-053/054/055 implementation tracker — structured fit, gates, rollout |
+| [docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md](./docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md) | Structured evidence-tiered fit scoring spec |
 ---
 
 ## Challenges & Decisions

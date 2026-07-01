@@ -88,6 +88,49 @@ def is_actually_remote(text: str) -> bool:
     return False
 
 
+_NON_SD_MAJOR_CITIES = (
+    "new york", "nyc", "manhattan", "brooklyn",
+    "chicago", "san francisco", "sf,", "sunnyvale", "mountain view",
+    "sacramento", "seattle", "boston", "austin", "denver", "atlanta",
+    "los angeles", "portland", "philadelphia", "dallas", "houston",
+    "toronto", "vancouver", "montreal", "ottawa", "calgary", "canada",
+)
+_TIMEZONE_RESTRICTED_REMOTE = re.compile(
+    r"\b(?:must be|required to be|based in|located in|within)\b.{0,50}\b"
+    r"(?:est|eastern|cst|central)(?:\s+time(?:zone)?)?\b",
+    re.I | re.DOTALL,
+)
+_REMOTE_EST_CST_ONLY = re.compile(
+    r"\bremote\b.{0,80}\b(?:est|eastern|cst|central)(?:\s+time(?:zone)?)?\b",
+    re.I | re.DOTALL,
+)
+_PACIFIC_FLEX = re.compile(
+    r"\b(?:pst|pacific|mst|mountain|flexible.{0,20}time(?:zone)?|any\s+us\s+time)\b",
+    re.I,
+)
+
+
+def _mentions_non_sd_city(text: str) -> str | None:
+    """Return first non-SD metro signal found in text, if any."""
+    for city in _NON_SD_MAJOR_CITIES:
+        if city in text:
+            return city.strip()
+    return None
+
+
+def _timezone_remote_reject(text: str) -> str | None:
+    """Reject remote postings limited to EST/CST when Pacific flexibility is absent."""
+    if _PACIFIC_FLEX.search(text):
+        return None
+    if _TIMEZONE_RESTRICTED_REMOTE.search(text):
+        return "Remote role restricted to EST/CST without Pacific-time flexibility"
+    if _REMOTE_EST_CST_ONLY.search(text):
+        return "Remote role restricted to EST/CST without Pacific-time flexibility"
+    if re.search(r"\b(?:est|eastern|cst|central)\s+(?:time(?:zone)?|hours)\s+only\b", text, re.I):
+        return "Remote role restricted to EST/CST without Pacific-time flexibility"
+    return None
+
+
 def resolve_location_verdict(jd_text: str) -> Tuple[str, str]:
     """
     Deterministic location eligibility for Remote + San Diego candidate.
@@ -110,6 +153,23 @@ def resolve_location_verdict(jd_text: str) -> Tuple[str, str]:
     )
     if is_explicit_foreign:
         return "REJECT", "Non-US location signals without US eligibility"
+
+    tz_reject = _timezone_remote_reject(text)
+    if tz_reject:
+        return "REJECT", tz_reject
+
+    has_hybrid = bool(re.search(r"\bhybrid\b", text))
+    has_onsite_explicit = bool(
+        re.search(r"\b(on[- ]?site|onsite|in[- ]?office|in office|in[- ]?person)\b", text)
+    )
+    non_sd_city = _mentions_non_sd_city(text)
+
+    if "canada" in text and (has_hybrid or has_onsite_explicit or "in person" in text or "in-person" in text):
+        if not has_remote:
+            return "REJECT", "Canada on-site/hybrid without remote eligibility"
+
+    if (has_hybrid or has_onsite_explicit) and non_sd_city and not has_remote:
+        return "REJECT", f"On-site/hybrid role in {non_sd_city} without remote option"
 
     # Remote anywhere in JD wins — even when other US cities are listed ("Dallas or Remote").
     if has_remote:

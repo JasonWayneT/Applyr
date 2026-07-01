@@ -14,6 +14,30 @@
 
   "freshness_days": 7,
 
+  "blocked_role_titles": [
+
+    "Staff", "VP", "Head", "Principal", "Lead", "Director", "Group Product Manager", "GPM",
+
+    "Founding", "First", "Manager of", "Engineering Manager", "People Manager",
+
+    "Assistant", "Coordinator", "Intern", "Associate", "Entry", "Junior",
+
+    "Analyst", "Software Engineer"
+
+  ],
+
+  "blocked_focus_area_words": [
+
+    "Growth", "Developer", "Designer", "Marketer"
+
+  ],
+
+  "blocked_companies": [
+
+    "Unity"
+
+  ],
+
   "blocked_titles": [
 
     "Staff", "VP", "Head", "Principal", "Lead", "Director", "Group Product Manager", "GPM",

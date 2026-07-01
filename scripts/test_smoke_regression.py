@@ -156,8 +156,9 @@ _promoted = apply_anchor_floor(
     {"required_anchors": ["platform", "roadmap", "cross-functional", "b2b saas"]},
     72,
 )
-assert_test("REG-18: Anchor floor promotes 68 to 72",
-            _promoted and _promoted["Decision"] == "YES" and _promoted["Score"] == 72,
+assert_test("REG-18: Anchor floor records hits without score promotion (CR-053 2.6)",
+            _promoted and _promoted["Decision"] == "NO" and _promoted["Score"] == 68
+            and any("anchor_hits" in f for f in _promoted.get("RiskFlags", [])),
             str(_promoted))
 
 assert_test("REG-19: Optional domain note detected",

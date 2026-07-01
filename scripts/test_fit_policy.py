@@ -82,8 +82,9 @@ assert_test("ophelia snippet has >=2 anchors", hits >= 2, f"hits={hits} matched=
 borderline = {"Decision": "NO", "Score": 68, "Summary": "Domain gap", "RiskFlags": []}
 floored = apply_anchor_floor(borderline, ophelia_snip, prefs, 72)
 assert_test(
-    "anchor floor promotes 68 to 72",
-    floored and floored["Decision"] == "YES" and floored["Score"] == 72,
+    "anchor floor records hits without score overwrite (CR-053 2.6)",
+    floored and floored["Decision"] == "NO" and floored["Score"] == 68
+    and any("anchor_hits" in f for f in floored.get("RiskFlags", [])),
     str(floored),
 )
 assert_test(

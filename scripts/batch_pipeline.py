@@ -443,6 +443,14 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str =
 
     prefs = prefs or load_candidate_preferences()
 
+    blocked = [c.strip().lower() for c in (prefs.get("blocked_companies") or []) if c.strip()]
+    if blocked and company_name:
+        company_key = company_name.strip().lower()
+        for entry in blocked:
+            if entry in company_key or company_key in entry:
+                print(f"    [ZERO-TOKEN REJECT] company_blocked:{entry}", file=sys.stderr)
+                return False
+
     ok, reason = passes_title_gate(jd_text, prefs)
     if not ok:
         print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
@@ -769,7 +777,24 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
         "required": ["Decision", "Score", "Summary"],
     }
 
-    # Primary path: Stage-B scoring only (CR-035)
+    # Primary path: structured evidence-tiered scoring (CR-053 Epic 2)
+    from structured_fit import evaluate_structured_fit, structured_fit_enabled
+
+    if structured_fit_enabled():
+        structured = evaluate_structured_fit(
+            jd_text, work_exp_for_fit, prefs, min_score, use_llm=True,
+        )
+        if structured:
+            decision = str(structured.get("Decision", "NO")).upper()
+            if decision == "REVIEW":
+                structured = dict(structured)
+                structured["Decision"] = "NO"
+                structured.setdefault("RiskFlags", []).append("needs_manual_review")
+            structured = strip_false_years_penalty(structured, truncated_jd, prefs)
+            structured = strip_location_risk_flags(structured, loc_verdict)
+            return _normalize_fit_result(apply_anchor_floor(structured, jd_text, prefs, min_score))
+
+    # Legacy path: Stage-B scoring-only LLM (CR-035)
     print("  -> [FIT] Scoring-only primary path (deterministic gates already passed).", file=sys.stderr)
     result = _call_fit_scoring_only(
         truncated_jd, work_exp_for_fit, prefs_str, loc_verdict, fit_schema, scoring_context,

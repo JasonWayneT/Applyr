@@ -1,25 +1,64 @@
 """
-Deterministic seniority gating (CR-019 / FR-109).
+Deterministic seniority gating (CR-019 / FR-109, CR-055).
 
-- Title blocklist: word-boundary match on job title line only (not full JD).
-- Years gate: regex on JD required experience vs experience_range.max.
+- Title blocklist: role-designation terms vs focus-area modifiers (CR-055 Epic 2).
+- Years gate: requirements-anchored parsing; ignores incidental numbers (CR-055 Epic 1).
 """
 from __future__ import annotations
 
 import re
 from typing import Optional, Tuple
 
-_YEARS_PATTERNS = [
+# Role-designation terms block anywhere in the title line.
+_DEFAULT_BLOCKED_ROLE_TITLES = [
+    "Staff", "VP", "Head", "Principal", "Lead", "Director", "Group Product Manager", "GPM",
+    "Founding", "First", "Manager of", "Engineering Manager", "People Manager",
+    "Assistant", "Coordinator", "Intern", "Associate", "Entry", "Junior",
+    "Analyst", "Software Engineer",
+]
+
+# Focus-area words block only when they appear as the primary role, not "PM, Growth".
+_DEFAULT_BLOCKED_FOCUS_AREA_WORDS = [
+    "Growth", "Developer", "Designer", "Marketer",
+]
+
+_PM_ROLE_RE = re.compile(
+    r"\b(?:senior\s+|staff\s+)?(?:technical\s+|platform\s+)?product\s+(?:manager|owner)\b",
+    re.I,
+)
+
+_REQ_SECTION_HEADER = re.compile(
+    r"^(?:#+\s*)?"
+    r"(?:requirements?|qualifications?|what you(?:'|')ll need|minimum qualifications?|"
+    r"what we(?:'|')re looking for|you have|you bring|experience required|about you|"
+    r"who you are|must have|basic qualifications?)\b",
+    re.I,
+)
+
+_NON_EXPERIENCE_CONTEXT = re.compile(
+    r"\b(?:history|founded|since|anniversary|celebrating|legacy|years ago|"
+    r"established|mission|nonprofit|research|science|institute|laboratory)\b",
+    re.I,
+)
+
+MAX_PLAUSIBLE_YEARS = 25
+
+# Always valid — explicit requirement language in match.
+_ANCHORED_YEARS_PATTERNS = [
     re.compile(
         r"(?:minimum|min\.?|at least|requires?|requirement[s]?:?)\s*(\d+)\s*\+?\s*(?:years?|yrs?\.?)",
         re.I,
     ),
     re.compile(r"(\d+)\s*\+\s*years?", re.I),
+    re.compile(r"(\d+)\s+or\s+more\s+years?", re.I),
+]
+
+# Requirements-section or experience-context only.
+_LOOSE_YEARS_PATTERNS = [
     re.compile(r"(\d+)\s*[-–]\s*(\d+)\s*years?", re.I),
     re.compile(r"(\d+)\s+to\s+(\d+)\s+years?", re.I),
-    re.compile(r"(\d+)\s+years?\s+(?:of\s+)?experience", re.I),
-    re.compile(r"(\d+)\s+years?\s+of\s+", re.I),
-    re.compile(r"(\d+)\s+or\s+more\s+years?", re.I),
+    re.compile(r"(\d+)\s+years?\s+(?:of\s+)?(?:product\s+)?(?:management\s+)?experience", re.I),
+    re.compile(r"(\d+)\s+years?\s+of\s+(?:professional\s+)?(?:product\s+)?experience", re.I),
 ]
 
 
@@ -40,6 +79,29 @@ def extract_job_title_line(jd_text: str) -> str:
     return jd_text.splitlines()[0].strip() if jd_text.splitlines() else ""
 
 
+def blocked_title_lists(prefs: dict | None) -> Tuple[list[str], list[str]]:
+    """Return (role_designation_terms, focus_area_words) from prefs with legacy fallback."""
+    prefs = prefs or {}
+    role = prefs.get("blocked_role_titles")
+    focus = prefs.get("blocked_focus_area_words")
+    if role is not None or focus is not None:
+        return list(role or []), list(focus or [])
+
+    legacy = list(prefs.get("blocked_titles") or [])
+    if not legacy:
+        return list(_DEFAULT_BLOCKED_ROLE_TITLES), list(_DEFAULT_BLOCKED_FOCUS_AREA_WORDS)
+
+    focus_set = {w.lower() for w in _DEFAULT_BLOCKED_FOCUS_AREA_WORDS}
+    role_out: list[str] = []
+    focus_out: list[str] = []
+    for term in legacy:
+        if term.lower() in focus_set:
+            focus_out.append(term)
+        else:
+            role_out.append(term)
+    return role_out, focus_out
+
+
 def title_matches_blocked(title: str, blocked: str) -> bool:
     phrase = blocked.strip()
     if not phrase or not title:
@@ -48,14 +110,26 @@ def title_matches_blocked(title: str, blocked: str) -> bool:
     return bool(re.search(pattern, title, re.I))
 
 
-def title_blocked(title: str, blocked_titles: list) -> Optional[str]:
-    """Return matched blocklist term or None."""
+def _focus_area_is_primary_role(title: str, term: str) -> bool:
+    """True when a focus-area word is the role designation, not a PM specialty."""
+    if not _PM_ROLE_RE.search(title):
+        return True
+    term_re = re.escape(term)
+    primary_patterns = (
+        rf"\bhead\s+of\s+{term_re}\b",
+        rf"^{term_re}\s+(?:lead|director|head|manager)\b",
+        rf"\b{term_re}\s+lead\b",
+    )
+    return any(re.search(p, title, re.I) for p in primary_patterns)
+
+
+def title_blocked(title: str, prefs: dict | None) -> Optional[str]:
+    """Return matched blocklist term or None — Implements CR-055 Epic 2."""
     if not title:
         return None
-    for term in blocked_titles:
+    role_terms, focus_terms = blocked_title_lists(prefs)
+    for term in role_terms:
         if title_matches_blocked(title, term):
-            # Special exception: skip blocking "assistant" if it's part of a product name 
-            # (e.g. preceded by virtual, ai, intelligent, digital, voice, chat, smart)
             if term.lower() == "assistant":
                 pattern = r"\b(virtual|ai|intelligent|digital|voice|chat|smart)\s+assistant\b"
                 all_matches = list(re.finditer(r"\bassistant\b", title, re.I))
@@ -63,24 +137,85 @@ def title_blocked(title: str, blocked_titles: list) -> Optional[str]:
                 if all_matches and len(all_matches) == len(product_matches):
                     continue
             return term
+    for term in focus_terms:
+        if title_matches_blocked(title, term) and _focus_area_is_primary_role(title, term):
+            return term
     return None
 
 
+def _extract_requirements_sections(jd_text: str) -> str:
+    """Pull text under requirements/qualifications headers."""
+    lines = jd_text.splitlines()
+    chunks: list[str] = []
+    in_section = False
+    for line in lines:
+        stripped = line.strip()
+        if _REQ_SECTION_HEADER.search(stripped):
+            in_section = True
+            continue
+        if in_section:
+            if re.match(r"^#+\s+\S", stripped) or re.match(r"^[A-Z][A-Z0-9\s/&-]{5,}$", stripped):
+                in_section = False
+            else:
+                chunks.append(line)
+    return "\n".join(chunks)
+
+
+def _context_window(text: str, start: int, end: int, radius: int = 80) -> str:
+    return text[max(0, start - radius): min(len(text), end + radius)]
+
+
+def _plausible_years(value: int, context: str) -> bool:
+    if value > MAX_PLAUSIBLE_YEARS:
+        return False
+    has_experience_signal = bool(
+        re.search(
+            r"\b(?:experience|experienced|pm|product management|professional)\b",
+            context,
+            re.I,
+        )
+    )
+    if _NON_EXPERIENCE_CONTEXT.search(context) and not has_experience_signal:
+        return False
+    return True
+
+
+def _collect_from_match(text: str, match: re.Match[str]) -> Optional[int]:
+    groups = [g for g in match.groups() if g is not None]
+    if not groups:
+        return None
+    nums = [int(g) for g in groups]
+    value = max(nums)
+    ctx = _context_window(text, match.start(), match.end())
+    if not _plausible_years(value, ctx):
+        return None
+    return value
+
+
 def parse_max_years_required(jd_text: str) -> Optional[int]:
-    """Highest years figure implied as required in JD (conservative for ranges)."""
+    """Highest years figure implied as required in JD — requirements-anchored (CR-055)."""
     if not jd_text:
         return None
     found: list[int] = []
-    for pat in _YEARS_PATTERNS:
+
+    for pat in _ANCHORED_YEARS_PATTERNS:
         for m in pat.finditer(jd_text):
-            groups = [g for g in m.groups() if g is not None]
-            if not groups:
-                continue
-            nums = [int(g) for g in groups]
-            if len(nums) == 1:
-                found.append(nums[0])
-            else:
-                found.append(max(nums))
+            val = _collect_from_match(jd_text, m)
+            if val is not None:
+                found.append(val)
+
+    req_text = _extract_requirements_sections(jd_text)
+    scan_bodies = [req_text] if req_text.strip() else []
+    if not scan_bodies:
+        scan_bodies = [jd_text]
+
+    for body in scan_bodies:
+        for pat in _LOOSE_YEARS_PATTERNS:
+            for m in pat.finditer(body):
+                val = _collect_from_match(body, m)
+                if val is not None:
+                    found.append(val)
+
     return max(found) if found else None
 
 
@@ -101,9 +236,8 @@ def check_years_gate(jd_text: str, prefs: dict) -> Tuple[bool, str]:
 
 
 def passes_title_gate(jd_text: str, prefs: dict) -> Tuple[bool, str]:
-    blocked = (prefs or {}).get("blocked_titles") or []
     title = extract_job_title_line(jd_text)
-    hit = title_blocked(title, blocked)
+    hit = title_blocked(title, prefs)
     if hit:
         return False, f"title_blocked:{hit}"
     return True, ""

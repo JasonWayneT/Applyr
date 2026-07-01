@@ -29,7 +29,7 @@ class SummaryContext:
 
 
 # ---------------------------------------------------------------------------
-# Verified data (from workExperience.md — do not change without updating source)
+# Verified data (from workExperience.md; do not change without updating source)
 # ---------------------------------------------------------------------------
 
 _YEARS_EXPERIENCE = 6
@@ -178,7 +178,7 @@ def extract_summary_context(jd_profile, candidate_profile: dict = None) -> Summa
 # Template variants (Story 4.3)
 # ---------------------------------------------------------------------------
 
-# Note: "B2B SaaS" is NEVER used as a direct label — rule enforced in Story 4.5 test.
+# Note: "B2B SaaS" is NEVER used as a direct label (rule enforced in Story 4.5 test).
 
 _TEMPLATE_ENTERPRISE = (
     "Product Manager with {years}+ years owning {environment_type}, "

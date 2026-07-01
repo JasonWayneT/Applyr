@@ -187,9 +187,7 @@ def build_fit_scoring_context(
 
 def apply_anchor_floor(result: dict | None, jd_text: str, prefs: dict, min_fit_score: int) -> dict | None:
     """
-    Promote borderline NO decisions when >=2 required_anchors match (FR-188).
-    Anchor hits are counted on the full JD — not the scoring truncation — so
-    Built In headers do not hide anchor phrases that appear later in the posting.
+    Record anchor hits as risk/evidence — no longer force-overwrites score (CR-053 Story 2.6).
     """
     if not result:
         return result
@@ -200,26 +198,12 @@ def apply_anchor_floor(result: dict | None, jd_text: str, prefs: dict, min_fit_s
     if hits < 2:
         return result
 
-    raw_score = result.get("Score")
-    score = int(raw_score) if isinstance(raw_score, int) else None
-    if score is None and isinstance(raw_score, str) and raw_score.strip().isdigit():
-        score = int(raw_score.strip())
-    if score is None:
-        return result
-
-    ceiling = min_fit_score - 1
-    if ANCHOR_FLOOR_LOW <= score <= ceiling:
-        out = dict(result)
-        out["Score"] = min_fit_score
-        out["Decision"] = "YES"
-        anchor_note = ", ".join(matched[:4])
-        summary = (out.get("Summary") or "Anchor-qualified borderline pass").strip()
-        out["Summary"] = f"{summary} [anchor floor: {hits} hits — {anchor_note}]"[:500]
-        flags = list(out.get("RiskFlags") or [])
-        flags.append(f"anchor_floor_promoted_from_{score}")
-        out["RiskFlags"] = flags
-        return out
-    return result
+    out = dict(result)
+    flags = list(out.get("RiskFlags") or [])
+    anchor_note = ", ".join(matched[:4])
+    flags.append(f"anchor_hits_{hits}:{anchor_note}")
+    out["RiskFlags"] = flags
+    return out
 
 
 def _fit_cites_years_reject(result: dict) -> bool:

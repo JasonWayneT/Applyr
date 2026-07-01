@@ -11,9 +11,18 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 
 ### Fixed
 - **CR-054:** Post-drafting audit non-convergence no longer reports pipeline success. `audit_and_improve_company` returns an `AuditImproveResult` contract; `run_drafting_engine` raises on failure; pre-audit file snapshots restore on non-convergence so bad enhanced drafts cannot ship under normal filenames.
+- **CR-055:** Years-gate false positives from incidental JD prose (Jackson Laboratory 90-year history, Civica founded-years) fixed via requirements anchoring and plausibility caps in `seniority_gate.py`.
+- **CR-055:** Title blocklist uses role-designation vs focus-area split; `Product Manager, Growth` and NVIDIA developer-productivity titles no longer false-block.
+- **CR-053:** Location gate rejects non-SD onsite/hybrid cities, Canada in-person, and EST/CST-only remote postings.
+- **CR-053:** Structured evidence-tiered fit scoring (`structured_fit.py`) replaces holistic LLM 0-100 as default path; anchor floor no longer force-promotes scores.
+
+### Changed
+- **CR-053:** `apply_anchor_floor` records anchor hits in `RiskFlags` only (no score overwrite).
+- **CR-054:** `blocked_companies` list in `candidate_preferences.json` enforced at zero-token gate (Unity in example prefs).
 
 ### Developer
-- **CR-054 Epic 1:** Added `scripts/test_audit_convergence.py` regression coverage for audit failure propagation and disk restore policy.
+- **CR-054 Epic 1:** `scripts/test_audit_convergence.py` regression coverage.
+- **CR-053/055:** New tests: `test_location_gate`, `test_title_blocklist`, `test_structured_fit`, `test_blocked_companies`, `test_template_lint_sources`; `calibration_harness.py`, `rescore_location_gates.py`.
 
 ---
 

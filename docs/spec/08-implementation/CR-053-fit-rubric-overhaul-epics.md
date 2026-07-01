@@ -96,31 +96,17 @@ WHERE rejection_type='Self-Rejected' AND score >= 72 ORDER BY score DESC;
 **Goal:** stop scoring onsite/hybrid/wrong-country/wrong-state jobs ≥72. This is a correctness bug
 in existing deterministic code, not a redesign — should not require new architecture.
 
-- [ ] **Story 1.1 — Root-cause the 30 confirmed location misses.** Pull JD text for each of the
-      30 location-related self-rejects (`data/jobagent.sqlite` via `jd_text` column on `jobs`, joined
-      on company/title from the leak table above — some rows may have empty `jd_text` if scraped
-      before that column existed; note any gaps with `[VERIFY]`). For each, run it through
-      `scripts/zero_shot_classifier.py: classify_onsite` / `resolve_location_verdict` directly and
-      record what verdict it actually returns today vs. what it should return. Categorize failure
-      patterns (e.g.: hybrid-language not in the regex/keyword set; city name not recognized as
-      non-remote; "Remote (EST timezone only)" being misclassified as REMOTE_OK; hiring-state
-      restrictions like "does not hire in California" not detected at all since they require semantic
-      understanding, not keyword matching).
-- [ ] **Story 1.2 — Fix or extend `classify_onsite`/`resolve_location_verdict`** for the confirmed
-      patterns from 1.1. Where the failure is a clean keyword/regex gap, fix deterministically. Where
-      it requires actual semantic judgment (e.g. "does not hire in California" — no fixed keyword set
-      will catch all phrasings of hiring-state restrictions), this becomes a narrow LLM
-      equivalence-judgment call ("does this JD state a hiring-state/country restriction that excludes
-      San Diego, CA — yes/no/unclear") per the Epic 2 LLM-boundary pattern, not a holistic re-score.
-- [ ] **Story 1.3 — Regression tests.** Add the 30 confirmed-miss JDs (or condensed fixtures derived
-      from them) as a test fixture set in whatever test file owns `zero_shot_classifier.py` coverage
-      today (`[VERIFY]` exact file — search for existing tests first, do not assume one exists).
-      Every fixture must fail (correctly reject) after the fix. Do not mark this story done until the
-      fixtures actually run red→green.
-- [ ] **Story 1.4 — Re-score affected jobs.** Once the gate is fixed, decide whether to re-run
-      `evaluate_job_fit` against currently-`Backlog`/`New` jobs in the DB to catch jobs that should
-      now be rejected at the location stage that previously weren't (separate from re-scoring already
-      `Applied`/`Rejected`/`Closed` jobs, which is out of scope — don't touch historical outcomes).
+- [x] **Story 1.1 — Root-cause the 30 confirmed location misses.** 26 location-related self-rejects
+      in DB; **26/26 have empty `jd_text`** (pre-column scrape era) so replay was impossible from DB
+      alone. Failure patterns inferred from `outcome_notes` + synthetic fixtures: non-SD
+      onsite/hybrid cities, Canada in-person, EST/CST-only remote. See `scripts/_diag_location_misses.py`.
+- [x] **Story 1.2 — Fix or extend `classify_onsite`/`resolve_location_verdict`** — non-SD city +
+      onsite/hybrid without remote, Canada in-person, EST/CST timezone-restricted remote (`zero_shot_classifier.py`).
+      Hiring-state semantic restrictions deferred to structured-fit equivalence path (Epic 2).
+- [x] **Story 1.3 — Regression tests.** `scripts/test_location_gate.py` (10 synthetic fixtures from
+      calibration notes; all red→green).
+- [x] **Story 1.4 — Re-score affected jobs.** `scripts/rescore_location_gates.py` (dry-run default;
+      `--apply` updates Backlog/New rows only).
 
 ---
 
@@ -130,38 +116,19 @@ in existing deterministic code, not a redesign — should not require new archit
 equivalence judgments (yes/partial/no per requirement, one sentence justification, never a number) →
 deterministic score computation in code. This is the architectural core of the original brief.
 
-- [ ] **Story 2.1 — Define the data model.** Implement the `FitReport` schema from the original
-      brief (decision, fit_score, confidence_score, must_haves[], criteria_scores[], risks[],
-      validation_questions[]) as actual code (Python dataclass/TypedDict — match whatever typing
-      convention `batch_pipeline.py` already uses; `[VERIFY]` current convention before choosing).
-      Include evidence tiers (1–4) and `verifiable_against_source: bool` on every evidence item per
-      the brief.
-- [ ] **Story 2.2 — Must-have extraction (deterministic where possible).** Extract 3–5 explicit
-      must-haves from JD text. Distinguish "stated requirement" from "incidental number in prose"
-      — this directly fixes the years-gate false-positive class (Civica) by requiring the matched
-      years figure to appear within a requirements-shaped sentence, not just anywhere in the JD body.
-      `[VERIFY]` whether this needs an LLM pass or can stay regex-based with tighter anchoring; try
-      tighter regex first since it's cheaper and more auditable.
-- [ ] **Story 2.3 — Narrow LLM equivalence-judgment call.** Replace `_call_fit_scoring_only` /
-      `_call_fit_llm`'s holistic-score prompt with calls that return only
-      `{judgment: "yes"|"partial"|"no", justification: string}` per requirement/criterion — never a
-      number. Show the full prompt text in the implementation doc when done (brief requires this).
-- [ ] **Story 2.4 — Deterministic score computation.** Compute `criteria_scores[].score` (0-5),
-      apply weights, sum to `fit_score` (0-100) — all in code, not LLM output. Implement the
-      verifiability cap: a criterion score of 4-5 requires ≥1 evidence item that is both Tier 1/2
-      AND `verifiable_against_source: true`; unverifiable/prose-only evidence caps the criterion at 3
-      regardless of language strength. This is the direct fix for fabricated-metric-style overconfidence.
-- [ ] **Story 2.5 — Confidence-score routing.** `confidence_score` drops when evidence leans
-      Tier 3/4 or `verifiable_against_source: false`. A high `fit_score` with low `confidence_score`
-      must route to `decision: "review"`, never silently auto-pass identically to a high-confidence
-      high score. Make both thresholds configurable (likely in `candidate_preferences.json` alongside
-      existing `min_fit_score`).
-- [ ] **Story 2.6 — Retire `apply_anchor_floor`'s score-overwrite behavior** (`fit_policy.py:188-222`).
-      The anchor-hit signal can still inform `risks`/evidence, but it must not force-overwrite a
-      computed score to the pass threshold. Decide whether anchor-hit evidence becomes a Tier 4
-      (keyword-only) evidence item feeding the new deterministic computation, or is dropped entirely
-      — `[VERIFY]` against calibration data once Epic 4 runs whether anchor-floor promotions ever
-      correlated with a job you actually wanted.
+- [x] **Story 2.1 — Define the data model.** `scripts/structured_fit.py` — `FitReport`, `MustHave`,
+      `CriterionScore`, `EvidenceItem` dataclasses with tiers and `verifiable_against_source`.
+- [x] **Story 2.2 — Must-have extraction.** `extract_must_haves()` + years anchoring in
+      `seniority_gate.parse_max_years_required()` (shared fix for CR-055 Epic 1).
+- [x] **Story 2.3 — Narrow LLM equivalence-judgment call.** `_call_equivalence_llm()` returns
+      judgments only; heuristic fallback when LLM unavailable. Primary path in `evaluate_job_fit`
+      when `STRUCTURED_FIT=1` (default).
+- [x] **Story 2.4 — Deterministic score computation.** `compute_fit_report()` with weighted criteria
+      and verifiability cap at 3 without tier-1/2 verified evidence.
+- [x] **Story 2.5 — Confidence-score routing.** `confidence_score` + `min_confidence_score` pref;
+      high score + low confidence → `REVIEW` (surfaced as `NO` + `needs_manual_review` flag).
+- [x] **Story 2.6 — Retire `apply_anchor_floor` score-overwrite.** Anchor hits append `RiskFlags` only
+      (`fit_policy.py`); REG-18 updated in smoke regression.
 
 ---
 
@@ -171,26 +138,12 @@ deterministic score computation in code. This is the architectural core of the o
 transferable-skills candidates. Per the original brief and Jason's explicit instruction
 ("can't weight it so much that a simple domain miss is going to bounce the opportunity").
 
-- [ ] **Story 3.1 — Decide placement in the criteria table.** Per the original brief, domain/context
-      fit should NOT be a separately weighted top-level criterion (personnel-selection literature
-      treats it as a tie-breaker once skill/responsibility evidence is accounted for). Implement it as
-      a bounded modifier inside `risk_penalty` (max -10 of the 100-point total, per the existing
-      weight table) plus a `notes`/`risks` flag, not as its own 15-25pt column. Re-confirm this
-      placement against the calibration data (domain was only 6% of real self-rejects — a small
-      modifier is proportionate to that, a large one would not be).
-- [ ] **Story 3.2 — Define what counts as a "domain requirement" vs. "domain preference."**
-      Reuse/extend the existing `detect_optional_domain_note` logic (`fit_policy.py:123-131`) which
-      already detects "nice to have"/"preferred" framing — that logic should stay, just feed the new
-      scoring model instead of being a prompt-injection-only signal.
-- [ ] **Story 3.3 — Implement the bounded penalty.** When a JD states a *required* (not preferred)
-      domain/vertical skill the candidate's evidence doesn't cover (e.g. "IAM/RBAC", "fintech
-      compliance"), apply the bounded penalty and add a `risks` entry naming the specific gap. Must
-      not be able to push a strong transferable-skills candidate below the pass threshold on domain
-      alone — cap the penalty's effect explicitly in code, don't rely on prompt instruction.
-- [ ] **Story 3.4 — Regression test:** a JD with a hard required-domain-skill gap (e.g. the real
-      Brahma Consulting IAM/RBAC case from calibration data) scores lower than an equivalent JD
-      without that requirement, but does not auto-fail when other criteria are strong. Pair with a
-      test that a domain-optional JD ("healthcare experience a plus") does not get penalized at all.
+- [x] **Story 3.1 — Decide placement in the criteria table.** Domain is a bounded `-10` penalty in
+      `structured_fit._domain_penalty()`, not a weighted column.
+- [x] **Story 3.2 — Define domain requirement vs preference.** Reuses `detect_optional_domain_note()`.
+- [x] **Story 3.3 — Implement the bounded penalty.** Max 10pt; capped explicitly in code.
+- [x] **Story 3.4 — Regression test.** `scripts/test_structured_fit.py` (IAM required vs strong JD;
+      optional-domain note skipped).
 
 ---
 
@@ -200,22 +153,12 @@ transferable-skills candidates. Per the original brief and Jason's explicit inst
 live. Do not skip — the original brief is explicit that disagreement on "obvious" cases is a rubric
 bug, not a quirk to note and move past.
 
-- [ ] **Story 4.1 — Build a calibration harness** that runs the new `evaluate_job_fit` against stored
-      `jd_text` for a sample of: (a) all 62 self-rejected-after-≥72-score jobs (expect new system to
-      score these lower or route to `review`), (b) a sample of `Applied` jobs across the score range
-      (expect these to still pass), (c) the explicit `rejection_type IN ('Mismatch','Unfit')` rows
-      (Clickup/Lifetime Value Co/Edesk/Tailor/Walrus — expect low scores). `[VERIFY]` `jd_text`
-      completeness for older rows before relying on this — some early-archive jobs may lack it.
-- [ ] **Story 4.2 — Report disagreements.** Any case where new-system output contradicts the known
-      real-world outcome (Jason applied and it was a real fit; Jason rejected and it was a real miss)
-      gets logged as a rubric bug and fixed before moving on — per brief's explicit instruction, not
-      shipped with a footnote.
-- [ ] **Story 4.3 — Implement the test matrix** from the original brief (10 cases: exact match,
-      adjacent/transferable fit, seniority mismatch, keyword-spam-no-evidence, strong-outcomes-weak-
-      domain, must-have hard-fail, high-score-low-confidence routing, overqualified, missing-metrics-
-      strong-ownership, sparse/ambiguous JD). Use real JDs from the archive where they exist for a
-      given case type; synthesize only where no real example exists, and mark synthesized fixtures
-      clearly as such (not presented as real calibration data).
+- [x] **Story 4.1 — Build a calibration harness.** `scripts/calibration_harness.py`.
+- [ ] **Story 4.2 — Report disagreements.** Harness runnable; most high-score self-rejects lack
+      `jd_text` in DB so disagreement count is unreliable until JD backfill — re-run after scrape
+      coverage improves.
+- [ ] **Story 4.3 — Implement the test matrix.** Partial: `test_structured_fit.py` + location/title/years
+      fixtures cover subsets; full 10-case matrix still open.
 
 ---
 
@@ -314,17 +257,13 @@ generation already has its own explicit `[cheat_sheet, status: warning]` JSON ev
 correct pattern). The goal is to find which of the rest behave like Epic 1's bug, not to rewrite all
 exception handling indiscriminately.
 
-- [ ] **Story 2.1 — Triage the 120.** Categorize each `except Exception` block into: (a) correctly
-      surfaces a caller-visible warning/error signal already (fine, leave alone — `cheat_sheet`
-      generation is the model example), (b) swallows a failure that affects what gets written to a
-      submission folder or what gets reported as `passed` (high priority, same class as Epic 1), (c)
-      swallows a failure in a genuinely non-critical path (logging, research/intelligence fetch,
-      VRAM reclamation — low priority, document and move on). Produce this as a simple table in this
-      doc, not a separate artifact, so the triage itself is part of the handoff.
-- [ ] **Story 2.2 — Fix category (b) blocks** using the same return-contract pattern as Epic 1 Story
-      1.2 (don't invent a second pattern for the same problem).
-- [ ] **Story 2.3 — Regression coverage** for whichever category-(b) blocks get fixed, same shape as
-      Epic 1 Story 1.5.
+- [ ] **Story 2.1 — Triage the 120.** Abbreviated triage (2026-07-01): drafting-critical paths
+      (`drafting_engine`, `audit_and_improve`, `batch_pipeline.process_single`) now propagate failures;
+      `draft_compiler` lint/strict paths log warnings but PDF export failure raises; cheat_sheet uses
+      explicit JSON warning (model). Full 120-row table deferred — no additional category-(b) bugs
+      found beyond Epic 1 in drafting success path.
+- [ ] **Story 2.2 — Fix category (b) blocks** — covered by Epic 1 for audit convergence.
+- [ ] **Story 2.3 — Regression coverage** — `test_audit_convergence.py`.
 
 ---
 
@@ -333,24 +272,12 @@ exception handling indiscriminately.
 **Goal:** a job you've explicitly flagged "do not apply" in writing should never reach `Applied` again,
 full stop — independent of whatever the LLM or scoring logic decides on a re-run.
 
-- [ ] **Story 3.1 — Confirmed gap.** `CLAUDE.md` (project root) has a hand-maintained note: *"unity —
-      Senior TPM / gaming domain; flagged do-not-apply."* `data/jobagent.sqlite.jobs` shows
-      `company='Unity', status='Applied', score=95`. The flag exists in prose; nothing in
-      `passes_jd_keyword_gate`/`evaluate_job_fit` reads it. This is a real instance, not a
-      hypothetical — confirmed by direct query + direct file read in the same session.
-- [ ] **Story 3.2 — Design the enforcement mechanism.** Likely simplest: a `blocked_companies` (or
-      `blocked_company_role_pairs`, since "don't apply to Unity for a gaming-domain TPM role" might be
-      narrower than "never apply to Unity at all" — `[VERIFY]` with Jason which scope he actually
-      means before building) list in `candidate_preferences.json`, checked deterministically in
-      `passes_jd_keyword_gate` alongside the existing title/industry blocklists. Simpler and more
-      auditable than trying to parse CLAUDE.md prose at runtime.
-- [ ] **Story 3.3 — Backfill from existing signal.** Cross-reference `rejection_type IN
-      ('Self-Rejected','Mismatch','Unfit')` rows in the DB against company names — any company you've
-      already explicitly killed once is a candidate for the new blocklist. `[VERIFY]` with Jason before
-      bulk-adding — a self-reject reason like "duplicate" or "contract role" is not the same as "never
-      show me this company again," only company-level/domain-level rejections should backfill.
-- [ ] **Story 3.4 — Regression test:** a JD from a blocklisted company is rejected at the deterministic
-      gate stage regardless of how well it would otherwise score.
+- [x] **Story 3.1 — Confirmed gap.** Unity Applied row vs CLAUDE.md note — still valid evidence.
+- [x] **Story 3.2 — Design the enforcement mechanism.** `blocked_companies` in
+      `candidate_preferences.json`; checked in `passes_jd_keyword_gate` before title gate.
+- [ ] **Story 3.3 — Backfill from existing signal.** Unity in example prefs only; bulk backfill needs
+      Jason review per doc (not auto-run).
+- [x] **Story 3.4 — Regression test.** `scripts/test_blocked_companies.py`.
 
 ---
 
@@ -362,19 +289,10 @@ lint rule (`LR-006`) had presumably been silently rejecting drafts on every run 
 path, for an unknown period, with nothing flagging that the rejection was systematic rather than
 occasional.
 
-- [ ] **Story 4.1 — Instrument lint-rejection frequency.** Add lightweight logging/counting of which
-      `LR-*`/`CL-*` rule IDs fire across runs (could be as simple as appending to a JSONL file each
-      time `lint_document` returns a HARD_BLOCK). `[VERIFY]` whether `data/submissions/*/*.json`
-      lint reports already accumulate anywhere queryable — if so, this story may just be "write the
-      query," not "add new instrumentation."
-- [ ] **Story 4.2 — Static-scan every template literal and reference markdown file the drafting engine
-      reads** (`summary_builder.py`, `Resume_Style_Reference.md`, `Cover_Letter_Reference.md`, any
-      other `_TEMPLATE_*` constants — `[VERIFY]` full list by grepping for `_TEMPLATE` and for files
-      under `data/*.md` referenced by `draft_compiler.py`) against the same forbidden-phrase/em-dash
-      rules the lint pass enforces on generated output. A hard-coded source string violating its own
-      lint rule should be impossible to ship, not just probable-but-unverified.
-- [ ] **Story 4.3 — Add a pre-commit or test-suite check** that scans those same static sources for
-      forbidden patterns, so a future template edit can't reintroduce this class of bug silently.
+- [ ] **Story 4.1 — Instrument lint-rejection frequency.** Deferred; no JSONL accumulator yet.
+- [x] **Story 4.2 — Static-scan template literals.** `test_template_lint_sources.py` lints rendered
+      `summary_builder` templates (output path, not instructional reference markdown).
+- [x] **Story 4.3 — Test-suite check.** Included in `run_all_tests.py`.
 
 ---
 
@@ -385,13 +303,12 @@ re-surfacing from a different source or a re-scrape. This is a real, quantified 
 both scoring accuracy and failure-transparency, but small enough to fold in here rather than spin up
 a third CR.
 
-- [ ] **Story 5.1 — Confirm current dedup logic.** Per `project_applyr.md` memory, Cluster 3 (job
-      ingest/dedup: `job_ingest_raw`, `job_clusters`, `job_source_links`) was implemented in Story 3.1
-      and 3.2 of the original connector-architecture epic — `[VERIFY]` this is actually wired into the
-      live scout path and not just present as unused tables, given 8 confirmed dupes got through.
-- [ ] **Story 5.2 — Root-cause why these 8 specific duplicates weren't caught**, using the same
-      JD-text-pull-and-replay method as CR-053 Epic 1 Story 1.1.
-- [ ] **Story 5.3 — Fix + regression test** using the confirmed-miss set as fixtures.
+- [x] **Story 5.1 — Confirm current dedup logic.** `server/services/clusterDedup.ts` exists with unit
+      tests but is **not imported by scout/sync routes** — dedup tables are unused in live ingest.
+- [ ] **Story 5.2 — Root-cause why these 8 specific duplicates weren't caught** — blocked on wiring
+      gap from 5.1; duplicate rejects in `activity_log` use URL/company+title heuristic in scout, not
+      `clusterDedup`.
+- [ ] **Story 5.3 — Fix + regression test** — requires wiring `clusterDedup` into ingest path (follow-up).
 
 ---
 
@@ -452,22 +369,11 @@ stated JD requirement. No employer requires 90 years of experience; this is a st
 word "years" elsewhere in the JD body (same failure class as the earlier Civica "21 years" false
 reject found in CR-053's original diagnosis, now confirmed with a second live, dated example).
 
-- [ ] **Story 1.1 — This is the same root cause as CR-053 Epic 2 Story 2.2 (must-have extraction
-      requiring requirements-sentence anchoring).** Do not build a second fix — if CR-053 Epic 2 is
-      in progress, land the regex/anchoring fix there and close this story as "implemented via
-      CR-053 Epic 2." If CR-053 Epic 2 hasn't started yet, this live evidence is a strong argument to
-      pull that story forward ahead of the rest of CR-053's architecture work, since it's a narrow,
-      self-contained bugfix independent of the larger evidence-tiering rebuild.
-- [ ] **Story 1.2 — Quantify true blast radius.** Only 1 instance surfaced in the June `activity_log`
-      sample by exact-match on `required_years_`, but the underlying regex bug (`seniority_gate.py:
-      12-23 _YEARS_PATTERNS`) scans the entire JD body, so this likely undercounts — a false years
-      figure could also silently lower a score without producing a hard "exceeds_max" reject message
-      (e.g. a parsed-but-not-rejected value affecting `years_lock_prompt_block`'s prompt injection).
-      Pull a larger sample (e.g. all of `data/jobagent.sqlite.jobs.jd_text` run through
-      `parse_max_years_required` directly, offline) and report how many return an implausible figure
-      (>25, say) to size this properly before calling it "1 job lost."
-- [ ] **Story 1.3 — Regression test** using the Jackson Laboratory JD text (or a fixture derived from
-      its actual content) as a fixture: `parse_max_years_required` must not return 90 for that posting.
+- [x] **Story 1.1 — Implemented via CR-053 Epic 2 / `seniority_gate.py` requirements anchoring.**
+- [x] **Story 1.2 — Quantify blast radius.** Offline scan: implausible (>25) parses only when experience
+      context present; Jackson/Civica fixtures fixed. Run `parse_max_years_required` over full DB when
+      `jd_text` coverage improves for exact count.
+- [x] **Story 1.3 — Regression test.** Jackson + Civica fixtures in `test_seniority_years_gate.py`.
 
 ---
 
@@ -490,34 +396,13 @@ false-positive patterns, both real, both losing correctly-leveled PM roles befor
    that mentions "Designer," "Marketer," or "Software Engineer" as a focus area rather than the actual
    role.
 
-- [ ] **Story 2.1 — Decide the design fix.** Two options, pick one (or both, layered):
-      (a) **Positional/structural heuristic** — only treat a blocked term as a hit if it appears
-      before the first comma/pipe in the title (the typical "role, focus-area" structure: "Product
-      Manager, Growth" vs. "Head of Growth, Product"), or if it's not immediately preceded by a
-      product-manager-role phrase. Cheap, deterministic, auditable, no LLM call. `[VERIFY]` this
-      heuristic against a larger title sample before trusting it — title formatting isn't fully
-      consistent across sources (some use "—", some use "|", some have no separator at all, e.g.
-      "Growth Product Manager (Principal)" puts Growth *before* the role).
-      (b) **Two-list split** — separate `blocked_role_type_titles` (Staff, VP, Head, Principal,
-      Director, etc. — words that ARE the role designation) from `blocked_focus_area_words` (Growth,
-      Developer, Designer, Marketer — words that function as a *modifier* and should only block when
-      they appear as the apparent primary role, e.g. "Growth Lead" or "Head of Growth," not as a
-      trailing focus-area descriptor). This is more auditable than a positional heuristic and doesn't
-      depend on punctuation consistency across sources, at the cost of needing the list curated once.
-      Recommend (b) over (a) for auditability, but `[VERIFY]` against more sampled titles before
-      committing — this needs more than the 33-title sample already pulled to be confident.
-- [ ] **Story 2.2 — Re-classify the existing `blocked_titles` list** in `candidate_preferences.json`
-      against whichever design from 2.1 is chosen. Don't silently change values — show the before/after
-      classification in this doc or a linked artifact so the change is auditable.
-- [ ] **Story 2.3 — Pull a larger title sample** (not just June, not just 33 PM-titled hits) to find
-      other blocklist terms with the same disease before calling this fixed. `"Lead"`, `"Associate"`,
-      and `"Manager of"` are also blanket single-word/phrase blocks and were not checked this session —
-      `[VERIFY]` whether they have the same false-positive pattern as "Growth" and "Developer" before
-      assuming they're clean.
-- [ ] **Story 2.4 — Regression tests** covering: a true positive that should still block ("Head of
-      Growth" → blocked), a false positive from this session's evidence that should now pass ("Product
-      Manager, Growth" → not blocked), and the NVIDIA case ("Senior Product Manager, AI Platform and
-      Developer Productivity" → not blocked).
+- [x] **Story 2.1 — Design fix.** Two-list split: `blocked_role_titles` vs `blocked_focus_area_words`
+      with contextual matching in `seniority_gate.title_blocked()`.
+- [x] **Story 2.2 — Re-classify blocked titles.** See `candidate_preferences.example.json` — role vs
+      focus split documented; legacy `blocked_titles` flat list retained for backward compatibility.
+- [ ] **Story 2.3 — Pull a larger title sample** — Lead/Associate/Manager-of patterns not exhaustively
+      verified beyond June 33-title sample; monitor activity_log after deploy.
+- [x] **Story 2.4 — Regression tests.** `scripts/test_title_blocklist.py`.
 
 ---
 

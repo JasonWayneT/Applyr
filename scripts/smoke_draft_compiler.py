@@ -91,7 +91,8 @@ def test_senior_title_allowed():
 
 def test_lead_title_blocked():
     title = "Lead Product Manager"
-    assert title_blocked(title, ["Lead", "Senior"]) == "Lead"
+    prefs = {"blocked_role_titles": ["Lead", "Senior"]}
+    assert title_blocked(title, prefs) == "Lead"
 
 
 def test_years_gate_rejects_high_requirement():

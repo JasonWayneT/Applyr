@@ -61,6 +61,29 @@ def main() -> int:
     failed += _assert("boundary 7 passes", ok7)
     failed += _assert("boundary 8 fails", not ok8 and "8" in reason8)
 
+    # CR-055: incidental years in prose must not gate-kill
+    jackson = (
+        "The Jackson Laboratory celebrates 90 years of genetics research. "
+        "Requirements: 5+ years of product management experience."
+    )
+    parsed_j = parse_max_years_required(jackson)
+    ok_j, _ = check_years_gate(jackson, PREFS)
+    failed += _assert(
+        "jackson lab ignores 90-year history",
+        parsed_j == 5 and ok_j,
+        f"parsed={parsed_j} ok={ok_j}",
+    )
+
+    civica = (
+        "Founded 21 years ago. Qualifications: minimum 4 years of PM experience."
+    )
+    parsed_c = parse_max_years_required(civica)
+    failed += _assert(
+        "civica ignores founded-years prose",
+        parsed_c == 4,
+        f"parsed={parsed_c}",
+    )
+
     return 1 if failed else 0
 
 

@@ -25,6 +25,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_domain_gate.py",
     "scripts/test_experience_theme_guard.py",
     "scripts/test_fit_policy.py",
+    "scripts/test_prefs_rollout.py",
     "scripts/test_location_gate.py",
     "scripts/test_resume_conversion_eval.py",
     "scripts/test_seniority_years_gate.py",

@@ -168,9 +168,8 @@ bug, not a quirk to note and move past.
       Health Management, Rencata, TE Connectivity, TrellisWare) through the rebuilt pipeline once
       Epics 1-4 are done. Compare new scores/decisions against the original 95/92/85/95/85. Report
       deltas — this is a live sanity check using a case you already have full context on.
-- [ ] **Story 5.2 — Update `.agent/rules/job_fit_engine.md`** to reflect actual implemented logic
-      (it's currently aspirational/prompt text, not a 1:1 description of code behavior — keep them in
-      sync going forward or note explicitly where they diverge and why).
+- [x] **Story 5.2 — Update `.agent/rules/job_fit_engine.md`** to reflect actual implemented logic
+      (v5.0: structured fit default, title split, location gate, anchor risk-only, CR-054 audit note).
 - [ ] **Story 5.3 — CHANGELOG.md + PRODUCT_CAPABILITIES.md entries** per this repo's standard
       change-request closeout convention (see any `CR-0XX` entry in those files for format).
 

@@ -29,9 +29,9 @@
 | CR-042 | Resume quality enforcement (strict gate + retry + fleet proof) | Implemented |
 | CR-043 | Deterministic cover letter voice | Implemented |
 | CR-044–052 | *(table not maintained for this range — see individual `CR-0XX-*.md` files in this directory)* | `[VERIFY]` |
-| CR-053 | Fit rubric overhaul — evidence-tiered scoring, replaces holistic LLM score | In progress — see [docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md](../08-implementation/CR-053-fit-rubric-overhaul-epics.md) |
-| CR-054 | Pipeline integrity & failure transparency (silent-success-on-failed-draft bug) | In progress — same doc as CR-053 |
-| CR-055 | Collection gate accuracy (years-gate regex bug, title-blocklist false positives) | In progress — same doc as CR-053 |
+| CR-053 | Fit rubric overhaul — evidence-tiered scoring, replaces holistic LLM score | **Partial** — Epics 1–3 + SDD closeout done; calibration/dedup open — [epics](../08-implementation/CR-053-fit-rubric-overhaul-epics.md), [spec](CR-053-fit-rubric-overhaul.md) |
+| CR-054 | Pipeline integrity & failure transparency (silent-success-on-failed-draft bug) | **Partial** — Epic 1 done — [spec](CR-054-pipeline-integrity.md) |
+| CR-055 | Collection gate accuracy (years-gate regex bug, title-blocklist false positives) | **Partial** — Epics 1–2 done — [spec](CR-055-collection-gate-accuracy.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

@@ -41,7 +41,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-006` | functional | P0 | implemented | Deterministic Keyword Pre-Filter (Zero Token Gate) | `AC-006` | `BMAD-SRC-005` |
 | `FR-007` | functional | P0 | implemented | LLM-based 100-point Job Fit Scoring | `AC-007` | `BMAD-SRC-005` |
 | `FR-008` | functional | P0 | implemented | "Two-Anchor Room" validation for YES decisions | `AC-008` | `BMAD-SRC-005` |
-| `FR-188` | functional | P1 | implemented | Anchor floor + scoring-only fit path after deterministic gates (CR-035) | `AC-191`, `AC-192`, `AC-193` | CR-035 |
+| `FR-188` | functional | P1 | implemented | Anchor floor + scoring-only fit path after deterministic gates (CR-035). **Score promotion retired** — anchor hits are risk flags only (`FR-242` / CR-053). | `AC-191`, `AC-192`, `AC-193` | CR-035 |
 | `FR-189` | functional | P1 | implemented | Solo PM trap zero-token gate + years policy lock for fit LLM (CR-036) | `AC-119`, `AC-119b`, `AC-194`, `AC-195`, `AC-196` | CR-036 |
 | `FR-190` | functional | P1 | implemented | Required vertical domain zero-token gate + fit cap when JD mandates industry years candidate lacks (CR-037) | `AC-197`, `AC-198`, `AC-199` | CR-037 |
 | `FR-191` | functional | P2 | implemented | B2C role openness via preferences, keywords, anchors, and fit prompt (CR-038) | `AC-200`, `AC-201`, `AC-202` | CR-038 |
@@ -425,7 +425,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 
 ### CR-035 Fit scoring hardening (FR-188)
 | `AC-191` | `FR-188` | Location lock | JD lists US cities and Remote | Fit evaluate | `REMOTE_OK`; model must not reject on location | implemented |
-| `AC-192` | `FR-188` | Anchor floor | ≥2 anchors match; LLM score 65–71 | Fit post-process | Promote to YES at min_fit_score | implemented |
+| `AC-192` | `FR-188` | Anchor floor | ≥2 anchors match; LLM score 65–71 | Fit post-process | ~~Promote to YES~~ **Retired (CR-053):** `anchor_hits_*` RiskFlags only; no score promotion | implemented |
 | `AC-193` | `FR-188` | Optional domain | JD says "nice plus" for vertical | Fit prompt | Injects DOMAIN_REQUIREMENT: OPTIONAL | implemented |
 
 ### CR-037 Required domain experience gate (FR-190)
@@ -513,6 +513,27 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
 |---|---|---|---|---|---|---|
 | `FR-241` | functional | P1 | accepted | Unified test runner that executes both Python unit tests and Vitest TypeScript tests with UTF-8 encoding support | `AC-215`, `AC-216`, `AC-217`, `AC-218`, `AC-219` | `CR-046` |
+
+### CR-053 / CR-054 / CR-055 Fit, pipeline & collection gates (FR-242–FR-248)
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-242` | functional | P1 | implemented | Structured evidence-tiered fit scoring: must-have extraction, LLM equivalence judgments (no holistic score), deterministic weighted score + confidence review routing (`STRUCTURED_FIT=1` default) | `AC-264`, `AC-266` | CR-053 |
+| `FR-243` | functional | P1 | implemented | Extended deterministic location gate: non-SD onsite/hybrid cities, Canada in-person, EST/CST-only remote | `AC-265` | CR-053 |
+| `FR-244` | functional | P1 | implemented | Requirements-anchored years parsing; ignore incidental year figures in JD prose | `AC-267` | CR-055 |
+| `FR-245` | functional | P1 | implemented | Contextual title blocklist: `blocked_role_titles` vs `blocked_focus_area_words` | `AC-268` | CR-055 |
+| `FR-246` | functional | P0 | implemented | Post-draft audit convergence failure must surface as `passed: false`; restore pre-audit submission files on failure | `AC-269` | CR-054 |
+| `FR-247` | functional | P1 | implemented | `blocked_companies` zero-token gate before fit scoring | `AC-270` | CR-054 |
+| `FR-248` | functional | P1 | implemented | `materializeJobSearchPrefs()` preserves pipeline gate keys across UI save (ADR-005) | `AC-271` | CR-053, CR-055, FEAT-009 |
+
+| `AC-264` | acceptance | P1 | implemented | Structured fit path computes score in code; LLM returns judgments only | `FR-242` | CR-053 |
+| `AC-265` | acceptance | P1 | implemented | Location fixtures for hybrid NYC, onsite Chicago, Canada in-person reject | `FR-243` | CR-053 |
+| `AC-266` | acceptance | P1 | implemented | Required-domain JD scores lower than strong PM JD without domain hard-require | `FR-242` | CR-053 |
+| `AC-267` | acceptance | P1 | implemented | Jackson Lab / Civica years fixtures ignore prose-year false positives | `FR-244` | CR-055 |
+| `AC-268` | acceptance | P1 | implemented | `Product Manager, Growth` passes title gate; `Head of Growth` blocks | `FR-245` | CR-055 |
+| `AC-269` | acceptance | P0 | implemented | Audit non-convergence → pipeline `passed: false` + file restore | `FR-246` | CR-054 |
+| `AC-270` | acceptance | P1 | implemented | Blocklisted company rejected at zero-token gate | `FR-247` | CR-054 |
+| `AC-271` | acceptance | P1 | implemented | UI re-save preserves `blocked_role_titles`, `blocked_focus_area_words`, `blocked_companies` | `FR-248` | FEAT-009 |
 
 ### CR-051 Interview datetime gate (FR-251)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |

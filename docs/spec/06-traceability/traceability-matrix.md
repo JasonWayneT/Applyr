@@ -239,6 +239,14 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-167` | CR-025 | Pipeline mutex | `server/middleware.ts`, `server/routes/pipeline.ts` | implemented |
 | `FR-168` | CR-025 | FTS sync | `server/db.ts`, `server/routes/jobs/` | implemented |
 | `FR-169` | CR-025 | Company slug sanitize | `scripts/company_slug.py`, `server/shared.ts` | implemented |
+| `FR-242` | CR-053 | Structured evidence-tiered fit scoring | `scripts/structured_fit.py`, `scripts/batch_pipeline.py` | implemented |
+| `FR-243` | CR-053 | Extended location zero-token gate | `scripts/zero_shot_classifier.py` | implemented |
+| `FR-244` | CR-055 | Requirements-anchored years gate | `scripts/seniority_gate.py` | implemented |
+| `FR-245` | CR-055 | Contextual title blocklist | `scripts/seniority_gate.py`, `data/candidate_preferences.example.json` | implemented |
+| `FR-246` | CR-054 | Audit convergence failure transparency | `scripts/audit_and_improve.py`, `scripts/drafting_engine.py` | implemented |
+| `FR-247` | CR-054 | Blocked companies gate | `scripts/batch_pipeline.py` | implemented |
+| `FR-248` | CR-053/055 | Gate prefs preserved on UI materialize | `server/domain/jobSearchPrefs.ts`, `scripts/prefs_rollout.py` | implemented |
+| `IMP-CR-053-055` | CR-053/054/055 | FEAT-002, FEAT-004, FEAT-009 | `docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md` | in_progress |
 
 
 ## Coverage checklist

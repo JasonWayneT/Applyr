@@ -2,110 +2,123 @@
 trigger: always_on
 ---
 
-# Dynamic Job-Fit Decision Engine (v4.0)
+# Dynamic Job-Fit Decision Engine (v5.0)
 
-This file defines a deterministic YES/NO decision system for evaluating job descriptions. It dynamically leverages the target specifications, experience ranges, blocklists, and anchors defined in the injected **Candidate Preferences JSON**.
+This file defines evaluation rules for job descriptions. **Python implements deterministic gates and scoring**; this document aligns LLM fallback behavior and human operators with that code.
+
+**Primary scoring path (CR-053):** `scripts/structured_fit.py` when `STRUCTURED_FIT=1` (default). LLM returns per-criterion equivalence judgments only; the final 0–100 score is computed in code. Set `STRUCTURED_FIT=0` to use legacy holistic LLM Stage B below.
+
+**Pass threshold:** `candidate_preferences.json` → `min_fit_score` (default **72**). Python uses `get_min_fit_score()`.
 
 ---
 
 ## 0) Purpose & Batch Logic
 
-**Pass threshold:** `candidate_preferences.json` → `min_fit_score` (default **72**). Python uses `get_min_fit_score()`; do not use legacy **78** from archived docs.
-
 1. **Initialize Sandbox:** Clear previous JD context; load only `workExperience.md` (Ground Truth) and `Candidate Preferences` (Targets).
-2. **Fast Gate:** Kill poor fits, seniority mismatches, blocked industries, or solo traps instantly using criteria from `Candidate Preferences`.
-3. **Transition Analysis & Scoring:** Score based on alignment with the Candidate's profile, experiences, and anchors.
+2. **Fast Gate:** Kill poor fits instantly — title tier, years, industries, solo trap, location, blocked companies, keywords — using criteria from `Candidate Preferences`.
+3. **Structured scoring (default):** Must-have extraction → LLM yes/partial/no judgments → weighted deterministic score + confidence routing (`min_confidence_score` when set).
+4. **Legacy LLM scoring (fallback):** Holistic Stage B rubric when structured path unavailable.
 
 ---
 
 ## 1) Ground Truth Profile & Preferences
+
 Evaluate the candidate using:
-- **Ground Truth (`workExperience.md`):** The candidate's actual metrics, roles, and historical timeline.
-- **Candidate Preferences (Injected JSON):** The explicit parameters for the target role, experience limits, blocklists, and key focus anchors.
+- **Ground Truth (`workExperience.md`):** Actual metrics, roles, and timeline.
+- **Candidate Preferences (Injected JSON):** Target role, experience limits, blocklists, anchors, gate rollout keys.
 
 ---
 
 ## 2) Stage A: The Fast Gate (Instant Kill)
-If any of the following triggers are met, return **Score: 0**, **Decision: NO**, and **Terminate Pipeline** for this JD.
+
+If any trigger matches, return **Score: 0**, **Decision: NO**, **Terminate Pipeline**.
 
 ### 2.1 Title & Tier Blocklist
-- **Blocked Titles:** Reject if the **job title** contains whole-word matches from `blocked_titles` (not substring hits in the JD body).
-- **Senior titles allowed:** "Senior Product Manager" (and similar) is **allowed** when stated required years are within `experience_range.max`.
-- **Solo PM trap:** Reject founding/first/sole/only-PM roles when `preferences.avoid_solo_pm_trap` is true. **Enforced deterministically** by `scripts/solo_pm_gate.py` (`FR-189` / CR-036).
-- **Squad PM & mentorship allowed:** Squad-level ownership, structured product orgs, and informal mentorship of L1/L2 PMs are **NOT** solo traps. Cross-functional work with engineering is allowed.
-- **Organization Role:** Reject if the role is explicitly "Founding," "First," "0-to-1," or "Sole" product professional unless permitted by preferences.
-- **Entry-level:** Reject intern programs, 0–1 years required, or explicit greenfield 0-to-1 ownership when `no_zero_to_one` is true.
+
+Enforced by `scripts/seniority_gate.py` (`FR-245` / CR-055):
+
+- **`blocked_role_titles`:** Whole-word matches in the **job title** reject (e.g. `Director`, `VP`, `Head of`, `Staff`).
+- **`blocked_focus_area_words`:** Reject only when the focus word appears **without** a PM/product title context (e.g. block `Growth` in "Head of Growth", allow "Product Manager, Growth").
+- **`blocked_titles` (legacy):** If rollout keys absent, falls back to the single combined list from UI `titleBlocklist`.
+- **Senior PM allowed** when stated required years ≤ `experience_range.max`.
+- **Solo PM trap:** `scripts/solo_pm_gate.py` when `preferences.avoid_solo_pm_trap` is true (`FR-189`).
+- **Entry-level / 0-to-1:** Reject when `no_zero_to_one` is true.
 
 ### 2.2 Experience & Constraints
-- **Years Required:** Reject if required years of experience **exceeds** `experience_range.max` in Candidate Preferences. **Exactly max is allowed** (e.g. 7 years when max=7; 8+ fails). Enforced by `seniority_gate.py`; LLM must not re-penalize when `PRE-VERIFIED YEARS POLICY` is injected.
-- **Blocked Industries:** Reject if the company operates in any of the `blocked_industries` listed in Candidate Preferences (user-defined moral/exclusion list only). **Enforced deterministically** by `scripts/industry_gate.py` at scout ingest and batch zero-token gate (`FR-170` / CR-027) before this LLM stage runs.
-- **Industry / customer base (transferable skills):** Do **NOT** reject because the JD's vertical industry (healthcare, fintech, etc.) or customer base (B2C vs B2B) differs from the candidate's background. Score on transferable PM skills: platform/roadmap, cross-functional delivery, agile, stakeholder alignment, data complexity, compliance-aware products. Note domain gaps in RiskFlags only — never instant-kill for industry or customer-base mismatch alone (`FR-192` / CR-039).
-- **Optional domain language:** When the JD marks vertical experience as optional, preferred, ideal, or "nice plus", do not penalize missing industry expertise.
-- **AI tools vs AI PM:** Do **not** reject because the JD mentions AI tools, Copilot, or workflow automation. Reject only when the role requires **owning ML model development** or being the primary AI/ML product owner.
+
+- **Years required:** `seniority_gate.py` parses requirements-anchored phrases; ignores incidental year figures in prose (`FR-244`). Reject when required years **exceed** `experience_range.max`. Exactly max is allowed.
+- **Blocked industries:** `scripts/industry_gate.py` at scout + batch (`FR-170`).
+- **Blocked companies:** `blocked_companies` in prefs — zero-token reject before fit (`FR-247` / CR-054).
+- **Industry / customer base:** Do **NOT** instant-kill for vertical or B2C/B2B mismatch alone (`FR-192`). Domain gaps may reduce structured score (max −10 penalty) or appear in RiskFlags.
+- **AI tools vs AI PM:** Reject only when the role requires owning ML model development, not Copilot/workflow mentions.
 
 ### 2.3 Location & Setting Gate
-- **Home Base:** The candidate is located in the **San Diego, CA** area.
-- **Remote Criteria:** If the role is explicitly "Remote", it is **ALLOWED** (provided it supports US hiring).
-- **Multi-city listings:** If the JD lists US office cities **and** offers Remote (e.g. "Dallas, TX, Atlanta, GA, or Remote"), treat as **REMOTE-ELIGIBLE**. Do not instant-kill for non-SD city names when Remote is explicitly offered.
-- **On-Site/Hybrid Criteria:** If the role is On-Site or Hybrid **only** (no Remote option), it MUST be located within **50 miles of San Diego, CA**.
-- **Trigger:** Reject and Terminate if the role is On-Site or Hybrid in any city outside of greater San Diego (e.g., New York, Chicago, Plano, Atlanta, Seattle, Charlotte, Sunnyvale, Canada) **and** Remote is not offered.
-- **Pre-verified override:** When the prompt includes `PRE-VERIFIED LOCATION POLICY: REMOTE_OK` or `SD_LOCAL_OK`, **skip this entire section** — location was already resolved deterministically; do not re-score or instant-kill on location.
+
+Enforced deterministically by `scripts/zero_shot_classifier.py` (`FR-243`) before LLM:
+
+- **Home base:** San Diego, CA area.
+- **Remote US:** Allowed when JD offers Remote / work-from-anywhere for US hiring.
+- **Multi-city + Remote:** US office cities listed **with** Remote → **REMOTE-ELIGIBLE**; do not kill for non-SD cities when Remote is explicit.
+- **On-site / Hybrid only:** Must be within ~50 miles of San Diego. Reject non-SD US cities (NYC, Chicago, Atlanta, Seattle, etc.) when Remote is **not** offered.
+- **Canada in-person:** Reject onsite/hybrid roles requiring Canada presence without SD-remote eligibility.
+- **EST/CST-only remote:** Reject when remote is limited to Eastern/Central time zones only (candidate is Pacific).
+- **Pre-verified override:** When prompt includes `PRE-VERIFIED LOCATION POLICY: REMOTE_OK` or `SD_LOCAL_OK`, skip location re-scoring.
 
 ---
 
-## 3) Stage B: Full Scoring (0–100)
+## 3) Stage B: Structured Fit (Default — CR-053)
 
-### A) Organizational Maturity (0-25)
-*Does the candidate have a function-specific leader/mentor and team structure?*
-- **22-25:** Perfect alignment with `preferences.structured_team_required` (mentions direct manager and a team).
-- **15-21:** Implicitly part of a larger functional org.
-- **0-14:** Solo trap (e.g., reports directly to a non-functional executive in a tiny startup).
+Implemented in `scripts/structured_fit.py`. LLM must **not** return a holistic integer score.
 
+1. Extract must-have criteria from JD (skills, seniority signals, domain requirements).
+2. For each criterion, LLM returns judgment: `yes` | `partial` | `no` with brief evidence (no numbers).
+3. Python computes weighted score from judgments + tier weights.
+4. **Domain penalty:** Required domain experience the candidate lacks → up to **−10** on total (not a zero-token gate).
+5. **Confidence routing:** Low-confidence structured results may route to manual review when `min_confidence_score` is configured.
+6. **Anchor hits:** `fit_policy.apply_anchor_floor` appends `anchor_hits_*` to **RiskFlags only** — **no score promotion** (retired `FR-188` promotion behavior).
+
+Decision: **YES** when score ≥ `min_fit_score` and mandatory gates passed; otherwise **NO**.
+
+---
+
+## 4) Stage B: Legacy LLM Scoring (Fallback)
+
+Used when `STRUCTURED_FIT=0` or structured path yields no result. Holistic 0–100 on four buckets:
+
+### A) Organizational Maturity (0–25)
 ### B) Seniority & Tenure Fit (0–25)
-- **23-25:** High overlap with `experience_range` (within min and max targets). Senior title + required years at or below `experience_range.max` scores here (7 years when max=7 is full credit).
-- **0-17:** Demands experience **above** `experience_range.max` (8+ when max=7), or head-of-product function ownership (not squad PM or informal mentorship).
-
 ### C) Technical & Execution Depth (0–25)
-- **22-25:** High technical overlap with the `required_anchors` listed in preferences.
-- **0-14:** Requires deep daily coding or non-relevant daily activities.
+### D) Bridge Alignment (0–25)
 
-### D) The "Bridge" Alignment (0–25)
-- **20-25:** High alignment on transferable PM skills — platform stability, roadmap, cross-functional delivery, data/system complexity — regardless of industry vertical or B2C/B2B customer base.
-- **0-14:** Low PM craft overlap (not merely different industry or consumer vs enterprise).
+**Penalties:** Solo/founding trap −50 only when no eng/design/data structure.
 
----
+**Two-anchor rule:** YES requires ≥2 overlaps with `required_anchors` when enforced (`ANCHOR_GATE_ENABLED` or LLM).
 
-## 4) Thresholds & The "Anchor" Gate
-**Total Score = (A+B+C+D) - Penalties.**
-
-### 4.1 Penalties
-- **Small Startup:** Apply a -50 penalty only when the company appears to be a solo/founding trap **and** the JD lacks engineering, product design, or data team structure. **Do not apply** when the role reports to a functional technology leader (e.g. CTO) or mentions eng + design + data collaboration.
-
-### 4.2 The "Two-Anchor Room" (Mandatory)
-A **YES** decision requires at least **2 explicit overlaps** between the job description responsibilities and the `required_anchors` list in the Candidate Preferences. When `ANCHOR_GATE_ENABLED=1`, batch zero-token gate enforces this before LLM fit (`FR-172` / CR-028); default is LLM-only enforcement.
-
-### 4.3 Final Decision
-- **Score ≥ 85:** YES (Strong Fit).
-- **Score 75–84:** YES (Conditional on Anchors).
-- **Score < 75:** NO (Reject).
+**Thresholds (legacy rubric):** ≥85 strong YES; 75–84 conditional YES; &lt;75 NO.
 
 ---
 
 ## 5) Output Requirements (Human + JSON)
-*Constraints: No em-dashes, no transition fluff, max lengths as defined below.*
 
-### Human-Readable Block
+*Constraints: No em-dashes, no transition fluff.*
+
 ```text
 Decision: YES/NO
 Score: [0-100]
 Confidence: High/Medium/Low
-Summary: [Max 25 words. Direct reasoning for fit/reject.]
+Summary: [Max 25 words]
 
 Top fit reasons:
-- [Reason 1, Max 15 words]
-- [Reason 2, Max 15 words]
+- [Reason 1]
+- [Reason 2]
 
 Risk flags:
-- [Risk 1, Max 15 words]
-- [Risk 2, Max 15 words]
+- [Risk 1]
+- [anchor_hits_* when applicable]
 ```
+
+---
+
+## 6) Pipeline Integrity (CR-054)
+
+Post-draft audit must converge. Non-convergence raises in `drafting_engine.py` → batch reports `passed: false` and restores pre-audit submission files (`FR-246`).

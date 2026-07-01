@@ -11,6 +11,18 @@ export { CANDIDATE_PREFS_PATH } from './paths.js';
 
 const DEFAULT_MIN_FIT_SCORE = 72;
 
+/** Keys managed by pipeline/rollout — not overwritten when UI re-materializes prefs (FR-248 / CR-053). */
+export const PRESERVE_PIPELINE_PREF_KEYS = [
+  'blocked_role_titles',
+  'blocked_focus_area_words',
+  'blocked_companies',
+  'min_confidence_score',
+  'must_have_keywords',
+  'required_anchors',
+  'domain_experience',
+  'required_domain_min_years',
+] as const;
+
 /** Read pass threshold from materialized prefs (FR-039 / CR-003). */
 export function readMinFitScore(defaultScore = DEFAULT_MIN_FIT_SCORE): number {
   try {
@@ -37,26 +49,29 @@ const DEFAULT_PIPELINE_PREFERENCES = {
   max_company_size_penalty_threshold: 50,
 };
 
-export function materializeJobSearchPrefs(jobSearch: Record<string, unknown>): void {
-  let existing: Record<string, unknown> = {};
-  try {
-    if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
-      existing = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8'));
-    }
-  } catch { /* use defaults */ }
-
+/** Build merged prefs object — testable without filesystem (FR-248). */
+export function buildMaterializedJobSearchPrefs(
+  jobSearch: Record<string, unknown>,
+  existing: Record<string, unknown> = {},
+): Record<string, unknown> {
   const targetRole = (jobSearch.targetRole as string) || 'Product Manager';
   const searchTerms = deriveSearchTermsFromTargetRole(targetRole);
 
-  const blockedTitles = ((jobSearch.titleBlocklist as string) || '').split(',').map(s => s.trim()).filter(Boolean);
-  const blockedIndustries = ((jobSearch.industryBlocklist as string) || '').split(',').map(s => s.trim()).filter(Boolean);
+  const blockedTitles = ((jobSearch.titleBlocklist as string) || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const blockedIndustries = ((jobSearch.industryBlocklist as string) || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 
   const expRange = (existing.experience_range as Record<string, number>) || {};
   const maxYears = (jobSearch.maxYearsRequired as number) ?? expRange.max ?? 7;
   const minYears = (jobSearch.minYearsPreferred as number) ?? expRange.min ?? 2;
   const totalYears = expRange.total_years_observed ?? 6;
 
-  const materialized = {
+  const materialized: Record<string, unknown> = {
     target_role: targetRole,
     search_terms: searchTerms,
     location_preference: (jobSearch.location as string) || 'United States',
@@ -69,17 +84,42 @@ export function materializeJobSearchPrefs(jobSearch: Record<string, unknown>): v
     min_salary: (jobSearch.minSalary as number) ?? 0,
     min_fit_score: (existing.min_fit_score as number) ?? 72,
     jd_required_keywords: (existing.jd_required_keywords as string[]) ?? DEFAULT_JD_KEYWORDS,
-    signal_keywords: (existing.signal_keywords as string[]) ?? (existing.jd_required_keywords as string[]) ?? DEFAULT_JD_KEYWORDS,
+    signal_keywords:
+      (existing.signal_keywords as string[])
+      ?? (existing.jd_required_keywords as string[])
+      ?? DEFAULT_JD_KEYWORDS,
     must_have_keywords: (existing.must_have_keywords as string[]) ?? [],
     required_anchors: (existing.required_anchors as string[]) ?? [],
     experience_range: { min: minYears, max: maxYears, total_years_observed: totalYears },
     preferences: (() => {
-      const base: Record<string, unknown> = { ...DEFAULT_PIPELINE_PREFERENCES, ...((existing.preferences as Record<string, unknown>) ?? {}) };
+      const base: Record<string, unknown> = {
+        ...DEFAULT_PIPELINE_PREFERENCES,
+        ...((existing.preferences as Record<string, unknown>) ?? {}),
+      };
       delete base.no_people_management;
       if (base.avoid_solo_pm_trap === undefined) base.avoid_solo_pm_trap = true;
       return base;
     })(),
   };
 
+  // Implements FR-248 — preserve pipeline-only gate keys across UI save
+  for (const key of PRESERVE_PIPELINE_PREF_KEYS) {
+    if (existing[key] !== undefined) {
+      materialized[key] = existing[key];
+    }
+  }
+
+  return materialized;
+}
+
+export function materializeJobSearchPrefs(jobSearch: Record<string, unknown>): void {
+  let existing: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
+      existing = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8'));
+    }
+  } catch { /* use defaults */ }
+
+  const materialized = buildMaterializedJobSearchPrefs(jobSearch, existing);
   fs.writeFileSync(CANDIDATE_PREFS_PATH, JSON.stringify(materialized, null, 2), 'utf-8');
 }

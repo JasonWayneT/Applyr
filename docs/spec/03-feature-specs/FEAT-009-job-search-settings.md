@@ -5,9 +5,9 @@
 - Feature ID: `FEAT-009`
 - Status: implemented
 - Source artifacts: User Request
-- Related requirements: `FR-046`, `FR-047`, `FR-048`, `FR-049`
+- Related requirements: `FR-046`, `FR-047`, `FR-048`, `FR-049`, `FR-248`
 - Supersedes: `FR-042` (partial), `FR-044` (partial)
-- Change request: `CR-003`
+- Change request: `CR-003`, `CR-053`, `CR-055`
 
 ## Problem statement
 
@@ -42,6 +42,7 @@ connected the UI to the file the pipeline reads. The scouter parameters panel al
 | `FR-047` | Preference Materialization to JSON | Server writes `candidate_preferences.json` on every `POST /api/profile/job_search` |
 | `FR-048` | Dynamic Scout URL Construction | All source URLs and search terms built at runtime from preferences |
 | `FR-049` | Generic ACC-ID Codification | Employer sections 5.N receive range N×100+1 dynamically, no hardcoded seeds |
+| `FR-248` | Preserve pipeline gate keys on materialize | `PRESERVE_PIPELINE_PREF_KEYS` in `jobSearchPrefs.ts` (`CR-053` / CR-055) |
 
 ## Architecture
 
@@ -74,7 +75,10 @@ The following SQLite profile keys are retired and no longer written or read:
 | `experienceLevels` | `experience_levels` | Direct (array) |
 | `datePosted` | `date_posted` | Direct |
 | `datePosted` | `freshness_days` | Mapped: "Past 24 hours"→1, "Past 3 days"→3, "Past week"→7, "Past month"→30 |
-| `titleBlocklist` | `blocked_titles` | Split on comma, trim, filter empty |
+| `titleBlocklist` | `blocked_titles` | Split on comma, trim, filter empty (legacy single list) |
+| *(pipeline rollout)* | `blocked_role_titles` | **Preserved** on UI save — role-tier tokens (`Director`, `VP`, …) |
+| *(pipeline rollout)* | `blocked_focus_area_words` | **Preserved** on UI save — focus-area tokens (`Growth`, …) only when not part of PM title |
+| *(pipeline rollout)* | `blocked_companies` | **Preserved** on UI save — zero-token company reject (`FR-247`) |
 | `industryBlocklist` | `blocked_industries` | Split on comma, trim, filter empty; **enforced** at scout + batch (`FR-170` / CR-027) |
 | `minSalary` | `min_salary` | Direct |
 | *(not in UI)* | `min_fit_score` | Preserved from existing JSON; default 72 |
@@ -134,6 +138,7 @@ For a document with employer subsections `### 5.1` through `### 5.N`:
 | `AC-049` | `FR-049` | `workExperience.md` contains subsections `### 5.1` through `### 5.4` | User saves experience | Each section receives IDs in its own 100-number range; no collisions |
 | `AC-050` | `FR-046` | No `job_search` profile record exists in SQLite | Job Search tab loads | Default values are shown matching current `candidate_preferences.json` |
 | `AC-051` | `FR-046` | User sets Title Blocklist to "Senior, VP, Director" and saves | Next scout run triggers | `blocked_titles` in `candidate_preferences.json` is `["Senior", "VP", "Director"]` and those titles are rejected in pre-filter |
+| `AC-271` | `FR-248` | `candidate_preferences.json` has rollout keys (`blocked_role_titles`, `blocked_focus_area_words`, `blocked_companies`) | User saves Job Search settings from UI | Rollout keys remain unchanged after `materializeJobSearchPrefs()` |
 
 ## Implementation tasks
 

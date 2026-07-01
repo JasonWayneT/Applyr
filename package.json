@@ -14,6 +14,8 @@
     "test": "python scripts/run_all_tests.py",
     "test:vitest": "vitest run",
     "test:python": "python scripts/run_all_tests.py --python-only",
+    "gate-rollout": "python scripts/apply_gate_rollout.py",
+    "gate-rollout:apply": "python scripts/apply_gate_rollout.py --apply",
     "lint": "eslint src server shared packages",
     "lint:fix": "eslint src server shared packages --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"server/**/*.ts\""

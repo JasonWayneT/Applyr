@@ -5,8 +5,8 @@
 - Feature ID: `FEAT-002`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-005`
-- Related requirements: `FR-006`, `FR-007`, `FR-008`, `FR-009`, `FR-035`, `FR-039`, `FR-109`, `FR-170`, `FR-171`, `FR-172`, `FR-188`, `FR-189`, `FR-190`, `FR-191`, `FR-192`
-- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`
+- Related requirements: `FR-006`, `FR-007`, `FR-008`, `FR-009`, `FR-035`, `FR-039`, `FR-109`, `FR-170`, `FR-171`, `FR-172`, `FR-188`, `FR-189`, `FR-190`, `FR-191`, `FR-192`, `FR-242`, `FR-243`, `FR-246`, `FR-247`
+- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`, `CR-053`, `CR-054`
 
 ## Problem statement
 
@@ -35,8 +35,12 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `FR-190` | Required domain experience gate | superseded by FR-192 (CR-039) — informational gaps only |
 | `FR-191` | B2C role openness | `open_to_b2c` preference + fit prompt (`CR-038`) |
 | `FR-192` | Transferable skills scoring | No domain zero-token gate; fit prompt (`CR-039`) |
-| `FR-188` | Fit scoring hardening | Scoring-only primary path, location lock, anchor floor on full JD (`CR-035`) |
+| `FR-188` | Fit scoring hardening | Location lock, anchor hits as risk flags only (score promotion retired — `FR-242` / CR-053) |
 | `FR-189` | Solo PM trap + years policy lock | `solo_pm_gate.py`, `fit_policy.py` (`CR-036`) |
+| `FR-242` | Structured evidence-tiered fit | `structured_fit.py` default path; LLM judgments only (`CR-053`) |
+| `FR-243` | Extended location zero-token gate | `zero_shot_classifier.py` non-SD onsite/hybrid, Canada, EST/CST-only remote (`CR-053`) |
+| `FR-246` | Audit convergence transparency | Failed post-draft audit → `passed: false` (`CR-054`) |
+| `FR-247` | Blocked companies gate | `passes_jd_keyword_gate` company blocklist (`CR-054`) |
 
 ## Acceptance criteria
 

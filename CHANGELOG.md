@@ -23,6 +23,8 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ### Developer
 - **CR-054 Epic 1:** `scripts/test_audit_convergence.py` regression coverage.
 - **CR-053/055:** New tests: `test_location_gate`, `test_title_blocklist`, `test_structured_fit`, `test_blocked_companies`, `test_template_lint_sources`; `calibration_harness.py`, `rescore_location_gates.py`.
+- **Rollout:** `npm run gate-rollout` / `gate-rollout:apply` merges gate prefs from example and rescores Backlog/New location gates (`apply_gate_rollout.py`).
+- **SDD closeout:** Formal `CR-053`/`CR-054`/`CR-055` specs; registry `FR-242`–`FR-248` + `AC-264`–`AC-271`; traceability matrix; `job_fit_engine.md` v5.0; `FR-248` preserve keys in `jobSearchPrefs.ts` + vitest.
 
 ---
 

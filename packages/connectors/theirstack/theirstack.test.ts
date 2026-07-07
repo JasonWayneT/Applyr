@@ -3,6 +3,7 @@ import type { RawJobPayload } from '../../../shared/types/connectors.js';
 import { createTheirstackConnector } from './index.js';
 import fixtureData from './fixtures/jobs.json';
 import { db } from '../../../server/db.js';
+import { currentMonthKey } from '../../../shared/domain/theirstackCredits.js';
 
 function mockOk(data: unknown): Response {
   return {
@@ -12,11 +13,20 @@ function mockOk(data: unknown): Response {
   } as unknown as Response;
 }
 
+function resetTheirstackCredits(used = 0) {
+  db.prepare(`
+    INSERT OR IGNORE INTO sources (id, name, type, status, credits_used_this_month, credits_reset_at)
+    VALUES ('theirstack', 'TheirStack', 'vendor_api', 'active', 0, ?)
+  `).run(new Date().toISOString());
+  db.prepare(`
+    UPDATE sources SET credits_used_this_month = ?, status = 'active', credits_reset_at = ?
+    WHERE id = 'theirstack'
+  `).run(used, new Date().toISOString());
+}
+
 beforeEach(() => {
-  try {
-    db.prepare("INSERT OR IGNORE INTO sources (id, name, type, status, credits_used_this_month) VALUES ('theirstack', 'TheirStack', 'vendor_api', 'active', 0)").run();
-    db.prepare("UPDATE sources SET credits_used_this_month = 0, status = 'active' WHERE id = 'theirstack'").run();
-  } catch { /* exists */ }
+  resetTheirstackCredits(0);
+  db.prepare("DELETE FROM profiles WHERE key = 'theirstack_settings'").run();
 });
 
 afterEach(() => {
@@ -33,8 +43,41 @@ describe('theirstack connector', () => {
     expect(jobs[0].external_job_id).toBe('ts-job-1');
   });
 
+  it('fetchJobs handles malformed JSON response gracefully', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockOk({ data: "not an array" })));
+    const connector = createTheirstackConnector({ apiKey: 'test-key' });
+    const jobs = await connector.fetchJobs();
+    expect(jobs).toEqual([]);
+  });
+
+  it('fetchJobs sends configurable limit in request body (default 10)', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(mockOk({ data: [] }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const connector = createTheirstackConnector({ apiKey: 'test-key' });
+    await connector.fetchJobs();
+
+    const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+    expect(body.limit).toBe(10);
+  });
+
+  it('fetchJobs uses theirstack_settings fetchLimitPerRun', async () => {
+    db.prepare(`
+      INSERT OR REPLACE INTO profiles (key, value) VALUES ('theirstack_settings', ?)
+    `).run(JSON.stringify({ fetchLimitPerRun: 7 }));
+
+    const fetchSpy = vi.fn().mockResolvedValue(mockOk({ data: [] }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const connector = createTheirstackConnector({ apiKey: 'test-key' });
+    await connector.fetchJobs();
+
+    const body = JSON.parse(String((fetchSpy.mock.calls[0][1] as RequestInit).body));
+    expect(body.limit).toBe(7);
+  });
+
   it('fetchJobs aborts immediately and returns [] when credit limit (200) is hit', async () => {
-    db.prepare("UPDATE sources SET credits_used_this_month = 200 WHERE id = 'theirstack'").run();
+    resetTheirstackCredits(200);
 
     const fetchSpy = vi.fn().mockResolvedValue(mockOk(fixtureData));
     vi.stubGlobal('fetch', fetchSpy);
@@ -49,18 +92,43 @@ describe('theirstack connector', () => {
     expect(row.status).toBe('paused');
   });
 
-  it('fetchJobs aborts and returns [] if the incoming batch would exceed 200', async () => {
-    db.prepare("UPDATE sources SET credits_used_this_month = 199 WHERE id = 'theirstack'").run();
+  it('fetchJobs clips to remaining credits when near cap', async () => {
+    resetTheirstackCredits(199);
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockOk(fixtureData)));
 
     const connector = createTheirstackConnector({ apiKey: 'test-key' });
     const jobs = await connector.fetchJobs();
 
-    expect(jobs).toHaveLength(0);
+    expect(jobs).toHaveLength(1);
 
-    const row = db.prepare("SELECT status FROM sources WHERE id = 'theirstack'").get() as { status: string };
+    const row = db.prepare(
+      "SELECT credits_used_this_month, status FROM sources WHERE id = 'theirstack'",
+    ).get() as { credits_used_this_month: number; status: string };
+    expect(row.credits_used_this_month).toBe(200);
     expect(row.status).toBe('paused');
+  });
+
+  it('resetTheirstackCreditsIfNewMonth runs before fetch when month rolled over', async () => {
+    const priorMonth = new Date();
+    priorMonth.setMonth(priorMonth.getMonth() - 1);
+    db.prepare(`
+      UPDATE sources SET credits_used_this_month = 200, status = 'paused', credits_reset_at = ?
+      WHERE id = 'theirstack'
+    `).run(priorMonth.toISOString());
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockOk(fixtureData)));
+
+    const connector = createTheirstackConnector({ apiKey: 'test-key' });
+    const jobs = await connector.fetchJobs();
+
+    expect(jobs).toHaveLength(2);
+    const row = db.prepare(
+      "SELECT credits_used_this_month, status FROM sources WHERE id = 'theirstack'",
+    ).get() as { credits_used_this_month: number; status: string };
+    expect(row.credits_used_this_month).toBe(2);
+    expect(row.status).toBe('active');
+    expect(currentMonthKey(new Date())).toBe(currentMonthKey());
   });
 
   it('normalize maps raw_data to NormalizedJob correctly', () => {

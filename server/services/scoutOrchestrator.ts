@@ -1,6 +1,5 @@
 import { db, logActivity } from '../db.js';
 import { insertJob } from '../repository/jobRepository.js';
-import { checkCrawlPolicy } from '../middleware/crawlPolicy.js';
 import type { JobConnector } from '../../shared/types/connectors.js';
 import { createRemotiveConnector } from '../../packages/connectors/remotive/index.js';
 import { createRemoteokConnector } from '../../packages/connectors/remoteok/index.js';
@@ -12,12 +11,6 @@ import { createWorkingnomadsConnector } from '../../packages/connectors/workingn
 import { createJobscolliderConnector } from '../../packages/connectors/jobscollider/index.js';
 import { createAdzunaConnector } from '../../packages/connectors/adzuna/index.js';
 import { createOpenPostingsConnector } from '../../packages/connectors/openpostings/index.js';
-import { createBuiltInConnector } from '../../packages/connectors/builtin/index.js';
-import { createLevelsFyiConnector } from '../../packages/connectors/levelsfyi/index.js';
-import { createGreenhouseConnector } from '../../packages/connectors/greenhouse/index.js';
-import { createLeverConnector } from '../../packages/connectors/lever/index.js';
-import { createAshbyConnector } from '../../packages/connectors/ashby/index.js';
-import { createWorkableConnector } from '../../packages/connectors/workable/index.js';
 import { createTheirstackConnector } from '../../packages/connectors/theirstack/index.js';
 import {
   passesTargetRoleTitleScope,
@@ -30,6 +23,7 @@ import {
 import { loadMaterializedScoutPrefs } from '../../shared/domain/scoutPrefs.js';
 import { writeJobStagingFile } from './jobStaging.js';
 import { broadcastSyncEvent } from '../routes/pipeline.js';
+import { isBlockedScrapeUrl } from '../../shared/domain/blockedScrapeHosts.js';
 
 const MIN_JD_CHARS = 200;
 
@@ -72,47 +66,25 @@ function isCompanyTitleNew(company: string, title: string): boolean {
 }
 
 export function buildDefaultConnectors(): JobConnector[] {
-  const builtinOnly = ['1', 'true', 'yes'].includes(
-    (process.env.SCOUT_BUILTIN_ONLY ?? '').toLowerCase(),
-  );
   const prefs = loadMaterializedScoutPrefs();
-  if (builtinOnly) {
-    return [
-      createBuiltInConnector({
-        policyChecker: checkCrawlPolicy,
-        searchTerms: prefs.searchTerms,
-        freshnessDays: prefs.freshnessDays,
-      }),
-    ];
-  }
-
   const adzuna = loadAdzunaCredentials();
+  const titleScopePrefs = {
+    targetRole: prefs.targetRole,
+    searchTerms: prefs.searchTerms,
+    builtinStrictTitle: prefs.builtinStrictTitle,
+  };
 
   return [
     createRemotiveConnector({ searchTerms: prefs.searchTerms }),
     createRemoteokConnector({ searchTerms: prefs.searchTerms }),
-    createWeworkremotelyConnector(),
-    createHimalayasConnector({ searchTerms: prefs.searchTerms }),
+    createWeworkremotelyConnector({ titleScopePrefs }),
+    createHimalayasConnector({ searchTerms: prefs.searchTerms, titleScopePrefs }),
     createThemuseConnector(),
     createJobicyConnector({ searchTerms: prefs.searchTerms }),
-    createWorkingnomadsConnector(),
-    createJobscolliderConnector(),
+    createWorkingnomadsConnector({ searchTerms: prefs.searchTerms }),
+    createJobscolliderConnector({ titleScopePrefs }),
     createAdzunaConnector({ appId: adzuna.appId, appKey: adzuna.appKey, searchTerms: prefs.searchTerms }),
     createOpenPostingsConnector({ searchTerms: prefs.searchTerms }),
-    createBuiltInConnector({
-      policyChecker: checkCrawlPolicy,
-      searchTerms: prefs.searchTerms,
-      freshnessDays: prefs.freshnessDays,
-    }),
-    createLevelsFyiConnector({
-      policyChecker: checkCrawlPolicy,
-      targetRole: prefs.targetRole,
-      searchTerms: prefs.searchTerms,
-    }),
-    createGreenhouseConnector({ searchTerms: prefs.searchTerms }),
-    createLeverConnector({ searchTerms: prefs.searchTerms }),
-    createAshbyConnector({ searchTerms: prefs.searchTerms }),
-    createWorkableConnector({ searchTerms: prefs.searchTerms }),
     createTheirstackConnector({ searchTerms: prefs.searchTerms }),
   ];
 }
@@ -126,8 +98,14 @@ export async function runConnectorOrchestration(
     titleBlocklist: prefs.titleBlocklist,
     workSetting: prefs.workSetting,
     maxExperienceYears: prefs.maxExperienceYears,
+    localAreaTerms: prefs.localAreaTerms,
+    locationPreference: prefs.locationPreference,
   };
-  const targetPrefs = { targetRole: prefs.targetRole, searchTerms: prefs.searchTerms };
+  const targetPrefs = {
+    targetRole: prefs.targetRole,
+    searchTerms: prefs.searchTerms,
+    builtinStrictTitle: prefs.builtinStrictTitle,
+  };
   let totalSaved = 0;
 
   for (const connector of connectors) {
@@ -178,6 +156,16 @@ export async function runConnectorOrchestration(
             continue;
           }
 
+          if (job.url && isBlockedScrapeUrl(job.url)) {
+            filtered++;
+            logActivity(
+              'INFO',
+              source,
+              `[REJECT] ${job.title} at ${job.company} - LinkedIn URL blocked (FR-080)`,
+            );
+            continue;
+          }
+
           if (job.url && isUrlKnown(job.url)) {
             filtered++;
             logActivity('INFO', source, `[REJECT] ${job.title} at ${job.company} - URL already exists`);
@@ -208,7 +196,8 @@ export async function runConnectorOrchestration(
             }
             saved++;
             logActivity('INFO', source, `[FOUND] ${job.title} at ${job.company}`);
-          } catch {
+          } catch (err) {
+            logActivity('ERROR', source, `[ERROR] Failed to insert ${job.title} at ${job.company}: ${err instanceof Error ? err.message : String(err)}`);
             filtered++;
           }
         } catch {

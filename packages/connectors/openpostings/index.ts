@@ -9,7 +9,7 @@ import type {
   ConnectorHealth,
 } from '../../../shared/types/connectors.js';
 
-const DEFAULT_DIR = path.resolve('OpenPostings-extracted/OpenPostings-main');
+const DEFAULT_DIR = path.resolve('data/archive/OpenPostings-extracted/OpenPostings-main');
 const DEFAULT_PORT = 8787;
 const DEFAULT_SEARCH_TERMS = ['product manager'];
 const JOB_CAP = 60;
@@ -83,7 +83,9 @@ export function createOpenPostingsConnector(config?: OpenPostingsConfig): JobCon
         proc = await startServer(openPostingsDir, port);
         await waitForHealth(port);
 
-        fetch(`http://localhost:${port}/sync/ats`, { method: 'POST' }).catch(() => {});
+        fetch(`http://localhost:${port}/sync/ats`, { method: 'POST' }).catch((err) => {
+          console.error('[openpostings] /sync/ats trigger failed:', err);
+        });
 
         const deadline = Date.now() + SYNC_TIMEOUT_MS;
         while (Date.now() < deadline) {
@@ -93,7 +95,8 @@ export function createOpenPostingsConnector(config?: OpenPostingsConfig): JobCon
               running?: boolean;
             };
             if (!s.running) break;
-          } catch {
+          } catch (err) {
+            console.error('[openpostings] /sync/status poll failed:', err);
             break;
           }
         }
@@ -103,10 +106,10 @@ export function createOpenPostingsConnector(config?: OpenPostingsConfig): JobCon
           try {
             const url = `http://localhost:${port}/postings?search=${encodeURIComponent(term)}&remote=remote`;
             const res = await fetch(url);
-            const data = (await res.json()) as unknown[];
-            if (!Array.isArray(data)) continue;
+            const data = (await res.json()) as { items?: unknown[] };
+            if (!Array.isArray(data.items)) continue;
 
-            for (const p of data as Record<string, unknown>[]) {
+            for (const p of data.items as Record<string, unknown>[]) {
               if (results.length >= JOB_CAP) break;
               const jobUrl = String(p['job_posting_url'] ?? '');
               const company = String(p['company_name'] ?? '').trim();

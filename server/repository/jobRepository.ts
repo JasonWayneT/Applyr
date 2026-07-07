@@ -26,7 +26,7 @@ export interface InsertJobData {
  * Insert a new job row and sync the FTS index.
  * Uses run().lastInsertRowid so FTS sync never needs a separate SELECT rowid.
  */
-export function insertJob(data: InsertJobData): string {
+export const insertJob = db.transaction((data: InsertJobData): string => {
     const id = data.id ?? randomUUID();
     const result = db.prepare(`
         INSERT INTO jobs
@@ -49,13 +49,13 @@ export function insertJob(data: InsertJobData): string {
     );
     syncJobFts(Number(result.lastInsertRowid));
     return id;
-}
+});
 
 /**
  * Apply a partial update to allowed job fields and keep FTS in sync.
  * FTS is only re-synced when a searchable column changes.
  */
-export function patchJob(id: string, updates: Record<string, unknown>): void {
+export const patchJob = db.transaction((id: string, updates: Record<string, unknown>): void => {
     const keys = Object.keys(updates).filter(k => k !== 'id' && ALLOWED_JOB_FIELDS.has(k));
     if (keys.length === 0) return;
     const setClause = keys.map(k => `${k} = ?`).join(', ');
@@ -64,22 +64,22 @@ export function patchJob(id: string, updates: Record<string, unknown>): void {
         const row = db.prepare('SELECT rowid FROM jobs WHERE id = ?').get(id) as { rowid: number } | undefined;
         if (row?.rowid) syncJobFts(row.rowid);
     }
-}
+});
 
 /**
  * Delete a job record, remove it from FTS, and add its URL to stale_jobs
  * so the scout never re-ingests the same posting (R-008 mitigation).
  */
-export function deleteJobRecord(
+export const deleteJobRecord = db.transaction((
     id: string,
     url: string | null | undefined,
     company: string,
     title: string,
-): void {
+): void => {
     if (url) {
         db.prepare('INSERT OR IGNORE INTO stale_jobs (url, company, title) VALUES (?, ?, ?)').run(url, company, title);
     }
     const row = db.prepare('SELECT rowid FROM jobs WHERE id = ?').get(id) as { rowid: number } | undefined;
     if (row?.rowid) deleteJobFts(row.rowid);
     db.prepare('DELETE FROM jobs WHERE id = ?').run(id);
-}
+});

@@ -449,7 +449,11 @@ def score_all_claims(
     """
     scored = []
     for claim_id, rec in catalog.claims.items():
-        # Skip disabled claims — master_claims.json marks them with "disabled": true
+        # Skip disabled claims — master_claims.json marks them with "disabled": true.
+        # load_catalog() already filters these at load time; this is a defense-in-depth
+        # check for callers (including tests) that construct a ClaimCatalog directly.
+        if getattr(rec, "disabled", False):
+            continue
         raw_text = catalog.raw_truth_lines.get(claim_id, "")
         if not raw_text:
             continue

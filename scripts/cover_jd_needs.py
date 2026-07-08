@@ -23,6 +23,92 @@ _INCOMPLETE_ENDINGS = (
     " scalable",
 )
 
+# Bare qualification-bullet openers (JD "nice to have" / requirements phrasing).
+# These have no subject or verb tying them to the candidate — inserting them
+# verbatim into a cover letter reads as leaked JD text, not a sentence.
+_QUALIFICATION_BULLET_STARTS = (
+    "familiarity with",
+    "experience in",
+    "experience with",
+    "knowledge of",
+    "understanding of",
+    "proficiency in",
+    "proficiency with",
+    "ability to",
+    "strong background in",
+    "background in",
+    "exposure to",
+    "comfort with",
+    "working knowledge of",
+)
+
+# JD imperative-verb starters — responsibility bullets ("Own the roadmap...",
+# "Drive adoption..."). NOT applied in _clause_valid: these are often complete,
+# legitimate sentences that are fine for scoring/proof-matching use of
+# ranked_needs, just wrong for verbatim insertion into cover-letter prose.
+# Import this into any call site that inserts ranked_needs text directly into
+# rendered output (see cover_letter_structure._valid_opener_context_phrase).
+# Infinitive, 3rd-person singular, and -ing forms of each verb.
+_JD_IMPERATIVE_VERB_STARTS = (
+    "build ", "builds ", "building ",
+    "drive ", "drives ", "driving ",
+    "own ", "owns ", "owning ",
+    "solve ", "solves ", "solving ",
+    "scale ", "scales ", "scaling ",
+    "grow ", "grows ", "growing ",
+    "lead ", "leads ", "leading ",
+    "run ", "runs ", "running ",
+    "engage ", "engages ", "engaging ",
+    "deliver ", "delivers ", "delivering ",
+    "develop ", "develops ", "developing ",
+    "manage ", "manages ", "managing ",
+    "expand ", "expands ", "expanding ",
+    "ensure ", "ensures ", "ensuring ",
+    "support ", "supports ", "supporting ",
+    "improve ", "improves ", "improving ",
+    "establish ", "establishes ", "establishing ",
+    "partner ", "partners ", "partnering ",
+    "help ", "helps ", "helping ",
+    "reduce ", "reduces ", "reducing ",
+    "create ", "creates ", "creating ",
+    "define ", "defines ", "defining ",
+    "collaborate ", "collaborates ", "collaborating ",
+    "execute ", "executes ", "executing ",
+    "identify ", "identifies ", "identifying ",
+    "design ", "designs ", "designing ",
+    "plan ", "plans ", "planning ",
+    "coordinate ", "coordinates ", "coordinating ",
+    "maintain ", "maintains ", "maintaining ",
+    "track ", "tracks ", "tracking ",
+    "review ", "reviews ", "reviewing ",
+    "leverage ", "leverages ", "leveraging ",
+    "thrive ", "thrives ", "thriving ",
+    "work ", "works ", "working ",
+    "adapt ", "adapts ", "adapting ",
+    "advise ", "advises ", "advising ",
+    "oversee ", "oversees ", "overseeing ",
+    "prioritize ", "prioritizes ", "prioritizing ",
+    "conduct ", "conducts ", "conducting ",
+    "facilitate ", "facilitates ", "facilitating ",
+    "advocate ", "advocates ", "advocating ",
+    "champion ", "champions ", "championing ",
+    "translate ", "translates ", "translating ",
+    "assess ", "assesses ", "assessing ",
+    "analyze ", "analyzes ", "analyzing ",
+    "recommend ", "recommends ", "recommending ",
+    "shape ", "shapes ", "shaping ",
+    "influence ", "influences ", "influencing ",
+    "guide ", "guides ", "guiding ",
+    "mentor ", "mentors ", "mentoring ",
+    # Candidate-fit / culture phrases common in JD postings
+    "interested ", "excited ", "passionate ",
+    "you will ", "you'll ", "you are ",
+    "we are ", "we're ", "our team ",
+    "this role ", "the role ", "the ideal ",
+    "we're looking ", "we are looking ", "looking for ",
+    "experience ", "candidates ", "product ",
+)
+
 
 def _clause_valid(clause: str, jd_text: str) -> bool:
     c = clause.strip()
@@ -33,6 +119,8 @@ def _clause_valid(clause: str, jd_text: str) -> bool:
     if not _substring_valid(c, jd_text):
         return False
     low = c.lower().rstrip(".")
+    if low.startswith(_QUALIFICATION_BULLET_STARTS):
+        return False
     for bad in _INCOMPLETE_ENDINGS:
         if low.endswith(bad):
             return False
@@ -55,6 +143,15 @@ _ROLE_SECTION_MARKERS = (
 
 def is_tenure_requirement(need: str) -> bool:
     return bool(_TENURE_RE.search((need or "").strip()))
+
+
+def _truncate_at_word_boundary(text: str, limit: int) -> str:
+    """Slice to at most `limit` chars without cutting a word in half."""
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    last_space = cut.rfind(" ")
+    return cut[:last_space] if last_space > 0 else cut
 
 
 def _extract_role_action_paragraphs(jd_text: str) -> List[str]:
@@ -91,7 +188,7 @@ def _extract_role_action_paragraphs(jd_text: str) -> List[str]:
                 if raw.startswith(("-", "•", "*")) and len(raw) < 120:
                     cleaned = re.sub(r"^[-•*]\s*", "", raw).strip()
                     if cleaned:
-                        blocks.append(cleaned[:160])
+                        blocks.append(_truncate_at_word_boundary(cleaned, 160))
                     i += 1
                     continue
                 chunk.append(raw)
@@ -99,7 +196,7 @@ def _extract_role_action_paragraphs(jd_text: str) -> List[str]:
             if chunk:
                 para = " ".join(chunk).strip()
                 if len(para) >= 40:
-                    blocks.append(para[:200])
+                    blocks.append(_truncate_at_word_boundary(para, 200))
             continue
         i += 1
     return blocks
@@ -253,7 +350,7 @@ def _extract_responsibility_lines(jd_text: str) -> List[str]:
         if any(x in low_clean for x in ("salary", "$", "compensation range", "per year")):
             continue
         if cleaned:
-            lines.append(cleaned[:160])
+            lines.append(_truncate_at_word_boundary(cleaned, 160))
     return lines
 
 
@@ -306,7 +403,7 @@ def extract_ranked_needs(jd_text: str, profile: JdProfile | None = None, limit: 
 
     for para in _extract_role_action_paragraphs(jd_text):
         for sent in re.split(r"(?<=[.!?])\s+", para):
-            clause = sent.strip()[:160]
+            clause = _truncate_at_word_boundary(sent.strip(), 160)
             if _clause_valid(clause, jd_text):
                 candidates.append((_score_need_line(clause, jd_text) + 12, clause))
 

@@ -29,6 +29,7 @@ class ClaimRecord:
     tags: List[str] = field(default_factory=list)
     metrics: List[str] = field(default_factory=list)
     cover_story: Optional[str] = None
+    disabled: bool = False
 
 @dataclass
 class ClaimCatalog:

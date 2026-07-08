@@ -163,7 +163,7 @@ def render_trust_hook(story: str) -> str:
     lead = value_lead_from_story(story)
     if not lead:
         return ""
-    out = lead.replace("—", ", ").replace(" -- ", ", ")
+    out = re.sub(r"\s*(?:—|--)\s*", ", ", lead)
     out = re.sub(r"\bCustomers told us\b", "When customers said", out, flags=re.I)
     # Convert inline JTBD jargon when present in the lead sentence
     out = re.sub(
@@ -190,7 +190,7 @@ def value_lead_from_story(story: str) -> str:
 
 
 def _normalize_hook_punct(text: str) -> str:
-    return text.replace("—", ", ").replace(" -- ", ", ").strip()
+    return re.sub(r"\s*(?:—|--)\s*", ", ", text).strip()
 
 
 def _hook_sentence_variants(hook: str) -> List[str]:
@@ -432,7 +432,7 @@ def apply_voice_polish(text: str) -> str:
     for pat, repl in _FORMAL_TO_PLAIN:
         out = re.sub(pat, repl, out, flags=re.I)
     out = apply_cover_phrase_polish(out)
-    out = out.replace("—", ", ").replace(" -- ", ", ")
+    out = re.sub(r"\s*(?:—|--)\s*", ", ", out)
     out = re.sub(r"  +", " ", out)
     out = re.sub(r"\n{3,}", "\n\n", out)
     return out.strip()

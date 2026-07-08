@@ -32,6 +32,8 @@
 | CR-053 | Fit rubric overhaul — evidence-tiered scoring, replaces holistic LLM score | **Partial** — Epics 1–3 + SDD closeout done; calibration/dedup open — [epics](../08-implementation/CR-053-fit-rubric-overhaul-epics.md), [spec](CR-053-fit-rubric-overhaul.md) |
 | CR-054 | Pipeline integrity & failure transparency (silent-success-on-failed-draft bug) | **Partial** — Epic 1 done — [spec](CR-054-pipeline-integrity.md) |
 | CR-055 | Collection gate accuracy (years-gate regex bug, title-blocklist false positives) | **Partial** — Epics 1–2 done — [spec](CR-055-collection-gate-accuracy.md) |
+| CR-058 | Generation defect fixes — fabricated metrics, JD-text leakage, punctuation corruption, misclassification, grounding audit | Implemented (uncommitted) — [spec](CR-058-generation-defect-fixes.md) |
+| CR-059 | Local LLM tuning loop — task-aware prompting/routing for the small local models the drafting pipeline actually calls | **Not started** — [handoff + round tracker](../08-implementation/CR-059-local-llm-tuning-loop.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

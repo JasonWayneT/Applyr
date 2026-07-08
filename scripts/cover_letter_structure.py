@@ -503,7 +503,7 @@ def _need_based_hook(ranked_needs: List[str], jd_text: str) -> str:
     )):
         return (
             "Enterprise platforms for workflow coordination don't fail because the "
-            "technology is wrong — they fail because the stakeholder inputs that "
+            "technology is wrong. They fail because the stakeholder inputs that "
             "should shape the roadmap never make it in coherently."
         )
 
@@ -513,7 +513,7 @@ def _need_based_hook(ranked_needs: List[str], jd_text: str) -> str:
     )):
         return (
             "Communication and engagement platforms fail in a specific way: the "
-            "friction shows up first as support escalations — students who didn't "
+            "friction shows up first as support escalations, students who didn't "
             "receive a message, staff who can't find a workflow, teams that can't "
             "see whether a campaign actually reached anyone."
         )
@@ -524,7 +524,7 @@ def _need_based_hook(ranked_needs: List[str], jd_text: str) -> str:
     )):
         return (
             "Most teams treat their API integrations and data pipelines as "
-            "infrastructure problems — something Engineering owns, something that "
+            "infrastructure problems, something Engineering owns, something that "
             "gets fixed reactively when it breaks. The better framing is that the "
             "integration layer is the product."
         )
@@ -535,7 +535,7 @@ def _need_based_hook(ranked_needs: List[str], jd_text: str) -> str:
     )):
         return (
             "The friction that builds up in a product's identity and admin layer "
-            "doesn't stay invisible for long — it arrives as Customer Service "
+            "doesn't stay invisible for long. It arrives as Customer Service "
             "escalation tickets, customers who can't get themselves unstuck, and "
             "support overhead that scales faster than the user base."
         )
@@ -755,66 +755,13 @@ def _valid_opener_context_phrase(text: str) -> bool:
     if len(t.split()) < 6:
         return False
     tl = t.lower()
-    if any(
-        tl.startswith(prefix)
-        for prefix in (
-            # Articles / prepositions
-            "build ",
-            "and ",
-            "with ",
-            "the ",
-            "to ",
-            "for ",
-            "in an ",
-            "in a ",
-            # JD imperative verb starters — responsibility bullets, not pain points
-            # infinitive, 3rd-person singular, and -ing (gerund/participial) forms
-            "drive ", "drives ", "driving ",
-            "own ", "owns ", "owning ",
-            "solve ", "solves ", "solving ",
-            "scale ", "scales ", "scaling ",
-            "grow ", "grows ", "growing ",
-            "lead ", "leads ", "leading ",
-            "run ", "runs ", "running ",
-            "engage ", "engages ", "engaging ",
-            "deliver ", "delivers ", "delivering ",
-            "develop ", "develops ", "developing ",
-            "manage ", "manages ", "managing ",
-            "expand ", "expands ", "expanding ",
-            "ensure ", "ensures ", "ensuring ",
-            "support ", "supports ", "supporting ",
-            "improve ", "improves ", "improving ",
-            "establish ", "establishes ", "establishing ",
-            "partner ", "partners ", "partnering ",
-            "help ", "helps ", "helping ",
-            "reduce ", "reduces ", "reducing ",
-            "create ", "creates ", "creating ",
-            "define ", "defines ", "defining ",
-            "collaborate ", "collaborates ", "collaborating ",
-            "execute ", "executes ", "executing ",
-            "identify ", "identifies ", "identifying ",
-            "design ", "designs ", "designing ",
-            "plan ", "plans ", "planning ",
-            "coordinate ", "coordinates ", "coordinating ",
-            "maintain ", "maintains ", "maintaining ",
-            "track ", "tracks ", "tracking ",
-            "review ", "reviews ", "reviewing ",
-            "build ", "builds ", "building ",
-            "leverage ", "leverages ", "leveraging ",
-            "thrive ", "thrives ", "thriving ",
-            "work ", "works ", "working ",
-            "adapt ", "adapts ", "adapting ",
-            # Candidate-fit / culture phrases common in JD postings
-            "interested ", "excited ", "passionate ",
-            "you will ", "you'll ", "you are ",
-            "we are ", "we're ", "our team ",
-            "this role ", "the role ", "the ideal ",
-            "we're looking ", "we are looking ", "looking for ",
-            "experience ",
-            "candidates ",
-            "product ",
-        )
-    ):
+
+    from cover_jd_needs import _JD_IMPERATIVE_VERB_STARTS
+
+    # Articles / prepositions that also signal a truncated fragment, not a
+    # pain point — kept local since they're specific to opener padding.
+    _FRAGMENT_STARTS = ("and ", "with ", "the ", "to ", "for ", "in an ", "in a ")
+    if tl.startswith(_FRAGMENT_STARTS) or tl.startswith(_JD_IMPERATIVE_VERB_STARTS):
         return False
     return True
 

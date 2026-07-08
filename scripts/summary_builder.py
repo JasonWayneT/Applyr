@@ -36,6 +36,12 @@ _YEARS_EXPERIENCE = 6
 
 _SCALE_ENTERPRISE = "~3,500 enterprise and mid-market accounts"  # MET-02
 _SCALE_CONSUMER = "~25,000 active users"                         # MET-03
+# Used when the run's selected bullets don't happen to include the MET-02/MET-03
+# figure — introducing an ungrounded number here gets the whole summary discarded
+# by audit_text_against_bullet_corpus() downstream, so fall back to a scope
+# description with no number at all rather than risk that.
+_SCALE_ENTERPRISE_UNGROUNDED = "a large enterprise and mid-market customer base"
+_SCALE_CONSUMER_UNGROUNDED = "a large active user base"
 
 _SCOPE_DESCRIPTION = (
     "a $40M ARR B2B media monitoring and contact database platform"
@@ -44,7 +50,8 @@ _SCOPE_DESCRIPTION = (
 _COMPANY_DISPLAY = "Cision"
 
 _OUTCOME_1 = "eliminated a 40% data drop-off across the customer contact pipeline"
-_OUTCOME_2 = "resolved 90% of a 300-item security backlog while maintaining core roadmap delivery"
+_OUTCOME_2_SECURITY = "resolved 90% of a 300-item security backlog while maintaining core roadmap delivery"
+_OUTCOME_2_DEFAULT = "sustained retention near 7% annually through a capacity model built for constrained engineering resources"
 
 _VERIFIED_PARTNERS_ALL = [
     "Engineering", "DBA", "DevOps", "Customer Experience",
@@ -81,10 +88,16 @@ _ENTERPRISE_SIGNALS = frozenset({
 })
 
 _CONSUMER_SIGNALS = frozenset({
-    "users", "growth", "b2c", "dau", "mau", "retention", "consumer",
-    "subscriber", "acquisition", "viral", "product-led", "plg",
+    "users", "growth", "b2c", "dau", "mau", "consumer",
+    "subscriber", "viral", "product-led", "plg",
     "self-serve", "freemium",
 })
+# "retention" deliberately excluded — data/conversion_rubric.md R8 treats retention/
+# churn as a B2B SaaS legibility signal, not a consumer one. Including it here caused
+# B2B JDs that mention retention (e.g. a nonprofit donor-CRM platform) to misclassify
+# as "consumer," pulling in an ungrounded scale metric the resume's actual bullets
+# never support and getting the whole adaptive summary rejected by the bullet-corpus
+# audit downstream.
 
 
 def classify_jd_context(jd_profile) -> Literal["enterprise", "consumer", "neutral"]:
@@ -147,19 +160,35 @@ def _select_focus_areas(jd_profile, max_areas: int = 3) -> List[str]:
     return keywords[:max_areas]
 
 
-def extract_summary_context(jd_profile, candidate_profile: dict = None) -> SummaryContext:
+def _grounded(number_bearing_phrase: str, bullet_corpus: str) -> bool:
+    """True if the digits in `number_bearing_phrase` appear in `bullet_corpus`."""
+    if not bullet_corpus:
+        return True
+    digits = re.sub(r"[^\d]", "", number_bearing_phrase)
+    if not digits:
+        return True
+    return digits in re.sub(r"[^\d]", "", bullet_corpus)
+
+
+def extract_summary_context(
+    jd_profile, candidate_profile: dict = None, jd_text: str = "", bullet_corpus: str = ""
+) -> SummaryContext:
     """Build SummaryContext from JdProfile and candidate data (Story 4.1)."""
     jd_context = classify_jd_context(jd_profile)
 
     if jd_context == "consumer":
-        scale_metric = _SCALE_CONSUMER
+        scale_metric = _SCALE_CONSUMER if _grounded(_SCALE_CONSUMER, bullet_corpus) else _SCALE_CONSUMER_UNGROUNDED
         environment_type = "SaaS platforms"
     elif jd_context == "enterprise":
-        scale_metric = _SCALE_ENTERPRISE
+        scale_metric = _SCALE_ENTERPRISE if _grounded(_SCALE_ENTERPRISE, bullet_corpus) else _SCALE_ENTERPRISE_UNGROUNDED
         environment_type = "enterprise SaaS"
     else:
-        scale_metric = _SCALE_ENTERPRISE
+        scale_metric = _SCALE_ENTERPRISE if _grounded(_SCALE_ENTERPRISE, bullet_corpus) else _SCALE_ENTERPRISE_UNGROUNDED
         environment_type = "software products"
+
+    from conversion_framing import has_security_jd_signal
+
+    outcome_2 = _OUTCOME_2_SECURITY if has_security_jd_signal(jd_text) else _OUTCOME_2_DEFAULT
 
     return SummaryContext(
         years_experience=_YEARS_EXPERIENCE,
@@ -170,7 +199,7 @@ def extract_summary_context(jd_profile, candidate_profile: dict = None) -> Summa
         scale_metric=scale_metric,
         partners=_select_partners(jd_profile),
         outcome_1=_OUTCOME_1,
-        outcome_2=_OUTCOME_2,
+        outcome_2=outcome_2,
     )
 
 
@@ -254,14 +283,18 @@ def assemble_summary(context: SummaryContext, jd_context: str) -> str:
     return text
 
 
-def build_jd_adaptive_summary(jd_profile, candidate_profile: dict = None) -> Optional[str]:
+def build_jd_adaptive_summary(
+    jd_profile, candidate_profile: dict = None, jd_text: str = "", bullet_corpus: str = ""
+) -> Optional[str]:
     """Main entry point (Story 4.4).
 
     Returns assembled summary string, or None if required fields are missing
     (caller should fall back to LLM generation and log a WARN).
     """
     try:
-        context = extract_summary_context(jd_profile, candidate_profile)
+        context = extract_summary_context(
+            jd_profile, candidate_profile, jd_text=jd_text, bullet_corpus=bullet_corpus
+        )
         # Verify required fields are populated
         if not context.scope_description or not context.scale_metric or not context.years_experience:
             return None

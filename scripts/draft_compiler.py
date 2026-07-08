@@ -560,7 +560,7 @@ def run(
         summary = None
         try:
             from summary_builder import build_jd_adaptive_summary
-            summary = build_jd_adaptive_summary(profile)
+            summary = build_jd_adaptive_summary(profile, jd_text=jd_text, bullet_corpus=bullet_corpus)
             if summary:
                 print("    [Compiler] Stage 4 summary: JD-adaptive template (Epic 4).")
             else:

@@ -4,6 +4,7 @@ JD profile extraction and claim scoring (CR-014 / FR-091).
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 from dataclasses import dataclass, field, asdict
@@ -41,6 +42,16 @@ THEME_KEYWORDS = (
     ("funnel", "consumer funnel optimization and conversion"),
     ("marketplace", "marketplace infrastructure and partner matching"),
     ("borrower", "borrower experience and offer optimization"),
+    ("privacy", "privacy compliance and governance"),
+    ("compliance", "compliance and legal alignment"),
+    ("identity", "identity access governance"),
+    ("access", "access control and platform governance"),
+    ("governance", "platform governance and automated workflows"),
+    ("genai", "AI tooling and agentic automation workflows"),
+    ("agentic", "AI tooling and agentic automation workflows"),
+    ("llm", "AI tooling and prompt engineering workflows"),
+    ("cursor", "AI tooling and prompt engineering workflows"),
+    ("claude", "AI tooling and prompt engineering workflows"),
 )
 
 
@@ -223,22 +234,111 @@ def load_cached_jd_profile_from_folder(company_folder: str, jd_text: str) -> Opt
         return None
 
 
+# --- CR-064 Round 3: rarity-weight cache ---------------------------------
+_RARITY_DF: Optional[Dict[str, int]] = None   # token -> number of active claims containing it
+_RARITY_N: Optional[int] = None               # number of active (non-disabled) claims
+
+
+def _reset_rarity_cache() -> None:
+    """Test hook: force `_get_rarity_table` to rebuild on next call."""
+    global _RARITY_DF, _RARITY_N
+    _RARITY_DF, _RARITY_N = None, None
+
+
+def _set_rarity_table(df: Dict[str, int], n: int) -> None:
+    """Test hook: inject a fixed synthetic df table so rarity-weight unit tests can
+    pin exact arithmetic without coupling to production `master_claims.json`
+    contents that drift.
+    """
+    global _RARITY_DF, _RARITY_N
+    _RARITY_DF, _RARITY_N = dict(df), n
+
+
+def _get_rarity_table() -> "tuple[Dict[str, int], int]":
+    """Lazily build (and cache) token document-frequency over active (non-disabled)
+    claims in `data/master_claims.json`. Self-loads the file directly via
+    `json.load` rather than `claim_catalog.load_catalog()`, which triggers a
+    dormant Ollama embeddings sync this CR must not couple into.
+    """
+    global _RARITY_DF, _RARITY_N
+    if _RARITY_DF is not None and _RARITY_N is not None:
+        return _RARITY_DF, _RARITY_N
+    path = os.path.join(PROJECT_ROOT, "data", "master_claims.json")
+    with open(path, encoding="utf-8") as fh:
+        claims = json.load(fh)                              # dict keyed by claim id
+    df: Dict[str, int] = {}
+    n = 0
+    for rec in claims.values():
+        if not isinstance(rec, dict) or rec.get("disabled"):
+            continue
+        n += 1
+        blob = ((rec.get("text") or "") + " " + " ".join(rec.get("tags") or [])).lower()
+        for tok in set(re.findall(r"[a-z]{5,}", blob)):      # count each token once per claim
+            df[tok] = df.get(tok, 0) + 1
+    _RARITY_DF, _RARITY_N = df, n
+    return df, n
+
+
+def _rarity_weight(token: str) -> float:
+    """Smoothed-IDF weight: `1 + ln(N/df)` for tokens seen in the catalog, floored
+    to `1.0` (i.e. behaves like the old flat/unweighted contribution) for tokens
+    absent from the table (typically substring-match artifacts, e.g. `ability`
+    inside "stability").
+    """
+    df, n = _get_rarity_table()
+    freq = df.get(token, 0)
+    if freq <= 0:
+        return 1.0
+    return 1.0 + math.log(n / freq)
+
+
 def score_claim_for_jd(claim_text: str, profile: JdProfile, jd_text: str) -> int:
+    """CR-064 Round 2+3+5: dedup pass, rarity-weighted contributions, then a DCG
+    rank-discount breadth dampener.
+
+    A given matched token contributes at most once per claim-JD pair, at its
+    highest tier across the four loops, instead of once per loop/line it happens
+    to appear in (the pre-CR-064 cross-loop/cross-line compounding bug). Each
+    unique matched token's tier is then scaled by how rare that token is across
+    the active claim catalog, so a claim that wins on one rare, precise term can
+    outscore a claim that wins on breadth of generic/common terms. Finally
+    (Round 5), the per-token contributions are sorted descending and discounted
+    by rank via `log2(rank+1)` (DCG position discount): the single strongest
+    match (rank 1) is undiscounted, so a one-token precision claim is immune to
+    this step, while each additional token pays a progressively steeper breadth
+    tax -- countering the pure-additive sum's structural bias toward claims that
+    match many moderately-relevant tokens over claims that match one killer one.
+    """
     text_l = claim_text.lower()
     jd_l = jd_text.lower()
-    score = sum(1 for w in profile.keywords if w in text_l and w in jd_l)
-    for req in profile.requirements:
+
+    matched: Dict[str, int] = {}
+
+    def _bump(tok: str, tier: int) -> None:
+        if matched.get(tok, 0) < tier:
+            matched[tok] = tier
+
+    for w in profile.keywords:                             # loop 1, tier 1
+        if w in text_l and w in jd_l:
+            _bump(w, 1)
+    for req in profile.requirements:                       # loop 2, tier 2
         for token in re.findall(r"[a-z]{5,}", req.lower()):
             if token in text_l:
-                score += 2
-    for theme in profile.priority_themes:
+                _bump(token, 2)
+    for theme in profile.priority_themes:                  # loop 3, tier 1
         for token in re.findall(r"[a-z]{5,}", theme.lower()):
             if token in text_l:
-                score += 1
-    for kw, _phrase in THEME_KEYWORDS:
+                _bump(token, 1)
+    for kw, _phrase in THEME_KEYWORDS:                      # loop 4, tier 3
         if kw in jd_l and kw in text_l:
-            score += 3
-    return score
+            _bump(kw, 3)
+
+    contribs = sorted(
+        (tier * _rarity_weight(tok) for tok, tier in matched.items()),
+        reverse=True,
+    )
+    total = sum(v / math.log2(rank + 1) for rank, v in enumerate(contribs, start=1))
+    return int(round(total))
 
 
 def _metric_signature(text: str) -> frozenset:

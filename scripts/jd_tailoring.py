@@ -88,7 +88,8 @@ _REQ_SECTION_RE = re.compile(
     r"preferred\s+qualifications?|basic\s+qualifications?|"
     r"required\s+qualifications?|key\s+requirements?|"
     r"minimum\s+qualifications?|must\s+have|you\s+bring|"
-    r"what\s+you\s+offer)(?:[^\n]{0,20})?\s*:?\s*$",
+    r"what\s+you\s+offer|who\s+you\s+are|"
+    r"required\s+education\s+and\s+experience)(?:[^\n]{0,20})?\s*:?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -131,10 +132,11 @@ def build_jd_profile_deterministic(jd_text: str, fit_summary: str = "") -> JdPro
             themes.append(phrase)
 
     requirements = []
-    for line in jd_text.splitlines():
+    req_source = extract_req_section(jd_text)
+    for line in req_source.splitlines():
         line = line.strip().lstrip("-•*").strip()
-        if 20 <= len(line) <= 120 and line[0].isalnum():
-            requirements.append(line[:120])
+        if 20 <= len(line) <= 250 and line[0].isalnum():
+            requirements.append(line[:250])
     requirements = requirements[:6]
 
     tokens = re.findall(r"[a-z]{5,}", jd_lower)

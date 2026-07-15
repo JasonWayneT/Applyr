@@ -2125,3 +2125,774 @@ the wrong tool here, given 13 companies already show 3 distinct JD layout conven
 boundary-rework round needs an ever-growing pattern list to keep pace with real-world diversity (the same
 shape CR-063's `THEME_KEYWORDS` rounds took), that's worth naming to Jason as a scope question before
 sinking more rounds into incremental regex patches, not something to keep patching silently.
+
+## Tech Lead — CR-068 Setup
+
+**Date:** 2026-07-14. **Input:** CR-067 diagnostic (3 compounding root causes in `scripts/jd_tailoring.py`'s
+`requirements`-extraction path, hands-verified, fix reverted rather than self-reviewed-and-shipped). **Task:**
+set up CR-068 as the implementation follow-up using CR-064's one-hypothesis-per-round discipline, spec +
+tracker only, no code.
+
+**Verified against current code (not from memory):**
+- `_REQ_SECTION_RE` (`jd_tailoring.py:85-93`): confirmed `who\s+you\s+are` and
+  `required\s+education\s+and\s+experience` are still ABSENT from the alternation — Fix 1 is still needed and
+  still accurate.
+- `requirements` construction (`jd_tailoring.py:133-138`): confirmed it scans `jd_text.splitlines()` directly,
+  does NOT call `extract_req_section()` (defined at :101) — Fix 2 (2-line wiring change) still accurate.
+- `_NEXT_SECTION_RE` (:95-98) = `\n\s*\n[A-Z][A-Z\s]{3,}\n|\n##\s` and the 120-char cap (:136) confirmed as
+  the root-cause-3 sites — scoped to Round 2, off-limits in Round 1.
+- `keywords` (:140-142) already CR-066's `Counter` frequency-sort — consistent with committed CR-066, do not
+  disturb.
+- Archive `data/archive/submissions/`: 12/16 eval-set slugs present (missing `sailpoint`/`tilt`/`par`/
+  `parkingpass_com`; `par_technology` present but distinct from `par`) — unchanged from CR-066. All 4
+  originally-broken companies (OneStream, Remote, Covideo, Ontra) present, so Round 1's core measurement is
+  runnable in full.
+
+**Technical approach (fits existing pattern, no new architecture):** this is the same shared-function edit
+pattern CR-066 shipped — narrow diff to `build_jd_profile_deterministic`, test the production entry point
+directly, full-sample before/after measurement reusing `measure_jd_profile_extraction.py`'s existing Part A
+per-company profile dump. No new pattern justified.
+
+**The one non-obvious call I made:** Round 1 couples fixes 1+2 into a *single* round rather than two, even
+though the arc's discipline is one-hypothesis-per-round. Rationale: Fix 1 (broaden headings) is provably
+inert on the `requirements` field output without Fix 2 (the wiring gap means the regex improvement never
+reaches `build_jd_profile_deterministic`'s output), so they are not independently measurable — they form one
+hypothesis. Fix 3 (boundary/length-cap rework) IS the genuinely independent, higher-regression-risk change
+and is the deferred Round 2. This matches the parent instruction (Round 1 = fixes 1+2) and CR-067's Decision.
+
+**The load-bearing thing I built the round sequence around:** CR-067's author already found fixes 1+2 alone
+do NOT clearly win end-to-end (Ontra/Remote stay broken via root cause 3's no-separator layout; Covideo
+shifts to a *different* wrong answer — benefits copy — via the 120-char cap dropping its long real bullets).
+So Round 1 is written to honestly measure {helps / does nothing / makes worse} per company, with the
+Covideo "different wrong answer" risk called out as an explicit check, not assumed away — a zero/mixed result
+is valid and is exactly what scopes Round 2. Round 2's scope (narrow Title-Case-only vs. broad no-separator
+handling, and how to treat the 120-char cap) is deliberately NOT detailed yet — that's Open Question 2,
+routed to Round 1's measurement rather than pre-decided, since which mechanism still breaks which company is
+unknown until measured.
+
+**Backflow check:** no missing product decision surfaced — CR-067 already scoped the fix and Jason's "work
+down the pipeline" direction (CR-065 scoping) covers this thread. The one genuine open scoping question
+(Round 2 breadth) is correctly a *measurement-gated* question, not a product decision to route back now. The
+"is regex the wrong tool for section detection" concern (CR-067 OQ2) is carried forward as this CR's Open
+Question 3, flagged to raise with Jason if Round 2 turns into whack-a-mole — not a Round 1 blocker.
+
+**Deliverables:**
+- Spec: `docs/spec/05-change-requests/CR-068-requirements-section-extraction-fix.md`
+- Epics/round tracker: `docs/spec/08-implementation/CR-068-requirements-section-extraction-fix-tracker.md`
+  (CR-064/065/066 format: checkpointing protocol, orientation checklist, Round 1 as first executable round,
+  Round 2 explicitly deferred, Session Handoff block pre-filled with starting state).
+- Registry: CR-068 row added to `docs/spec/05-change-requests/README.md`.
+
+## Senior Engineer — CR-068 Round 1
+
+**Date:** 2026-07-14. **Story:** CR-068 Round 1 — implement the two validated fixes for the `requirements`
+field's boilerplate-capture defect (broaden `_REQ_SECTION_RE`'s heading alternation with `who\s+you\s+are`
+and `required\s+education\s+and\s+experience`; wire `build_jd_profile_deterministic`'s `requirements`
+construction through `extract_req_section()` instead of scanning raw `jd_text`).
+
+**Test-first, confirmed watched-failing before the fix:** wrote `scripts/test_jd_profile_requirements.py`
+(3 tests: `_REQ_SECTION_RE` matches "Who You Are" / "Required Education and Experience"; an end-to-end test
+against `build_jd_profile_deterministic()` with a crafted JD using a layout the fix CAN bound). Ran the
+suite before touching `jd_tailoring.py` — all 3 failed as expected (`_REQ_SECTION_RE.search()` returned
+`None` for both phrases; the end-to-end test failed because `requirements` scanned raw `jd_text` and
+captured the earlier boilerplate line). Implemented the two exact scoped changes, re-ran — all 3 pass.
+
+**Files changed:**
+- `scripts/jd_tailoring.py` — the two scoped changes only. `git diff --stat` = `1 file changed, 4
+  insertions(+), 2 deletions(-)`. Zero changes to `_NEXT_SECTION_RE`, the 120-char cap,
+  `keywords`/`priority_themes`, `score_claim_for_jd`, or `THEME_KEYWORDS`.
+- `scripts/test_jd_profile_requirements.py` (new) — the Round 1 unit tests, per the tracker's resolved Open
+  Question 1.
+
+**Full measurement, run honestly per the tracker's explicit instruction not to assume a win:**
+- Eval-set membership re-confirmed: 12/16 present, unchanged from tech-lead setup, all 4 originally-broken
+  companies present.
+- Pytest baseline: 28 failed / 195 passed / 1 skipped (pre-fix) → 28 failed / 198 passed / 1 skipped
+  (post-fix). Verified via a *targeted* `git stash push -- scripts/jd_tailoring.py` that the same 28-failure
+  set exists pre- and post-fix (a full-repo `git stash` was tried first and rejected — this repo's working
+  tree carries a lot of unrelated uncommitted work, and a full stash pulled in unrelated tracked files,
+  breaking an unrelated test file's import; the targeted single-file stash avoided that entirely).
+- Full-sample `requirements` hand-review (pre-fix vs. post-fix, verbatim, all 12 companies) — logged in full
+  in the tracker's "Round 1 results" section.
+
+**Result, stated plainly — mixed, not a clean win, exactly as the tracker's governing warning anticipated
+for 3 of the 4 originally-broken companies:**
+- **OneStream: FIXED cleanly.** All location/employment-type/benefits/salary boilerplate replaced with real
+  requirement content.
+- **Ontra: STILL BROKEN.** Remains title/role-description boilerplate.
+- **Remote: STILL BROKEN** (partially improved — 2 of the worst process-boilerplate lines dropped — but the
+  field still does not reflect real qualifications cleanly).
+- **Covideo: CHANGED TO A DIFFERENT, ARGUABLY WORSE WRONG ANSWER** — now 100% benefits/offer copy (401k,
+  health insurance, PTO) instead of title/location/responsibilities copy, exactly the failure mode CR-067
+  warned about.
+- **Zero regressions** among the 8 previously-good companies. 2 of them (Cresta, Group 1001) measurably
+  *improved* as an incidental side effect of Fix 2 alone (their matched heading was the pre-existing `"What
+  We're Looking For"` pattern, not the new `who you are` phrase — confirmed by direct regex inspection, so
+  this is not the new heading phrase doing the work). The specific regression risk the tracker named — a
+  "Who You Are" intro appearing before a JD's real requirements section, causing the new phrase to lock onto
+  the wrong, earlier heading — was checked directly per company and did not materialize anywhere in the
+  8-company good set.
+
+**A genuine root-cause refinement this round's measurement surfaced, corrected rather than just repeated
+from CR-067:** CR-067 attributed Ontra/Remote's continued brokenness to root cause 3
+(`_NEXT_SECTION_RE`'s no-blank-line-separator blindness) and treated the 120-char-length-cap failure mode as
+Covideo-specific. Direct measurement this round (inspecting `extract_req_section()`'s actual output and the
+real bullet lengths for Ontra and Remote) shows the no-separator fallback (`remainder[:2000]`) **actually
+works correctly** for both — it returns their real "Who You Are" content verbatim. The real and sole
+blocker for all 3 still-broken/wrong-answer companies (Ontra, Remote, Covideo) is the unchanged 120-char
+line-length cap silently dropping every long `"Trait: elaboration"`-style bullet. This is logged in full,
+with the specific measured bullet lengths, in the tracker.
+
+**Deviation from the plan:** none in scope or method. The one adaptation was the pytest regression-check
+mechanism — the tracker/spec both say "verify via `git stash` (as CR-066 did)," but CR-066 ran in a cleaner
+working tree; a full-repo stash in the current tree pulled in ~90 unrelated uncommitted files and broke an
+unrelated test's import. Used a targeted `git stash push -- scripts/jd_tailoring.py` instead, which achieves
+the same isolation without touching unrelated files. Logged in the tracker's Session Handoff for whoever
+runs Round 2.
+
+**What I did NOT verify:** did not run or re-verify anything outside `requirements` (no re-check of
+`keywords`/`priority_themes`/`score_claim_for_jd` behavior — out of scope and untouched per the diff). Did
+not run this past security-reviewer or qa-reviewer — per CR-067's own stated reasoning (no shipping
+self-reviewed changes to a shared production function without independent review), that is the explicit
+next step, not something I can self-certify.
+
+**Docs updated:** `docs/spec/08-implementation/CR-068-requirements-section-extraction-fix-tracker.md`
+(all 11 Round 1 checklist items checked with real evidence, full "Round 1 results" section with verbatim
+before/after tables, Session Handoff block updated for whoever runs Round 2), `docs/spec/05-change-
+requests/README.md` (CR-068 registry row updated with the Round 1 result). No connector or gate changed, so
+the CLAUDE.md "Documentation Update Checklist" connector/gate rows do not apply — confirmed at close-out.
+
+**Files touched this session:** `scripts/jd_tailoring.py`, `scripts/test_jd_profile_requirements.py` (new),
+`docs/spec/08-implementation/CR-068-requirements-section-extraction-fix-tracker.md`,
+`docs/spec/05-change-requests/README.md`.
+
+## Security Review — CR-068 Round 1
+
+**Date:** 2026-07-14. **Reviewer:** security-reviewer. **Verdict: CLEAR.**
+
+Reviewed the actual diff (`git diff -- scripts/jd_tailoring.py`), `git status --porcelain`, and the new
+`scripts/test_jd_profile_requirements.py`. Same low-risk shape as CR-066 Round 1, confirmed directly rather
+than assumed: pure in-process string/regex logic, no new I/O, no new external input, no new dependency.
+
+**Checklist findings:**
+
+1. **Diff scope (confirmed).** Production diff is exactly two hunks in `scripts/jd_tailoring.py`:
+   (a) `_REQ_SECTION_RE` alternation gains two literal heading phrases — `who\s+you\s+are` and
+   `required\s+education\s+and\s+experience` (`scripts/jd_tailoring.py:91-92`); (b) `requirements`
+   construction now scans `extract_req_section(jd_text)` instead of raw `jd_text`
+   (`scripts/jd_tailoring.py:135-136`). `extract_req_section` is already defined in the same file
+   (`scripts/jd_tailoring.py:102`) and already used elsewhere — no new import, no new file I/O, no network
+   call. Import block (`scripts/jd_tailoring.py:6-14`) is unchanged.
+
+2. **No PII in the test (confirmed).** `scripts/test_jd_profile_requirements.py` uses only synthetic fixture
+   text ("Acme Corp", "Senior Product Manager", generic requirement bullets). No real candidate name, email,
+   phone, LinkedIn, or MET/ACC content from `data/workExperience.md`. Safe to be a tracked file.
+
+3. **Hard scope boundary honored (confirmed).** The diff touches nothing in `keywords`, `priority_themes`,
+   `_NEXT_SECTION_RE` (`scripts/jd_tailoring.py:96-99`, unchanged), the 120-char cap
+   (`scripts/jd_tailoring.py:138`, unchanged), `score_claim_for_jd`, `THEME_KEYWORDS`, or
+   `data/master_claims.json` — all Round 2 territory, all untouched.
+
+4. **Secrets / dependency risk (none).** No hardcoded keys/tokens/credentials introduced or moved. No new
+   third-party package; no new import of any kind. No architecture drift toward cloud/multi-user/non-`.env`
+   secrets — this is a localhost-only in-process pipeline internal.
+
+5. **Call-site safety (confirmed).** Signature and return type unchanged:
+   `build_jd_profile_deterministic(jd_text: str, fit_summary: str = "") -> JdProfile`
+   (`scripts/jd_tailoring.py:126`); `JdProfile.requirements` remains `List[str]`
+   (`scripts/jd_tailoring.py:62`). The 4 real production call sites — `cover_jd_needs.py:397`,
+   `cover_letter_compiler.py:129`, `cover_plan_builder.py:50`, `local_draft_stages.py:377` — all invoke it
+   positionally and consume `.requirements` as a list; they receive different (not differently-typed) content
+   and are otherwise unaffected. The two internal wrapper calls (`jd_tailoring.py:164,199`) are likewise
+   unchanged.
+
+**Trust boundaries:** the new source `extract_req_section(jd_text)` operates on JD-derived (external) text,
+but only via in-process regex and slice operations. No SQL, no shell, no filesystem-path construction from
+JD input is introduced. The two added regex alternatives are simple literal/`\s+` phrases with no
+catastrophic-backtracking shape. No injection surface added.
+
+**Cannot verify from the diff alone (not blocking):** the measured accuracy of the Round 1 fix and the
+28F/198P/1S pytest baseline are correctness/QA claims, out of security scope — deferred to qa-reviewer.
+
+**Verdict: CLEAR.** No PII exposure, no secret exposure, no widened data access, no new injection surface, no
+dependency scope creep, no constitution Non-goal drift. Nothing to remediate.
+
+## QA — CR-068 Round 1
+
+**Date:** 2026-07-14. **Reviewer:** qa-reviewer. **Verdict: PASS.** The implementation matches the two
+scoped fixes, and the mixed result is honestly and accurately reported — not overstated as a clean win, not
+understated as more broken than it is. Every checkable claim in the tracker and the Senior Engineer log
+entry was independently reproduced from the live code, not accepted from the report.
+
+**1. Diff scope — confirmed exactly as claimed.** `git diff -- scripts/jd_tailoring.py` shows exactly two
+hunks: `_REQ_SECTION_RE` gains `who\s+you\s+are` and `required\s+education\s+and\s+experience`
+(`scripts/jd_tailoring.py:91-92`), and `requirements` construction is rewired to scan
+`extract_req_section(jd_text)` instead of raw `jd_text` (`scripts/jd_tailoring.py:135-136`).
+`git diff --stat -- scripts/jd_tailoring.py` → `1 file changed, 4 insertions(+), 2 deletions(-)`, matching
+the claim exactly. `_NEXT_SECTION_RE`, the 120-char cap (`jd_tailoring.py:138`), `keywords`/`priority_themes`,
+`score_claim_for_jd`, `THEME_KEYWORDS`, and `data/master_claims.json` are all untouched — confirmed by
+reading the file directly, not just trusting the stat.
+
+**2. The 4 originally-broken companies — re-ran `build_jd_profile_deterministic()` live against the real
+archived JDs.** Verbatim output matches the tracker's claimed before/after exactly (differences are only
+Windows console encoding artifacts in curly quotes/non-breaking hyphens, not content):
+- OneStream: fixed cleanly, all boilerplate replaced with real requirement bullets (one residual heading
+  fragment "Preferred Education and Experience," as disclosed).
+- Ontra: still broken, same 4-item boilerplate-heavy list reproduced verbatim.
+- Remote: still broken (partially improved — 2 boilerplate lines dropped), same 4-item list reproduced
+  verbatim.
+- Covideo: reproduced the claimed shift to 100% offer/benefits copy verbatim — `'401k plan with matching'`,
+  `'Comprehensive health insurance (including vision and dental)'`, `'Flexible paid time off'` are all
+  present in the live re-run output, confirming the "changed to a different, arguably worse wrong answer"
+  claim is real, not exaggerated.
+
+**3. Refined-diagnosis claim — independently confirmed, not just re-asserted.** Ran `_REQ_SECTION_RE.search()`
+and `extract_req_section()` directly against Ontra's and Remote's raw JD text. Both match `"Who you are"` at
+character 5 (JD opens `"Role\nWho you are\n..."`), and `extract_req_section()`'s fallback correctly returns
+the real "Who You Are" subsection verbatim for both (5 real bullets for Ontra: 135, 136, 130, 148, 132 chars;
+9 for Remote: 124, 112, 156, 157, 177, 241, 245, 202, 65 chars — measured directly with `len()`, not
+estimated). Confirmed the 120-char cap (`20 <= len(line) <= 120`) is what drops nearly every one of these —
+for Remote only "Customer Focus" (112) and "Language" (65) survive, exactly the 2 real-content lines that
+appear in the reproduced output alongside the 2 boilerplate fragments. Boundary/fallback logic is not the
+blocker for either company, confirming the tracker's correction of CR-067's own diagnosis.
+
+**4. Regression check on the 8 previously-good companies — re-ran all 8, not just a sample.** Used a
+targeted `git stash push -- scripts/jd_tailoring.py` / `pop` to capture true pre-fix output on the current
+tree, then diffed against post-fix output for all 8: Buyers Edge Platform, DataGrail, MyTime, PointClickCare,
+Redox, Lumos are byte-identical (confirmed via `diff` on the two captured dumps — zero output lines changed
+for these 6). Cresta and Group 1001 are the only two that changed, and both changed for the better exactly
+as claimed: Cresta's before-list included the bare heading fragment `"What We're Looking For"`, replaced
+post-fix with a 6th real bullet; Group 1001's before-list included two heading fragments (`"Why This Role
+Matters:"`, `"This is a role for someone who:"`), replaced post-fix with two additional real requirement
+bullets. Confirmed via direct `_REQ_SECTION_RE.search()` inspection that the match for both is the
+pre-existing `"What We're Looking For"` pattern, not the new `who you are` phrase — so this is Fix 2's
+`extract_req_section()` wiring doing the work, exactly as the tracker attributes it.
+
+**5. "Who you are" false-early-match risk — checked directly, not assumed absent.** Ran
+`_REQ_SECTION_RE.search()` against all 6 byte-identical companies. 5 of 6 (DataGrail, MyTime, PointClickCare,
+Redox, Lumos) newly match `"Who you are"` at character 5, immediately following `"Role\n"` at the very start
+of the document — no earlier heading for the new phrase to spuriously out-compete. Buyers Edge Platform has
+no `_REQ_SECTION_RE` match at all (falls back to full-JD scan, unchanged behavior). The regression risk the
+tracker named — an earlier "Who You Are" intro locking onto the wrong heading — did not materialize in any
+of the 8, confirmed directly rather than taken on faith.
+
+**6. Pytest — re-ran independently.** `python -m pytest -q --ignore=test_domain_gate.py
+--ignore=test_fit_policy.py --ignore=test_llm.py` from `scripts/` → **28 failed, 198 passed, 1 skipped**,
+matching the claimed post-fix counts exactly. Extracted the full list of 28 failing test files via `grep
+"^FAILED" | sed | sort | uniq -c`: `test_audit_convergence.py` (1), `test_cover_claim_picker.py` (1),
+`test_cover_dignifi.py` (3), `test_cover_everbridge.py` (2), `test_cover_letter_slots.py` (12),
+`test_cover_splash_golden.py` (3), `test_cover_structure_universal.py` (2), `test_cover_word_padding.py`
+(1), `test_gap_detector.py` (1), `test_submission_linter.py` (2) — sums to 28, and every failing file/class
+matches the tracker's named failure set. Also ran `scripts/test_jd_profile_requirements.py` directly: 3/3
+pass, and the file genuinely exercises `build_jd_profile_deterministic()` (the real production entry point)
+with a crafted multi-section JD, not a tautological assertion against a mocked function — a test that could
+fail (and per the tracker's own record, did fail pre-fix).
+
+**Minor discrepancy found (not blocking):** the Senior Engineer log entry's parenthetical failure tally
+(pipeline-log.md, `## Senior Engineer — CR-068 Round 1`, step 8) states `test_cover_letter_slots x9`; the
+actual count, independently verified via `uniq -c` above, is **12**, not 9. Summing the log's own listed
+counts as written (1+1+3+2+9+3+2+1+1+2 = 25) does not reach the 28 the same sentence asserts as the total —
+only the corrected count of 12 reconciles the arithmetic to 28. The aggregate 28F/198P/1S figures elsewhere
+in the tracker and log are correct and were independently reproduced; this is a narrative tally typo in one
+parenthetical, not a wrong headline number and not a fabricated pass/fail claim. Filed as **Minor**.
+
+**7. Edge cases checked beyond the tracker's own scope.** `build_jd_profile_deterministic('')` and
+`build_jd_profile_deterministic('short')` both return an empty-but-valid `JdProfile` with no exception —
+`extract_req_section()`'s fallback-to-full-JD path handles empty/short input safely, no crash introduced by
+the new wiring. Enumerated all 9 real call sites of `build_jd_profile_deterministic`/`build_jd_profile`
+(`cover_jd_needs.py:397`, `cover_letter_compiler.py:129`, `cover_plan_builder.py:50`,
+`local_draft_stages.py:377`, `draft_compiler.py:483`, plus 4 `measure_*.py`/`smoke_*.py` internal tools) —
+matches the security review's enumeration; none consume `.requirements` in a way that would break on
+different-but-same-typed content.
+
+**Severity-ordered findings:**
+- Critical: none.
+- Important: none. The 3 still-broken/worse-answer companies (Ontra, Remote, Covideo) are the disclosed,
+  expected result of a deliberately scoped Round 1 — not a hidden regression. Round 2 is already flagged as
+  required in the tracker.
+- Minor: `pipeline-log.md`'s Senior Engineer entry undercounts `test_cover_letter_slots` failures as x9
+  instead of the actual 12 in its parenthetical tally (arithmetic doesn't reconcile to the stated 28 total
+  without the correction). Does not affect the verdict — the actual pytest run, re-executed independently,
+  shows the correct 28F/198P/1S and the correct per-file failure set.
+
+**Conclusion:** the code changes match the spec exactly (2 scoped hunks, nothing else touched), the new test
+file is real and has teeth, the pytest regression floor is unmoved, and the Round 1 "mixed, not a clean win"
+finding — including the specific claim that the 120-char cap (not boundary/separator detection) is the real
+blocker for Ontra/Remote/Covideo — is accurate on direct, independent re-measurement. **PASS.** No fix-and-
+re-review loop needed for Round 1. Recommend the Senior Engineer correct the x9→x12 tally in their log entry
+for the record, but this does not block proceeding to Round 2.
+
+## Tech Lead — CR-068 Round 2 Planning
+
+Design pass on the length-cap fix confirmed by Round 1 as the sole remaining blocker for `requirements`
+extraction on Ontra, Remote, Covideo. Read Round 1 results in full first; did NOT re-litigate its
+measurement. Plan written into `docs/spec/08-implementation/CR-068-requirements-section-extraction-fix-tracker.md`,
+"Round 2 — line-length-cap raise" section (frontmatter status → `round_2_planned_ready_for_engineer`,
+handoff block updated).
+
+**Decision: raise the cap 120 → 250, one filter line, length-cap only.** In
+`build_jd_profile_deterministic` (`scripts/jd_tailoring.py`, ~line 138) change `120` → `250` in BOTH the
+`len(line) <= 120` bound and the `line[:120]` store-slice, so bound and truncation move in lockstep. Over-
+limit (>250) lines still drop entirely. No `_NEXT_SECTION_RE` / boundary rework — Round 1 proved
+`extract_req_section()`'s no-separator fallback already returns the correct "Who You Are" content for all 3
+targets; the cap is the only thing dropping their real bullets.
+
+**Why 250, measured not arbitrary.** Read-only scan of the whole 259-folder archive (current committed
+`extract_req_section()` + the filter, no code change): the real single-requirement-bullet population tops
+out at ~245-250 chars (Remote 245/241, Lumos 245, bitsight 248, hudu 246, first_advantage 250). The archive's
+>250 band (417 lines) flips almost entirely to multi-sentence paragraph boilerplate — mission prose, EEO
+statements, benefits/comp-philosophy paragraphs — the exact class the original cap existed to exclude. 250 is
+the empirical break between the two populations: smallest value admitting essentially the entire real-bullet
+population while still rejecting the paragraph class. Higher buys ~0 real bullets and readmits boilerplate;
+lower re-drops real bullets.
+
+**Bound == truncation (both 250), not admit-high-truncate-low.** If we admitted up to 250 but kept the store-
+slice at 120, an admitted 245-char real bullet would be chopped to 120 and downstream `score_all_claims`
+keyword matching would lose half its distinguishing vocabulary. So the slice moves to 250 too (a no-op given
+the bound, kept for coherence). Rejected the "admit-high-truncate-low" variant — it readmits the paragraph
+class and stores half of it, strictly worse.
+
+**Boilerplate-readmit risk: real but bounded; deliberately NOT managed with a content filter.** The 121-250
+band does contain some EEO/comp/visa/benefits boilerplate the 120 cap currently drops. Two shipped mechanisms
+bound it: `extract_req_section()` scoping (Round 1) keeps most of it outside the scanned span, and
+`requirements[:6]` keeps only the first 6 lines, which real requirement bullets lead. Did NOT add a keyword
+blocklist — that is content classification, not a length change, reintroduces the whack-a-mole pattern-list
+risk (OQ3), and breaks the length-cap-only scope. If the full-archive regression finds boilerplate
+displacing real bullets in any company's first 6, that routes to a separate Round 3 decision, not an inline
+patch.
+
+**Isolation confirmed.** Round 2 touches only the one `requirements` filter line + an additive test in the
+existing `scripts/test_jd_profile_requirements.py`. `_REQ_SECTION_RE`, `_NEXT_SECTION_RE`,
+`extract_req_section`, the `20` lower bound, `requirements[:6]`, `keywords`/`priority_themes`,
+`score_claim_for_jd`, `THEME_KEYWORDS`, `data/master_claims.json` all off-limits. Plan requires test-first
+(a kept-line test pinning a 150-200-char real bullet now surfaces; a still-rejected test pinning a >250-char
+paragraph is still excluded — proving the cap was raised, not removed), then re-measure the 3 targets, then a
+full-archive (259-folder) regression, pytest via targeted single-file `git stash`, and `git diff --stat`
+scope confirmation.
+
+**Honest expectation (report the measured result, this is the hypothesis).** Tech-lead read-only simulation
+at cap=250 against current archived JDs: Ontra 5/6 slots real (+1 residual heading fragment; was 0/6), Remote
+6/6 real (was 2/6), Covideo 5/6 real (+1 residual offer line; was 0/6, previously 100% benefits copy). So:
+expected to substantially resolve all 3, primary goal met — but NOT a flawless 6/6 for Ontra/Covideo; each
+keeps one residual non-requirement line in slot 6. Those residuals are section-boundary/ordering artifacts,
+not length-cap failures, and are out of this round's scope. Remote → expected clean 6/6; Ontra/Covideo →
+expected 5/6 (functionally resolved). The full-archive regression is the one genuinely unknown outcome —
+simulation only checked the 3 targets, not all 259 folders' first-6 for boilerplate displacement. Did not
+
+---
+
+## Senior Engineer — CR-068 Round 2
+
+**Story executed:** CR-068 Round 2 — "line-length-cap raise," per the tech-lead's fully-decided plan in
+`docs/spec/08-implementation/CR-068-requirements-section-extraction-fix-tracker.md`'s "Round 2 —
+line-length-cap raise (PLANNED...)" section. Executed the tech-lead's 10-step ordered checklist exactly, no
+redesign.
+
+**The change.** In `build_jd_profile_deterministic` (`scripts/jd_tailoring.py`), the `requirements`
+line-length filter cap moved from 120 to 250, in both places on the single filter line (bound and
+store-slice in lockstep, as specified):
+
+```python
+# before
+if 20 <= len(line) <= 120 and line[0].isalnum():
+    requirements.append(line[:120])
+# after
+if 20 <= len(line) <= 250 and line[0].isalnum():
+    requirements.append(line[:250])
+```
+
+Nothing else in the file was touched this round — `_REQ_SECTION_RE`, `_NEXT_SECTION_RE`,
+`extract_req_section`, the `20` lower bound, `requirements[:6]`, `keywords`/`priority_themes`,
+`score_claim_for_jd`, and `THEME_KEYWORDS` are all unchanged. (The `git diff --stat` against the last
+commit shows both this round's change AND Round 1's change together, since Round 1 was never committed and
+both live as one uncommitted diff to the same file — verified this round's own edit was scoped correctly by
+checking my own tool-call record: exactly one `Edit` call, changing only the two `120`s to `250`.)
+
+**Files changed:**
+- `scripts/jd_tailoring.py` — the cap-raise (see above).
+- `scripts/test_jd_profile_requirements.py` — added a new `TestRequirementsLineLengthCapRaisedTo250` class
+  with 2 tests (appended to the existing file from Round 1; the 3 Round 1 tests are untouched).
+- `docs/spec/08-implementation/CR-068-requirements-section-extraction-fix-tracker.md` — checked off all 10
+  Round 2 checklist items with real measured evidence, added the "Round 2 results" section, updated
+  frontmatter `status`, updated the Session Handoff block.
+- `docs/spec/05-change-requests/README.md` — updated the CR-068 registry row.
+
+**Tests written, test-first confirmed.** Two new tests in `test_jd_profile_requirements.py`:
+1. `test_150_to_200_char_real_bullet_is_kept` — a crafted JD with a genuine 185-char requirement bullet.
+   Confirmed FAILING against pre-fix (cap=120) code first: `AssertionError:
+   'Proven experience owning complex, multi-phase B2B SaaS product roadmaps...' not found in
+   ['Comfortable partnering directly with engineering and design']` — the long real bullet was dropped,
+   only the short trailing bullet survived. Confirmed PASSING after the cap raise.
+2. `test_over_250_char_paragraph_boilerplate_still_dropped` — a crafted >250-char "About the company"
+   paragraph in the same scanned span. This one already passed pre-fix (>250 was excluded at the old 120
+   cap too, trivially) — its purpose is purely as a post-fix pin that the cap was *raised*, not *removed*.
+   Confirmed it still passes post-fix.
+
+Both the 3 pre-existing Round 1 tests and these 2 new tests pass post-fix (5/5 in the file). Pytest
+baseline at session start (before touching code): 28 failed / 198 passed / 1 skipped — exact match to the
+expected Round 1 close-out floor, no drift.
+
+**Measured result vs. the tech-lead's simulation — matched exactly, all 3 targets, zero deviation.**
+- **Ontra:** 5/6 real requirement bullets (130-148 chars each, the exact population the old cap was
+  dropping) + 1 residual "What the job involves" heading fragment in slot 6. Was 0/6 real. Matches
+  simulation exactly.
+- **Remote:** 6/6 real requirement bullets, clean (112-241 chars, including the 241-char "Proficiency in
+  Cursor and/or Claude Code" bullet the tech-lead specifically named as the longest real bullet in the eval
+  sample). Was 2/6 real. Matches simulation exactly.
+- **Covideo:** 5/6 real requirement bullets (145-207 chars each) + 1 residual offer line ("The autonomy to
+  truly own...") in slot 6. Was 0/6 real (100% benefits/offer copy — the Round 1 "changed to a different
+  wrong answer" case). Matches simulation exactly. The Round 1 regression is fully corrected.
+
+Full verbatim before/after tables for all 3 are logged in the tracker's "Round 2 results" section.
+
+**Full-archive regression check — the one genuinely unmeasured risk, run and reported honestly.** 259
+folders total in the archive; 250 have `Original_JD.txt` (9 do not, mostly incomplete `_backup_*` folders).
+Of the 250 checked at cap=120 vs. cap=250, 156 had a changed `requirements[:6]`. Used a throwaway read-only
+probe script (never edited any archived JD; deleted after use so it wouldn't pollute the diff) plus a
+rule-based boilerplate classifier (EEO/comp-range/visa/benefits/401k/PTO/background-check/pay-transparency
+keyword regex) cross-referenced against which PRE items disappeared and which POST items are new, to hunt
+specifically for the tracker's named risk: a boilerplate line displacing a real bullet in an already-full
+PRE list. Found exactly **one**: `visionaire_partners` — a Dice job-board-scrape JD whose `requirements[:6]`
+was already ~5/6 boilerplate before this round (job-board chrome like `'Dice Job Match Score™'`, `'Pay
+range: $80-91/hour W2'`); the one surviving real-ish line, `'Own and manage team backlog(s)'`, got displaced
+by a newly-admitted 161-char benefits sentence. Marginal impact — the field was providing almost no signal
+either way, before or after. Every other changed company was better or lateral (boilerplate displaced OUT
+of the top 6 by real content, or real bullets got longer/more specific) — checked directly, not just by the
+keyword classifier, on every company the classifier flagged plus a manual sample sweep.
+
+The 8 previously-good companies from Round 1 (Buyers Edge Platform, DataGrail, MyTime, PointClickCare,
+Redox, Lumos, Cresta, Group 1001): zero regressions. 2 byte-identical (PointClickCare, Group 1001); the
+other 6 changed, every change neutral-to-positive (longer/better real bullets, or a heading-fragment/
+compensation-heading line dropping out of the top 6 in favor of real content).
+
+**Pytest regression check.** Post-change (current live code): 28 failed / 200 passed / 1 skipped (200 = 198
+Round-1-close-out floor + 2 new Round 2 tests). Used a targeted `git stash push -- scripts/jd_tailoring.py`
+to check the pre-existing failure floor — with one honest process caveat: since Round 1's changes to this
+same file are also still uncommitted, the single-file stash reverts BOTH rounds together, not Round 2 in
+isolation (no commit boundary exists between them). Reverted-state run: 32 failed / 196 passed / 1 skipped
+(28 pre-existing + 4 of 5 `test_jd_profile_requirements.py` tests failing, as expected without any of this
+arc's code). Extracted and sorted the full failure-name lists from both runs (excluding the 5
+`test_jd_profile_requirements.py` entries, expected to differ) and diffed them: byte-identical 28-item sets
+in both states. Confirms the pre-existing failure floor is unmoved by Round 2.
+
+**Deviation from the tech-lead's plan:** none in mechanism or scope — implemented exactly the two-number
+change as specified. One process deviation worth flagging: step 7/8 asked for a stash-based comparison
+assuming it would isolate Round 2's own diff, but because Round 1 was never committed, a single-file stash
+of `scripts/jd_tailoring.py` necessarily reverts both rounds together. I did not treat this as blocking —
+I verified Round 2's own edit scope directly from my own tool-call record instead (exactly one `Edit` call,
+the two-number change, nothing else), and used the stash purely for the pytest pre-existing-failure-set
+comparison (which still works correctly for that narrower purpose, since the 28-item floor predates both
+rounds). Flagging this so whoever reviews Round 1+2 together knows why the `git diff --stat` for this round
+alone can't be cleanly isolated via git history.
+
+**What I did NOT verify:** did not run an independent security or QA review pass (out of scope for this
+role — flagged in the tracker's Session Handoff as the explicit next step). Did not exhaustively hand-review
+all 156 changed companies in the full-archive regression — relied on a rule-based boilerplate classifier
+plus targeted manual verification of every company the classifier flagged and a manual sample sweep across
+the alphabetical range, not a line-by-line review of all 156. Did not investigate whether Ontra's/Covideo's
+residual slot-6 ordering artifacts warrant a Round 3 — explicitly out of this round's length-cap-only scope
+per the tracker, flagged as a carry-forward open question (OQ3) rather than resolved.
+
+**Report:** Round 2 fully resolves the 3 remaining companies to the level the tech-lead's simulation
+predicted — a decisive fix (0/6→5/6, 2/6→6/6, 0/6→5/6), not a flawless 6/6/6, with residual ordering
+artifacts explicitly named and left out of scope. The full-archive regression check, the one genuinely
+unmeasured risk, surfaces exactly one small named regression (`visionaire_partners`, marginal) — not zero,
+and not hidden.
+assume a clean 6/6/6 win.
+
+## Security Review — CR-068 Round 2
+
+**Reviewer:** security-reviewer. **Scope:** the CR-068 Round 2 length-cap raise (120→250) in
+`scripts/jd_tailoring.py`, reviewed as part of the combined uncommitted Round 1 + Round 2 diff to that
+file (no commit boundary between the two rounds). Verdict: **CLEAR.**
+
+**Checklist item 1 — is the diff exactly a length-threshold change? Confirmed.** Round 2's own edit is
+exactly the two numbers on `scripts/jd_tailoring.py:138-139`: the upper-bound comparison
+(`20 <= len(line) <= 250`) and the store-slice (`line[:250]`), both moved from `120` in lockstep. No
+other logic changed by Round 2. For completeness, the combined `git diff` also carries Round 1's changes
+in the same file (`scripts/jd_tailoring.py:88-92` — two heading phrases added to `_REQ_SECTION_RE`:
+"who you are" / "required education and experience"; and `scripts/jd_tailoring.py:135-136` — the
+`requirements` scan re-sourced from `extract_req_section(jd_text)` instead of raw `jd_text.splitlines()`).
+That Round 1 wiring is what makes the cap operate on the scoped requirements subsection; it is not
+introduced by Round 2 and was reviewed in the Round 1 pass. No new regex pattern, no new code path, no
+new import in Round 2 — the "narrower, lower-risk than Round 1" framing holds.
+
+**Checklist item 2 — does admitting up to 250 chars expose/leak more, or open an adversarial-JD window?
+No. Reasoned directly, not assumed.** The `requirements` field is built purely from the JD's own
+requirements section (`req_source`, `scripts/jd_tailoring.py:135-139`). The JD is the pipeline's input,
+already stored in gitignored locations (`data/submissions/` at `.gitignore:50`, `data/archive/` at
+`.gitignore:52`). The derived profile is persisted only to `jd_profile_cache.json` via
+`save_cached_jd_profile` (`scripts/jd_tailoring.py:208-213`), written under the company folder inside
+those same gitignored trees. So raising the retained slice from 120 to 250 chars keeps a longer piece of
+the *same already-gitignored source text* in an *already-gitignored cache* — no new tracked-file, log, or
+commit surface, and no candidate PII flows through this path (the data is public job-posting text, not
+`data/workExperience.md` / `jobagent.sqlite` PII). On the adversarial-JD angle: the admitted line is only
+appended to a list, sliced `[:250]`, JSON-serialized, and later iterated as plain substrings in
+`score_claim_for_jd` (`scripts/jd_tailoring.py:328`). It is never passed to `eval`, a shell, an SQL
+string, or a filesystem path, and no regex is *built from* it (the module regexes are static literals, so
+no ReDoS surface is widened). A 250-char line versus a 120-char line changes the quantity of retained
+text, not the class of operation performed on it — there is no injection or trust-boundary window that the
+wider cap opens. The only gate on the content (`line[0].isalnum()`, length bounds) is unchanged in kind.
+
+**Checklist item 3 — was the full-archive regression check read-only, with no artifacts left behind?
+Confirmed.** The tracker's "Round 2 results" section (`docs/spec/.../CR-068-...-tracker.md:647-664`) and
+the log entry above (`pipeline-log.md:2548-2561`) both describe a throwaway read-only probe script,
+explicitly deleted after use, plus a rule-based boilerplate classifier scan across the 250 folders that
+have `Original_JD.txt` — measurement only, matching every prior round's methodology. No probe script
+remains in the untracked set. The only stray untracked files in the repo (`=` at root and `scripts/=`)
+are both 0 bytes and dated 2026-07-06/07, predating this round's 2026-07-14 execution — pre-existing
+redirect-accident cruft, not artifacts of this round. No archived JD was edited (the guardrail at
+`tracker.md:740` was honored). Read-only confirmed.
+
+**Checklist item 4 — do the new tests hardcode real candidate PII? No.** The two Round 2 tests in
+`scripts/test_jd_profile_requirements.py:87-153` use only fictional content ("Acme Corp", generic PM
+requirement prose). No real names, emails, phone numbers, or LinkedIn URLs. Imports are stdlib only
+(`os`, `sys`, `unittest`) — no new third-party dependency (checklist item 5 / dependency-risk: clean).
+
+**Checklist item 5 — was any file besides the two expected code files touched by this round's code? No.**
+Round 2's code changes are confined to `scripts/jd_tailoring.py` and `scripts/test_jd_profile_requirements.py`.
+The other files in this round's footprint are documentation only and expected/fine:
+`docs/spec/08-implementation/CR-068-requirements-section-extraction-fix-tracker.md` (results + handoff),
+`docs/spec/05-change-requests/README.md` (registry row), and this `pipeline-log.md`. The many other
+modified/untracked files in `git status` are unrelated pre-existing uncommitted repo work, not this round.
+
+**Constitution / architecture-drift check:** nothing in this change points toward cloud hosting,
+multi-user access, secrets leaving `.env`, or any Non-goal violation. No secrets, no new endpoints, no
+widened data access — `score_claim_for_jd` reads the same profile fields it already read.
+
+**Verdict: CLEAR.** No Critical, Important, or Minor findings. One non-blocking hygiene observation for
+the maintainer (not a Round 2 finding): the pre-existing 0-byte `=` and `scripts/=` files
+(`.gitignore`-untracked, dated 2026-07-06/07) are unrelated cruft worth deleting during a future cleanup.
+
+## QA — CR-068 Round 2
+
+**Date:** 2026-07-15. **Reviewer:** qa-reviewer. **Scope:** independent re-verification of the Round 2
+line-length-cap raise (120→250) in `scripts/jd_tailoring.py`, reviewed together with the still-uncommitted
+Round 1 diff since neither round has a commit boundary. **Verdict: PASS.** Every checkable claim in the
+tracker, the Senior Engineer log entry, and the Security Review was reproduced independently from the live
+code and the live archive, not accepted from the report. One pre-existing narrative typo already caught in
+Round 1's QA pass remains uncorrected in the log but does not affect the verdict.
+
+**1. Diff scope — confirmed exactly as claimed.** `git diff -- scripts/jd_tailoring.py` (`scripts/jd_tailoring.py:138-139`)
+shows exactly the two-number change: `if 20 <= len(line) <= 250 and line[0].isalnum(): requirements.append(line[:250])`,
+formerly `120`/`120`. `git diff --stat -- scripts/jd_tailoring.py scripts/test_jd_profile_requirements.py` →
+`1 file changed, 10 insertions(+), 4 deletions(-)` (Round 1 + Round 2 combined, no commit boundary between
+them — consistent with the tracker's own disclosed caveat). `git status --porcelain` confirms only
+`scripts/jd_tailoring.py` (modified) and `scripts/test_jd_profile_requirements.py` (new, untracked) as code
+files touched, plus doc files (`CR-068-requirements-section-extraction-fix.md`, the tracker,
+`docs/spec/05-change-requests/README.md`, `pipeline-log.md`) — matches the claimed footprint, nothing extra.
+
+**2. Re-ran `build_jd_profile_deterministic()` live against Ontra/Remote/Covideo's real archived JDs
+(`data/archive/submissions/{ontra,remote,covideo}/Original_JD.txt`).** Verbatim output matches the tracker's
+claimed before/after exactly (Windows console mojibake in curly apostrophes/em-dashes only, not a content
+difference):
+- **Ontra:** 5 real bullets (135, 136, 130, 148, 132 chars — "Product Experience…", "Educational
+  Background…", "Strategic Development…", "Technical Aptitude…", "Product Launch…") + slot 6 = `"What the
+  job involves"` heading fragment, reproduced verbatim as claimed.
+- **Remote:** 6/6 real bullets (124, 112, 156, 157, 177, 241 chars), including the 241-char "Proficiency in
+  Cursor and/or Claude Code (Required)…" bullet named as the longest real bullet in the eval sample —
+  reproduced verbatim, clean 6/6 confirmed.
+- **Covideo:** 5 real bullets (165, 145, 189, 207, 166 chars — "An Auto-Tech Expert…", "AI-Fluent…", "A
+  High-Velocity Builder…", "A Cross-Functional Partner…", "Data-Driven & Customer-Centric…") + slot 6 =
+  `"The autonomy to truly own and shape high-impact product initiatives."` (offer line), reproduced verbatim
+  as claimed. The Round 1 100%-benefits-copy wrong answer is confirmed corrected.
+
+**3. Independently re-verified the `visionaire_partners` regression, with a differently-implemented
+classifier from the engineer's, converging on the same result.** Wrote an independent probe (own
+boilerplate-keyword regex, own "PRE-was-full + real item disappeared + boilerplate item newly appeared"
+filter, not copied from the engineer's script) and ran it against all 250 archive folders with
+`Original_JD.txt`. Confirmed (a) pre-fix `requirements[:6]` for `visionaire_partners` is 5/6 Dice-job-board
+chrome (`'Hybrid in St. Louis, MO, US…'`, `'Dice Job Match Score™'`, `'6-month contract to hire'`, `'Hybrid
+in St. Louis, MO (3 days/week in-office)'`, `'Pay range: $80-91/hour W2'`) plus one real-ish item, `'Own and
+manage team backlog(s)'`; (b) post-fix, that one real item is displaced by a newly-admitted 161-char
+sentence, `'Visionaire Partners offers all full-time W2 contractors a comprehensive benefits package for the
+contractor…'`; (c) this is a real, marginal regression — an already near-100%-boilerplate JD going from 1/6
+real to 0/6 real — not a mischaracterization in either direction. My independently-written scan flagged
+**exactly one** regression across all 250 folders, matching the tracker's count exactly with zero overlap
+in implementation, which is stronger evidence than re-running the engineer's own script would have been.
+As a sanity check on my own classifier's precision, I also ran a much looser variant (any real PRE item
+disappearing, regardless of what displaced it) which flagged 117 companies as noise — hand-inspected 7 of
+them (aderant, adly, airspace, carfax, crain_communications, drake_software, case_iq) and confirmed every
+one is real-content-displacing-real-content (a longer/better real bullet earlier in the section pushing a
+shorter real bullet out of the top-6 window), i.e. lateral/better, not a regression — consistent with the
+tracker's own "companies like adaptive, sago, zumper" characterization and confirming the stricter
+boilerplate-displacement filter is the correct regression test, not an undercount.
+
+**4. Spot-checked (and in fact fully re-ran, all 3 named plus 3 more) companies claimed improved/neutral:**
+`dailypay` — pre was 6/6 benefits boilerplate (health/dental/vision, equity, life/AD&D, EAP, ERGs, "fun
+company outings"), post is 6/6 real requirement bullets (years of experience, analytical excellence,
+independence, delivery track record, stakeholder communication, fintech/EWA domain knowledge) — confirmed a
+full boilerplate-to-real flip, better than the tracker's own "displaced boilerplate" framing implies (it's
+not partial, it's total). `workday` — pre had a heading fragment (`"Other Qualifications:"`) and a "Pay
+Transparency Statement" boilerplate line; post keeps the heading fragment but replaces the pay-transparency
+line and adds 3 more real bullets — confirmed better/lateral, zero real-content loss. `randstad_digital` —
+pre had only 3 items (2 real + 1 "posting is open" boilerplate, list not full); post fills to 6 with 2 more
+real bullets plus a newly-admitted EEO statement — confirmed the tracker's own claim that this doesn't meet
+its own "worse" bar because no real bullet was displaced (the EEO line filled a previously-empty slot).
+
+**5. Confirmed all 8 Round-1 previously-good companies (not just 3) — zero regressions.** Re-ran
+`compute_requirements()` at cap=120 vs. cap=250 for Buyers Edge Platform, DataGrail, MyTime, PointClickCare,
+Redox, Lumos, Cresta, Group 1001. PointClickCare and Group 1001 are byte-identical before/after, confirming
+the claimed "2 byte-identical" exactly. The other 6 all changed, and every change is neutral-to-positive on
+direct inspection: Cresta's `"Compensation At Cresta"` heading fragment is replaced by a real bullet; MyTime
+and Lumos gain real bullets earlier in the list while `"What the job involves"` stays pinned at slot 6 (not
+newly introduced); Redox, DataGrail, Buyers Edge Platform all gain longer/additional real bullets with no
+boilerplate readmitted. No company in this set lost a real bullet to boilerplate.
+
+**6. Confirmed the 2 new Round 2 unit tests exercise the real, live cap value (not a hardcoded stale
+number) and pass, and all 5 tests in the file pass together.** `scripts/test_jd_profile_requirements.py`
+imports `build_jd_profile_deterministic` directly from `jd_tailoring` (`test_jd_profile_requirements.py:28`)
+— both new tests call the real production function against a crafted JD, not a mocked cap constant, so they
+would fail if the cap regressed to 120 or were removed entirely (confirmed by the tracker's own pre-fix
+failure log, and independently by inspection: `test_150_to_200_char_real_bullet_is_kept` asserts a 185-char
+bullet is present; `test_over_250_char_paragraph_boilerplate_still_dropped` asserts a >250-char paragraph is
+absent — genuine, not tautological assertions). Ran directly:
+`python -m pytest -q scripts/test_jd_profile_requirements.py` → **5 passed** (0.09s). These are real tests
+with teeth, not assertions that can't fail.
+
+**7. Re-ran the full pytest suite independently.** `python -m pytest -q --ignore=test_domain_gate.py
+--ignore=test_fit_policy.py --ignore=test_llm.py` from `scripts/` → **28 failed, 200 passed, 1 skipped**,
+matching the claimed post-Round-2 counts exactly. Extracted the 28 failing test names directly from this
+run's own output and cross-checked against the Round 1 QA pass's corrected 28-name list (which fixed a
+prior x9→x12 `test_cover_letter_slots` tally typo) — same 28 names, same per-file breakdown
+(`test_cover_letter_slots.py` = 12, not 9, confirming that Round 1 QA correction still holds and was never
+propagated back into the Senior Engineer log's earlier parenthetical — still a Minor, non-blocking, carried
+forward from Round 1's QA pass, not a new issue).
+
+**8. `git diff --stat` scope check — confirmed with the one honest caveat the tracker already discloses.**
+Because neither Round 1 nor Round 2 is committed, `git diff --stat -- scripts/jd_tailoring.py` necessarily
+shows both rounds' changes as one diff (no commit boundary to isolate Round 2 alone via git history). Read
+the diff directly (not just the stat) and confirmed its full content is exactly 3 hunks: (a) the Round 1
+`_REQ_SECTION_RE` alternation addition, (b) the Round 1 `req_source = extract_req_section(jd_text)` rewire,
+(c) the Round 2 `120`→`250` two-number change — nothing else in the 358-line file is touched. No changes to
+`_NEXT_SECTION_RE`, `requirements[:6]`, `keywords`/`priority_themes`, `score_claim_for_jd`, `THEME_KEYWORDS`,
+or `data/master_claims.json`, confirmed by direct read of the unified diff, not just the stat line.
+
+**9. Nearby-code-path check (beyond the tracker's own scope) — grepped every caller of
+`build_jd_profile_deterministic`/`.requirements`/`extract_req_section`.** Found 4 real production consumers
+of `.requirements` (`cover_jd_needs.py:418`, `local_draft_stages.py:1389-1393`, `bullet_generation.py:34`,
+`jd_tailoring.py:328` itself in `score_claim_for_jd`) and confirmed none regress from longer (up to 250-char)
+content:
+- `cover_jd_needs.py:113-129` (`_clause_valid`) already rejects any clause `len(c) > 160` before it can reach
+  a cover letter — an independent, pre-existing safety net that already bounds Covideo's 165-207-char and
+  Remote's 177/241-char bullets out of cover-letter need-extraction regardless of this CR's cap. No new
+  overlong-sentence-in-cover-letter risk introduced.
+- `local_draft_stages.py:1389-1393` (hook fallback) already truncates any `requirements[0]` over 95 chars to
+  92 chars at a word boundary before use — unaffected by the cap raise.
+- `bullet_generation.py:31-35` feeds up to 3 raw requirement lines into an LLM prompt as context (not
+  directly into a resume bullet), and only in the non-default `DRAFT_MODE=legacy_llm` path (CLAUDE.md:
+  "the default drafting pipeline calls zero local LLMs"). Longer prompt context is not a functional
+  regression; flagged as an informational Minor, not blocking, since it is dead in the default pipeline.
+- `jd_tailoring.py:328` (`score_claim_for_jd`) tokenizes `req` via `re.findall(r"[a-z]{5,}", req.lower())`
+  regardless of line length — this is the intended beneficiary of the cap raise (more real requirement
+  vocabulary now reaches claim scoring), not a regression.
+
+**Severity-ordered findings:**
+- Critical: none.
+- Important: none. The residual Ontra/Covideo slot-6 ordering artifacts and the single
+  `visionaire_partners` regression are disclosed, bounded, and match this round's own stated scope
+  (length-cap-only; boundary/ordering explicitly deferred to a possible Round 3 / OQ3).
+- Minor: (a) carried forward from Round 1's QA pass — the Senior Engineer log's `test_cover_letter_slots`
+  failure-count tally (`x9`) was never corrected to the actual `x12` in the log text itself, though the
+  aggregate 28F/200P/1S figures used throughout Round 2 are correct. (b) `bullet_generation.py:34`'s legacy
+  `DRAFT_MODE=legacy_llm` path now passes longer, untruncated requirement lines into an LLM prompt — inert
+  in the default pipeline, worth a truncation guard if that legacy path is ever reactivated, not blocking.
+
+**Conclusion:** every measured claim in the Round 2 tracker section, the Senior Engineer log entry, and the
+Security Review — the 3 target companies' verbatim before/after, the full-archive regression scan's "exactly
+one" result, the zero-regression claim on the Round 1 8-good set, the 5/5 and 28F/200P/1S test counts, and
+the diff-scope claim — reproduced cleanly under independent implementation, not just independent execution
+of the same scripts. **PASS.** No fix-and-re-review loop needed. This CR-068 tracker is a round-by-round
+checklist rather than an epics/stories tracker with `- [ ]` story boxes to check off (all of its own
+checklist items were already marked `[x]` by the engineer during execution) — there is no separate
+story-tracker checkbox for QA to flip here; the actionable next step per the tracker's own Session Handoff
+is committing Round 1 + Round 2 (a decision for Jason/senior-engineer, not QA).
+
+## Engineering Manager — CR-068 Close-out
+
+**Date:** 2026-07-15. **Reviewer:** engineering-manager. **Verdict: APPROVED.** CR-068 closes as a genuine
+success — both rounds cleared every gate, and I independently re-ran the actual verification rather than
+trusting the chain.
+
+**1. Security hard gate — no BLOCKED verdict anywhere.** Read both Security Review entries in full. Round 1:
+CLEAR. Round 2: CLEAR. Both are genuinely clear (pure in-process string/regex/length-threshold change on
+already-gitignored JD text into an already-gitignored cache; no new I/O, no new import, no new injection
+surface, no PII, no secrets, no architecture drift). Nothing to override.
+
+**2. Independent pytest re-run — reproduced exactly.** `python -m pytest -q --ignore=test_domain_gate.py
+--ignore=test_fit_policy.py --ignore=test_llm.py` from `scripts/` → **28 failed / 200 passed / 1 skipped**,
+matching the claimed post-Round-2 count. Same pre-existing failure families (`test_cover_letter_slots`,
+`test_cover_splash_golden`, `test_cover_structure_universal`, `test_cover_word_padding`, `test_gap_detector`,
+`test_submission_linter`, `test_cover_dignifi`, `test_cover_everbridge`, `test_audit_convergence`,
+`test_cover_claim_picker`) — the CR-066 baseline floor, unmoved.
+
+**3. Independent 4-company re-run of `build_jd_profile_deterministic()`** against the real archived JDs
+(`data/archive/submissions/{onestream_software,remote,ontra,covideo}`), confirming the final state:
+- OneStream: 5 real requirement bullets (Bachelor's degree, 3-7 yrs experience, roadmap ownership, platform
+  understanding, Agile/Scrum) + slot 6 "Preferred Education and Experience" heading fragment. All boilerplate
+  gone. Substantively fixed.
+- Remote: clean 6/6 real bullets, including the 241-char "Proficiency in Cursor and/or Claude Code" bullet
+  the old 120 cap was dropping.
+- Ontra: 5/6 real bullets (130-148 chars) + slot 6 "What the job involves" heading fragment.
+- Covideo: 5/6 real bullets (145-207 chars) + slot 6 "The autonomy to truly own..." offer line. The Round 1
+  100%-benefits-copy wrong answer is corrected.
+
+**4. Shipped code read directly** — `scripts/jd_tailoring.py`'s `_REQ_SECTION_RE` (now carries `who\s+you\s+are`
+and `required\s+education\s+and\s+experience`), `req_source = extract_req_section(jd_text)` wiring in
+`build_jd_profile_deterministic`, and the `20 <= len(line) <= 250` / `line[:250]` filter — all match what
+both rounds claim, byte-for-byte.
+
+**5. Scope adherence — confirmed.** `git diff -- scripts/jd_tailoring.py` is exactly the three scoped hunks
+(two Round 1 + one Round 2, combined since neither round was committed). Grep confirms zero changes to
+`_NEXT_SECTION_RE`, `score_claim_for_jd`, or `THEME_KEYWORDS` inside the diff; `keywords`/`priority_themes`
+untouched; `data/master_claims.json` (gitignored) not referenced. `scripts/cover_claim_picker.py`'s
+uncommitted changes are pre-existing CR-061/CR-064 arc work (present in the start-of-session git snapshot),
+NOT part of CR-068 — verified, not a scope violation.
+
+**6. Residual-findings weighing (my call, not deferred to the chain):**
+- **`visionaire_partners` marginal regression — does NOT block.** It is an already-near-100%-boilerplate
+  Dice-scrape JD whose single generic real-ish line ("Own and manage team backlog(s)") was displaced by a
+  benefits sentence; the field was giving near-zero signal either way. It is the *only* regression across a
+  250-folder full-archive check, independently confirmed by two differently-implemented classifiers (engineer
+  + QA). An honestly-disclosed, bounded tradeoff on an already-broken edge case is acceptable; blocking a fix
+  that cleanly resolves 4 real companies over one no-signal scrape JD would be the wrong trade.
+- **Ontra/Covideo slot-6 ordering artifacts — acceptable scope boundary, not corner-cutting.** Both rounds
+  correctly identified these as a different mechanism (section-boundary/ordering, not length) and scoped them
+  out with measurement, not hand-waving. Round 2 was deliberately length-cap-only, one-hypothesis-at-a-time
+  per the arc discipline. Chasing them now risks the exact `_NEXT_SECTION_RE` whack-a-mole OQ3 flags. Closing
+  here is the disciplined call.
+- **`bullet_generation.py:34` (legacy `DRAFT_MODE=legacy_llm` path) — noted, does not block.** Inert in the
+  default pipeline (CLAUDE.md: default drafting calls zero local LLMs); would want a truncation guard only if
+  ever reactivated. Recorded for the future.
+- **Round 1 `test_cover_letter_slots` x9→x12 tally typo in the Senior Engineer log text — housekeeping only.**
+  The headline 28F/198P/1S / 28F/200P/1S figures are correct and I reproduced them; the typo is in one
+  parenthetical, not a load-bearing number.
+
+**7. Documentation duty — completed at close-out.** CR-068 is a pipeline scoring/extraction internal, not a
+connector or gate, so CLAUDE.md's connector/gate checklist rows do not strictly compel a CHANGELOG entry —
+but CR-066 (the functionally identical predecessor extraction fix) set the arc convention of a CHANGELOG
+`### Fixed` entry, so I added one for CR-068 to stay consistent. Updated the CR-068 registry row in
+`docs/spec/05-change-requests/README.md` from the stale "Security/QA pending" to the final Complete state.
+Set the tracker frontmatter `status: complete` and filled the Session Handoff block with final state + the
+three carry-forward pointers (OQ3 ordering-artifact/regex-whack-a-mole; the open `ACC-401-AITOOLS`/`ACC-204`
+under-scoring thread; the open `cover_claim_picker.py` flat-bonus calibration from CR-064). CLAUDE.md and
+AGENTS.md were not touched, so their byte-identical duty does not apply.
+
+**Note on process:** this CR was scoped and driven initially by the orchestrating session directly rather
+than through the normal product-manager chain, due to a mid-session API rate limit. That does not change my
+assessment — the same review gates (tech-lead planning, senior-engineer test-first execution, independent
+security review, independent QA re-verification) applied to both rounds once subagent capacity returned, and
+I re-verified the actual output myself. The work is sound on its own merits.
+
+**Final state, plainly:** the fix works. All 4 originally-broken companies substantially improved (2 clean,
+2 at 5/6 real content), one honestly-disclosed marginal regression on a no-signal scrape JD, zero regressions
+on any previously-good company across a 250-company archive check, pytest floor unmoved, scope clean.
+
+**Next-step options for Jason (I am not picking one for you):**
+1. **Commit and close as Accepted** — commit the combined Round 1 + Round 2 diff to `scripts/jd_tailoring.py`
+   plus the new `scripts/test_jd_profile_requirements.py` (one commit; there is no clean boundary to split the
+   rounds since neither was committed mid-arc), mark CR-068 Accepted. My recommendation.
+2. **Keep open for a Round 3** — only if you want to chase the Ontra/Covideo slot-6 ordering artifacts; be
+   aware of the regex whack-a-mole risk OQ3 raises before sinking rounds into `_NEXT_SECTION_RE` patches.
+3. **Hold as-is** — leave the changes uncommitted in the working tree if you want to batch them with other
+   in-flight arc work before committing.

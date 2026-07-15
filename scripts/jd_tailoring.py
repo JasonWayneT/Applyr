@@ -7,6 +7,7 @@ import json
 import math
 import os
 import re
+from collections import Counter
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional
 
@@ -136,8 +137,9 @@ def build_jd_profile_deterministic(jd_text: str, fit_summary: str = "") -> JdPro
             requirements.append(line[:120])
     requirements = requirements[:6]
 
-    words = set(re.findall(r"[a-z]{5,}", jd_lower))
-    keywords = sorted(w for w in words if w not in {"about", "their", "would", "should", "other"})[:12]
+    tokens = re.findall(r"[a-z]{5,}", jd_lower)
+    counts = Counter(t for t in tokens if t not in {"about", "their", "would", "should", "other"})
+    keywords = [w for w, _c in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:12]]
 
     if fit_summary:
         fs = fit_summary.lower()

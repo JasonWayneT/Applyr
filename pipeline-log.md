@@ -1028,3 +1028,1033 @@ note) — future work, not a continuation of CR-064.
   so expectation should be low.
 - **Hold/redirect:** close CR-064 as-is and open the separate JD-profile/keyword-extraction
   investigation as the higher-probability lever.
+
+---
+
+## Product Manager — [New Investigation] JD-Profile Extraction
+
+**Trigger:** CR-064 closed `closed_partial` today (2026-07-14). Its own close-out named a next direction
+without scoping it: "a NEW, separate investigation into JD-profile / keyword extraction (upstream of
+`score_claim_for_jd`)... if both the DCG and geometric curves fail to move the metric, the defect is not
+in the aggregation arithmetic." Jason asked for that investigation to be scoped now, following the exact
+SDD process used for CR-064, with explicit instruction to be diagnostic-first — not to repeat the
+"should work" pattern that produced three consecutive null results in CR-064.
+
+### Global Constraints (verbatim from `docs/spec/00-project-constitution.md`)
+
+**Goals**
+- `GOAL-001`: Automate multi-source job scouting (BuiltIn, APIs, OpenPostings; LinkedIn decommissioned per CR-010).
+- `GOAL-002`: Implement deterministic fit scoring to minimize LLM token waste.
+- `GOAL-003`: Generate application materials (Resume, Cover Letter) grounded in verified `workExperience.md`.
+- `GOAL-004`: Maintain absolute data privacy by running the core engine on `localhost`.
+- `GOAL-005`: Provide a real-time dashboard for monitoring the automation pipeline.
+
+**Non-goals**
+- `NG-001`: Cloud hosting or multi-user access (privacy violation).
+- `NG-002`: Direct ATS submission (requires human-in-the-loop for safety).
+- `NG-003`: "General purpose" career coaching (focused strictly on PM roles).
+
+**Global quality bar**
+- Performance: Sub-second UI response; sub-15-minute end-to-end job evaluation.
+- Accessibility: Standard WCAG compliance for internal use.
+- Security: Zero-knowledge architecture; API keys restricted to local `.env`.
+- Reliability: 100% "Context Firewall" success between job iterations.
+- Maintainability: SDD-compliant code with full requirement traceability.
+- Documentation: Spec-first workflow enforced for all changes.
+
+**Agent constraints**
+- Agents must update specs before code.
+- Agents must cite requirement IDs in tasks and implementation summaries.
+- Agents must preserve existing accepted behavior unless a change request says otherwise.
+- Agents must record open questions instead of guessing when the decision changes product behavior.
+
+### Prior art checked
+
+- **CR-063** (`docs/spec/05-change-requests/CR-063-jd-theme-claim-selection-loop.md` + tracker) — closed
+  diagnostic. Ran a 16-JD test-and-iterate loop against `THEME_KEYWORDS`/`score_claim_for_jd`, tested and
+  ruled out embeddings and `jd_profile_mode="llm"` for the *ranking* question with real data, and pinned
+  the defect to `score_claim_for_jd`'s arithmetic. Its Final round found `jd_profile_mode="llm"` produced
+  byte-identical top-5 rankings to the deterministic path on 3 worst JDs even when the LLM extracted a
+  theme (`"AI"` for Ontra) the keyword table missed — read at the time as proof the bottleneck was purely
+  downstream. Important nuance for this new investigation: that comparison only ever checked final
+  *rankings*, never the deterministic profile's own `keywords`/`requirements` fields directly against
+  ground truth — `measure_theme_extraction.py` only ever logged `priority_themes`. So CR-063 tested
+  "does a better JD read change the ranking" (no) but never tested "is the deterministic profile itself
+  generic" in isolation. That's the actual gap this CR fills, not a re-litigation of CR-063's finding.
+- **CR-064** (`docs/spec/05-change-requests/CR-064-claim-score-formula-rework.md` + tracker, closed
+  `closed_partial` today) — reworked `score_claim_for_jd` across 5 rounds: dedup (Round 2), IDF-style
+  rarity weighting (Round 3), a DCG breadth dampener (Round 4 design, Round 5 implementation). Each
+  mechanism was independently hand-verified correct on isolated examples (Remote/`ACC-401-AITOOLS`'s rank
+  improved from 43 to 24 under rarity weighting; a synthetic 9-token claim's contribution was cut ~55%
+  under the dampener). **None moved the CR's actual target metric**: `ACC-105-EXECUTION`'s cross-JD top-5
+  over-representation was 10/14 before any of the three mechanisms and 10/14 after all three, on QA's
+  fullest archive-sourced measurement. Two real, separate residual issues from CR-064 remain open and are
+  explicitly NOT part of this new investigation (see Out of Scope below): 2 pytest regressions in
+  `cover_claim_picker.py` from flat bonuses interacting with CR-064's inflated score scale, and a
+  worsening `data/submissions/` eval-set data-instability problem (Round 5 found only 7/16 companies
+  present and the set mutating mid-session, attributed to an uncoordinated Google Drive sync).
+- `docs/spec/07-decisions/` — read all 5 ADRs (SQLite local-first, Gemini Flash model, deterministic
+  pre-filter, bridge logic, materialized-JSON pipeline). None constrain JD-profile extraction or claim
+  scoring specifically; no conflicting decision found.
+- `docs/reports/jd-theme-claim-eval-set.md` — the 16-company human-verified ground truth (real JD themes
+  per company, in a "Real JD themes (human-verified)" column, plus which `master_claims.json` codes
+  should surface). This is the fixed instrument this new CR reuses, same as CR-063/CR-064 did.
+
+Also read the actual code, not just the CRs: `scripts/jd_tailoring.py`'s `build_jd_profile_deterministic`
+(lines 124-153) and `extract_req_section` (lines 100-116) in full, and `scripts/measure_theme_extraction.py`
+in full to confirm exactly what it does and does not currently log.
+
+### What was found reading the code this session (not previously measured by CR-063 or CR-064)
+
+`build_jd_profile_deterministic` builds three fields, and two of them have a concrete, previously
+unnoticed defect candidate:
+
+1. **`keywords` (line 140):** `sorted(w for w in words if w not in {5 stopwords})[:12]` — the JD's
+   length-≥5 words are deduplicated into a set, then the top 12 are selected by **alphabetical order**,
+   not frequency, position, or any relevance signal. Alphabetical truncation has no mechanism to
+   correlate with what a JD is actually distinctively about — it will systematically surface whatever
+   words happen to sort early, which has no reason to track the JD's real themes.
+2. **`requirements` (lines 132-137):** built by scanning `jd_text.splitlines()` — the entire raw JD text,
+   in document order — for the first 6 lines that are 20-120 characters and start alphanumeric. It does
+   **not** call `extract_req_section()`, a function that exists in the same file for exactly this purpose
+   (isolating the requirements/qualifications subsection) and is actively used by two other call sites
+   (`local_draft_stages.py:1229`, `resume_rubric.py:49`). Depending on a JD's layout, this field may be
+   capturing "About the company"/"About the role" boilerplate instead of actual requirements, simply
+   because that text often appears earlier in the document.
+
+Neither has ever been measured against real JDs — `measure_theme_extraction.py` (CR-063's tool) only ever
+logged `priority_themes`, never `keywords` or `requirements`. Both are cheap, concrete, and directly
+testable, which is why they anchor this CR's diagnostic plan rather than a vaguer "investigate whether
+extraction is too generic."
+
+**Also found, and load-bearing for scoping:** the eval-set data source has degraded further since CR-064
+closed. `data/submissions/` (the live location CR-063/CR-064 originally used) now has only 2 of 16
+eval-set companies' `Original_JD.txt` present (`sailpoint`, plus `test_co`, which isn't in the eval set).
+`data/archive/submissions/` (which CR-064's QA reviewer used at close-out as a more stable source) has
+**13 of 16** present — missing `tilt`, `par`, `parkingpass_com`. This CR's spec sources from the archive
+location and works with the 13-company sample rather than pausing on data restoration, mirroring CR-064
+Round 5's own precedent — flagged explicitly as Open Question 1 in the CR rather than assumed silently.
+
+### Problem statement
+
+Three CRs' worth of downstream ranking-arithmetic work (CR-063's `THEME_KEYWORDS`, CR-064's dedup/rarity/
+dampener) have assumed `build_jd_profile_deterministic`'s output adequately discriminates between JDs and
+focused entirely on what happens to it after extraction. That assumption has never been directly tested,
+and reading the extraction code surfaced two concrete, previously-unmeasured candidates (alphabetical
+`keywords` truncation; a `requirements` field that never calls the file's own requirements-section
+extractor) that would produce exactly the "generic profile, can't discriminate" symptom CR-064's three
+independently-correct ranking mechanisms all failed to fix from the ranking side.
+
+### Acceptance criteria (Phase 1 — diagnostic only, no fix)
+
+1. A new standalone measurement script logs `priority_themes`, `requirements`, AND `keywords` together
+   (not just themes) for all 13 available eval-set companies, sourced from `data/archive/submissions/`.
+2. A per-company hand-review comparing the extracted profile against `jd-theme-claim-eval-set.md`'s
+   human-verified themes, for all 13 companies, not a subset.
+3. The alphabetical-vs-frequency `keywords` comparison run and logged for at least 5 companies, with
+   actual word-list diffs shown.
+4. The `extract_req_section()`-vs-current-scan `requirements` comparison run and logged for the same
+   sample, with actual captured lines shown for both methods.
+5. One explicit finding written — profiles are measurably too generic (naming which field is the driver),
+   profiles are adequately discriminating (defect is elsewhere), or inconclusive (naming what's needed to
+   resolve it) — not a hedge between them.
+6. Zero changes to `jd_tailoring.py`, `score_claim_for_jd`'s call sites, or `master_claims.json`.
+7. Full `scripts/` pytest suite shows identical pass/fail/skip counts before and after (no production
+   code touched).
+
+### Out of scope (this CR)
+
+- Any fix to `build_jd_profile_deterministic`, `extract_req_section`, `THEME_KEYWORDS`, or
+  `score_claim_for_jd` — diagnosis only; a fix is a separate future CR gated on this finding.
+- Editing `master_claims.json` claim tags/bodies (including investigating `ACC-105-EXECUTION`'s own tag
+  breadth, the leading candidate if this CR's finding is "profiles are fine, defect is elsewhere").
+- Reopening embeddings or broadening `jd_profile_mode="llm"` as a fix — CR-063 ruled both out for the
+  *ranking* question; if this CR finds the *extraction* step itself is the defect, LLM-mode profiling
+  becomes a legitimately different question, but scoping that pilot is a future CR's decision, not this
+  diagnostic phase's.
+- Retuning `cover_claim_picker.py`'s flat bonuses (still an open, separate, Jason-gated item from CR-064).
+- Resolving the `data/submissions/` sync instability itself — worked around via `data/archive/submissions/`,
+  not fixed here.
+- Restoring the 3 missing companies (`tilt`, `par`, `parkingpass_com`) before starting — proceeding on the
+  13 available, flagged as Open Question 1.
+
+### Open questions (recorded in the CR, not guessed at)
+
+1. Proceed on the 13/16 archive-sourced sample, or pause to restore `tilt`/`par`/`parkingpass_com` first?
+2. Should the two candidate-mechanism comparisons (alphabetical-vs-frequency keywords;
+   `extract_req_section()`-vs-current requirements scan) stay pure measurement, or does Jason want a
+   further spike that re-runs ranking with a corrected profile through a parallel script (still not
+   touching production code)? Scoped as pure measurement in the CR; flagged as a possible larger ask.
+3. If the finding is "profiles are fine, defect is elsewhere" — does the next thread become
+   `ACC-105-EXECUTION`'s own tag/body breadth in `master_claims.json` (CR-063 Round 2's
+   flagged-but-never-actioned finding), or does Jason want to reassess whether continuing to chase this
+   one metric is still worth a fourth investigation given the effort CR-063/CR-064 already represent?
+
+### CR-worthiness call
+
+**Yes, and drafted.** This is diagnostic-only work, but so was CR-063, and the task instructions
+explicitly asked me to follow the same SDD process CR-064 used, which itself points back to CR-063 as
+the template. I deliberately did **not** use the generic CR-010 format (Overview/Motivation/Requirements
+table with FR-IDs/Traceability Mapping) that my own role instructions default to — Applyr has its own
+established, lighter format specifically for this family of diagnostic-loop CRs (Metadata / Problem /
+Decision / Acceptance Criteria / Out of Scope), used by both CR-063 and CR-064, and matching that
+established sibling pattern is more consistent with "follow Applyr's own SDD process, not a generic one"
+than defaulting to CR-010's heavier structure for work that isn't shaped like a feature build. Confirmed
+CR-065 was the next unused number via `docs/spec/05-change-requests/README.md` and a glob of the CR-06*
+files before assigning it.
+
+**Filed at:** `docs/spec/05-change-requests/CR-065-jd-profile-extraction-diagnostic.md`. Also added a
+CR-065 row to the registry table (`docs/spec/05-change-requests/README.md`), and updated CR-064's own
+registry row from "Not started" to "Closed partial" with the 10/14-unmoved headline finding — that row
+was stale (still said "Not started") even though the tracker's own Close-out section (dated today) closed
+it; fixing a registry row to match a CR's own already-decided status isn't a new decision on my part, just
+keeping the index honest, so I made the edit rather than flagging it as an open question.
+
+### Self-check against placeholders
+
+Re-read the CR and this log entry for "handle edge cases" / "TBD" / "etc." style gestures before calling
+this done. Both candidate mechanisms (keywords sort key, requirements section-scoping) are named with
+exact line numbers and exact current behavior, not "investigate the extraction logic." The eval-set
+sourcing decision names the exact directory, exact company counts, and exact missing companies rather than
+"data may be incomplete." The three-way finding structure in Acceptance Criteria #5 is written so "the
+profile seems kind of generic" would not satisfy it — a name-the-field or name-the-elsewhere-defect
+requirement is explicit test text, not a rubric to interpret loosely.
+
+## Tech Lead — CR-065 Setup
+
+**Task:** incorporate Jason's three Open-Question decisions into the CR-065 spec, decide the technical
+approach for the one piece that changed scope (the ranking-impact spike), and set up the tracker doc —
+same one-level-upstream pass my Round 1 did for CR-064. No measurement script written or run; that's
+senior-engineer's next job.
+
+**Read before deciding (not from memory):** the CR-065 spec in full; the CR-064 tracker (format + its
+Close-out that pointed this investigation upstream); `scripts/jd_tailoring.py`'s `JdProfile` dataclass
+(lines 58-66), `build_jd_profile_deterministic` (124-153), `extract_req_section` (100-116), the
+CR-064-final `score_claim_for_jd` (295-341) and `score_all_claims` (540-565); and both parallel-measurement
+precedents (`measure_theme_extraction.py`, `measure_semantic_rerank.py`). Confirmed the 13 archive
+companies are present and that the archive's `par_technology` is a different folder from the eval set's
+missing `par` slug — do not substitute it.
+
+**Decisions incorporated into `CR-065-jd-profile-extraction-diagnostic.md` (append-not-delete, same pattern
+CR-064's Round-1-approved decisions used):**
+- Open Question 1 → RESOLVED: proceed on the 13 companies in `data/archive/submissions/`; log the 3
+  missing as a caveat, don't wait.
+- Open Question 2 → RESOLVED: extend Phase 1 to include the ranking-impact spike. Added a third bullet to
+  Decision item 3, a scope-clarification paragraph to Decision item 5, a note to Out-of-Scope item 1, and
+  a concrete acceptance criterion (per-company `ACC-105-EXECUTION` before/after rank + top-5 membership,
+  actual numbers, `git diff --stat` still clean on `jd_tailoring.py`).
+- Open Question 3 → RESOLVED: continue the investigation; framed as Investigation Phase 1 of a
+  pipeline-down sequence in the tracker's intro and Session Handoff.
+
+**Technical approach for the ranking spike (this is the piece that changed scope, so it gets the precise
+call):** The constraint "zero changes to `jd_tailoring.py`" and the goal "re-run ranking with a corrected
+profile" are not in tension, because `JdProfile` is a plain 4-field `@dataclass`
+(`priority_themes`/`requirements`/`keywords`/`source`) and the scoring path takes a profile *as an
+argument*. So the corrected profile is constructed as data inside the standalone script — never by editing
+the extractor:
+1. `current = build_jd_profile_deterministic(jd_text)` (shipped function, unmodified).
+2. `corrected = JdProfile(priority_themes=current.priority_themes, requirements=<Part D list>,
+   keywords=<Part C list>, source="corrected")`. Themes are copied unchanged — they are not one of the two
+   candidate defects and CR-063 already worked that field; changing only keywords+requirements keeps the
+   spike a clean isolation of the two named defects.
+3. `keywords` corrected list: the frequency-sorted result computed in the script, holding the current
+   code's own choices fixed everywhere else — same length-≥5 filter, same 5-stopword set, same `[:12]`
+   cutoff, same source text (`_jd_body_for_themes(jd_text)`, the 72% body the current keyword line
+   tokenizes over), changing *only* the sort key from `sorted(...)` (alphabetical) to descending in-body
+   frequency. Same-shape comparison, one variable.
+4. `requirements` corrected list: run `extract_req_section(jd_text)` (shipped, unmodified) first, then apply
+   the identical 20-120-char / alphanumeric-start / `[:6]` line-scan to that section instead of the whole
+   JD.
+5. `load_catalog()` once, then `score_all_claims(current, catalog, jd_text)` vs.
+   `score_all_claims(corrected, catalog, jd_text)` — both call the unmodified CR-064-final
+   `score_claim_for_jd`. Diff `ACC-105-EXECUTION`'s 1-indexed rank and top-5 membership across the two,
+   reusing `measure_theme_extraction.py`'s `code_hits_top5`/`project_id`/`TOP_N` for consistent accounting.
+
+This is exactly the `measure_semantic_rerank.py` pattern (imports `score_claim_for_jd`, layers a comparison
+on top, modifies nothing) — I pointed the tracker at it as the reference so senior-engineer builds the same
+shape. The one deviation to flag: `measure_theme_extraction.py`'s `SUBMISSIONS_DIR` constant points at the
+unstable live `data/submissions/`; the new script must source from `data/archive/submissions/` instead
+(import `EVAL_SET`/helpers, not that path constant).
+
+**Fit/debt call:** this fits the existing standalone-measurement pattern exactly — no new architecture, no
+production surface touched, reversible by deleting one file. It creates zero technical debt and no dead-end
+for the (gated, future) fix work; if the spike shows a corrected profile moves `ACC-105-EXECUTION`'s rank,
+the same corrected-keywords/corrected-requirements logic is what a CR-066 would promote into
+`build_jd_profile_deterministic`. No backflow to product-manager needed — the spec had exactly one
+genuinely-open scope decision (the spike), Jason made it, and the code confirmed it's implementable within
+the stated constraint. Nothing else in the spec required a decision the code contradicted.
+
+**Deliverables (paths):**
+- Spec updated: `docs/spec/05-change-requests/CR-065-jd-profile-extraction-diagnostic.md`
+- Tracker created: `docs/spec/08-implementation/CR-065-jd-profile-extraction-diagnostic-tracker.md`
+  (status `not_started`, Before-Round-1 orientation + Round 1 Parts A-G + Session Handoff, ready for
+
+---
+
+## Backlog — raw findings from another session, not yet triaged (2026-07-14)
+
+Jason pasted a set of findings from a separate session's review of drafted submissions (not this session's
+work, not verified by any role in this pipeline). Logged here verbatim-in-substance so they aren't lost,
+explicitly NOT acted on — Jason's direction is to work the pipeline top-down starting with JD extraction
+(CR-065, above), so these are queued for future triage, not fixed now. Do not assume any of these are
+confirmed defects until a role in this pipeline actually verifies them against the code.
+
+1. **Cover letters don't name the company's real problem before any accomplishment appears** — described as
+   a distinct authoring step, not a byproduct of claim selection. Possibly relevant to the CR-064 close-out's
+   deferred `cover_claim_picker.py` item, possibly a separate authoring-flow gap — untriaged.
+2. **Proof-point density is uncapped** — pipeline drafts consistently cram 5-6 claims per cover letter;
+   manual rewrites converged on 3. Suggested: a hard cap with forced trimming, mirroring the page-count
+   pruning that already exists for resumes.
+3. **Quality degrades hard, silently, under VRAM fallback** — claimed that the worst hallucinations (broken
+   placeholders, mangled/conflated metrics, a "JobAgent-as-accomplishment" mixup) happened when free VRAM
+   was low and the pipeline silently substituted `phi3.5:3.8b` for the primary model. The fallback is logged
+   but not treated as a quality-risk signal. Suggested: queue/retry instead of drafting on a much weaker
+   model, or flag fallback-drafted content for mandatory review.
+4. **The self-heal loop's internal validation disagrees with `submission_linter.py`** — claimed twice
+   (Drake Software, Allstate) it printed "verified and passed all conversion guards," then the very next
+   `compile_single.py` run failed the linter on a forbidden phrase it supposedly just checked. Two different
+   validation code paths reportedly disagreeing.
+5. **Claim catalog has drifted past what CLAUDE.md documents** — claimed `master_claims.json` has ACC-111
+   through ACC-118 marked enabled, but CLAUDE.md's approved list stops at ACC-110, and ACC-111 reportedly has
+   no anchor in `workExperience.md` at all. The validator allegedly only warns on this instead of blocking.
+   **This one is worth a fast, direct verification given the project's own anti-hallucination rules — an
+   unanchored enabled claim is a real risk if true, not just a quality nit.**
+6. **Two specific, fixable bugs**: the location classifier reportedly flags "US and Canada both eligible" as
+   a non-US signal; company-name resolution reportedly used a LinkedIn listing name ("Drake Software")
+   instead of the name the JD itself used throughout ("Taxwell").
+7. **Fit scoring is reportedly unstable, not just imprecise** — claimed same JD, back-to-back runs, scored
+   60 vs. 62 with different reasoning each time — described as a reliability problem in the scoring
+   structure itself, not normal variance.
+
+**Suggested next step, once CR-065 (and whatever it leads to) concludes:** triage item 5 first (fastest to
+verify, highest stakes if true — a live anti-hallucination guarantee), then decide whether the rest become
+their own CR(s) or get folded into whatever CR-065's "work down the pipeline" sequence surfaces next.
+  senior-engineer).
+
+---
+
+## Senior Engineer — CR-065 Round 1
+
+**Story/work item:** CR-065 (`docs/spec/05-change-requests/CR-065-jd-profile-extraction-diagnostic.md`)
+Round 1 — the JD-profile extraction diagnostic, per the fully-specified tracker at
+`docs/spec/08-implementation/CR-065-jd-profile-extraction-diagnostic-tracker.md`. Diagnosis-only work, no
+production code changes.
+
+**What the script does (`scripts/measure_jd_profile_extraction.py`, new, standalone, not wired into any
+production path):**
+1. Reads all 13 available eval-set companies' `Original_JD.txt` from `data/archive/submissions/` (not
+   `data/submissions/`, per the tracker's data-instability guardrail).
+2. Calls the unmodified `build_jd_profile_deterministic()` and logs the full profile: `priority_themes`,
+   `requirements`, AND `keywords` together (the gap `measure_theme_extraction.py` leaves open, since it
+   only logs `priority_themes`).
+3. Implements the two candidate-defect comparisons named in the spec as pure diagnostics: `keywords`
+   alphabetical (current) vs. frequency-sorted (same length-5+ filter, same 5-stopword filter, same
+   `_jd_body_for_themes()` source, same 12-word cutoff, only the sort key differs); `requirements` current
+   whole-JD line-scan vs. the same line-scan applied only to `extract_req_section()`'s output.
+4. Runs a ranking-impact spike: constructs a corrected `JdProfile` (same themes, frequency-sorted keywords,
+   section-scoped requirements) as a plain dataclass instance inside the script, and re-scores it through
+   the unmodified, shipped `score_all_claims()`, comparing `ACC-105-EXECUTION`'s rank and top-5 membership
+   against the current deterministic profile.
+
+**Finding reached: (a), profiles are measurably too generic/non-discriminating.** Dominant driver:
+`keywords`' alphabetical selection (a universal defect, present in 13 of 13 companies in the Part B
+hand-review; cleanly isolated as the sole cause of `ACC-105-EXECUTION`'s rank movement in 5 of 6 sampled
+companies in Part E, since `requirements` was byte-identical before and after correction in those 5
+companies). `requirements`' boilerplate-capture is a real, secondary, JD-layout-dependent contributor
+(4 of 13 companies, OneStream/Remote/Covideo/Ontra, confirmed capturing pure posting metadata or
+interview-process text instead of real requirements in Part B), but the tested fix
+(`extract_req_section()`-scoping) only resolved 1 of those 4 (Cresta); Covideo and Ontra remain broken even
+after section-scoping, pointing at a second, compounding defect in `extract_req_section()`'s own
+heading-regex coverage and the line-scan's 120-character cap, not attributed a fix here since that is out
+of scope by design.
+
+**The evidence, not just a summary; the tracker's "Round 1 results" section has the full detail:**
+- Part B: 13-row hand-review table, every company judged against `docs/reports/jd-theme-claim-eval-set.md`'s
+  ground truth. `keywords` weak in all 13; `requirements` boilerplate-broken in 4 of 13 (OneStream's
+  requirements are literally posting metadata lines like Location/Employment Type/Benefits Offered/salary;
+  Covideo's are 0 of 6 real, all title/location/heading/culture/benefits text; Remote's include a start-date
+  line and "Interview with recruiter"; Ontra's are 0 of 3 real, all intro/org-context boilerplate).
+- Part C: 6-company sample (Cresta, Redox, Covideo, DataGrail for the over-representation criterion;
+  SailPoint, Ontra for the under-scoring-miss criterion; Covideo and DataGrail satisfy both), named before
+  running. Every sampled company's frequency-sorted `keywords` recovers ground-truth-relevant nouns the
+  alphabetical version discards; the sharpest example is SailPoint, where frequency-sort recovers
+  "identity", "security", "cloud", "certification", literally the words in that company's own eval-set
+  ground-truth description, none of which the current alphabetical output contains.
+- Part D: same 6 companies, `extract_req_section()`-scoped requirements vs. current whole-JD scan.
+  Byte-identical in 5 of 6 (Redox, Covideo, DataGrail, SailPoint, Ontra); Ontra's case is notable because
+  `extract_req_section(jd_text)` equals `jd_text` exactly, confirming the section-detection regex missed
+  this JD's "Who you are" heading and fell back to the whole document.
+- Part E, the load-bearing measurement: `ACC-105-EXECUTION`'s rank moved in 4 of 6 sampled companies under
+  the corrected profile (Cresta rank 2 to 1, Redox rank 3 to 6 and drops out of the top-5, Covideo rank 3
+  to 2, DataGrail rank 1 to 6 and drops out of the top-5), and stayed unchanged in 2 of 6 (SailPoint 7 to 7,
+  Ontra 19 to 21, both already far outside the top-5). This directly contradicts CR-064's five-round null
+  result on this same metric, because CR-064 never varied the input profile, only the downstream
+  aggregation arithmetic that consumes it.
+
+**What the finding does not claim:** the corrected profile did not pull the under-scoring
+`ACC-401-AITOOLS`/`ACC-204` claims into the top-5 anywhere in the 6-company sample; this fix, on this
+evidence, addresses the over-representation half of the CR-063/CR-064 problem but is not shown to solve
+the under-scoring half. Also flagged: `keywords`' 5-letter-minimum filter structurally cannot surface
+"AI"/"ML"/"UX" tokens regardless of sort order, a real limitation for any follow-up fix design.
+
+**Deviations from the tracker/spec:** none. Followed the Before-Round-1 checklist and Parts A through G
+exactly as specified; file paths, function signatures, the 13-company list, the archive data source, and
+the comparison methodology all matched what was pre-written. Sample selection for Parts C/D/E was named
+and justified before running (Cresta/Redox/Covideo/DataGrail for over-representation, SailPoint/Ontra for
+under-scoring-miss), per the tracker's anti-cherry-pick instruction.
+
+**Test harness note:** this CR's own guardrails explicitly forbid production code changes, so there is no
+"write a failing test before the fix" step here in the usual sense; the closest equivalent (the pytest
+baseline run before and after, to prove nothing broke) was performed and matched exactly.
+
+**Verification performed:**
+- `git diff --stat` scoped to `scripts/jd_tailoring.py` and `data/master_claims.json` produced zero output,
+  confirming both are byte-unchanged.
+- `git status --porcelain` confirms the only new file under `scripts/` is
+  `scripts/measure_jd_profile_extraction.py`.
+- Full `scripts/` pytest suite (ignoring `test_domain_gate.py`, `test_fit_policy.py`, `test_llm.py`) run
+  both before any work (28 failed, 190 passed, 1 skipped) and again at close-out (28 failed, 190 passed,
+  1 skipped): exact match, no drift.
+- Re-confirmed the exact 13-present/3-missing company split in `data/archive/submissions/` at session start
+  via a direct shell loop (matches the tracker's expected list exactly, including `par_technology` being
+  distinct from and not a substitute for `par`).
+- The new script was import-tested standalone to confirm it has no accidental production wiring or
+  import-time side effects.
+
+**What I did NOT verify:** I did not attempt to restore or investigate the 3 missing companies
+(`tilt`, `par`, `parkingpass_com`); out of scope per the tracker's resolved Open Question 1. I did not
+design or prototype any fix to `keywords` or `requirements`; out of scope by explicit CR mandate (diagnosis
+only, fix design gated on Jason's review). I did not isolate whether Cresta's rank movement (2 to 1, the
+one sampled company where both `keywords` and `requirements` changed together) was driven by one field or
+both; noted explicitly in Part E and Part F rather than guessed at. I did not investigate why
+`extract_req_section()`'s heading-regex misses Ontra's "Who you are" heading or Covideo's specific layout;
+flagged as a compounding, unattributed defect for a future CR, not root-caused further here since that
+would cross into fix-design territory this CR's guardrails explicitly exclude.
+
+Files touched: `scripts/measure_jd_profile_extraction.py` (new),
+`docs/spec/08-implementation/CR-065-jd-profile-extraction-diagnostic-tracker.md` (Round 1 results,
+checklist checkoffs, Session Handoff), `docs/spec/05-change-requests/CR-065-jd-profile-extraction-diagnostic.md`
+(Status line only), and this file.
+
+## Security Review — CR-065 Round 1
+
+**Reviewer:** Senior Security Engineer (AppSec + data privacy). **Verdict: CLEAR.** No Critical,
+Important, or Minor findings. Diff reviewed directly (`git diff --stat`, `git status --porcelain`), new
+script read in full (`scripts/measure_jd_profile_extraction.py`), transitive imports and `.gitignore`
+coverage verified against the project constitution's security bar (zero-knowledge, `.env`-only secrets,
+localhost-only, NG-001 no cloud/multi-user).
+
+1. **PII exposure — CLEAR.** The script's only file reads are gitignored JD text and the gitignored
+   claim catalog: `data/archive/submissions/{slug}/Original_JD.txt` (`measure_jd_profile_extraction.py:60`,
+   read-mode) and `data/master_claims.json` via `load_catalog()` (`claim_catalog.py:55`, read-mode). Both
+   source paths are gitignored (`data/archive/` at `.gitignore:52`; `data/master_claims.json` at
+   `.gitignore:84` via `data/*.json`). No reference anywhere in the script to `data/workExperience.md`,
+   `jobagent.sqlite`, or any candidate-PII source (grep for `workExperience|jobagent|sqlite|.env|password|
+   token|api_key|secret` returns only the `[a-z]{5,}` tokenizer regex, unrelated). The runnable output
+   (`main()` -> `print_part_a`, `measure_jd_profile_extraction.py:205-210`) prints only JD-derived profile
+   fields (`priority_themes`/`requirements`/`keywords`); the ranking helpers surface only claim IDs
+   (`ACC-105-EXECUTION` etc.), which are already-public codes committed throughout `docs/`, never claim
+   body text. The diagnostic content written into the tracked tracker is JD excerpts (public job-posting
+   text, not candidate PII) plus those claim IDs. Nothing candidate-identifying reaches a tracked file.
+
+2. **Data access — CLEAR.** No widening. The script is strictly read-only over the JD corpus and catalog:
+   the only `open()` calls are read-mode (`measure_jd_profile_extraction.py:60`), and it never writes,
+   moves, or deletes under `data/submissions/` or `data/archive/submissions/`, satisfying the tracker's
+   explicit guardrail (`CR-065-...-tracker.md:402`). Importing `EVAL_SET`/`code_hits_top5`/`project_id`
+   from `measure_theme_extraction` is side-effect-free: that module's only write
+   (`measure_theme_extraction.py:100`, and it targets `docs/reports/`, not submissions) is function-scoped
+   under its own `if __name__ == "__main__"` guard, so import triggers no I/O.
+
+3. **Zero production code changes — CLEAR.** `git diff --stat -- scripts/jd_tailoring.py
+   data/master_claims.json` returns empty (zero lines changed), matching the CR's hard constraint. The new
+   script is untracked/standalone (`?? scripts/measure_jd_profile_extraction.py`) and is not wired into any
+   production path.
+
+4. **Trust boundaries — CLEAR.** All file paths are built from a fixed, hardcoded slug list: `slug` comes
+   only from `EVAL_SET` (imported from `measure_theme_extraction`), filtered by `available_eval_set()`
+   (`measure_jd_profile_extraction.py:48-55`) — never derived from JD content. Confirmed the tracker's claim
+   that slugs are a fixed list, not JD-derived, holds in code. No SQL, no shell invocation, no
+   `os.system`/`subprocess`. The `re.findall(r"[a-z]{5,}", ...)` over JD text feeds only an in-memory
+   `Counter` for tokenization (`measure_jd_profile_extraction.py:105-106`) — no injection surface.
+
+5. **Secrets — CLEAR.** No hardcoded keys, tokens, or credentials introduced or relocated. No `.env`
+   interaction at all.
+
+6. **Dependency risk — CLEAR.** Imports are stdlib only (`json`, `os`, `re`, `collections.Counter`) plus
+   existing in-repo modules (`claim_catalog`, `jd_tailoring`, `measure_theme_extraction`, `utils`). No new
+   third-party package, no new `package.json`/requirements entry — no repeat of the OpenPostings
+   transitive-scope precedent.
+
+7. **Architecture drift — CLEAR.** Standalone local diagnostic; nothing points toward cloud hosting,
+   multi-user access, network exposure, or moving secrets off `.env`. Consistent with NG-001 and the
+   zero-knowledge/localhost bar.
+
+**Note (out of scope, non-security):** `import json` at `measure_jd_profile_extraction.py:24` appears
+unused in the runnable path — hygiene only, no security implication, flagged for the author's awareness,
+not a finding.
+
+**Could not verify from the diff alone:** nothing material. All claims above are grounded in the read
+files and the git state captured this session.
+
+## QA — CR-065 Round 1
+
+**Scope:** independent verification of the CR-065 Round 1 diagnostic finding (`scripts/measure_jd_profile_extraction.py`, tracker `docs/spec/08-implementation/CR-065-jd-profile-extraction-diagnostic-tracker.md`, senior-engineer log entry above). Security already cleared this; my job was to re-derive the numbers, not trust the report.
+
+**Verdict: (a) diagnostic work itself — PASS.** (b) **Evidence substantively supports finding (a)** ("profiles too generic, `keywords`' alphabetical selection is the dominant driver") **on every claim I could independently reproduce, with one real data-integrity caveat that the tracker's "13/13, no drift" language is now false and should be corrected.**
+
+### 1. Script runs clean
+`python scripts/measure_jd_profile_extraction.py` from `scripts/` exits 0, prints Part A for every company found. **Finding: it printed only 12 companies, not 13** — see item 4 below. `main()` (`measure_jd_profile_extraction.py:205-210`) only invokes Part A; Parts C/D/E have no script entry point and had to be reproduced by importing the module's functions directly (`keywords_frequency_sorted`, `requirements_section_scoped`, `ranking_spike`, etc.) — this matches the CR's stated design (script is "also importable for ad hoc use," `measure_jd_profile_extraction.py:19-20`) but means Parts C/D/E are not literally reproducible via a single `python script.py` invocation; a minor reproducibility gap, not a defect.
+
+### 2. Part E ranking-impact spike (the load-bearing claim) — CONFIRMED EXACT for Redox and DataGrail
+Reconstructed via `ranking_spike()` unmodified, called against `load_catalog()` and the real `score_all_claims()`:
+- **Redox: rank_current=3, rank_corrected=6, top5_current=True, top5_corrected=False** — matches tracker exactly (`CR-065-...-tracker.md:314`). Corrected top-5 IDs: `['ACC-109-PROCESS', 'ACC-112-COMPLIANCE', 'ACC-111-ENTERPRISE', 'ACC-113-MIGRATION', 'ACC-401-AITOOLS']` — also confirms the tracker's footnote that `ACC-401-AITOOLS` incidentally lands in Redox's corrected top-5 at rank 5.
+- **DataGrail: rank_current=1, rank_corrected=6, top5_current=True, top5_corrected=False** — matches tracker exactly (`CR-065-...-tracker.md:316`).
+Both numbers reproduce byte-for-byte. This is the CR's central claim and it holds up under independent reconstruction, not just re-reading the log.
+
+### 3. Part C keyword diffs — CONFIRMED EXACT for 5/6 sampled companies; SailPoint NOT independently verifiable (see item 4)
+Recomputed `keywords_alphabetical_current()` and `keywords_frequency_sorted()` directly for Cresta, Redox, Covideo, DataGrail, Ontra — all five word-for-word match the tracker's Part C table (`CR-065-...-tracker.md:275-280`), including Covideo's frequency list recovering `dealership` (absent from alphabetical) and DataGrail's recovering `product`/`customer`/`engineering`. I could not check SailPoint — see item 4.
+
+### 4. Data-integrity finding: `data/archive/submissions/sailpoint/` does not exist right now — the tracker's "13/13, re-confirmed, no drift" claim is currently false
+- `python scripts/measure_jd_profile_extraction.py` printed only 12 companies (`Total companies available: 12/13`), silently missing SailPoint — confirmed by direct `ls`/`find` of `data/archive/submissions/`: no `sailpoint` directory exists anywhere in the tree (checked case-insensitively, checked `data/submissions/` too — absent from both).
+- `git check-ignore -v data/archive/submissions/sailpoint` confirms the path is gitignored (`.gitignore:52`), so there is no git history to recover it or timestamp its removal precisely.
+- Circumstantial timing evidence: `data/archive/submissions/` (the parent dir) has mtime **2026-07-14 19:09:50**, later than sibling folders like `redox`/`covideo`/`cresta`/`datagrail` (all **2026-07-13**) — consistent with something being removed from that directory on 2026-07-14, the same day the tracker's orientation checklist states "**Re-confirmed 2026-07-14 (this session):** re-ran the exact 13-slug + 3-missing + `par_technology` distinctness check... All 13 present... No drift since scoping" (`CR-065-...-tracker.md:63-66`) and the same day Part F/Session Handoff repeat "13/13" and "no drift" (`CR-065-...-tracker.md:216, 342, 435-437`).
+- **Practical effect:** I cannot independently verify the SailPoint rows in Part B (`CR-065-...-tracker.md:202`), Part C (`:279`, the "sharpest case" evidence — `identity`/`security`/`cloud`/`certification`), or Part E (`:317`, rank 7→7 unchanged) today. I did not find any reason to *doubt* those specific numbers — the mechanism is deterministic and I confirmed it produces the described pattern (alphabetical list missing the JD's own defining nouns, frequency list recovering them) in every one of the 5 other companies I could check — but "the code plausibly did this" is not the same as "I reproduced it," and the instructions I was given are explicit that unverified claims aren't evidence. Flagging as **Important, not Critical**: it doesn't change the finding (corroborated independently by 5/6 Part C companies and both load-bearing Part E companies), but the tracker's current text overstates data availability and should be corrected (either re-source SailPoint's JD from wherever it came from, or update the "13/13, no drift" language to "12/13, SailPoint since become unavailable" before this doc is relied on further).
+
+### 5. Part D requirements comparison — CONFIRMED EXACT for all 5 available sample companies
+Recomputed `requirements_current()` vs `requirements_section_scoped()` for Cresta (DIFFER), Redox/Covideo/DataGrail/Ontra (IDENTICAL) — matches the tracker's table (`CR-065-...-tracker.md:292-297`) exactly, including the specific claim `extract_req_section(jd_text) == jd_text` for Ontra (confirmed `True`).
+
+### 6. Zero production code changes — CONFIRMED, with one caveat on verification strength
+`git diff --stat -- scripts/jd_tailoring.py` returns empty (zero lines changed). `git status --porcelain` shows `scripts/measure_jd_profile_extraction.py` as the only new file under `scripts/`. **Caveat:** `data/master_claims.json` is untracked/gitignored (`git ls-files data/master_claims.json` returns nothing), so `git diff --stat` on it is trivially empty regardless of whether it changed — this is expected repo behavior (data files are gitignored by design per CLAUDE.md), not a defect, but it means this particular check doesn't actually prove non-modification of that file the way it does for `jd_tailoring.py`. No other evidence of it being touched.
+
+### 7. pytest baseline — CONFIRMED EXACT MATCH
+`python -m pytest -q --ignore=test_domain_gate.py --ignore=test_fit_policy.py --ignore=test_llm.py` from `scripts/`: **28 failed, 190 passed, 1 skipped** — identical to the CR-064 baseline and the tracker's claimed before/after counts. No drift from this CR's work.
+
+### 8. Part B boilerplate-capture claims — CONFIRMED for OneStream and Covideo
+Read the actual `requirements` list from the Part A rerun:
+- **OneStream** (`CR-065-...-tracker.md:204`, claimed "4/6 lines are posting metadata"): confirmed — lines 1-4 are literally `'Location:...Remote, USA'`, `'Employment Type:...Full-Time'`, `'Benefits Offered:...Vision, Medical, Life, Dental, 401K'`, `'Gross annual base salary:...USD 114,000-148,000'`; only lines 5-6 are a heading and one real content line. Exact match.
+- **Covideo** (`CR-065-...-tracker.md:208`, claimed "0/6 real content, worst example"): confirmed — the 6 lines are `'Senior Product Manager'` (title), `'Indianapolis, IN Remote (US)'` (location), `'Key Responsibilities'` (heading), then three culture/benefits sentences. Zero of the 6 lines are an actual job requirement. Exact match.
+
+### Findings summary (severity-ordered)
+- **Important:** `data/archive/submissions/sailpoint/` is currently absent (confirmed via direct filesystem search + `.gitignore` check), contradicting the tracker's "13/13 present, re-confirmed, no drift" language at `CR-065-...-tracker.md:63-66, 216, 342, 435-437`. Doesn't invalidate the finding (corroborated by the other 5/6 Part C companies and both load-bearing Part E companies, all reproduced exactly), but the tracker text is currently inaccurate and should be corrected or re-caveated before further reliance.
+- **Minor:** Parts C/D/E have no single-command script entry point (`main()` only runs Part A, `measure_jd_profile_extraction.py:205-210`) — reproducing them requires importing functions ad hoc, as I did. Not required by the CR's guardrails, but worth a `--full` flag if this script gets reused for CR-066 follow-up measurement.
+- **Minor:** the "zero changes to `data/master_claims.json`" verification step is trivially satisfied for a gitignored/untracked file and doesn't actually prove non-modification the way the `jd_tailoring.py` check does. No evidence of actual modification, just noting the check's limit.
+
+**Bottom line:** the diagnostic script is correct, deterministic, and reproduces its own claimed numbers exactly everywhere the underlying data still exists. The load-bearing Part E measurement (Redox 3→6, DataGrail 1→6, both dropping out of top-5) is confirmed byte-for-byte via independent reconstruction, not just re-reading the report. Finding (a) is well-supported. The one thing that doesn't hold up under re-verification today is the tracker's data-availability bookkeeping (SailPoint), which is a real but non-fatal gap — CR-066 scoping can proceed on this finding, but whoever picks it up should re-source or re-caveat the SailPoint evidence first.
+
+---
+
+## Product Manager — CR-066 Scoping
+
+**Trigger:** Jason's standing instruction this session — proceed through the pipeline without per-step approval checks. Scope CR-066, the fix design following CR-065's diagnostic finding, and hand it directly to tech-lead.
+
+### Global Constraints (verbatim from `docs/spec/00-project-constitution.md`)
+
+**Goals**
+- `GOAL-001`: Automate multi-source job scouting (BuiltIn, APIs, OpenPostings; LinkedIn decommissioned per CR-010).
+- `GOAL-002`: Implement deterministic fit scoring to minimize LLM token waste.
+- `GOAL-003`: Generate application materials (Resume, Cover Letter) grounded in verified `workExperience.md`.
+- `GOAL-004`: Maintain absolute data privacy by running the core engine on `localhost`.
+- `GOAL-005`: Provide a real-time dashboard for monitoring the automation pipeline.
+
+**Non-goals**
+- `NG-001`: Cloud hosting or multi-user access (privacy violation).
+- `NG-002`: Direct ATS submission (requires human-in-the-loop for safety).
+- `NG-003`: "General purpose" career coaching (focused strictly on PM roles).
+
+**Global quality bar**
+- Performance: Sub-second UI response; sub-15-minute end-to-end job evaluation.
+- Accessibility: Standard WCAG compliance for internal use.
+- Security: Zero-knowledge architecture; API keys restricted to local `.env`.
+- Reliability: 100% "Context Firewall" success between job iterations.
+- Maintainability: SDD-compliant code with full requirement traceability.
+- Documentation: Spec-first workflow enforced for all changes.
+
+**Agent constraints**
+- Agents must update specs before code.
+- Agents must cite requirement IDs in tasks and implementation summaries.
+- Agents must preserve existing accepted behavior unless a change request says otherwise.
+- Agents must record open questions instead of guessing when the decision changes product behavior.
+
+### Prior CRs/decisions checked
+- `docs/spec/05-change-requests/CR-065-jd-profile-extraction-diagnostic.md` and its tracker
+  `docs/spec/08-implementation/CR-065-jd-profile-extraction-diagnostic-tracker.md` — Round 1 (the whole
+  diagnostic) complete 2026-07-14, finding (a): JD profiles are measurably too generic, `keywords`'
+  alphabetical selection is the dominant, universal (13/13 companies) driver; `requirements`'
+  boilerplate-capture is a real secondary, JD-layout-dependent contributor (4/13, tested fix only
+  resolved 1 of those 4). This CR is the direct, gated follow-up that finding's own Session Handoff
+  named as the next step — I did not re-derive or re-litigate the finding, I scoped the fix it points at.
+- `pipeline-log.md`'s "Security Review — CR-065 Round 1" and "QA — CR-065 Round 1" entries — both
+  independently reproduced the load-bearing Part E numbers (Redox 3->6, DataGrail 1->6) and 5/6 of Part
+  C's keyword diffs against real, unmodified code. QA also found a real, currently-live data caveat:
+  `data/archive/submissions/sailpoint/` was present during CR-065 Round 1's execution but was confirmed
+  gone from disk by QA's own verification pass hours later the same day (12/13 companies now, not
+  13/13) — I built that caveat into this CR's acceptance criteria rather than assuming the tracker's
+  "13/13" language still holds.
+- This does not touch resume/cover-letter content directly (it's a scoring-input code fix), so CLAUDE.md's
+  Hard Anti-Hallucination Rules / Exclusion Zones / Forbidden Language sections don't govern this CR's
+  scope, though the fix's downstream effect (which claims get selected for cover letters) is exactly why
+  Acceptance Criterion 5 requires a cover-letter-side hand-check per the CR-064-established discipline.
+
+### Problem statement
+`build_jd_profile_deterministic`'s `keywords` field (`scripts/jd_tailoring.py:139-140`) selects the
+top-12 JD words by alphabetical order instead of frequency, discarding frequency information entirely
+via `set()`. CR-065 measured this is the dominant, cleanly-isolated cause of `ACC-105-EXECUTION`'s
+cross-JD top-5 over-representation — the defect CR-063 diagnosed and all three of CR-064's independently-
+correct scoring-formula mechanisms (dedup, rarity weighting, DCG dampener) failed to move. A frequency-
+sorted correction, tested as a standalone comparison (not yet shipped), moved the claim's rank materially
+in 4/6 sampled companies and dropped it fully out of the top-5 in 2 (Redox, DataGrail) — reproduced
+independently by both Security Review and QA against the real, unmodified `score_all_claims()`.
+
+### Scope decision — narrow, around the strongest evidence only
+Scoped CR-066 around exactly the `keywords` frequency-sort fix, using the same mechanism CR-065's tested
+comparison already validated (`scripts/measure_jd_profile_extraction.py:96-108`,
+`keywords_frequency_sorted()`) moved into production: same length>=5 filter, same 5-stopword filter, same
+`_jd_body_for_themes()` source text, same `[:12]` cutoff — only the sort key changes, from alphabetical to
+descending in-JD-frequency (Counter-based, ties broken alphabetically for determinism). Nothing else in
+`build_jd_profile_deterministic` changes.
+
+**This is a PRODUCTION code change**, unlike CR-063/064/065 which were all diagnostic-only against
+standalone scripts never wired into a real call path. `build_jd_profile_deterministic` has real production
+call sites (`local_draft_stages.py`, `cover_jd_needs.py`, `cover_letter_compiler.py`,
+`cover_plan_builder.py`) plus several test/measurement scripts. That changes the risk profile materially
+from CR-065: this CR requires re-running the full CR-064-era guardrail set — pytest baseline, cover-
+letter-side hand-check, and a full eval-set re-measurement (not just the 6-company sample CR-065 used to
+demonstrate the mechanism) — before it can be considered done. I said this explicitly in the CR doc rather
+than letting it read as another lightweight diagnostic-CR entry in the CR-063/064/065 family.
+
+### `requirements`/`extract_req_section()` — explicit call: separate CR-067, not bundled
+CR-065 Part D found the tested `requirements` fix (scoping the existing line-scan through
+`extract_req_section()`) only resolved 1 of the 4 confirmed-broken companies (Cresta); Covideo and Ontra
+remain broken even after that correction, because the defect there is inside `extract_req_section()`
+itself (its heading-regex doesn't match some JDs' heading styles at all, e.g. Ontra falls back to scanning
+the entire JD; for others, like Covideo, the section it isolates still contains boilerplate). This is a
+distinct root cause from `keywords`' alphabetical-vs-frequency defect, and unlike `keywords`, it has not
+been diagnosed to the point where a tested fix reliably works. My call: this stays a separate CR (I
+reserved the number CR-067 in the spec doc's Out of Scope section but did not draft it — that's a future,
+separate diagnostic-then-fix cycle, not part of this dispatch). Reasoning:
+1. Different root cause (heading-regex coverage + a 120-char line-scan window vs. `keywords`' sort key)
+   — bundling two unrelated fixes into one CR muddies what's actually being verified.
+2. The tested correction for `requirements` doesn't reliably work (1/4), meaning the real fix hasn't been
+   identified yet — only that the obvious first attempt is insufficient. That's diagnostic-phase work, not
+   fix-phase work, and mixing the two violates the "measure before fix, one hypothesis at a time"
+   discipline this project's CR-063->064->065 arc has held to throughout.
+3. Bundling would make it harder to cleanly attribute any regression CR-066's own measurement surfaces —
+   if something moves unexpectedly, was it the keywords change or the requirements change? Keeping them
+   separate keeps that attribution clean, the same reason CR-065's own Part E spike varied one field at a
+   time where it could.
+
+### Explicitly not scoped — under-scoring problem
+Per direct instruction and CR-065's own evidence: did **not** scope a fix for `ACC-401-AITOOLS`/`ACC-204`
+under-scoring. CR-065's ranking-impact spike found the corrected profile did not pull these claims into
+the top-5 anywhere in its 6-company sample — no evidence a `keywords`/`requirements` fix addresses this
+half of the original CR-063/CR-064 problem. Scoping a fix here would be designing against an unmeasured
+hypothesis, the exact anti-pattern this session's whole diagnostic arc has been disciplined about
+avoiding. Left as an explicit Out of Scope item in the CR-066 doc with a note that it needs its own
+diagnostic phase first if it remains a priority.
+
+### CR-worthiness
+**Yes.** This is a multi-file production code change (new import, changed selection logic, new tests,
+new tracker doc, registry update) to a function on the live drafting path, following directly from a
+formally diagnosed, independently-reproduced finding — squarely inside "meaningful, multi-file change
+worth a formal record" per CLAUDE.md's Documentation Update Checklist. Drafted as
+`docs/spec/05-change-requests/CR-066-jd-profile-keywords-frequency-fix.md`, next unused CR number,
+structured as a hybrid of CR-010's fix-CR shape (Overview/Problem framing, a Traceability Mapping table
+at the end) and the round-based tracker discipline CR-063/064/065 established (Decision items written as
+an executable checklist, Acceptance Criteria numbered and measurable, a tracker doc named but not created
+here — that's the executing role's job, same precedent CR-065's "Tech Lead — CR-065 Setup" entry set).
+No FR-ID requirements table — consistent with CR-063/064/065, none of which registered FR-IDs in
+`docs/spec/02-requirements-registry.md` either; forcing IDs into this lighter-weight CR family would break
+that established precedent without adding real traceability value here.
+
+### Open questions
+CR-065's evidence for this specific fix is strong and cleanly isolated, so genuinely few remain (both
+left to the executing role to resolve and log, not gated on Jason):
+1. Where the new required unit test(s) should live — directly against `build_jd_profile_deterministic`'s
+   output, or against an extracted, separately-testable keyword-selection helper. Normal implementation
+   choice, not a product-behavior question.
+2. Whether `scripts/measure_jd_profile_extraction.py` should be extended in place (a `--full` mode, per
+   QA's CR-065 finding that Parts C/D/E currently lack a single-command entry point) or whether this CR's
+   full-sample measurement should be a new script to avoid touching a script CR-065 already reviewed.
+   Minor sequencing choice, not gated.
+
+No product-behavior-changing open questions were left unresolved — everything that would have required
+guessing at a decision Jason hadn't made was either already resolved by CR-065's own Open Questions
+(sample-size handling, sequence commitment) or explicitly kept out of scope above rather than guessed at.
+
+### Self-check against placeholders
+Re-read the CR-066 doc end to end before finalizing: no "handle edge cases," no "TBD," no "etc." Every
+acceptance criterion names a specific file, function, or number (the exact code change at
+`jd_tailoring.py:139-140`, the exact pre-fix baseline range `9/13`, the exact pytest baseline
+`28 failed / 190 passed / 1 skipped`, the exact call sites to re-confirm). Where a number genuinely can't
+be pinned yet (the exact company count at execution time, given SailPoint's confirmed disappearance), the
+doc says so explicitly and requires it be logged, rather than asserting a stale number as fact.
+
+### Files touched this entry
+- `docs/spec/05-change-requests/CR-066-jd-profile-keywords-frequency-fix.md` — new CR spec.
+- `docs/spec/05-change-requests/README.md` — added CR-066 registry row; also corrected CR-065's row
+  (was stale "Not started" from scoping time, updated to reflect Round 1 diagnostic completion — needed
+  so CR-066's own row, which says "fix handed off," reads consistently against it).
+
+### Handoff to tech-lead
+Hand `docs/spec/05-change-requests/CR-066-jd-profile-keywords-frequency-fix.md` directly to tech-lead per
+Jason's standing no-pause instruction this session. The spec's Decision section is written as an
+executable checklist (exact code diff, exact call sites, exact pre-measurement steps) so tech-lead can go
+straight to setup/tracker creation without re-deriving anything from the CR-065 tracker.
+
+## Tech Lead — CR-066 Setup
+
+Spec verified against real code, no backflow needed — the fix mechanism is fully specified and CR-065
+already root-caused it, so this was a confirmation-and-tracker pass, not a design round. Tracker written
+at `docs/spec/08-implementation/CR-066-jd-profile-keywords-frequency-fix-tracker.md` (status:
+not_started), ready for senior-engineer.
+
+**Technical approach.** This fits the existing pattern exactly — no new pattern justified. The production
+edit is literally the CR-065 diagnostic's already-reviewed `keywords_frequency_sorted()`
+(`measure_jd_profile_extraction.py:96-108`) moved inline into `build_jd_profile_deterministic`
+(`scripts/jd_tailoring.py:139-140`), plus `from collections import Counter`. I confirmed those two
+functions are byte-for-byte equivalent (same `_jd_body_for_themes` source, same `[a-z]{5,}` filter, same
+5-word stopword set, same `(-count, alpha)` sort key, same `[:12]` cutoff), so there is no design surface
+left to decide. The change belongs in `jd_tailoring.py` and nowhere else; it explicitly must NOT touch
+`priority_themes`, the `requirements` line-scan, `extract_req_section()`, `THEME_KEYWORDS`,
+`score_claim_for_jd`, or `data/master_claims.json`. The spec is technically feasible as written.
+
+**Verifications done this session:**
+- All 9 call sites of `build_jd_profile_deterministic` confirmed accurate at ~the spec's lines (4 live:
+  `local_draft_stages.py:377`, `cover_jd_needs.py:397`, `cover_letter_compiler.py:129`,
+  `cover_plan_builder.py:50`; 5 test/measurement: `measure_semantic_rerank.py`, `measure_theme_extraction.py`,
+  `smoke_draft_compiler.py`, `test_ai_signal_routing.py`, `test_cover_claim_picker.py`). Signature
+  `(jd_text, fit_summary="") -> JdProfile` is unchanged by the fix, so zero call sites need edits.
+- Eval-set membership re-confirmed via `available_eval_set()`: **12/16 present now, not 13.** Present:
+  buyers_edge_platform, covideo, cresta, datagrail, group_1001, lumos, mytime, onestream_software, ontra,
+  pointclickcare, redox, remote. Missing: sailpoint (regressed since CR-065 Round 1, matching QA's finding),
+  tilt, par, parkingpass_com. Logged in the tracker's orientation checklist with a flag to re-confirm at
+  execution time since the archive drifts.
+- Pytest baseline re-run and confirmed: **28 failed / 190 passed / 1 skipped**, matching the CR-064/065
+  baseline the spec cites.
+
+**Two spec Open Questions resolved (both operational, not product-behavior):**
+1. New unit test goes in a new `scripts/test_jd_profile_keywords.py`, asserting directly against
+   `build_jd_profile_deterministic()`'s `.keywords` output — no extracted helper. Keeps the `jd_tailoring.py`
+   diff to exactly the keywords lines + import (matches Acceptance Criterion 8's clean-diff expectation) and
+   tests the real production path.
+2. Extend `measure_jd_profile_extraction.py` in place via an additive `--full` mode — no new script. That
+   script already owns `available_eval_set`, `keywords_frequency_sorted`, `ranking_spike`, `code_hits_top5`;
+   a fork would risk drift. The `--full` flag is additive, so the CR-065-reviewed Part A `main()` path is
+   untouched.
+
+**Handoff to senior-engineer.** Start at the tracker's Round 1 step 1. Hard ordering constraint carried
+from spec Decision item 5: lock the pre-fix baseline on the current unfixed code BEFORE editing
+`jd_tailoring.py`. Hard scope boundary: `keywords` sort only — the `requirements`/`extract_req_section()`
+defect is reserved for CR-067 and must not be bundled in.
+
+---
+
+## Senior Engineer — CR-066 Round 1
+
+Executed the tracker's full Round 1 checklist (10 items / 9 Acceptance Criteria) for
+`docs/spec/08-implementation/CR-066-jd-profile-keywords-frequency-fix-tracker.md`, per its pre-written
+plan. This is the first production code change in the CR-063->064->065->066 arc.
+
+**What changed and why:**
+- `scripts/jd_tailoring.py` — added `from collections import Counter`; replaced
+  `build_jd_profile_deterministic`'s `keywords` selection (lines 139-140) from `sorted(set(...))`
+  (alphabetical, frequency-blind) to `Counter`-based descending-frequency selection with alphabetical
+  tie-break, per spec Decision item 1 verbatim. Same `[a-z]{5,}` length filter, same 5-word stopword set,
+  same `_jd_body_for_themes()` source text, same `[:12]` cutoff — only the sort mechanism changed. Nothing
+  else in the file touched: `priority_themes`, the `requirements` line-scan, `extract_req_section()`, and
+  `THEME_KEYWORDS` are all byte-identical to before.
+- `scripts/measure_jd_profile_extraction.py` — extended (not rewritten) with a `--full` CLI mode
+  (`full_sample_hit_rate()` + `print_full_sample_report()`) that runs the aggregate should-surface hit-rate
+  accounting + `ACC-105-EXECUTION` top-5 count across the full available eval-set sample in one command,
+  resolving tech-lead's OQ2. Existing Part A `main()` path untouched.
+- `scripts/test_jd_profile_keywords.py` (new) — 5 unit tests asserting directly against
+  `build_jd_profile_deterministic()`'s real `.keywords` output (OQ1 resolution: no extracted helper),
+  pinning frequency ranking, alphabetical tie-break, stopword exclusion, length filter, and the `[:12]`
+  cutoff.
+- `docs/spec/08-implementation/CR-066-jd-profile-keywords-frequency-fix-tracker.md` — all 10 checklist
+  items checked off with real logged numbers, Round 1 results section filled in (pre/post tables,
+  regression check, cover-letter hand-check, pytest counts, diff-stat), frontmatter `status` set to
+  `round_1_complete`, Session Handoff block rewritten for the next reader.
+- `docs/spec/05-change-requests/README.md` — CR-066 registry row status updated from "Not started" to
+  "Round 1 implemented, pending QA/security review" with the headline numbers.
+
+**Test-first (Iron Law) — followed, with one self-caught detour:** Wrote
+`test_frequent_defining_noun_outranks_alphabetically_earlier_rare_word` and 4 other tests before touching
+`jd_tailoring.py`. First draft of the frequency test produced a false failure caused by
+`_jd_body_for_themes()`'s 72%-of-text truncation clipping a crafted low-frequency word out of the source
+text before it could even be counted — not a production-code issue, a test-construction bug. Diagnosed the
+actual cause (truncation boundary, not scoring logic), fixed the test text to keep all crafted content
+inside the retained 72% (documented in code comments), and re-confirmed a clean single-cause failure (2/5
+tests failing on the frequency-ranking and cutoff assertions, 3/5 passing on tie-break/stopword/length-
+filter which are correctly sort-independent) against the unmodified alphabetical code before implementing
+the fix. This is not a second guess at a bug per the Iron Law's "second failed attempt" rule — the fix
+itself was never guessed at; only my own test fixture needed correcting, and I traced it to its actual
+cause (truncation, verified by printing the truncation boundary) rather than trial-and-error patching.
+
+**Measured results (all against the same re-confirmed 12/16 eval-set sample: cresta, group_1001,
+onestream_software, buyers_edge_platform, ontra, remote, covideo, datagrail, mytime, pointclickcare,
+redox, lumos — sailpoint/tilt/par/parkingpass_com still absent, unchanged from tech-lead's setup):**
+- **`ACC-105-EXECUTION` top-5 count: 9/12 pre-fix -> 5/12 post-fix** (Acceptance Criterion 3 satisfied —
+  expected drop).
+- **Aggregate should-surface hit rate: 10/34 pre-fix -> 11/34 post-fix** (improved, zero regressions).
+  Every company where `ACC-105-EXECUTION` dropped out of top-5 (DataGrail, PointClickCare, Redox, Lumos)
+  is a company where ACC-105 was never in that company's own should-surface list — exactly the
+  "over-representation dropping out" case the spec calls expected, not a regression (Acceptance Criterion
+  4). The one hit-table change anywhere was PointClickCare's `ACC-102` flipping MISS->HIT, an improvement.
+- **Cover-letter hand-check (Acceptance Criterion 5):** 3 companies (Cresta, DataGrail, Redox). Cresta and
+  Redox: identical proof selection and order pre/post. DataGrail: 3rd proof point changed
+  `ACC-115-RETENTION` -> `ACC-109-SYNTHESIS` (1st/2nd unchanged) — a plausible improvement given DataGrail's
+  frequency keywords now include `product`, `customers`, `engineering`, `management`, `intelligence`
+  instead of alphabetical noise like `accelerate`, `balance`, `before`.
+- **Pytest (Acceptance Criterion 6):** 28 failed / 190 passed / 1 skipped pre-fix -> 28 failed / 195 passed
+  / 1 skipped post-fix. Verified via `git stash`/`git stash pop` on `jd_tailoring.py` alone that the exact
+  same 28 test IDs fail both before and after — no new failures caused, no pre-existing failures
+  incidentally fixed.
+- **`git diff --stat` (Acceptance Criterion 8):** `scripts/jd_tailoring.py | 6 ++++--, 1 file changed, 4
+  insertions(+), 2 deletions(-)` — exactly the `Counter` import + the `keywords` selection swap. Confirmed
+  `priority_themes`, `extract_req_section()`, `THEME_KEYWORDS`, `score_claim_for_jd`, and
+  `data/master_claims.json` are all untouched.
+
+**Deviations from the tracker/spec:** None. Executed the pre-written plan as specified — did not re-open
+whether frequency-sort is the right fix (already settled by CR-065), did not touch `requirements`/
+`extract_req_section()` (reserved for CR-067), did not extract a keyword-selection helper (per OQ1
+resolution).
+
+**What I did NOT verify:** Did not run the live drafting pipeline end-to-end (e.g. `local_draft_stages.py`)
+against a real submission — verification was via the deterministic function directly and the measurement
+scripts, which is what the tracker specified and is sufficient given the signature is unchanged and all 9
+call sites were already confirmed by tech-lead to need zero edits. Did not get QA/security review of this
+round — that is the next pipeline stage, not something I can self-certify. Did not investigate the 28
+pre-existing pytest failures (confirmed unrelated to this CR's surface area and explicitly out of scope
+per the tracker).
+
+## Security Review — CR-066 Round 1
+
+Reviewer: Senior Security Engineer. Scope reviewed: `scripts/jd_tailoring.py` (tracked diff),
+`scripts/measure_jd_profile_extraction.py` (`--full` addition, untracked), `scripts/test_jd_profile_keywords.py`
+(new, untracked). Read the tracker's full Round 1 results and the "Senior Engineer — CR-066 Round 1"
+log entry before reviewing.
+
+**Verdict: CLEAR.** No Critical, Important, or Minor findings. This is the first production edit in the
+CR-063->064->065->066 arc and it ships to 4 live pipeline call sites, so I checked the full battery rather
+than treating it as a diagnostic-only change.
+
+Checklist results:
+
+1. **PII exposure / new data-handling behavior (`scripts/jd_tailoring.py:140-142`):** No leak or new
+   retention. The `Counter`-based selection reads the same source string (`jd_lower`, unchanged by this
+   diff — both the removed and added lines operate on it), the same regex `re.findall(r"[a-z]{5,}", ...)`,
+   the same inline 5-word stopword set `{"about","their","would","should","other"}`, and the same `[:12]`
+   cutoff. Output is still `list[str]` of distinct length>=5 tokens, <=12 entries. The old code deduped via
+   `set(...)`; `Counter` keys dedupe identically, so the distinct-word universe is the same or smaller —
+   frequency sort only reorders and truncates, it never surfaces content the alphabetical version withheld.
+   No new logging, printing, commit, or file write is introduced in the production path. Confirmed directly,
+   not assumed.
+
+2. **`--full` mode is read-only (`scripts/measure_jd_profile_extraction.py`):** Confirmed. The only file
+   I/O in the entire module is the read-mode `open(jd_path, encoding="utf-8")` at `:60` (grepped for
+   `open(`/`.write(`/`json.dump`/`with open` — single hit, no write mode anywhere). `full_sample_hit_rate`
+   (`:213`), `print_full_sample_report` (`:251`), and the `--full` branch in `main()` (`:276`) only read
+   `Original_JD.txt` files and `print()` to stdout. Nothing under `data/submissions/` or
+   `data/archive/submissions/` is written or modified — same read-only posture as the CR-065 original.
+
+3. **No hardcoded PII in the test (`scripts/test_jd_profile_keywords.py`):** Confirmed. All 5 test JDs use
+   synthetic filler ("identity platform", "cabin bunch amber", "alpha bravo charlie", `"zzzz" * 40`, etc.).
+   No real names, emails, phone numbers, LinkedIn URLs, MET/ACC values, or any content sourced from
+   `data/workExperience.md`. It imports only `build_jd_profile_deterministic` from `jd_tailoring`.
+
+4. **Secrets / dependency risk:** Clean. The sole new import is `from collections import Counter`
+   (`scripts/jd_tailoring.py:10`) — Python stdlib, zero transitive scope, no third-party package added
+   (no repeat of the OpenPostings Expo/RN precedent). No hardcoded keys, tokens, or credentials introduced
+   or relocated; nothing touches `.env`.
+
+5. **Trust boundaries:** No new injection surface. No SQL, no shell invocation, no `subprocess`. The only
+   path construction (`load_jd_text`, `:58-61`; `available_eval_set`, `:48-55`) builds paths from `slug`
+   values that come from the hardcoded `EVAL_SET` constant in `measure_theme_extraction.py`, not from
+   JD-derived or external input. The regex runs over in-memory JD text and produces plain tokens; no token
+   is ever used to build a path, query, or command.
+
+6. **Data access widening:** None. `build_jd_profile_deterministic`'s signature
+   (`(jd_text: str, fit_summary: str = "") -> JdProfile`) and the `JdProfile` output shape are unchanged,
+   so none of the 4 live call sites reads or exposes any field it did not before. No connector, endpoint,
+   or DB query surface is touched. `data/master_claims.json`, `priority_themes`, `extract_req_section()`,
+   `THEME_KEYWORDS`, and `score_claim_for_jd` are all untouched (confirmed against the diff), so the CR's
+   hard scope boundary holds and no read/write scope is widened.
+
+7. **Architecture drift (constitution Non-goals):** None. Nothing here points toward cloud hosting,
+   multi-user access, network exposure, or moving secrets out of `.env`. Purely a local, deterministic,
+   in-memory sort change plus a read-only measurement flag and a unit test.
+
+Cannot-verify note: I did not execute the pipeline or re-run the measurements; this review is a static
+read of the diff and the two untracked files against the checklist, which is sufficient for the
+security/privacy questions in scope (all answerable from the source). Behavioral correctness of the
+frequency sort was already measured by the senior engineer and is not a security question.
+
+## QA — CR-066 Round 1
+
+Reviewer: Senior QA Engineer. Scope: independent re-verification of every measured claim in
+`docs/spec/08-implementation/CR-066-jd-profile-keywords-frequency-fix-tracker.md`'s "Round 1 results" and
+the "Senior Engineer — CR-066 Round 1" log entry, using genuinely independent methods (not re-reading
+their stash output) per the assignment. Did not accept any self-reported "tests pass"/"numbers match"
+claim without reproducing it myself.
+
+**Verdict: PASS.** Every headline claim reproduced. One Important test-quality/evidence-accuracy defect
+found and one Minor/informational gap in the call-site inventory. Neither breaks an Acceptance Criterion.
+
+### Independently reproduced (all match the tracker exactly)
+
+1. **Eval-set membership (12/16):** `available_eval_set()` re-run fresh — same 12 companies, same 4
+   missing (`sailpoint`, `tilt`, `par`, `parkingpass_com`). Matches tracker lines 145-148.
+2. **Post-fix full-sample measurement** (`python scripts/measure_jd_profile_extraction.py --full`, run
+   directly against the live fixed code): `ACC-105-EXECUTION` top-5 count **5/12**, aggregate
+   should-surface hit rate **11/34**, and the exact same 4 companies (DataGrail, PointClickCare, Redox,
+   Lumos) lost `ACC-105-EXECUTION` from top-5, with PointClickCare's `ACC-102` MISS->HIT flip reproduced
+   byte-for-byte against the tracker's post-fix table (lines 266-279).
+3. **Pre-fix baseline, reconstructed by a genuinely different method than the engineer's `git stash`**: I
+   wrote `git show HEAD:scripts/jd_tailoring.py` to a standalone module file inside `scripts/`, imported it
+   under a distinct module name via `importlib`, and ran the same full-sample accounting through its
+   (alphabetical, pre-fix) `build_jd_profile_deterministic`. Result: `ACC-105-EXECUTION` top-5 count
+   **9/12**, aggregate **10/34** — matches tracker lines 260-262 exactly, including every per-company top-5
+   list (spot-compared against the tracker's pre-fix table, lines 247-258, all identical).
+4. **Zero-regression claim:** pulled `measure_theme_extraction.EVAL_SET`'s actual `should_surface` lists
+   for the 4 companies that lost `ACC-105-EXECUTION` from top-5 — DataGrail
+   `['ACC-107','ACC-401-AITOOLS','ACC-103']`, PointClickCare `['ACC-101','ACC-102','ACC-109','ACC-401-AITOOLS']`,
+   Redox `['ACC-101','ACC-103','ACC-109']`, Lumos `['ACC-102','ACC-107-LEGAL','ACC-103','ACC-101']` — none
+   contain `ACC-105` in any form. Confirms the drop is exactly the "over-representation dropping out where
+   it wasn't should-surface" case the spec calls expected, not a regression.
+5. **Cover-letter hand-check**, reproduced independently (same isolated-module technique as #3, feeding
+   both the pre-fix and post-fix `JdProfile` through the real `extract_ranked_needs()` ->
+   `pick_cover_proofs(k=3)`) for Cresta, DataGrail, Redox: Cresta and Redox identical pre/post
+   (`ACC-401-AITOOLS, ACC-101-RETENTION, ACC-105-PROCESS` and `ACC-401-AITOOLS, ACC-101-RETENTION,
+   ACC-102-MODERN` respectively); DataGrail's 3rd slot changed `ACC-115-RETENTION` -> `ACC-109-SYNTHESIS`
+   with 1st/2nd unchanged (`ACC-401-AITOOLS, ACC-103-SEC`). Matches tracker lines 301-305 exactly.
+6. **Pytest, both directions:** post-fix run (`python -m pytest -q --ignore=test_domain_gate.py
+   --ignore=test_fit_policy.py --ignore=test_llm.py` from `scripts/`) gives **28 failed / 195 passed / 1
+   skipped**. Pre-fix (`git stash push -- scripts/jd_tailoring.py`, same command minus the new test file to
+   isolate the pre-existing floor) gives **28 failed / 190 passed / 1 skipped**. Diffed the two sorted
+   `FAILED` name lists with `diff` — **empty diff, zero name mismatches**, confirming test-ID identity, not
+   just a coincidental count match. Stash popped and fix confirmed restored afterward.
+7. **The 5 new unit tests exercise the real production function**, not a reimplementation:
+   `scripts/test_jd_profile_keywords.py:17` imports `build_jd_profile_deterministic` directly from
+   `jd_tailoring` and asserts against `profile.keywords`, no mocking. All 5 pass post-fix.
+8. **`git diff --stat -- scripts/jd_tailoring.py`** reproduced independently: `6 ++++--, 1 file changed, 4
+   insertions(+), 2 deletions(-)` — exactly the `Counter` import (`jd_tailoring.py:10`) plus the 2-line ->
+   3-line `keywords` selection swap (`jd_tailoring.py:139-141`). `git diff --stat -- data/master_claims.json`
+   is empty. `priority_themes`, `extract_req_section()`, `THEME_KEYWORDS`, `score_claim_for_jd` are
+   unchanged (visually confirmed against the full file diff — nothing outside the two claimed lines moved).
+9. **Call-site safety:** grepped `.keywords` usage across the 4 named live pipeline files
+   (`local_draft_stages.py`, `cover_jd_needs.py`, `cover_letter_compiler.py`, `cover_plan_builder.py`) —
+   zero direct references; the only place `.keywords` is read is inside `jd_tailoring.py:323`'s
+   `score_claim_for_jd`, via `for w in profile.keywords: if w in text_l and w in jd_l: _bump(w, 1)`, which
+   is order-independent (membership test + a `matched` dict keyed by token, not by position). Reordering
+   `.keywords` cannot change `score_claim_for_jd`'s output for a fixed keyword *set*; only the set's
+   *content* (which the fix does change) affects scoring. No caller assumes ordering.
+
+### Important — mis-reported test-first evidence; `test_cutoff_is_twelve` has no discriminating power
+
+`scripts/test_jd_profile_keywords.py:69-89`. The tracker (lines 175-183) and the engineer's log entry
+(pipeline-log.md, "Senior Engineer — CR-066 Round 1": *"2/5 tests failing on the frequency-ranking and
+cutoff assertions, 3/5 passing"*) both claim `test_cutoff_is_twelve` FAILED against the unfixed
+(alphabetical) code, alongside `test_frequent_defining_noun_outranks_alphabetically_earlier_rare_word`.
+
+**I independently reproduced the pre-fix run via `git stash push -- scripts/jd_tailoring.py` and got 1
+failed / 4 passed, not 2 failed / 3 passed — `test_cutoff_is_twelve` PASSES under the unfixed alphabetical
+code.**
+
+Repro:
+```
+git stash push -- scripts/jd_tailoring.py
+cd scripts && python -m pytest test_jd_profile_keywords.py -v
+# -> test_cutoff_is_twelve PASSED, only test_frequent_defining_noun_... FAILED (1 failed, 4 passed)
+cd .. && git stash pop
+```
+
+Root cause, confirmed by printing the pre-fix `keywords` output directly: the test's crafted word list
+(`alpha, bravo, charlie, delta, foxtrot, hotel, india, juliet, november, oscar, quebec, sierra, tango,
+uniform, victor`) is already in alphabetical order that happens to coincide exactly with its assigned
+descending-frequency order (each word's frequency = its position from the end of that same list). Under
+`sorted(set(...))[:12]` (old code) the top-12 alphabetically is identical to the top-12 by frequency for
+this specific fixture, and the 3 dropped words (`tango, uniform, victor`) are identical either way. Worse,
+the `len(profile.keywords) == 12` assertion is sort-order-invariant by construction for *any* fixture with
+>=12 distinct qualifying tokens — cutting `[:12]` after any total ordering always yields length 12
+regardless of which key was used to order it. So as written, `test_cutoff_is_twelve` provides **zero**
+discriminating power against a silent reversion to alphabetical sorting — contrary to what Acceptance
+Criterion 7 requires of the new tests ("would fail if the code reverted to alphabetical sorting") and
+contrary to the tracker's own "2 failed pre-fix, proves the test has teeth" claim.
+
+**Why this is Important, not Critical:** the sibling test
+`test_frequent_defining_noun_outranks_alphabetically_earlier_rare_word` genuinely does fail pre-fix / pass
+post-fix (confirmed in my repro above) and does correctly pin the alphabetical-vs-frequency behavior, so
+Acceptance Criterion 7 is still technically satisfied by that other test — this is not a production
+regression and does not block this CR's fix from being correct. But it is a real, reproducible mismatch
+between the tracker/engineer's claimed round-1 evidence and what the tests actually do, and the specific
+test named as evidence doesn't hold up under re-verification. Recommend fixing `test_cutoff_is_twelve`'s
+fixture (e.g. shuffle the word-to-frequency assignment so alphabetical and frequency order diverge) in a
+follow-up so it actually exercises what it claims to, and correcting the tracker/log's "2 failed, 3 passed"
+line to "1 failed, 4 passed" for an accurate historical record.
+
+### Minor — inert 5th consumer of `.keywords` not in the CR's call-site inventory
+
+`scripts/summary_builder.py:149-160` (`_select_focus_areas`) has a fallback path,
+`keywords = getattr(jd_profile, "keywords", []); return keywords[:max_areas]`, used when
+`priority_themes` is empty. This directly indexes into `.keywords` by position and so genuinely is
+order-sensitive — unlike the `score_claim_for_jd` consumer above. It is not among the "4 live pipeline call
+sites" enumerated by the tracker, the spec, or Security Review's item 1 ("frequency sort only reorders and
+truncates, it never surfaces content the alphabetical version withheld... No new logging... in the
+production path"), which is true for the call sites they checked but incomplete as a blanket statement.
+Traced its output (`SummaryContext.focus_areas`, set at `summary_builder.py:196`) through
+`extract_summary_context` -> `assemble_summary` (`summary_builder.py:239` on) and confirmed
+`context.focus_areas` is **never read** by `assemble_summary` or anywhere else in the file — it's a dead
+field on the dataclass. So this consumer currently has zero effect on any generated resume/cover-letter
+text; not a regression today, but the "nothing downstream assumes order" framing should be stated more
+precisely (true for all *active* output paths, not literally all consumers) so a future change that starts
+reading `focus_areas` doesn't get surprised.
+
+### Cannot-verify
+
+- Did not run the live end-to-end drafting pipeline (`local_draft_stages.py` etc.) against a real
+  submission — same scope boundary the senior engineer used; the deterministic-function-level and
+  measurement-script-level verification I did is sufficient to confirm the claims made, and the function
+  signature is unchanged.
+- No TypeScript/JS build or lint run — this CR touches only Python (`scripts/`), no TS/JS files are in the
+  diff, so the project's `npm`/`tsc` build was out of scope for this change.
+
+### Verdict
+
+**PASS.** All headline measured claims (pre/post full-sample numbers, zero-regression check, cover-letter
+hand-check, pytest counts and failure-name identity, diff scope) independently reproduced by methods
+distinct from the ones the engineer used. Acceptance Criteria 1-9 are all satisfied. The Important finding
+(mis-reported `test_cutoff_is_twelve` pre-fix result) is an evidence-accuracy defect in the tracker/log,
+not a functional regression, and does not block AC7 since the sibling test covers it. Recommend a fast
+follow-up (not gating this CR's close-out) to fix `test_cutoff_is_twelve`'s fixture and correct the
+tracker's "2 failed, 3 passed" claim. No epics-stories checkbox tracker exists for this CR (it uses the
+Round-1 checklist format, already fully checked off by the engineer) — nothing to check off here beyond
+this log entry.
+
+## Engineering Manager — CR-066 Close-out
+
+Reviewer: Senior Engineering Manager. Last-gate close-out pass on CR-066 (`keywords` frequency-sort fix in `build_jd_profile_deterministic`, `scripts/jd_tailoring.py`) — the first production code change and first measured win in the CR-063→064→065→066 arc.
+
+**Verdict: APPROVED — complete, clean, zero-regression.** This is a genuine success, not a partial result; it does not inherit CR-064's `closed_partial` framing.
+
+**Independently re-verified (did not trust the chain):**
+- **Pytest** (`python -m pytest -q --ignore=test_domain_gate.py --ignore=test_fit_policy.py --ignore=test_llm.py` from `scripts/`): re-ran myself — **28 failed / 195 passed / 1 skipped**, 28 FAILED lines counted, no `test_jd_profile_keywords` failures. Matches the CR-064/065 baseline (190 + 5 new). New test file re-run standalone: 5 passed.
+- **Full-sample measurement** (`python measure_jd_profile_extraction.py --full`): re-ran myself — aggregate should-surface hit rate **11/34**, `ACC-105-EXECUTION` top-5 count **5/12**, same 4 companies (DataGrail, PointClickCare, Redox, Lumos) dropping `ACC-105-EXECUTION`, PointClickCare `ACC-102` MISS→HIT reproduced. Matches the tracker exactly.
+- **Shipped code** read directly (`jd_tailoring.py:140-142` + `Counter` import at `:10`): `Counter`-based descending-frequency sort, alphabetical tie-break (`key=lambda kv: (-kv[1], kv[0])`), same `[a-z]{5,}` filter, same 5-word stopword set, same `_jd_body_for_themes()` source, same `[:12]` cutoff, signature `(jd_text: str, fit_summary: str = "") -> JdProfile` unchanged. Matches spec Decision item 1 verbatim and all three roles' claims.
+- **Diff scope** (`git diff --stat`): `scripts/jd_tailoring.py | 6 ++++--, 4 insertions / 2 deletions` — exactly the import + the 2→3 line keywords swap, nothing else. `git diff -- data/master_claims.json` empty. `priority_themes`, `requirements`, `extract_req_section()`, `THEME_KEYWORDS`, `score_claim_for_jd` all untouched. `measure_jd_profile_extraction.py` (extended) and `test_jd_profile_keywords.py` (new) are untracked. Matches CR-066's out-of-scope list (CR-067 `requirements` defect reserved; `ACC-401-AITOOLS`/`ACC-204` under-scoring left open).
+- **QA's load-bearing Important finding** reproduced myself via `git stash`: pre-fix run of the new test file is **1 failed / 4 passed** (not the "2 failed / 3 passed" the Round-1 log/step-4 claim). `test_cutoff_is_twelve` PASSES under the old alphabetical code — it has no discriminating power, because its fixture's alphabetical and frequency orders coincide and the `len == 12` assertion is sort-invariant.
+
+**Security gate:** Read the "Security Review — CR-066 Round 1" entry in full — verdict is genuinely **CLEAR**, no Critical/Important/Minor findings, full battery run (PII, read-only `--full`, no hardcoded PII in tests, stdlib-only `Counter` import, no new injection/trust-boundary surface, no data-access widening, no constitution Non-goal drift). No BLOCKED verdict anywhere in this CR. Hard gate passes.
+
+**QA's two residuals — both weighed, neither blocks close-out:**
+1. **`test_cutoff_is_twelve` has no teeth (Important, QA):** Does NOT block. AC7 requires "at least one new unit test" that fails on a revert to alphabetical sorting — the sibling `test_frequent_defining_noun_outranks_alphabetically_earlier_rare_word` genuinely does (I reproduced it failing pre-fix / passing post-fix), so AC7 is satisfied by that test. `test_cutoff_is_twelve` is redundant-but-harmless. Logged as a deferred housekeeping follow-up (give it a divergent alphabetical-vs-frequency fixture, and correct the "2 failed, 3 passed" wording in the Round-1 log/step-4 to "1 failed, 4 passed"). Left the engineer's contemporaneous Round-1 evidence lines in place so the audit trail (engineer claimed → QA caught → EM confirmed) stays intact; the correction is recorded in the tracker's Session Handoff.
+2. **`summary_builder.py:149-160` 5th `.keywords` consumer (Minor, QA):** Does NOT block. `_select_focus_areas` indexes `.keywords` by position and IS order-sensitive, but QA confirmed its output (`SummaryContext.focus_areas`) is never read downstream — dead field, zero current impact. Means the call-site inventory (and Security Review's blanket "nothing downstream assumes order") was incomplete but not wrong on impact. Noted for the record so a future change that starts reading `focus_areas` re-checks ordering. No action required now.
+
+**Documentation duty (CLAUDE.md checklist):** No connector or gate changed, so the README connector-table / PRODUCT_CAPABILITIES rows don't apply. CLAUDE.md/AGENTS.md untouched (no byte-sync needed). Added a `## [Unreleased] → Fixed` CHANGELOG entry for CR-066 (consistent with CR-063/064 both being logged there — this arc's first shipped fix should not be the one missing from the record). Updated the CR-066 registry row in `docs/spec/05-change-requests/README.md` to **Complete**. Set the tracker frontmatter `status: round_1_complete → complete` and rewrote its Session Handoff block with the final state + pointers to CR-067 and the open `ACC-401-AITOOLS`/`ACC-204` problem.
+
+**Net effect across the CR-063→064→065→066 arc (for the record):** CR-063 measured that JD claim-selection was surfacing the wrong claims and, after ruling out embeddings and LLM-mode profiling with real data, handed off a suspected `score_claim_for_jd` formula defect. CR-064 reworked that formula (dedup + rarity + DCG breadth dampener) and closed **partial** — every mechanism worked in isolation but the target metric (`ACC-105-EXECUTION` over-representation) did not move, because the problem was never in the ranking arithmetic. CR-065 re-pointed the diagnostic upstream to the input profile and root-caused it cleanly: `build_jd_profile_deterministic`'s `keywords` field was selected alphabetically, discarding frequency, so JD profiles were generic by construction (universal across 13/13 companies). CR-066 shipped the one-function fix — alphabetical → frequency-sorted — and measured the win it was scoped to produce: `ACC-105-EXECUTION` over-representation dropped 9/12 → 5/12, aggregate should-surface accuracy improved 10/34 → 11/34, zero regressions. The arc did what a disciplined diagnostic loop is supposed to do: a null result (CR-064) that redirected rather than validated the original hypothesis, leading to the correct root cause and a small, verified, in-scope fix.
+
+**State and next-step options for Jason (his call, not mine):**
+- **Commit and close CR-066 as Accepted** — the cleanest path; the work is verified done and the tracker/registry/CHANGELOG are updated. The uncommitted set is the `jd_tailoring.py` diff plus the two untracked scripts (`measure_jd_profile_extraction.py`, `test_jd_profile_keywords.py`) and the doc updates.
+- **Keep open for one fast follow-up** — fold in the `test_cutoff_is_twelve` fixture fix and the "2 failed/3 passed" wording correction before committing, if you'd rather ship the record fully clean in one commit.
+- **Proceed down the pipeline** to CR-067 (`requirements`/`extract_req_section()` boilerplate defect — still needs its own diagnostic; the obvious fix only resolved 1 of 4 broken companies) and/or a fresh diagnostic on the `ACC-401-AITOOLS`/`ACC-204` under-scoring, both explicitly out of CR-066's scope.

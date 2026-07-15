@@ -2058,3 +2058,70 @@ Reviewer: Senior Engineering Manager. Last-gate close-out pass on CR-066 (`keywo
 - **Commit and close CR-066 as Accepted** — the cleanest path; the work is verified done and the tracker/registry/CHANGELOG are updated. The uncommitted set is the `jd_tailoring.py` diff plus the two untracked scripts (`measure_jd_profile_extraction.py`, `test_jd_profile_keywords.py`) and the doc updates.
 - **Keep open for one fast follow-up** — fold in the `test_cutoff_is_twelve` fixture fix and the "2 failed/3 passed" wording correction before committing, if you'd rather ship the record fully clean in one commit.
 - **Proceed down the pipeline** to CR-067 (`requirements`/`extract_req_section()` boilerplate defect — still needs its own diagnostic; the obvious fix only resolved 1 of 4 broken companies) and/or a fresh diagnostic on the `ACC-401-AITOOLS`/`ACC-204` under-scoring, both explicitly out of CR-066's scope.
+
+---
+
+## CR-067 Scoping/Diagnostic — Direct Session Pass, No Subagent Pipeline (2026-07-14, later same day)
+
+**Operating note:** the first attempt to scope CR-067 through `product-manager` failed on an API session
+rate limit (reset time reported as 8:30pm Pacific) with zero partial output — unlike an earlier tech-lead
+failure this session that had actually completed its work before erroring. Rather than keep retrying a
+blocked subagent path or stall, I (the orchestrating session) did this diagnostic pass directly — reading
+real files, running real regex/function tests against real archived JD text, and writing up the finding
+myself, holding to the same "diagnose before fixing" discipline every prior CR in this arc used. Full
+finding is in the new CR doc: `docs/spec/05-change-requests/CR-067-requirements-section-extraction-diagnostic.md`.
+
+**What I found, in one line:** CR-065 Part D's `requirements` diagnosis undersold the problem — it's not
+1-2 root causes, it's **3 independent, compounding ones** (heading-phrase coverage gap in
+`_REQ_SECTION_RE`; `_NEXT_SECTION_RE`'s section-boundary detection only recognizing ALL-CAPS/markdown
+headings, blind to the Title-Case and no-blank-line-separator layouts all 4 broken companies actually use;
+and a 120-char line-length cap that silently drops real requirement bullets written in a longer style).
+
+**A real correction to CR-065's own record, caught by direct re-verification:** CR-065 characterized
+Covideo's failure as different from Ontra's ("regex matched a heading but the section it isolated still
+contains boilerplate" vs. Ontra's clean "no match, falls back to whole JD"). Running `_REQ_SECTION_RE.
+search()` directly against Covideo's real archived JD text (`data/archive/submissions/covideo/
+Original_JD.txt`) shows **zero match** — identical mechanism to Ontra, not a distinct boundary-too-loose
+failure. The "boilerplate text" CR-065 quoted as "the isolated section" was simply `jd_text` from character
+0, the fallback-to-whole-JD behavior the function's own docstring describes. Corrected in
+`CR-065-jd-profile-extraction-diagnostic-tracker.md`'s Part D table (Covideo row) with this session's date
+and re-verification method noted inline, original text preserved with a correction annotation rather than
+silently overwritten — same audit-trail discipline CR-066's close-out used for its own `test_cutoff_is_
+twelve` correction.
+
+**What actually happened, test-first, before I stopped:**
+1. Read `_REQ_SECTION_RE` and confirmed via direct `re.search()` calls that all 4 originally-broken
+   companies (OneStream, Remote, Covideo, Ontra) fail to match — none of their real headings ("Who you
+   are," "Required Education and Experience," etc.) are in the pattern list.
+2. Added two validated patterns (`who\s+you\s+are`, `required\s+education\s+and\s+experience`) and
+   confirmed all 4 now match.
+3. Discovered — the same way CR-065's own Part D should have, but didn't check end-to-end — that fixing the
+   regex alone changes nothing in `build_jd_profile_deterministic`'s actual output, because that function's
+   `requirements` construction never calls `extract_req_section()` in the first place (CR-065's own finding,
+   re-confirmed). Wired it through (`req_source = extract_req_section(jd_text)`, scan that instead of raw
+   `jd_text`) — a validated 2-line change.
+4. Re-tested end-to-end and found a THIRD defect surfacing: Ontra/Remote's `requirements` output was
+   **unchanged** (still boilerplate) because their JDs use no blank-line section separators at all and
+   `_NEXT_SECTION_RE` requires one; Covideo's output **changed but to a different wrong answer** (benefits
+   copy instead of title/location copy) because its real "Who You Are" bullets are written in a long
+   `"Trait: elaboration"` style that the 120-char line-length cap silently drops entirely, so the line-scan
+   fell through to shorter, wrong lines further down the (also-too-wide, root-cause-3-affected) captured
+   span.
+5. **Stopped and reverted** (`git checkout -- scripts/jd_tailoring.py`, confirmed clean against CR-066's
+   committed state) rather than ship a 3-part regex/logic rewrite to a function with 4 live production call
+   sites, self-reviewed only, with no security-reviewer or qa-reviewer available to independently check it.
+   This is exactly the discipline the pipeline-role structure exists to enforce, and it held even without
+   the subagents that normally enforce it.
+
+**Recommended next step (not started, reserved as CR-068):** a proper 3-fix implementation CR, run through
+the normal pipeline once subagent capacity returns, using the same one-hypothesis-at-a-time round
+discipline CR-064's Rounds 2/3/5 used — implement and full-sample-measure the heading-phrase broadening,
+the `extract_req_section()` wiring, and the boundary/length-cap rework as separate, independently-measured
+rounds, not one combined patch, given the regression risk of loosening detection logic 3 ways at once
+against a shared production function.
+
+**Open question flagged, not resolved:** whether a regex-based heading/boundary detector is fundamentally
+the wrong tool here, given 13 companies already show 3 distinct JD layout conventions — if CR-068's
+boundary-rework round needs an ever-growing pattern list to keep pace with real-world diversity (the same
+shape CR-063's `THEME_KEYWORDS` rounds took), that's worth naming to Jason as a scope question before
+sinking more rounds into incremental regex patches, not something to keep patching silently.

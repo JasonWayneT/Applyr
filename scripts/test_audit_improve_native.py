@@ -1,6 +1,7 @@
 from audit_improve_native import apply_claude_native_improvement
 
-MASTER_RESUME = """
+MASTER_RESUME = """# Jason Taylor
+
 Jason Taylor - Product Manager
 Cision: owned a $40M ARR platform, reduced data drop-off from 40% to zero,
 resolved 90% of a 300-item security backlog, migrated 700 accounts.
@@ -11,6 +12,38 @@ Owned a $40M ARR B2B SaaS platform serving 25,000 users.
 Reduced contact data drop-off from 40% to zero via a rebuilt ETL pipeline.
 Resolved 90% of a 300-item security vulnerability backlog.
 """
+
+RESUME_HEADER = (
+    "# Jason Taylor\n\n"
+    "[REDACTED_EMAIL] | linkedin.com/in/jasontaylor\n\n"
+)
+
+RESUME_BODY_TAIL = (
+    "\n\n## PROFESSIONAL EXPERIENCE\n\n"
+    "### Product Manager | Cision | 2019 - 2023\n\n"
+    "San Diego, CA\n\n"
+    "* Owned a $40M ARR B2B SaaS platform serving 25,000 users.\n"
+    "* Reduced contact data drop-off from 40% to zero via a rebuilt ETL pipeline.\n"
+    "* Resolved 90% of a 300-item security vulnerability backlog.\n\n"
+    "## EDUCATION\n\n"
+    "* Bachelor of Business Administration, National University, San Diego, California, 2019\n"
+)
+
+CL_HEADER = (
+    "# Jason Taylor\n\n"
+    "[REDACTED_EMAIL] | linkedin.com/in/jasontaylor\n\n"
+)
+
+CL_TAIL = "\n\nRegards,\n\nJason Taylor\n"
+
+
+def _build_resume(summary: str) -> str:
+    return f"{RESUME_HEADER}## PROFESSIONAL SUMMARY\n\n{summary}{RESUME_BODY_TAIL}"
+
+
+def _build_cover_letter(body: str) -> str:
+    return f"{CL_HEADER}Dear Hiring Manager,\n\n{body}{CL_TAIL}"
+
 
 GOOD_SUMMARY = (
     "Senior Product Manager with 6 years of B2B SaaS platform experience. "
@@ -30,37 +63,43 @@ TWO_SENTENCE_SUMMARY = (
     "Reduced contact data drop-off from 40% to zero on a $40M ARR platform."
 )
 
-GOOD_COVER_LETTER = (
-    "Dear Hiring Manager,\n\nYour platform reliability challenge is one I've "
-    "solved before. At Cision, I reduced contact data drop-off from 40% to "
-    "zero on a $40M ARR platform by rebuilding the ETL pipeline.\n\nRegards,\nJason Taylor\n"
+GOOD_COVER_LETTER_BODY = (
+    "Your platform reliability challenge is one I've solved before. At Cision, "
+    "I reduced contact data drop-off from 40% to zero on a $40M ARR platform "
+    "by rebuilding the ETL pipeline."
 )
 
-FABRICATED_COVER_LETTER = (
-    "Dear Hiring Manager,\n\nYour platform reliability challenge is one I've "
-    "solved before. At Cision, I grew revenue by 250% and reduced churn to 2%.\n\n"
-    "Regards,\nJason Taylor\n"
+FABRICATED_COVER_LETTER_BODY = (
+    "Your platform reliability challenge is one I've solved before. At Cision, "
+    "I grew revenue by 250% and reduced churn to 2%."
 )
+
+GOOD_RESUME = _build_resume(GOOD_SUMMARY)
+FABRICATED_SUMMARY_RESUME = _build_resume(FABRICATED_SUMMARY)
+TWO_SENTENCE_RESUME = _build_resume(TWO_SENTENCE_SUMMARY)
+
+GOOD_COVER_LETTER = _build_cover_letter(GOOD_COVER_LETTER_BODY)
+FABRICATED_COVER_LETTER = _build_cover_letter(FABRICATED_COVER_LETTER_BODY)
 
 
 def test_accepts_good_content_and_converges():
     result = apply_claude_native_improvement(
-        context={"company_stage": "Growth", "product_motion": "Enterprise B2B SaaS"},
-        new_summary=GOOD_SUMMARY,
-        new_cover_letter=GOOD_COVER_LETTER,
+        updated_resume=GOOD_RESUME,
+        updated_cl=GOOD_COVER_LETTER,
         master_resume_text=MASTER_RESUME,
         bullets=BULLETS,
         company_name="TestCo",
     )
     assert result.converged is True
     assert result.final_issues == []
+    assert result.corrected_resume != ""
+    assert result.corrected_cover_letter != ""
 
 
 def test_rejects_fabricated_summary_metric():
     result = apply_claude_native_improvement(
-        context={"company_stage": "Growth", "product_motion": "Enterprise B2B SaaS"},
-        new_summary=FABRICATED_SUMMARY,
-        new_cover_letter=GOOD_COVER_LETTER,
+        updated_resume=FABRICATED_SUMMARY_RESUME,
+        updated_cl=GOOD_COVER_LETTER,
         master_resume_text=MASTER_RESUME,
         bullets=BULLETS,
         company_name="TestCo",
@@ -71,22 +110,20 @@ def test_rejects_fabricated_summary_metric():
 
 def test_rejects_fabricated_cover_letter_metric():
     result = apply_claude_native_improvement(
-        context={"company_stage": "Growth", "product_motion": "Enterprise B2B SaaS"},
-        new_summary=GOOD_SUMMARY,
-        new_cover_letter=FABRICATED_COVER_LETTER,
+        updated_resume=GOOD_RESUME,
+        updated_cl=FABRICATED_COVER_LETTER,
         master_resume_text=MASTER_RESUME,
         bullets=BULLETS,
         company_name="TestCo",
     )
     assert result.converged is False
-    assert any("250" in issue or "2" in issue for issue in result.final_issues)
+    assert any("250" in issue for issue in result.final_issues)
 
 
 def test_rejects_wrong_sentence_count_summary():
     result = apply_claude_native_improvement(
-        context={"company_stage": "Growth", "product_motion": "Enterprise B2B SaaS"},
-        new_summary=TWO_SENTENCE_SUMMARY,
-        new_cover_letter=GOOD_COVER_LETTER,
+        updated_resume=TWO_SENTENCE_RESUME,
+        updated_cl=GOOD_COVER_LETTER,
         master_resume_text=MASTER_RESUME,
         bullets=BULLETS,
         company_name="TestCo",

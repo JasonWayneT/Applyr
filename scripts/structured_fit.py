@@ -281,6 +281,28 @@ JOB DESCRIPTION:
         return None
 
 
+def _normalize_judgments(judgments: Any) -> dict[str, Any]:
+    """Coerce LLM equivalence payload into dict shape — never crash on strings."""
+    if not isinstance(judgments, dict):
+        return {"must_haves": [], "criteria": {}}
+    out: dict[str, Any] = {"must_haves": [], "criteria": {}}
+    raw_must = judgments.get("must_haves")
+    if isinstance(raw_must, list):
+        for item in raw_must:
+            if isinstance(item, dict):
+                out["must_haves"].append(item)
+            elif isinstance(item, str) and item.strip():
+                out["must_haves"].append(
+                    {"text": item.strip(), "judgment": "partial", "justification": ""}
+                )
+    raw_crit = judgments.get("criteria")
+    if isinstance(raw_crit, dict):
+        out["criteria"] = {
+            k: v for k, v in raw_crit.items() if isinstance(v, dict)
+        }
+    return out
+
+
 def compute_fit_report(
     jd_text: str,
     work_exp: str,
@@ -289,6 +311,7 @@ def compute_fit_report(
     min_fit_score: int,
 ) -> FitReport:
     """Deterministic score from equivalence judgments."""
+    judgments = _normalize_judgments(judgments)
     criteria_scores: list[CriterionScore] = []
     total = 0.0
     low_confidence = 0
@@ -374,6 +397,11 @@ def compute_fit_report(
     )
 
 
+def fit_judgment_mode() -> str:
+    """Implements CR-070 Epic 2 — default 'ollama_legacy' preserves current behavior."""
+    return os.environ.get("FIT_JUDGMENT_MODE", "ollama_legacy").strip().lower()
+
+
 def evaluate_structured_fit(
     jd_text: str,
     work_exp: str,
@@ -385,7 +413,11 @@ def evaluate_structured_fit(
     """Top-level structured fit entry — returns legacy dict or None on failure."""
     must_haves = extract_must_haves(jd_text)
     judgments = None
-    if use_llm:
+    if use_llm and fit_judgment_mode() == "claude_native":
+        from fit_judgment_io import read_equivalence_judgment
+        folder = os.environ.get("FIT_JUDGMENT_FOLDER", "")
+        judgments = read_equivalence_judgment(folder) if folder else None
+    elif use_llm:
         judgments = _call_equivalence_llm(jd_text, work_exp, must_haves)
     if not judgments:
         judgments = _heuristic_judgments(jd_text, work_exp, must_haves)

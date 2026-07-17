@@ -1,0 +1,70 @@
+# CR-070: Claude-Native Generation Pipeline (No-API, Batch-Capable Rebuild)
+
+## Metadata
+- **Epic**: [CR-070 epics & stories](../08-implementation/CR-070-claude-native-generation-pipeline-epics.md)
+- **Status**: Proposed (Phase 2 architecture — not yet built)
+- **Date**: 2026-07-17
+- **Source**: Jason asked for a rebuild of the resume/cover-letter generation pipeline so it runs natively inside Claude Code (subscription only, no separate API billing), stays batch-capable across 24+ JDs with minimal manual approval, and does not gut the existing rubric/grounding/voice machinery. Phase 1 investigation this session found the "zero local LLMs" premise CLAUDE.md inherited from CR-059's closure is stale for two call sites CR-059 explicitly scoped *out* of its own closure: fit evaluation (`evaluate_job_fit`) and post-draft rewriting (`audit_and_improve.py`). Both run unconditionally on the default path today and together are the largest measured latency and design-smell surface in the pipeline.
+
+## Problem
+Per-JD generation takes 5-10 minutes with no interactive prompts anywhere in the code (verified — the only `input()` calls in `scripts/` are in an unrelated tagging CLI). The time goes to:
+- `evaluate_job_fit` calling local Ollama up to 5x per job across retry branches (`scripts/batch_pipeline.py:813`, `scripts/llm_stages.py:57`), up to 180s timeout each.
+- `audit_and_improve.audit_and_improve_company`, called unconditionally after drafting (`scripts/drafting_engine.py:391`), making up to 8 more LLM round trips (1 context-analysis call + a 3-attempt loop each calling `improve_resume_summary` + `improve_cover_letter`) to rewrite content the deterministic pipeline already produced.
+- Playwright PDF renders fired 4-10+ times per job across initial export, page-pruning, critique retries, and the audit loop's final re-export (`scripts/draft_compiler.py:946-1074`).
+
+None of this is API-billed (it's local Ollama), but it is the reason a Claude-Code-native rebuild needs to actually replace these call sites, not just wrap them — pointing Claude Code's own model at the same subprocess architecture would just relocate the latency, not remove it.
+
+## Decision
+Rearchitect the two live LLM call sites to run as native Claude Code reasoning inside the session instead of subprocess calls to Ollama, and fold the post-draft quality gate into the generation flow instead of bolting a separate rewrite loop on afterward. Everything already deterministic (JD profiling, claim scoring, claim composition, cover letter assembly, linting, structural QA) is reused unmodified — it has no framework lock-in and doesn't touch a model.
+
+Per-JD flow, packaged as a Claude Code Skill (`.claude/skills/generate-submission/SKILL.md`):
+
+1. **Ingest** — write `Original_JD.txt` into `data/submissions/{slug}/` (slug via the existing `scripts/company_slug.py`, byte-identical to the frontend's `sanitizeCompanySlug`).
+2. **JD profiling** — unchanged, `scripts/jd_tailoring.py` deterministic extraction (post CR-065/066/067/068 fixes).
+3. **Fit evaluation — rearchitected, old path kept intact.** `fit_policy.py`'s deterministic gate context (years-lock, solo-PM-trap, transferable-skills notes) stays as-is. The LLM judgment call that currently goes to Ollama is instead made by Claude directly during the skill turn, writing the same structured JSON shape `_call_fit_llm` produces today so `fit_policy.py`'s post-processing keeps working unmodified. Per Jason's decision (2026-07-17), the existing Ollama call path is **not deleted** — it's kept in the repo, gated behind an explicit opt-in flag (default off), preserved for research/study rather than removed. This changes *where* fit is evaluated by default, not the scoring formula/thresholds owned by CR-053/054/055 — coordinate with that thread, don't re-litigate it here.
+4. **Claim selection** — unchanged, `claim_catalog.py`/`jd_tailoring.py` (post CR-064).
+5. **Draft assembly** — unchanged, `claim_composer.py` + `cover_letter_structure.py`/`renderer.py` in `compose` mode. `local_rewrite`/embedding paths stay opt-in and untouched.
+6. **PDF render (first pass)** — `compile_single.py` for Resume.md and CoverLetter.md; page-count pruning loop stays (deterministic, capped at 8).
+7. **Stage-aware tailoring + grounding safety net — ports `audit_and_improve.py`'s real logic, does not delete it.** Investigated 2026-07-17 (`scripts/audit_and_improve.py`): this is not redundant motion. It does three things the deterministic draft doesn't: (a) classifies company stage/motion/segment from the JD and rewrites the summary + cover letter to actually reflect that context — genuine tailoring, not just keyword overlap; (b) runs a *second*, independent numeric/fact grounding check (`audit_text_against_bullet_corpus`, `validate_hard_facts`) with a retry-with-feedback loop, catching anything that slipped past drafting; (c) snapshots pre-audit files and restores them on failure, so a bad run never leaves broken output. Only the three `call_llm` functions (`analyze_company_context`, `improve_resume_summary`, `improve_cover_letter`) get replaced with Claude-native reasoning during the skill turn — the deterministic guard logic, the retry/feedback loop shape, and the snapshot/restore safety net are reused as-is, called from the new flow instead of reimplemented. The original file stays in the repo unmodified (Jason's explicit instruction) and stops being called from `drafting_engine.py:391` by default, kept as a reference implementation and an opt-in legacy path.
+   - **Implementation note**: `improve_cover_letter`'s prompt hardcodes a specific example closer ("I would welcome the opportunity to discuss how my background... Thank you for your time and consideration.") as a model for the LLM to follow — a likely source of the generic-closer pattern flagged in the research below. The Claude-native version should not carry this canned example forward; Claude can generate a fresh, JD-specific closer per letter with no template to anchor on.
+8. **Rubric + truth-grounding + qualitative read — the `conversion-ready-pass` skill, run as a further mandatory gate after step 7,** not a replacement for it. Step 7 tailors and safety-checks; this step scores and does the final qualitative "does this read like a real person" pass (rubric scoring against `conversion_rubric.md`, mechanical linting, up to 3 rounds). See "Research: authenticity hardening" below for what to add to this pass.
+9. **PDF re-render** — only if step 7 or 8 actually edited Resume.md/CoverLetter.md, not unconditionally.
+10. **`draft_manifest.json`** — write `verification_passed`, `rubric_score`, `claim_sources`, matching what the frontend's `crud.ts`/`files.ts`/`DocumentEditor.tsx` read today. Fixes a discrepancy found in Phase 1: live submission folders are currently missing this file even though `draft_compiler.py:1199` writes it.
+11. **Cheat sheet** — `generate_cheat_sheet`, unchanged (low-stakes per CR-059's own scoping).
+
+No MCP sampling is needed — native Claude Code tool use during the session already satisfies "reuse the session's own model access." MCP sampling would only matter if the reasoning had to happen inside a detached subprocess outside a Claude Code turn, which isn't the case here: Claude is already the orchestrator.
+
+## Research: authenticity hardening (2026-07-17)
+
+Jason asked whether output would get "caught in an AI audit or read clearly made by AI," and to fold any real improvements into this plan. Findings, sourced 2026-07-17:
+
+- **No major ATS platform in 2026 detects AI authorship.** Testing across Workday, Greenhouse, iCIMS, SAP SuccessFactors, Lever, Ashby, and Oracle Taleo found zero with native AI-authorship detection — the AI layer these platforms run is for keyword/candidate matching and ranking, not writing-style forensics, and vendors have a live legal disincentive (NYC Local Law 144, EU AI Act bias-audit exposure) to add one. **The real risk is a human recruiter's read, and a candidate's ability to defend the content in a screening call** — not an automated gate. This reframes the goal: recruiter-readability hardening, not detector evasion, because there is no detector to evade. [Can ATS Detect AI Resumes in 2026?](https://www.jobscan.co/blog/can-ats-detect-ai-resume/), [Does ATS Detect AI Resumes? We Tested 10 Systems](https://enhancv.com/blog/ats-detect-ai-resume/)
+- **Word-level tells beyond what CLAUDE.md's Forbidden Language list already covers**: "delve," "robust," "pivotal," "cutting-edge," "unlock the potential/value," "game-changer," "future-ready," "elevate your," "drive impact," "spearheaded," "orchestrated," "It is important to note," "In today's fast-paced world," "Dive into," and "Indeed" as a sentence opener. [Most Common ChatGPT Words to Avoid](https://walterwrites.ai/most-common-chatgpt-words-to-avoid/), [AI Writing Tells](https://seofrancisco.com/insights/ai-writing-tells-sound-human-again/)
+- **Structural tells** (can't be regex-caught, need qualitative judgment — belongs in the rubric-gate's qualitative pass, not the linter): predictable sentence rhythm where every bullet follows the same formula with no narrative variation; achievements stated as vague outcomes ("significant growth," "enhanced efficiency") without naming the specific tool/project/obstacle; a summary or skills section that mirrors the JD's exact keywords while adding zero information about *how* the work was actually done. [How to Tell if a Resume Was Written with AI](https://enhancv.com/blog/signs-of-ai-generated-resume/)
+- **Checked against the current pipeline**: `claim_composer.py` does not bold-wrap metrics or dollar amounts (a cited AI formatting tell) — clean, no action needed. The grounding discipline already in place (every claim traces to a VOC/MET/ACC code in `workExperience.md`) already substantially addresses the "can't defend it in a screening call" risk, since nothing is invented — this is a case where the existing anti-hallucination architecture is already doing double duty as authenticity insurance, worth naming explicitly rather than assuming it needs new machinery.
+
+See Epic 8 in the epics doc for concrete additions (linter word list, rubric-gate qualitative checks).
+
+**Cover-letter voice (added 2026-07-17, Epic 9):** Jason's existing `voice-rewrite` skill has a `professional` profile already scoped for cover letters — a positive vocabulary model (his real PM vocabulary vs. corporate filler to strip) rather than a growing deny-list, and its AI-artifact strip list independently overlaps most of the research above. Wired into step 7 (the Claude-native tailoring pass) as a required cover-letter-only pass. Resolved: when a JD's own required-skill wording lands on a word the profile normally strips, voice wins outright — no JD-literal carve-out (Jason's call, R2/C2/C3 scoring mostly rewards named tools/domain terms, not generic corporate connectors). Revisit only if a real batch shows recurring, evidenced cost, not on a single anecdote.
+
+**Batching 24 JDs without approval friction** is two separate problems:
+- Claude Code's own permission prompts on repeated Bash calls — solved by allowlisting the specific deterministic script invocations in `.claude/settings.json`, scoped to `data/submissions/**` output paths (read-only/known-output-path per Jason's own standing rule). Run the `fewer-permission-prompts` skill against a first calibration batch to derive the allowlist from real usage.
+- Iterating the JDs themselves — with steps 3 and 7 now inline reasoning instead of subprocess model calls, sequential execution in one session should be fast enough that parallel orchestration (Agent/Workflow fan-out) isn't needed. Don't add that complexity until real post-rebuild timing shows it's actually a bottleneck.
+
+Frontend requires no changes — the folder/file contract (Phase 1 finding) only hard-requires `Resume.md`/`CoverLetter.md` + matching PDFs + a `draft_manifest.json` with `verification_passed`/`rubric_score`; everything else is either generically listed by extension or unread.
+
+## Acceptance Criteria
+- CLAUDE.md/AGENTS.md corrected: "zero local LLMs" restated precisely (true for drafting stages; not true for fit evaluation and `audit_and_improve`, which is what this CR changes).
+- One JD run end-to-end through the new flow produces a `data/submissions/{slug}/` folder passing the existing Required Verification steps (linter, `quality_checker.check_resume`, 1-page PDF compile) with **zero Ollama subprocess calls** on the default path.
+- `scripts/audit_and_improve.py` and the Ollama fit-call path remain unmodified in the repo (verifiable via `git diff` showing no deletions), reachable only through an explicit opt-in flag, default off.
+- `draft_manifest.json` present with `verification_passed`/`rubric_score` populated, confirmed readable by the frontend's existing endpoints without frontend code changes.
+- `submission_linter.py`'s word list extended with the terms found in Epic 8's research pass; a sample resume/cover letter seeded with each new term is confirmed to trip the linter.
+- Real timing measurement (not estimate) of per-JD wall-clock time before vs. after, on at least 3 JDs.
+- A 24-JD batch run completes with fewer than 5 total permission-prompt interruptions.
+
+## Out of Scope
+- CR-053/054/055's fit-rubric scoring formula and calibration/dedup work — this CR relocates *where* fit is computed, not the scoring logic itself.
+- CR-064's claim-score formula — reused as-is.
+- `local_rewrite` (CR-062) and the ruled-out embedding path (CR-063) — untouched, remain opt-in/dormant.
+- Any frontend change — none required.
+- Chasing AI-detector evasion — research found no ATS in production use does AI-authorship detection; Epic 8 is scoped to human-recruiter readability and interview defensibility, not a detection arms race.

@@ -6,46 +6,64 @@ This file is the tool-agnostic counterpart to `CLAUDE.md` (Claude Code reads tha
 
 If you only do one thing before touching `data/submissions/`, do this: **run the verification commands in "Required Verification Before You're Done" below.** Do not consider a resume or cover letter finished until those commands pass clean.
 
-**Trigger phrase binding:** when Jason says a resume/cover letter should be "conversion ready," "apply ready," "ready to send," or asks you to "review" or "check" one — that always means score it against `data/conversion_rubric.md` (R1–R8 resume / C1–C5 cover letter) before answering. He should not have to name that file or re-link the research report each time; this file being auto-loaded is what makes that unnecessary. Don't just eyeball it for typos and call it done.
+**Trigger phrase binding:** when Jason says a resume/cover letter should be "conversion ready," "apply ready," "ready to send," or asks you to "review" or "check" one — that always means running the full three-pass workflow in [.claude/skills/conversion-ready-pass/SKILL.md](.claude/skills/conversion-ready-pass/SKILL.md): rubric scoring against `data/conversion_rubric.md` (R1–R8 resume / C1–C5 cover letter), a mechanical truth-grounding sweep, and a qualitative hiring-manager read, looped up to 3 rounds. That file is plain markdown with no Claude-Code-specific mechanism required to use it — if you are a different coding agent and have no automatic skill-loading step, open and follow it directly rather than stopping at the rubric. He should not have to name these files or re-link the research report each time. Don't just eyeball a document for typos and call it done, and don't stop after the rubric score alone — that is Pass 1 of three, not the whole workflow.
 
 ---
 
 ## Active Engineering Work — Read This First If You're Here to Build, Not Draft
 
-Two active, resumable engineering threads, most recent first:
+There are two active, resumable engineering threads:
 
-1. **[docs/spec/08-implementation/CR-059-local-llm-tuning-loop.md](docs/spec/08-implementation/CR-059-local-llm-tuning-loop.md)**
-   — tuning how the drafting pipeline uses its local LLMs (Ollama: `llama3.1:8b-instruct-q5_K_M`,
-   `phi3.5:3.8b-mini-instruct-q8_0`, `qwen2.5:7b-instruct-q4_K_M`) so prompting/task-decomposition/model-
-   routing match what these small models can actually do reliably. Self-paced 4-round loop
-   (analyze → change → test → analyze), checkbox-tracked, not started as of 2026-07-07. Read it before
-   touching any LLM prompt in the drafting pipeline (`bullet_generation.py`, `claim_composer.py`,
-   `summary_builder.py`, `cover_letter_slots.py`, `model_manager.py`). Immediate predecessor:
-   **[docs/spec/05-change-requests/CR-058-generation-defect-fixes.md](docs/spec/05-change-requests/CR-058-generation-defect-fixes.md)**
-   — 7 confirmed generator bugs (fabricated metrics, JD-text leakage, punctuation corruption from a
-   buggy em-dash cleanup, JD-context misclassification, grounding-audit mismatch) fixed the same
-   session, uncommitted as of this writing — check `git status` before assuming these are live. Full
-   investigation trail:
-   `_bmad-output/implementation-artifacts/investigations/applyr-generation-defects-investigation.md`
-   (parent `Resource/CodeProjects` dir, shared BMAD install, not inside this repo).
+1. **[docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md](docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md)**
+   — scoring/pipeline overhaul (covers CR-053 fit-rubric rebuild, CR-054 pipeline-failure-transparency
+   hardening, CR-055 collection-gate accuracy fixes). It is a self-contained handoff doc with
+   checkbox-tracked epics/stories, file:line references, real production-log evidence, and an explicit
+   cross-CR priority ranking at the bottom. Open it, find the first unchecked story, and start there.
+   It supersedes the scoring policy in CR-039 (`docs/spec/05-change-requests/`) — if the two disagree,
+   the CR-053 doc wins until it's closed out and the registry below is updated to reflect it.
+2. **[docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md](docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md)**
+   — rework `score_claim_for_jd`'s scoring formula (dedup + rarity weighting) so a claim with rare,
+   precise vocabulary (a named tool, a specific compliance regime) can outrank a claim whose generic PM
+   vocabulary happens to overlap the JD everywhere. This is CR-063's own root-caused conclusion, not a
+   new hypothesis: CR-063 (below) measured a 16-JD eval set, tested both of its own proposed fallbacks
+   (semantic re-ranking via cached embeddings, `jd_profile_mode="llm"`) with real local infra, found both
+   made things worse or made no difference, and pinned the defect to this one function. Start here, not
+   by reopening the fallback paths CR-063 already ruled out. Spec:
+   `docs/spec/05-change-requests/CR-064-claim-score-formula-rework.md`.
 
-2. There is also an active, resumable scoring/pipeline overhaul in progress:
-   **[docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md](docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md)**
-   (covers CR-053 fit-rubric rebuild, CR-054 pipeline-failure-transparency hardening, CR-055
-   collection-gate accuracy fixes). It is a self-contained handoff doc with checkbox-tracked epics/stories,
-   file:line references, real production-log evidence, and an explicit cross-CR priority ranking at the
-   bottom. Open it, find the first unchecked story, and start there. It supersedes the scoring policy in
-   CR-039 (`docs/spec/05-change-requests/`) — if the two disagree, the CR-053 doc wins until it's closed
-   out and the registry below is updated to reflect it.
+**Diagnostic work, done — read before touching CR-064 above, not instead of it:**
+[docs/spec/08-implementation/CR-063-jd-theme-claim-selection-loop-tracker.md](docs/spec/08-implementation/CR-063-jd-theme-claim-selection-loop-tracker.md)
+ran the test-and-iterate loop measuring whether JD theme-extraction and claim-selection
+(`jd_tailoring.py`) surface the right grounded claims per JD, against a 16-JD human-verified eval set
+(`docs/reports/jd-theme-claim-eval-set.md`). Baseline: 14/45 should-surface codes, 0/16 companies with a
+full pass. Three `THEME_KEYWORDS` rounds left that flat; a Final round tested embeddings (made the
+aggregate monotonically *worse*, 14/45 → 11/45) and `jd_profile_mode="llm"` (byte-identical selection
+accuracy to the deterministic path despite better theme extraction) and ruled out both with real
+measured data, not architectural reasoning alone. Full trail — including a documented mid-session
+section-ordering bug that got caught and fixed — is in the tracker; the conclusion is CR-064 above.
 
-   This doc was written before being formally registered in the CR registry
-   (`docs/spec/05-change-requests/README.md`) or split into the repo's usual `CR-XXX.md` (spec) +
-   `IMP-CR-XXX.md` (implementation notes) pair — it's a hybrid of both. If you create the formal CR-053/
-   054/055 entries as part of this work, keep this file as the working epics tracker rather than
-   duplicating the checkboxes elsewhere.
+This doc was written before being formally registered in the CR registry
+(`docs/spec/05-change-requests/README.md`) or split into the repo's usual `CR-XXX.md` (spec) +
+`IMP-CR-XXX.md` (implementation notes) pair — it's a hybrid of both. If you create the formal CR-053/
+054/055 entries as part of this work, keep this file as the working epics tracker rather than
+duplicating the checkboxes elsewhere.
 
-   These two threads are independent (one is fit-scoring/job-scouting, the other is drafting-pipeline
-   LLM usage) and can be worked in either order.
+**Closed, not active:**
+[docs/spec/08-implementation/CR-059-local-llm-tuning-loop.md](docs/spec/08-implementation/CR-059-local-llm-tuning-loop.md)
+was closed 2026-07-08 as moot before any round ran — the default *drafting* pipeline (JD profiling,
+claim selection, bullet/summary/cover-letter assembly) calls zero local LLMs (deliberate architecture
+since CR-017, not a bug). This does NOT extend to fit evaluation or the post-draft rewrite step —
+`structured_fit.py`'s `_call_equivalence_llm` (one Ollama call per JD, CR-053) and, until CR-070 Epic 3
+lands, `audit_and_improve.py`'s rewrite loop both call local LLMs on the default path today. CR-059's
+own tracker doc scoped fit-scoring out of its finding by name; this note previously lost that nuance.
+See [CR-070](docs/spec/05-change-requests/CR-070-claude-native-generation-pipeline.md) for the
+rearchitecture of both. See CR-059's doc top section for the original finding. Its predecessor,
+**[docs/spec/05-change-requests/CR-058-generation-defect-fixes.md](docs/spec/05-change-requests/CR-058-generation-defect-fixes.md)**
+(7 confirmed generator bugs fixed same session, uncommitted as of 2026-07-07 — check `git status` before
+assuming these are live), remains a valid reference for drafting-pipeline defect history. Full
+investigation trail:
+`_bmad-output/implementation-artifacts/investigations/applyr-generation-defects-investigation.md`
+(parent `Resource/CodeProjects` dir, shared BMAD install, not inside this repo).
 
 ---
 
@@ -156,7 +174,7 @@ These are absolute. Violating any of these requires immediate rewrite.
 
 **Never claim:**
 - People management, direct reports, hiring/firing, or managing other PMs
-- Titles above PM II (no Director, Head of, Principal, VP, Staff)
+- Titles above Senior IC PM (no Director, Head of, Principal, VP, Staff, Group PM)
 - AI/ML model training, ownership, or engineering
 - Revenue, billing, or payment system ownership
 - Tools not in Jason's history (no Snowflake, Tableau, FHIR, Docker, etc. unless in workExperience.md)
@@ -289,6 +307,8 @@ Choose each letter's proof points purely on fit to that letter's own JD — scor
 If two letters for different companies independently land on the same true accomplishment because it is genuinely the strongest fit for both JDs, that is correct — leave it alone. Only revisit reused phrasing if it fails C2/C3 for that letter on its own merits, or if the language itself is generic/AI-sounding within that one letter (a C4 Authenticity issue — see Forbidden Language below), not because it also appears elsewhere.
 
 Keep cover letters 250-400 words, one page, opening with something specific to the company rather than generic enthusiasm (C1 Opening Hook). Avoid generic AI closers (e.g. "I would welcome the opportunity to speak with your team") when they read as filler for that letter — this is a per-letter authenticity check, not a batch-variety check.
+
+**This covers sentence-level phrasing too, not just proof-point selection** (corrected again 2026-07-16 — the 2026-07-07 correction above didn't stop the same mistake from recurring in a different form). Finding that several cover letters share a similar opening-hook structure or closing line is not, by itself, a defect. No hiring manager reads two of Jason's letters side by side, so a shared closer like "I would welcome a conversation about how this maps to X" across many companies carries zero real conversion risk — it is invisible to every actual reader. Before flagging or rewriting anything that spans multiple submissions, ask: would this be noticeable to someone who only ever reads this one document? If answering requires comparing it to another company's letter, it is out of scope — do not raise it, not even as a secondary point stacked alongside a real single-letter issue. Judge each line only on whether it reads as generic or AI-sounding standing completely alone.
 
 ---
 

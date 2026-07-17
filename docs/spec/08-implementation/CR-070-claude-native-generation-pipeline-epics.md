@@ -53,7 +53,26 @@ The real default-path LLM call is `_call_equivalence_llm` (`structured_fit.py:21
 
 - [x] **Story 2.1**: RESOLVED — traced above. Real target: `_call_equivalence_llm` (`structured_fit.py:218-281`), input = `(jd_text, work_exp, must_haves)`, output schema = `{"must_haves": [{"text","judgment","justification"}...], "criteria": {<5 fixed keys>: {"judgment","justification"}}}`, consumed by `_normalize_judgments` (`structured_fit.py:284-303`) then `compute_fit_report` (deterministic, unchanged).
 - [ ] **Story 2.2**: Build the skill step where Claude reads the JD text + must-haves (from `extract_must_haves`, already deterministic, unchanged) + candidate profile excerpt and produces the same `{"must_haves": [...], "criteria": {...}}` JSON shape directly (Write tool), replacing the `call_llm_stage("fit_equiv", ...)` call in `_call_equivalence_llm`. `compute_fit_report`, `_normalize_judgments`, `_heuristic_judgments`, and all of `fit_policy.py`'s downstream gates stay untouched — only the judgment source changes.
-- [ ] **Story 2.3**: Verify Claude-native judgments produce fit decisions directionally consistent with CR-053's own calibration ground truth (`docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md`'s real outcome data — 573 Rejected, 343 Closed, 69 Applied) on a sample of archived JDs, not just a handful eyeballed. Compare `Decision`/`fit_score` against what's already stored for those jobs, not a vibe check.
+- [x] **Story 2.3**: DONE 2026-07-17 — ran a real 10-JD comparison (`docs/superpowers/plans/2026-07-17-cr070-epic1-epic2.md` Task 4). Method: picked 10 archived JDs (`data/archive/submissions/`) that also have a stored historical `jobs.score` in `jobagent.sqlite` (snapsheet, roadie, quinstreet, pointclickcare, tivity_health, apex_systems, ryan, swarm_aero, rafay, informdata). Ollama is not reachable in this environment (confirmed — `localhost:11434` connection refused), so a live same-session Ollama-vs-Claude-native head-to-head wasn't possible; compared Claude-native judgments (reasoned directly against each real JD + `data/workExperience.md`, written via `fit_judgment_io.write_equivalence_judgment`, run through the real `evaluate_structured_fit(FIT_JUDGMENT_MODE=claude_native)`) against each job's stored historical `jobs.score` instead.
+
+  **Caveat that matters:** the historical scores were not necessarily produced by today's exact `compute_fit_report` code — fit/claim scoring changed multiple times across CR-053/064/065/066/067/068 since those jobs were originally scored, so this is not a clean same-algorithm before/after. It's the best available real-world baseline without a reachable Ollama endpoint, not a controlled experiment.
+
+  | Company | Historical | Claude-native | Decision (72 threshold) | Diff |
+  |---|---:|---:|---|---:|
+  | snapsheet | 85 | 96 | YES | +11 |
+  | roadie | 97 | 100 | YES | +3 |
+  | quinstreet | 85 | 68 | **NO** | -17 |
+  | pointclickcare | 75 | 90 | **NO** (hard-fail on healthcare must-have) | +15 |
+  | tivity_health | 60 | 96 | YES | +36 |
+  | apex_systems | 96 | 90 | YES | -6 |
+  | ryan | 100 | 88 | YES | -12 |
+  | swarm_aero | 78 | 62 | **NO** | -16 |
+  | rafay | 85 | 90 | YES | +5 |
+  | informdata | 85 | 96 | YES | +11 |
+
+  Mean absolute difference: 13.2 points. **8/10 agree on Decision direction at the min_fit_score=72 threshold; 2/10 disagree** (quinstreet, swarm_aero — both cases where the Claude-native judgment flagged a real domain/craft mismatch: quinstreet is consumer-fintech growth/experimentation work, not Jason's documented platform-stabilization craft; swarm_aero is defense/UAV real-time systems, explicitly stated as not a role "for someone learning the craft"). pointclickcare is a third notable case: Claude-native correctly hard-failed on the healthcare-background must-have even though the weighted score alone (90) would have passed — Jason has zero healthcare/clinical domain experience, and CR-053's own founding diagnosis specifically named domain-mismatch as a failure mode the old scoring missed.
+
+  **Read on this, not just the numbers:** the two decision flips aren't random noise — both are explainable by genuine domain/craft-fit reasoning that plausibly predates CR-053's domain-awareness work. But 10 JDs and one reasoner's pass is not enough to declare this settled either way. **Recommendation: do not flip `FIT_JUDGMENT_MODE` to `claude_native` by default yet.** Widen the sample (aim for 30-50, spanning more of the archive) and, critically, get Jason's read specifically on the quinstreet and swarm_aero calls — do those two flips match his own judgment of those two roles, or does the Claude-native reasoning have a real, correctable bias? That answer should gate the default flip, not an aggregate diff number alone.
 - [x] **Story 2.4**: RESOLVED per "keep code intact" decision — gate `_call_equivalence_llm`'s Ollama call behind an explicit opt-in flag (e.g. `FIT_JUDGMENT_MODE=ollama_legacy`, default off) once 2.3 passes. Leave `_call_equivalence_llm` and the dead legacy ladder (`_call_fit_llm`/`_call_fit_scoring_only`) callable, just not on the default path.
 
 ## Epic 3 — Port `audit_and_improve.py`'s tailoring + safety-net logic to Claude-native reasoning

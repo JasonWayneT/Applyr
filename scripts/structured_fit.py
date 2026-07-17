@@ -413,7 +413,8 @@ def evaluate_structured_fit(
     """Top-level structured fit entry — returns legacy dict or None on failure."""
     must_haves = extract_must_haves(jd_text)
     judgments = None
-    if use_llm and fit_judgment_mode() == "claude_native":
+    mode = fit_judgment_mode()
+    if use_llm and mode == "claude_native":
         from fit_judgment_io import read_equivalence_judgment
         folder = os.environ.get("FIT_JUDGMENT_FOLDER", "")
         judgments = read_equivalence_judgment(folder) if folder else None

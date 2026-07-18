@@ -12,16 +12,33 @@ If you only do one thing before touching `data/submissions/`, do this: **run the
 
 ## Active Engineering Work — Read This First If You're Here to Build, Not Draft
 
-There are two active, resumable engineering threads:
+There are three active, resumable engineering threads:
 
-1. **[docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md](docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md)**
+1. **[docs/spec/08-implementation/CR-070-claude-native-generation-pipeline-epics.md](docs/spec/08-implementation/CR-070-claude-native-generation-pipeline-epics.md)**
+   — the most recently active thread (2026-07-17 session). Rearchitects the generation pipeline to run
+   inside Claude Code natively instead of calling local Ollama models, batch-capable across the 271-JD
+   archive with minimal permission-prompt friction. 9 epics, checkbox-tracked. **Current state:**
+   Epic 1 done (docs corrected). Epic 2 (fit evaluation) validated against 34 real archived JDs —
+   judgment quality holds up, but the real blocker to flipping the default is that no automated
+   mechanism exists yet to populate a fit judgment during a live run (that's Epic 5's job). Epic 3
+   (`audit_and_improve.py` port) has a built, reviewed module (`scripts/audit_improve_native.py`) with
+   one known, well-scoped bug left: it treats every `validate_hard_facts` warning as blocking, when at
+   least one class of warning (education-section self-healing) represents a successfully auto-corrected
+   condition, not a real problem — **fix that first**, then continue to Epic 5. Two superpowers-format
+   execution plans track exact task-by-task state:
+   [Epic 1-2 plan](../superpowers/plans/2026-07-17-cr070-epic1-epic2.md),
+   [Epic 3 plan](../superpowers/plans/2026-07-17-cr070-epic3.md). Spec:
+   `docs/spec/05-change-requests/CR-070-claude-native-generation-pipeline.md`.
+2. **[docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md](docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md)**
    — scoring/pipeline overhaul (covers CR-053 fit-rubric rebuild, CR-054 pipeline-failure-transparency
    hardening, CR-055 collection-gate accuracy fixes). It is a self-contained handoff doc with
    checkbox-tracked epics/stories, file:line references, real production-log evidence, and an explicit
    cross-CR priority ranking at the bottom. Open it, find the first unchecked story, and start there.
    It supersedes the scoring policy in CR-039 (`docs/spec/05-change-requests/`) — if the two disagree,
-   the CR-053 doc wins until it's closed out and the registry below is updated to reflect it.
-2. **[docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md](docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md)**
+   the CR-053 doc wins until it's closed out and the registry below is updated to reflect it. CR-070
+   Epic 2 relocates *where* fit judgment happens but does not change this scoring formula — coordinate,
+   don't re-litigate.
+3. **[docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md](docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md)**
    — rework `score_claim_for_jd`'s scoring formula (dedup + rarity weighting) so a claim with rare,
    precise vocabulary (a named tool, a specific compliance regime) can outrank a claim whose generic PM
    vocabulary happens to overlap the JD everywhere. This is CR-063's own root-caused conclusion, not a

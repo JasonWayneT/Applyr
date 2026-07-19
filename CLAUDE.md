@@ -12,7 +12,17 @@ If you only do one thing before touching `data/submissions/`, do this: **run the
 
 ## Active Engineering Work — Read This First If You're Here to Build, Not Draft
 
-There are three active, resumable engineering threads:
+> **START HERE (2026-07-18):
+> [SESSION-HANDOFF-2026-07-18-authoring.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-18-authoring.md)**
+> — this supersedes the CR-070 tracker below as the active thread. The working model changed: **you
+> author resumes and cover letters directly** from the JD and ground truth, rather than generating via
+> `draft_compiler.run()` (JD extraction is unreliable and its output needed heavy rewriting every time).
+> Deterministic checks stay, as *verification* on text you already wrote. The goal is conversion, not
+> pipeline completeness. That handoff also carries the one open defect worth fixing next: a repeated
+> sentence-shape tic that reads as AI-generated and that our burstiness check cannot see.
+
+The CR-070 epics below are largely complete and are kept for reference. There are three
+previously-active engineering threads:
 
 1. **[docs/spec/08-implementation/CR-070-claude-native-generation-pipeline-epics.md](docs/spec/08-implementation/CR-070-claude-native-generation-pipeline-epics.md)**
    — the most recently active thread (2026-07-17 session). Rearchitects the generation pipeline to run
@@ -108,7 +118,7 @@ Don't consider a pipeline/connector/gate change finished until the docs below ar
 
 ## Who This Is For
 
-This workspace is configured for a **B2B SaaS Platform PM** with 6+ years of experience.
+This workspace is configured for a **B2B SaaS Platform PM** with 7 years of experience.
 To protect candidate privacy:
 - All real contact details (PII) are stored locally in the gitignored `data/workExperience.md` (Section 1.0) and inside the gitignored SQLite database `jobagent.sqlite`.
 - Do NOT write or commit real names, emails, phone numbers, or LinkedIn URLs to tracked Git files.
@@ -139,7 +149,7 @@ All metrics below are from `data/workExperience.md` Section 4. Use them exactly 
 | MET-02 | Active accounts | ~3,500 |
 | MET-03 | Active users | ~25,000 |
 | MET-04 | Platform churn rate | 7% annually |
-| MET-05 | Infrastructure savings (Cision) | $1M–$2M cumulative |
+| MET-05 | Infrastructure savings (Cision) | ~$2M cumulative |
 | MET-06 | Contact data drop-off (pre-fix) | 40% |
 | MET-07 | Data drop-off post-remediation | 100% reduction |
 | MET-08 | Security backlog resolved | ~90% of ~300 items |
@@ -220,6 +230,8 @@ Engineering, DBA, DevOps, Customer Experience (CX), Customer Support, Sales, Acc
 
 Never use: em dashes (—), double-hyphen (`--`), "leverage," "passionate," "driven," "dynamic," "innovative," "seamless," "transformative," "synergy," "tapestry," "revolutionize," "proven track record," "I am excited to apply," "I am excited about," "I am confident that," "Furthermore," "Moreover," "In addition," "Additionally."
 
+The fuller, actively-maintained list (CR-070 Epic 8 authenticity research + Jason's own `voice-rewrite` skill's Pass 1 strip list) lives in `scripts/submission_linter.py`'s `LR-009`/`LW-006`/`LW-007` rules — that's the single source of truth going forward (per CR-070 Epic 9's decision not to hand-duplicate a growing word list in two places); this section stays as the always-hard-blocked core, not the exhaustive set.
+
 Never open a sentence with transition fluff. Never start a cover letter with "I am writing to express my interest."
 
 No bullet points in cover letters. No em dashes anywhere — including as a stand-in punctuation pattern like `word: word` used to avoid the literal character. If you find yourself writing a colon where an em dash would have gone, restructure the sentence instead; the colon-as-em-dash-substitute pattern is itself a tell.
@@ -236,7 +248,10 @@ A resume MUST contain these exact section headings, in this order, or it will fa
 
 ## PROFESSIONAL SUMMARY
 **[Optional bolded positioning subtitle]**
-[3+ sentence paragraph — fewer than 3 sentences fails R-010]
+[EXACTLY 3 sentences. Fewer fails R-010; more fails CW-013/R-012.]
+
+## CORE COMPETENCIES
+[optional — see below]
 
 ## PROFESSIONAL EXPERIENCE
 ### [Title] | [Company] | [Start] - [End]
@@ -249,7 +264,8 @@ A resume MUST contain these exact section headings, in this order, or it will fa
 ```
 
 - The heading must be literally `## PROFESSIONAL SUMMARY` — not a custom title line like `## PRODUCT MANAGER | Domain | B2B SaaS`. That exact substitution has happened before and silently fails `R-005`/`R-012`.
-- Do not add `## CORE EXPERTISE` or `## TECHNICAL ENVIRONMENT` sections. They are not part of the approved template, and adding them is the single most common cause of resumes overflowing to 2 pages.
+- **The summary is exactly 3 sentences, and at most ONE of them carries a metric.** The enforced shape is 2 "template" sentences (positioning/scope) + at most 1 "proof" sentence — `SUMMARY_TEMPLATE_SENTENCES = 2` and `SUMMARY_MAX_PROOF_SENTENCES = 1` in `scripts/resume_conversion_eval.py`. A 4th sentence fails `CW-013` ("stacks multiple proof sentences, reads like pasted bullet fragments") and `apply_claude_native_improvement` separately rejects any count != 3. This section previously said "3+ sentences," which is wrong and caused a real authoring failure on 2026-07-18 — corrected then. Get sentence-length variety *within* the 3 sentences rather than by adding a 4th.
+- `## CORE COMPETENCIES` is the one approved optional section beyond the three required ones (added by `build_skills_section`, `scripts/local_draft_stages.py`, FR-195 — confirmed 2026-07-18 to be deliberate, not drift: a JD-adaptive skills row sourced from selected claim tags plus a verified-tools row from `data/skills_catalog.json`, both passing through the same `BLOCKED_TOOLS` guard as the rest of the resume). Do not add any *other* undocumented section (`## CORE EXPERTISE`, `## TECHNICAL ENVIRONMENT`, etc.) — those aren't part of the approved template, and adding one is the single most common cause of resumes overflowing to 2 pages. Since there is still no automated page-count gate (see below), a JD with a long competency/tool match can push a resume to 2 pages even with only the approved sections present — check page count manually regardless.
 - Each bullet must be ≤40 words (`R-013`/`CW-003`).
 - Most recent role: 5-6 bullets. Earlier roles: 2-3 bullets. (Engine has produced 7-8 before; trim down.)
 

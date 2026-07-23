@@ -1,6 +1,9 @@
 ---
-trigger: always_on
+trigger: manual
+description: Retired 2026-07-19 (CR-070 direct-authoring pivot). Reference/rebuild only -- see banner below.
 ---
+
+> **Retired, not active.** The local-Ollama structured-fit engine this file describes was superseded 2026-07-19 by Claude-native fit evaluation (CR-070 Epic 2). Current process: `AGENTS.md` -> `.claude/skills/generate-submission/SKILL.md` Stage 0. Kept here for future study/rebuild reference only -- do not follow these rules for a real submission.
 
 # Dynamic Job-Fit Decision Engine (v5.0)
 

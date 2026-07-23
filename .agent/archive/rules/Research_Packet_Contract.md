@@ -1,6 +1,9 @@
 ---
-trigger: always_on
+trigger: manual
+description: Retired. Conflicts with the standing "no web research, any stage" rule -- see banner below.
 ---
+
+> **Retired, not active.** This file's Perplexity-driven research contract conflicts with the current standing rule: no web research, at any stage, for any purpose (`SKILL.md` top-level rule). Kept here for future study/rebuild reference only -- do not follow this contract for a real submission.
 
 # Research Packet Contract (v2.0)
 

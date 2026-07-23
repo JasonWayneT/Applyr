@@ -1,6 +1,9 @@
 ---
-trigger: always_on
+trigger: manual
+description: Retired 2026-07-19 (CR-070 direct-authoring pivot). Reference/rebuild only -- see banner below.
 ---
+
+> **Retired, not active.** The `compose`/local-Ollama pipeline this file describes was superseded 2026-07-19 by the direct-authoring pivot. Current process: `AGENTS.md` -> `.claude/skills/generate-submission/SKILL.md`. Kept here for future study/rebuild reference only -- do not follow these defaults for a real submission.
 
 # Pipeline Environment & Local-First Defaults (CR-021)
 

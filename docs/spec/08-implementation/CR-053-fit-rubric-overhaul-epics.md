@@ -426,6 +426,100 @@ it's flagged here so it isn't lost, not because a bug is confirmed.
 
 ---
 
+## Session Evidence — 2026-07-13 (raw findings, not yet triaged into epics/stories)
+
+Logged during a same-day apply push (Jason needed assets today, prioritized getting drafts over
+fixing the pipeline; findings captured here for a future dedicated fix session). Three jobs run
+through `batch_pipeline.py --mode single` end to end: Cresta (Platform PM, IAM), SailPoint (PM,
+Certification & Governance), Group 1001 (Senior PM, Onyx annuity platform). All three failed at the
+fit-scoring gate; assets were then generated via manual DB override + `--draft-only` per Jason's
+explicit go-ahead, with manual polish afterward. Every finding below is a fresh, reproducible instance
+of a *distinct* failure mode, not a repeat of the calibration data already logged in Epic 0.
+
+1. **Identical-score clustering across dissimilar JDs — new evidence for the "opaque single LLM call"
+   problem (point 1 in "Why this exists").** All three jobs scored exactly **60** (below the 72
+   threshold) on the first pass, despite being structurally different roles (identity/access platform
+   PM, identity governance PM, insurance platform PM) with none of Jason's hard exclusions present
+   (no 0-to-1, no people management, no AI/ML ownership, no revenue/billing). A real holistic judgment
+   producing the *same* integer three times in a row across different JDs is itself suspicious — worth
+   pulling the raw LLM completions for these three (if still recoverable from `model_manager.log`) as
+   calibration evidence once Epic 4's harness exists.
+
+2. **New confirmed instance of the CR-054 "passed: true on a failed draft" pattern — SailPoint.**
+   `data/submissions/sailpoint/cl_lint_report.json` (intermediate) reported `"passed": true`, but the
+   final `lint_report.json` for the *same generated file* reported `"passed": false"` with a blocked
+   hard rule (`LR-004`, forbidden phrase "proven track record", plus a transition-fluff warning). The
+   pipeline still wrote and left `CoverLetter.pdf` on disk containing the blocked content — the CLI's
+   only visible signal was a downstream `compile_single.py` non-zero exit buried in a stack-trace-style
+   error, not a clear "this document is blocked" message. A human (or another agent) reading the CLI
+   output casually could easily miss that the on-disk PDF was invalid. Manually fixed by rewriting the
+   flagged paragraph; relevant to CR-054 Epic on failure transparency.
+
+3. **New bug: page-count guard reported failure but final export succeeded — Cresta.** Mid-run log
+   showed `Page-count guard: cannot prune further (floor reached)` and `Page-count guard: 1 prune(s) —
+   STILL 2 pages`, but the actual final `Resume.pdf` on disk (after the self-healing retry loop
+   completed) was 1 page and lint-clean. Either the guard's warning fires on an intermediate draft
+   before a later successful prune, or the log message is stale/mis-ordered relative to the real final
+   state. Not confirmed dangerous (final artifact was fine) but confusing enough to burn review time
+   chasing a non-issue — worth making the log message unambiguous about which attempt it refers to.
+
+4. **New bug: numeric-hallucination guard false-positives on digits embedded in the company name —
+   Group 1001.** Cover letter drafting crashed outright (`SUCCESS` never reached, no `CoverLetter.md`
+   ever written) with `Cover letter numeric audit: Document introduces numbers not in bullet corpus:
+   ['1001']`. The "1001" is literally the second word of the company name "Group 1001", not a
+   fabricated metric — the numeric-audit function almost certainly scans the letter body for bare
+   digit sequences without excluding tokens that already appear in the company name. This is a hard
+   pipeline failure (not just a linter warning), meaning any company with a number in its name (e.g.
+   "Group 1001", "Big Bang 1", "1Password"-style names) cannot draft through the automated path at all.
+   Cover letter was hand-drafted from the same claim catalog codes the compiler had already selected
+   (`ACC-101-TECH`, `ACC-103-ROADMAP`, `ACC-105-PROCESS`, `ACC-113-ADOPTION`) to keep it consistent
+   with what the engine would have produced, then run through `submission_linter.lint_document` and
+   `quality_checker.check_resume` manually — both clean, 242 words, 1 page after compile.
+
+5. **Unverified claim shipped to a live resume without a hard block — `ACC-111-ENTERPRISE`
+   (Cresta).** The compiler's own catalog validation logged `ACC-111-SCOPE: no workExperience anchor
+   for ACC-111` and `ACC-111-ENTERPRISE: metric '38' not in approved list` as warnings, then shipped
+   the bullet ("Maintained a secondary legacy enterprise platform for approximately 38 high-revenue
+   enterprise accounts...") into `Resume.md` anyway. Grepped `data/workExperience.md` for "38",
+   "secondary", "two separate", "multi-platform" — zero matches. This claim has no ground-truth anchor
+   at all, unlike the already-disabled `ACC-114` ($800K Canadian platform deprecation), which was
+   caught and flagged `"disabled": true` in `master_claims.json`. `ACC-111-SCOPE`/`ACC-111-ENTERPRISE`
+   were never disabled despite carrying the identical failure signature (no workExperience anchor).
+   Manually replaced with the verified `ACC-107-PLATFORM` claim before sending. **Actionable fix:**
+   any claim whose catalog validation logs "no workExperience anchor" should be hard-blocked from
+   drafting, the same way `ACC-114` is, not merely warned about — the current soft-warning behavior
+   is a silent path for unverified claims to reach a document Jason actually sends. Worth auditing
+   `master_claims.json` for any other claim carrying this same warning signature before it ships again.
+   **Update 2026-07-13, batch 2:** found a second live instance of this exact bullet in Redox's resume
+   (drafted 2026-07-10, before this fix existed) — confirms this was not a one-off, the unanchored
+   claim was actively being selected by the compiler across multiple runs. Fixed the same way.
+
+6. **Systemic: one closing paragraph used as a template fallback across 6 of 12 unrelated JDs.**
+   Full write-up in `data/jd_gap_analysis_log.md` ("2026-07-13 batch 2" section) — the exact same
+   "shelved migration / retention mandate" paragraph (`ACC-104` lifecycle framing) appeared
+   word-for-word in Buyers Edge Platform, Ontra, Remote, Tilt, Redox, and Covideo's cover letters, at
+   least 4 of which have nothing to do with migrations, legacy platforms, or churn/retention in their
+   JD. Two hook lines ("The friction that builds up in a product's identity and admin layer...",
+   "Customer-facing friction rarely announces itself on the roadmap...") showed the same pattern across
+   Buyers Edge, Tilt, PAR, and Lumos. This is the single highest-recurrence defect found across both
+   review batches (6/12 letters) and is almost certainly the same root cause as finding 1 above (opaque,
+   single-shot LLM generation with no per-claim JD-fit check) manifesting as a fallback/default rather
+   than a scoring artifact. Worth prioritizing a look at why the compiler converges on this specific
+   paragraph so often — possibly a claim-selection weighting issue where `ACC-104` variants score as
+   generically "safe" across too wide a range of JD-fit profiles.
+
+**Suggested triage order for a future session (updated 2026-07-13 batch 2):** (6) now outranks
+everything else — a defect confirmed in 6 of 12 letters reviewed is a bigger real-world impact than a
+single crash bug, and it directly degrades conversion quality (mismatched proof points) on every
+future submission until fixed. (5) and (4) are next, both outright-crash or silently-wrong-output bugs
+— (5) especially, since it's the one that can put a fabricated claim in front of a hiring manager
+without any error surfacing at all, and it has now recurred twice (Cresta, Redox). (2) is a CR-054
+transparency issue already tracked at the epic level (add this as a concrete repro case). (1) needs
+the Epic 4 calibration harness before it's actionable. (3) is low priority (cosmetic log confusion, no
+bad output reached the user).
+
+---
+
 ## Rollout note (CR-053 / CR-054 / CR-055 combined priority)
 
 Updated priority ranking given all three CRs: **(1) CR-054 Epic 1** (silent failure reporting — cheap,

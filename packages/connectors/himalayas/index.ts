@@ -4,13 +4,19 @@ import type {
   NormalizedJob,
   ConnectorHealth,
 } from '../../../shared/types/connectors.js';
+import {
+  passesTargetRoleTitleScope,
+  type TargetRolePrefs,
+} from '../../../shared/domain/gates.js';
 
 interface HimalayasConfig {
   searchTerms?: string[];
+  titleScopePrefs?: TargetRolePrefs;
 }
 
 export function createHimalayasConnector(config?: HimalayasConfig): JobConnector {
   const searchTerms = config?.searchTerms ?? ['product manager'];
+  const titleScopePrefs = config?.titleScopePrefs;
 
   return {
     sourceId: 'himalayas',
@@ -32,6 +38,11 @@ export function createHimalayasConnector(config?: HimalayasConfig): JobConnector
         for (const p of postings) {
           const id = String(p['id'] ?? '');
           if (!id || seenIds.has(id)) continue;
+
+          const title = String(p['title'] ?? '').trim();
+          if (titleScopePrefs && !passesTargetRoleTitleScope(title, titleScopePrefs, 'himalayas')) {
+            continue;
+          }
 
           if (since && p['publishedAt'] != null) {
             const pub = new Date(String(p['publishedAt']));

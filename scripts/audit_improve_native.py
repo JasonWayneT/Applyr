@@ -34,6 +34,30 @@ def _count_summary_sentences(summary_text: str) -> int:
     return len([s for s in re.split(r'\.(?:\s+|$)', clean) if s.strip()])
 
 
+# Substrings unique to validate_hard_facts warnings whose underlying issue is
+# already fixed in the text it returns before the warning is ever seen (e.g.
+# "MISSING FACT: Education ... Triggering self-healing injection" - the
+# education block has already been re-injected by the time this string
+# exists). Treating these as blocking made every good-faith rewrite fail to
+# converge (CR-070 Epic 3 Story 3.4 validation pass, 2026-07-17) even though
+# corrected_resume/corrected_cl already contained the fix. Warnings NOT in
+# this list (SENIORITY INFLATION, METRIC INTEGRITY, "MISSING FACT: Company")
+# describe damage validate_hard_facts cannot repair on its own and must keep
+# blocking.
+_SELF_HEALED_WARNING_MARKERS = (
+    "Triggering self-healing injection",  # education block re-injected
+    "Repairing header",  # name/contact header prepended
+    "HALLUCINATION CAUGHT:",  # known bad substitution auto-replaced
+    "TOOL HALLUCINATION:",  # blocked tool auto-redacted
+    "TONE (FR-096):",  # layoff-language auto-rewritten
+    "STYLE VIOLATION: Em-dash detected",  # em-dash auto-replaced
+)
+
+
+def _is_self_healed_warning(warning: str) -> bool:
+    return any(marker in warning for marker in _SELF_HEALED_WARNING_MARKERS)
+
+
 def apply_claude_native_improvement(
     updated_resume: str,
     updated_cl: str,
@@ -93,9 +117,15 @@ def apply_claude_native_improvement(
         )
 
     if res_warnings:
-        issues.extend(f"Resume hard-fact warning: {w}" for w in res_warnings)
+        issues.extend(
+            f"Resume hard-fact warning: {w}" for w in res_warnings
+            if not _is_self_healed_warning(w)
+        )
     if cl_warnings:
-        issues.extend(f"Cover letter hard-fact warning: {w}" for w in cl_warnings)
+        issues.extend(
+            f"Cover letter hard-fact warning: {w}" for w in cl_warnings
+            if not _is_self_healed_warning(w)
+        )
 
     if issues:
         return AuditImproveResult(converged=False, final_issues=issues)

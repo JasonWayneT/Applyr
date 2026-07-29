@@ -68,6 +68,16 @@ def get_min_fit_score(default: int = 72) -> int:
         return default
 
 
+def get_scoring_jd_max_chars(default: int = 4000) -> int:
+    """Max JD characters sent to fit-scoring LLM (from candidate_preferences.json)."""
+    prefs = load_candidate_preferences()
+    try:
+        raw = int(prefs.get("scoring_jd_max_chars", default))
+        return max(500, min(raw, 15000))
+    except (TypeError, ValueError):
+        return default
+
+
 def get_jd_required_keywords(default: list | None = None) -> list:
     """Legacy OR-list; prefers signal_keywords when set (FR-171)."""
     prefs = load_candidate_preferences()
@@ -461,9 +471,11 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
     
     base_url = settings.get('localUrl') or os.getenv('OLLAMA_HOST') or 'http://localhost:11434'
 
-    # If caller explicitly pins a model (e.g. verifier using phi3.5), honour it directly.
+    # If caller explicitly pins a model, honour it directly.
     # Otherwise select dynamically based on available VRAM.
-    fallback = settings.get('localFallbackModel') or 'phi3.5:3.8b-mini-instruct-q8_0'
+    # Default fallback is the primary model — never silently degrade to phi.
+    primary = settings.get('localModel') or 'llama3.1:8b-instruct-q5_K_M'
+    fallback = settings.get('localFallbackModel') or primary
     if model:
         target_model = model
         models_to_try = [model]

@@ -2,6 +2,16 @@
  * Deterministic ingest gates — pure functions, no I/O.
  * Used by scout orchestrator at ingest; tested in tests/unit/gates.test.ts.
  */
+import {
+  isExplicitForeignLocation,
+  textHasRemoteSignal,
+  textMatchesLocalArea,
+  normalizeGeoTerms,
+  type GeoPrefs,
+} from './geoPrefs.js';
+
+export type { GeoPrefs };
+export { passesBuiltInStrictRemoteCard } from './geoPrefs.js';
 
 export interface ScrapedJob {
   company: string;
@@ -21,22 +31,32 @@ export interface GateConfig {
   titleBlocklist: string[];
   workSetting: string;
   maxExperienceYears: number;
+  localAreaTerms: string[];
+  locationPreference: string;
 }
 
 export interface TargetRolePrefs {
   targetRole: string;
   searchTerms: string[];
+  /** When true (Built In only), apply extra adjacent-role deny patterns at ingest. */
+  builtinStrictTitle?: boolean;
 }
 
+/** Connector sourceId values that are remote-by-definition (lowercase). */
 const REMOTE_ONLY_SOURCES = new Set([
-  'Remotive',
-  'RemoteOK',
-  'WWR',
-  'Himalayas',
-  'Jobicy',
-  'Working Nomads',
-  'JobsCollider',
+  'remotive',
+  'remoteok',
+  'weworkremotely',
+  'wwr',
+  'himalayas',
+  'jobicy',
+  'workingnomads',
+  'jobscollider',
 ]);
+
+function isRemoteOnlySource(source: string): boolean {
+  return REMOTE_ONLY_SOURCES.has((source || '').trim().toLowerCase());
+}
 
 function industryTermMatches(text: string, term: string): boolean {
   const phrase = term.trim();
@@ -78,10 +98,16 @@ export function passesTitleBlocklist(title: string, config: GateConfig): boolean
   return !config.titleBlocklist.some((blocked) => titleMatchesBlocked(title, blocked));
 }
 
-/** True when Job Search target_role is PM-family (default for Jason; swappable in prefs). */
-export function isProductManagerFamilyTarget(targetRole: string): boolean {
-  const r = (targetRole || '').trim().toLowerCase();
-  return r.includes('product manager') || r.includes('product owner');
+/** PM-family titles matched when search term is Product Manager (not exact-title equality). */
+const PRODUCT_MANAGER_FAMILY_TITLE =
+  /\b(?:(?:technical|platform|data|enterprise|api|integration|infrastructure|senior|group)\s+)?product\s+manager\b/i;
+
+export function isProductManagerSearchTerm(term: string): boolean {
+  return /^product\s+manager$/i.test((term || '').trim());
+}
+
+export function titleMatchesProductManagerFamily(title: string): boolean {
+  return PRODUCT_MANAGER_FAMILY_TITLE.test((title || '').trim());
 }
 
 /** Preference-driven positive match: title contains a configured search term. */
@@ -89,6 +115,9 @@ export function titleMatchesSearchTerm(title: string, term: string): boolean {
   const t = (title || '').trim();
   const q = (term || '').trim();
   if (!t || !q) return false;
+  if (isProductManagerSearchTerm(q)) {
+    return titleMatchesProductManagerFamily(t);
+  }
   if (q.length <= 4) {
     const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return new RegExp(`\\b${escaped}\\b`, 'i').test(t);
@@ -101,31 +130,13 @@ export function passesSearchTermsTitleScope(title: string, searchTerms: string[]
   return searchTerms.some((term) => titleMatchesSearchTerm(title, term));
 }
 
-const BUILTIN_NON_PM_TITLE_PATTERNS: RegExp[] = [
-  /\bproduct marketing\b/i,
-  /\bdevops\b/i,
-  /\bsoftware engineer\b/i,
-  /\bdata engineer\b/i,
-  /\bproduct designer\b/i,
-  /\bproduct analyst\b/i,
-  /\btalent community\b/i,
-  /\bsolutions engineer\b/i,
-  /\btechnical writer\b/i,
-  /\brecruiter\b/i,
-];
-
-export function passesBuiltInPmTitleScope(title: string): boolean {
-  const t = (title || '').trim();
-  if (!t) return false;
-  if (!/\bproduct manager\b/i.test(t)) return false;
-  if (/\bproduct owner\b/i.test(t) && !/\bproduct manager\b/i.test(t)) return false;
-  for (const pat of BUILTIN_NON_PM_TITLE_PATTERNS) {
-    if (pat.test(t)) return false;
-  }
-  return true;
+/** Adjacent-role deny list applies only when search terms suggest a product-focused hunt. */
+export function shouldApplyAdjacentRoleDeny(searchTerms: string[]): boolean {
+  return searchTerms.some((term) => /product/i.test(term || ''));
 }
 
-const BROAD_NON_PM_TITLE_PATTERNS: RegExp[] = [
+/** Adjacent-role titles rejected on broad category feeds (product marketing, program manager, etc.). */
+export const ADJACENT_ROLE_DENY_PATTERNS: RegExp[] = [
   /\bproduct marketing\b/i,
   /\bproduct design/i,
   /\bproduct analyt/i,
@@ -138,12 +149,55 @@ const BROAD_NON_PM_TITLE_PATTERNS: RegExp[] = [
   /\binside sales\b/i,
 ];
 
+const BUILTIN_EXTRA_DENY_PATTERNS: RegExp[] = [
+  /\bdevops\b/i,
+  /\bsoftware engineer\b/i,
+  /\bdata engineer\b/i,
+  /\bproduct designer\b/i,
+  /\bproduct analyst\b/i,
+  /\btalent community\b/i,
+  /\btechnical writer\b/i,
+  /\brecruiter\b/i,
+];
+
+export function passesCompanyBlocklist(company: string, blocklist: string[]): boolean {
+  const key = (company || '').trim().toLowerCase();
+  if (!key || !blocklist.length) return true;
+  return !blocklist.some((entry) => {
+    const e = entry.trim().toLowerCase();
+    return e && (key.includes(e) || e.includes(key));
+  });
+}
+
+export function passesTitleDenyPatterns(title: string, extraPatterns: RegExp[] = []): boolean {
+  const t = (title || '').trim();
+  if (!t) return false;
+  const all = [...ADJACENT_ROLE_DENY_PATTERNS, ...extraPatterns];
+  return !all.some((pat) => pat.test(t));
+}
+
+/**
+ * @deprecated Legacy PM-specific gate — use passesTargetRoleTitleScope with user search_terms.
+ */
+export function passesBuiltInPmTitleScope(title: string): boolean {
+  const t = (title || '').trim();
+  if (!t) return false;
+  if (!/\bproduct manager\b/i.test(t)) return false;
+  if (/\bproduct owner\b/i.test(t) && !/\bproduct manager\b/i.test(t)) return false;
+  for (const pat of BUILTIN_EXTRA_DENY_PATTERNS) {
+    if (pat.test(t)) return false;
+  }
+  if (/\bproduct marketing\b/i.test(t)) return false;
+  return true;
+}
+
+/**
+ * @deprecated Legacy PM-specific gate — use passesTargetRoleTitleScope with user search_terms.
+ */
 export function passesBroadPmTitleScope(title: string): boolean {
   const t = (title || '').trim();
   if (!t) return false;
-  for (const pat of BROAD_NON_PM_TITLE_PATTERNS) {
-    if (pat.test(t)) return false;
-  }
+  if (!passesTitleDenyPatterns(t)) return false;
   return (
     /\bproduct manager\b/i.test(t) ||
     /\bproduct owner\b/i.test(t) ||
@@ -152,8 +206,7 @@ export function passesBroadPmTitleScope(title: string): boolean {
 }
 
 /**
- * Single ingest choke point: allow titles matching target_role / search_terms.
- * PM-family targets use broad PM scope; other targets use search_terms only.
+ * Single ingest choke point: positive match on user search_terms, then adjacent-role deny patterns.
  */
 export function passesTargetRoleTitleScope(
   title: string,
@@ -163,34 +216,37 @@ export function passesTargetRoleTitleScope(
   const t = (title || '').trim();
   if (!t) return false;
 
-  if (sourceId === 'builtin' && isProductManagerFamilyTarget(prefs.targetRole)) {
-    return passesBuiltInPmTitleScope(t);
+  if (!passesSearchTermsTitleScope(t, prefs.searchTerms)) return false;
+
+  if (shouldApplyAdjacentRoleDeny(prefs.searchTerms)) {
+    const extra =
+      sourceId === 'builtin' && prefs.builtinStrictTitle ? BUILTIN_EXTRA_DENY_PATTERNS : [];
+    if (!passesTitleDenyPatterns(t, extra)) return false;
   }
 
-  if (isProductManagerFamilyTarget(prefs.targetRole)) {
-    return passesBroadPmTitleScope(t);
-  }
-
-  return passesSearchTermsTitleScope(t, prefs.searchTerms);
+  return true;
 }
 
-const BUILTIN_HYBRID_OR_ONSITE_CARD =
-  /\b(in[-\s]?office\s+or\s+remote|remote\s+or\s+hybrid|hybrid\s+or\s+remote|on[-\s]?site|in[-\s]?office)\b/i;
+export function passesGeographicGate(job: ScrapedJob, config: GateConfig): boolean {
+  const text = `${job.title} ${job.description || ''}`.toLowerCase();
+  const localTerms = normalizeGeoTerms(config.localAreaTerms);
 
-export function passesBuiltInStrictRemoteCard(cardText: string): boolean {
-  const c = (cardText || '').toLowerCase();
-  if (!c) return false;
-  if (BUILTIN_HYBRID_OR_ONSITE_CARD.test(c)) return false;
-  const hasRemote =
-    /\bremote\b/.test(c) || /\bwork from home\b/.test(c) || /\banywhere in\b/.test(c);
-  const hasSd =
-    /\bsan diego\b/.test(c) ||
-    /\bcarlsbad\b/.test(c) ||
-    /\bla jolla\b/.test(c) ||
-    /\bencinitas\b/.test(c) ||
-    /\bdel mar\b/.test(c) ||
-    /\bsolana beach\b/.test(c);
-  return hasRemote || hasSd;
+  if ((job.description || '').trim().length < 50) {
+    if (textMatchesLocalArea(job.title, localTerms)) return true;
+    if (config.workSetting === 'Remote') {
+      if (isRemoteOnlySource(job.source)) return true;
+      console.log(
+        `[REJECT] ${job.title} at ${job.company} (${job.source}) - [GEOGRAPHIC REJECT] remote_only_no_location_signal`,
+      );
+      return false;
+    }
+    return true;
+  }
+
+  if (isExplicitForeignLocation(text, config.locationPreference)) return false;
+  if (textMatchesLocalArea(text, localTerms) || textHasRemoteSignal(text)) return true;
+  if (isRemoteOnlySource(job.source)) return true;
+  return false;
 }
 
 export function passesIndustryGate(job: ScrapedJob, config: GateConfig): boolean {
@@ -215,51 +271,6 @@ export function passesIndustryGate(job: ScrapedJob, config: GateConfig): boolean
     }
   }
   return true;
-}
-
-export function passesGeographicGate(job: ScrapedJob, config: GateConfig): boolean {
-  const text = `${job.title} ${job.description || ''}`.toLowerCase();
-
-  if ((job.description || '').trim().length < 50) {
-    if (config.workSetting === 'Remote') {
-      if (REMOTE_ONLY_SOURCES.has(job.source)) return true;
-      console.log(
-        `[REJECT] ${job.title} at ${job.company} (${job.source}) - [GEOGRAPHIC REJECT] remote_only_no_location_signal`,
-      );
-      return false;
-    }
-    return true;
-  }
-
-  const hasLocalSD =
-    text.includes('san diego') ||
-    text.includes('carlsbad') ||
-    text.includes('la jolla') ||
-    text.includes('encinitas') ||
-    text.includes('del mar') ||
-    text.includes('solana beach') ||
-    text.includes('ca');
-
-  const hasRemote =
-    text.includes('remote') ||
-    text.includes('anywhere in') ||
-    text.includes('work from home') ||
-    text.includes('telecommute');
-
-  const isExplicitForeign =
-    (text.includes('canada') ||
-      text.includes('united kingdom') ||
-      text.includes('london,') ||
-      text.includes('europe') ||
-      text.includes('germany') ||
-      text.includes('india') ||
-      text.includes('apac')) &&
-    !(text.includes('united states') || text.includes('within the us') || text.includes('us citizen'));
-
-  if (isExplicitForeign) return false;
-  if (hasLocalSD || hasRemote) return true;
-  if (REMOTE_ONLY_SOURCES.has(job.source)) return true;
-  return false;
 }
 
 export function passesSeniorityGate(job: ScrapedJob, config: GateConfig): boolean {

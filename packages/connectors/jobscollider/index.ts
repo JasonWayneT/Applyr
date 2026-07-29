@@ -4,6 +4,10 @@ import type {
   NormalizedJob,
   ConnectorHealth,
 } from '../../../shared/types/connectors.js';
+import {
+  passesTargetRoleTitleScope,
+  type TargetRolePrefs,
+} from '../../../shared/domain/gates.js';
 
 const FEED_URL = 'https://remotefirstjobs.com/remote-product-jobs.rss';
 
@@ -14,7 +18,13 @@ function extractXmlField(item: string, tag: string): string {
   return m ? m[1].trim() : '';
 }
 
-export function createJobscolliderConnector(): JobConnector {
+interface JobsColliderConfig {
+  titleScopePrefs?: TargetRolePrefs;
+}
+
+export function createJobscolliderConnector(config?: JobsColliderConfig): JobConnector {
+  const titleScopePrefs = config?.titleScopePrefs;
+
   return {
     sourceId: 'jobscollider',
 
@@ -44,6 +54,10 @@ export function createJobscolliderConnector(): JobConnector {
         const lastAt = rawTitle.lastIndexOf(' at ');
         const title = lastAt > 0 ? rawTitle.slice(0, lastAt).trim() : rawTitle;
         const company = lastAt > 0 ? rawTitle.slice(lastAt + 4).trim() : 'Unknown';
+
+        if (titleScopePrefs && !passesTargetRoleTitleScope(title, titleScopePrefs, 'jobscollider')) {
+          continue;
+        }
 
         seenUrls.add(url);
         results.push({

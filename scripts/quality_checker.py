@@ -68,6 +68,23 @@ def check_and_repair_cover_letter(file_path):
         repaired = True
         messages.append("[H-001 OK] Header block successfully injected.")
 
+    # Check for closing sign-off phrase before the name (Rule H-002, added 2026-07-21 —
+    # found missing on 3 of 4 real submissions reviewed that day: Applause, Humana, Leader Bank.
+    # H-001 above already auto-repairs a missing header the same way; this mirrors it for the close.
+    if not re.search(r"\b(Best regards|Regards|Sincerely),", content):
+        messages.append("[H-002 WARNING] Missing sign-off phrase before closing name. Auto-repairing...")
+        stripped_content = content.rstrip()
+        parts = stripped_content.rsplit("\n", 1)
+        if len(parts) == 2:
+            before, name_line = parts
+            content = f"{before.rstrip()}\n\nBest regards,\n\n{name_line.strip()}\n"
+        else:
+            content = f"{stripped_content}\n"
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        repaired = True
+        messages.append("[H-002 OK] Sign-off phrase inserted before closing name.")
+
     # Check for length (Rule CL-006: ~1 page; CR-024 Match Brief allows slightly longer)
     char_count = len(content)
     cover_char_limit = 2800
@@ -113,7 +130,15 @@ def check_resume(file_path):
     """
     Checks if Resume.md has correct sections, job title formatting, no em-dashes,
     and adheres to the Option A Clean Action-Verb Standard.
-    Returns (True, message) if passed, (False, message) if failed.
+
+    Returns (True, message) on a clean pass, or (True, message) with soft warnings
+    attached. On a HARD fail (R-005/008/009/010/011/012/013 — structural/forbidden-
+    language violations), raises drafting_errors.SelfCorrectionError instead of
+    returning (False, message) — this docstring previously claimed the latter, which
+    was wrong (found 2026-07-20 by an audit that reproduced the actual behavior with
+    a deliberately broken resume and got an unhandled traceback, not a clean False).
+    Callers must catch SelfCorrectionError to get a clean pass/fail result; see
+    CLAUDE.md's "Required Verification Before You're Done" for the corrected sample.
     """
     if not os.path.exists(file_path):
         return False, f"File not found: {file_path}"
@@ -164,13 +189,14 @@ def check_resume(file_path):
 
     # Check that core career history employers are present (Rule R-005)
     lower_content = content.lower()
-    from candidate_context import employer_display_name, load_employer_headers, load_employers_ordered
-
-    headers = load_employer_headers()
-    for slug in load_employers_ordered():
-        label = employer_display_name(slug, headers)
-        if label.lower() not in lower_content and slug.replace("_", " ") not in lower_content:
-            messages.append(f"[R-005 FAIL] Missing core career history experience: {label}")
+    canonical_employers = [
+        ("Cision", ["cision"]),
+        ("Sterkly", ["sterkly"]),
+        ("Zero To Sixty", ["zero to sixty", "zero_to_sixty", "zero to sixty media"])
+    ]
+    for display_name, match_terms in canonical_employers:
+        if not any(term in lower_content for term in match_terms):
+            messages.append(f"[R-005 FAIL] Missing core career history experience: {display_name}")
 
     try:
         from local_draft_stages import count_bullets_by_employer
@@ -182,11 +208,19 @@ def check_resume(file_path):
         if ordered:
             primary = ordered[0]
             primary_min = min(4, quotas.get(primary, 5))
-            if counts.get(primary, 0) < primary_min:
+            primary_max = 6
+            primary_count = counts.get(primary, 0)
+            if primary_count < primary_min:
                 label = employer_display_name(primary, headers)
                 messages.append(
-                    f"[R-010 FAIL] {label} has {counts.get(primary, 0)} bullets; "
+                    f"[R-010 FAIL] {label} has {primary_count} bullets; "
                     f"expected at least {primary_min}."
+                )
+            elif primary_count > primary_max:
+                label = employer_display_name(primary, headers)
+                messages.append(
+                    f"[R-010 FAIL] {label} has {primary_count} bullets; "
+                    f"exceeds maximum allowed cap of {primary_max} bullets."
                 )
         for emp in ordered[1:]:
             label = employer_display_name(emp, headers)
@@ -195,6 +229,10 @@ def check_resume(file_path):
             if have < max(2, want - 1):
                 messages.append(
                     f"[R-010 FAIL] {label} has {have} bullets; expected at least {max(2, want - 1)}."
+                )
+            elif have > 3:
+                messages.append(
+                    f"[R-010 FAIL] {label} has {have} bullets; exceeds maximum allowed cap of 3 bullets."
                 )
         summary_block = re.search(
             r"##\s*PROFESSIONAL\s+SUMMARY\s*\n([\s\S]*?)(?=\n##\s)",
@@ -491,7 +529,9 @@ def repair_resume_markdown(content: str, education_block: str | None = None) -> 
         content = header_block + content.lstrip()
 
     if not re.search(r"^##\s*(?:\*\*)?PROFESSIONAL\s+SUMMARY", content, re.MULTILINE | re.IGNORECASE):
-        insert = "\n## PROFESSIONAL SUMMARY\n\nProduct Manager with 6+ years across enterprise SaaS platforms, consumer software, and internal tooling.\n"
+        # Tenure figure is 7 (set 2026-07-18, Jason's call). Keep in sync with
+        # summary_builder._YEARS_EXPERIENCE and data/workExperience.md Section 1.0.
+        insert = "\n## PROFESSIONAL SUMMARY\n\nProduct Manager with 7 years across enterprise SaaS platforms, consumer software, and internal tooling.\n"
         if header_block.strip() in content:
             content = content.replace(header_block.strip(), header_block.strip() + insert, 1)
         else:

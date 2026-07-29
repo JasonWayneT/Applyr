@@ -4,6 +4,10 @@ import type {
   NormalizedJob,
   ConnectorHealth,
 } from '../../../shared/types/connectors.js';
+import {
+  passesTargetRoleTitleScope,
+  type TargetRolePrefs,
+} from '../../../shared/domain/gates.js';
 
 const FEED_URL = 'https://weworkremotely.com/categories/remote-product-jobs.rss';
 
@@ -14,7 +18,13 @@ function extractXmlField(item: string, tag: string): string {
   return m ? m[1].trim() : '';
 }
 
-export function createWeworkremotelyConnector(): JobConnector {
+interface WeworkremotelyConfig {
+  titleScopePrefs?: TargetRolePrefs;
+}
+
+export function createWeworkremotelyConnector(config?: WeworkremotelyConfig): JobConnector {
+  const titleScopePrefs = config?.titleScopePrefs;
+
   return {
     sourceId: 'weworkremotely',
 
@@ -43,6 +53,10 @@ export function createWeworkremotelyConnector(): JobConnector {
         const colonIdx = rawTitle.indexOf(':');
         const company = colonIdx > 0 ? rawTitle.slice(0, colonIdx).trim() : 'Unknown';
         const title = colonIdx > 0 ? rawTitle.slice(colonIdx + 1).trim() : rawTitle;
+
+        if (titleScopePrefs && !passesTargetRoleTitleScope(title, titleScopePrefs, 'weworkremotely')) {
+          continue;
+        }
 
         seenUrls.add(url);
         results.push({

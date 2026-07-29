@@ -28,7 +28,7 @@ def select_model(settings=None):
     Dynamically selects the local model based on available free VRAM.
     Threshold is 7.5 GB (7500 MB) — sized for llama3.1:8b-q5_K_M (~6GB) with headroom.
     Primary: llama3.1:8b-instruct-q5_K_M
-    Fallback: phi3.5:3.8b-mini-instruct-q8_0
+    Fallback: same primary by default (phi produced unusable draft quality).
     """
     if settings is None:
         settings = {}
@@ -36,7 +36,7 @@ def select_model(settings=None):
     # Define default thresholds and models
     threshold_mb = settings.get("vram_threshold_mb", 7500)  # 7.5 GB
     primary_model = settings.get("localModel") or "llama3.1:8b-instruct-q5_K_M"
-    fallback_model = settings.get("localFallbackModel") or "phi3.5:3.8b-mini-instruct-q8_0"
+    fallback_model = settings.get("localFallbackModel") or primary_model
     
     free_vram = get_free_vram_mb()
     

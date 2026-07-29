@@ -3,11 +3,24 @@ import os
 import requests
 import sys
 
+
+def local_embeddings_enabled() -> bool:
+    """CR-070: the embedding/vector-search path stays opt-in, not on the
+    default path — matches the CR-070 spec's own stated intent ("local_rewrite/
+    embedding paths stay opt-in and untouched"), which wasn't actually wired
+    to a flag before this. Set LOCAL_EMBEDDINGS=1 to re-enable."""
+    return os.environ.get("LOCAL_EMBEDDINGS", "0").strip().lower() in ("1", "true", "yes")
+
+
 def get_embedding(text: str, model: str = "nomic-embed-text") -> list:
     """
     Fetches text embeddings using the local Ollama API.
     Ensure `ollama pull nomic-embed-text` has been run.
+    Returns [] without attempting a network call unless LOCAL_EMBEDDINGS=1.
     """
+    if not local_embeddings_enabled():
+        return []
+
     from utils import load_llm_settings
     settings = load_llm_settings()
     base_url = settings.get('localUrl') or os.getenv('OLLAMA_HOST') or 'http://localhost:11434'

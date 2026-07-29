@@ -1,11 +1,59 @@
 ---
-status: not_started
+status: closed_moot
 created: 2026-07-07
-related: CR-058 (generation-defect-fixes, same session, immediate predecessor)
+closed: 2026-07-08
+related: CR-058 (generation-defect-fixes, same session, immediate predecessor), CR-017 (local-claim-composition-engine — the reason this CR's premise doesn't hold)
 contains: CR-059 (Local LLM Tuning Loop)
 ---
 
 # CR-059 — Local LLM Tuning Loop: Handoff & Round Tracker
+
+## CLOSED 2026-07-08 — premise falsified by Round 1, Story 1.1
+
+**Finding:** the default drafting pipeline calls zero local LLMs. Every stage in the actual default
+configuration (`JD_PROFILE_MODE=deterministic`, `DRAFT_MODE=compose`, `COVER_ENGINE` unset → `v1`) is
+deterministic string assembly, not LLM generation:
+
+| Stage | Default config | What runs | LLM call? |
+|---|---|---|---|
+| JD profiling | `JD_PROFILE_MODE=deterministic` | `jd_tailoring.py:113-142` `build_jd_profile_deterministic` — keyword/regex extraction | No |
+| Claim selection | (no flag) | `draft_compiler.py:404-411` → keyword-scored selection | No |
+| Bullet generation | `DRAFT_MODE=compose` | `claim_composer.py:77-124` `compose_bullet` — pulls text straight from `master_claims.json`, template bridge phrases, regex validation | No |
+| Resume summary | (no flag) | `summary_builder.py` docstring: "Replaces LLM-generated summary with deterministic string assembly" | No |
+| Cover letter | `COVER_ENGINE` unset → `v1` | `cover_letter_compiler.py:75` `compile_cover_letter` — plan/render/audit, no `call_llm` anywhere in the file | No |
+
+The only LLM call sites for drafting (`bullet_generation.py`'s `legacy_llm` path, `cover_letter_slots.py`'s
+v2 CL engine, `jd_tailoring.build_jd_profile`'s LLM branch) all sit behind non-default env vars that
+nothing sets in production — dead code paths, not live behavior.
+
+This is not a bug. It's a deliberate architectural decision from
+[CR-017](../05-change-requests/CR-017-local-claim-composition-engine.md) (2026-05-21, P0): *"Default
+drafting uses compose mode... not free-form local LLM rewrites."* CR-058's own fix list (7 bugs, all
+regex/logic, zero prompt changes) is consistent with this — there was no prompt to fix.
+
+**Why this CR is closed rather than redirected:**
+- **Reviving the dormant LLM paths** to chase authenticity/rubric gains would mean trading a solved
+  fabrication-risk problem for an unsolved one. CR-017 moved away from free-form LLM rewrites
+  specifically to eliminate that risk (see `CLAUDE.md`'s Hard Anti-Hallucination Rules, VOC/MET/ACC
+  grounding). Not worth reopening for a proxy-score gain.
+- **Redirecting to the LLM calls that do run live** (fit scoring, research packets, interview cheat
+  sheets) would cross this CR's own guardrail scoping it to the drafting pipeline. Fit scoring already
+  belongs to the separate CR-053/054/055 thread; research/cheat-sheet generation are lower-stakes,
+  different-purpose artifacts. Bundling them in would blur two work streams that were deliberately kept
+  apart.
+
+**If the underlying goal (higher rubric score / less generic-reading output) is still worth pursuing**,
+the correct framing is a new CR about **deterministic template variety** in `claim_composer.py` /
+`summary_builder.py` — more phrasing variants, better JD-conditional branching — not LLM prompt tuning.
+That's a different, smaller, lower-risk problem than the one this CR was written to test. Not opened as
+part of this closure; raise it separately if wanted.
+
+Round 1, Stories 1.2–1.5 and Rounds 2–4 below were never started — the finding above made them moot
+before any regeneration test or model research was run. Left unstruck for the record.
+
+---
+
+# CR-059 — Local LLM Tuning Loop: Handoff & Round Tracker (original doc, superseded above)
 
 **Handoff doc, one change request, self-paced experimental loop.** This is the resumable plan for
 tuning how Applyr's drafting pipeline uses its local LLMs (via Ollama) so the small models it actually

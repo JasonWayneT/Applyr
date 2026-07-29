@@ -5,7 +5,13 @@ import type {
   ConnectorHealth,
 } from '../../../shared/types/connectors.js';
 
-export function createWorkingnomadsConnector(): JobConnector {
+interface WorkingnomadsConfig {
+  searchTerms?: string[];
+}
+
+export function createWorkingnomadsConnector(config?: WorkingnomadsConfig): JobConnector {
+  const searchTerms = config?.searchTerms ?? ['product manager'];
+
   return {
     sourceId: 'workingnomads',
 
@@ -25,9 +31,9 @@ export function createWorkingnomadsConnector(): JobConnector {
 
       for (const p of postings) {
         const url = String(p['url'] ?? '');
-        const category = String(p['category_name'] ?? '').toLowerCase();
+        const title = String(p['title'] ?? '').toLowerCase();
 
-        if (!category.includes('product') && !category.includes('management')) continue;
+        if (!searchTerms.some((t) => title.includes(t.toLowerCase()))) continue;
         if (!url || seenUrls.has(url)) continue;
 
         if (since && p['pub_date'] != null) {

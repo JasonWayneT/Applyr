@@ -10,6 +10,7 @@ import jobsRouter     from './routes/jobs/index.js';
 import profileRouter  from './routes/profile.js';
 import pipelineRouter from './routes/pipeline.js';
 import sourcesRouter  from './routes/sources.js';
+import { resetTheirstackCreditsIfNewMonth } from './services/theirstackCreditLedger.js';
 
 // Ensure workspace dirs exist before status transitions (FR-030)
 if (!fs.existsSync(ARCHIVE_DIR)) fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
@@ -51,6 +52,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n${'='.repeat(48)}`);
   console.log(`  JobAgent Server  🚀  Listening on all interfaces (0.0.0.0:${PORT})`);
   console.log(`${'='.repeat(48)}\n`);
+  resetTheirstackCreditsIfNewMonth();
   logActivity('INFO', 'Server', 'System initialized. Ready for local and Tailscale syncing.');
 
   setInterval(() => {

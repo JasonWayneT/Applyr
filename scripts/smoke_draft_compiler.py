@@ -215,7 +215,12 @@ def test_cover_proof_format_and_picker():
 
     raw = "Prioritized delivery against roadmap goals: enforced strict prioritization."
     fmt = format_cover_proof_sentence(raw)
-    assert fmt.startswith("Enforced")
+    # 2026-07-18 fix: cover-letter proof sentences need a subject ("I enforced...")
+    # since resume-bullet-style verb-first text ("Enforced...") reads as a sentence
+    # fragment when spliced into cover-letter prose. Real defect found and fixed
+    # during a real-archive sweep (CR-070) - a snapsheet cover letter contained
+    # exactly this fragment ("Presented the consolidated quarterly roadmap...").
+    assert fmt.startswith("I enforced")
     assert fmt.endswith(".")
 
     jd = (

@@ -2896,3 +2896,372 @@ on any previously-good company across a 250-company archive check, pytest floor 
    aware of the regex whack-a-mole risk OQ3 raises before sinking rounds into `_NEXT_SECTION_RE` patches.
 3. **Hold as-is** — leave the changes uncommitted in the working tree if you want to batch them with other
    in-flight arc work before committing.
+
+## Product Manager — CR-069 Scoping
+
+**Trigger:** scope a diagnostic investigation into why `ACC-401-AITOOLS` and `ACC-204` (rare, high-value,
+grounded claims) consistently fail to surface in top-5 rankings even on JDs where the human-verified eval
+set says they should — the second of CR-063's two named failure modes, never fixed or directly
+root-caused by anything in the arc since (`ACC-105-EXECUTION` over-representation, the first failure
+mode, is now substantially fixed per CR-066/068).
+
+### Global Constraints (verbatim from `docs/spec/00-project-constitution.md`)
+
+**Goals**
+- `GOAL-001`: Automate multi-source job scouting (BuiltIn, APIs, OpenPostings; LinkedIn decommissioned per CR-010).
+- `GOAL-002`: Implement deterministic fit scoring to minimize LLM token waste.
+- `GOAL-003`: Generate application materials (Resume, Cover Letter) grounded in verified `workExperience.md`.
+- `GOAL-004`: Maintain absolute data privacy by running the core engine on `localhost`.
+- `GOAL-005`: Provide a real-time dashboard for monitoring the automation pipeline.
+
+**Non-goals**
+- `NG-001`: Cloud hosting or multi-user access (privacy violation).
+- `NG-002`: Direct ATS submission (requires human-in-the-loop for safety).
+- `NG-003`: "General purpose" career coaching (focused strictly on PM roles).
+
+**Global quality bar**
+- Performance: Sub-second UI response; sub-15-minute end-to-end job evaluation.
+- Accessibility: Standard WCAG compliance for internal use.
+- Security: Zero-knowledge architecture; API keys restricted to local `.env`.
+- Reliability: 100% "Context Firewall" success between job iterations.
+- Maintainability: SDD-compliant code with full requirement traceability.
+- Documentation: Spec-first workflow enforced for all changes.
+
+**Agent constraints**
+- Agents must update specs before code.
+- Agents must cite requirement IDs in tasks and implementation summaries.
+- Agents must preserve existing accepted behavior unless a change request says otherwise.
+- Agents must record open questions instead of guessing when the decision changes product behavior.
+
+### Prior art read, in full, before scoping
+
+CR-063 spec + tracker (original diagnosis, both failure modes named); CR-064 tracker (5 rounds of
+`score_claim_for_jd` formula rework — dedup, rarity weight, DCG breadth dampener — plus its Round 1
+isolated Remote/`ACC-401-AITOOLS` hand-check); CR-065 tracker Part E (corrected-profile ranking-impact
+spike); CR-066 tracker Round 1 results (shipped `keywords` frequency-sort fix); CR-067/CR-068 (the
+`requirements`-extraction diagnostic + fix arc — not directly about these 2 claims but confirms what the
+current shipped extraction state actually is); `docs/reports/jd-theme-claim-eval-set.md` (ground truth);
+`data/master_claims.json`'s actual `ACC-401-AITOOLS`/`ACC-204-QA`/`ACC-204-GLOBAL` entries; and the
+current, fully-shipped `scripts/jd_tailoring.py` (`build_jd_profile_deterministic`, `score_claim_for_jd`,
+`THEME_KEYWORDS`, `has_ai_signal`) plus `cover_claim_picker.py`'s `_protected_ai_slot` guard.
+
+### What every prior measurement in this arc found (compiled into one table, not previously assembled this way)
+
+| Source | ACC-401-AITOOLS hit rate | ACC-204 hit rate |
+|---|---|---|
+| CR-063 Round 1 baseline (16 JDs) | 0/6 | 0/2 |
+| CR-063 Round 3 (added `genai`/`agentic`/`llm`/`cursor`/`claude` to `THEME_KEYWORDS`) | 0/6 (unchanged) | not retested this round |
+| CR-064 Round 1 hand-check, Remote (design math, pre-implementation) | rank 43→24 of 63 — up 19 places, still outside top-5 | not hand-checked |
+| CR-064 Round 3 (dedup+rarity, live, 14-JD set) | 0/6 | 0/2 |
+| CR-064 Round 5 (dedup+rarity+DCG dampener, live, 7-JD subset) | 0/2 | 0/2 |
+| CR-065 Part E (corrected `keywords`+`requirements` profile, 6-company sample) | False→False every sampled company | not in this sample |
+| CR-066 Round 1 (shipped `keywords` frequency-sort fix, live) | still MISS in every listed company | not in this table's sample |
+
+Never once moved. Every measurement above was a side-effect check inside a CR scoped at a different
+primary target — no CR in this arc has scoped these 2 claims' under-scoring as its own primary question.
+
+### Three concrete findings surfaced this session by reading the actual code/data directly (not yet independently measured — this is what CR-069 exists to confirm or refute)
+
+1. **A real, checkable vocabulary gap.** `ACC-401-AITOOLS`'s body contains "Claude" but never "Cursor" —
+   Remote's JD literally frames these as an either/or pair ("Proficiency in Cursor and/or Claude Code").
+   No scoring formula, however tuned, can credit a substring that isn't in the source text. `ACC-204-QA`
+   contains "backlog" verbatim; `ACC-204-GLOBAL` contains none of `scrum`/`agile`/`sprint`/`backlog` at
+   all — the exact vocabulary both should-surface JDs (Buyers Edge, PAR) use.
+2. **A previously-unexamined mechanism: `priority_themes`' `themes[:4]` cap truncates in
+   `THEME_KEYWORDS`' declared table order, not by relevance.** `THEME_KEYWORDS`' first ~8 entries are
+   generic B2B SaaS vocabulary (`platform`, `data`, `migration`, `security`, `roadmap`, `saas`,
+   `stakeholder`) that Round 1's own data shows tripping on nearly every JD in the eval set — often
+   filling all 4 kept slots before the table even reaches `cursor`/`claude` (added reactively, near the
+   very end of the 36-entry tuple, by CR-063 Round 3). If so, `score_claim_for_jd`'s theme-token loop
+   (loop 3, which reads only the truncated `profile.priority_themes`) can never credit AI-tooling tokens
+   for `ACC-401-AITOOLS` regardless of what CR-063 Round 3 added — only the separate, profile-independent
+   full-table loop can still fire, and only for whatever literal keyword survives finding 1's gap. This is
+   consistent with CR-064's own hand-check finding exactly one matched token (`claude`) for Remote, not
+   the several additional AI-vocabulary tokens loop 3 should also credit if the theme survived truncation
+   — but this has not been directly traced (pre-truncation `themes` list logged) for a should-surface JD.
+   No equivalent `THEME_KEYWORDS` entry exists at all for Scrum/coordination vocabulary, so this mechanism
+   is moot for `ACC-204`.
+3. **An asymmetric, undocumented mitigation.** `cover_claim_picker.py`'s `has_ai_signal`/
+   `_protected_ai_slot` guard is a claim-specific mechanism, independent of `score_claim_for_jd`'s base
+   score, that has guaranteed `ACC-401-AITOOLS` a cover-letter proof slot in every CR-064 hand-check
+   sampled regardless of base-score changes. No equivalent guard exists for `ACC-204`, and neither claim
+   has any protection on the resume-side/fallback selection paths (`draft_compiler.py`,
+   `claim_composer.py`, `local_draft_stages.py`) that also consume `score_all_claims`/`score_claim_for_jd`.
+   The "0/6 top-5" metric may therefore represent different real severity per claim and per consumer —
+   never made explicit in any prior CR.
+
+### CR-worthiness
+
+**Yes.** This is a formal follow-up in a multi-CR investigation arc, matching the CR-065/CR-067
+diagnostic-CR precedent exactly (measurement + root cause, explicitly no fix, gated on Jason's review
+before any fix CR is drafted). Drafted as `docs/spec/05-change-requests/CR-069-rare-claim-under-scoring-diagnostic.md`
+— confirmed CR-069 was the next free number in the registry before writing it. Registry
+(`docs/spec/05-change-requests/README.md`) updated with the new row.
+
+### Acceptance criteria (full detail in the CR doc)
+
+1. Fresh current-code hit-rate baseline for both claims (do not inherit any earlier round's number as
+   still-true — the extraction/scoring code has changed underneath since CR-064 Round 5/CR-065 were
+   measured).
+2. Per-JD vocabulary-gap table for all 8 should-surface pairs (finding 1 above), extended beyond the one
+   JD (Remote) already spot-checked.
+3. Per-JD pre-truncation `priority_themes` trace for all 6 `ACC-401-AITOOLS` should-surface JDs, directly
+   confirming or refuting the truncation-order hypothesis (finding 2 above) with the actual untruncated
+   list shown.
+4. Full loop-by-loop `score_claim_for_jd` trace (matched tokens, tier, rarity weight, DCG discount, final
+   score, top-5 cutoff) for all 8 should-surface pairs against the current shipped formula.
+5. Confirmed, evidenced answer on whether the `cover_claim_picker.py` guard mitigates `ACC-401-AITOOLS`'s
+   real-world cover-letter impact, and confirmation of what's unmitigated (finding 3 above).
+6. A named root cause per claim (they may differ — do not assume a shared cause), each citing which
+   measurement above it rests on.
+7. Zero changes to `scripts/jd_tailoring.py`, `scripts/cover_claim_picker.py`, `scripts/draft_compiler.py`,
+   `scripts/claim_composer.py`, `scripts/local_draft_stages.py`, or `data/master_claims.json` — confirmed
+   via `git diff --stat`.
+8. Full `scripts/` pytest suite shows identical pass/fail/skip counts before and after.
+
+### Out of scope
+
+No fix in this phase to any of the files named in criterion 7. No `master_claims.json` edits without
+Jason's sign-off, even where this diagnostic's own evidence points at one as cheap and direct (e.g.
+adding "Cursor" to `ACC-401-AITOOLS`'s body) — the catalog is source-of-truth and any edit to it is his
+call, flagged here as a finding, not acted on. Not reopening `keywords`/`requirements` extraction
+(CR-066/068) or `score_claim_for_jd`'s dedup/rarity/DCG mechanisms (CR-064-final) unless this diagnostic
+finds a specific, evidenced defect in one of them disproportionately harming these 2 claims — no
+re-litigating already-closed findings from architectural reasoning alone. Not re-deriving or expanding
+the 16-JD eval set. Not investigating `ACC-105-EXECUTION`'s over-representation (already substantially
+fixed). Not piloting or reopening embeddings-based re-ranking, broad `jd_profile_mode="llm"`, or Hybrid
+Anchor + Polish — CR-063's Final round already ruled the first two out with real data for the ranking
+question generally.
+
+### Open questions (full detail in the CR doc — not resolved here, routed to Jason)
+
+1. Whether `ACC-401-AITOOLS`'s empty `employer` field plays any role in scoring/selection/display beyond
+   `score_claim_for_jd` (which does not take it as an input) — likely a dead end, not exhaustively traced.
+2. Whether `ACC-204` should get an equivalent guard to `ACC-401-AITOOLS`'s `has_ai_signal`/
+   `_protected_ai_slot` mechanism as a stopgap, or whether that's the same kind of narrow per-claim patch
+   CR-063 already flagged as a smell in `THEME_KEYWORDS`'s early "oddly specific one-offs" — a mechanism-
+   design tradeoff, not something to default on inside this diagnostic.
+3. Whether Jason is open to this diagnostic concluding that a general-`score_claim_for_jd`-formula-only
+   approach is structurally insufficient for these 2 claims specifically (both may be catalog outliers in
+   different ways) and that a claim-content fix is the load-bearing lever rather than more formula tuning
+   — CR-064 already spent 5 rounds on the formula without closing this gap. This diagnostic surfaces
+   evidence either way; the decision on which lever to pull next is his, not preempted here.
+
+**Files:**
+- `docs/spec/05-change-requests/CR-069-rare-claim-under-scoring-diagnostic.md` (new)
+- `docs/spec/05-change-requests/README.md` (registry row added)
+
+## Tech Lead — CR-069 Setup
+
+Diagnostic-only Phase 1 (measurement + one named root cause per claim, no fix). Verified every technical
+claim in the spec against live code/data before setting up the tracker — the spec is well-evidenced but the
+archive and working tree have both moved under it.
+
+**Verified as stated:** `ACC-401-AITOOLS` body has "Claude" but no "Cursor" (`master_claims.json:889`),
+`employer:""` (:878); `build_jd_profile_deterministic`'s `themes[:4]` cap at `jd_tailoring.py:153`
+(function 126, inside the cited 126-157); `THEME_KEYWORDS` = 36 entries with the 5 AI entries
+(`genai/agentic/llm/cursor/claude`) last (51-55), first 8 generic, and no scrum/agile/sprint/backlog entry
+anywhere (so the truncation mechanism is genuinely moot for `ACC-204`); `score_claim_for_jd` (:299) 4 loops
+— loop 3 reads the truncated `priority_themes`, loop 4 reads the full table and bypasses the cap;
+`has_ai_signal` (:449), `_protected_ai_slot` (`cover_claim_picker.py:347`).
+
+**Discrepancies found (flagged in tracker, none block the diagnostic):**
+- `data/submissions/` is now EMPTY — all JDs live under `data/archive/submissions/`. CR-063's scripts point
+  at the old path and must be repointed.
+- The eval set names `ACC-401-AITOOLS` should-surface on **7** companies, not 6 as the spec's Problem table /
+  AC 2-3 state (inherited CR-063 undercount). **SailPoint is now gone from the archive**, independently
+  leaving exactly 6 measurable — so the count aligns with the spec's "6/8" but for the wrong reason. Logged
+  SailPoint as excluded, not as the eval-set truth.
+- PAR's slug changed `par` → `par_technology`.
+- Working tree already dirty on 4 of the 6 target files (`cover_claim_picker`, `draft_compiler`,
+  `claim_composer`, `local_draft_stages` — pre-existing, likely CR-058); `jd_tailoring.py` and
+  `master_claims.json` clean. AC 7 must be checked as "diff unchanged from baseline," not "diff empty" —
+  flagged so the engineer snapshots the baseline before starting.
+- Two harmless spec line-drift typos: has_ai_signal cited "210" (is 449), pick_cover_proofs cited "134"
+  (is 264).
+
+**Technical approach.** Fits the existing "parallel measurement tool" pattern this arc has used throughout
+(CR-063/065) — no new architecture, no production edits. Decided the diagnostic needs THREE separate
+standalone instrumentation scripts, not one combined driver, because each maps 1:1 to a distinct Acceptance
+Criterion, emits a differently shaped artifact, and stays independently resumable (the checkpointing unit):
+`scripts/trace_priority_themes.py` (pre-truncation themes, AC 3), `scripts/trace_score_loops.py` (loop-by-loop
+matched tokens with tier/rarity/DCG + top-5 cutoff, AC 4), `scripts/check_guard_mitigation.py` (drives the
+existing `pick_cover_proofs`/`score_all_claims` production functions directly — no internal instrumentation,
+AC 5). The fresh baseline (item 1) reuses CR-063's `measure_theme_extraction.py` repointed to the archive; the
+vocab-gap table (item 2) is a pure read, no instrumentation. Did NOT run any measurement or write findings —
+that is senior-engineer's next pass.
+
+**Tracker:** `docs/spec/08-implementation/CR-069-rare-claim-under-scoring-diagnostic-tracker.md`
+(status: not_started; Before-Round-1 orientation + Round 1 Steps 1-8 checklist + Session Handoff).
+
+---
+
+## Senior Engineer — CR-069 Round 1
+
+**What this session did.** Executed CR-069 Round 1 (Phase 1: measurement + root-cause diagnostic, explicitly
+no fix) in full, per `docs/spec/08-implementation/CR-069-rare-claim-under-scoring-diagnostic-tracker.md`.
+Every checklist item in the Before-Round-1 orientation and the Round 1 plan (Steps 1-8) is checked off with
+real numbers logged directly in the tracker doc; this log entry summarizes, the tracker is the source of
+truth for the full tables and per-pair detail.
+
+**Orientation (re-confirmed, not re-derived, per the tracker's instructions):** `data/submissions/` is empty,
+all JDs live under `data/archive/submissions/`; all 6 measurable `ACC-401-AITOOLS` JDs (Ontra, Remote,
+Covideo, DataGrail, MyTime, PointClickCare) and both `ACC-204` JDs (Buyers Edge Platform, `par_technology`)
+present; SailPoint confirmed absent (excluded, not silently treated as part of the "6"). Captured a fresh
+git-diff baseline on the 6 target files (`jd_tailoring.py`/`master_claims.json` clean; 4 others pre-existing
+dirty, +81/-11 across them, per CLAUDE.md's CR-058 note) and a fresh pytest baseline: 200 passed, 28 failed,
+1 skipped. One correction to the tracker's own prior note: `THEME_KEYWORDS` is actually 37 entries, not 36
+(off-by-one, no functional impact).
+
+**Three standalone instrumentation scripts plus two read-only measurement scripts, all new files, zero
+production edits:**
+- `scripts/measure_aitools_acc204_baseline.py` (Step 1, fresh hit-rate baseline, adapted from CR-063's
+  `measure_theme_extraction.py`, repointed to the archive, PAR to `par_technology`, scoped to the 8 pairs)
+- `scripts/check_vocab_gap.py` (Step 2, vocabulary-gap table, phrase-level and token-level substring checks)
+- `scripts/trace_priority_themes.py` (Step 3, pre-truncation `themes` list trace, sanity-checked against real
+  production `build_jd_profile_deterministic()` output on every run)
+- `scripts/trace_score_loops.py` (Step 4, loop-by-loop `score_claim_for_jd` trace with real tier/rarity-
+  weight/DCG-discount numbers, sanity-checked against real production `score_claim_for_jd()` on every run)
+- `scripts/check_guard_mitigation.py` (Step 5, drives real, unmodified `pick_cover_proofs` exactly as
+  `cover_plan_builder.build_plan` calls it in production, plus `score_all_claims` for the unguarded resume-
+  side/fallback path)
+
+All sanity-check assertions (traced value equals live production function output) passed on every run, for
+every pair. Raw JSON also written to `docs/reports/cr069-round1-baseline-raw-output.json`.
+
+**Headline findings (full tables and per-pair detail in the tracker's "Round 1 results" section):**
+
+- Step 1, fresh baseline differs from history. `ACC-401-AITOOLS`: 1/6 (Remote now HITs, rank 3, score 27 vs
+  cutoff 24, improved from the last-known 0/6, likely from CR-064-final/CR-066/CR-068 landing since that
+  figure was taken). `ACC-204`: 0/2, unchanged.
+- Step 2, vocabulary gap confirmed, more severe than the spec's headline example alone suggested. Remote's
+  "Cursor" is genuinely absent from the claim (only bare "Claude" survives, not the two-word phrase "Claude
+  Code"). Three of six AITOOLS companies (Ontra, DataGrail, MyTime) have zero overlap at all, phrase or
+  token level. `ACC-204`: neither variant contains any form of scrum/agile/sprint; only `ACC-204-QA`'s
+  "backlog" partially overlaps.
+- Step 3, the truncation-order hypothesis (spec evidence item 2) is real but explains only 1 of 6. Only
+  Remote shows the AI theme surviving keyword-match but getting displaced past index 4. In 3 of 6 (Covideo,
+  DataGrail, PointClickCare) the AI-tooling keyword never matches at all, not a truncation issue but a
+  `THEME_KEYWORDS` table-coverage gap (the 5 AI entries are too narrow for generic "AI"/"ML" JD phrasing).
+  In 2 of 6 (Ontra, MyTime) the theme survives fully intact and still isn't enough.
+- Step 4, loop-by-loop scores, real numbers, all sanity-checked. Remote's HIT comes entirely from loop 4
+  (the profile-independent full-table scan that bypasses the 4-item cap) crediting `claude` at tier 3, not
+  from `priority_themes` survival. DataGrail is the extreme MISS (score 2 vs cutoff 22) with literally zero
+  AI-relevant tokens matched. `ACC-204`'s best-scoring variant per company never exceeds a -8 to -12 gap,
+  driven entirely by generic filler tokens, never a Scrum-specific one.
+- Step 5, guard-mitigation asymmetry confirmed with real output. `pick_cover_proofs` (the real cover-letter
+  path) lands `ACC-401-AITOOLS` in slot 0 on 6/6 AITOOLS JDs via the `_protected_ai_slot` guard, regardless
+  of base score (including DataGrail's score-2 case). The resume-side/fallback path (`score_all_claims`,
+  unguarded) shows the same low ~1/6 hit rate as the raw formula. `ACC-204` has zero mitigation anywhere
+  (0/2 cover-letter, 0/4 resume-side across both variants times both companies).
+- Step 6, named, ranked root causes, not hedged:
+  - `ACC-401-AITOOLS`: three ranked, distinct sub-causes across the 6 companies. (1) Dominant, 3/6, a
+    `THEME_KEYWORDS` table-coverage gap for generic AI/ML phrasing. (2) Confirmed but non-consequential in
+    practice, 1/6 (Remote), the truncation-order effect, rescued by loop 4's bypass. (3) Secondary, 2/6, a
+    formula-breadth ceiling even when the theme fully survives. Separately, the cover-letter-path guard
+    fully mitigates real-world impact; the resume-side path does not.
+  - `ACC-204`: single dominant cause, both companies, a genuine vocabulary/catalog-content gap (no
+    scrum/agile/sprint token anywhere in either claim variant, and no `THEME_KEYWORDS` entry for that
+    vocabulary family at all), compounded by the claim being split across 2 variants that dilute each other.
+    Not a formula defect.
+- Step 8, Open Question 1 answered cleanly plus one step further. `employer: ""` is confirmed inert for the
+  scoring question (function signature check). Traced one step further than the spec flagged as optional: it
+  does silently route the claim into the primary employer's resume-quota bucket via
+  `candidate_context.employer_for_claim_id`'s fallback chain, a real but separate, minor finding, not the
+  under-scoring root cause. Open Questions 2 and 3 answered with evidence, not resolved, per Out-of-Scope:
+  the evidence favors a claim-content fix as the load-bearing lever for both claims (Question 3), and
+  suggests a bespoke `ACC-204` guard would only patch the cover-letter symptom, not the equally-unmitigated
+  resume-side path (Question 2). Both remain Jason's calls.
+
+**Close-out (AC 7, AC 8), re-verified after all work was done, not just once mid-session:**
+- `git diff --stat` on the 6 target files (`jd_tailoring.py`, `cover_claim_picker.py`, `draft_compiler.py`,
+  `claim_composer.py`, `local_draft_stages.py`, `master_claims.json`) is byte-identical to the session-start
+  baseline. Confirmed twice, once before writing this log entry, once after.
+- Full pytest re-run: 200 passed, 28 failed, 1 skipped, identical counts before and after.
+- Zero production code changes this session. Every file touched is either a new standalone script under
+  `scripts/`, the tracker doc itself, or this log file.
+
+**Deviations from the tracker's plan.** None of substance. Two small additions beyond the letter of the
+plan, both flagged where they occur: (1) added individual-word-level substring checks in
+`check_vocab_gap.py` alongside the whole-phrase checks the tracker described, since that is the actual
+granularity `score_claim_for_jd`'s loops match at, and it materially changed the Remote finding (bare
+"claude" does match even though "Cursor"/"Claude Code" do not); (2) went one step past the tracker's "if
+it's cheap" instruction on Open Question 1 by tracing `candidate_context.employer_for_claim_id`'s fallback
+chain, since it was a two-minute grep-and-read and surfaced a real, if minor, finding.
+
+**What I did NOT verify or did not do.** Did not implement any fix, explicitly out of scope for this phase.
+Did not re-derive or expand the 16-JD eval set. Did not re-litigate CR-064's dedup/rarity/DCG mechanics or
+CR-066/CR-068's already-shipped extraction fixes beyond using their live behavior as measured input. Did not
+pilot embeddings/semantic re-ranking or `jd_profile_mode="llm"` (out of scope, already ruled out by CR-063).
+Did not resolve any of the 3 spec Open Questions, surfaced evidence for Jason's decision per the spec's
+explicit instruction not to default on them here. Did not check whether the pre-existing dirty state of the
+rest of the working tree (dozens of unrelated modified/untracked files outside the 6 target files) is safe
+to leave as-is, that predates this session and is outside this CR's scope.
+
+**Files changed:**
+- New: `scripts/measure_aitools_acc204_baseline.py`, `scripts/check_vocab_gap.py`,
+  `scripts/trace_priority_themes.py`, `scripts/trace_score_loops.py`, `scripts/check_guard_mitigation.py`
+- New generated artifact: `docs/reports/cr069-round1-baseline-raw-output.json`
+- Updated: `docs/spec/08-implementation/CR-069-rare-claim-under-scoring-diagnostic-tracker.md` (status
+  changed to `round1_complete`; orientation checkboxes checked; full Round 1 results section with real
+  tables written; Session Handoff block updated for the next session/CR)
+- No changes to any of the 6 protected target files (confirmed via `git diff --stat`, see Close-out above).
+
+## Security Review — CR-069 Round 1
+
+**Verdict: CLEAR.** Diagnostic-only round; 5 new read-only scripts + 1 gitignored JSON artifact, zero
+production edits. No PII exposure, no secrets, no injection surface, no dependency or architecture drift.
+Reviewed against the project constitution's security bar (zero-knowledge, `.env`-only secrets, localhost-only,
+NG-001 no cloud/multi-user). All findings below are cited to file:line.
+
+**1. JSON artifact (`docs/reports/cr069-round1-baseline-raw-output.json`) — safe, and gitignored.**
+- Gitignored via `.gitignore:59` (`docs/reports/` — whole directory). Confirmed with `git check-ignore -v`:
+  the path resolves to that rule; `git status --porcelain` shows it as neither tracked nor untracked. It
+  cannot be accidentally committed under the current `.gitignore`.
+- Content inspected in full (393 lines): public company names (Ontra, Remote, Covideo, DataGrail, MyTime,
+  PointClickCare, Buyers Edge Platform, PAR), `ACC-xxx` claim **IDs only** (not claim body text), integer
+  scores/ranks, generic theme labels (e.g. "platform reliability and scale"), and one SailPoint-exclusion
+  note. No candidate PII (no names, emails, phones, LinkedIn URLs), no `data/workExperience.md` content, no
+  MET/VOC values, no verbatim claim text. Even if it were tracked it would be job-posting-derived metadata
+  plus claim codes, not PII — but it is gitignored regardless, so double-safe.
+
+**2. All 5 scripts are genuinely read-only against protected data.** Confirmed by grepping every
+`open()`/`.write`/`json.dump`/`subprocess`/`os.system`/`shutil`/`os.remove`/`os.rename`/`unlink` in each:
+- The only write anywhere is `scripts/measure_aitools_acc204_baseline.py:145` (`open(out_path, "w")` +
+  `json.dump` at :146), and `out_path` is the gitignored `docs/reports/cr069-round1-baseline-raw-output.json`
+  (:144). No write targets `data/submissions/`, `data/archive/submissions/`, or `data/master_claims.json`.
+- Every other file access is read-mode: `check_vocab_gap.py:21` (master_claims.json, read),
+  `trace_priority_themes.py:57,98`, `trace_score_loops.py:100`, `check_guard_mitigation.py:48,68` — all read
+  `Original_JD.txt` under the gitignored `data/archive/submissions/`. No shell-out or filesystem mutation in
+  any of the 5.
+
+**3. Zero production code changes — matches the pre-existing baseline.** `git diff --stat` on the 6 protected
+files returns: `claim_composer.py` 14, `cover_claim_picker.py` 39, `draft_compiler.py` 17,
+`local_draft_stages.py` 22 (4 files, 81 insertions, 11 deletions); `jd_tailoring.py` and `master_claims.json`
+show no diff (clean). This is byte-identical to the baseline the tracker recorded at
+`CR-069-...-tracker.md:117-123` — the 4 dirty files carry unchanged pre-existing counts, the 2 clean files
+stay clean. AC7 satisfied; nothing in this round widened data access or altered a scoring/selection path.
+
+**4. Secrets — none.** No hardcoded API keys, tokens, or credentials in any of the 5 scripts. No `os.environ`
+secret reads, no network calls, no new `.env` usage. Imports are stdlib (`json`, `os`, `re`, `math`) plus
+local project modules (`claim_catalog`, `jd_tailoring`, `utils`, `cover_claim_picker`, `cover_jd_needs`).
+
+**5. Dependency risk — none.** No new third-party package introduced by these scripts; nothing pulls in
+out-of-scope tree (no OpenPostings-style Expo/RN precedent risk here). `package.json`'s diff is unrelated
+prior work, not part of CR-069's script set.
+
+**6. Trust boundaries — clean.** No SQL, no shell command construction. File paths are built from hardcoded
+slug allowlists (`AITOOLS_SLUGS`/`ACC204_SLUGS` constants, e.g. `measure_aitools_acc204_baseline.py:28-47`),
+never from JD-derived or external input. JD text is read and passed only into scoring functions
+(`build_jd_profile_deterministic`, `score_all_claims`, `pick_cover_proofs`), never used to build a path or
+command — no path-traversal or injection surface.
+
+**7. Architecture drift — none.** Purely local, read-only, offline diagnostics on the default deterministic
+path. No cloud hosting, no multi-user surface, no network egress, no `.env`/secrets relocation. Consistent
+with NG-001 and the zero-knowledge/localhost-only bar.
+
+**Minor, out-of-scope observation (not a CR-069 finding, flagging for hygiene):** `git status` shows two
+stray untracked files named `=` (repo root) and `scripts/=`, both **0 bytes / empty** (inspected — no
+content, so no PII/secret risk) and **not** gitignored (`git check-ignore` returns nothing). They appear to
+be shell-redirect artifacts (a `>=` typo) unrelated to this CR. Recommend deleting them before any commit so
+they are not accidentally staged; no security impact given they are empty.

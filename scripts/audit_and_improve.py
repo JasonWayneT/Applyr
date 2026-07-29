@@ -116,7 +116,7 @@ def improve_resume_summary(resume_md, context, jd_text, resume_bullets, feedback
         "PROFESSIONAL SUMMARY section of the candidate's resume (Jason Taylor) to optimize it "
         "for the target company stage and product motion, adhering to the provided conversion guidelines.\n\n"
         "FACTUAL CONSTRAINTS (CRITICAL):\n"
-        "- Jason Taylor is a B2B SaaS Platform PM with over 6 years of experience.\n"
+        "- Jason Taylor is a B2B SaaS Platform PM with 7 years of experience.\n"
         "- He is NOT a 0-to-1 greenfield builder (do not claim this).\n"
         "- He is NOT a people manager, AI/ML model developer, or revenue/billing owner.\n"
         "- YOU MUST ONLY USE NUMBERS, METRICS, AND TOOLS THAT ARE EXPLICITLY FOUND IN THE SELECTED EXPERIENCE BULLETS BELOW.\n"

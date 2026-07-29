@@ -12,6 +12,7 @@ from utils import (
     WORK_EXP_FILE,
 )
 from company_slug import company_submission_dir
+from applyr_python import resolve_applyr_python
 # --- Hard Fact Validation (Deterministic Post-Generation Guard) ---
 # Extracts known ground-truth facts from the master resume and verifies
 # they were not hallucinated or substituted in the generated output.
@@ -69,7 +70,15 @@ BLOCKED_TOOLS = [
     "Kubernetes", "Docker", "Terraform", "Helm", "Jenkins", "CircleCI",
     "FHIR", "HL7", "HIPAA", "SOC2", "SOC 2", "ISO 27001",
     "Databricks", "Redshift", "BigQuery", "Fivetran", "Segment",
-    "Amplitude", "Mixpanel", "Pendo", "LaunchDarkly",
+    # Pendo removed 2026-07-18: it was blocking a VERIFIED tool. workExperience.md
+    # ACC-117 ("Used Pendo to understand how users were actually navigating the
+    # platform"), ACC-119 (tools list), and ACC-118 (Pendo training course +
+    # certification) all approve it. This bug was flagged as unconfirmed in the
+    # CR-070 tracker and is now confirmed: it suppressed a real, JD-relevant
+    # credential (Instructure asks for "Pendo, Amplitude, or similar" by name).
+    # Scope limit still applies per workExperience.md: behavioral/engagement
+    # analytics + in-app messaging only, NOT workflow-completion health metrics.
+    "Amplitude", "Mixpanel", "LaunchDarkly",
     "React", "Node.js", "GraphQL", "Rust", "Go",
     "TensorFlow", "PyTorch", "LangChain", "RAG", "LLM pipeline",
     "AWS", "Azure", "GCP", "Heroku",
@@ -290,6 +299,14 @@ def validate_hard_facts(generated_text, master_resume_text, target_company=None,
     return corrected, warnings
 
 
+def emit_asset_progress(company_name, stage, summary=""):
+    """Stdout hook for server/UI asset-creation visibility."""
+    msg = f"[ASSET_PROGRESS] company={company_name} stage={stage}"
+    if summary:
+        msg += f" summary={summary[:160]}"
+    print(msg, flush=True)
+
+
 def run_research(company_name, jd_text):
     from pipeline_env import research_mode
 
@@ -310,7 +327,7 @@ def run_research(company_name, jd_text):
         env = os.environ.copy()
         env["RESEARCH_MODE"] = mode
         subprocess.run(
-            [sys.executable, os.path.join(script_dir, "research-engine.py"), company_name, "Product Manager"],
+            [resolve_applyr_python(), os.path.join(script_dir, "research-engine.py"), company_name, "Product Manager"],
             check=False,
             env=env,
         )
@@ -337,7 +354,7 @@ def generate_pdf(md_path, output_path):
         return
     script_dir = os.path.dirname(os.path.abspath(__file__))
     subprocess.run(
-        [sys.executable, os.path.join(script_dir, "compile_single.py"), md_path, output_path],
+        [resolve_applyr_python(), os.path.join(script_dir, "compile_single.py"), md_path, output_path],
         check=True,
     )
     if not os.path.exists(output_path) or os.path.getsize(output_path) < 100:
@@ -360,8 +377,10 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result, disp
         print(f"    [Error] Could not save original JD: {e}")
 
     # Research for cheat sheet / interview prep only — not injected into resume/cover (CR-014)
+    emit_asset_progress(company_name, "research", "Extracting JD intelligence")
     run_research(company_name, jd_text)
 
+    emit_asset_progress(company_name, "resume", "Building resume and cover letter")
     from draft_compiler import run as run_compiler
     run_compiler(
         company_name,
@@ -374,6 +393,7 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result, disp
         display_name=display_name,
     )
     
+    emit_asset_progress(company_name, "audit", "Quality audit and PDF compile")
     from audit_and_improve import audit_and_improve_company
     print(f"    [Enhancement] Running automated self-healing and stage/motion tailoring for {display}...")
     audit_result = audit_and_improve_company(company_folder)
@@ -381,5 +401,6 @@ def run_drafting_engine(company_name, jd_text, work_exp, evaluation_result, disp
         issues = "; ".join(audit_result.final_issues) or "audit did not converge within attempt limit"
         raise RuntimeError(f"Post-drafting quality audit failed for {display}: {issues}")
 
+    emit_asset_progress(company_name, "done", f"Assets ready for {display}")
     print(f"  -> Successfully generated and audited all assets for {company_name}")
 

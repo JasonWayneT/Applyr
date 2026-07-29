@@ -13,6 +13,8 @@
   recommendation" sections before starting — they contain the full diagnostic trail, not just the
   conclusion.
 
+> **Superseded for generation (2026-07-19).** `score_claim_for_jd` only matters for automated claim selection during deterministic generation (`draft_compiler.py`/`claim_composer.py`/`cover_claim_picker.py`), which the 2026-07-18 direct-authoring pivot bypasses — nothing in the current verification toolchain (`submission_linter`, `quality_checker`, `approved_metrics`) calls this function. Relevant again only if the deterministic path is ever un-retired for authoring. Current process: `.claude/skills/generate-submission/SKILL.md`.
+
 ## Problem
 `score_claim_for_jd(claim_text, profile, jd_text)` computes a claim's rank via four independent,
 additive loops with no cross-loop or cross-line deduplication:

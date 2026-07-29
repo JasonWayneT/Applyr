@@ -1,4 +1,8 @@
-@import "tailwindcss";
+/* Only scan app source. Broader crawls pick up Windows paths in logs
+   (e.g. \907a38...) and crash Tailwind with "Invalid code point". */
+@import "tailwindcss" source(none);
+@source "../../index.html";
+@source "./**/*.{js,ts,jsx,tsx,html}";
 
 @theme {
   /* ===== APPLYR — Design Tokens ===== */

@@ -32,7 +32,10 @@ class SummaryContext:
 # Verified data (from workExperience.md; do not change without updating source)
 # ---------------------------------------------------------------------------
 
-_YEARS_EXPERIENCE = 6
+# Set to 7 on 2026-07-18 (Jason's call). Was 6, which undersold him and contradicted
+# the resume's own date range (Zero To Sixty starts June 2017). Derivation lives in
+# data/workExperience.md Section 1.0: first PM/PO title Feb 2019 -> Jan 2026 = 6.9 yrs.
+_YEARS_EXPERIENCE = 7
 
 _SCALE_ENTERPRISE = "~3,500 enterprise and mid-market accounts"  # MET-02
 _SCALE_CONSUMER = "~25,000 active users"                         # MET-03
@@ -51,7 +54,16 @@ _COMPANY_DISPLAY = "Cision"
 
 _OUTCOME_1 = "eliminated a 40% data drop-off across the customer contact pipeline"
 _OUTCOME_2_SECURITY = "resolved 90% of a 300-item security backlog while maintaining core roadmap delivery"
-_OUTCOME_2_DEFAULT = "sustained retention near 7% annually through a capacity model built for constrained engineering resources"
+# ATTRIBUTION (corrected 2026-07-18, Jason-confirmed): the prior wording here was
+# "sustained retention near 7% annually THROUGH a capacity model...", which welded
+# two separate facts into a false causal chain and shipped in 4 of 4 resumes before
+# it was caught. Ground truth: the ~7% churn rate (MET-04) was the collective result
+# of reliability, security, and migration work; the capacity model's actual job was
+# quarterly prioritization and roadmap creation, not churn reduction. The owned verb
+# is "prioritized" - Jason prioritized the work; the work held the number. Do not
+# reintroduce a causal connective ("through", "by", "driving") between a capacity/
+# planning artifact and a business-outcome metric.
+_OUTCOME_2_DEFAULT = "prioritized the reliability, security, and migration work that held annual churn near 7%"
 
 _VERIFIED_PARTNERS_ALL = [
     "Engineering", "DBA", "DevOps", "Customer Experience",
@@ -210,7 +222,7 @@ def extract_summary_context(
 # Note: "B2B SaaS" is NEVER used as a direct label (rule enforced in Story 4.5 test).
 
 _TEMPLATE_ENTERPRISE = (
-    "Product Manager with {years}+ years owning {environment_type}, "
+    "Product Manager with {years} years owning {environment_type}, "
     "most recently at {company} where I managed {scope} supporting {scale}. "
     "I partner with {partner_1} and {partner_2} to drive roadmap decisions grounded in "
     "customer trust and business outcomes: {outcome_1}, and {outcome_2}. "
@@ -219,7 +231,7 @@ _TEMPLATE_ENTERPRISE = (
 )
 
 _TEMPLATE_CONSUMER = (
-    "Product Manager with {years}+ years working across {environment_type}, "
+    "Product Manager with {years} years working across {environment_type}, "
     "most recently at {company} where I owned {scope} used by {scale}. "
     "I work at the boundary of Engineering and {partner_1} "
     "to convert customer-visible failures into measurable product improvements: "
@@ -228,7 +240,7 @@ _TEMPLATE_CONSUMER = (
 )
 
 _TEMPLATE_NEUTRAL = (
-    "Product Manager with {years}+ years across {environment_type}, "
+    "Product Manager with {years} years across {environment_type}, "
     "most recently at {company} owning {scope}. "
     "I partner with {partner_1}, {partner_2}, and {partner_3} "
     "to deliver platform improvements with clear business outcomes. "

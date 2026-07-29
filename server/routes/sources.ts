@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { requireApiToken } from '../middleware.js';
 import { buildDefaultConnectors, runConnectorOrchestration } from '../services/scoutOrchestrator.js';
+import { resetTheirstackCreditsIfNewMonth } from '../services/theirstackCreditLedger.js';
 
 const router = Router();
 
 router.get('/api/sources', (_req, res) => {
+  resetTheirstackCreditsIfNewMonth();
   const sources = db.prepare('SELECT * FROM sources ORDER BY name').all();
   res.json(sources);
 });

@@ -38,7 +38,7 @@ improving a document, stop and re-read this paragraph.
 | Quality bar (R1–R8 resume, C1–C5 cover letter; 70/65 thresholds) | `data/conversion_rubric.md` |
 | Cover letter structure, proof ordering, word count | `data/Cover_Letter_Reference.md` |
 | Voice (`professional` profile) | `C:\Users\Jason\.claude\skills\voice-rewrite\` |
-| Authoring rules + 7 real mistakes to avoid | `.claude/skills/generate-submission/SKILL.md` |
+| The full JD-triage → author → verify process (Stage 0–3), rewritten 2026-07-19 per `C:\Users\Jason\.claude\plans\magical-booping-wilkes.md` — supersedes this doc's own "7 real mistakes" framing below | `.claude/skills/generate-submission/SKILL.md` |
 | Archive of 271 JDs to practice against | `data/archive/submissions/*/Original_JD.txt` |
 
 ## Done this session
@@ -108,11 +108,41 @@ given batch has been patched into shape. The root-cause fixes for the three find
 rules 8–10 in `.claude/skills/generate-submission/SKILL.md`'s "Authoring mistakes that have actually
 happened" list (that file is gitignored — it lives locally, not in this repo's history).
 
+### Loop state after rounds 2–3 (updated 2026-07-18, second session)
+
+Round-1 findings were root-caused into SKILL.md rules 8–10 and the three drafts rewritten. A fresh
+round-2 judge confirmed the landing-line tic gone but found its successor (the "X rather than Y"
+contrast frame, now guarded by `LW-008` in `submission_linter.py` + rule 11), an **ungrounded claim**
+("no dedicated security engineering capacity" in the Instructure letter — invented, fixed), the
+"200 stakeholders" inflation (rule 13 + ACC-109 framing note in `workExperience.md`), and
+stage-mismatched process framing (rule 14). After those fixes, round-3 verdicts: 1upHealth
+**YES WITH RESERVATIONS** (was borderline/no in round 1), Accompany Health **BORDERLINE**, Instructure
+**YES**. Round-3's new structural findings became rules 16–18 (bullet-skeleton uniformity, kicker-ending
+density, triplet frequency).
+
+**Resolved same session:**
+- **Travel ceiling**: Jason confirmed 15% max. Added as `workExperience.md` §1.4, rule 19, and fixed
+  in the Instructure letter (states the true 15% ceiling against the JD's ~25% ask, plainly, not as a
+  second staged-candor beat).
+- **Zero To Sixty framing**: Jason confirmed he was hired as an Account Manager and moved into product
+  work himself over the tenure, earning the Product Owner title by the end — the automation projects
+  (ACC-301/302/303) **are the evidence of that move**, not separate ops work. Documented in
+  `workExperience.md` §2.1. All three resumes' Zero To Sixty section now reads "Account Manager →
+  Product Owner" with a lead bullet stating the arc (worded differently per resume per rule 15).
+
+**Still open, needs Jason:** whether mission-driven companies get explicit mission-engagement content
+in the letter (Accompany's borderline verdict leans on its absence — the letter is procedurally humble
+but never engages why the mission itself matters to him), and whether any ship-measure-iterate story
+exists in ground truth to counter reviewers' "every accomplishment is defense/triage" observation
+(ACC-106, the mobile UVPM competitive-gap fix, is the closest candidate — confirm before using it that
+way).
+
 ### Next actions, in order
 
 1. **Rewrite all three** with the tic deliberately flattened — at most **one** landing line per letter,
-   everything else just reports what happened — and spend the reclaimed words on one researched,
-   specific fact about each company.
+   everything else just reports what happened — and spend the reclaimed words engaging one concrete,
+   company-specific detail **from the JD itself**. (Jason, 2026-07-18: **no web research** — the loop
+   runs offline from the archive JDs and ground truth only.)
 2. **Re-run the independent judge** (spawn a fresh subagent with a hiring-manager persona; do not
    review your own work as the final check — you will not see your own tics).
 3. **Per-document fixes** the reviewer named: 1upHealth ignores a *required* consumer-facing-product
@@ -122,11 +152,8 @@ happened" list (that file is gitignored — it lives locally, not in this repo's
    a letter whose main asset is sounding human, and says nothing about the stated East Coast preference.
 4. Then continue through the archive in batches of 5, reporting after each batch.
 
-## Needs Jason's decision (do not decide unilaterally)
+## Resolved decisions
 
-**"Six years" vs. the dates.** Resumes say "six years"; the experience section runs June 2017 – January
-2026 (8.6 years total, 6.9 since his first PM/PO title). `workExperience.md:36` says "6+ years" and
-line 47 targets "Mid-level PM / PM II with 3–7 years" — so the understatement may be **deliberate
-positioning** toward mid-level roles rather than staleness. A recruiter subtracting the dates sees a
-contradiction. Proposed fix that preserves the positioning: say **"six years as a product manager"**
-rather than bare "six years." Confirm with Jason before changing.
+**"Six years" vs. the dates — RESOLVED (Jason, 2026-07-18).** `workExperience.md:36` now mandates
+**7 years** ("Use 7. Do not write 'six years' or '6+ years' anywhere"), derived from first PM/PO
+title Feb 2019 → Jan 2026 = 6.9 years. All three authored resumes already say "seven years."

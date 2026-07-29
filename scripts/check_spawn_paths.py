@@ -19,11 +19,8 @@ ALLOW_LINE_PATTERNS = [
     re.compile(r"runPythonScript\s*\("),
     re.compile(r"['\"]scripts/batch_pipeline\.py['\"]"),
     re.compile(r"['\"]scripts/generate_experience_summary\.py['\"]"),
-    # runPythonScript passes absolute paths in args (middleware.ts)
-    re.compile(r"spawn\s*\(\s*['\"]python['\"],\s*args"),
-    # Manual draft — procArgs built with path.join(SCRIPTS_DIR, 'batch_pipeline.py') (jobs.ts)
-    re.compile(r"spawn\s*\(\s*['\"]python['\"],\s*procArgs"),
     re.compile(r"spawnPython\s*\("),
+    re.compile(r"resolvePythonExecutable\s*\("),
 ]
 
 SPAWN_PATTERN = re.compile(r"""spawn\s*\(\s*['"]python['"]""")

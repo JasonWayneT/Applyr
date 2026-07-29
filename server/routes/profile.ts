@@ -5,6 +5,7 @@ import {
   materializeJobSearchPrefs,
   WORK_EXPERIENCE_PATH,
 } from '../shared.js';
+import { CANDIDATE_PREFS_PATH } from '../domain/paths.js';
 import { requireApiToken } from '../middleware.js';
 import { runDetached, pythonScriptPath } from '../pipeline/processRunner.js';
 
@@ -98,6 +99,44 @@ function codifyExperienceAndAssignIDs(markdown: string): string {
 // ---------------------------------------------------------------------------
 
 // Specific key route must be registered before /:key to avoid param capture
+router.get('/api/profile/job_search', (_req, res) => {
+  try {
+    const row = db.prepare('SELECT value FROM profiles WHERE key = ?').get('job_search') as
+      | { value: string }
+      | undefined;
+    const data = row ? (JSON.parse(row.value) as Record<string, unknown>) : {};
+
+    if (data.additionalSearchTerms === undefined && data.searchTerms === undefined) {
+      try {
+        if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
+          const prefs = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8')) as {
+            search_terms?: string[];
+            target_role?: string;
+          };
+          const target = String(data.targetRole || prefs.target_role || 'Product Manager').trim();
+          const extras = (prefs.search_terms || [])
+            .map((t) => String(t).trim())
+            .filter(
+              (t) =>
+                t &&
+                t !== 'Product Owner' &&
+                t.toLowerCase() !== target.toLowerCase(),
+            );
+          if (extras.length) {
+            data.additionalSearchTerms = extras.join(', ');
+          }
+        }
+      } catch {
+        /* optional enrichment */
+      }
+    }
+
+    res.json(data);
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch job search settings' });
+  }
+});
+
 router.post('/api/profile/job_search', (req, res) => {
   try {
     db.prepare('INSERT OR REPLACE INTO profiles (key, value) VALUES (?, ?)').run('job_search', JSON.stringify(req.body));

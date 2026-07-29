@@ -15,7 +15,7 @@ candidate@example.com
 
 Dear Hiring Manager,
 
-HubSpot's shift toward product-led growth created a specific kind of product problem: the platform had to earn adoption from users who hadn't been sold to yet.
+HubSpot's shift toward product-led growth created a specific kind of product problem. The platform had to earn adoption from users who hadn't been sold to yet.
 
 At Cision, on a $40M ARR B2B platform, that was the kind of problem I was responsible for solving. I partnered with engineering, DBA, and DevOps to eliminate a 40% data drop-off that was eroding customer trust and contributing to churn.
 
@@ -33,7 +33,7 @@ candidate@example.com
 
 ## PROFESSIONAL SUMMARY
 
-Product Manager with 6 years across B2B SaaS platforms. Owned data integrity, platform stability, and cross-functional delivery on a $40M ARR media monitoring platform supporting 3,500 enterprise accounts.
+Product Manager with 7 years across B2B SaaS platforms. Owned data integrity, platform stability, and cross-functional delivery on a $40M ARR media monitoring platform supporting 3,500 enterprise accounts.
 
 ## PROFESSIONAL EXPERIENCE
 
@@ -245,6 +245,116 @@ def test_clean_cover_letter_passes():
 def test_clean_resume_passes():
     r = lint_document(RESUME_CLEAN, "resume")
     assert r.passed
+
+
+# ---------------------------------------------------------------------------
+# LW-009-PAIR — shared phrasing across resume + cover letter
+# ---------------------------------------------------------------------------
+
+def test_LW009_pair_flags_shared_mechanism_phrase():
+    from submission_linter import check_cross_document_repetition
+
+    resume = RESUME_CLEAN + (
+        "\n* Built a PTO-adjusted capacity model using T-shirt sizing to guide "
+        "quarterly resource allocation across stability, compliance, and roadmap priorities\n"
+    )
+    letter = CL_CLEAN + (
+        "\nI also built a PTO-adjusted capacity model using T-shirt sizing to guide "
+        "how engineering resources were allocated each quarter.\n"
+    )
+    warns = check_cross_document_repetition(resume, letter)
+    assert any(v.rule_id == "LW-009-PAIR" for v in warns)
+
+
+def test_LW009_pair_allows_shared_metric_core_only():
+    from submission_linter import check_cross_document_repetition, find_shared_phrases
+
+    resume = "* Eliminated a 40% contact-data drop-off by partnering with engineering on a new path.\n"
+    letter = (
+        "When Salesforce closed-lost analysis showed data accuracy as a top named reason "
+        "customers were leaving, I drove a replacement path that eliminated a 40% contact-data "
+        "drop-off after an open ideation session with engineers.\n"
+    )
+    # The short metric core may appear in both; mechanism clauses must differ.
+    shared = find_shared_phrases(resume, letter)
+    assert not any("partnering with engineering" in s for s in shared)
+    warns = check_cross_document_repetition(resume, letter)
+    assert not any(v.rule_id == "LW-009-PAIR" for v in warns)
+
+
+def test_LW009_pair_clean_when_vocabulary_diverges():
+    from submission_linter import check_cross_document_repetition
+
+    resume = (
+        "* Every quarter, pulled priorities and blockers from Sales, Legal, DevOps, and DBA, "
+        "resolved them into one roadmap, and presented it to the full product and engineering "
+        "organization before work began.\n"
+    )
+    letter = (
+        "Sales wanted data fixes prioritized. Legal and DevOps arrived with their own asks. "
+        "My job each quarter was to force those into a single sequence the whole team could "
+        "commit to before anyone started building.\n"
+    )
+    warns = check_cross_document_repetition(resume, letter)
+    assert not any(v.rule_id == "LW-009-PAIR" for v in warns)
+
+
+# ---------------------------------------------------------------------------
+# no-ai-slop integration (LW-015 - LW-020), added 2026-07-23
+# ---------------------------------------------------------------------------
+
+def test_LW015_warns_on_throat_clearing_opener():
+    text = CL_CLEAN + "\nHere's the thing, I have shipped fixes like this before."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-015" for v in r.warns)
+
+
+def test_LW016_warns_on_faux_insight_setup():
+    text = CL_CLEAN + "\nWhat if I told you this role is exactly the kind of problem I solve."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-016" for v in r.warns)
+
+
+def test_LW017_warns_on_importance_puffery():
+    text = CL_CLEAN + "\nThis launch marks a pivotal moment for the company."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-017" for v in r.warns)
+
+
+def test_LW018_warns_on_weasel_attribution():
+    text = CL_CLEAN + "\nExperts agree that this approach works well."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-018" for v in r.warns)
+
+
+def test_LW019_warns_on_fake_strong_hub_verb():
+    text = CL_CLEAN + "\nThe tool serves as a centralized hub for sponsor management."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-019" for v in r.warns)
+
+
+def test_LW020_warns_on_binary_contrast_shape():
+    text = CL_CLEAN + "\nIt's not the model. It's the eval that matters here."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-020" for v in r.warns)
+
+
+def test_LW007_warns_on_ultimately_sentence_starter():
+    text = CL_CLEAN + "\nUltimately, I want to help this team ship faster."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-007" for v in r.warns)
+
+
+def test_LW007_no_warn_on_ultimately_mid_sentence():
+    text = CL_CLEAN + "\nI was ultimately responsible for the migration outcome."
+    r = lint_document(text, "cover_letter")
+    assert not any(v.rule_id == "LW-007" for v in r.warns)
+
+
+def test_no_ai_slop_rules_clean_on_baseline_fixtures():
+    r = lint_document(CL_CLEAN, "cover_letter")
+    new_rule_ids = {"LW-015", "LW-016", "LW-017", "LW-018", "LW-019", "LW-020"}
+    assert not any(v.rule_id in new_rule_ids for v in r.warns)
 
 
 # ---------------------------------------------------------------------------

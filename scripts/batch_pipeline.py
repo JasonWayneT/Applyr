@@ -16,6 +16,7 @@ from utils import (
     WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE, FIT_ENGINE_FILE,
     SCORING_JD_MAX_CHARS, load_candidate_preferences,
     get_jd_required_keywords, get_min_fit_score,
+    get_scoring_jd_max_chars,
     unload_local_models, clean_jd_text, send_notification
 )
 from local_embeddings import get_embedding, cosine_similarity
@@ -39,6 +40,64 @@ apply_quality_batch_defaults()
 STATUS_NEEDS_RETRY = "Needs Retry"
 STATUS_REJECTED = "Rejected"
 MAX_AUTO_RETRIES = 3
+
+
+def _effective_jd_body(jd_text: str) -> str:
+    """Strip staging headers (Title:/URL:) for length checks and DB persistence."""
+    if not jd_text:
+        return ""
+    lines = jd_text.strip().splitlines()
+    body_lines = []
+    past_headers = False
+    for line in lines:
+        stripped = line.strip()
+        if not past_headers:
+            if stripped.startswith("Title:") or stripped.startswith("URL:") or not stripped:
+                continue
+            past_headers = True
+        body_lines.append(line)
+    if body_lines:
+        return "\n".join(body_lines).strip()
+    return jd_text.strip()
+
+
+def get_min_jd_chars_evaluate(prefs=None) -> int:
+    prefs = prefs or load_candidate_preferences()
+    raw = prefs.get("min_jd_chars_evaluate", 800)
+    try:
+        return max(200, int(raw))
+    except (TypeError, ValueError):
+        return 800
+
+
+def _jd_meets_evaluate_threshold(jd_text: str, prefs=None) -> bool:
+    return len(_effective_jd_body(jd_text or "")) >= get_min_jd_chars_evaluate(prefs)
+
+
+def _persist_jd_text_if_missing(db_path, job_id_prefix, company_name, jd_text: str) -> None:
+    body = _effective_jd_body(jd_text or "")
+    if len(body) < 200:
+        return
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    cursor = conn.cursor()
+    if job_id_prefix:
+        cursor.execute(
+            """
+            UPDATE jobs SET jd_text = ?
+            WHERE id LIKE ? AND (jd_text IS NULL OR LENGTH(TRIM(jd_text)) < 200)
+            """,
+            (body, f"{job_id_prefix}%"),
+        )
+    else:
+        cursor.execute(
+            """
+            UPDATE jobs SET jd_text = ?
+            WHERE LOWER(company) = LOWER(?) AND (jd_text IS NULL OR LENGTH(TRIM(jd_text)) < 200)
+            """,
+            (body, company_name),
+        )
+    conn.commit()
+    conn.close()
 
 
 GPU_LOCK = threading.Lock()
@@ -239,6 +298,28 @@ def _find_staging_jd(company: str, job_id: str | None = None) -> str:
     return ""
 
 
+def _load_job_title(db_path: str, company: str, job_id: str | None = None) -> str:
+    if not os.path.exists(db_path):
+        return ""
+    try:
+        conn = sqlite3.connect(db_path, timeout=10.0)
+        if job_id:
+            row = conn.execute("SELECT title FROM jobs WHERE id = ?", (job_id,)).fetchone()
+        elif job_id is None and company:
+            row = conn.execute(
+                "SELECT title FROM jobs WHERE LOWER(company) = LOWER(?) ORDER BY rowid DESC LIMIT 1",
+                (company,),
+            ).fetchone()
+        else:
+            row = None
+        conn.close()
+        if row and row[0]:
+            return str(row[0]).strip()
+    except sqlite3.Error:
+        pass
+    return ""
+
+
 def _load_jd_for_job(company: str, job_id: str | None = None) -> str:
     """Staging file first, then DB jd_text, then saved Original_JD.txt from a prior draft attempt."""
     jd_text = _find_staging_jd(company, job_id)
@@ -402,7 +483,7 @@ def _draft_success_summary(score, display_company: str, fit_summary: str) -> str
     return f"{base} {fit_line}".strip() if fit_line else base
 
 
-def _set_backlog(db_path, job_id_prefix, company_name, score, summary: str):
+def _set_backlog(db_path, job_id_prefix, company_name, score, summary: str, jd_text: str | None = None):
     conn = sqlite3.connect(db_path, timeout=30.0)
     cursor = conn.cursor()
     if job_id_prefix:
@@ -423,6 +504,8 @@ def _set_backlog(db_path, job_id_prefix, company_name, score, summary: str):
         )
     conn.commit()
     conn.close()
+    if jd_text:
+        _persist_jd_text_if_missing(db_path, job_id_prefix, company_name, jd_text)
 
 
 def _cleanup_staging_file(filepath: str, filename: str):
@@ -433,7 +516,7 @@ def _cleanup_staging_file(filepath: str, filename: str):
         pass
 
 
-def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str = "") -> bool:
+def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str = "", job_title: str = "") -> bool:
     """Zero-token pre-filter. Rejects JDs with blocked titles, industries, years, keywords, optional anchors."""
     from seniority_gate import check_years_gate, passes_title_gate
     from industry_gate import check_industry_gate
@@ -451,7 +534,7 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str =
                 print(f"    [ZERO-TOKEN REJECT] company_blocked:{entry}", file=sys.stderr)
                 return False
 
-    ok, reason = passes_title_gate(jd_text, prefs)
+    ok, reason = passes_title_gate(jd_text, prefs, fallback_title=job_title)
     if not ok:
         print(f"    [ZERO-TOKEN REJECT] {reason}", file=sys.stderr)
         return False
@@ -582,7 +665,10 @@ def _call_fit_llm(
     prefs_str,
     location_lock,
     fit_schema,
+    scoring_max=None,
 ):
+    if scoring_max is None:
+        scoring_max = get_scoring_jd_max_chars()
     prompt = f"""
     You are the JobAgent Job-Fit Decision Engine.
     
@@ -592,7 +678,7 @@ def _call_fit_llm(
     GROUND TRUTH (Jason Taylor's Profile — BM25-pruned):
     {work_exp_for_fit}
     
-    JOB DESCRIPTION (first {SCORING_JD_MAX_CHARS} chars):
+    JOB DESCRIPTION (first {scoring_max} chars):
     {truncated_jd}
     
     RULES & SCORING PROTOCOL:
@@ -736,11 +822,11 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
         _fit_cites_years_reject,
     )
 
-    # Truncate JD — first 1500 chars contain ~90% of signal for scoring
-    truncated_jd = jd_text[:SCORING_JD_MAX_CHARS] if len(jd_text) > SCORING_JD_MAX_CHARS else jd_text
+    scoring_max = get_scoring_jd_max_chars()
+    truncated_jd = jd_text[:scoring_max] if len(jd_text) > scoring_max else jd_text
     work_exp_for_fit = _pruned_work_exp_for_fit(truncated_jd, work_exp_summary)
 
-    loc_verdict, loc_detail = resolve_location_verdict(jd_text)
+    loc_verdict, loc_detail = resolve_location_verdict(jd_text, prefs)
     if loc_verdict == "REJECT":
         return {
             "Decision": "NO",
@@ -757,7 +843,7 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
     )
     rules_for_fit = gates_passed_rubric(
         _location_stripped_rubric(job_fit_rules)
-        if loc_verdict in ("REMOTE_OK", "SD_LOCAL_OK")
+        if loc_verdict in ("REMOTE_OK", "LOCAL_OK")
         else job_fit_rules,
     )
 
@@ -804,12 +890,12 @@ def evaluate_job_fit(jd_text, work_exp_summary, job_fit_rules, prefs):
         print("  -> [FIT] Scoring-only returned no result — fallback to Stage-B rubric LLM.", file=sys.stderr)
         result = _call_fit_llm(
             truncated_jd, work_exp_for_fit, rules_for_fit, prefs_str,
-            location_lock + "\n" + scoring_context, fit_schema,
+            location_lock + "\n" + scoring_context, fit_schema, scoring_max,
         )
 
     if (
         result
-        and loc_verdict in ("REMOTE_OK", "SD_LOCAL_OK")
+        and loc_verdict in ("REMOTE_OK", "LOCAL_OK")
         and str(result.get("Decision", "")).upper() == "NO"
         and _fit_cites_location_reject(result)
     ):
@@ -869,8 +955,20 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
     if not jd_text:
         jd_text = _load_jd_for_job(company, job_id)
 
+    job_title = _load_job_title(db_path, company, job_id)
+
     if not jd_text:
         print(json.dumps({"id": "gate", "status": "error", "summary": "No JD text found. Run sync or open the job posting to scrape first."}))
+        return
+
+    if not _jd_meets_evaluate_threshold(jd_text, prefs):
+        need = get_min_jd_chars_evaluate(prefs)
+        print(json.dumps({
+            "id": "gate",
+            "status": "error",
+            "summary": f"JD body too short for evaluation (minimum {need} characters).",
+        }))
+        print(json.dumps({"score": 0, "passed": False}))
         return
 
     cached_fit = None
@@ -880,12 +978,12 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
             print(json.dumps({"id": "fit", "status": "error", "summary": "Draft-only requires an existing fit score ≥ 72 on this job."}))
             return
     # Zero-token keyword gate before any LLM call
-    if not passes_jd_keyword_gate(jd_text, prefs, company_name=company or ""):
+    if not passes_jd_keyword_gate(jd_text, prefs, company_name=company or "", job_title=job_title):
         print(json.dumps({"id": "gate", "status": "done", "summary": "Rejected (zero-token gate: title/years/industry/keywords/anchors)."}))
         print(json.dumps({"score": 0, "passed": False}))
         return
 
-    is_onsite, onsite_reason = classify_onsite(jd_text)
+    is_onsite, onsite_reason = classify_onsite(jd_text, prefs)
     if is_onsite:
         print(json.dumps({"id": "gate", "status": "done", "summary": f"Rejected (location gate: {onsite_reason})."}))
         print(json.dumps({"score": 0, "passed": False}))
@@ -959,7 +1057,7 @@ def process_single(company, url, jd_text, job_id=None, draft_only=False):
     success_summary = _draft_success_summary(score, display, summary)
     if os.path.exists(db_path) and job_id:
         try:
-            _set_backlog(db_path, job_id[:8], company, score, success_summary)
+            _set_backlog(db_path, job_id[:8], company, score, success_summary, jd_text=jd_text)
         except Exception as e:
             print(json.dumps({"id": "fit", "status": "error", "summary": f"Could not update database: {e}"}))
 
@@ -1068,8 +1166,18 @@ def process_batch():
         
         jd_text = load_file(filepath)
 
-        if not jd_text or len(jd_text.strip()) < 100:
-            print(f"  -> Skipping. File {filename} seems empty or too short.")
+        if not _jd_meets_evaluate_threshold(jd_text, prefs) and db_exists:
+            db_jd = _load_jd_for_job(company_name, job_id_prefix)
+            if _jd_meets_evaluate_threshold(db_jd, prefs):
+                print(
+                    f"  -> Staging JD short; using jd_text from database "
+                    f"({len(_effective_jd_body(db_jd))} chars)."
+                )
+                jd_text = db_jd
+
+        if not _jd_meets_evaluate_threshold(jd_text, prefs):
+            need = get_min_jd_chars_evaluate(prefs)
+            print(f"  -> Skipping. JD body shorter than min_jd_chars_evaluate ({need}).")
             _cleanup_staging_file(filepath, filename)
             batch_completed["n"] += 1
             _emit_batch_progress(company_name, "skipped")
@@ -1167,7 +1275,28 @@ def process_batch():
             if vec:
                 save_jd_vector(db_path, job_id_prefix, company_name, vec)
 
-        if not passes_jd_keyword_gate(jd_text, prefs, company_name=company_name):
+        batch_job_title = ""
+        if db_exists:
+            try:
+                conn = sqlite3.connect(db_path, timeout=30.0)
+                if job_id_prefix:
+                    row = conn.execute(
+                        "SELECT title FROM jobs WHERE id LIKE ?", (f"{job_id_prefix}%",)
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT title FROM jobs WHERE LOWER(company) = LOWER(?) ORDER BY rowid DESC LIMIT 1",
+                        (company_name,),
+                    ).fetchone()
+                conn.close()
+                if row and row[0]:
+                    batch_job_title = str(row[0]).strip()
+            except sqlite3.Error:
+                batch_job_title = ""
+
+        if not passes_jd_keyword_gate(
+            jd_text, prefs, company_name=company_name, job_title=batch_job_title
+        ):
             print(f"  -> Skipping. JD failed zero-token gate (keyword/title/industry/anchor).")
             if db_exists:
                 try:
@@ -1196,7 +1325,7 @@ def process_batch():
             return job_failures_local
 
         # Zero-Shot On-Site Classifier Gate
-        is_onsite, reason = classify_onsite(jd_text)
+        is_onsite, reason = classify_onsite(jd_text, prefs)
         if is_onsite:
             print(f"  -> Skipping. Zero-Shot Classifier detected stealth on-site/hybrid outside local area: {reason}")
             if db_exists:
@@ -1339,6 +1468,7 @@ def process_batch():
                         display,
                         result.get("Summary", ""),
                     ),
+                    jd_text=jd_text,
                 )
                 print(f"  -> Database status updated to 'Backlog' (Ready to Apply) with score {score}.")
                 
@@ -1418,7 +1548,13 @@ def process_batch():
         send_notification(msg, "jobagent_alerts")
 
 if __name__ == "__main__":
+    from applyr_python import assert_applyr_host
     from utils import init_pipeline_prefs
+    try:
+        assert_applyr_host()
+    except Exception as exc:
+        print(f"CRITICAL: {exc}", file=sys.stderr)
+        sys.exit(1)
     init_pipeline_prefs()
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', choices=['batch', 'single'], default='batch')

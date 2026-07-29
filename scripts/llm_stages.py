@@ -13,6 +13,11 @@ STAGE_PROVIDERS = {
     "claim_select": ["local", "gemini"],
     "bullet": ["local", "gemini"],
     "fit": ["local", "gemini"],
+    # Local-only, no cloud fallback: this stage exists specifically to prove local-model
+    # reliability (CR-062 / Deterministic-Minimal-LLM), so silently falling through to a
+    # cloud provider on local failure would defeat the point. call_llm_stage below enforces
+    # this — it raises rather than substituting a cloud provider for a hard-local stage.
+    "rewrite": ["local"],
 }
 
 STAGE_MODEL_KEYS = {
@@ -20,7 +25,12 @@ STAGE_MODEL_KEYS = {
     "claim_select": "localModelClaimSelect",
     "bullet": "localModelBullet",
     "fit": "localModelFit",
+    "rewrite": "localModelRewrite",
 }
+
+# Stages in this set must never silently substitute a different provider than the ones
+# listed in STAGE_PROVIDERS, even if none of them are "configured" — see call_llm_stage.
+_HARD_PROVIDER_STAGES = {"rewrite"}
 
 
 def local_only_mode() -> bool:
@@ -38,7 +48,8 @@ def stage_model(stage_id: str) -> str | None:
         return settings[key]
     defaults = {
         "fit": settings.get("localModelFit") or "qwen2.5:7b-instruct-q4_K_M",
-        "jd_profile": settings.get("localModel") or "phi3.5:3.8b-mini-instruct-q8_0",
+        "jd_profile": settings.get("localModel") or "llama3.1:8b-instruct-q5_K_M",
+        "rewrite": settings.get("localModelRewrite") or "qwen2.5:7b-instruct-q4_K_M",
     }
     return defaults.get(stage_id)
 
@@ -52,6 +63,11 @@ def call_llm_stage(stage_id: str, system_prompt: str, user_prompt: str, **kwargs
         preferred = STAGE_PROVIDERS.get(stage_id, ["local", "gemini"])
     providers = [p for p in preferred if p in configured]
     if not providers:
+        if stage_id in _HARD_PROVIDER_STAGES:
+            raise RuntimeError(
+                f"Stage '{stage_id}' requires {preferred} but none are configured; "
+                "refusing to silently substitute a different provider."
+            )
         providers = configured
     model = kwargs.pop("model", None) or stage_model(stage_id)
     return call_llm(

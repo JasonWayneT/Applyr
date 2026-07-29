@@ -26,7 +26,11 @@ async function run() {
   }
 
   const prefs = loadMaterializedScoutPrefs();
-  const targetPrefs = { targetRole: prefs.targetRole, searchTerms: prefs.searchTerms };
+  const targetPrefs = {
+    targetRole: prefs.targetRole,
+    searchTerms: prefs.searchTerms,
+    builtinStrictTitle: prefs.builtinStrictTitle,
+  };
 
   const db = new Database(DB_PATH);
   const rows = db

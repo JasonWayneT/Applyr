@@ -252,7 +252,7 @@ def strip_false_years_penalty(
 
 def strip_location_risk_flags(result: dict | None, loc_verdict: str) -> dict | None:
     """Remove spurious location risk flags when location is pre-verified."""
-    if not result or loc_verdict not in ("REMOTE_OK", "SD_LOCAL_OK"):
+    if not result or loc_verdict not in ("REMOTE_OK", "LOCAL_OK"):
         return result
     location_terms = (
         "location", "remote", "on-site", "onsite", "hybrid", "san diego", "geograph",

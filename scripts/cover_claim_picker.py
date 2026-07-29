@@ -6,7 +6,7 @@ from typing import List, Set, Tuple
 
 from claim_catalog import ClaimCatalog
 from cover_letter_plan import CoverProofSlot
-from jd_tailoring import JdProfile, score_claim_for_jd
+from jd_tailoring import JdProfile, has_ai_signal, score_claim_for_jd
 
 LENS_ALIAS = {
     "lifecycle": "migration",
@@ -207,6 +207,25 @@ def _proof_score(
         ):
             if sig in combined:
                 score += bonus
+    if has_ai_signal(jd_text):
+        # JD explicitly signals AI/LLM relevance (FR-209) but no existing bonus
+        # block favored AI-specific proof points, so the one grounded AI-tooling
+        # claim (ACC-401-AITOOLS) never competed with generic PM claims for a
+        # slot even on JDs that named AI/LLM fluency as a core requirement.
+        story_l = (cover_story or "").lower()
+        combined = f"{text_l} {story_l}"
+        for sig, bonus in (
+            ("claude", 10),
+            ("gemini", 10),
+            ("prompt engineer", 10),
+            ("agentic", 9),
+            ("llm", 8),
+            ("ai pipeline", 8),
+            ("automation pipeline", 6),
+            ("python", 5),
+        ):
+            if sig in combined:
+                score += bonus
     return score
 
 
@@ -318,8 +337,22 @@ def pick_cover_proofs(
         rec = catalog.claims.get(cid)
         return bool(rec and re.search(r"\d", rec.body))
 
+    # The AI-tooling claim (ACC-401-AITOOLS) has no metric by design — it is a
+    # qualitative capability claim, not a quantified outcome, and CLAUDE.md's
+    # anti-hallucination rules forbid inventing a number just to satisfy this
+    # density check. Without this guard it reliably won the initial pick on
+    # AI-signal JDs (see has_ai_signal-gated bonus above) and then got silently
+    # discarded here for lacking a digit, which was the actual root cause of the
+    # cover letter never using it even when it was clearly the best-scoring proof.
+    def _protected_ai_slot(idx: int) -> bool:
+        return (
+            has_ai_signal(jd_text)
+            and idx < len(proofs)
+            and proofs[idx].claim_id == "ACC-401-AITOOLS"
+        )
+
     metric_count = sum(1 for p in proofs if _has_metric(p.claim_id))
-    if proofs and metric_count < min(2, len(proofs)):
+    if proofs and metric_count < min(2, len(proofs)) and not _protected_ai_slot(0):
         best_metric: Tuple[int, CoverProofSlot] | None = None
         for cid, rec in catalog.claims.items():
             if not re.search(r"\d", rec.body):
@@ -337,7 +370,7 @@ def pick_cover_proofs(
         if best_metric and proofs:
             proofs[0] = best_metric[1]
 
-    if len(proofs) >= 2 and not _has_metric(proofs[1].claim_id):
+    if len(proofs) >= 2 and not _has_metric(proofs[1].claim_id) and not _protected_ai_slot(1):
         need1 = ranked_needs[1] if len(ranked_needs) > 1 else need0
         best_m2: Tuple[int, CoverProofSlot] | None = None
         for cid, rec in catalog.claims.items():

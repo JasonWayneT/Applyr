@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Job } from '../types/job';
 import StatusChip from '../components/StatusChip';
 import { api } from '../lib/api';
+import type { OpportunitiesFilter } from '../types/opportunities';
+import { DASHBOARD_FILTER_MAP } from '../types/opportunities';
 
 interface TodayViewProps {
   jobs: Job[];
   onJobClick: (job: Job) => void;
+  onNavigateToOpportunities?: (filter: OpportunitiesFilter) => void;
 }
 
 const getGreeting = () => {
@@ -15,7 +18,7 @@ const getGreeting = () => {
   return 'Good evening';
 };
 
-const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
+const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpportunities }) => {
   const [firstName, setFirstName] = useState('');
   const [isReranking, setIsReranking] = useState(false);
   const [rerankQuery, setRerankQuery] = useState('');
@@ -92,6 +95,28 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
     { label: 'Offers', count: offers.length, height: getChartBarHeight(offers.length, funnelMax) },
   ];
 
+  const goToOpportunities = (label: string) => {
+    const filter = DASHBOARD_FILTER_MAP[label];
+    if (filter && onNavigateToOpportunities) onNavigateToOpportunities(filter);
+  };
+
+  const funnelClickProps = (label: string) =>
+    onNavigateToOpportunities
+      ? {
+          role: 'button' as const,
+          tabIndex: 0,
+          onClick: () => goToOpportunities(label),
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              goToOpportunities(label);
+            }
+          },
+          className: 'cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
+          title: `View ${label} in Opportunities`,
+        }
+      : {};
+
   return (
     <div className="space-y-10">
       {/* Welcome Header */}
@@ -120,11 +145,12 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
             {statusCounts.map((item, i) => (
               <div
                 key={item.label}
+                {...funnelClickProps(item.label)}
                 className={`flex-1 rounded-t-lg transition-all duration-500 hover:opacity-80 relative group ${
                   item.count === 0 
                     ? 'bg-outline-variant/20' 
                     : i === 2 ? 'bg-primary' : i === 4 ? 'bg-secondary-container' : 'bg-primary-container/50'
-                }`}
+                } ${onNavigateToOpportunities ? 'cursor-pointer hover:brightness-110' : ''}`}
                 style={{ height: item.height }}
               >
                 <div className="absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-on-surface text-surface text-[10px] px-2 py-1 rounded whitespace-nowrap">
@@ -139,12 +165,23 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
           </div>
           <div className="flex justify-between mt-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-2">
             {statusCounts.map(s => (
-              <span key={s.label} className="text-center">
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => goToOpportunities(s.label)}
+                disabled={!onNavigateToOpportunities}
+                className={`text-center transition-colors ${
+                  onNavigateToOpportunities
+                    ? 'hover:text-primary cursor-pointer disabled:cursor-default'
+                    : 'cursor-default'
+                }`}
+                title={onNavigateToOpportunities ? `View ${s.label} in Opportunities` : undefined}
+              >
                 {s.label}
                 <span className="block text-[11px] text-on-surface tabular-nums normal-case tracking-normal mt-0.5">
                   {s.count}
                 </span>
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -378,12 +415,29 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick }) => {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mt-4 pb-8">
         {[
-          { label: 'Total Active', value: activeJobs.length, icon: 'trending_up' },
-          { label: 'Screening', value: screenings.length, icon: 'hourglass_top' },
-          { label: 'Interviewing', value: coreInterviews.length, icon: 'record_voice_over', accent: true },
-          { label: 'Response Rate', value: jobs.length > 0 ? `${Math.round((screenings.length + coreInterviews.length + offers.length) / jobs.length * 100)}%` : '0%', icon: 'insights', accent: true },
+          { label: 'Total Active', value: activeJobs.length, icon: 'trending_up', navigable: true },
+          { label: 'Screening', value: screenings.length, icon: 'hourglass_top', navigable: true },
+          { label: 'Interviewing', value: coreInterviews.length, icon: 'record_voice_over', accent: true, navigable: true },
+          { label: 'Response Rate', value: jobs.length > 0 ? `${Math.round((screenings.length + coreInterviews.length + offers.length) / jobs.length * 100)}%` : '0%', icon: 'insights', accent: true, navigable: false },
         ].map(stat => (
-          <div key={stat.label} className="bg-surface-container-lowest rounded-2xl p-6 editorial-shadow">
+          <div
+            key={stat.label}
+            role={stat.navigable && onNavigateToOpportunities ? 'button' : undefined}
+            tabIndex={stat.navigable && onNavigateToOpportunities ? 0 : undefined}
+            onClick={stat.navigable ? () => goToOpportunities(stat.label) : undefined}
+            onKeyDown={stat.navigable && onNavigateToOpportunities ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                goToOpportunities(stat.label);
+              }
+            } : undefined}
+            className={`bg-surface-container-lowest rounded-2xl p-6 editorial-shadow ${
+              stat.navigable && onNavigateToOpportunities
+                ? 'cursor-pointer hover:border-primary/20 border border-transparent transition-all hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
+                : ''
+            }`}
+            title={stat.navigable && onNavigateToOpportunities ? `View ${stat.label} in Opportunities` : undefined}
+          >
             <div className="flex items-center justify-between mb-3">
               <span className="material-symbols-outlined text-on-surface-variant/40">{stat.icon}</span>
             </div>

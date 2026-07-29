@@ -20,7 +20,13 @@ BLOCKED_TOOLS = [
     "Kubernetes", "Docker", "Terraform", "Helm", "Jenkins", "CircleCI",
     "FHIR", "HL7", "HIPAA", "SOC2", "SOC 2", "ISO 27001",
     "Databricks", "Redshift", "BigQuery", "Fivetran", "Segment",
-    "Amplitude", "Mixpanel", "Pendo", "LaunchDarkly",
+    # Pendo removed 2026-07-20 to match drafting_engine.py's already-fixed list (2026-07-18):
+    # it blocks a VERIFIED tool. workExperience.md ACC-117/118/119 all approve it. This module's
+    # own list had silently diverged from the fixed one — found by an audit specifically checking
+    # whether the self-repair protocol's own cited "already fixed" example had actually stayed fixed
+    # everywhere. It hadn't; this was the second, unfixed copy, still live in local_rewrite.py's
+    # validate_prose_rewrite gate.
+    "Amplitude", "Mixpanel", "LaunchDarkly",
     "React", "Node.js", "GraphQL", "Rust", "Go",
     "TensorFlow", "PyTorch", "LangChain", "RAG", "LLM pipeline",
     "AWS", "Azure", "GCP", "Heroku",
@@ -719,7 +725,7 @@ def _pad_summary_template_parts(parts: List[str], theme_phrase: Optional[str] = 
             
     # Guarantee at least SUMMARY_MIN_SENTENCES using standard fallback sentences
     default_sentences = [
-        "Product Manager with over 6 years of experience in enterprise SaaS platforms, specializing in sales-led enterprise solutions.",
+        "Product Manager with 7 years of experience in enterprise SaaS platforms, specializing in sales-led enterprise solutions.",
         "Experienced partnering with engineering, DevOps, CX, and upgrade teams to ship reliable platform capabilities under resource constraints.",
         SUMMARY_TEMPLATE_S3
     ]
@@ -842,12 +848,12 @@ def build_summary_deterministic(
     )
     if theme_phrase:
         s1 = (
-            f"Product Manager with 6+ years of experience across enterprise SaaS platforms, "
+            f"Product Manager with 7 years of experience across enterprise SaaS platforms, "
             f"technical workflows, and internal tooling, with recent focus on {theme_phrase}."
         )
     else:
         s1 = (
-            "Product Manager with 6+ years of experience across enterprise SaaS platforms, "
+            "Product Manager with 7 years of experience across enterprise SaaS platforms, "
             "technical workflows, and internal tooling, most recently maintaining a high-value "
             "enterprise platform through data integrity, customer migration, and infrastructure cost reduction."
         )
@@ -987,6 +993,26 @@ def build_summary_deterministic(
 
     best_proof = _best_summary_proof(proof_pool)
     if best_proof:
+        import os as _os
+
+        if _os.environ.get("DRAFT_MODE", "compose").strip().lower() == "local_rewrite":
+            # CR-062: naturalize the already-selected, already-grounded proof clause.
+            # Re-check grounding independently (this clause feeds the summary, which has
+            # its own downstream assert_summary_grounded gate, but checking here too means
+            # a bad rewrite never even reaches that gate) and fall back to the original
+            # clause unchanged on any failure.
+            # Use the prose validator, not the bullet one: proof clauses are extracted
+            # sentence fragments and aren't guaranteed to be verb-first the way a resume
+            # bullet is, so the bullet gate's leading-verb check would reject them for the
+            # wrong reason.
+            from local_rewrite import local_rewrite_prose
+
+            rewritten = local_rewrite_prose(best_proof, max_words=40)
+            trial_ok, _ = assert_summary_grounded(
+                " ".join(sentences + [rewritten]), bullets_by_company
+            )
+            if trial_ok:
+                best_proof = rewritten
         sentences.append(best_proof)
 
     if not has_security_jd_signal(jd_text):
@@ -1326,7 +1352,7 @@ def assert_summary_grounded(summary: str, bullets_by_company: Dict[str, List[str
     ok_nums, err = audit_text_against_bullet_corpus(summary, corpus)
     if not ok_nums:
         return False, err
-    # Only verify metric-bearing fragments (not tenure boilerplate like "6+ years")
+    # Only verify metric-bearing fragments (not tenure boilerplate like "7 years")
     for frag in re.findall(r"[^.!?]*\d[^.!?]*[.!?]?", summary):
         frag_c = frag.strip()
         if len(frag_c) < 8:
@@ -1519,7 +1545,7 @@ def build_projects_section(jd_text: str = "") -> str:
     except (FileNotFoundError, json.JSONDecodeError):
         return ""
 
-    MAX_PROJECTS = 3
+    MAX_PROJECTS = 1
     all_projects = [p for p in data.get("projects", []) if p.get("ai_relevant")]
     projects = sorted(all_projects, key=lambda p: p.get("priority", 99))[:MAX_PROJECTS]
     if not projects:

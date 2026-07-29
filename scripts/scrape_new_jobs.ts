@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { extractJobDescriptionFromPage, MIN_JD_CHARS } from './extract_job_page.js';
+import { isBlockedScrapeUrl } from '../shared/domain/blockedScrapeHosts.js';
 
 chromium.use(stealth());
 
@@ -26,6 +27,13 @@ async function run() {
   for (const job of jobs) {
     if (!job.url || job.url.startsWith('local://')) {
       console.log(`Skipping ${job.company} - ${!job.url ? 'No URL' : 'Local Mock URL'}`);
+      continue;
+    }
+
+    if (isBlockedScrapeUrl(job.url)) {
+      console.log(
+        `[FR-080] Skipping ${job.company} — LinkedIn URLs are not scraped (decommissioned). URL: ${job.url}`,
+      );
       continue;
     }
 

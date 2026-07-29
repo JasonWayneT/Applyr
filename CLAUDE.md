@@ -6,20 +6,25 @@ This file is the tool-agnostic counterpart to `CLAUDE.md` (Claude Code reads tha
 
 If you only do one thing before touching `data/submissions/`, do this: **run the verification commands in "Required Verification Before You're Done" below.** Do not consider a resume or cover letter finished until those commands pass clean.
 
-**Trigger phrase binding:** when Jason says a resume/cover letter should be "conversion ready," "apply ready," "ready to send," or asks you to "review" or "check" one — that always means running the full three-pass workflow in [.claude/skills/conversion-ready-pass/SKILL.md](.claude/skills/conversion-ready-pass/SKILL.md): rubric scoring against `data/conversion_rubric.md` (R1–R8 resume / C1–C5 cover letter), a mechanical truth-grounding sweep, and a qualitative hiring-manager read, looped up to 3 rounds. That file is plain markdown with no Claude-Code-specific mechanism required to use it — if you are a different coding agent and have no automatic skill-loading step, open and follow it directly rather than stopping at the rubric. He should not have to name these files or re-link the research report each time. Don't just eyeball a document for typos and call it done, and don't stop after the rubric score alone — that is Pass 1 of three, not the whole workflow.
+**Trigger phrase binding:** when Jason says a resume/cover letter should be "conversion ready," "apply ready," "ready to send," or asks you to "review" or "check" one — that always means running the full three-pass workflow in [.claude/skills/conversion-ready-pass/SKILL.md](.claude/skills/conversion-ready-pass/SKILL.md): rubric scoring against `data/conversion_rubric.md` (R1–R8 resume / C1–C5 cover letter), a mechanical truth-grounding sweep, and a qualitative hiring-manager read, looped up to 3 rounds. That file is plain markdown with no Claude-Code-specific mechanism required to use it — if you are a different coding agent and have no automatic skill-loading step, open and follow it directly rather than stopping at the rubric. He should not have to name these files or re-link the research report each time. Don't just eyeball a document for typos and call it done, and don't stop after the rubric score alone — that is Pass 1 of three, not the whole workflow. **Scoping note (2026-07-19):** for a document authored via the `generate-submission` skill, its own Stage 2 already satisfies this trigger — don't run `conversion-ready-pass` a second time on top of it. `conversion-ready-pass` is for checking a document *not* produced by that flow.
+
+**Processing job descriptions today?** Invoke the `generate-submission` skill (`.claude/skills/generate-submission/SKILL.md`) — the single operational entry point for JD triage (fit-gating before any drafting), direct authoring, and verification. It's the current authoritative process, not the CR-070 tracker referenced below (superseded for generation — see the note just below).
 
 ---
 
 ## Active Engineering Work — Read This First If You're Here to Build, Not Draft
 
-> **START HERE (2026-07-18):
-> [SESSION-HANDOFF-2026-07-18-authoring.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-18-authoring.md)**
-> — this supersedes the CR-070 tracker below as the active thread. The working model changed: **you
-> author resumes and cover letters directly** from the JD and ground truth, rather than generating via
-> `draft_compiler.run()` (JD extraction is unreliable and its output needed heavy rewriting every time).
-> Deterministic checks stay, as *verification* on text you already wrote. The goal is conversion, not
-> pipeline completeness. That handoff also carries the one open defect worth fixing next: a repeated
-> sentence-shape tic that reads as AI-generated and that our burstiness check cannot see.
+> **START HERE (2026-07-20):
+> [SESSION-HANDOFF-2026-07-20-process-hardening.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-20-process-hardening.md)**
+> — supersedes the 2026-07-18 handoff below as the active thread. The direct-authoring pivot from 07-18
+> is done and stable; this doc covers what happened when the resulting process (`.claude/skills/generate-submission/SKILL.md`
+> v2.0.0 — the actual authoritative Stage 0-3 process, read it in full) ran against real JDs for the
+> first time, in two harnesses, and the self-repair fixes that came out of it: a database check so
+> Stage 0 never drafts for a company already marked Rejected/Closed, a mechanical check for resume↔letter
+> restatement the rubric couldn't see, and the standing rule that cover letters argue fit rather than
+> confess gaps. Six of nine real submissions from that batch are verified clean and ready to apply;
+> three are blocked on a database-status decision only Jason can make. The 07-18 handoff below is kept
+> for the original pivot's history, not as a second active thread.
 
 The CR-070 epics below are largely complete and are kept for reference. There are three
 previously-active engineering threads:
@@ -129,12 +134,15 @@ To protect candidate privacy:
 
 | File | Purpose | Read When |
 |------|---------|-----------|
+| `data/agent_context_pack.md` | **Generated fast-path digest** of this file's operative sections + `generate-submission/SKILL.md`'s operative sections + `workExperience.md` + `conversion_rubric.md`, built by `scripts/generate_context_pack.py` so a drafting/reviewing agent reads one lean file instead of four full ones (~19% smaller than the sum of sources; excludes engineering-only content this file carries that a drafting agent never needs). **Verify freshness first** — `python scripts/check_context_pack_freshness.py` must print FRESH; if STALE, regenerate before relying on it. Not a replacement for this file when doing engineering/process work — see below. | Before drafting or reviewing any submission, instead of separately reading this file + SKILL.md + workExperience.md + conversion_rubric.md |
 | `data/workExperience.md` | **Ground truth.** Every metric, accomplishment, and claim must trace back here. Contains VOC codes (vocabulary translation), MET codes (verified metrics), ACC codes (approved accomplishments), and explicit DO NOT CLAIM lists. | Before writing any bullet, proof paragraph, or metric |
-| `data/master_claims.json` | Structured claim catalog used by the pipeline. 59+ active claims. Claims with `"disabled": true` are quarantined and must NOT be used. | When selecting proof points for cover letters |
+| `data/master_claims.json` | Structured claim catalog. 59+ active claims. Claims with `"disabled": true` are quarantined and must NOT be used. **Read `tags` only as a retrieval index into `workExperience.md`'s full stories** — `text` and especially `cover_story` (a full first-person cover-letter-register paragraph per claim) are legacy write-only artifacts from the retired deterministic pipeline; never place either directly in an output document. | When selecting proof points for cover letters |
+| `data/master_claims_tags_only.json` | Generated sidecar of the above with `text`/`cover_story` already stripped from every claim by construction (`scripts/generate_context_pack.py`) — makes "tags only" true by construction instead of relying on every agent to self-police it. Regenerated alongside `agent_context_pack.md`. | Same as `master_claims.json` above — prefer this file when it exists |
 | `data/conversion_rubric.md` | Scoring rubric R1–R8 (resume) and C1–C5 (cover letter). **Thresholds: Resume 70+ = CONVERT-READY, Cover Letter 65+ = CONVERT-READY.** Do not chase points above threshold. | When evaluating or scoring a submission — this is the actionable day-to-day tool |
 | `data/pm_resume_cover_letter_research_report.md` | Background research the rubric above was built from (same heuristics, cited evidence, narrative form). Not a scoring tool itself. | Only when you need the reasoning behind a specific rubric criterion, or when revising the rubric itself |
 | `data/candidate_preferences.json` | Filter preferences: no solo/founding PM roles, no 0-to-1, min fit score 72. | When evaluating job fit |
 | `data/Cover_Letter_Reference.md` | Cover letter structural reference | When drafting cover letters |
+| `data/external_resume_patterns.md` | Third-party PM resume examples (Enhancv), paraphrased — cross-cutting summary/bullet patterns plus per-example notes. Reference only, never a template; don't copy phrasing verbatim. | When working on summary wording specifically, or wanting an outside comparison point before calling a draft done |
 | `submissions/{company}/Original_JD.txt` | The actual job description for that role | Before tailoring any submission |
 
 ---
@@ -181,6 +189,7 @@ Full text in `data/workExperience.md` Sections 5.1–5.3. Quick reference:
 - ACC-108: Jira ticket prioritization system
 - ACC-109: Quarterly PI planning (~200–300 stakeholders)
 - ACC-110: Cross-team knowledge transfer through layoffs
+- ACC-120: AI content-generation system — adjacent exposure & joint prompt-engineering research with the PM who built it (added 2026-07-21). **CONTRIBUTED at most, for the joint research only** — Jason did not build, design, or own this system. Never say "I built" or "I designed" about it. Distinct from his own personal AI-tooling project (ACC-401-AITOOLS, `data/aiProjects.md` — six named side projects with real what/why/how/tech detail, a much stronger source for AI-fluency content than the thin "I use Claude and Gemini daily" line that had been recurring).
 
 **Sterkly (ACC-201 to ACC-204)**
 - ACC-201: Workflow standardization
@@ -224,17 +233,25 @@ Engineering, DBA, DevOps, Customer Experience (CX), Customer Support, Sales, Acc
 
 **Forbidden tone (R-011 / tone_guard.py):** never use "layoff(s)" — use "resource constraints," "resource-constrained cycle," or "organizational transitions" instead. The drafting engine has produced this violation before; double-check it specifically.
 
+**Cover letters: don't discuss workforce reduction at all, not even via the euphemism (2026-07-21, Jason-supplied, Glint Tech review).** This is stronger than R-011's substitution rule above. R-011 governs word choice everywhere; this is a cover-letter-specific scope rule: don't build any part of a cover letter's argument around headcount shrinking, executive turnover as adversity, or "operating through constraint" framed via team size — not even using an approved euphemism like "resource-constrained cycle." Found running through all three paragraphs of a real letter ("repeated rounds of headcount reduction," "a shrinking engineering bench," "even as the team itself was shrinking") on 2026-07-21. The resume can still reference resource constraints factually where relevant (workExperience.md's own role context does); this rule is about what a cover letter chooses to argue from, not about erasing the fact.
+
 ---
 
 ## Forbidden Language (Anti-AI Fingerprint)
 
-Never use: em dashes (—), double-hyphen (`--`), "leverage," "passionate," "driven," "dynamic," "innovative," "seamless," "transformative," "synergy," "tapestry," "revolutionize," "proven track record," "I am excited to apply," "I am excited about," "I am confident that," "Furthermore," "Moreover," "In addition," "Additionally."
+Never use: em dashes (—), double-hyphen (`--`), "leverage," "passionate," "driven," "dynamic," "innovative," "seamless," "transformative," "synergy," "tapestry," "revolutionize," "revenue-bearing" (added 2026-07-19 — Jason's own correction: he's never heard the phrase and it isn't how he speaks; it had leaked from `workExperience.md`'s own positioning line into an authored resume), "proven track record," "I am excited to apply," "I am excited about," "I am confident that," "Furthermore," "Moreover," "In addition," "Additionally."
 
 The fuller, actively-maintained list (CR-070 Epic 8 authenticity research + Jason's own `voice-rewrite` skill's Pass 1 strip list) lives in `scripts/submission_linter.py`'s `LR-009`/`LW-006`/`LW-007` rules — that's the single source of truth going forward (per CR-070 Epic 9's decision not to hand-duplicate a growing word list in two places); this section stays as the always-hard-blocked core, not the exhaustive set.
 
+**`no-ai-slop` skill integration (2026-07-23, Jason-supplied).** Jason also uses a general-purpose writing skill, [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop), installed globally at `~/.claude/skills/no-ai-slop` for any draft, not Applyr-specific. Rather than keep a second parallel word list, its pattern catalog was diffed against the existing `LR`/`LW` rules and the genuine gaps were added as new mechanical `WARN` rules in `submission_linter.py`: `LW-015` (throat-clearing openers — "Here's the thing," "Let me be clear"), `LW-016` (faux-insight/rhetorical setups — "what nobody tells you," "what if I told you"), `LW-017` (importance puffery — "marks a pivotal moment," "a testament to"), `LW-018` (weasel attribution — "experts agree," "studies show"), `LW-019` (fake-strong hub-verb — "serves as a centralized hub"), and `LW-020` (the "It's not X. It's Y." binary-contrast two-sentence shape). `LW-007` was also widened to catch "Ultimately,"/"Overall," as summary-recap sentence-starters (comma-gated so mid-sentence uses like "ultimately responsible for" don't false-positive). Patterns from that skill's list left out as impractical to regex reliably or low-relevance to a 250-400 word professional document (negative listing, dramatic fragmentation, synonym cycling, robotic rhythm, fake-profound kickers, formatting slop) — ask Jason before adding a mechanical rule for any of these; a human read still catches them fine. `submission_linter.py` remains the single source of truth per the paragraph above — this integration extends it rather than starting a second list.
+
 Never open a sentence with transition fluff. Never start a cover letter with "I am writing to express my interest."
 
-No bullet points in cover letters. No em dashes anywhere — including as a stand-in punctuation pattern like `word: word` used to avoid the literal character. If you find yourself writing a colon where an em dash would have gone, restructure the sentence instead; the colon-as-em-dash-substitute pattern is itself a tell.
+No bullet points in cover letters. No em dashes anywhere — including as a stand-in punctuation pattern like `word: word` used to avoid the literal character. If you find yourself writing a colon where an em dash would have gone, restructure the sentence instead; the colon-as-em-dash-substitute pattern is itself a tell. **This is now mechanically enforced as `LR-015` (HARD_BLOCK) in `submission_linter.py`** (added 2026-07-21, Jason-supplied, Stripe review): a colon followed by whitespace then a letter ("compelling: building", "context: how", "work: I built"). It had been named as a tell here for weeks but nothing checked for it — em-dashes (`LR-006`) and semicolons (`LR-014`) were enforced, the colon was not, so it slipped through every "clean" verification and turned up in 7 of 9 real cover letters. Resume label colons ("**Skills:** …") are safe (colon immediately followed by `**`, not whitespace). Reporting reminder that came out of the same miss: **"clean" means "every check in Required Verification passed," never "reads well" — state which checks ran, don't imply more.**
+
+No semicolons anywhere in resumes or cover letters (added 2026-07-21, Jason-supplied — same tell as the em dash, reads as AI-prose rather than how Jason writes; matches the standing rule already applied to `application_question_bank.md` answers). Hard-blocked as `LR-014` in `submission_linter.py`. Split into two sentences instead.
+
+**Collaboration, not coercion (2026-07-21, Jason-supplied).** Never frame Jason's cross-functional work as forcing, making, imposing, or driving other teams "into" a decision ("forced Sales, Legal, DevOps, and engineering into one sequence"). Jason works through influence and alignment, not authority he does not have — this framing is both inaccurate and off-voice. Use "built alignment across," "brought teams to a shared order of priorities," "got everyone to commit to," "aligned X and Y on." Soft-flagged as `LW-010` (WARN, not hard-block — "force" has legitimate uses) in `submission_linter.py`. This appeared in multiple 2026-07-21 cover letters (Nelnet, Principal) framing his quarterly prioritization as coercion. Related word-repetition tell caught the same day: don't lean on "sequence" as the noun for a prioritized plan more than once in a letter — vary it ("plan," "order of priorities," "roadmap").
 
 ---
 
@@ -264,10 +281,33 @@ A resume MUST contain these exact section headings, in this order, or it will fa
 ```
 
 - The heading must be literally `## PROFESSIONAL SUMMARY` — not a custom title line like `## PRODUCT MANAGER | Domain | B2B SaaS`. That exact substitution has happened before and silently fails `R-005`/`R-012`.
-- **The summary is exactly 3 sentences, and at most ONE of them carries a metric.** The enforced shape is 2 "template" sentences (positioning/scope) + at most 1 "proof" sentence — `SUMMARY_TEMPLATE_SENTENCES = 2` and `SUMMARY_MAX_PROOF_SENTENCES = 1` in `scripts/resume_conversion_eval.py`. A 4th sentence fails `CW-013` ("stacks multiple proof sentences, reads like pasted bullet fragments") and `apply_claude_native_improvement` separately rejects any count != 3. This section previously said "3+ sentences," which is wrong and caused a real authoring failure on 2026-07-18 — corrected then. Get sentence-length variety *within* the 3 sentences rather than by adding a 4th.
+- **The optional bolded positioning subtitle must mirror the specific JD's own framing — never default to "B2B SaaS Platform Product Manager" (2026-07-21, Jason-supplied).** If the JD does not frame the role as B2B SaaS, don't lead the resume with it; it corners Jason into one positioning regardless of what the role actually wants. The subtitle is genuinely optional — when the JD's framing doesn't map to a crisp, honest positioning line, omit it entirely rather than reaching for the B2B SaaS default. It also must not overclaim: a "Data Enrichment" subtitle on an enrichment-PM role Jason is a transferable-skill fit for (not a literal match) is the same overclaim class as asserting a gap-domain as owned experience — found 2026-07-21 on the Relativity resume.
+- **The summary is exactly 3 sentences.** `SUMMARY_TEMPLATE_SENTENCES = 2` and `SUMMARY_MAX_PROOF_SENTENCES = 1` in `scripts/resume_conversion_eval.py` cap the mechanically-allowed metric-bearing sentences at one — but **the preferred, default shape is zero** (2026-07-19, Jason-supplied): a summary characterizes the professional — positioning, scope, how he works — it is not the place for achievements. Accomplishments belong in Professional Experience, where they're backed by a bullet, not asserted in prose. Only reach for the one allowed proof sentence if a specific role's summary genuinely needs it; don't treat it as the expected default shape. A 4th sentence fails `CW-013` ("stacks multiple proof sentences, reads like pasted bullet fragments") and `apply_claude_native_improvement` separately rejects any count != 3. This section previously said "3+ sentences," which is wrong and caused a real authoring failure on 2026-07-18 — corrected then. Get sentence-length variety *within* the 3 sentences rather than by adding a 4th. **Cross-functional framing in a summary**: say "cross-functionally" — don't recite the verified partner-team list from `workExperience.md` §2.2 in a characterization sentence; that list is for bullet-level evidence. Jason works cross-functionally across the organization, especially closely with engineering teams — not "embedded" (that reads as confined to engineering, undercutting the broader feature/product work he also owns; corrected 2026-07-19 same day it was first written) — see the "How to use this list" note in §2.2.
 - `## CORE COMPETENCIES` is the one approved optional section beyond the three required ones (added by `build_skills_section`, `scripts/local_draft_stages.py`, FR-195 — confirmed 2026-07-18 to be deliberate, not drift: a JD-adaptive skills row sourced from selected claim tags plus a verified-tools row from `data/skills_catalog.json`, both passing through the same `BLOCKED_TOOLS` guard as the rest of the resume). Do not add any *other* undocumented section (`## CORE EXPERTISE`, `## TECHNICAL ENVIRONMENT`, etc.) — those aren't part of the approved template, and adding one is the single most common cause of resumes overflowing to 2 pages. Since there is still no automated page-count gate (see below), a JD with a long competency/tool match can push a resume to 2 pages even with only the approved sections present — check page count manually regardless.
-- Each bullet must be ≤40 words (`R-013`/`CW-003`).
-- Most recent role: 5-6 bullets. Earlier roles: 2-3 bullets. (Engine has produced 7-8 before; trim down.)
+- Most recent role: 5-6 bullets. Earlier roles: 2-3 bullets. All 3 canonical career history roles (Cision, Sterkly, Zero To Sixty) MUST be present (hard-blocked as `LR-020` and `LR-021` in `submission_linter.py`).
+- **Lead with the number, don't bury it.** When a bullet has a hard metric, put it close to the verb rather than trailing at the end of a long clause (2026-07-21, Jason-supplied, Kintsugi review).
+- **Ordering within a role's bullet list**: JD-relevance is still the primary ordering signal (per the Cover Letter Proof-Point Selection section's same logic, applied here to bullets) — the Cision role's first bullet is always the $40M ARR line regardless. Among bullets of otherwise-comparable relevance to the JD, prefer the one carrying a hard metric. A bullet with no metric can still lead over a metric-bearing one if it is genuinely the single most JD-relevant bullet available (e.g. a compliance-heavy JD naming the compliance-workflow bullet ahead of a same-tier metric bullet) — this is a tiebreaker, not an override.
+
+---
+
+## Required Cover Letter Structure (added 2026-07-21 — found missing on 6 of 9 real submissions)
+
+A cover letter MUST contain a name/contact header block before the greeting, and a sign-off phrase before the closing name, or it fails `quality_checker.check_and_repair_cover_letter()`:
+
+```
+# [Name]
+[contact line]
+
+Dear Hiring Manager,
+
+[body paragraphs]
+
+Best regards,
+
+[Name]
+```
+
+This exact structure is missing on 6 of 9 real submissions from the 2026-07-20/21 batch (Principal, Relativity, Nelnet, Kintsugi, Monks, Stripe) — `check_and_repair_cover_letter()` already existed in `quality_checker.py` and already auto-repairs both the missing header (`H-001`) and the missing sign-off (`H-002`, added 2026-07-21) in place, but nothing in the process ever called it until it was added to Required Verification below. Don't assume `Cover_Letter_Reference.md`'s template alone guarantees this gets followed — it didn't, in practice, across two-thirds of a real batch.
 
 ---
 
@@ -291,8 +331,11 @@ data/submissions/
     CoverLetter.pdf          — compiled PDF
     cover_letter_plan.json   — pipeline plan metadata (pipeline-generated)
     jd_profile_cache.json    — parsed JD profile (pipeline-generated)
-    Interview_Cheat_Sheet.md — Q&A prep (pipeline-generated)
 ```
+
+**No `Interview_Cheat_Sheet.md` at draft time** (removed 2026-07-23, Jason-supplied) — generating Q&A prep for every submission regardless of whether it reaches an interview wastes tokens and implied web research this pipeline doesn't do. Generate it later, on demand, via `generate_cheat_sheet.py`, only once a real interview is actually scheduled for that company.
+
+**If the job posting URL is known when `Original_JD.txt` is created, it MUST be the file's first line, formatted exactly as `URL: <the url>`, followed by a blank line before the raw JD text starts** (added 2026-07-24, Jason-supplied, after a full 13-submission batch went into the `jobs` database with `url` left `NULL` on every row — the parsing logic for this exact line already existed in `server/submissionFolders.ts`'s `readJdMeta()`, it just had never once been fed a file that used it). This is not cosmetic: `reconcileOrphanSubmissionFolders()` reads this line to populate the `jobs.url` column when a folder gets linked to a DB row, and it silently falls back to `null` if the line is absent — there is no other mechanism that backfills it. If a submission is authored without a known URL (e.g., practice runs, or a JD pasted with no source), leave the raw JD text as the first line exactly as before; do not fabricate a placeholder URL.
 
 To compile MD → PDF: `python scripts/compile_single.py <md_path> <pdf_path>`
 
@@ -300,34 +343,29 @@ To compile MD → PDF: `python scripts/compile_single.py <md_path> <pdf_path>`
 
 ## Required Verification Before You're Done
 
-Never tell Jason a resume or cover letter is finished without running all of these from `scripts/` and confirming clean output:
+**Scope note:** this section applies in full to any resume/cover letter going into a real application. Archive-JD practice runs (offline authoring against `data/archive/submissions/*/Original_JD.txt` to sharpen the process) are exempt from the PDF-compile/page-count steps specifically — they stay `.md`-only in `data/authored_drafts/{company}/` and are never meant to reach the Applyr UI. The `generate-submission` skill's Stage 3 makes this distinction explicit; don't assume PDFs are optional for a real submission just because a recent practice run skipped them.
+
+Never tell Jason a resume or cover letter is finished without running this from the repo root and confirming clean output:
 
 ```bash
-# 1. Lint check (forbidden phrases, em dashes, placeholders)
-python -c "
-from submission_linter import lint_document
-for doc in ['Resume.md', 'CoverLetter.md']:
-    with open(f'../data/submissions/{COMPANY}/{doc}', encoding='utf-8') as fh:
-        text = fh.read()
-    r = lint_document(text, filename=doc)
-    print(doc, 'blocks:', [b.rule_id for b in r.blocks], 'warns:', [w.rule_id for w in r.warns])
-"
+# 1. Compile to PDF first -- verify_submission.py reads the PDFs for page counts.
+python scripts/compile_single.py data/submissions/COMPANY/Resume.md data/submissions/COMPANY/Resume.pdf
+python scripts/compile_single.py data/submissions/COMPANY/CoverLetter.md data/submissions/COMPANY/CoverLetter.pdf
 
-# 2. Resume structure/QA check
-python -c "
-from quality_checker import check_resume
-ok, msg = check_resume('../data/submissions/COMPANY/Resume.md')
-print(ok, msg)
-"
+# 2. One required verification command -- lint (both documents plus the resume/cover-letter
+#    pair checks), resume structure/QA, cover-letter structure/QA (auto-repairs H-001/H-002 in
+#    place -- if it reports a repair, recompile the PDFs and re-run this), the unapproved-metrics
+#    sweep, and page counts, all in one script, writing verification_receipt.json into the folder.
+python scripts/verify_submission.py data/submissions/COMPANY
 
-# 3. Compile to PDF
-python compile_single.py ../data/submissions/COMPANY/Resume.md ../data/submissions/COMPANY/Resume.pdf
-python compile_single.py ../data/submissions/COMPANY/CoverLetter.md ../data/submissions/COMPANY/CoverLetter.pdf
-
-# 4. Page count — Resume.pdf MUST be 1, CoverLetter.pdf MUST be 1
-pdfinfo ../data/submissions/COMPANY/Resume.pdf | grep Pages
-pdfinfo ../data/submissions/COMPANY/CoverLetter.pdf | grep Pages
+# 3. After Stage 2's rubric_score is hand-scored into draft_manifest.json (see generate-submission
+#    SKILL.md Stage 2 point 1 -- a script cannot assign this, it requires an actual read against
+#    conversion_rubric.md with cited evidence per criterion), audit it against every other
+#    submission's score, past and present, for the templating failure mode below.
+python scripts/verify_submission.py --audit data/submissions/COMPANY
 ```
+
+**Why one script, not five separate commands (rewritten 2026-07-23):** this section and `generate-submission/SKILL.md`'s own Stage 2 code sample had already drifted from each other twice (2026-07-20, missing the pair-check requirement; 2026-07-21, missing the cover-letter check) before a cross-harness session found the sharper version of the same problem — a harness ran the lint check on the cover letter only, saved that single result as `lint_report.json`, and the resume's lint check silently never ran at all. Two descriptions of the same requirement, however carefully worded, can still drift or get partially followed. `scripts/verify_submission.py` is the one command every harness runs, producing one receipt file instead of a self-report. **The rubric score itself still cannot be mechanized** — `--audit` doesn't verify judgment quality, it catches the one failure mode a script actually can catch: byte-identical rubric sub-scores across different JDs, checked against a persistent cross-session log at `data/.rubric_score_history.json`. Found real 2026-07-23: 8 submissions in one batch had identical resume (94/100) and cover-letter (100/100) sub-scores down to the sub-criterion, across 8 unrelated companies -- a templated pass presented as a genuine one. If `--audit` flags a match, re-score both documents for real; don't dismiss the warning as a false positive without actually re-reading the flagged pair.
 
 If any step fails or the resume is 2 pages, fix the content and re-run — do not hand back a "done" answer with a failing check.
 
@@ -342,6 +380,14 @@ If two letters for different companies independently land on the same true accom
 Keep cover letters 250-400 words, one page, opening with something specific to the company rather than generic enthusiasm (C1 Opening Hook). Avoid generic AI closers (e.g. "I would welcome the opportunity to speak with your team") when they read as filler for that letter — this is a per-letter authenticity check, not a batch-variety check.
 
 **This covers sentence-level phrasing too, not just proof-point selection** (corrected again 2026-07-16 — the 2026-07-07 correction above didn't stop the same mistake from recurring in a different form). Finding that several cover letters share a similar opening-hook structure or closing line is not, by itself, a defect. No hiring manager reads two of Jason's letters side by side, so a shared closer like "I would welcome a conversation about how this maps to X" across many companies carries zero real conversion risk — it is invisible to every actual reader. Before flagging or rewriting anything that spans multiple submissions, ask: would this be noticeable to someone who only ever reads this one document? If answering requires comparing it to another company's letter, it is out of scope — do not raise it, not even as a secondary point stacked alongside a real single-letter issue. Judge each line only on whether it reads as generic or AI-sounding standing completely alone.
+
+**Two compelling-ness anti-patterns, now mechanically flagged (added 2026-07-21, Jason-supplied):** These are the difference between a letter that is merely *clean* (no tells) and one that is actually *compelling*. Both are WARNs, not hard blocks, because both need a judgment call — but the flag forces the call.
+- **`LW-011` — JD-paraphrase hook.** The opening paragraph must not read the posting's own descriptive prose back to the reader. Mechanically: if the hook shares 6+ word verbatim sequences with `Original_JD.txt`, it is parroting. Naming the role/team is fine; mirroring the JD's sentences signals nothing to the person who wrote them. Open with a specific observation or insight about the company's problem instead.
+- **`LW-012` — assertion-of-fit overclaim.** "maps directly," "exact fit," "the exact shape of," "perfectly suited," "uniquely qualified," etc. These assert a fit instead of demonstrating it, and in practice they paper over a real gap (Stripe's "maps directly" to an API-primitives role, Relativity's "exact shape of" an enrichment role). When one fires, check the underlying claim: if the fit is real, show it with a specific fact; if it is a stretch, name the honest transferable bridge instead of asserting a direct match.
+
+Neither check makes a letter compelling on its own — they raise the floor by killing the two most common ways a letter reads as competent-but-generic. Whether a hook shows genuine *insight* (versus competent paraphrase that happens to share no 6-word runs) is the irreducible judgment a mechanical check cannot make; that still needs a real read.
+
+**Gap-confession language is now hard-blocked, not just a prose rule (`LR-016`, added 2026-07-21, Jason-supplied).** The letter's job is to stress why Jason is a fit, never to acknowledge where he isn't — a rule already stated in the `generate-submission` skill, and one that still got violated in 5 of 11 real letters the same week it was written ("is new territory for me," "I have not yet applied that thinking," "are new to me"), each time as a lead-in to a transferable-skill pivot that should have stood on its own. A prose instruction alone did not survive drafting pressure, hence hard-coding it: cut the confession clause, keep only the positive claim. The narrow exception — a single, plain, factual disclosure of a genuinely unbridgeable hard constraint (e.g. the 15% travel ceiling) — uses different, non-confessional phrasing and does not trip this rule.
 
 ---
 
@@ -362,9 +408,11 @@ Keep cover letters 250-400 words, one page, opening with something specific to t
 - Recompile PDFs after edits
 - Run the Required Verification steps above before reporting anything as complete
 
-**Conversion thresholds (stop improving once reached):**
+**Conversion thresholds — a floor, not a stop signal (revised 2026-07-21, Jason-supplied):**
 - Resume: 70+ = CONVERT-READY
 - Cover Letter: 65+ = CONVERT-READY
+
+These numbers were previously read as "stop improving once reached" — that produced real submissions that barely cleared threshold with real, available ground truth sitting unused (found 2026-07-21: the Bazaarvoice dry run scored 73/100, and an independent reviewer found MET-09's SQL-database footprint and ACC-117's Pendo analytics work were both real, both relevant to explicitly required JD items, and neither made it into the document). **"Done" is not "clears the number." Done is: every required JD item is engaged with the single strongest available piece of ground truth for it, not merely an adequate one, and nothing genuinely usable was left on the table.** This is a real bar, not a bigger number to chase — do not pad, stretch a claim, or force in extra content just to raise a score; the failure mode this is correcting is *unused* evidence, not *insufficient volume* of evidence. If the strongest available evidence is already in the document, stop — that is done, whatever the score reads. Chasing points for their own sake above what real ground truth supports is still wrong.
 
 ---
 

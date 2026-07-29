@@ -3,6 +3,11 @@ import { db, logActivity } from '../../db.js';
 import { tryAcquirePipeline, releasePipeline } from '../../pipelineLock.js';
 import { readMinFitScore } from '../../shared.js';
 import { spawnPython, pythonScriptPath } from '../../pipeline/processRunner.js';
+import {
+  parseAssetProgressLine,
+  parseJsonStageLine,
+  publishAssetProgress,
+} from '../../assetProgress.js';
 
 const router = Router();
 
@@ -41,12 +46,32 @@ router.post('/api/jobs/:id/draft', (req, res) => {
     spawnPython(procArgs, {
       stdin: '',
       onStdout: (data) => {
-        const output = data.trim();
-        if (!output) return;
-        try {
-          const parsed = JSON.parse(output);
-          if (parsed.summary) logActivity('INFO', 'Pipeline', `[Draft] ${parsed.summary}`);
-        } catch { logActivity('INFO', 'Pipeline', `[Draft] ${output}`); }
+        const lines = data.split('\n');
+        for (const raw of lines) {
+          const output = raw.trim();
+          if (!output) continue;
+
+          const assetLine = parseAssetProgressLine(output);
+          if (assetLine) {
+            publishAssetProgress(assetLine);
+            logActivity('INFO', 'Pipeline', output);
+            continue;
+          }
+
+          const stageLine = parseJsonStageLine(output, job.company);
+          if (stageLine) {
+            publishAssetProgress(stageLine);
+            logActivity('INFO', 'Pipeline', `[Draft] ${stageLine.summary ?? stageLine.stage}`);
+            continue;
+          }
+
+          try {
+            const parsed = JSON.parse(output);
+            if (parsed.summary) logActivity('INFO', 'Pipeline', `[Draft] ${parsed.summary}`);
+          } catch {
+            logActivity('INFO', 'Pipeline', `[Draft] ${output}`);
+          }
+        }
       },
       onStderr: (err) => {
         if (err && !err.includes('UserWarning')) logActivity('ERROR', 'Pipeline', `[Draft Error] ${err}`);

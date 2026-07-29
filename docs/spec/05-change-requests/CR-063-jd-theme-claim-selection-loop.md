@@ -1,5 +1,7 @@
 # CR-063: JD Theme-Extraction & Claim-Selection Test-and-Iterate Loop
 
+> **Superseded for generation (2026-07-19).** This CR and its direct descendants — CR-064 (claim-score formula), CR-065 (JD-profile extraction diagnostic), CR-066 (keywords fix), CR-067 (requirements diagnostic), CR-068 (requirements fix), CR-069 (rare-claim scoring diagnostic) — are all about improving deterministic JD-parsing → claim-scoring quality for the automated generation path the 2026-07-18 direct-authoring pivot bypasses entirely. None of their own status fields say this; this is the one pointer note covering all six as a batch rather than editing each individually. Current process: `.claude/skills/generate-submission/SKILL.md`.
+
 ## Metadata
 - **Epic**: Local-LLM Drafting Pipeline (see `docs/reports/local-llm-builder-architecture-options.md`)
 - **Status**: Not started — this CR is the handoff brief for the session that starts it

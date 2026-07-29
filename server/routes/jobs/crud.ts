@@ -9,6 +9,8 @@ import {
   restoreArchivedSubmission,
   jobHasPdfAssets,
   reconcileActiveSubmissionFolders,
+  reconcileDraftedJobsWithAssets,
+  reconcileOrphanSubmissionFolders,
 } from '../../submissionFolders.js';
 import { isSafeHttpUrl, isValidJobId, runPythonScript } from '../../middleware.js';
 import { pythonScriptPath } from '../../pipeline/processRunner.js';
@@ -16,6 +18,9 @@ import { insertJob, patchJob, deleteJobRecord } from '../../repository/jobReposi
 import {
   statusRequiresInterviewDateTime,
   isValidInterviewDateTime,
+  APPLICATION_FUNNEL_SET,
+  APPLICATION_FUNNEL_STATUSES,
+  PRE_APPLY_STATUSES,
 } from '../../../shared/domain/jobPipeline.js';
 
 const router = Router();
@@ -43,6 +48,8 @@ function readManifestRubricScore(company: string): Record<string, any> | null {
 
 router.get('/api/jobs', (req, res) => {
   try {
+    reconcileDraftedJobsWithAssets();
+    reconcileOrphanSubmissionFolders();
     const search = req.query.search as string;
     let jobs: any[];
     if (search) {
@@ -121,11 +128,73 @@ router.post('/api/jobs/reconcile-submissions', (_req, res) => {
 
 router.get('/api/jobs/stats', (_req, res) => {
   try {
-    const total          = db.prepare('SELECT COUNT(*) as count FROM jobs').get() as any;
-    const byStatus       = db.prepare('SELECT status, COUNT(*) as count FROM jobs GROUP BY status').all();
-    const byRejStage     = db.prepare("SELECT rejection_stage, COUNT(*) as count FROM jobs WHERE status = 'Closed' GROUP BY rejection_stage").all();
-    const byRejType      = db.prepare("SELECT rejection_type,  COUNT(*) as count FROM jobs WHERE status = 'Closed' GROUP BY rejection_type").all();
-    res.json({ total: total.count, byStatus, byRejectionStage: byRejStage, byRejectionType: byRejType });
+    const funnelList = APPLICATION_FUNNEL_STATUSES.map((s) => `'${s}'`).join(', ');
+
+    const everApplied = db.prepare(
+      `SELECT COUNT(*) as count FROM jobs WHERE
+         status IN (${funnelList})
+         OR (status = 'Closed' AND rejection_stage IN (${funnelList}))`,
+    ).get() as { count: number };
+
+    const activeInFunnel = db.prepare(
+      `SELECT COUNT(*) as count FROM jobs WHERE status IN (${funnelList})`,
+    ).get() as { count: number };
+
+    const closedAfterApply = db.prepare(
+      `SELECT COUNT(*) as count FROM jobs
+       WHERE status = 'Closed' AND rejection_stage IN (${funnelList})`,
+    ).get() as { count: number };
+
+    const byStage = db.prepare(
+      `SELECT rejection_stage, COUNT(*) as count FROM jobs
+       WHERE status = 'Closed' AND rejection_stage IN (${funnelList})
+       GROUP BY rejection_stage`,
+    ).all() as { rejection_stage: string; count: number }[];
+
+    const byType = db.prepare(
+      `SELECT rejection_type, COUNT(*) as count FROM jobs
+       WHERE status = 'Closed' AND rejection_stage IN (${funnelList})
+         AND rejection_type IS NOT NULL AND rejection_type != ''
+       GROUP BY rejection_type`,
+    ).all() as { rejection_type: string; count: number }[];
+
+    const activeByStatus = db.prepare(
+      `SELECT status, COUNT(*) as count FROM jobs
+       WHERE status IN (${funnelList})
+       GROUP BY status`,
+    ).all() as { status: string; count: number }[];
+
+    const preApplyClosed = db.prepare(
+      `SELECT COUNT(*) as count FROM jobs
+       WHERE status = 'Closed'
+         AND (rejection_stage IS NULL OR rejection_stage NOT IN (${funnelList}))`,
+    ).get() as { count: number };
+
+    const stageOrder = new Map<string, number>(APPLICATION_FUNNEL_STATUSES.map((s, i) => [s, i]));
+    byStage.sort(
+      (a, b) =>
+        (stageOrder.get(a.rejection_stage) ?? 99) - (stageOrder.get(b.rejection_stage) ?? 99),
+    );
+    byType.sort((a, b) => b.count - a.count);
+    activeByStatus.sort(
+      (a, b) =>
+        (stageOrder.get(a.status) ?? 99) - (stageOrder.get(b.status) ?? 99),
+    );
+
+    res.json({
+      outcomes: {
+        everApplied: everApplied.count,
+        activeInFunnel: activeInFunnel.count,
+        closedAfterApply: closedAfterApply.count,
+        byStage,
+        byType,
+        activeByStatus,
+      },
+      notes: {
+        preApplyClosed: preApplyClosed.count,
+        funnelStages: [...APPLICATION_FUNNEL_STATUSES],
+      },
+    });
   } catch {
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
@@ -161,13 +230,14 @@ router.patch('/api/jobs/:id/status', (req, res) => {
     if (!isValidJobId(id)) return res.status(400).json({ error: 'Invalid job id' });
     let { status } = req.body;
 
-    const job = db.prepare('SELECT company, status, interview_date, rowid FROM jobs WHERE id = ?').get(id) as any;
+    const job = db.prepare('SELECT company, status, interview_date, applied_at, rowid FROM jobs WHERE id = ?').get(id) as any;
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     const rejectionType = req.body.rejection_type as string | undefined;
     const rejectionStage = req.body.rejection_stage as string | undefined;
     const outcomeNotes = req.body.outcome_notes as string | undefined;
     const interviewDateFromBody = req.body.interview_date as string | undefined;
+    const appliedAtFromBody = req.body.applied_at as string | undefined;
 
     if (status === 'Rejected' && rejectionType) {
       status = 'Closed';
@@ -218,23 +288,44 @@ router.patch('/api/jobs/:id/status', (req, res) => {
           ? interviewDateFromBody || null
           : undefined;
 
-    db.prepare(`
+    // applied_at: stamp on first entry to Applied+; clear if returned to pre-apply; allow body override
+    let appliedAtSql = 'applied_at';
+    let appliedAtBind: string | null | undefined = undefined;
+    if (appliedAtFromBody !== undefined) {
+      const trimmed = String(appliedAtFromBody).trim();
+      appliedAtSql = '?';
+      appliedAtBind = trimmed || null;
+    } else if (PRE_APPLY_STATUSES.has(status)) {
+      appliedAtSql = 'NULL';
+      appliedAtBind = undefined;
+    } else if (APPLICATION_FUNNEL_SET.has(status) && !job.applied_at) {
+      appliedAtSql = 'CURRENT_TIMESTAMP';
+      appliedAtBind = undefined;
+    }
+
+    const updateSql = `
       UPDATE jobs
       SET status          = ?,
           rejection_stage = COALESCE(?, rejection_stage),
           rejection_type  = COALESCE(?, rejection_type),
           outcome_notes   = COALESCE(?, outcome_notes),
-          interview_date  = CASE WHEN ? IS NOT NULL THEN ? ELSE interview_date END
+          interview_date  = CASE WHEN ? IS NOT NULL THEN ? ELSE interview_date END,
+          applied_at      = ${appliedAtSql === '?' ? '?' : appliedAtSql}
       WHERE id = ?
-    `).run(
+    `;
+
+    const params: unknown[] = [
       status,
       isClosed ? (rejectionStage || job.status) : null,
       isClosed ? rejectionType : null,
       isClosed ? outcomeNotes : null,
       interviewDateToPersist === undefined ? null : interviewDateToPersist,
       interviewDateToPersist === undefined ? null : interviewDateToPersist,
-      id,
-    );
+    ];
+    if (appliedAtSql === '?') params.push(appliedAtBind);
+    params.push(id);
+
+    db.prepare(updateSql).run(...params);
     logActivity('INFO', 'System', `Job "${job.company}" status changed to ${status}`);
 
     // FR-210: log rubric score alongside outcome for calibration

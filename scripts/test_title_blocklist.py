@@ -37,6 +37,7 @@ def main() -> int:
         False,
     )
     failed += _assert("Lead PM blocks", "Lead Product Manager", True)
+    failed += _assert("leaders lead with passes", "leaders lead with a people-first approach", False)
     failed += _assert("Software Developer blocks", "Senior Software Developer", True)
     return 1 if failed else 0
 

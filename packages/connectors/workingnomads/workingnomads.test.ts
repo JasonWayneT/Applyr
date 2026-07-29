@@ -2,13 +2,15 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { RawJobPayload } from '../../../shared/types/connectors.js';
 import { createWorkingnomadsConnector } from './index.js';
 
-// Mixed-category fixture — only product/management rows should pass through
+// Mixed-title fixture — only rows whose title matches a search term should pass through.
+// Working Nomads' real category taxonomy (Marketing, Development, Design, Sales, etc.)
+// never contains "Product" or "Management", so filtering must happen on title, not category.
 const fixture = [
   {
     title: 'Product Manager',
     company_name: 'Acme Corp',
     url: 'https://www.workingnomads.com/jobs/product-manager-acme',
-    category_name: 'Product Management',
+    category_name: 'Business',
     pub_date: '2026-06-01T00:00:00Z',
     description: '<p>Own the product roadmap</p>',
   },
@@ -24,7 +26,7 @@ const fixture = [
     title: 'Technical Product Manager',
     company_name: 'Beta Inc',
     url: 'https://www.workingnomads.com/jobs/tpm-beta',
-    category_name: 'Product',
+    category_name: 'Development',
     pub_date: '2026-01-10T00:00:00Z',
     description: '',
   },
@@ -48,7 +50,7 @@ afterEach(() => {
 });
 
 describe('workingnomads connector', () => {
-  it('fetchJobs includes only product/management category rows', async () => {
+  it('fetchJobs includes only rows whose title matches a search term', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockOkResponse(fixture)));
     const connector = createWorkingnomadsConnector();
     const jobs = await connector.fetchJobs();
@@ -56,6 +58,14 @@ describe('workingnomads connector', () => {
     expect(jobs.map((j) => j.external_job_id)).not.toContain(
       'https://www.workingnomads.com/jobs/sales-exec-gamma',
     );
+  });
+
+  it('fetchJobs respects a custom searchTerms list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockOkResponse(fixture)));
+    const connector = createWorkingnomadsConnector({ searchTerms: ['sales executive'] });
+    const jobs = await connector.fetchJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0].external_job_id).toContain('sales-exec-gamma');
   });
 
   it('fetchJobs uses URL as external_job_id', async () => {

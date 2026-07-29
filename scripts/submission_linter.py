@@ -134,7 +134,12 @@ HARD_BLOCK_RULES: List[LintRule] = [
         rule_id="LR-009",
         severity="HARD_BLOCK",
         check_type="regex",
-        pattern=r"\b(leverage|passionate|dynamic|innovative|seamless|transformative|synergy|tapestry|revolutionize)\b",
+        # "driven" uses a negative lookbehind for "-" so hyphenated compounds ("data-driven",
+        # "metrics-driven", "AI-driven") pass — Jason's explicit call 2026-07-20, audit found the
+        # plain \bdriven\b matched these too (a hyphen still counts as a word-boundary character,
+        # so "data-driven" was silently hard-blocking ordinary, non-buzzwordy PM vocabulary).
+        # Standalone "driven" ("a driven professional") still blocks.
+        pattern=r"\b(leverage|passionate|dynamic|innovative|seamless|transformative|synergy|tapestry|revolutionize|revenue-bearing)\b|(?<!-)\bdriven\b",
         message="Forbidden buzzword detected",
         suggestion="Replace with plain language that describes what you actually did or built.",
         doc_types=["cover_letter", "resume"],
@@ -165,10 +170,160 @@ HARD_BLOCK_RULES: List[LintRule] = [
         rule_id="LR-012",
         severity="HARD_BLOCK",
         check_type="regex",
-        pattern=r"\$800K Canadian|\$800,000 Canadian",
-        message="Disabled claim ACC-114 ($800K Canadian) detected",
+        # Widened 2026-07-20 (audit finding): the "Canadian"-adjacent-only version let a rephrased
+        # claim ("$800,000 saved through consolidation," no word "Canadian") pass silently, and
+        # approved_metrics.py's allowlist independently contained the same figure outright — both
+        # safety nets missed it the same way. Confirmed zero legitimate $800K/$800,000 figure exists
+        # anywhere in workExperience.md, so blocking the bare figure is safe.
+        pattern=r"\$800K|\$800,000|\b800,000\b|\b800K\b",
+        message="Disabled claim ACC-114 ($800K Canadian platform deprecation) detected",
         suggestion="Remove this claim. It is quarantined pending verification.",
         doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LR-013",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Added 2026-07-20 (audit finding): the years-of-experience figure was corrected from
+        # "6+ years"/"six years" to 7 on 2026-07-18 ("Use 7. Do not write 'six years' or '6+ years'
+        # anywhere" — workExperience.md §1.0), but nothing mechanical enforced it. approved_metrics.py
+        # cannot catch this by design — it deliberately excludes 1-2 digit bare numbers to avoid noisy
+        # false positives on small unrelated counts, so a superseded years figure needs its own
+        # narrow, specific rule rather than a hack in the generic numeric sweep.
+        pattern=r"\b6\+?\s*years\b|\bsix years\b",
+        message="Superseded years-of-experience figure detected (should be 7, not 6/6+/six)",
+        suggestion="Use 7 years, per workExperience.md §1.0's explicit correction.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LR-014",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Added 2026-07-21 (Jason-supplied, Humana review): same tell as the em-dash rule (LR-006)
+        # — semicolons read as an AI-prose artifact, not how Jason writes. Matches the standing rule
+        # already applied to application-question answers; formalized here for resumes/cover letters.
+        pattern=r";",
+        message="Forbidden semicolon detected",
+        suggestion="Split into two sentences, or use a comma/period. Semicolons read as an AI-prose tell.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LR-015",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Added 2026-07-21 (Jason-supplied, Stripe review): the colon-as-elaboration tell. CLAUDE.md
+        # ("No em dashes anywhere ... the colon-as-em-dash-substitute pattern is itself a tell") named
+        # this for weeks but nothing enforced it — LR-006 catches em-dashes, LR-014 catches semicolons,
+        # and this third documented tell slipped through every "clean" verification. Found in 6 of 9
+        # real cover letters that had passed as clean. Pattern is a colon followed by whitespace then a
+        # letter ("compelling: building", "context: how", "unplanned work: I built") — the elaboration
+        # colon. NOTE: lint_document applies every regex with re.IGNORECASE (line ~417), so [a-z] here
+        # matches capitals too — that is deliberate and correct: it also catches elaboration colons
+        # whose next word is capitalized ("work: I built ..."). It still does NOT false-positive on:
+        # URL colons ("https://" — colon then slash, no whitespace); resume label colons
+        # ("**Skills:** Platform" — the colon is immediately followed by "**", so there is no
+        # colon-then-whitespace); times or ratios (digit, usually no space). Verified against all 9
+        # real letters + all 9 resumes: 7 letters flagged (every hit a genuine tell), 0 resumes.
+        pattern=r":\s+[a-z]",
+        message="Colon-as-elaboration tell detected (colon followed by a lowercase continuation)",
+        suggestion="Restructure into two sentences, or replace with a comma. A colon introducing a lowercase elaboration reads as AI prose, same tell class as the em-dash and semicolon.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LR-016",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Added 2026-07-21 (Jason-supplied): gap-confession language in cover letters. Stage 1 of
+        # SKILL.md has said "do not spend cover-letter space confessing gaps" since 2026-07-20, and
+        # it was still violated in 5 of 11 real letters the same week ("is new territory for me",
+        # "I have not yet applied that thinking", "are new to me") - a prose rule alone was not
+        # enough to stop it under drafting pressure, hence hard-coding it here. The letter's job is
+        # to argue fit; naming what Jason does NOT have is never that argument, even as a lead-in to
+        # a "but the underlying skill transfers" pivot - cut the confession clause, keep only the
+        # positive transferable-skill claim. NARROW EXCEPTION, not covered by this pattern: a single,
+        # plain, factual disclosure of a genuinely unbridgeable hard constraint stated once in neutral
+        # register (e.g. the 15% travel ceiling against a JD's higher ask, per workExperience.md
+        # §1.4) - that already uses different, non-confessional phrasing ("I can travel up to 15%")
+        # and does not match this pattern, which specifically targets the "X is new/I haven't done Y"
+        # shape.
+        pattern=(
+            r"\b(is|are)\s+new\s+(to\s+me|territor(?:y|ies)|domains?)\b"
+            r"|\bnew\s+(territor(?:y|ies)|domains?)\s+for\s+me\b"
+            r"|\b(have|has|had)\s+not\s+yet\b"
+            r"|\bI\s+(do\s+not|don'?t|have\s+not|haven'?t)\s+have\b"
+            r"|\bI\s+(have\s+not|haven'?t)\s+worked\s+in\b"
+            r"|\bI\s+lack\b"
+        ),
+        message="Gap-confession language detected in a cover letter",
+        suggestion="Cut the confession clause entirely. Argue the transferable skill directly as fit; never name what's absent, even as a lead-in to a pivot. If this is a genuinely unbridgeable hard constraint, state it once, plainly, in neutral register (see workExperience.md §1.4's travel-ceiling example) rather than in this confessional shape.",
+        doc_types=["cover_letter"],
+    ),
+    LintRule(
+        rule_id="LR-017",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Added 2026-07-21 (Jason-supplied). CLAUDE.md's "Cover letters: don't discuss workforce
+        # reduction at all, not even via the euphemism" rule was written the same day as a prose-only
+        # addition and was NOT mechanized -- confirmed missed the same day when Cove's cover letter
+        # shipped with "a shrinking engineering bench" and "the team itself was shrinking" and nothing
+        # caught it until a manual re-read. Same lesson as LR-015/LR-016: a prose rule alone does not
+        # survive drafting pressure. This is stricter than R-011/tone_guard.py's "never say layoffs"
+        # substitution rule -- R-011 allows an approved euphemism ("resource-constrained cycle");
+        # this rule blocks the whole framing category in cover letters specifically, euphemism
+        # included. Resumes are NOT in scope (workExperience.md's own role context legitimately
+        # references resource constraints factually) -- this is about what a cover letter argues
+        # FROM, not about erasing the underlying fact everywhere.
+        pattern=(
+            r"\bheadcount\s+reduction\b"
+            r"|\bshrinking\s+(engineering\s+)?(bench|team|headcount|workforce)\b"
+            r"|\b(team|headcount|workforce|bench)\s+(was|is|were)\s+shrinking\b"
+            r"|\brounds?\s+of\s+headcount\b"
+            r"|\bdownsizing\b"
+        ),
+        message="Workforce-reduction framing detected in a cover letter",
+        suggestion="Cut this framing entirely, even the approved 'resource-constrained cycle' euphemism -- cover letters should not build any part of their argument around headcount/team-size shrinking. Argue the underlying discipline (ambiguity, prioritization, decision-making under incomplete information) without the team-size frame.",
+        doc_types=["cover_letter"],
+    ),
+    LintRule(
+        rule_id="LR-018",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Added 2026-07-23 (process evaluation audit): blocks the forbidden inverted retention metrics
+        # (93% / 93 percent / ninety-three percent) that violate workExperience.md §6.1's explicit ban
+        # on inverting the 7% churn to manufacture a fake retention claim.
+        pattern=r"\b(?:93%|93\s*percent|ninety-three\s*percent)\b",
+        message="Forbidden inverted retention metric detected (inverts the 7% churn statistic, violating workExperience.md §6.1)",
+        suggestion="Do not invert the 7% churn figure to claim '93% retention'. Cite the 7% annual churn statistic factually in context or drop it.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LR-019",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Added 2026-07-23 (process evaluation audit): blocks claiming the title of "Program Manager"
+        # within the years of experience summary sentence (fabricating a title not held factually).
+        pattern=r"\bProgram\s+Manager\s+with\s+\d+\s+years\b",
+        message="Fabricated Program Manager title in summary years-of-experience statement detected",
+        suggestion="Use Product Manager / Product Owner or state product experience years instead. Jason has never held the title 'Program Manager' (workExperience.md §1.0).",
+        doc_types=["resume"],
+    ),
+    LintRule(
+        rule_id="LR-020",
+        severity="HARD_BLOCK",
+        check_type="structural",
+        pattern=None,
+        message="Missing required canonical career history employer (Cision, Sterkly, or Zero To Sixty)",
+        suggestion="Ensure all 3 career history roles are included to preserve career timeline continuity.",
+        doc_types=["resume"],
+    ),
+    LintRule(
+        rule_id="LR-021",
+        severity="HARD_BLOCK",
+        check_type="structural",
+        pattern=None,
+        message="Primary employer (Cision) bullet count exceeds maximum cap of 6 bullets",
+        suggestion="Trim Cision bullets to 5-6 bullets to prevent 2-page resume overflow and visual clutter.",
+        doc_types=["resume"],
     ),
 ]
 
@@ -209,6 +364,163 @@ WARN_RULES: List[LintRule] = [
         suggestion="Replace with specific evidence of alignment or collaboration.",
         doc_types=["cover_letter", "resume"],
     ),
+    LintRule(
+        rule_id="LW-006",
+        severity="WARN",
+        check_type="regex",
+        pattern=(
+            r"\b(delve|pivotal|cutting-edge|game-changer|future-ready|elevate your"
+            r"|drive impact|spearheaded|orchestrated|groundbreaking|harness|unlock the (potential|value))\b"
+        ),
+        message="AI-tell buzzword detected (CR-070 Epic 8 authenticity research)",
+        suggestion="Replace with plain language describing what you actually did.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-007",
+        severity="WARN",
+        check_type="regex",
+        pattern=(
+            r"\b(It is important to note|It should be noted|One must consider|It is essential to"
+            r"|In today's fast-paced world|Dive into|Indeed,|Certainly,|Absolutely,|Of course,|Definitely,"
+            r"|In conclusion|To summarize|In summary|In closing|Notably,|Subsequently,|Consequently,"
+            r"|Building on this|It is worth noting"
+            # Added 2026-07-23 (no-ai-slop skill integration, see LW-015 comment below): the same
+            # summary-recap tell class ("In conclusion" etc. above) also covers "Ultimately,"/
+            # "Overall," as sentence-starters, which weren't in the original list. Lookahead on the
+            # comma rather than relying on the shared trailing \b below, since "Ultimately"/"Overall"
+            # alone are legitimate mid-sentence words (e.g. "ultimately responsible for") and only the
+            # comma-led sentence-starter form is the tell.
+            r"|Ultimately(?=,)|Overall(?=,)|At the end of the day|All things considered)\b"
+        ),
+        message="AI hedging/affirmation/conclusion phrase detected (CR-070 Epic 8/voice-rewrite Pass 1)",
+        suggestion="Cut the phrase and start the sentence with its actual content.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-009",
+        severity="WARN",
+        check_type="regex",
+        pattern=r"~\d",
+        message="Data-notation shorthand ('~' as approximation) detected — ground-truth-doc notation bleeding into prose",
+        suggestion="Write 'approximately'/'roughly', or just state the number plainly. A tilde reads as a spreadsheet artifact on a printed page, not natural resume/letter prose.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-010",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-21 (Jason-supplied, Nelnet/Principal review): coercive framing of Jason's
+        # cross-functional work ("forced Sales, Legal, and engineering INTO one sequence"). He works
+        # through influence and alignment, not authority he does not have — this is both inaccurate
+        # and off-voice. WARN not HARD_BLOCK: "force"/"drive" have legitimate uses ("forcing function",
+        # "task force", "drove a fix"), so this flags for human judgment rather than blocking. The
+        # "...into" proximity requirement filters most false positives. See CLAUDE.md "Collaboration,
+        # not coercion". Reframe: "built alignment across", "brought teams to a shared order of priorities".
+        pattern=r"\b(forc(e|ed|ing)|impos(e|ed|ing)|coerc(e|ed|ing))\b[^.]{0,45}\binto\b",
+        message="Coercive cross-functional framing detected ('force/impose ... into')",
+        suggestion="Reframe as collaboration/influence: 'built alignment across', 'brought teams to a shared order of priorities', 'aligned X and Y on'. Jason leads through influence, not authority he does not have.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-012",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-21 (Jason-supplied, Stripe/Relativity review): assertion-of-fit overclaim
+        # language. These phrases ASSERT a fit instead of DEMONSTRATING it, and in practice they
+        # paper over a real gap — Stripe ("maps directly" to an API-primitives role that is not his
+        # background), Relativity ("the exact shape of" an enrichment role he did not build for).
+        # WARN, not hard-block: the phrase itself is not always wrong, but it is a reliable flag that
+        # the sentence is claiming fit rather than showing it. When it fires, check the underlying
+        # claim honestly — if the fit is real, demonstrate it with a specific fact; if it is a
+        # stretch, name the transferable bridge instead of asserting a direct match.
+        pattern=(
+            r"\b(maps directly|maps perfectly|exact fit|the exact shape of|perfect fit"
+            r"|perfectly suited|ideally suited|uniquely qualified|ideal candidate)\b"
+        ),
+        message="Assertion-of-fit overclaim language detected (asserts fit instead of showing it)",
+        suggestion="Demonstrate the fit with a specific fact, or name the honest transferable bridge. Don't assert 'maps directly'/'exact fit' — that phrasing papers over gaps and reads as generic.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-015",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-23 (Jason-supplied, sourced from the `no-ai-slop` skill's pattern list —
+        # https://github.com/petergyang/no-ai-slop). Throat-clearing openers: a stalling phrase before
+        # the actual point ("Here's the thing," "Let me be clear," "I'll be honest"). Not previously
+        # covered — LW-007 catches hedging/conclusion phrases but not this opener shape specifically.
+        pattern=r"\b(Here'?s the thing|Let me be clear|I'?ll be honest|The uncomfortable truth is|Here'?s what I mean)\b",
+        message="Throat-clearing opener detected",
+        suggestion="Cut the stalling phrase and state the point directly.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-016",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-23 (no-ai-slop skill integration). Faux-insight setups and rhetorical
+        # question/self-answer setups flatter the writer as the lone expert instead of just making the
+        # claim ("what nobody tells you," "what if I told you," "plot twist," "think about it").
+        pattern=(
+            r"\b(what nobody tells you|what most people get wrong|the part (?:everyone|most people) "
+            r"(?:misses|skip)|what if I told you|plot twist|think about it)\b"
+        ),
+        message="Faux-insight or rhetorical setup detected",
+        suggestion="Cut the setup and let the claim stand on its own.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-017",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-23 (no-ai-slop skill integration). Importance puffery states that something
+        # matters instead of stating the fact and letting the reader judge ("marks a pivotal moment,"
+        # "solidifies its position," "a testament to").
+        pattern=(
+            r"\b(stands as a testament|marks a (?:pivotal|defining) moment|plays a vital role"
+            r"|solidifies its position|underscores its significance|a testament to)\b"
+        ),
+        message="Importance-puffery phrase detected",
+        suggestion="State the fact plainly and let the reader judge whether it matters.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-018",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-23 (no-ai-slop skill integration). Weasel attribution cites an unnamed
+        # authority instead of a real source ("experts agree," "studies show," "widely regarded as").
+        # Low base-rate risk in a first-person cover letter/resume, but cheap to catch if it appears.
+        pattern=r"\b(experts agree|studies show|industry reports suggest|widely regarded as|many argue)\b",
+        message="Weasel attribution detected (unnamed authority cited)",
+        suggestion="Name the actual source, or cut the claim if there isn't one.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-019",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-23 (no-ai-slop skill integration). Fake-strong verb: "serves as a centralized
+        # hub" describes the thing's category instead of what it actually does.
+        pattern=r"\bserves as (?:a|the) (?:centralized hub|one-stop shop|backbone|cornerstone|single source of truth)\b",
+        message="Fake-strong verb phrase detected ('serves as a/the ...')",
+        suggestion="Say what it actually does, not the category it belongs to.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-020",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-23 (no-ai-slop skill integration). Binary-contrast two-sentence shape:
+        # "It's not X. It's Y." States Y directly instead. Distinct from LW-008 (which counts
+        # ", not"/"rather than"/"instead of" density) — this is the specific two-sentence negate-then-
+        # assert shape, catchable on a single paragraph line since these docs are one-line-per-paragraph.
+        pattern=r"\bIt('?s| is) not\b[^.!?]{0,120}[.!?]\s+It('?s| is)\b",
+        message="Binary-contrast two-sentence shape detected ('It's not X. It's Y.')",
+        suggestion="State Y directly instead of negating X first. ('The eval matters more than the model,' not 'It's not the model. It's the eval.')",
+        doc_types=["cover_letter", "resume"],
+    ),
 ]
 
 INFO_RULES: List[LintRule] = [
@@ -244,10 +556,10 @@ INFO_RULES: List[LintRule] = [
 ALL_RULES: List[LintRule] = HARD_BLOCK_RULES + WARN_RULES + INFO_RULES
 
 _VERIFIED_PARTNERS = frozenset({
-    "engineering", "dba", "database administration", "devops", "customer experience",
+    "engineering", "engineer", "dba", "database administration", "devops", "customer experience",
     "cx", "customer support", "support", "sales", "account management",
     "legal", "infosec", "information security", "product marketing",
-    "executive", "presidential", "executive leadership",
+    "executive", "presidential", "executive leadership", "upgrade", "upgrades",
 })
 
 
@@ -306,9 +618,9 @@ def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResu
         violation: Optional[LintViolation] = None
 
         if rule.check_type == "regex" and rule.pattern:
-            flags = re.IGNORECASE if rule.rule_id not in ("LR-010",) else re.MULTILINE
+            flags = (re.IGNORECASE | re.MULTILINE) if rule.rule_id not in ("LR-010", "LR-011") else re.MULTILINE
             for i, line in enumerate(lines, start=1):
-                if re.search(rule.pattern, line, re.IGNORECASE | re.MULTILINE):
+                if re.search(rule.pattern, line, flags):
                     violation = LintViolation(
                         rule_id=rule.rule_id,
                         severity=rule.severity,
@@ -343,6 +655,33 @@ def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResu
                             line=i,
                         )
                         break
+            elif rule.rule_id == "LR-020" and doc_type == "resume":
+                text_l = text.lower()
+                canonical_employers = [
+                    ("Cision", ["cision"]),
+                    ("Sterkly", ["sterkly"]),
+                    ("Zero To Sixty", ["zero to sixty", "zero_to_sixty"])
+                ]
+                for display_name, terms in canonical_employers:
+                    if not any(t in text_l for t in terms):
+                        violation = LintViolation(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            message=f"Missing core career history employer: {display_name}",
+                            suggestion=rule.suggestion,
+                        )
+                        break
+            elif rule.rule_id == "LR-021" and doc_type == "resume":
+                cision_section = re.search(r"###\s+.*Cision[\s\S]*?(?=###|\n##\s|\Z)", text, re.IGNORECASE)
+                if cision_section:
+                    bullets = [ln for ln in cision_section.group(0).splitlines() if ln.strip().startswith("* ")]
+                    if len(bullets) > 6:
+                        violation = LintViolation(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            message=f"Primary employer Cision has {len(bullets)} bullets (exceeds maximum cap of 6 bullets)",
+                            suggestion=rule.suggestion,
+                        )
             elif rule.rule_id == "LI-002":
                 pass  # checked externally (requires filesystem knowledge)
             elif rule.rule_id == "LI-003" and doc_type == "cover_letter":
@@ -407,13 +746,243 @@ def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResu
             suggestion="Only use partners from the verified list in CLAUDE.md Section 2.2.",
         ))
 
+    # LW-008: Contrast-frame density (sentence-SHAPE tell, 2026-07-18 adversarial review).
+    # "X rather than Y" / "instead of" / ", not Y" repeated across one document is a structural
+    # fingerprint that length-based burstiness checks cannot see. Individually fine; >2 per
+    # document reads as machine rhythm to a careful reviewer.
+    contrast_hits = len(re.findall(r"\brather than\b|\binstead of\b|, not ", text, flags=re.IGNORECASE))
+    if contrast_hits > 2:
+        warns.append(LintViolation(
+            rule_id="LW-008",
+            severity="WARN",
+            message=f"Contrast-frame density: {contrast_hits} instances of 'rather than'/'instead of'/', not' in one document (max 2)",
+            suggestion="Rewrite all but one or two as plain statements. The contrast frame is a repeated sentence shape, and shape repetition is an AI tell even when every instance reads well alone.",
+        ))
+
+    # LW-014: Connective-device density (2026-07-21, found by independent Stage 2 review on the
+    # Bazaarvoice dry run). "The same X" / "that same X" used as the load-bearing thread tying
+    # paragraphs together is a repeated single-word connective device LW-008 doesn't catch (LW-008
+    # only matches "rather than"/"instead of"/", not"). Found 4 uses in one 267-word cover letter
+    # ("The same logic...", "The same pattern...", "that same judgment call...", "...the same
+    # build-it-right-or-patch-it-forever decision"); one or two uses is a legitimate rhetorical
+    # thread, four is a structural tic. WARN not HARD_BLOCK: this needs a read to confirm it's
+    # actually doing the same job each time versus varying legitimately.
+    same_hits = len(re.findall(r"\bthe same\b|\bthat same\b", text, flags=re.IGNORECASE))
+    if same_hits > 2:
+        warns.append(LintViolation(
+            rule_id="LW-014",
+            severity="WARN",
+            message=f"Connective-device density: {same_hits} instances of 'the same'/'that same' in one document (max 2)",
+            suggestion="Vary how each point connects back to the throughline instead of repeating 'the same X' as the connective tissue every time.",
+        ))
+
     passed = len(blocks) == 0
     return LintResult(passed=passed, blocks=blocks, warns=warns, infos=infos, document_type=doc_type)
+
+
+def _word_tokens(text: str) -> List[str]:
+    """Lowercase alphanumeric tokens for cross-document phrase matching."""
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+_HEADER_EMAIL_RE = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
+
+
+def _strip_header_block(text: str) -> str:
+    """Drop a leading name-heading + contact-info line before phrase matching.
+
+    Both the resume and cover letter are expected to open with the same identity/contact
+    block (utils.format_contact_header_block) -- that is required duplication, not the
+    mechanism/phrasing restatement LW-009-PAIR exists to catch. Found 2026-07-21: adding
+    the cover letter's missing header (per CLAUDE.md's required structure) made LW-009-PAIR
+    flag the shared contact line as a false positive on every submission going forward.
+    """
+    lines = text.splitlines()
+    idx = 0
+    while idx < len(lines) and not lines[idx].strip():
+        idx += 1
+    if idx < len(lines) and re.match(r"^#\s+\S", lines[idx]):
+        idx += 1
+        while idx < len(lines) and not lines[idx].strip():
+            idx += 1
+        if idx < len(lines) and (_HEADER_EMAIL_RE.search(lines[idx]) or lines[idx].count("|") >= 1):
+            idx += 1
+    return "\n".join(lines[idx:])
+
+
+# Shared metric/scope cores that legitimately appear in both docs (numbers, not mechanism).
+# Longer mechanism clauses ("PTO-adjusted capacity model using T-shirt sizing…") must NOT match.
+_SHARED_METRIC_ALLOW: List[re.Pattern[str]] = [
+    re.compile(r"^(approximately )?3 ?500 (active )?accounts( and 25 ?000 users)?$"),
+    re.compile(r"^25 ?000 users$"),
+    re.compile(r"^(eliminated )?(a )?40( percent)?( contact)?( data)? drop( off)?$"),
+    re.compile(r"^\$?40m arr( legacy)?( platform)?$"),
+]
+
+
+def _is_allowed_shared_metric_phrase(phrase: str) -> bool:
+    """Return True when a shared n-gram is only an approved metric/scope core."""
+    return any(p.match(phrase) for p in _SHARED_METRIC_ALLOW)
+
+
+def find_shared_phrases(resume_text: str, cover_letter_text: str, min_len: int = 6) -> List[str]:
+    """Find maximal shared word sequences of length >= min_len across the pair.
+
+    Implements LW-009-PAIR. Resume bullets and cover-letter proof points often share the
+    same ACC; that is fine. Reusing the same 6+ word mechanism/phrasing clause is not —
+    it is the restatement defect Stage 2 keeps catching by eye. Metric cores alone are allowed.
+    """
+    resume_toks = _word_tokens(_strip_header_block(resume_text))
+    cover_toks = _word_tokens(_strip_header_block(cover_letter_text))
+    if len(resume_toks) < min_len or len(cover_toks) < min_len:
+        return []
+
+    cover_ngrams = {
+        " ".join(cover_toks[i : i + n])
+        for n in range(min_len, min(12, len(cover_toks) + 1))
+        for i in range(len(cover_toks) - n + 1)
+    }
+
+    candidates: List[str] = []
+    for n in range(min(12, len(resume_toks)), min_len - 1, -1):
+        for i in range(len(resume_toks) - n + 1):
+            phrase = " ".join(resume_toks[i : i + n])
+            if phrase in cover_ngrams and not _is_allowed_shared_metric_phrase(phrase):
+                candidates.append(phrase)
+
+    # Keep maximal only (drop phrases contained in a longer hit).
+    maximal: List[str] = []
+    for phrase in sorted(set(candidates), key=len, reverse=True):
+        if not any(phrase in longer for longer in maximal):
+            maximal.append(phrase)
+    return maximal
+
+
+def check_cross_document_repetition(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
+    """Pair-level repetition checks a hiring manager would see reading both docs together.
+
+    LW-008-PAIR: contrast-frame density across the combined pair.
+    LW-009-PAIR: shared 6+ word phrases (restatement), excluding approved metric cores.
+    Count is for THIS company's own resume+letter pair only, never vs another company.
+    """
+    violations: List[LintViolation] = []
+    combined = f"{resume_text}\n{cover_letter_text}"
+    hits = re.findall(r"\brather than\b|\binstead of\b|, not ", combined, flags=re.IGNORECASE)
+    if len(hits) > 2:
+        violations.append(LintViolation(
+            rule_id="LW-008-PAIR",
+            severity="WARN",
+            message=(
+                f"Contrast-frame density across the resume+cover-letter pair: {len(hits)} instances "
+                f"of 'rather than'/'instead of'/', not' combined (max 2), even if each file alone is clean"
+            ),
+            suggestion="Count is for THIS company's own resume+letter pair only, never compared to a different company's submission. Rewrite all but one or two as plain statements.",
+        ))
+
+    shared = find_shared_phrases(resume_text, cover_letter_text)
+    if shared:
+        preview = "; ".join(f'"{p}"' for p in shared[:3])
+        extra = f" (+{len(shared) - 3} more)" if len(shared) > 3 else ""
+        violations.append(LintViolation(
+            rule_id="LW-009-PAIR",
+            severity="WARN",
+            message=(
+                f"Shared phrasing across resume+cover-letter pair: {len(shared)} distinctive "
+                f"6+ word sequence(s) appear in both documents. Examples: {preview}{extra}"
+            ),
+            suggestion=(
+                "Resume owns the metric/outcome wording; the cover letter must retell the same "
+                "story with different vocabulary and different details (judgment, origin, tradeoff). "
+                "Rewrite the letter's proof sentences so none of these phrases survive."
+            ),
+        ))
+    return violations
+
+
+def _extract_hook(cover_letter_text: str) -> str:
+    """Return the cover letter's opening body paragraph (the hook) after the salutation."""
+    after = cover_letter_text.split("Dear Hiring Manager,", 1)
+    body = after[1] if len(after) > 1 else cover_letter_text
+    paras = [p.strip() for p in body.split("\n\n") if p.strip()]
+    return paras[0] if paras else ""
+
+
+def check_hook_jd_paraphrase(cover_letter_text: str, jd_text: str) -> List[LintViolation]:
+    """LW-011: flag when the cover letter's HOOK parrots the JD's own distinctive phrasing.
+
+    A compelling hook offers a specific observation or insight; it does not read the posting's
+    own descriptive prose back to the person who wrote it. Reuses find_shared_phrases (6+ word
+    verbatim overlap) between the opening paragraph and Original_JD.txt. Role/team/product names
+    are short proper nouns and fall under the 6-word threshold, so naming the role is not flagged;
+    lifting the JD's descriptive sentences is. Added 2026-07-21 (Jason-supplied, Stripe review:
+    the hook lifted "foundational platform primitives ... model, launch, and scale" verbatim).
+    """
+    hook = _extract_hook(cover_letter_text)
+    if not hook or not jd_text.strip():
+        return []
+    shared = find_shared_phrases(hook, jd_text, min_len=6)
+    if not shared:
+        return []
+    preview = "; ".join(f'"{p}"' for p in shared[:3])
+    extra = f" (+{len(shared) - 3} more)" if len(shared) > 3 else ""
+    return [LintViolation(
+        rule_id="LW-011",
+        severity="WARN",
+        message=(
+            f"Hook paraphrases the JD: {len(shared)} distinctive 6+ word sequence(s) from the "
+            f"opening paragraph appear verbatim in Original_JD.txt. Examples: {preview}{extra}"
+        ),
+        suggestion=(
+            "Open with a specific observation or insight about the company's problem, not the "
+            "posting's own words read back to them. Naming the role/team is fine; mirroring the "
+            "JD's descriptive prose signals nothing to a reader who wrote it."
+        ),
+    )]
+
+
+def _extract_summary(resume_text: str) -> str:
+    """Return the PROFESSIONAL SUMMARY section body (between its heading and the next ## heading)."""
+    m = re.search(r"##\s*PROFESSIONAL SUMMARY\s*\n(.*?)(?=\n##\s|\Z)", resume_text, re.DOTALL | re.IGNORECASE)
+    return m.group(1).strip() if m else ""
+
+
+def check_b2b_saas_positioning(resume_text: str, jd_text: str) -> List[LintViolation]:
+    """LW-013: flag a resume summary that defaults to 'B2B SaaS' framing the JD itself never uses.
+
+    CLAUDE.md's "Required Document Structure" section already states this as a prose rule (added
+    2026-07-21): the optional positioning subtitle "must mirror the specific JD's own framing --
+    never default to 'B2B SaaS Platform Product Manager'". Found violated on all 9 real summaries
+    in the 2026-07-21 batch review despite the rule already being written down -- a prose instruction
+    alone did not survive drafting pressure, same failure mode as LR-016/LR-015 before this was
+    mechanized. WARN, not HARD_BLOCK: a JD can genuinely be B2B SaaS without using the literal term
+    (an enterprise software JD, for instance) -- this forces a check, not an automatic rewrite.
+    """
+    summary = _extract_summary(resume_text)
+    if not summary or not jd_text.strip():
+        return []
+    if not re.search(r"b2b\s*saas", summary, re.IGNORECASE):
+        return []
+    if re.search(r"\bsaas\b", jd_text, re.IGNORECASE):
+        return []
+    return [LintViolation(
+        rule_id="LW-013",
+        severity="WARN",
+        message=(
+            "Resume summary frames the role as 'B2B SaaS' but Original_JD.txt never uses the term "
+            "'SaaS' anywhere -- likely default positioning rather than positioning drawn from this JD."
+        ),
+        suggestion=(
+            "Re-read the JD's own framing of what it is (vertical software, marketplace, platform, "
+            "etc.) and match the summary to that instead, or drop the positioning language entirely "
+            "if no crisp honest framing fits."
+        ),
+    )]
 
 
 def lint_folder(folder: str) -> List[dict]:
     """Lint all .md files in a submission folder. Returns list of summary dicts."""
     results = []
+    texts_by_doc_type = {}
     for fname in os.listdir(folder):
         if not fname.endswith(".md"):
             continue
@@ -424,6 +993,7 @@ def lint_folder(folder: str) -> List[dict]:
         except OSError:
             continue
         doc_type = _detect_doc_type(text, fname)
+        texts_by_doc_type[doc_type] = text
         result = lint_document(text, doc_type, filename=fname)
 
         pdf_path = fpath.replace(".md", ".pdf")
@@ -445,6 +1015,61 @@ def lint_folder(folder: str) -> List[dict]:
             "infos": len(result.infos),
             "result": result,
         })
+
+    if "resume" in texts_by_doc_type and "cover_letter" in texts_by_doc_type:
+        pair_warns = check_cross_document_repetition(texts_by_doc_type["resume"], texts_by_doc_type["cover_letter"])
+        results.append({
+            "submission": os.path.basename(folder),
+            "document": "resume+cover_letter (pair)",
+            "doc_type": "pair",
+            "status": "PASS" if not pair_warns else "WARN",
+            "blocks": 0,
+            "warns": len(pair_warns),
+            "infos": 0,
+            "result": LintResult(passed=True, warns=pair_warns, document_type="pair"),
+        })
+
+    # LW-011: hook-vs-JD paraphrase check (needs Original_JD.txt alongside the cover letter).
+    jd_path = os.path.join(folder, "Original_JD.txt")
+    if "cover_letter" in texts_by_doc_type and os.path.exists(jd_path):
+        try:
+            with open(jd_path, encoding="utf-8") as f:
+                jd_text = f.read()
+        except OSError:
+            jd_text = ""
+        hook_warns = check_hook_jd_paraphrase(texts_by_doc_type["cover_letter"], jd_text)
+        if hook_warns:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "cover_letter hook vs JD",
+                "doc_type": "hook",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(hook_warns),
+                "infos": 0,
+                "result": LintResult(passed=True, warns=hook_warns, document_type="hook"),
+            })
+
+    # LW-013: resume summary vs JD B2B SaaS positioning check (needs Original_JD.txt).
+    if "resume" in texts_by_doc_type and os.path.exists(jd_path):
+        try:
+            with open(jd_path, encoding="utf-8") as f:
+                jd_text = f.read()
+        except OSError:
+            jd_text = ""
+        positioning_warns = check_b2b_saas_positioning(texts_by_doc_type["resume"], jd_text)
+        if positioning_warns:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "resume summary vs JD",
+                "doc_type": "positioning",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(positioning_warns),
+                "infos": 0,
+                "result": LintResult(passed=True, warns=positioning_warns, document_type="positioning"),
+            })
+
     return results
 
 

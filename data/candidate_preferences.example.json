@@ -2,9 +2,19 @@
 
   "target_role": "Product Manager",
 
-  "search_terms": ["Product Manager", "Product Owner", "Technical Product Manager", "Platform Product Manager"],
+  "search_terms": ["Product Manager"],
+
+  "builtin_strict_title": true,
+
+  "min_jd_chars_evaluate": 800,
+
+  "scoring_jd_max_chars": 4000,
 
   "location_preference": "United States",
+
+  "local_area_terms": [],
+
+  "timezone_flexibility_terms": [],
 
   "work_setting": "Remote",
 
@@ -52,7 +62,7 @@
 
   "blocked_industries": [
 
-    "Gambling", "Sports Betting", "Gaming", "Ad Tech", "Crypto", "Web3"
+    "Gambling", "Sports Betting", "Ad Tech", "Crypto", "Web3"
 
   ],
 
@@ -127,7 +137,9 @@
 
     "structured_team_required": true,
 
-    "max_company_size_penalty_threshold": 50
+    "max_company_size_penalty_threshold": 50,
+
+    "reject_est_cst_remote": false
 
   }
 

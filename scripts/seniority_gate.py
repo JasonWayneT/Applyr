@@ -62,21 +62,55 @@ _LOOSE_YEARS_PATTERNS = [
 ]
 
 
+def _strip_html(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+_TITLE_BOILERPLATE_PREFIXES = (
+    "reports to",
+    "location",
+    "first priority",
+    "second priority",
+    "about ",
+    "responsibilities",
+    "url:",
+    "http",
+)
+
+
 def extract_job_title_line(jd_text: str) -> str:
     """First line or explicit Title: header from staging CSV imports."""
     if not jd_text:
         return ""
-    for line in jd_text.splitlines()[:8]:
-        stripped = line.strip()
+    for line in jd_text.splitlines()[:20]:
+        stripped = _strip_html(line.strip())
         if not stripped:
             continue
-        if stripped.lower().startswith("title:"):
+        lower = stripped.lower()
+        if lower.startswith("title:"):
             return stripped.split(":", 1)[1].strip()
-        if stripped.lower().startswith("position:"):
+        if lower.startswith("position:"):
             return stripped.split(":", 1)[1].strip()
-        if len(stripped) < 120 and not stripped.lower().startswith(("url:", "http", "about ")):
-            return stripped
-    return jd_text.splitlines()[0].strip() if jd_text.splitlines() else ""
+        if len(stripped) >= 120:
+            continue
+        if any(lower.startswith(prefix) for prefix in _TITLE_BOILERPLATE_PREFIXES):
+            continue
+        return stripped
+    return ""
+
+
+def _lead_is_role_designation(title: str) -> bool:
+    """Block Lead only as a role title, not verb uses like 'leaders lead with'."""
+    patterns = (
+        r"\blead\s+(?:product|technical|platform|senior|group|principal|pm)\b",
+        r"\b(?:product|technical|platform|group|engineering)\s+lead\b",
+        r"\bteam\s+lead\b",
+        r"^lead\b",
+    )
+    return any(re.search(p, title, re.I) for p in patterns)
 
 
 def blocked_title_lists(prefs: dict | None) -> Tuple[list[str], list[str]]:
@@ -136,6 +170,8 @@ def title_blocked(title: str, prefs: dict | None) -> Optional[str]:
                 product_matches = list(re.finditer(pattern, title, re.I))
                 if all_matches and len(all_matches) == len(product_matches):
                     continue
+            if term.lower() == "lead" and not _lead_is_role_designation(title):
+                continue
             return term
     for term in focus_terms:
         if title_matches_blocked(title, term) and _focus_area_is_primary_role(title, term):
@@ -235,8 +271,10 @@ def check_years_gate(jd_text: str, prefs: dict) -> Tuple[bool, str]:
     return True, ""
 
 
-def passes_title_gate(jd_text: str, prefs: dict) -> Tuple[bool, str]:
-    title = extract_job_title_line(jd_text)
+def passes_title_gate(jd_text: str, prefs: dict, fallback_title: str = "") -> Tuple[bool, str]:
+    title = extract_job_title_line(jd_text) or (fallback_title or "").strip()
+    if not title:
+        return True, ""
     hit = title_blocked(title, prefs)
     if hit:
         return False, f"title_blocked:{hit}"

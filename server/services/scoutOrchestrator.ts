@@ -16,6 +16,7 @@ import {
   passesTargetRoleTitleScope,
   passesIndustryGate,
   passesGeographicGate,
+  passesCompanyBlocklist,
   titleMatchesBlocked,
   type GateConfig,
   type ScrapedJob,
@@ -127,6 +128,12 @@ export async function runConnectorOrchestration(
           if (!passesTitleBlocklist(job.title, prefs.titleBlocklist)) {
             filtered++;
             logActivity('INFO', source, `[REJECT] ${job.title} at ${job.company} - Title Blocklist`);
+            continue;
+          }
+
+          if (!passesCompanyBlocklist(job.company, prefs.blockedCompanies)) {
+            filtered++;
+            logActivity('INFO', source, `[REJECT] ${job.title} at ${job.company} - Company blocklist`);
             continue;
           }
 

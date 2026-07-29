@@ -21,7 +21,7 @@
     "lens": "technical",
     "tags": ["Data Integrity", "ETL", "Platform Architecture"],
     "metrics": ["40%"],
-    "text": "Engineered a structural bypass of failing legacy ETL pipelines, integrating the core B2B SaaS platform with the upstream database to eliminate a 40% data drop-off rate."
+    "text": "Engineered a structural bypass of failing legacy ETL pipelines, integrating the customer-facing enterprise platform with the upstream database to eliminate a 40% data drop-off rate."
   },
   "ACC-102-BUS": {
     "employer": "acme_corp",

@@ -26,7 +26,7 @@ export function buildTsxSpawn(scriptRelativeToRoot: string, extraArgs: string[] 
 export const ALLOWED_JOB_FIELDS = new Set([
   'title', 'company', 'url', 'score', 'summary', 'status',
   'salary_range', 'recruiter_name', 'recruiter_url', 'source_site',
-  'rejection_stage', 'rejection_type', 'outcome_notes', 'interview_date',
+  'rejection_stage', 'rejection_type', 'outcome_notes', 'interview_date', 'applied_at',
 ]);
 
 export { DATE_POSTED_TO_DAYS, CANDIDATE_PREFS_PATH } from './domain/paths.js';

@@ -1,6 +1,7 @@
 """Render CoverLetterPlan to markdown (CR-024 / FR-097; voice CR-043; structure CR-047)."""
 from __future__ import annotations
 
+import os
 import re
 from typing import Tuple
 
@@ -40,6 +41,17 @@ def _render_block_letter(
 
     blocks = build_cover_blocks(plan, catalog, jd_text)
     body_text = blocks_to_prose(blocks)
+
+    if os.environ.get("DRAFT_MODE", "compose").strip().lower() == "local_rewrite":
+        # CR-062: naturalize each already-assembled, already-grounded paragraph
+        # independently. Proof-point selection (which claim, which cover_story) already
+        # happened in build_cover_blocks and is untouched here -- this only rephrases the
+        # finished paragraphs, falling back to each paragraph verbatim on any gate failure.
+        from local_rewrite import local_rewrite_prose
+
+        paragraphs = body_text.split("\n\n")
+        body_text = "\n\n".join(local_rewrite_prose(p) if p.strip() else p for p in paragraphs)
+
     wc = _word_count(body_text)
     if wc > WORD_MAX:
         excess = wc - WORD_MAX

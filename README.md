@@ -82,18 +82,15 @@ npm install
 
 > CI and clean installs use `npm ci`. The repo `.npmrc` sets `legacy-peer-deps` because `@toast-ui/react-editor` declares React 17 peers while this app uses React 19 (install still works at runtime).
 
-### 3. Install Playwright browsers (for the scout engine)
+### 4. Create Applyr's Python environment (isolated from Hermes / global PATH)
 
 ```bash
-npx playwright install chromium
-playwright install chromium
+npm run setup:python
 ```
 
-### 4. Install Python dependencies
+This creates `.venv/` in the project root, installs `requirements.txt`, and downloads Playwright Chromium for PDF export. The server and pipeline **only** use this interpreter — never whatever `python` is on your PATH.
 
-```bash
-pip install -r requirements.txt
-```
+Optional override: set `APPLYR_PYTHON` to an absolute path if you keep the venv elsewhere.
 
 ### 5. Start the app
 
@@ -112,7 +109,8 @@ Open the **Local** URL printed by Vite (e.g. **[http://localhost:5173](http://lo
 | Dashboard looks empty but you had jobs before | Your jobs are likely **Applied** / **Closed** — open **Opportunities** (all jobs). Dashboard highlights **Backlog** with PDFs. |
 | `jobs.filter is not a function` in browser console | Restart dev after pulling latest; API returned an error object instead of a list (fixed in `fetchJobs()`). |
 | `npm ci` / install fails on React peer deps | Repo `.npmrc` sets `legacy-peer-deps=true`. |
-| Missing `data/workExperience.md` after clone | Run `python scripts/bootstrap_local_data.py` then configure Settings. |
+| Missing `data/workExperience.md` after clone | Run `npm run setup:python` then `node scripts/invoke_applyr_python.mjs scripts/bootstrap_local_data.py` and configure Settings. |
+| Pipeline uses Hermes Python / PDF compile fails | Run `npm run setup:python` and restart `npm run dev`. Applyr requires project `.venv`, not PATH `python`. |
 | Missing gate keys after upgrading (`blocked_role_titles`, etc.) | Run `npm run gate-rollout` **once** — merges from `candidate_preferences.example.json`. Not needed on every pull. |
 | Wrong Vite port | Use the port Vite prints (not an old tab on 5173 if Vite moved to 5174). |
 | `APPLYR_API_TOKEN` set without `VITE_APPLYR_API_TOKEN` | POST requests need both, or unset the server token for local-only dev. GET routes work without a token. |
@@ -214,17 +212,19 @@ Go to **Job Search** and click **Run Scout**. The backend launches a parallel sc
 | Source | Type |
 |---|---|
 | LinkedIn | **Decommissioned** (CR-010 — security risk; skipped in `scout_local.ts`) |
-| BuiltIn | Playwright-based crawl |
+| BuiltIn | **Removed** (CR-056 — Playwright stealth-browser crawl against a live site; ban-risk pattern retired in favor of API-only sourcing) |
+| Levels.fyi | **Removed** (CR-056 — same reason as BuiltIn) |
+| Greenhouse / Lever / Ashby / Workable (per-company) | **Removed** (CR-056 — required hand-curating a company watchlist; superseded by OpenPostings, which covers these same ATS platforms plus Workday, iCIMS, and others across 7,700+ companies with no watchlist) |
 | RemoteOK | Public API |
 | Remotive | Public API |
-| We Work Remotely | RSS feeds (product + management) |
+| We Work Remotely | Public API |
 | Himalayas | Public API |
 | The Muse | Public API (role-aware category routing) |
+| Jobicy | Public API |
+| Working Nomads | Public API (title-matched; not category-filtered — see CR-056) |
+| JobsCollider | Public API |
 | Adzuna | Aggregator API (optional, key required) |
-| Greenhouse | Lane 1 ATS API |
-| Lever | Lane 1 ATS API |
-| Ashby | Lane 1 ATS API |
-| Workable | Lane 1 ATS API |
+| OpenPostings | Local ATS aggregator across 7,700+ companies (Greenhouse, Lever, Ashby, Workday, iCIMS, and more) — see setup below |
 | TheirStack | Lane 2 API (optional, key required, 200 credit guard) |
 
 The pipeline runs in four sequential stages automatically:
@@ -248,6 +248,8 @@ Anchor keyword hits are recorded as risk flags only — scores are no longer for
 Rubric reference: `.agent/rules/job_fit_engine.md` (v5.0). Formal spec: `docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md`.
 
 ### Drafting assets
+
+**Note (2026-07-19):** the automatic flow below is the web UI's own "Draft" button and scout-triggered path (`server/routes/jobs/draft.ts`/`pipeline.ts`/`scout.ts`, still spawning `batch_pipeline.py`) — it's live code, not deleted, but it is not how documents actually get authored day to day anymore. The default workflow is Claude authoring resumes/cover letters directly from job-description text and ground truth, verified against `data/conversion_rubric.md` — see `.claude/skills/generate-submission/SKILL.md`. Whether this button's automatic path should be retired or brought in line with the new process is an open question, not yet decided.
 
 Roles that pass scoring automatically get a full asset pack drafted:
 
@@ -283,7 +285,12 @@ When you mark a role as **Applied**, the submission folder is automatically move
 
 ### OpenPostings (optional scout source)
 
-To enable the OpenPostings scraper, extract `OpenPostings-main.zip` into `OpenPostings-extracted/OpenPostings-main/` (the zip is gitignored after first extract). Scouts read `OpenPostings-extracted/OpenPostings-main/jobs.db`.
+OpenPostings runs as a local Express server the connector spawns on demand. The project lives at `data/archive/OpenPostings-extracted/OpenPostings-main/` (gitignored). To enable it:
+
+1. Extract the OpenPostings project into that path if it isn't already there.
+2. Install its 4 real server dependencies only (skip its full `package.json`, which pulls in an unrelated Expo/React Native app tree): `cd data/archive/OpenPostings-extracted/OpenPostings-main && npm install cors express sqlite sqlite3 --no-save`.
+
+Scouts read/write `data/archive/OpenPostings-extracted/OpenPostings-main/jobs.db`. A full sync across all ~7,700 tracked companies takes longer than the connector's 2-minute per-run timeout, so coverage builds up incrementally across multiple scout runs rather than completing in one pass.
 
 ---
 

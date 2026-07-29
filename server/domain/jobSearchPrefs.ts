@@ -9,6 +9,66 @@ import { deriveSearchTermsFromTargetRole } from '../../shared/domain/scoutPrefs.
 
 export { CANDIDATE_PREFS_PATH } from './paths.js';
 
+/** Legacy auto-expanded terms — stripped on materialize unless user adds via UI search terms field. */
+const LEGACY_STRIPPED_SEARCH_TERMS = new Set(['Product Owner']);
+
+function dedupeSearchTerms(terms: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const term of terms) {
+    const key = term.toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(term);
+  }
+  return out;
+}
+
+function parseAdditionalSearchTerms(raw: unknown): string[] {
+  if (typeof raw === 'string') {
+    return raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((t) => String(t).trim()).filter(Boolean);
+  }
+  return [];
+}
+
+/** Resolve scout search_terms from UI job_search payload + existing prefs file. */
+export function resolveMaterializedSearchTerms(
+  jobSearch: Record<string, unknown>,
+  existing: Record<string, unknown>,
+): string[] {
+  const targetRole = (jobSearch.targetRole as string) || 'Product Manager';
+  const hasUiSearchTerms =
+    jobSearch.additionalSearchTerms !== undefined || jobSearch.searchTerms !== undefined;
+  const uiExtras = parseAdditionalSearchTerms(
+    jobSearch.additionalSearchTerms ?? jobSearch.searchTerms,
+  );
+
+  if (hasUiSearchTerms) {
+    return dedupeSearchTerms([targetRole.trim(), ...uiExtras].filter(Boolean));
+  }
+
+  const existingTerms = existing.search_terms;
+  if (
+    Array.isArray(existingTerms) &&
+    existingTerms.length > 0 &&
+    existingTerms.every((t) => typeof t === 'string' && String(t).trim())
+  ) {
+    return dedupeSearchTerms(
+      (existingTerms as string[])
+        .map((t) => String(t).trim())
+        .filter((t) => t && !LEGACY_STRIPPED_SEARCH_TERMS.has(t)),
+    );
+  }
+
+  return deriveSearchTermsFromTargetRole(targetRole);
+}
+
 const DEFAULT_MIN_FIT_SCORE = 72;
 
 /** Keys managed by pipeline/rollout — not overwritten when UI re-materializes prefs (FR-248 / CR-053). */
@@ -55,7 +115,7 @@ export function buildMaterializedJobSearchPrefs(
   existing: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const targetRole = (jobSearch.targetRole as string) || 'Product Manager';
-  const searchTerms = deriveSearchTermsFromTargetRole(targetRole);
+  const searchTerms = resolveMaterializedSearchTerms(jobSearch, existing);
 
   const blockedTitles = ((jobSearch.titleBlocklist as string) || '')
     .split(',')

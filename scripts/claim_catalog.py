@@ -102,7 +102,13 @@ def _sync_embeddings(catalog: ClaimCatalog, source_path: str):
         except Exception:
             pass
 
-    # Need to generate or update embeddings
+    # Need to generate or update embeddings — but the embedding path is opt-in
+    # (CR-070), so don't attempt Ollama calls, and don't overwrite an existing
+    # cache with empty embeddings, unless explicitly enabled.
+    from local_embeddings import local_embeddings_enabled
+    if not local_embeddings_enabled():
+        return
+
     import sys
     print("    [Info] Generating local embeddings for master_claims...", file=sys.stderr)
     try:
@@ -119,13 +125,25 @@ def _sync_embeddings(catalog: ClaimCatalog, source_path: str):
         print(f"    [Error] Failed to generate claim embeddings: {e}", file=sys.stderr)
 
 def apply_voc_map(text: str, catalog: ClaimCatalog) -> str:
-    # Deprecated: master_claims.json is already plain-language
-    return text
+    from voc_map import apply_voc_replacements
+
+    if catalog.voc_map:
+        out = text or ""
+        for codename, replacement in sorted(
+            catalog.voc_map.items(), key=lambda item: -len(item[0])
+        ):
+            out = re.sub(
+                rf"\b{re.escape(codename)}\b",
+                replacement,
+                out,
+                flags=re.IGNORECASE,
+            )
+        return out
+    return apply_voc_replacements(text)
+
 
 def sanitize_claim_text(text: str, catalog: ClaimCatalog) -> str:
-    # Deprecated: master_claims.json is already sanitized, just return it
-    # We still ensure trailing period for styling safety.
-    clean = text.strip()
+    clean = apply_voc_map(text, catalog).strip()
     if clean and not clean.endswith("."):
         clean += "."
     return clean

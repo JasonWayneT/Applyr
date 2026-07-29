@@ -28,6 +28,10 @@ interface ApiConnections {
   theirstackApiKey?: string;
 }
 
+interface TheirStackSettings {
+  fetchLimitPerRun: number;
+}
+
 interface EnvStatus {
   gemini: boolean;
   claude: boolean;
@@ -36,11 +40,18 @@ interface EnvStatus {
   localUrl: boolean;
 }
 
+interface OutcomesStats {
+  everApplied: number;
+  activeInFunnel: number;
+  closedAfterApply: number;
+  byStage: { rejection_stage: string; count: number }[];
+  byType: { rejection_type: string; count: number }[];
+  activeByStatus: { status: string; count: number }[];
+}
+
 interface StatsData {
-  total: number;
-  byStatus: { status: string; count: number }[];
-  byRejectionStage: { rejection_stage: string; count: number }[];
-  byRejectionType: { rejection_type: string; count: number }[];
+  outcomes: OutcomesStats;
+  notes?: { preApplyClosed: number; funnelStages: string[] };
 }
 
 function SettingsCard({
@@ -119,34 +130,38 @@ const SettingsView: React.FC = () => {
     perplexityApiKey: '',
   });
   const [apiConnections, setApiConnections] = useState<ApiConnections>({ adzunaAppId: '', adzunaAppKey: '', theirstackApiKey: '' });
+  const [theirstackSettings, setTheirstackSettings] = useState<TheirStackSettings>({ fetchLimitPerRun: 10 });
   const [experience, setExperience] = useState('');
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [envStatus, setEnvStatus] = useState<EnvStatus>({ gemini: false, claude: false, perplexity: false, adzuna: false, localUrl: false });
 
-  // Debounce Ref
-  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Debounce Refs — keyed per settings key so unrelated fields don't cancel each other's pending saves
+  const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Fetch all profile/preference/experience/stats datasets on mount
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [profileRes, expRes, statsRes, llmRes, connRes, envRes] = await Promise.all([
+        const [profileRes, expRes, statsRes, llmRes, connRes, envRes, tsRes] = await Promise.all([
           fetch(api('/api/profile/identity')),
           fetch(api('/api/experience')),
           fetch(api('/api/jobs/stats')),
           fetch(api('/api/profile/llm_settings')),
           fetch(api('/api/profile/api_connections')),
           fetch(api('/api/env_status')),
+          fetch(api('/api/profile/theirstack_settings')),
         ]);
 
-        const [profileData, expData, statsData, llmData, connData, envData] = await Promise.all([
+        const [profileData, expData, statsData, llmData, connData, envData, tsData] = await Promise.all([
           profileRes.json(),
           expRes.json(),
           statsRes.json(),
           llmRes.json(),
           connRes.json(),
           envRes.json(),
+          tsRes.json(),
         ]);
 
         if (profileData && typeof profileData === 'object') {
@@ -155,6 +170,8 @@ const SettingsView: React.FC = () => {
         setExperience(expData.content ?? '');
         if (statsData && !statsData.error) {
           setStats(statsData);
+        } else if (statsData?.error) {
+          setStatsError(statsData.error);
         }
         if (llmData && typeof llmData === 'object') {
           // Implements FR-063: backward compat — old 'provider' field → primaryProvider
@@ -174,6 +191,12 @@ const SettingsView: React.FC = () => {
         if (envData) {
           setEnvStatus(envData);
         }
+        if (tsData && typeof tsData === 'object' && tsData.fetchLimitPerRun) {
+          setTheirstackSettings(prev => ({
+            ...prev,
+            fetchLimitPerRun: Math.min(25, Math.max(1, Number(tsData.fetchLimitPerRun) || 10)),
+          }));
+        }
       } catch (err) {
         console.error('Failed to load SettingsView configurations:', err);
       }
@@ -184,9 +207,9 @@ const SettingsView: React.FC = () => {
 
   // Debounced auto-saving function
   const debouncedSave = useCallback((key: string, data: any) => {
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
     setSaveStatus('saving');
-    debounceTimer.current = setTimeout(async () => {
+    debounceTimers.current[key] = setTimeout(async () => {
       try {
         const res = await fetch(api(`/api/profile/${key}`), {
           method: 'POST',
@@ -276,7 +299,7 @@ const SettingsView: React.FC = () => {
             {activeTab === 'Profile' && 'Contact details and links used across resumes and applications.'}
             {activeTab === 'Experience' && 'Source of truth for accomplishments, metrics, and proof codes.'}
             {activeTab === 'API or Connections' && 'AI providers and optional job board API connections.'}
-            {activeTab === 'Analytics' && 'Pipeline throughput and rejection telemetry.'}
+            {activeTab === 'Analytics' && 'Application outcomes — where you applied and where rejections landed.'}
           </p>
         </div>
         {saveBadge}
@@ -806,6 +829,23 @@ const SettingsView: React.FC = () => {
                   <SettingsField label="API key">
                     <input type="password" value={apiConnections.theirstackApiKey ?? ''} onChange={(e) => { const next = { ...apiConnections, theirstackApiKey: e.target.value }; setApiConnections(next); debouncedSave('api_connections', next); }} className={`${inputClass} font-mono text-xs`} placeholder="••••••••••••••••" />
                   </SettingsField>
+                  <SettingsField label="Jobs per scout run (1–25)">
+                    <input
+                      type="number"
+                      min={1}
+                      max={25}
+                      value={theirstackSettings.fetchLimitPerRun}
+                      onChange={(e) => {
+                        const raw = parseInt(e.target.value, 10);
+                        const fetchLimitPerRun = Math.min(25, Math.max(1, Number.isFinite(raw) ? raw : 10));
+                        const next = { fetchLimitPerRun };
+                        setTheirstackSettings(next);
+                        debouncedSave('theirstack_settings', next);
+                      }}
+                      className={`${inputClass} font-mono text-xs`}
+                    />
+                    <p className="text-[10px] text-on-surface-variant mt-1 italic">Free tier: 200 credits/month (1 per job). Default 10 stretches ~20 scout runs.</p>
+                  </SettingsField>
                 </div>
               </div>
             </SettingsCard>
@@ -815,59 +855,103 @@ const SettingsView: React.FC = () => {
         {/* Analytics Tab */}
         {activeTab === 'Analytics' && (
           <>
-            {stats ? (
+            {stats?.outcomes ? (
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Total leads</p>
-                    <p className="text-3xl font-headline font-extrabold text-primary">{stats.total}</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Ever applied</p>
+                    <p className="text-3xl font-headline font-extrabold text-primary">{stats.outcomes.everApplied}</p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">Submitted at least once</p>
                   </div>
                   <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Rejected</p>
-                    <p className="text-3xl font-headline font-extrabold text-error">{stats.byRejectionType.find(t => t.rejection_type === 'Rejected')?.count || 0}</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Still in play</p>
+                    <p className="text-3xl font-headline font-extrabold text-primary">{stats.outcomes.activeInFunnel}</p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">Applied through offer stage</p>
                   </div>
                   <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
                     <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Ghosted</p>
-                    <p className="text-3xl font-headline font-extrabold text-on-surface-variant">{stats.byRejectionType.find(t => t.rejection_type === 'Ghosted')?.count || 0}</p>
+                    <p className="text-3xl font-headline font-extrabold text-on-surface-variant">
+                      {stats.outcomes.byType.find(t => t.rejection_type === 'Ghosted')?.count || 0}
+                    </p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">After apply, no response</p>
                   </div>
                   <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Active</p>
-                    <p className="text-3xl font-headline font-extrabold text-primary">{
-                      (stats.byStatus.find(s => s.status === 'Backlog')?.count || 0) +
-                      (stats.byStatus.find(s => s.status === 'Drafted')?.count || 0)
-                    }</p>
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Rejected</p>
+                    <p className="text-3xl font-headline font-extrabold text-error">
+                      {stats.outcomes.byType.find(t => t.rejection_type === 'Rejected')?.count || 0}
+                    </p>
+                    <p className="text-[10px] text-on-surface-variant mt-1">Explicit no after apply</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <SettingsCard label="Pipeline" title="By status">
+                  <SettingsCard
+                    label="Outcomes"
+                    title="Where rejections happened"
+                    description="Only roles you had already applied to. Stage = where the role was when you closed it."
+                  >
                     <div className="space-y-3">
-                      {stats.byStatus.map((row, i) => (
-                        <div key={i} className="flex justify-between items-center text-sm py-1">
-                          <span className="text-on-surface-variant">{row.status}</span>
+                      {stats.outcomes.byStage.map((row) => (
+                        <div key={row.rejection_stage} className="flex justify-between items-center text-sm py-1">
+                          <span className="text-on-surface-variant">{row.rejection_stage}</span>
                           <span className="font-semibold text-on-surface bg-surface px-2.5 py-1 rounded-lg border border-outline/10">{row.count}</span>
                         </div>
                       ))}
+                      {stats.outcomes.byStage.length === 0 && (
+                        <p className="text-sm italic text-on-surface-variant py-2">No post-apply closures yet.</p>
+                      )}
                     </div>
                   </SettingsCard>
-                  <SettingsCard label="Outcomes" title="By rejection stage">
+                  <SettingsCard
+                    label="Outcomes"
+                    title="How they ended"
+                    description={`${stats.outcomes.closedAfterApply} closed after apply.`}
+                  >
                     <div className="space-y-3">
-                      {stats.byRejectionStage.map((row, i) => (
-                        <div key={i} className="flex justify-between items-center text-sm py-1">
-                          <span className="text-on-surface-variant">{row.rejection_stage || 'N/A'}</span>
+                      {stats.outcomes.byType.map((row) => (
+                        <div key={row.rejection_type} className="flex justify-between items-center text-sm py-1">
+                          <span className="text-on-surface-variant">{row.rejection_type}</span>
                           <span className="font-semibold text-on-surface bg-surface px-2.5 py-1 rounded-lg border border-outline/10">{row.count}</span>
                         </div>
                       ))}
-                      {stats.byRejectionStage.length === 0 && (
-                        <p className="text-sm italic text-on-surface-variant py-2">No rejection telemetry yet.</p>
+                      {stats.outcomes.byType.length === 0 && (
+                        <p className="text-sm italic text-on-surface-variant py-2">No outcome types recorded yet.</p>
                       )}
                     </div>
                   </SettingsCard>
                 </div>
+
+                {stats.outcomes.activeByStatus.length > 0 && (
+                  <SettingsCard label="In progress" title="Active applications by stage">
+                    <div className="flex flex-wrap gap-3">
+                      {stats.outcomes.activeByStatus.map((row) => (
+                        <div
+                          key={row.status}
+                          className="flex items-center gap-2 text-sm bg-surface px-3 py-2 rounded-xl border border-outline/10"
+                        >
+                          <span className="text-on-surface-variant">{row.status}</span>
+                          <span className="font-semibold text-on-surface">{row.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </SettingsCard>
+                )}
+
+                {stats.notes && stats.notes.preApplyClosed > 0 && (
+                  <p className="text-xs text-on-surface-variant leading-relaxed px-1">
+                    {stats.notes.preApplyClosed} other closed roles were removed before apply (self-reject, unfit, etc.).
+                    Those are not counted above. A rejection stage of &quot;Closed&quot; means the job was already closed when
+                    you self-rejected it, not your total closure count.
+                  </p>
+                )}
               </>
+            ) : statsError ? (
+              <div className="p-12 bg-surface-container-lowest border border-outline/8 rounded-2xl text-center text-sm text-error">
+                Failed to load application outcomes: {statsError}
+              </div>
             ) : (
               <div className="p-12 bg-surface-container-lowest border border-outline/8 rounded-2xl text-center text-sm text-on-surface-variant animate-pulse">
-                Loading pipeline statistics...
+                Loading application outcomes...
               </div>
             )}
           </>

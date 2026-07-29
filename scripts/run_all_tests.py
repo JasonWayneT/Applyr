@@ -15,6 +15,7 @@ from typing import List, Tuple
 PYTHON_TEST_SCRIPTS = [
     "scripts/audit_public_repo.py",
     "scripts/check_spawn_paths.py",
+    "scripts/test_applyr_python.py",
     "scripts/smoke_draft_compiler.py",
     "scripts/test_audit_convergence.py",
     "scripts/test_blocked_companies.py",

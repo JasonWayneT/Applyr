@@ -65,11 +65,21 @@ def strip_bridge_prefix(bullet: str) -> str:
 
 
 def format_cover_proof_sentence(bullet: str) -> str:
-    """Cover proof line: strip bridge prefix, capitalize, ensure terminal period."""
+    """Cover proof line: strip bridge prefix, add a subject, ensure terminal period.
+
+    Claim text in master_claims.json is written resume-bullet style (verb-first,
+    no subject - "Presented the roadmap..."), which is correct for a resume bullet
+    but reads as a sentence fragment when used as its own cover-letter sentence.
+    This function is cover-letter-only (never used for resume bullets - those go
+    through a separate path in draft_compiler.py), so it's safe to always add "I "
+    here without risking resume-bullet formatting elsewhere.
+    """
     text = strip_bridge_prefix(bullet).strip()
     if not text:
         return ""
-    if text[0].islower():
+    if not re.match(r"^I\b", text):
+        text = f"I {text[0].lower()}{text[1:]}" if text else text
+    if text and text[0].islower():
         text = text[0].upper() + text[1:]
     return text if text.endswith(".") else f"{text}."
 
@@ -84,10 +94,20 @@ def compose_bullet(
     rec = catalog.claims.get(claim_id)
     if not rec:
         return ""
-    
+
     # In the new architecture, the text is already perfectly styled.
     core = sanitize_claim_text(rec.body, catalog)
-    
+
+    if _draft_mode() == "local_rewrite":
+        # CR-062: additive naturalization pass over an already-selected, already-styled
+        # sentence. Never changes selection/structure; falls back to `core` unchanged on
+        # any gate failure, so this is a pure quality upgrade layered on the existing path,
+        # not a new point of failure. validate_bullet_for_local below still re-checks the
+        # result independently.
+        from local_rewrite import local_rewrite_bullet
+
+        core = local_rewrite_bullet(core)
+
     prefix = pick_bridge_prefix(jd_text) if use_bridge else ""
     if prefix:
         # We lowercase the first letter of core if we prepend a prefix

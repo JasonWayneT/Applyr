@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { api } from '../lib/api';
+import PipelineTracker, { Stage, StageStatus } from '../components/PipelineTracker';
 
 interface ActivityLog {
   id: number;
@@ -47,6 +48,21 @@ function isPipelineActive(status: PipelineStatus): boolean {
   return status === 'scout_running' || status === 'evaluate_running' || status === 'drafting';
 }
 
+const MIN_FIT_SCORE = 72;
+
+function isActionablePipelineJob(job: JobMatch): boolean {
+  if (!['Backlog', 'Drafted', 'Needs Retry'].includes(job.status)) return false;
+  if (
+    job.status === 'Backlog' &&
+    job.score != null &&
+    job.score < MIN_FIT_SCORE &&
+    !job.has_assets
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function isEvaluatePhase(status: PipelineStatus): boolean {
   return status === 'evaluate_running' || status === 'drafting';
 }
@@ -72,6 +88,7 @@ function runButtonLabel(status: PipelineStatus, isSyncing: boolean): string {
 
 interface JobSearchSettings {
   targetRole: string;
+  additionalSearchTerms: string;
   workSetting: string;
   location: string;
   experienceLevels: string[];
@@ -85,12 +102,13 @@ interface JobSearchSettings {
 
 const DEFAULT_SETTINGS: JobSearchSettings = {
   targetRole: 'Product Manager',
+  additionalSearchTerms: '',
   workSetting: 'Remote',
   location: 'United States',
   experienceLevels: [],
   datePosted: 'Past week',
   titleBlocklist: 'Staff, VP, Head, Principal, Lead, Director, Group Product Manager, GPM, Growth, Founding, First, Manager of, Engineering Manager, People Manager, Assistant, Coordinator, Intern, Associate, Entry, Junior, Analyst, Software Engineer, Developer, Designer, Marketer',
-  industryBlocklist: 'Gambling, Sports Betting, Gaming, Ad Tech, Crypto, Web3',
+  industryBlocklist: 'Gambling, Sports Betting, Ad Tech, Crypto, Web3',
   minSalary: 0,
   maxYearsRequired: 7,
   minYearsPreferred: 2,
@@ -115,6 +133,44 @@ const EXP_OPTIONS = [
   'Expert/Leader (9+ Years)',
 ];
 
+const ASSET_STAGE_ORDER = ['gate', 'fit', 'research', 'resume', 'cover'];
+
+const INITIAL_ASSET_STAGES: Stage[] = [
+  { id: 'gate', label: 'Gate filters', status: 'pending' },
+  { id: 'fit', label: 'Fit evaluation', status: 'pending' },
+  { id: 'research', label: 'JD research', status: 'pending' },
+  { id: 'resume', label: 'Resume & cover letter', status: 'pending' },
+  { id: 'cover', label: 'Audit & PDF export', status: 'pending' },
+];
+
+interface AssetProgressEvent {
+  company: string;
+  stage: string;
+  status: StageStatus;
+  summary?: string;
+  completed?: number;
+  total?: number;
+  current_item?: string;
+  pipeline_status?: PipelineStatus;
+}
+
+function applyAssetStageUpdate(stages: Stage[], data: AssetProgressEvent): Stage[] {
+  const targetIdx = ASSET_STAGE_ORDER.indexOf(data.stage);
+  return stages.map((s) => {
+    const sIdx = ASSET_STAGE_ORDER.indexOf(s.id);
+    if (s.id === data.stage) {
+      return { ...s, status: data.status, summary: data.summary ?? s.summary };
+    }
+    if (targetIdx > 0 && sIdx >= 0 && sIdx < targetIdx && data.status === 'running') {
+      return { ...s, status: 'done' };
+    }
+    if (data.status === 'error' && sIdx > targetIdx) {
+      return { ...s, status: 'pending', summary: undefined };
+    }
+    return s;
+  });
+}
+
 interface SourceEntry {
   id: string;
   name: string;
@@ -122,6 +178,8 @@ interface SourceEntry {
   status: 'active' | 'warning' | 'error' | 'paused';
   last_success_at: string | null;
   last_error_at: string | null;
+  credits_used_this_month?: number | null;
+  credits_reset_at?: string | null;
 }
 
 const SyncActivityView: React.FC = () => {
@@ -135,7 +193,19 @@ const SyncActivityView: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [serverError, setServerError] = useState(false);
   const [draftingJobId, setDraftingJobId] = useState<string | null>(null);
+  const [assetStages, setAssetStages] = useState<Stage[]>(INITIAL_ASSET_STAGES);
+  const [activeAssetCompany, setActiveAssetCompany] = useState<string | null>(null);
+  const assetCompanyRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const pinnedToBottomRef = useRef(true);
+  const lastLogIdRef = useRef<number | null>(null);
+
+  const handleLogScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    pinnedToBottomRef.current = distanceFromBottom < 48;
+  };
 
   const [settings, setSettings] = useState<JobSearchSettings>(DEFAULT_SETTINGS);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -163,6 +233,10 @@ const SyncActivityView: React.FC = () => {
             setSettings(prev => ({
               ...prev,
               ...data,
+              additionalSearchTerms:
+                typeof data.additionalSearchTerms === 'string'
+                  ? data.additionalSearchTerms
+                  : prev.additionalSearchTerms ?? '',
               maxYearsRequired: data.maxYearsRequired ?? prev.maxYearsRequired ?? 7,
               minYearsPreferred: data.minYearsPreferred ?? prev.minYearsPreferred ?? 2,
             }));
@@ -208,11 +282,21 @@ const SyncActivityView: React.FC = () => {
     try {
       const res = await fetch(api('/api/logs'));
       const data = await res.json();
-      setLogs(data);
+      const newLogs: ActivityLog[] = Array.isArray(data) ? data : [];
+      const latestId = newLogs.length > 0 ? newLogs[newLogs.length - 1].id : null;
+      const hasNewEntries = latestId !== lastLogIdRef.current;
+      lastLogIdRef.current = latestId;
+
+      setLogs(newLogs);
       setServerError(false);
-      setTimeout(() => {
-        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-      }, 50);
+
+      if (pinnedToBottomRef.current && hasNewEntries) {
+        requestAnimationFrame(() => {
+          const el = scrollRef.current;
+          if (!el) return;
+          el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        });
+      }
     } catch {
       setServerError(true);
     }
@@ -223,7 +307,7 @@ const SyncActivityView: React.FC = () => {
       const res = await fetch(api('/api/jobs'));
       const data = await res.json();
       if (Array.isArray(data)) {
-        setMatchedJobs(data.filter(j => ['Backlog', 'Drafted', 'Needs Retry'].includes(j.status)));
+        setMatchedJobs(data.filter(isActionablePipelineJob));
       }
     } catch { /* ignore */ }
   };
@@ -256,7 +340,41 @@ const SyncActivityView: React.FC = () => {
     setTimeout(() => setIsSyncing(false), 2000);
   };
 
+  const handleAssetProgress = useCallback((data: AssetProgressEvent) => {
+    if (data.company && assetCompanyRef.current !== data.company) {
+      assetCompanyRef.current = data.company;
+      setActiveAssetCompany(data.company);
+      setAssetStages(INITIAL_ASSET_STAGES.map((s) => ({ ...s })));
+    }
+
+    if (data.pipeline_status || data.current_item || data.completed != null) {
+      setSystemStatus((prev) => ({
+        ...prev,
+        status: data.pipeline_status ?? prev.status,
+        current_item: data.current_item ?? prev.current_item,
+        items_completed: data.completed ?? prev.items_completed,
+        items_total: data.total ?? prev.items_total,
+      }));
+    }
+
+    if (ASSET_STAGE_ORDER.includes(data.stage)) {
+      setAssetStages((prev) => applyAssetStageUpdate(prev, data));
+    }
+  }, []);
+
+  const resetAssetStages = useCallback(() => {
+    assetCompanyRef.current = null;
+    setActiveAssetCompany(null);
+    setAssetStages(INITIAL_ASSET_STAGES.map((s) => ({ ...s })));
+  }, []);
+
   const handleDraftAssets = async (jobId: string) => {
+    const job = matchedJobs.find((j) => j.id === jobId);
+    if (job) {
+      assetCompanyRef.current = job.company;
+      setActiveAssetCompany(job.company);
+      setAssetStages(INITIAL_ASSET_STAGES.map((s) => ({ ...s })));
+    }
     setDraftingJobId(jobId);
     try {
       await fetch(api(`/api/jobs/${jobId}/draft`), { method: 'POST' });
@@ -321,6 +439,7 @@ const SyncActivityView: React.FC = () => {
         if (data.to === 'EVALUATE') {
           nextStatus = 'evaluate_running';
           currentItem = 'Evaluating fit and drafting assets';
+          resetAssetStages();
         } else if (data.to === 'SCOUT') {
           nextStatus = 'scout_running';
           currentItem = 'Running job connector orchestration';
@@ -416,8 +535,18 @@ const SyncActivityView: React.FC = () => {
       }
     });
 
+    es.addEventListener('asset_progress', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as AssetProgressEvent;
+        handleAssetProgress(data);
+      } catch (err) {
+        console.error('Failed to parse asset_progress SSE event:', err);
+      }
+    });
+
     es.addEventListener('run_complete', (e: MessageEvent) => {
       try {
+        setAssetStages((prev) => prev.map((s) => ({ ...s, status: s.status === 'error' ? 'error' : 'done' })));
         setSystemStatus({
           status: 'completed',
           current_item: 'Completed end-to-end sync successfully!',
@@ -434,7 +563,7 @@ const SyncActivityView: React.FC = () => {
     es.onerror = () => {
       console.warn('SSE connection encountered an error.');
     };
-  }, []);
+  }, [handleAssetProgress, resetAssetStages]);
 
   const disconnectSSE = useCallback(() => {
     if (eventSourceRef.current) {
@@ -451,13 +580,20 @@ const SyncActivityView: React.FC = () => {
   }, [connectSSE, disconnectSSE]);
 
   const isRunning = isSyncing || isPipelineActive(systemStatus.status);
+  const showAssetTracker =
+    isEvaluatePhase(systemStatus.status) ||
+    systemStatus.status === 'drafting' ||
+    draftingJobId !== null ||
+    assetStages.some((s) => s.status === 'running' || s.status === 'done');
   const evaluateProgress =
     (systemStatus.items_total ?? 0) > 0
       ? Math.min(100, Math.round(((systemStatus.items_completed ?? 0) / systemStatus.items_total!) * 100))
       : null;
 
-  const scoutQueue = matchedJobs.filter(j => j.status === 'Drafted');
-  const evaluatedJobs = matchedJobs.filter(j => j.status === 'Backlog' || j.status === 'Needs Retry');
+  const scoutQueue = matchedJobs.filter(j => j.status === 'Drafted' && !j.has_assets);
+  const evaluatedJobs = matchedJobs.filter(
+    j => j.status === 'Backlog' || j.status === 'Needs Retry' || (j.status === 'Drafted' && j.has_assets),
+  );
   const readyCount = evaluatedJobs.filter(j => j.status === 'Backlog' && j.has_assets).length;
 
   const renderJobCard = (job: JobMatch) => (
@@ -473,9 +609,9 @@ const SyncActivityView: React.FC = () => {
         }`}>
           {job.status === 'Needs Retry'
             ? 'Needs retry'
-            : job.status === 'Drafted'
+            : job.status === 'Drafted' && !job.has_assets
               ? 'Awaiting evaluation'
-              : job.status === 'Backlog' && job.has_assets
+              : (job.status === 'Backlog' || job.status === 'Drafted') && job.has_assets
                 ? 'Ready to Apply'
                 : 'Pending Assets'}
         </span>
@@ -553,7 +689,22 @@ const SyncActivityView: React.FC = () => {
               placeholder="e.g. Product Manager"
               className="input-applyr w-full rounded-xl text-xs py-2.5"
             />
-            <p className="text-[10px] text-on-surface-variant mt-1.5 italic">Use a standard title for best results.</p>
+            <p className="text-[10px] text-on-surface-variant mt-1.5 italic">Primary title scouts query for.</p>
+          </div>
+
+          {/* Additional search titles */}
+          <div className="md:col-span-2">
+            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Additional Search Titles</label>
+            <input
+              type="text"
+              value={settings.additionalSearchTerms}
+              onChange={e => update('additionalSearchTerms', e.target.value)}
+              placeholder="Optional — e.g. Product Owner"
+              className="input-applyr w-full rounded-xl text-xs py-2.5"
+            />
+            <p className="text-[10px] text-on-surface-variant mt-1.5 italic">
+              Optional comma-separated titles. Product Owner is separate — add it here only if you want PO roles in the funnel.
+            </p>
           </div>
 
           {/* Work Setting */}
@@ -740,6 +891,11 @@ const SyncActivityView: React.FC = () => {
             return (
               <div key={src.id} className="p-3 bg-surface-container-low border border-outline-variant/10 rounded-xl flex flex-col justify-between hover:border-primary/20 transition-all select-none">
                 <span className="text-xs font-bold text-on-surface truncate">{src.name}</span>
+                {src.id === 'theirstack' && (
+                  <span className="text-[9px] font-mono text-on-surface-variant mt-1">
+                    {src.credits_used_this_month ?? 0}/200 credits
+                  </span>
+                )}
                 <div className="mt-2 flex items-center justify-between">
                   <span className="text-[9px] text-on-surface-variant font-mono uppercase">{src.type.replace('_', ' ')}</span>
                   <span className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded capitalize ${badgeClass}`}>
@@ -833,6 +989,24 @@ const SyncActivityView: React.FC = () => {
               </div>
             </div>
           )}
+          {showAssetTracker && (
+            <div className="pt-3 border-t border-outline/10 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold text-secondary uppercase tracking-widest">Asset creation</p>
+                  <p className="text-sm font-headline font-bold text-on-surface mt-0.5">
+                    {activeAssetCompany ?? 'Current role'}
+                  </p>
+                </div>
+                {systemStatus.status === 'drafting' && (
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-secondary/10 text-secondary border border-secondary/20">
+                    Drafting
+                  </span>
+                )}
+              </div>
+              <PipelineTracker stages={assetStages} />
+            </div>
+          )}
           {systemStatus.status === 'completed' && (systemStatus.items_total ?? 0) > 0 && (
             <p className="text-[11px] text-on-surface-variant">
               Processed {systemStatus.items_completed ?? 0} of {systemStatus.items_total} queued jobs this run.
@@ -852,7 +1026,11 @@ const SyncActivityView: React.FC = () => {
               <div className="w-2.5 h-2.5 rounded-full bg-primary/60" />
             </div>
           </div>
-          <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 font-mono text-[12px] space-y-1.5 applyr-scrollbar">
+          <div
+            ref={scrollRef}
+            onScroll={handleLogScroll}
+            className="flex-1 overflow-y-auto p-5 font-mono text-[12px] space-y-1.5 applyr-scrollbar"
+          >
             {logs.map(log => {
               const level = displayLogLevel(log);
               return (

@@ -12,6 +12,8 @@ const cfg: GateConfig = {
   titleBlocklist: ['staff', 'vp', 'director', 'intern', 'junior', 'lead', 'software engineer', 'sales manager'],
   workSetting: 'Remote',
   maxExperienceYears: 7,
+  localAreaTerms: [],
+  locationPreference: 'United States',
 };
 
 const baseJob = (overrides: Partial<ScrapedJob> = {}): ScrapedJob => ({

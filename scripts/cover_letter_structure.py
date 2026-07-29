@@ -114,6 +114,10 @@ def render_work_history_bridge(
     include_scale: bool = True,
 ) -> str:
     employer = employer_display_name(slot.employer)
+    # ACC-401 and similar personal-project claims can have an empty employer.
+    # Never emit "At ," — that made it into production cover letters.
+    if not employer:
+        return "That was the kind of problem I was responsible for solving."
     scale = _employer_scale_phrase(catalog, slot.employer) if include_scale else ""
     if scale:
         return (

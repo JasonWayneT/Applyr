@@ -22,6 +22,7 @@ import {
     type ExtractionSource,
     type ExtractionConfidence,
 } from './domain/jdQuality.js';
+import { isBlockedScrapeUrl } from '../shared/domain/blockedScrapeHosts.js';
 
 export const MIN_JD_CHARS = 200;
 export const BUILTIN_MIN_JD_CHARS = 500;
@@ -201,16 +202,28 @@ export async function extractJobDescriptionWithMeta(
     url: string,
     minChars: number = MIN_JD_CHARS,
 ): Promise<ExtractionResult> {
+    if (isBlockedScrapeUrl(url)) {
+        console.log(`[FR-080] Blocked scrape host — refusing navigation to ${url}`);
+        return {
+            text: '',
+            source: 'body',
+            confidence: 'low',
+            flags: ['blocked_host_linkedin'],
+        };
+    }
+
     const page = await context.newPage();
     try {
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
 
-        // ATS redirect detection — Built In sometimes links directly to external ATS pages
+        // ATS redirect — follow and extract from destination (Built In → Greenhouse/Workday/etc.)
         const finalUrl = page.url();
-        if (ATS_DOMAINS.some(d => finalUrl.includes(d))) {
+        const atsRedirect =
+          ATS_DOMAINS.some((d) => finalUrl.includes(d)) &&
+          !ATS_DOMAINS.some((d) => url.includes(d));
+        if (atsRedirect) {
             console.log(`[LOG] extract_job_page: ATS redirect ${url} → ${finalUrl}`);
-            return { text: '', source: 'body', confidence: 'low', flags: ['external_ats_redirect'] };
         }
 
         // Wait for real content before extracting
@@ -224,12 +237,14 @@ export async function extractJobDescriptionWithMeta(
         const structured: string | null = await page.evaluate(extractStructuredInBrowser);
         if (structured && structured.length >= minChars) {
             const text = structured.slice(0, MAX_JD_CHARS);
-            console.log(`[LOG] extract_job_page: structured (${text.length} chars) ${url}`);
+            console.log(`[LOG] extract_job_page: structured (${text.length} chars) ${finalUrl}`);
+            const flags = buildDataQualityFlags(text, 'structured', minChars);
+            if (atsRedirect) flags.push('ats_redirect_followed');
             return {
                 text,
                 source: 'structured',
                 confidence: classifyConfidence(text, 'structured'),
-                flags: buildDataQualityFlags(text, 'structured', minChars),
+                flags,
             };
         }
 
@@ -243,12 +258,14 @@ export async function extractJobDescriptionWithMeta(
 
         if (trimmed.length >= minChars) {
             const text = trimmed.slice(0, MAX_JD_CHARS);
-            console.log(`[LOG] extract_job_page: ${source} (${text.length} chars) ${url}`);
+            console.log(`[LOG] extract_job_page: ${source} (${text.length} chars) ${finalUrl}`);
+            const flags = buildDataQualityFlags(text, source, minChars);
+            if (atsRedirect) flags.push('ats_redirect_followed');
             return {
                 text,
                 source,
                 confidence: classifyConfidence(text, source),
-                flags: buildDataQualityFlags(text, source, minChars),
+                flags,
             };
         }
 
@@ -261,7 +278,12 @@ export async function extractJobDescriptionWithMeta(
         const bodyLen: number = await page.evaluate(() => document.body?.innerText?.length ?? 0);
         console.log(`[DEBUG] body.innerText length: ${bodyLen}`);
 
-        return { text: '', source: 'body', confidence: 'low', flags: ['extraction_failed'] };
+        return {
+            text: '',
+            source: 'body',
+            confidence: 'low',
+            flags: atsRedirect ? ['ats_redirect_failed'] : ['extraction_failed'],
+        };
 
     } catch (err) {
         console.log(`[LOG] extract_job_page: failed for ${url} — ${err}`);

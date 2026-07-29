@@ -43,8 +43,14 @@ _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
 ]
 
 # Patterns that must not appear in finalized resume / cover letter text.
+# NOTE (fixed 2026-07-21): "Partnered closely" was previously hard-blocked here under a
+# "Forbidden workforce-reduction language" error message, which is wrong on its face - the
+# phrase has no relation to layoffs/attrition/RIF, this file's actual stated purpose (see
+# module docstring). It incorrectly hard-failed a real, clean cover letter (Human Interest,
+# "partnered closely with engineering"). Removed. If there is a genuine stylistic preference
+# against "partnered closely with" as a generic phrase, that belongs in submission_linter.py's
+# WARN-level generic-phrase rules (LW-004/LW-006 style), not this file's hard-block list.
 _BLOCKED_TONE_PATTERNS: List[re.Pattern] = [
-    re.compile(r"\bPartnered\s+closely\b", re.IGNORECASE),
     re.compile(r"\blayoffs?\b", re.IGNORECASE),
     re.compile(r"\blaid[\s-]off\b", re.IGNORECASE),
     re.compile(r"\battrition\b", re.IGNORECASE),

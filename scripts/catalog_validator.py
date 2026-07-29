@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from approved_metrics import APPROVED_METRICS
 from utils import DATA_DIR, WORK_EXP_FILE
+from voc_map import contains_voc_codename, find_voc_codenames
 
 MASTER_CLAIMS_FILE = os.path.join(DATA_DIR, "master_claims.json")
 MASTER_CLAIMS_EXAMPLE = os.path.join(DATA_DIR, "master_claims.example.json")
@@ -113,6 +114,11 @@ def validate_catalog(
             if re.search(pat, text, re.I):
                 result.errors.append(f"{cid}: forbidden phrase matched /{pat}/")
                 result.ok = False
+
+        if contains_voc_codename(text):
+            hits = ", ".join(find_voc_codenames(text)[:3])
+            result.errors.append(f"{cid}: internal VOC codename in claim text ({hits})")
+            result.ok = False
 
         prefix = _acc_prefix(cid) or _acc_prefix(val.get("project_id", ""))
         acc_truth_keys = [k for k in truth if k.upper().startswith("ACC")]

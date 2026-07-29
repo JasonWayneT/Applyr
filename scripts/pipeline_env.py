@@ -23,11 +23,19 @@ def local_only_mode() -> bool:
     return _flag("LOCAL_ONLY_MODE") in ("1", "true", "yes")
 
 
+# DRAFT_MODE values that keep the compose-path deterministic defaults (JD profile,
+# cover hook). "local_rewrite" (CR-062) is an additive layer on top of "compose" — it
+# changes how already-selected text is phrased, not how the JD gets profiled or which
+# cover-hook mode runs — so it must not silently fall through to the "llm" branch below
+# the way an unrecognized DRAFT_MODE value does.
+_COMPOSE_LIKE_DRAFT_MODES = ("compose", "local_rewrite")
+
+
 def jd_profile_mode() -> str:
-    """deterministic | llm — compose path defaults to deterministic."""
+    """deterministic | llm — compose(-like) path defaults to deterministic."""
     mode = _flag("JD_PROFILE_MODE")
     if not mode:
-        return "deterministic" if draft_mode() == "compose" else "llm"
+        return "deterministic" if draft_mode() in _COMPOSE_LIKE_DRAFT_MODES else "llm"
     return mode
 
 
@@ -35,7 +43,7 @@ def cover_hook_mode() -> str:
     """template | llm — template avoids ungrounded cover openings."""
     mode = _flag("COVER_HOOK_MODE")
     if not mode:
-        return "template" if draft_mode() == "compose" else "llm"
+        return "template" if draft_mode() in _COMPOSE_LIKE_DRAFT_MODES else "llm"
     return mode
 
 
@@ -149,12 +157,12 @@ def fit_num_predict() -> int:
 
 
 def fit_model_override() -> str | None:
-    """Optional local model for fit stage (fast mode defaults to phi3.5)."""
+    """Optional local model for fit stage (fast mode uses primary llama, not phi)."""
     explicit = os.environ.get("FIT_MODEL", "").strip()
     if explicit:
         return explicit
     if batch_fast_mode():
-        return "phi3.5:3.8b-mini-instruct-q8_0"
+        return "llama3.1:8b-instruct-q5_K_M"
     return None
 
 

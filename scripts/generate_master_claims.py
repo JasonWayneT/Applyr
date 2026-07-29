@@ -33,7 +33,7 @@ claims = {
         "lens": "technical",
         "tags": ["Data Integrity", "ETL", "Platform Architecture", "Technical Problem Solving"],
         "metrics": ["40%"],
-        "text": "Engineered a structural bypass of failing legacy ETL pipelines, integrating the core B2B SaaS platform directly with the upstream source-of-truth database to eliminate a 40% data drop-off rate."
+        "text": "Engineered a structural bypass of failing legacy ETL pipelines, integrating the customer-facing enterprise platform directly with the upstream source-of-truth database to eliminate a 40% data drop-off rate."
     },
     "ACC-102-BUS": {
         "employer": "cision",

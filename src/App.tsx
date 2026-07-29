@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TodayView from './pages/TodayView';
 import AllJobsView from './pages/AllJobsView';
@@ -9,18 +9,43 @@ import NotificationPanel from './components/NotificationPanel';
 import TuningLogView from './pages/TuningLogView';
 import SettingsView from './components/SettingsView';
 import { useJobs } from './hooks/useJobs';
+import type { OpportunitiesFilter } from './types/opportunities';
 
 function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [opportunitiesFilter, setOpportunitiesFilter] = useState<OpportunitiesFilter>('All');
+  const mainRef = useRef<HTMLElement>(null);
   const { jobs, isLoaded, selectedJob, setSelectedJob, handleStatusChange } = useJobs();
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [activeTab]);
+
+  const navigateToOpportunities = (filter: OpportunitiesFilter) => {
+    setOpportunitiesFilter(filter);
+    setActiveTab('Opportunities');
+  };
 
   const renderPage = () => {
     switch (activeTab) {
       case 'Dashboard':
-        return <TodayView jobs={jobs} onJobClick={setSelectedJob} />;
+        return (
+          <TodayView
+            jobs={jobs}
+            onJobClick={setSelectedJob}
+            onNavigateToOpportunities={navigateToOpportunities}
+          />
+        );
       case 'Opportunities':
-        return <AllJobsView jobs={jobs} onJobClick={setSelectedJob} />;
+        return (
+          <AllJobsView
+            jobs={jobs}
+            onJobClick={setSelectedJob}
+            activeFilter={opportunitiesFilter}
+            onFilterChange={setOpportunitiesFilter}
+          />
+        );
       case 'Add Job':
         return <FindNewJobsView />;
       case 'Job Search':
@@ -73,7 +98,7 @@ function App() {
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto px-8 pt-8 pb-12 applyr-scrollbar">
+        <main ref={mainRef} className="flex-1 overflow-y-auto px-8 pt-8 pb-12 applyr-scrollbar">
           <div className="max-w-7xl mx-auto">
             {isLoaded ? renderPage() : (
               <div className="flex items-center justify-center h-64 text-on-surface-variant text-sm gap-2">

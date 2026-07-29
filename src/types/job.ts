@@ -10,6 +10,8 @@ export interface Job {
   rejection_type?: 'Ghosted' | 'Rejected' | 'Withdrawn' | 'Other' | 'Self-Rejected' | 'No Longer Available' | null;
   outcome_notes?: string | null;
   interview_date?: string | null;
+  /** When the application was submitted (null until Applied+). Separate from created_at (discovered). */
+  applied_at?: string | null;
   summary: string | null;
   created_at: string;
   has_assets?: boolean;

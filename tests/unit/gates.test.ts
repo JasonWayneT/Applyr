@@ -23,6 +23,8 @@ const cfg: GateConfig = {
     titleBlocklist: ['staff', 'vp', 'director', 'intern', 'junior', 'lead'],
     workSetting: 'Remote',
     maxExperienceYears: 7,
+    localAreaTerms: ['san diego'],
+    locationPreference: 'United States',
 };
 
 const baseJob = (overrides: Partial<ScrapedJob> = {}): ScrapedJob => ({
@@ -156,8 +158,12 @@ describe('passesGeographicGate', () => {
         });
         expect(passesGeographicGate(job, cfg)).toBe(false);
     });
-    it('passes remote-only source with empty description', () => {
+    it('passes remote-only source with empty description (display name)', () => {
         const job = baseJob({ description: '', source: 'Remotive' });
+        expect(passesGeographicGate(job, cfg)).toBe(true);
+    });
+    it('passes remote-only source with empty description (connector sourceId)', () => {
+        const job = baseJob({ description: '', source: 'remotive' });
         expect(passesGeographicGate(job, cfg)).toBe(true);
     });
     it('rejects non-remote-only source with empty description when workSetting=Remote', () => {
@@ -235,33 +241,57 @@ describe('passesBroadPmTitleScope', () => {
 });
 
 describe('passesTargetRoleTitleScope', () => {
-    const pmPrefs = { targetRole: 'Product Manager', searchTerms: ['Product Manager', 'Product Owner'] };
+    const pmPrefs = { targetRole: 'Product Manager', searchTerms: ['Product Manager'] };
 
-    it('accepts Product Manager for PM target', () => {
+    it('accepts Product Manager for PM search term', () => {
         expect(passesTargetRoleTitleScope('Senior Product Manager', pmPrefs)).toBe(true);
     });
-    it('rejects Account Executive for PM target', () => {
+    it('accepts Technical Product Manager for PM search term (family match, not exact title)', () => {
+        expect(passesTargetRoleTitleScope('Technical Product Manager', pmPrefs)).toBe(true);
+    });
+    it('accepts Platform Product Manager for PM search term', () => {
+        expect(passesTargetRoleTitleScope('Platform Product Manager', pmPrefs)).toBe(true);
+    });
+    it('rejects Product Owner when not in search_terms', () => {
+        expect(passesTargetRoleTitleScope('Product Owner - SEPA/Payments', pmPrefs)).toBe(false);
+    });
+    it('accepts dual title when Product Manager search term matches', () => {
+        expect(passesTargetRoleTitleScope('Product Owner / Product Manager', pmPrefs)).toBe(true);
+    });
+    it('rejects Account Executive for PM search terms', () => {
         expect(passesTargetRoleTitleScope('Account Executive', pmPrefs)).toBe(false);
+    });
+    it('rejects product marketing adjacent roles', () => {
+        expect(passesTargetRoleTitleScope('Product Marketing Manager', pmPrefs)).toBe(false);
     });
     it('uses search terms only for non-PM targets', () => {
         const aePrefs = { targetRole: 'Account Executive', searchTerms: ['Account Executive', 'AE'] };
         expect(passesTargetRoleTitleScope('Account Executive', aePrefs)).toBe(true);
         expect(passesTargetRoleTitleScope('Product Manager', aePrefs)).toBe(false);
     });
+    it('accepts Product Owner when user configured it in search_terms', () => {
+        const poPrefs = { targetRole: 'Product Owner', searchTerms: ['Product Owner'] };
+        expect(passesTargetRoleTitleScope('Senior Product Owner', poPrefs)).toBe(true);
+    });
 });
 
 describe('passesBuiltInStrictRemoteCard', () => {
+    const geo = { localAreaTerms: ['san diego'], locationPreference: 'United States' };
+
     it('accepts plain Remote listing', () => {
-        expect(passesBuiltInStrictRemoteCard('Remote United States Mid level')).toBe(true);
+        expect(passesBuiltInStrictRemoteCard('Remote United States Mid level', geo)).toBe(true);
     });
     it('rejects Remote or Hybrid', () => {
-        expect(passesBuiltInStrictRemoteCard('Remote or Hybrid United States')).toBe(false);
+        expect(passesBuiltInStrictRemoteCard('Remote or Hybrid United States', geo)).toBe(false);
     });
     it('rejects In-Office or Remote', () => {
-        expect(passesBuiltInStrictRemoteCard('In-Office or Remote 10 Locations')).toBe(false);
+        expect(passesBuiltInStrictRemoteCard('In-Office or Remote 10 Locations', geo)).toBe(false);
     });
-    it('accepts San Diego area listing', () => {
-        expect(passesBuiltInStrictRemoteCard('San Diego, CA, USA')).toBe(true);
+    it('accepts listing matching configured local area', () => {
+        expect(passesBuiltInStrictRemoteCard('San Diego, CA, USA', geo)).toBe(true);
+    });
+    it('rejects local-area-only listing when localAreaTerms empty', () => {
+        expect(passesBuiltInStrictRemoteCard('San Diego, CA, USA', { localAreaTerms: [] })).toBe(false);
     });
 });
 

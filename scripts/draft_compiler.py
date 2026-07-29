@@ -359,11 +359,12 @@ def _assemble_resume(
     from candidate_context import load_employers_ordered
     prune_order = list(reversed(load_employers_ordered()))
 
-    # First pruning pass: remove PROJECTS section if over budget before touching bullets
-    if len(result) > RESUME_CHAR_BUDGET and projects_injected[0]:
-        projects_injected[0] = False
-        result = _render()
-
+    # Prune bullets down to each employer's floor first. The PROJECTS section
+    # (when present) only appears because the JD signaled AI/LLM relevance
+    # (FR-208, has_ai_signal) — that is a deliberate, targeted proof point, not
+    # padding, so it should be the last thing cut, not the first. Previously this
+    # section was stripped on any overage before a single low-priority bullet was
+    # trimmed, which meant it almost never survived to the final resume.
     while len(result) > RESUME_CHAR_BUDGET:
         pruned = False
         for employer in prune_order:
@@ -383,6 +384,12 @@ def _assemble_resume(
                     break
         if not pruned:
             break
+        result = _render()
+
+    # Last resort: strip the PROJECTS section only if bullets are already at floor
+    # and the resume is still over budget.
+    if len(result) > RESUME_CHAR_BUDGET and projects_injected[0]:
+        projects_injected[0] = False
         result = _render()
 
     return result

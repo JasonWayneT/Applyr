@@ -2,27 +2,26 @@ import React, { useState } from 'react';
 import { Job } from '../types/job';
 import StatusChip from '../components/StatusChip';
 import { api } from '../lib/api';
+import type { OpportunitiesFilter } from '../types/opportunities';
+import { OPPORTUNITIES_FILTERS, FILTER_STATUS_MAP } from '../types/opportunities';
 
 interface AllJobsViewProps {
   jobs: Job[];
   onJobClick: (job: Job) => void;
+  activeFilter: OpportunitiesFilter;
+  onFilterChange: (filter: OpportunitiesFilter) => void;
 }
 
-const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
+const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilter, onFilterChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [activeFilter, setActiveFilter] = useState('All');
 
   const processedJobs = jobs.filter(job => {
-    // 1. Filter by status
-    if (job.status === 'Drafted') return false; // Completely hidden from views
-    if (job.status === 'Rejected') return false; // Not a fit — hidden from Opportunities (Tuning Log / Settings stats)
-    if (activeFilter === 'Active' && job.status !== 'Applied') return false;
-    if (activeFilter === 'Backlog' && !['New', 'Backlog'].includes(job.status)) return false;
-    if (activeFilter === 'Interviewing' && !['Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(job.status)) return false;
-    if (activeFilter === 'Closed' && job.status !== 'Closed') return false;
-    if (activeFilter === 'Retry' && job.status !== 'Needs Retry') return false;
+    if (job.status === 'Drafted') return false;
+    if (job.status === 'Rejected') return false;
 
-    // 2. Filter by search term
+    const allowedStatuses = FILTER_STATUS_MAP[activeFilter];
+    if (allowedStatuses && !allowedStatuses.includes(job.status)) return false;
+
     if (searchTerm.trim() !== '') {
       const term = searchTerm.toLowerCase();
       const matchCompany = job.company.toLowerCase().includes(term);
@@ -37,22 +36,22 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
     { title: 'New from scout', statuses: ['New'], chipClass: 'chip-new', icon: 'fiber_new' },
     { title: 'Ready to Apply', statuses: ['Backlog'], chipClass: 'chip-backlog', icon: 'priority_high' },
     { title: 'Needs retry', statuses: ['Needs Retry'], chipClass: 'chip-drafted', icon: 'replay' },
-    { title: 'Waiting for contact', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
-    { title: 'Initial screening', statuses: ['Recruiter Screen'], chipClass: 'chip-recruiter-screen', icon: 'hourglass_top' },
-    { title: 'Active gauntlet', statuses: ['Core Interviews'], chipClass: 'chip-core-interviews', icon: 'record_voice_over' },
-    { title: 'In conversation', statuses: ['Offer and Negotiation'], chipClass: 'chip-offer', icon: 'handshake' },
+    { title: 'Applied', statuses: ['Applied'], chipClass: 'chip-applied', icon: 'hourglass_empty' },
+    { title: 'Screening', statuses: ['Recruiter Screen'], chipClass: 'chip-recruiter-screen', icon: 'hourglass_top' },
+    { title: 'Interviews', statuses: ['Core Interviews'], chipClass: 'chip-core-interviews', icon: 'record_voice_over' },
+    { title: 'Offers', statuses: ['Offer and Negotiation'], chipClass: 'chip-offer', icon: 'handshake' },
     { title: 'Terminal', statuses: ['Closed'], chipClass: 'chip-closed', icon: 'archive' },
   ];
 
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Opportunities</h1>
           <p className="text-on-surface-variant mt-1">Track your career journeys with clarity.</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="relative">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
             <input
@@ -60,15 +59,15 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick }) => {
               placeholder="Search company or role..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-applyr rounded-full pl-10 pr-4 py-2 w-56 text-sm"
+              className="input-applyr rounded-full pl-10 pr-4 py-2 w-full sm:w-56 text-sm"
             />
           </div>
-          <div className="flex bg-surface-container-low p-1 rounded-xl">
-            {['All', 'Backlog', 'Retry', 'Active', 'Interviewing', 'Closed'].map(f => (
+          <div className="flex flex-wrap bg-surface-container-low p-1 rounded-xl gap-0.5 max-w-full">
+            {OPPORTUNITIES_FILTERS.map(f => (
               <button 
                 key={f} 
-                onClick={() => setActiveFilter(f)}
-                className={`px-4 py-1.5 text-xs rounded-lg font-medium transition-colors ${f === activeFilter ? 'bg-surface-container-lowest text-on-surface editorial-shadow' : 'text-on-surface-variant hover:text-on-surface'}`}
+                onClick={() => onFilterChange(f)}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors whitespace-nowrap ${f === activeFilter ? 'bg-surface-container-lowest text-on-surface editorial-shadow' : 'text-on-surface-variant hover:text-on-surface'}`}
               >
                 {f}
               </button>

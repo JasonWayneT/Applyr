@@ -205,4 +205,35 @@ describe('runConnectorOrchestration', () => {
     );
     expect(rejectCalls.length).toBeGreaterThan(0);
   });
+
+  it('rejects LinkedIn job URLs at ingest (FR-080)', async () => {
+    const raw: RawJobPayload = {
+      external_job_id: 'li-1',
+      url: 'https://www.linkedin.com/jobs/view/123456/',
+      source_id: 'test',
+      raw_data: {
+        title: 'Product Manager',
+        company: 'Acme',
+        description: 'Remote product manager role in the United States. B2B SaaS platform experience preferred.',
+      },
+    };
+    const connector = makeConnector('src', [raw]);
+    connector.normalize = vi.fn(() => ({
+      external_job_id: raw.external_job_id,
+      source_id: 'src',
+      title: 'Product Manager',
+      company: 'Acme',
+      url: raw.url,
+      source_site: 'src',
+      description: String((raw.raw_data as Record<string, unknown>)['description'] ?? ''),
+    }));
+
+    await runConnectorOrchestration([connector]);
+
+    expect(vi.mocked(insertJob)).not.toHaveBeenCalled();
+    const rejectCalls = vi.mocked(logActivity).mock.calls.filter(
+      ([, , msg]) => typeof msg === 'string' && msg.includes('LinkedIn URL blocked'),
+    );
+    expect(rejectCalls.length).toBeGreaterThan(0);
+  });
 });

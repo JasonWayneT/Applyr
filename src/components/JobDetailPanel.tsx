@@ -7,7 +7,48 @@ import {
   statusRequiresInterviewDateTime,
   isValidInterviewDateTime,
   toDatetimeLocalValue,
+  toDateInputValue,
+  APPLICATION_FUNNEL_SET,
 } from 'shared/domain/jobPipeline';
+import {
+  INTERVIEW_DEBRIEF_OUTCOMES,
+  isValidDebriefOutcome,
+  toDebriefDateInputValue,
+  type InterviewDebrief,
+} from 'shared/domain/interviewDebrief';
+
+type DebriefFormState = {
+  date: string;
+  notes: string;
+  outcome: InterviewDebrief['outcome'] | '';
+};
+
+type DebriefFieldErrors = {
+  date?: boolean;
+  notes?: boolean;
+  outcome?: boolean;
+};
+
+function RequiredLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <label className="block text-[10px] font-bold text-on-surface uppercase tracking-widest mb-1.5">
+      {children}
+      <span className="text-error ml-0.5" aria-hidden="true">*</span>
+    </label>
+  );
+}
+
+/** Glance dates in Details: "Jul 9, 2026" for both discovered and applied. */
+function formatGlanceDate(value: string | null | undefined): string {
+  if (!value) return '';
+  const trimmed = value.trim();
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  const parsed = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(trimmed.includes('T') ? trimmed : trimmed.replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 interface JobFile {
   name: string;
@@ -43,6 +84,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
     notes: ''
   });
   const [interviewDate, setInterviewDate] = useState(job?.interview_date || '');
+  const [appliedAtDate, setAppliedAtDate] = useState(toDateInputValue(job?.applied_at));
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<string>('');
@@ -52,9 +94,38 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
   const [skillGap, setSkillGap] = useState<string | null>(null);
   const [loadingSkillGap, setLoadingSkillGap] = useState(false);
 
+  const [debriefs, setDebriefs] = useState<InterviewDebrief[]>([]);
+  const [loadingDebriefs, setLoadingDebriefs] = useState(false);
+  const [savingDebrief, setSavingDebrief] = useState(false);
+  const [editingDebriefId, setEditingDebriefId] = useState<string | null>(null);
+  const [debriefForm, setDebriefForm] = useState<DebriefFormState>({
+    date: toDebriefDateInputValue(new Date().toISOString()),
+    notes: '',
+    outcome: '',
+  });
+  const [debriefError, setDebriefError] = useState<string | null>(null);
+  const [debriefFieldErrors, setDebriefFieldErrors] = useState<DebriefFieldErrors>({});
+
+  const debriefInputClass = (invalid: boolean) =>
+    `input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface-container-lowest ${
+      invalid ? 'ring-2 ring-error/50 border-error/40' : ''
+    }`;
+
+  const resetDebriefForm = () => {
+    setEditingDebriefId(null);
+    setDebriefForm({
+      date: toDebriefDateInputValue(new Date().toISOString()),
+      notes: '',
+      outcome: '',
+    });
+    setDebriefError(null);
+    setDebriefFieldErrors({});
+  };
+
   useEffect(() => {
     if (!job) return;
     setInterviewDate(toDatetimeLocalValue(job.interview_date) || '');
+    setAppliedAtDate(toDateInputValue(job.applied_at));
     setShowClosureForm(false);
     setClosureData({ stage: job.status, type: 'Rejected', notes: '' });
     setErrorMsg(null);
@@ -76,6 +147,14 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
       .then(r => r.json())
       .then(data => setSystemStatus(data))
       .catch(() => {});
+
+    setLoadingDebriefs(true);
+    resetDebriefForm();
+    fetch(api(`/api/jobs/${job.id}/debriefs`))
+      .then(r => r.json())
+      .then(data => setDebriefs(data.debriefs ?? []))
+      .catch(() => setDebriefs([]))
+      .finally(() => setLoadingDebriefs(false));
   }, [job?.id, job?.company]);
 
   if (!job) return null;
@@ -112,6 +191,66 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
     }
   };
 
+  const saveDebrief = async () => {
+    const fieldErrors: DebriefFieldErrors = {
+      date: !debriefForm.date.trim(),
+      notes: !debriefForm.notes.trim(),
+      outcome: !isValidDebriefOutcome(debriefForm.outcome),
+    };
+    if (fieldErrors.date || fieldErrors.notes || fieldErrors.outcome) {
+      setDebriefFieldErrors(fieldErrors);
+      setDebriefError('Fill in all required fields before saving.');
+      return;
+    }
+    setSavingDebrief(true);
+    setDebriefError(null);
+    setDebriefFieldErrors({});
+    try {
+      const isEdit = !!editingDebriefId;
+      const url = isEdit
+        ? api(`/api/jobs/${job.id}/debriefs/${editingDebriefId}`)
+        : api(`/api/jobs/${job.id}/debriefs`);
+      const res = await fetch(url, {
+        method: isEdit ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(debriefForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save debrief');
+
+      const listRes = await fetch(api(`/api/jobs/${job.id}/debriefs`));
+      const listData = await listRes.json();
+      setDebriefs(listData.debriefs ?? []);
+      resetDebriefForm();
+    } catch (err) {
+      setDebriefError(err instanceof Error ? err.message : 'Failed to save debrief.');
+    } finally {
+      setSavingDebrief(false);
+    }
+  };
+
+  const startEditDebrief = (debrief: InterviewDebrief) => {
+    setEditingDebriefId(debrief.id);
+    setDebriefForm({
+      date: toDebriefDateInputValue(debrief.date),
+      notes: debrief.notes,
+      outcome: debrief.outcome,
+    });
+    setDebriefError(null);
+  };
+
+  const deleteDebrief = async (debriefId: string) => {
+    if (!window.confirm('Delete this debrief?')) return;
+    try {
+      const res = await fetch(api(`/api/jobs/${job.id}/debriefs/${debriefId}`), { method: 'DELETE' });
+      if (!res.ok) throw new Error();
+      setDebriefs(prev => prev.filter(d => d.id !== debriefId));
+      if (editingDebriefId === debriefId) resetDebriefForm();
+    } catch {
+      setDebriefError('Failed to delete debrief.');
+    }
+  };
+
   const handleDateChange = async (date: string) => {
     setInterviewDate(date);
     setErrorMsg(null);
@@ -124,6 +263,21 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
       if (!res.ok) throw new Error();
     } catch {
       setErrorMsg('Failed to save interview date. Check that the server is running.');
+    }
+  };
+
+  const handleAppliedAtChange = async (date: string) => {
+    setAppliedAtDate(date);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(api(`/api/jobs/${job.id}`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applied_at: date || null }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      setErrorMsg('Failed to save applied date. Check that the server is running.');
     }
   };
 
@@ -222,6 +376,57 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-8 applyr-scrollbar">
+            {/* Details — discovered / applied / interview glance */}
+            <section className="bg-surface-container-low p-6 rounded-2xl">
+              <h3 className="text-lg font-headline font-bold text-on-surface mb-4">Details</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
+                    Discovered
+                  </label>
+                  <p className="text-sm font-medium text-on-surface py-2.5">
+                    {formatGlanceDate(job.created_at) || '—'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
+                    Applied
+                  </label>
+                  {APPLICATION_FUNNEL_SET.has(job.status) || job.applied_at || job.status === 'Closed' ? (
+                    <div className="flex items-center gap-2 py-2.5">
+                      <p className="text-sm font-medium text-on-surface min-w-0">
+                        {formatGlanceDate(appliedAtDate) || '—'}
+                      </p>
+                      <label
+                        className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary cursor-pointer transition-colors"
+                        title="Edit applied date"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">calendar_month</span>
+                        <input
+                          type="date"
+                          value={appliedAtDate}
+                          onChange={(e) => handleAppliedAtChange(e.target.value)}
+                          className="sr-only"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-on-surface-variant py-2.5">Not applied yet</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
+                    Interview
+                  </label>
+                  <p className="text-sm font-medium text-on-surface py-2.5">
+                    {interviewDate
+                      ? new Date(interviewDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+                      : '—'}
+                  </p>
+                </div>
+              </div>
+            </section>
+
             {/* Timeline */}
             <section className="bg-surface-container-low p-6 rounded-2xl">
               <h3 className="text-lg font-headline font-bold text-on-surface mb-4">Application Status</h3>
@@ -271,6 +476,147 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     <span className="material-symbols-outlined text-sm">notifications_active</span>
                     Scheduled for {new Date(interviewDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
                   </p>
+                )}
+              </div>
+            </section>
+
+            {/* Interview Debrief — post-interview notes (separate from cheat sheet prep) */}
+            <section className="bg-secondary/5 p-6 rounded-2xl border border-secondary/10">
+              <div className="flex items-center gap-3 mb-4">
+                <span className="material-symbols-outlined text-secondary">forum</span>
+                <h3 className="text-lg font-headline font-bold text-on-surface">Interview Debrief</h3>
+              </div>
+              <p className="text-[11px] text-on-surface-variant mb-1 leading-relaxed">
+                Capture what they asked and how it went while it is fresh. This is separate from your prep cheat sheet.
+              </p>
+              <p className="text-[10px] text-on-surface-variant mb-4">
+                Fields marked <span className="text-error font-bold">*</span> are required.
+              </p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <RequiredLabel>Interview date</RequiredLabel>
+                    <input
+                      type="date"
+                      value={debriefForm.date}
+                      onChange={(e) => {
+                        setDebriefForm(prev => ({ ...prev, date: e.target.value }));
+                        setDebriefFieldErrors(prev => ({ ...prev, date: false }));
+                      }}
+                      className={debriefInputClass(!!debriefFieldErrors.date)}
+                      aria-invalid={debriefFieldErrors.date || undefined}
+                      required
+                    />
+                    {debriefFieldErrors.date && (
+                      <p className="text-[10px] text-error mt-1">Interview date is required.</p>
+                    )}
+                  </div>
+                  <div>
+                    <RequiredLabel>Outcome</RequiredLabel>
+                    <select
+                      value={debriefForm.outcome}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setDebriefForm(prev => ({
+                          ...prev,
+                          outcome: isValidDebriefOutcome(value) ? value : '',
+                        }));
+                        setDebriefFieldErrors(prev => ({ ...prev, outcome: false }));
+                      }}
+                      className={debriefInputClass(!!debriefFieldErrors.outcome)}
+                      aria-invalid={debriefFieldErrors.outcome || undefined}
+                      required
+                    >
+                      <option value="" disabled>Select how it went…</option>
+                      {INTERVIEW_DEBRIEF_OUTCOMES.map(o => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                    {debriefFieldErrors.outcome && (
+                      <p className="text-[10px] text-error mt-1">Select an outcome before saving.</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <RequiredLabel>Notes</RequiredLabel>
+                  <textarea
+                    value={debriefForm.notes}
+                    onChange={(e) => {
+                      setDebriefForm(prev => ({ ...prev, notes: e.target.value }));
+                      setDebriefFieldErrors(prev => ({ ...prev, notes: false }));
+                    }}
+                    rows={6}
+                    placeholder="Questions they asked, your answers, gaps, vibe, anything worth remembering..."
+                    className={`${debriefInputClass(!!debriefFieldErrors.notes)} py-3 resize-y min-h-[120px]`}
+                    aria-invalid={debriefFieldErrors.notes || undefined}
+                    required
+                  />
+                  {debriefFieldErrors.notes && (
+                    <p className="text-[10px] text-error mt-1">Notes are required.</p>
+                  )}
+                </div>
+                {debriefError && (
+                  <p className="text-[11px] text-error">{debriefError}</p>
+                )}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={saveDebrief}
+                    disabled={savingDebrief}
+                    className="btn-primary text-xs px-4 py-2 rounded-xl disabled:opacity-50"
+                  >
+                    {savingDebrief ? 'Saving...' : editingDebriefId ? 'Update debrief' : 'Save debrief'}
+                  </button>
+                  {editingDebriefId && (
+                    <button
+                      type="button"
+                      onClick={resetDebriefForm}
+                      className="text-xs text-on-surface-variant hover:text-on-surface"
+                    >
+                      Cancel edit
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 pt-5 border-t border-outline-variant/10">
+                <h4 className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-3">Past debriefs</h4>
+                {loadingDebriefs ? (
+                  <p className="text-xs text-on-surface-variant italic">Loading...</p>
+                ) : debriefs.length === 0 ? (
+                  <p className="text-xs text-on-surface-variant italic">No debriefs yet for this role.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {debriefs.map(d => (
+                      <div key={d.id} className="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div>
+                            <p className="text-xs font-bold text-on-surface">
+                              {new Date(d.date).toLocaleDateString([], { dateStyle: 'medium' })}
+                            </p>
+                            <span className="text-[10px] font-bold text-secondary">{d.outcome}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => startEditDebrief(d)}
+                              className="text-[10px] font-bold text-primary hover:underline"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteDebrief(d.id)}
+                              className="text-[10px] font-bold text-error hover:underline"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                        <p className="text-sm text-on-surface-variant whitespace-pre-wrap leading-relaxed">{d.notes}</p>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             </section>

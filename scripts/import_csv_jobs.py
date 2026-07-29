@@ -99,12 +99,16 @@ def import_jobs(csv_paths):
 
 
 if __name__ == "__main__":
+    from applyr_python import assert_applyr_host
+    try:
+        assert_applyr_host()
+    except Exception as exc:
+        print(f"CRITICAL: {exc}", file=sys.stderr)
+        sys.exit(1)
+
     if len(sys.argv) > 1:
-        # Accept one or more CSV paths as arguments:
-        # python import_csv_jobs.py "path/to/file1.csv" "path/to/file2.csv"
         paths = sys.argv[1:]
     else:
-        # Default: look for known filenames in the user's Downloads folder
         downloads = os.path.join(os.path.expanduser("~"), "Downloads")
         candidates = [
             "Job Evaluation 1 - Sheet1.csv",
@@ -114,7 +118,7 @@ if __name__ == "__main__":
         paths = [os.path.join(downloads, f) for f in candidates if os.path.exists(os.path.join(downloads, f))]
         if not paths:
             print("No CSV files found. Pass file paths as arguments:")
-            print("  python import_csv_jobs.py \"path/to/jobs.csv\"")
+            print('  node scripts/invoke_applyr_python.mjs scripts/import_csv_jobs.py "path/to/jobs.csv"')
             sys.exit(1)
 
     import_jobs(paths)

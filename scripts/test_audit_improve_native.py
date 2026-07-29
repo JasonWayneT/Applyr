@@ -7,6 +7,8 @@ Cision: owned a $40M ARR platform, reduced data drop-off from 40% to zero,
 resolved 90% of a 300-item security backlog, migrated 700 accounts.
 """
 
+MASTER_RESUME_WITH_EDUCATION = MASTER_RESUME + "\nNational University, 2019.\n"
+
 BULLETS = """
 Owned a $40M ARR B2B SaaS platform serving 25,000 users.
 Reduced contact data drop-off from 40% to zero via a rebuilt ETL pipeline.
@@ -130,3 +132,50 @@ def test_rejects_wrong_sentence_count_summary():
     )
     assert result.converged is False
     assert any("sentence" in issue.lower() for issue in result.final_issues)
+
+
+def test_self_healed_education_warning_does_not_block_convergence():
+    """CR-070 Epic 3 Story 3.4 regression: validate_hard_facts warns AND
+    re-injects a corrected EDUCATION block in the same call when the degree
+    line goes missing. That warning must not block convergence, since
+    corrected_resume already contains the fix."""
+    import drafting_engine
+    drafting_engine.HARD_FACTS = None  # force reload against the education-bearing master text
+
+    resume_missing_education = (
+        RESUME_HEADER + "## PROFESSIONAL SUMMARY\n\n" + GOOD_SUMMARY
+        + "\n\n## PROFESSIONAL EXPERIENCE\n\n"
+        "### Product Manager | Cision | 2019 - 2023\n\n"
+        "San Diego, CA\n\n"
+        "* Owned a $40M ARR B2B SaaS platform serving 25,000 users.\n"
+        "* Reduced contact data drop-off from 40% to zero via a rebuilt ETL pipeline.\n"
+        "* Resolved 90% of a 300-item security vulnerability backlog.\n"
+    )
+
+    result = apply_claude_native_improvement(
+        updated_resume=resume_missing_education,
+        updated_cl=GOOD_COVER_LETTER,
+        master_resume_text=MASTER_RESUME_WITH_EDUCATION,
+        bullets=BULLETS,
+        company_name="TestCo",
+    )
+    assert result.converged is True
+    assert result.final_issues == []
+    assert "National University" in result.corrected_resume
+
+
+def test_seniority_inflation_warning_still_blocks():
+    """Real, non-self-healed warnings (validate_hard_facts flags but does not
+    repair the text) must keep blocking convergence."""
+    inflated_summary = GOOD_SUMMARY.replace(
+        "Partners closely with", "Led a team of engineers and partners closely with"
+    )
+    result = apply_claude_native_improvement(
+        updated_resume=_build_resume(inflated_summary),
+        updated_cl=GOOD_COVER_LETTER,
+        master_resume_text=MASTER_RESUME,
+        bullets=BULLETS,
+        company_name="TestCo",
+    )
+    assert result.converged is False
+    assert any("seniority inflation" in issue.lower() for issue in result.final_issues)

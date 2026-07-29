@@ -3,6 +3,7 @@
  */
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
+import { resolvePythonExecutable } from '../domain/pythonBin.js';
 import { PROJECT_ROOT, SCRIPTS_DIR, buildPythonEnv } from '../shared.js';
 
 const SECRET_ENV_KEYS = new Set([
@@ -19,11 +20,15 @@ export function pythonScriptPath(scriptName: string): string {
   return path.join(SCRIPTS_DIR, scriptName);
 }
 
+export { resolvePythonExecutable } from '../domain/pythonBin.js';
+
 export function buildSpawnEnv(extra: Record<string, string> = {}): Record<string, string> {
   const env: Record<string, string> = { ...buildPythonEnv(), ...extra };
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined || SECRET_ENV_KEYS.has(key)) continue;
     if (key.startsWith('npm_') || key.startsWith('NODE_')) continue;
+    // Never inherit another project's venv (e.g. Hermes) into Applyr child processes.
+    if (key === 'VIRTUAL_ENV' || key === 'PYTHONHOME') continue;
     env[key] = value;
   }
   return env;
@@ -34,7 +39,7 @@ export function runBuffered(
   options: { cwd?: string; env?: Record<string, string>; stdin?: string } = {},
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('python', args, {
+    const proc = spawn(resolvePythonExecutable(), args, {
       cwd: options.cwd ?? PROJECT_ROOT,
       shell: false,
       env: options.env ?? buildSpawnEnv(),
@@ -88,7 +93,7 @@ export function runDetached(
   args: string[],
   options: { cwd?: string; env?: Record<string, string> } = {},
 ): ChildProcess {
-  const proc = spawn('python', args, {
+  const proc = spawn(resolvePythonExecutable(), args, {
     cwd: options.cwd ?? PROJECT_ROOT,
     shell: false,
     env: buildSpawnEnv(options.env ?? {}),
@@ -112,7 +117,7 @@ export function spawnPython(
     onError?: (err: Error) => void;
   } = {},
 ): ChildProcessWithoutNullStreams {
-  const proc = spawn('python', args, {
+  const proc = spawn(resolvePythonExecutable(), args, {
     cwd: options.cwd ?? PROJECT_ROOT,
     shell: false,
     env: buildSpawnEnv(options.env),

@@ -72,8 +72,21 @@ def first_gate_failure(jd: str, company: str, prefs: dict) -> str | None:
     return None
 
 
-def evaluate_row(row: dict, prefs: dict, fit_rules: str, work_exp: str, min_score: int) -> dict:
+_REMOTE_PREFIX = "Location: Remote, United States\n\n"
+
+
+def evaluate_row(
+    row: dict,
+    prefs: dict,
+    fit_rules: str,
+    work_exp: str,
+    min_score: int,
+    *,
+    assume_remote: bool = False,
+) -> dict:
     jd = row["jd"]
+    if assume_remote:
+        jd = _REMOTE_PREFIX + jd
     company = row["company"]
     out: dict = {
         "company": company,
@@ -183,7 +196,30 @@ def write_report(results: list[dict], csv_path: str, out_path: str, min_score: i
         f.write("\n".join(lines))
 
 
+def _reclaim_fit_vram() -> None:
+    """Stop fit models so the next job sees free VRAM above the primary threshold."""
+    import subprocess
+
+    for model in ("llama3.1:8b-instruct-q5_K_M", "phi3.5:3.8b-mini-instruct-q8_0"):
+        try:
+            subprocess.run(
+                ["ollama", "stop", model],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except Exception:
+            pass
+
+
 def main() -> int:
+    from applyr_python import assert_applyr_host
+    try:
+        assert_applyr_host()
+    except Exception as exc:
+        print(f"CRITICAL: {exc}", file=sys.stderr)
+        return 1
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "csv_path",
@@ -197,6 +233,11 @@ def main() -> int:
     parser.add_argument(
         "--md",
         default=os.path.join(PROJECT_ROOT, "docs", "reports", "csv-job-evaluation-1-report.md"),
+    )
+    parser.add_argument(
+        "--assume-remote",
+        action="store_true",
+        help="Prepend Remote, United States to each JD (skip stealth on-site rejection)",
     )
     args = parser.parse_args()
 
@@ -215,8 +256,21 @@ def main() -> int:
     results = []
     for i, row in enumerate(rows, 1):
         print(f"  [{i}/{len(rows)}] {row['company']}...", flush=True)
-        results.append(evaluate_row(row, prefs, fit_rules, work_exp, min_score))
+        results.append(
+            evaluate_row(
+                row,
+                prefs,
+                fit_rules,
+                work_exp,
+                min_score,
+                assume_remote=args.assume_remote,
+            )
+        )
+        # Reclaim VRAM so the next job can use the primary model (llama), not phi fallback.
+        if results[-1].get("score") is not None:
+            _reclaim_fit_vram()
 
+    _reclaim_fit_vram()
     write_report(results, args.csv_path, args.md, min_score)
     with open(args.json, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)

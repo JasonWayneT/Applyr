@@ -10,10 +10,12 @@ from utils import get_verifier_model, call_llm
 
 
 def lint_draft_text(text: str, label: str = "resume") -> Dict[str, Any]:
-    """Returns {ok: bool, issues: list[str]}. Skips when LOCAL_LINT=0."""
+    """Returns {ok: bool, issues: list[str]}. Opt-in only (CR-070) — set
+    LOCAL_LINT=1 to enable; skipped by default so this Ollama call doesn't
+    fire on the default drafting path."""
     import os
 
-    if os.environ.get("LOCAL_LINT", "1").strip() in ("0", "false", "no"):
+    if os.environ.get("LOCAL_LINT", "0").strip() not in ("1", "true", "yes"):
         return {"ok": True, "issues": []}
 
     schema = {

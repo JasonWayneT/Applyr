@@ -20,9 +20,14 @@ export function useJobs() {
         return () => clearInterval(interval);
     }, []);
 
-    const handleStatusChange = useCallback((id: string, newStatus: string) => {
-        setJobs(prev => prev.map(j => j.id === id ? { ...j, status: newStatus as Job['status'] } : j));
+    const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
         setSelectedJob(null);
+        // Refetch so applied_at (and other status-side fields) stay in sync
+        try {
+            setJobs((await fetchJobs()) as Job[]);
+        } catch {
+            setJobs(prev => prev.map(j => j.id === id ? { ...j, status: newStatus as Job['status'] } : j));
+        }
     }, []);
 
     return { jobs, isLoaded, selectedJob, setSelectedJob, handleStatusChange };

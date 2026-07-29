@@ -19,7 +19,7 @@ export function companySlug(company: string): string {
 }
 
 function folderNamesMatch(a: string, b: string): boolean {
-  const norm = (s: string) => s.replace(/[_-]/g, '');
+  const norm = (s: string) => s.toLowerCase().replace(/[_-]/g, '');
   return a === b || norm(a) === norm(b);
 }
 

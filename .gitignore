@@ -67,6 +67,8 @@ docs/PROJECT_DEEP_DIVE.md
 docs/reports/
 docs/legacy/
 PRODUCT_CAPABILITIES.md
+# UX audit screenshots — Profile screen capture shows real email/phone in plain text
+docs/spec/04-design-specs/ui-redesign-material3/ux-audit/screenshots/
 
 # Claude Code internal files
 settings.local.json

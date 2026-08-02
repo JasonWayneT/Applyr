@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Job } from '../types/job';
 
 interface Notification {
@@ -20,6 +20,8 @@ interface NotificationPanelProps {
 }
 
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onClose, onJobClick, onNavigate }) => {
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+
   if (!isOpen) return null;
 
   const notifications: Notification[] = [];
@@ -89,6 +91,12 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
     });
   }
 
+  const visibleNotifications = notifications.filter(n => !dismissedIds.has(n.id));
+
+  const dismiss = (id: string) => {
+    setDismissedIds(prev => new Set(prev).add(id));
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -98,21 +106,26 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
       <div className="absolute right-8 top-14 z-50 w-96 bg-surface-container-lowest rounded-2xl editorial-shadow border border-outline-variant/10 animate-slide-up overflow-hidden">
         <div className="px-5 py-4 border-b border-outline-variant/10 flex items-center justify-between">
           <h3 className="text-sm font-headline font-bold text-on-surface">Notifications</h3>
-          <span className="text-[10px] text-on-surface-variant">{notifications.length} active</span>
+          <span className="text-[10px] text-on-surface-variant">{visibleNotifications.length} active</span>
         </div>
 
         <div className="max-h-[400px] overflow-y-auto applyr-scrollbar">
-          {notifications.length === 0 ? (
+          {visibleNotifications.length === 0 ? (
             <div className="py-12 text-center">
               <span className="material-symbols-outlined text-3xl text-on-surface-variant/30 mb-2 block">notifications_off</span>
               <p className="text-sm text-on-surface-variant">All clear. Nothing needs your attention.</p>
             </div>
           ) : (
-            notifications.map(n => (
-              <button
+            visibleNotifications.map(n => (
+              <div
                 key={n.id}
+                role="button"
+                tabIndex={0}
                 onClick={n.action}
-                className="w-full px-5 py-4 flex items-start gap-3 hover:bg-surface-container transition-colors text-left border-b border-outline-variant/5 last:border-b-0"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); n.action?.(); }
+                }}
+                className="w-full px-5 py-4 flex items-start gap-3 hover:bg-surface-container transition-colors text-left border-b border-outline-variant/5 last:border-b-0 cursor-pointer"
               >
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${n.iconClass}`}>
                   <span className="material-symbols-outlined text-base">{n.icon}</span>
@@ -122,7 +135,15 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
                   <p className="text-xs text-on-surface-variant mt-0.5 truncate">{n.detail}</p>
                 </div>
                 <span className="text-[10px] text-on-surface-variant whitespace-nowrap mt-0.5">{n.time}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); dismiss(n.id); }}
+                  className="text-on-surface-variant/50 hover:text-on-surface-variant shrink-0"
+                  title="Dismiss"
+                >
+                  <span className="material-symbols-outlined text-base">close</span>
+                </button>
+              </div>
             ))
           )}
         </div>

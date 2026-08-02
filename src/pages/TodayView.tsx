@@ -1,14 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import { Job } from '../types/job';
+import { Contact } from '../types/contact';
 import StatusChip from '../components/StatusChip';
 import { api } from '../lib/api';
 import type { OpportunitiesFilter } from '../types/opportunities';
 import { DASHBOARD_FILTER_MAP } from '../types/opportunities';
 
+const CONTACT_TYPE_LABELS: Record<Contact['contact_type'], string> = {
+  hiring_manager: 'Hiring manager',
+  warm_connection: 'Warm connection',
+  informational: 'Informational',
+};
+
+type NeedsAttentionFormState = {
+  company: string;
+  contact_name: string;
+  contact_title: string;
+  contact_type: Contact['contact_type'] | '';
+  source: string;
+};
+
+const EMPTY_NEEDS_ATTENTION_FORM: NeedsAttentionFormState = {
+  company: '',
+  contact_name: '',
+  contact_title: '',
+  contact_type: '',
+  source: '',
+};
+
+const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+
 interface TodayViewProps {
   jobs: Job[];
   onJobClick: (job: Job) => void;
   onNavigateToOpportunities?: (filter: OpportunitiesFilter) => void;
+  onStatusChange?: (id: string, newStatus: string) => void;
 }
 
 const getGreeting = () => {
@@ -18,10 +44,40 @@ const getGreeting = () => {
   return 'Good evening';
 };
 
-const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpportunities }) => {
+const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpportunities, onStatusChange }) => {
   const [firstName, setFirstName] = useState('');
   const [isReranking, setIsReranking] = useState(false);
   const [rerankQuery, setRerankQuery] = useState('');
+
+  const [markingAppliedId, setMarkingAppliedId] = useState<string | null>(null);
+  const [applyToast, setApplyToast] = useState<{ company: string } | null>(null);
+
+  const markApplied = async (job: Job) => {
+    if (markingAppliedId) return;
+    setMarkingAppliedId(job.id);
+    try {
+      const res = await fetch(api(`/api/jobs/${job.id}/status`), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Applied' }),
+      });
+      if (!res.ok) throw new Error();
+      onStatusChange?.(job.id, 'Applied');
+      setApplyToast({ company: job.company });
+      setTimeout(() => setApplyToast(null), 3000);
+    } catch {
+      console.error('Failed to mark job as applied');
+    } finally {
+      setMarkingAppliedId(null);
+    }
+  };
+
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [contactForm, setContactForm] = useState<NeedsAttentionFormState>(EMPTY_NEEDS_ATTENTION_FORM);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(api('/api/profile/identity'))
@@ -29,6 +85,60 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
       .then(data => { if (data?.name) setFirstName(data.name.trim().split(' ')[0]); })
       .catch(() => {});
   }, []);
+
+  const loadContacts = () => {
+    setLoadingContacts(true);
+    fetch(api('/api/contacts'))
+      .then(r => r.json())
+      .then(data => setContacts(data.contacts ?? []))
+      .catch(() => setContacts([]))
+      .finally(() => setLoadingContacts(false));
+  };
+
+  useEffect(() => {
+    loadContacts();
+  }, []);
+
+  const saveNeedsAttentionContact = async () => {
+    if (!contactForm.company.trim() || !contactForm.contact_name.trim() || !contactForm.contact_type) {
+      setContactError('Company, name, and contact type are required.');
+      return;
+    }
+    setSavingContact(true);
+    setContactError(null);
+    try {
+      const res = await fetch(api('/api/contacts'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company: contactForm.company.trim(),
+          contact_name: contactForm.contact_name.trim(),
+          contact_title: contactForm.contact_title.trim() || undefined,
+          contact_type: contactForm.contact_type,
+          source: contactForm.source.trim() || undefined,
+          message_sent_at: new Date().toISOString(),
+          confirmed: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add contact');
+      loadContacts();
+      setContactForm(EMPTY_NEEDS_ATTENTION_FORM);
+      setShowAddContact(false);
+    } catch (err) {
+      setContactError(err instanceof Error ? err.message : 'Failed to add contact.');
+    } finally {
+      setSavingContact(false);
+    }
+  };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const followUpDue = contacts
+    .filter(c => c.next_follow_up_due && c.next_follow_up_due.slice(0, 10) <= todayStr)
+    .sort((a, b) => a.next_follow_up_due!.localeCompare(b.next_follow_up_due!));
+  const worthReconnecting = contacts
+    .filter(c => !c.next_follow_up_due && Date.now() - new Date(c.last_touch_at).getTime() >= SIXTY_DAYS_MS)
+    .sort((a, b) => new Date(a.last_touch_at).getTime() - new Date(b.last_touch_at).getTime());
 
   const handleRerank = async () => {
     if (!rerankQuery.trim()) return;
@@ -88,7 +198,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
   const funnelMax = Math.max(...funnelCounts, 1);
 
   const statusCounts = [
-    { label: 'Backlog', count: backlogs.length, height: getChartBarHeight(backlogs.length, funnelMax) },
+    { label: 'Ready to Apply', count: backlogs.length, height: getChartBarHeight(backlogs.length, funnelMax) },
     { label: 'Applied', count: applied.length, height: getChartBarHeight(applied.length, funnelMax) },
     { label: 'Screening', count: screenings.length, height: getChartBarHeight(screenings.length, funnelMax) },
     { label: 'Interviews', count: coreInterviews.length, height: getChartBarHeight(coreInterviews.length, funnelMax) },
@@ -219,18 +329,18 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
 
         {/* Ready to Apply Pipeline List */}
         <div className="lg:col-span-12 mt-2">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-2">
             <h3 className="text-2xl font-headline font-bold text-on-surface">Ready to Apply</h3>
             <div className="flex items-center gap-2 mt-4 md:mt-0">
-              <input 
-                type="text" 
-                placeholder="Semantic search (e.g. HealthTech)" 
-                value={rerankQuery} 
-                onChange={(e) => setRerankQuery(e.target.value)} 
+              <input
+                type="text"
+                placeholder="Semantic search (e.g. HealthTech)"
+                value={rerankQuery}
+                onChange={(e) => setRerankQuery(e.target.value)}
                 className="px-4 py-2 bg-surface-container rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/50 text-on-surface"
               />
-              <button 
-                onClick={handleRerank} 
+              <button
+                onClick={handleRerank}
                 disabled={isReranking || !rerankQuery.trim()}
                 className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-50 hover:bg-primary/90 transition-colors"
               >
@@ -238,6 +348,9 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               </button>
             </div>
           </div>
+          <p className="text-xs text-on-surface-variant mb-6 md:text-right">
+            Search and reorder your Ready-to-Apply backlog by company, role, or keyword.
+          </p>
           <div className="space-y-4">
             {pipelineJobs.slice(0, 10).map(job => (
               <div
@@ -271,6 +384,17 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
                   <div className="min-w-[130px]">
                   <StatusChip status={job.status} hasAssets={job.has_assets} />
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); markApplied(job); }}
+                    disabled={markingAppliedId === job.id}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-primary-container transition-colors disabled:opacity-50"
+                    title="Mark as Applied"
+                  >
+                    <span className="material-symbols-outlined">
+                      {markingAppliedId === job.id ? 'progress_activity' : 'check_circle'}
+                    </span>
+                  </button>
                   <a
                     href={api(`/api/jobs/${job.id}/download-all`)}
                     download={`${job.company.toLowerCase()}_assets.zip`}
@@ -410,6 +534,162 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
             )}
           </div>
         </div>
+
+        {/* Needs Attention — networking contacts (CR-071) */}
+        <div className="lg:col-span-12 mt-8">
+          <div className="bg-surface-container-lowest rounded-[2rem] p-8 editorial-shadow">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-secondary">group</span>
+                <h3 className="text-2xl font-headline font-bold text-on-surface">Needs Attention</h3>
+              </div>
+              {!showAddContact && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddContact(true)}
+                  className="btn-secondary text-xs flex items-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-sm">person_add</span>
+                  Add contact
+                </button>
+              )}
+            </div>
+
+            {showAddContact && (
+              <div className="space-y-3 animate-fade-in bg-surface-container-low p-4 rounded-2xl mb-6">
+                <p className="text-[11px] text-on-surface-variant">
+                  For a contact with no open role tied to it yet — e.g. someone you met before a job existed.
+                  For contacts tied to a specific role, add them from that job&apos;s detail panel instead.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    placeholder="Company"
+                    value={contactForm.company}
+                    onChange={(e) => setContactForm(prev => ({ ...prev, company: e.target.value }))}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Contact name"
+                    value={contactForm.contact_name}
+                    onChange={(e) => setContactForm(prev => ({ ...prev, contact_name: e.target.value }))}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Title (optional)"
+                    value={contactForm.contact_title}
+                    onChange={(e) => setContactForm(prev => ({ ...prev, contact_title: e.target.value }))}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                  />
+                  <select
+                    value={contactForm.contact_type}
+                    onChange={(e) => setContactForm(prev => ({ ...prev, contact_type: e.target.value as Contact['contact_type'] }))}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                  >
+                    <option value="" disabled>Contact type…</option>
+                    {(Object.keys(CONTACT_TYPE_LABELS) as Contact['contact_type'][]).map(t => (
+                      <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="text"
+                    placeholder="Source (optional)"
+                    value={contactForm.source}
+                    onChange={(e) => setContactForm(prev => ({ ...prev, source: e.target.value }))}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface sm:col-span-2"
+                  />
+                </div>
+                {contactError && <p className="text-[11px] text-error">{contactError}</p>}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={saveNeedsAttentionContact}
+                    disabled={savingContact}
+                    className="btn-primary text-xs px-4 py-2 rounded-xl disabled:opacity-50"
+                  >
+                    {savingContact ? 'Saving...' : 'Save contact'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setShowAddContact(false); setContactForm(EMPTY_NEEDS_ATTENTION_FORM); setContactError(null); }}
+                    className="text-xs text-on-surface-variant hover:text-on-surface"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {loadingContacts ? (
+              <p className="text-xs text-on-surface-variant italic">Loading...</p>
+            ) : followUpDue.length === 0 && worthReconnecting.length === 0 ? (
+              !showAddContact && (
+                <p className="text-sm text-on-surface-variant">Nothing needs a follow-up right now.</p>
+              )
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                  <h4 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">
+                    Follow-up due
+                  </h4>
+                  {followUpDue.length === 0 ? (
+                    <p className="text-xs text-on-surface-variant italic">Nothing due.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {followUpDue.map(c => (
+                        <div key={c.id} className="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/10">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-bold text-on-surface">{c.contact_name}</p>
+                              <p className="text-xs text-on-surface-variant">{c.company}</p>
+                            </div>
+                            <span className="text-[10px] font-bold text-secondary bg-secondary-container/40 px-2 py-0.5 rounded-md shrink-0">
+                              {CONTACT_TYPE_LABELS[c.contact_type]}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-on-surface-variant mt-2 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px]">event</span>
+                            Due {new Date(c.next_follow_up_due!).toLocaleDateString([], { dateStyle: 'medium' })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">
+                    Worth reconnecting
+                  </h4>
+                  {worthReconnecting.length === 0 ? (
+                    <p className="text-xs text-on-surface-variant italic">Nobody&apos;s gone quiet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {worthReconnecting.map(c => (
+                        <div key={c.id} className="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/10">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-bold text-on-surface">{c.contact_name}</p>
+                              <p className="text-xs text-on-surface-variant">{c.company}</p>
+                            </div>
+                            <span className="text-[10px] font-bold text-secondary bg-secondary-container/40 px-2 py-0.5 rounded-md shrink-0">
+                              {CONTACT_TYPE_LABELS[c.contact_type]}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-on-surface-variant mt-2">
+                            Haven&apos;t talked since {new Date(c.last_touch_at).toLocaleDateString([], { dateStyle: 'medium' })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -445,6 +725,18 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
             <p className="text-xs text-on-surface-variant mt-1 font-medium">{stat.label}</p>
           </div>
         ))}
+      </div>
+
+      {/* Mark as Applied confirmation toast */}
+      <div className={`fixed bottom-8 right-8 flex items-center gap-3 bg-surface-container-highest text-on-surface border border-outline-variant/20 px-5 py-3 rounded-2xl shadow-2xl transition-all duration-300 z-50 transform ${
+        applyToast ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0 pointer-events-none'
+      }`}>
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <span className="material-symbols-outlined text-primary text-xl" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+        </div>
+        <p className="text-xs font-bold">
+          {applyToast ? `Marked ${applyToast.company} as Applied` : ''}
+        </p>
       </div>
     </div>
   );

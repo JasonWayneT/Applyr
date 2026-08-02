@@ -23,7 +23,23 @@ function folderNamesMatch(a: string, b: string): boolean {
   return a === b || norm(a) === norm(b);
 }
 
-/** Merge files from src into dest (newer active copies overwrite archive). */
+/**
+ * Merge files from src into dest (newer active copies overwrite archive).
+ *
+ * Safety (2026-07-31, Jason-prompted): this used to call fs.copyFileSync
+ * unconditionally, silently destroying whatever was at `to` if a name
+ * collided. Found real: reconcileActiveSubmissionFolders() archived a fresh
+ * same-day resume/cover-letter draft into an archive folder that already
+ * held real files from a genuine prior application cycle for that same
+ * company (Interview_Cheat_Sheet.md, Research_Packet.pdf) -- the folder-name
+ * match is by company slug only, with no concept of "this is a different
+ * posting" vs "this is the same posting reposted." Before overwriting any
+ * existing destination file whose content actually differs from the
+ * incoming one, the old version is preserved as `{name}.bak-{timestamp}`
+ * rather than silently lost. This does not fix the deeper issue (one folder
+ * per company, not per posting) -- it just guarantees nothing real
+ * disappears without a trace while that's still true.
+ */
 export function mergeSubmissionFolder(src: string, dest: string): void {
   fs.mkdirSync(dest, { recursive: true });
   for (const name of fs.readdirSync(src)) {
@@ -32,6 +48,15 @@ export function mergeSubmissionFolder(src: string, dest: string): void {
     if (fs.statSync(from).isDirectory()) {
       mergeSubmissionFolder(from, to);
     } else {
+      if (fs.existsSync(to)) {
+        const existing = fs.readFileSync(to);
+        const incoming = fs.readFileSync(from);
+        if (!existing.equals(incoming)) {
+          const stamp = fs.statSync(to).mtime.toISOString().replace(/[:.]/g, '-');
+          const backupPath = path.join(dest, `${name}.bak-${stamp}`);
+          if (!fs.existsSync(backupPath)) fs.copyFileSync(to, backupPath);
+        }
+      }
       fs.copyFileSync(from, to);
     }
   }

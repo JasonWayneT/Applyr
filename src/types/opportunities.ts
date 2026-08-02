@@ -13,6 +13,7 @@ export type OpportunitiesFilter = (typeof OPPORTUNITIES_FILTERS)[number];
 /** Dashboard funnel / stat label → Opportunities tab filter (1:1 stage alignment) */
 export const DASHBOARD_FILTER_MAP: Record<string, OpportunitiesFilter> = {
   Backlog: 'Backlog',
+  'Ready to Apply': 'Backlog',
   Applied: 'Applied',
   Screening: 'Screening',
   Interviews: 'Interviews',

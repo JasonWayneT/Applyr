@@ -192,6 +192,7 @@ const SyncActivityView: React.FC = () => {
   });
   const [isSyncing, setIsSyncing] = useState(false);
   const [serverError, setServerError] = useState(false);
+  const [isActivityOpen, setIsActivityOpen] = useState(false);
   const [draftingJobId, setDraftingJobId] = useState<string | null>(null);
   const [assetStages, setAssetStages] = useState<Stage[]>(INITIAL_ASSET_STAGES);
   const [activeAssetCompany, setActiveAssetCompany] = useState<string | null>(null);
@@ -213,6 +214,12 @@ const SyncActivityView: React.FC = () => {
 
   const [isExpOpen, setIsExpOpen] = useState(false);
   const expRef = useRef<HTMLDivElement>(null);
+
+  // Auto-expand the Activity section when a run starts so there's something to watch;
+  // never force it closed again once opened (manually or automatically).
+  useEffect(() => {
+    if (isPipelineActive(systemStatus.status)) setIsActivityOpen(true);
+  }, [systemStatus.status]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -868,6 +875,27 @@ const SyncActivityView: React.FC = () => {
         </div>
       </div>
 
+      {/* Activity — source health, live pipeline status, log console, and in-flight roles */}
+      <div className="bg-surface-container-lowest border border-outline/10 rounded-2xl editorial-shadow overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsActivityOpen(prev => !prev)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-surface-container transition-colors"
+        >
+          <div className="flex items-center gap-3 text-left">
+            <span className="material-symbols-outlined text-on-surface-variant text-base">monitoring</span>
+            <div>
+              <span className="text-xs font-bold text-on-surface block">Activity</span>
+              <span className="text-[10px] text-on-surface-variant">Source health, live pipeline status, and in-flight roles</span>
+            </div>
+          </div>
+          <span className="material-symbols-outlined text-on-surface-variant text-base">
+            {isActivityOpen ? 'expand_less' : 'expand_more'}
+          </span>
+        </button>
+        {isActivityOpen && (
+          <div className="px-6 pb-6 space-y-6">
+
       {/* Source Health Registry Section */}
       <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl editorial-shadow space-y-4">
         <div>
@@ -1112,6 +1140,9 @@ const SyncActivityView: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
+          </div>
+        )}
       </div>
     </div>
   );

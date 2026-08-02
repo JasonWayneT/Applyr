@@ -35,6 +35,7 @@ function App() {
             jobs={jobs}
             onJobClick={setSelectedJob}
             onNavigateToOpportunities={navigateToOpportunities}
+            onStatusChange={handleStatusChange}
           />
         );
       case 'Opportunities':
@@ -50,7 +51,7 @@ function App() {
         return <FindNewJobsView />;
       case 'Job Search':
         return <SyncActivityView />;
-      case 'Profile':
+      case 'Settings':
         return <SettingsView />;
       case 'Tuning Log':
         return <TuningLogView jobs={jobs} onJobClick={setSelectedJob} />;

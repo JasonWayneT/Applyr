@@ -12,8 +12,19 @@ interface AllJobsViewProps {
   onFilterChange: (filter: OpportunitiesFilter) => void;
 }
 
+type SortOption = 'newest' | 'oldest' | 'company-asc' | 'company-desc' | 'score-desc';
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'newest', label: 'Date Added (Newest)' },
+  { value: 'oldest', label: 'Date Added (Oldest)' },
+  { value: 'company-asc', label: 'Company (A-Z)' },
+  { value: 'company-desc', label: 'Company (Z-A)' },
+  { value: 'score-desc', label: 'Fit Score (High-Low)' },
+];
+
 const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilter, onFilterChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
 
   const processedJobs = jobs.filter(job => {
     if (job.status === 'Drafted') return false;
@@ -30,6 +41,15 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
     }
 
     return true;
+  }).sort((a, b) => {
+    switch (sortBy) {
+      case 'company-asc': return a.company.localeCompare(b.company);
+      case 'company-desc': return b.company.localeCompare(a.company);
+      case 'oldest': return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      case 'score-desc': return (b.score ?? -1) - (a.score ?? -1);
+      case 'newest':
+      default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    }
   });
 
   const groups = [
@@ -59,9 +79,29 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
               placeholder="Search company or role..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-applyr rounded-full pl-10 pr-4 py-2 w-full sm:w-56 text-sm"
+              className="input-applyr rounded-full pl-10 pr-9 py-2 w-full sm:w-56 text-sm"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                title="Clear search"
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            )}
           </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
+            className="input-applyr rounded-full px-4 py-2 text-sm cursor-pointer"
+            title="Sort jobs"
+          >
+            {SORT_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
           <div className="flex flex-wrap bg-surface-container-low p-1 rounded-xl gap-0.5 max-w-full">
             {OPPORTUNITIES_FILTERS.map(f => (
               <button 
@@ -150,7 +190,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                           </a>
                         )}
                         {job.status === 'Backlog' && job.has_assets ? (
-                          <button className="btn-primary text-xs py-1.5 px-4 rounded-lg">Apply Now</button>
+                          <button className="btn-primary text-xs py-1.5 px-4 rounded-lg">Review to Apply</button>
                         ) : job.status === 'Core Interviews' ? (
                           <button className="btn-secondary text-xs py-1.5 px-4 rounded-lg">Cheat sheet</button>
                         ) : (

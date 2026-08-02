@@ -132,7 +132,7 @@ const FindNewJobsView: React.FC = () => {
                 <div>
                   <p className="text-sm font-headline font-bold text-on-surface">No active session</p>
                   <p className="text-xs text-on-surface-variant mt-1">
-                    {inputMode === 'single' ? "Paste a JD and click 'Run' to begin." : "Upload a CSV to batch process roles."}
+                    {inputMode === 'single' ? "Paste a JD and click 'Run automation' to begin." : "Upload a CSV to batch process roles."}
                   </p>
                 </div>
               </div>

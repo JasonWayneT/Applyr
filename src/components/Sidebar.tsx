@@ -10,9 +10,10 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [accountLabel, setAccountLabel] = useState('Local account');
   const menuRef = useRef<HTMLDivElement>(null);
-  
+
   const newJobsCount = jobs.filter(j => j.status === 'Backlog' && j.has_assets).length;
 
   const mainNav = [
@@ -21,6 +22,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     { name: 'Job Search', icon: 'radar' },
     { name: 'Add Job', icon: 'post_add' },
     { name: 'Tuning Log', icon: 'tune' },
+    { name: 'Settings', icon: 'account_circle' },
   ];
 
   useEffect(() => {
@@ -38,6 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
+        setIsHelpOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -109,7 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
             <div className="space-y-0.5">
               <button
                 onClick={() => {
-                  setActiveTab('Profile');
+                  setActiveTab('Settings');
                   setIsMenuOpen(false);
                 }}
                 className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
@@ -117,20 +120,27 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
                 <span className="material-symbols-outlined text-sm text-tertiary">settings</span>
                 Settings
               </button>
-              
+
               <div className="h-[1px] bg-outline-variant/10 my-1" />
-              
+
               <button
-                onClick={() => {
-                  alert("Applyr v2.5 Multi-LLM Agent. All services connected and running on local SQLite.");
-                  setIsMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+                onClick={() => setIsHelpOpen(prev => !prev)}
+                className="w-full flex items-center justify-between gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
               >
-                <span className="material-symbols-outlined text-sm">help</span>
-                Help
+                <span className="flex items-center gap-3.5">
+                  <span className="material-symbols-outlined text-sm">help</span>
+                  Help
+                </span>
+                <span className="material-symbols-outlined text-sm">
+                  {isHelpOpen ? 'expand_less' : 'expand_more'}
+                </span>
               </button>
-              
+              {isHelpOpen && (
+                <div className="px-3 pb-2 pt-1 text-[11px] text-on-surface-variant leading-relaxed">
+                  Applyr v2.5 Multi-LLM Agent. All services connected and running on local SQLite.
+                </div>
+              )}
+
               <button
                 onClick={() => {
                   localStorage.clear();
@@ -138,8 +148,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
                 }}
                 className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-error/80 hover:text-error transition-colors"
               >
-                <span className="material-symbols-outlined text-sm">logout</span>
-                Log out
+                <span className="material-symbols-outlined text-sm">restart_alt</span>
+                Reset local session
               </button>
             </div>
           </div>
@@ -158,10 +168,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
           <div className="w-9 h-9 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-extrabold shadow-sm">
             JT
           </div>
-          {/* Name & Plan Details */}
+          {/* Name */}
           <div className="text-left flex-1 min-w-0">
-            <p className="text-xs font-extrabold text-on-surface truncate leading-tight">soylaertes</p>
-            <p className="text-[9px] font-bold text-primary uppercase tracking-wider leading-none mt-0.5">Plus</p>
+            <p className="text-xs font-extrabold text-on-surface truncate leading-tight">{accountLabel}</p>
           </div>
           {/* Chevron */}
           <span className="material-symbols-outlined text-on-surface-variant text-base select-none">

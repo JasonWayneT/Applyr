@@ -10,6 +10,7 @@ import jobsRouter     from './routes/jobs/index.js';
 import profileRouter  from './routes/profile.js';
 import pipelineRouter from './routes/pipeline.js';
 import sourcesRouter  from './routes/sources.js';
+import contactsRouter from './routes/contacts.js';
 import { resetTheirstackCreditsIfNewMonth } from './services/theirstackCreditLedger.js';
 
 // Ensure workspace dirs exist before status transitions (FR-030)
@@ -47,6 +48,7 @@ app.use('/', jobsRouter);
 app.use('/', profileRouter);
 app.use('/', pipelineRouter);
 app.use('/', sourcesRouter);
+app.use('/', contactsRouter);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n${'='.repeat(48)}`);

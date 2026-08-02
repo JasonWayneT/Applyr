@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Job } from '../types/job';
+import { Contact } from '../types/contact';
 import { api } from '../lib/api';
 import StatusChip from './StatusChip';
 import DocumentEditor from './DocumentEditor';
@@ -16,6 +17,26 @@ import {
   toDebriefDateInputValue,
   type InterviewDebrief,
 } from 'shared/domain/interviewDebrief';
+
+const CONTACT_TYPE_LABELS: Record<Contact['contact_type'], string> = {
+  hiring_manager: 'Hiring manager',
+  warm_connection: 'Warm connection',
+  informational: 'Informational',
+};
+
+type ContactFormState = {
+  contact_name: string;
+  contact_title: string;
+  contact_type: Contact['contact_type'] | '';
+  source: string;
+};
+
+const EMPTY_CONTACT_FORM: ContactFormState = {
+  contact_name: '',
+  contact_title: '',
+  contact_type: '',
+  source: '',
+};
 
 type DebriefFormState = {
   date: string;
@@ -106,6 +127,13 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
   const [debriefError, setDebriefError] = useState<string | null>(null);
   const [debriefFieldErrors, setDebriefFieldErrors] = useState<DebriefFieldErrors>({});
 
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [showAddContact, setShowAddContact] = useState(false);
+  const [contactForm, setContactForm] = useState<ContactFormState>(EMPTY_CONTACT_FORM);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+
   const debriefInputClass = (invalid: boolean) =>
     `input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface-container-lowest ${
       invalid ? 'ring-2 ring-error/50 border-error/40' : ''
@@ -155,6 +183,16 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
       .then(data => setDebriefs(data.debriefs ?? []))
       .catch(() => setDebriefs([]))
       .finally(() => setLoadingDebriefs(false));
+
+    setLoadingContacts(true);
+    setShowAddContact(false);
+    setContactForm(EMPTY_CONTACT_FORM);
+    setContactError(null);
+    fetch(api(`/api/contacts?job_id=${job.id}`))
+      .then(r => r.json())
+      .then(data => setContacts(data.contacts ?? []))
+      .catch(() => setContacts([]))
+      .finally(() => setLoadingContacts(false));
   }, [job?.id, job?.company]);
 
   if (!job) return null;
@@ -248,6 +286,43 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
       if (editingDebriefId === debriefId) resetDebriefForm();
     } catch {
       setDebriefError('Failed to delete debrief.');
+    }
+  };
+
+  const saveContact = async () => {
+    if (!contactForm.contact_name.trim() || !contactForm.contact_type) {
+      setContactError('Name and contact type are required.');
+      return;
+    }
+    setSavingContact(true);
+    setContactError(null);
+    try {
+      const res = await fetch(api('/api/contacts'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: job.id,
+          company: job.company,
+          contact_name: contactForm.contact_name.trim(),
+          contact_title: contactForm.contact_title.trim() || undefined,
+          contact_type: contactForm.contact_type,
+          source: contactForm.source.trim() || undefined,
+          message_sent_at: new Date().toISOString(),
+          confirmed: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add contact');
+
+      const listRes = await fetch(api(`/api/contacts?job_id=${job.id}`));
+      const listData = await listRes.json();
+      setContacts(listData.contacts ?? []);
+      setContactForm(EMPTY_CONTACT_FORM);
+      setShowAddContact(false);
+    } catch (err) {
+      setContactError(err instanceof Error ? err.message : 'Failed to add contact.');
+    } finally {
+      setSavingContact(false);
     }
   };
 
@@ -480,6 +555,122 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
               </div>
             </section>
 
+            {/* Contacts — networking outreach tied to this role (CR-071) */}
+            <section className="bg-surface-container-low p-6 rounded-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-secondary">group</span>
+                  <h3 className="text-lg font-headline font-bold text-on-surface">Contacts</h3>
+                </div>
+                {!showAddContact && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddContact(true)}
+                    className="btn-secondary text-xs flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">person_add</span>
+                    Add contact
+                  </button>
+                )}
+              </div>
+
+              {loadingContacts ? (
+                <p className="text-xs text-on-surface-variant italic">Loading...</p>
+              ) : contacts.length === 0 && !showAddContact ? (
+                <p className="text-xs text-on-surface-variant italic">No contacts logged for this role yet.</p>
+              ) : (
+                <div className="space-y-3 mb-4">
+                  {contacts.map(c => (
+                    <div key={c.id} className="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-bold text-on-surface">{c.contact_name}</p>
+                          {c.contact_title && (
+                            <p className="text-xs text-on-surface-variant">{c.contact_title}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-bold text-secondary bg-secondary-container/40 px-2 py-0.5 rounded-md">
+                            {CONTACT_TYPE_LABELS[c.contact_type]}
+                          </span>
+                          {!c.confirmed && (
+                            <span className="text-[10px] font-bold text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-md">
+                              Draft
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 mt-2 text-[11px] text-on-surface-variant">
+                        <span className="capitalize">{c.status}</span>
+                        {c.next_follow_up_due && (
+                          <span className="flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px]">event</span>
+                            Follow up {new Date(c.next_follow_up_due).toLocaleDateString([], { dateStyle: 'medium' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {showAddContact && (
+                <div className="space-y-3 animate-fade-in bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/10">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      placeholder="Contact name"
+                      value={contactForm.contact_name}
+                      onChange={(e) => setContactForm(prev => ({ ...prev, contact_name: e.target.value }))}
+                      className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Title (optional)"
+                      value={contactForm.contact_title}
+                      onChange={(e) => setContactForm(prev => ({ ...prev, contact_title: e.target.value }))}
+                      className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                    />
+                    <select
+                      value={contactForm.contact_type}
+                      onChange={(e) => setContactForm(prev => ({ ...prev, contact_type: e.target.value as Contact['contact_type'] }))}
+                      className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                    >
+                      <option value="" disabled>Contact type…</option>
+                      {(Object.keys(CONTACT_TYPE_LABELS) as Contact['contact_type'][]).map(t => (
+                        <option key={t} value={t}>{CONTACT_TYPE_LABELS[t]}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Source (optional)"
+                      value={contactForm.source}
+                      onChange={(e) => setContactForm(prev => ({ ...prev, source: e.target.value }))}
+                      className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface"
+                    />
+                  </div>
+                  {contactError && <p className="text-[11px] text-error">{contactError}</p>}
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={saveContact}
+                      disabled={savingContact}
+                      className="btn-primary text-xs px-4 py-2 rounded-xl disabled:opacity-50"
+                    >
+                      {savingContact ? 'Saving...' : 'Save contact'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowAddContact(false); setContactForm(EMPTY_CONTACT_FORM); setContactError(null); }}
+                      className="text-xs text-on-surface-variant hover:text-on-surface"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+
             {/* Interview Debrief — post-interview notes (separate from cheat sheet prep) */}
             <section className="bg-secondary/5 p-6 rounded-2xl border border-secondary/10">
               <div className="flex items-center gap-3 mb-4">
@@ -636,7 +827,11 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
               <h3 className="text-lg font-headline font-bold text-on-surface mb-3 flex items-center justify-between">
                 <span>Scoring Transparency</span>
                 <span className="text-sm bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-mono">
-                  {job.score_total !== undefined && job.score_total !== null ? `${job.score_total}/100` : 'Unscored'}
+                  {job.score_total !== undefined && job.score_total !== null
+                    ? `${job.score_total}/100`
+                    : job.score
+                      ? `Score: ${job.score}`
+                      : 'Unscored'}
                 </span>
               </h3>
               
@@ -684,7 +879,11 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                   return <p className="text-xs text-on-surface-variant italic">Failed to parse score breakdown details.</p>;
                 }
               })() : (
-                <p className="text-xs text-on-surface-variant italic">Not yet scored or no breakdown details available.</p>
+                <p className="text-xs text-on-surface-variant italic">
+                  {job.score
+                    ? `Score: ${job.score} available — detailed breakdown not yet generated for this role.`
+                    : 'Not yet scored.'}
+                </p>
               )}
             </section>
 
@@ -745,6 +944,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                   {files.filter(f => f.name.endsWith('.pdf')).map(file => {
                     const mdFilename = file.name.replace('.pdf', '.md');
                     const hasMd = files.some(f => f.name === mdFilename);
+                    const isCheatSheet = /cheat.?sheet/i.test(file.name);
 
                     return (
                       <div
@@ -753,9 +953,13 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                       >
                         <div className="flex items-center gap-3">
                           <div className="p-2 bg-primary-container rounded-lg">
-                            <span className="material-symbols-outlined text-primary text-base">{fileIcon(file.name)}</span>
+                            <span className="material-symbols-outlined text-primary text-base">
+                              {isCheatSheet ? 'fact_check' : fileIcon(file.name)}
+                            </span>
                           </div>
-                          <span className="text-sm text-on-surface group-hover:text-primary transition-colors">{file.name}</span>
+                          <span className="text-sm text-on-surface group-hover:text-primary transition-colors">
+                            {isCheatSheet ? 'Interview Cheat Sheet' : file.name}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2">
                           {hasMd && (
@@ -789,13 +993,16 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
             {/* Pipeline Process Logs */}
             <section className="border-t border-outline-variant/10 pt-6">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-1">
                 <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Pipeline Process Logs</h3>
                 {loadingLogs && (
                   <span className="material-symbols-outlined text-sm animate-spin text-primary">sync</span>
                 )}
               </div>
-              
+              <p className="text-[10px] text-on-surface-variant italic mb-3">
+                Text-matched activity feed — may include entries from unrelated roles.
+              </p>
+
               <div className="bg-inverse-surface rounded-xl p-4 font-mono text-[11px] leading-relaxed overflow-hidden flex flex-col max-h-[180px] overflow-y-auto applyr-scrollbar">
                 {systemStatus && ['scout_running', 'evaluate_running', 'drafting'].includes(systemStatus.status) && systemStatus.current_item?.toLowerCase().includes(job.company.toLowerCase()) && (
                   <div className="flex gap-2 text-emerald-400 font-bold animate-pulse border-b border-emerald-500/10 pb-1 mb-1">

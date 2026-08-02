@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Job } from '../types/job';
 
 interface TuningLogViewProps {
@@ -6,7 +6,16 @@ interface TuningLogViewProps {
   onJobClick: (job: Job) => void;
 }
 
+const TERM_GLOSSARY = [
+  { term: 'Engine Score', definition: 'The fit score the automated scorer assigned to this role before you self-rejected it.' },
+  { term: 'Avg Mismatched Score', definition: 'The average Engine Score across every role you’ve self-rejected — a high average means the engine keeps rating roles well that you don’t actually want.' },
+  { term: 'Target Mismatch Stage', definition: 'The pipeline stage (e.g. Drafted) where self-rejections happen most often — useful for spotting whether mismatches cluster at a specific point in the process.' },
+  { term: 'Discovered Mismatch at', definition: 'The specific pipeline stage this particular role was in when you self-rejected it.' },
+];
+
 const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
+  const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
+
   // Filter for jobs that were self-rejected by the user (not the company)
   const selfRejectedJobs = jobs.filter(
     job => job.status === 'Closed' && job.rejection_type === 'Self-Rejected'
@@ -27,9 +36,36 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
         <div className="flex bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-xl items-center gap-2 max-w-sm">
           <span className="material-symbols-outlined text-amber-600 text-lg">tune</span>
           <p className="text-[11px] font-medium text-amber-800 leading-normal">
-            Use these critiques to polish constraints inside <code className="bg-amber-500/20 px-1 py-0.5 rounded font-mono">job_fit_engine.md</code>.
+            These critiques help refine which roles get automatically matched to you.
           </p>
         </div>
+      </div>
+
+      {/* Term Glossary */}
+      <div className="bg-surface-container-low border border-outline-variant/10 rounded-2xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setIsGlossaryOpen(prev => !prev)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-surface-container transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-on-surface-variant text-base">help</span>
+            <span className="text-xs font-bold text-on-surface">What do these terms mean?</span>
+          </div>
+          <span className="material-symbols-outlined text-on-surface-variant text-base">
+            {isGlossaryOpen ? 'expand_less' : 'expand_more'}
+          </span>
+        </button>
+        {isGlossaryOpen && (
+          <div className="px-6 pb-6 space-y-3">
+            {TERM_GLOSSARY.map(({ term, definition }) => (
+              <div key={term}>
+                <p className="text-xs font-bold text-on-surface">{term}</p>
+                <p className="text-xs text-on-surface-variant leading-relaxed">{definition}</p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Stats Cards Row */}

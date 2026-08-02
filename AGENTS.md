@@ -10,92 +10,34 @@ If you only do one thing before touching `data/submissions/`, do this: **run the
 
 **Processing job descriptions today?** Invoke the `generate-submission` skill (`.claude/skills/generate-submission/SKILL.md`) — the single operational entry point for JD triage (fit-gating before any drafting), direct authoring, and verification. It's the current authoritative process, not the CR-070 tracker referenced below (superseded for generation — see the note just below).
 
+**Drafting a message to reach out to someone at a target company?** Invoke the `networking-outreach` skill (`.claude/skills/networking-outreach/SKILL.md`) — covers both a hiring-manager/role-relevant contact and an unrelated-department warm connection (alum, former coworker), since those need different message structures. Added 2026-07-30 after two drafts of a message to a CivicPlus contact missed the mark (too soft, then no relationship framing) before the pattern got written down.
+
 ---
 
 ## Active Engineering Work — Read This First If You're Here to Build, Not Draft
 
-> **START HERE (2026-07-20):
-> [SESSION-HANDOFF-2026-07-20-process-hardening.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-20-process-hardening.md)**
-> — supersedes the 2026-07-18 handoff below as the active thread. The direct-authoring pivot from 07-18
-> is done and stable; this doc covers what happened when the resulting process (`.claude/skills/generate-submission/SKILL.md`
-> v2.0.0 — the actual authoritative Stage 0-3 process, read it in full) ran against real JDs for the
-> first time, in two harnesses, and the self-repair fixes that came out of it: a database check so
-> Stage 0 never drafts for a company already marked Rejected/Closed, a mechanical check for resume↔letter
-> restatement the rubric couldn't see, and the standing rule that cover letters argue fit rather than
-> confess gaps. Six of nine real submissions from that batch are verified clean and ready to apply;
-> three are blocked on a database-status decision only Jason can make. The 07-18 handoff below is kept
-> for the original pivot's history, not as a second active thread.
+Not needed for drafting/reviewing submissions or networking outreach — this section is engineering-only
+(same reason it's excluded from `data/agent_context_pack.md`'s digest). Skip it unless you're building.
 
-The CR-070 epics below are largely complete and are kept for reference. There are three
-previously-active engineering threads:
+**START HERE:** [SESSION-HANDOFF-2026-07-20-process-hardening.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-20-process-hardening.md)
+— the direct-authoring pivot (`generate-submission` skill v2.0.0, the authoritative Stage 0-3 process) is
+done and stable; this doc covers the self-repair fixes from its first real run: a DB check so Stage 0
+never drafts for a company already Rejected/Closed, a mechanical resume↔letter restatement check, and the
+standing rule that cover letters argue fit rather than confess gaps. Six of nine submissions from that
+batch verified clean; three blocked on a database-status decision only Jason can make.
 
-1. **[docs/spec/08-implementation/CR-070-claude-native-generation-pipeline-epics.md](docs/spec/08-implementation/CR-070-claude-native-generation-pipeline-epics.md)**
-   — the most recently active thread (2026-07-17 session). Rearchitects the generation pipeline to run
-   inside Claude Code natively instead of calling local Ollama models, batch-capable across the 271-JD
-   archive with minimal permission-prompt friction. 9 epics, checkbox-tracked. **Current state:**
-   Epic 1 done (docs corrected). Epic 2 (fit evaluation) validated against 34 real archived JDs —
-   judgment quality holds up, but the real blocker to flipping the default is that no automated
-   mechanism exists yet to populate a fit judgment during a live run (that's Epic 5's job). Epic 3
-   (`audit_and_improve.py` port) has a built, reviewed module (`scripts/audit_improve_native.py`) with
-   one known, well-scoped bug left: it treats every `validate_hard_facts` warning as blocking, when at
-   least one class of warning (education-section self-healing) represents a successfully auto-corrected
-   condition, not a real problem — **fix that first**, then continue to Epic 5. Two superpowers-format
-   execution plans track exact task-by-task state:
-   [Epic 1-2 plan](../superpowers/plans/2026-07-17-cr070-epic1-epic2.md),
-   [Epic 3 plan](../superpowers/plans/2026-07-17-cr070-epic3.md). Spec:
-   `docs/spec/05-change-requests/CR-070-claude-native-generation-pipeline.md`.
-2. **[docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md](docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md)**
-   — scoring/pipeline overhaul (covers CR-053 fit-rubric rebuild, CR-054 pipeline-failure-transparency
-   hardening, CR-055 collection-gate accuracy fixes). It is a self-contained handoff doc with
-   checkbox-tracked epics/stories, file:line references, real production-log evidence, and an explicit
-   cross-CR priority ranking at the bottom. Open it, find the first unchecked story, and start there.
-   It supersedes the scoring policy in CR-039 (`docs/spec/05-change-requests/`) — if the two disagree,
-   the CR-053 doc wins until it's closed out and the registry below is updated to reflect it. CR-070
-   Epic 2 relocates *where* fit judgment happens but does not change this scoring formula — coordinate,
-   don't re-litigate.
-3. **[docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md](docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md)**
-   — rework `score_claim_for_jd`'s scoring formula (dedup + rarity weighting) so a claim with rare,
-   precise vocabulary (a named tool, a specific compliance regime) can outrank a claim whose generic PM
-   vocabulary happens to overlap the JD everywhere. This is CR-063's own root-caused conclusion, not a
-   new hypothesis: CR-063 (below) measured a 16-JD eval set, tested both of its own proposed fallbacks
-   (semantic re-ranking via cached embeddings, `jd_profile_mode="llm"`) with real local infra, found both
-   made things worse or made no difference, and pinned the defect to this one function. Start here, not
-   by reopening the fallback paths CR-063 already ruled out. Spec:
-   `docs/spec/05-change-requests/CR-064-claim-score-formula-rework.md`.
+Three previously-active threads, each a self-contained handoff doc with checkbox-tracked stories — open
+it, find the first unchecked item, start there:
 
-**Diagnostic work, done — read before touching CR-064 above, not instead of it:**
-[docs/spec/08-implementation/CR-063-jd-theme-claim-selection-loop-tracker.md](docs/spec/08-implementation/CR-063-jd-theme-claim-selection-loop-tracker.md)
-ran the test-and-iterate loop measuring whether JD theme-extraction and claim-selection
-(`jd_tailoring.py`) surface the right grounded claims per JD, against a 16-JD human-verified eval set
-(`docs/reports/jd-theme-claim-eval-set.md`). Baseline: 14/45 should-surface codes, 0/16 companies with a
-full pass. Three `THEME_KEYWORDS` rounds left that flat; a Final round tested embeddings (made the
-aggregate monotonically *worse*, 14/45 → 11/45) and `jd_profile_mode="llm"` (byte-identical selection
-accuracy to the deterministic path despite better theme extraction) and ruled out both with real
-measured data, not architectural reasoning alone. Full trail — including a documented mid-session
-section-ordering bug that got caught and fixed — is in the tracker; the conclusion is CR-064 above.
+| Thread | Docs | Current state |
+|---|---|---|
+| **CR-070** — native generation pipeline (rearchitects generation to run inside Claude Code, no local Ollama, batch-capable across the 271-JD archive) | [epics](docs/spec/08-implementation/CR-070-claude-native-generation-pipeline-epics.md) · [spec](docs/spec/05-change-requests/CR-070-claude-native-generation-pipeline.md) · plans: [1-2](../superpowers/plans/2026-07-17-cr070-epic1-epic2.md), [3](../superpowers/plans/2026-07-17-cr070-epic3.md) | Epic 1 done. Epic 2 (fit eval) validated against 34 real JDs, blocked on Epic 5 (no mechanism yet to populate a fit judgment during a live run). Epic 3's `scripts/audit_improve_native.py` has one known bug: treats every `validate_hard_facts` warning as blocking, when education-section self-healing is a successfully auto-corrected condition, not a real problem — fix that first, then continue to Epic 5. |
+| **CR-053/054/055** — fit-rubric overhaul + pipeline-failure-transparency + collection-gate accuracy | [tracker](docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md) (file:line refs, production-log evidence, cross-CR priority ranking at the bottom) | Supersedes CR-039's scoring policy — if they disagree, CR-053 wins. CR-070 Epic 2 relocates *where* fit judgment happens, not this scoring formula — coordinate, don't re-litigate. Predates formal CR registry entries; if you formalize CR-053/054/055, keep this doc as the working tracker rather than duplicating checkboxes elsewhere. |
+| **CR-064** — claim-score formula rework (dedup + rarity weighting so rare precise vocabulary can outrank generic JD-wide overlap) | [tracker](docs/spec/08-implementation/CR-064-claim-score-formula-rework-tracker.md) · [spec](docs/spec/05-change-requests/CR-064-claim-score-formula-rework.md) | Direct conclusion of CR-063's diagnostic work (below), not a new hypothesis — start here, don't reopen the fallbacks CR-063 already ruled out with real data. |
 
-This doc was written before being formally registered in the CR registry
-(`docs/spec/05-change-requests/README.md`) or split into the repo's usual `CR-XXX.md` (spec) +
-`IMP-CR-XXX.md` (implementation notes) pair — it's a hybrid of both. If you create the formal CR-053/
-054/055 entries as part of this work, keep this file as the working epics tracker rather than
-duplicating the checkboxes elsewhere.
+**CR-063 (diagnostic, done — read before touching CR-064, not instead of it):** [tracker](docs/spec/08-implementation/CR-063-jd-theme-claim-selection-loop-tracker.md) measured JD theme-extraction/claim-selection accuracy against a 16-JD human-verified [eval set](docs/reports/jd-theme-claim-eval-set.md). Baseline 14/45 should-surface codes, 0/16 companies with a full pass. Ruled out with real measured data, not reasoning alone: `THEME_KEYWORDS` tuning (flat across 3 rounds), embeddings (made it *worse*, 14/45→11/45), `jd_profile_mode="llm"` (no accuracy gain). Conclusion is CR-064 above.
 
-**Closed, not active:**
-[docs/spec/08-implementation/CR-059-local-llm-tuning-loop.md](docs/spec/08-implementation/CR-059-local-llm-tuning-loop.md)
-was closed 2026-07-08 as moot before any round ran — the default *drafting* pipeline (JD profiling,
-claim selection, bullet/summary/cover-letter assembly) calls zero local LLMs (deliberate architecture
-since CR-017, not a bug). This does NOT extend to fit evaluation or the post-draft rewrite step —
-`structured_fit.py`'s `_call_equivalence_llm` (one Ollama call per JD, CR-053) and, until CR-070 Epic 3
-lands, `audit_and_improve.py`'s rewrite loop both call local LLMs on the default path today. CR-059's
-own tracker doc scoped fit-scoring out of its finding by name; this note previously lost that nuance.
-See [CR-070](docs/spec/05-change-requests/CR-070-claude-native-generation-pipeline.md) for the
-rearchitecture of both. See CR-059's doc top section for the original finding. Its predecessor,
-**[docs/spec/05-change-requests/CR-058-generation-defect-fixes.md](docs/spec/05-change-requests/CR-058-generation-defect-fixes.md)**
-(7 confirmed generator bugs fixed same session, uncommitted as of 2026-07-07 — check `git status` before
-assuming these are live), remains a valid reference for drafting-pipeline defect history. Full
-investigation trail:
-`_bmad-output/implementation-artifacts/investigations/applyr-generation-defects-investigation.md`
-(parent `Resource/CodeProjects` dir, shared BMAD install, not inside this repo).
+**Closed, not active:** CR-059 (local LLM tuning) closed 2026-07-08 as moot — the default *drafting* pipeline calls zero local LLMs by design (since CR-017), though fit evaluation (`structured_fit.py`'s `_call_equivalence_llm`) and, until CR-070 Epic 3 lands, the post-draft rewrite loop still do. See [CR-070](docs/spec/05-change-requests/CR-070-claude-native-generation-pipeline.md) for the rearchitecture. Predecessor [CR-058](docs/spec/05-change-requests/CR-058-generation-defect-fixes.md) (7 generator bugs; check `git status` before assuming live) remains a valid drafting-pipeline defect-history reference. Full investigation trail: `_bmad-output/implementation-artifacts/investigations/applyr-generation-defects-investigation.md` (parent `Resource/CodeProjects` dir, shared BMAD install).
 
 ---
 
@@ -233,7 +175,7 @@ Engineering, DBA, DevOps, Customer Experience (CX), Customer Support, Sales, Acc
 
 **Forbidden tone (R-011 / tone_guard.py):** never use "layoff(s)" — use "resource constraints," "resource-constrained cycle," or "organizational transitions" instead. The drafting engine has produced this violation before; double-check it specifically.
 
-**Cover letters: don't discuss workforce reduction at all, not even via the euphemism (2026-07-21, Jason-supplied, Glint Tech review).** This is stronger than R-011's substitution rule above. R-011 governs word choice everywhere; this is a cover-letter-specific scope rule: don't build any part of a cover letter's argument around headcount shrinking, executive turnover as adversity, or "operating through constraint" framed via team size — not even using an approved euphemism like "resource-constrained cycle." Found running through all three paragraphs of a real letter ("repeated rounds of headcount reduction," "a shrinking engineering bench," "even as the team itself was shrinking") on 2026-07-21. The resume can still reference resource constraints factually where relevant (workExperience.md's own role context does); this rule is about what a cover letter chooses to argue from, not about erasing the fact.
+**Cover letters: don't discuss workforce reduction at all, not even via the euphemism.** Stronger than R-011's word-substitution rule above — this is a cover-letter-specific scope rule: don't build any part of a cover letter's argument around headcount shrinking, executive turnover as adversity, or "operating through constraint" via team size, not even using an approved euphemism like "resource-constrained cycle." Found running through all three paragraphs of a real letter on 2026-07-21. The resume can still reference resource constraints factually where relevant (workExperience.md's own role context does) — this rule is about what a cover letter argues from, not about erasing the fact.
 
 ---
 
@@ -243,15 +185,15 @@ Never use: em dashes (—), double-hyphen (`--`), "leverage," "passionate," "dri
 
 The fuller, actively-maintained list (CR-070 Epic 8 authenticity research + Jason's own `voice-rewrite` skill's Pass 1 strip list) lives in `scripts/submission_linter.py`'s `LR-009`/`LW-006`/`LW-007` rules — that's the single source of truth going forward (per CR-070 Epic 9's decision not to hand-duplicate a growing word list in two places); this section stays as the always-hard-blocked core, not the exhaustive set.
 
-**`no-ai-slop` skill integration (2026-07-23, Jason-supplied).** Jason also uses a general-purpose writing skill, [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop), installed globally at `~/.claude/skills/no-ai-slop` for any draft, not Applyr-specific. Rather than keep a second parallel word list, its pattern catalog was diffed against the existing `LR`/`LW` rules and the genuine gaps were added as new mechanical `WARN` rules in `submission_linter.py`: `LW-015` (throat-clearing openers — "Here's the thing," "Let me be clear"), `LW-016` (faux-insight/rhetorical setups — "what nobody tells you," "what if I told you"), `LW-017` (importance puffery — "marks a pivotal moment," "a testament to"), `LW-018` (weasel attribution — "experts agree," "studies show"), `LW-019` (fake-strong hub-verb — "serves as a centralized hub"), and `LW-020` (the "It's not X. It's Y." binary-contrast two-sentence shape). `LW-007` was also widened to catch "Ultimately,"/"Overall," as summary-recap sentence-starters (comma-gated so mid-sentence uses like "ultimately responsible for" don't false-positive). Patterns from that skill's list left out as impractical to regex reliably or low-relevance to a 250-400 word professional document (negative listing, dramatic fragmentation, synonym cycling, robotic rhythm, fake-profound kickers, formatting slop) — ask Jason before adding a mechanical rule for any of these; a human read still catches them fine. `submission_linter.py` remains the single source of truth per the paragraph above — this integration extends it rather than starting a second list.
+**`no-ai-slop` skill integration.** Jason also uses a general-purpose writing skill, [petergyang/no-ai-slop](https://github.com/petergyang/no-ai-slop), installed globally at `~/.claude/skills/no-ai-slop`. Its pattern catalog was diffed against the existing `LR`/`LW` rules for genuine gaps, added as `WARN` rules: `LW-015` (throat-clearing openers — "Here's the thing"), `LW-016` (faux-insight setups — "what nobody tells you"), `LW-017` (importance puffery — "marks a pivotal moment"), `LW-018` (weasel attribution — "experts agree"), `LW-019` (fake-strong hub-verb — "serves as a centralized hub"), `LW-020` (the "It's not X. It's Y." binary-contrast shape). `LW-007` widened to catch "Ultimately,"/"Overall," as summary-recap openers (comma-gated so "ultimately responsible for" doesn't false-positive). Left un-mechanized as impractical to regex or low-relevance here (negative listing, dramatic fragmentation, synonym cycling, robotic rhythm, fake-profound kickers, formatting slop) — ask Jason before adding a rule for these; a human read still catches them. `submission_linter.py` stays the single source of truth for the full list — see CHANGELOG.md for the integration's full rationale.
 
 Never open a sentence with transition fluff. Never start a cover letter with "I am writing to express my interest."
 
-No bullet points in cover letters. No em dashes anywhere — including as a stand-in punctuation pattern like `word: word` used to avoid the literal character. If you find yourself writing a colon where an em dash would have gone, restructure the sentence instead; the colon-as-em-dash-substitute pattern is itself a tell. **This is now mechanically enforced as `LR-015` (HARD_BLOCK) in `submission_linter.py`** (added 2026-07-21, Jason-supplied, Stripe review): a colon followed by whitespace then a letter ("compelling: building", "context: how", "work: I built"). It had been named as a tell here for weeks but nothing checked for it — em-dashes (`LR-006`) and semicolons (`LR-014`) were enforced, the colon was not, so it slipped through every "clean" verification and turned up in 7 of 9 real cover letters. Resume label colons ("**Skills:** …") are safe (colon immediately followed by `**`, not whitespace). Reporting reminder that came out of the same miss: **"clean" means "every check in Required Verification passed," never "reads well" — state which checks ran, don't imply more.**
+No bullet points in cover letters. No em dashes anywhere — including the colon-as-em-dash-substitute pattern (`word: word` used to avoid the literal character; restructure the sentence instead, that pattern is itself a tell). **Mechanically enforced as `LR-015` (HARD_BLOCK)**: a colon followed by whitespace then a letter ("compelling: building", "context: how"). Resume label colons ("**Skills:** …") are safe (colon immediately followed by `**`, not whitespace). **Reporting reminder:** "clean" means every check in Required Verification passed, never "reads well" — state which checks ran, don't imply more.
 
-No semicolons anywhere in resumes or cover letters (added 2026-07-21, Jason-supplied — same tell as the em dash, reads as AI-prose rather than how Jason writes; matches the standing rule already applied to `application_question_bank.md` answers). Hard-blocked as `LR-014` in `submission_linter.py`. Split into two sentences instead.
+No semicolons anywhere in resumes or cover letters — same tell as the em dash, matches the standing rule already applied to `application_question_bank.md` answers. Hard-blocked as `LR-014`. Split into two sentences instead.
 
-**Collaboration, not coercion (2026-07-21, Jason-supplied).** Never frame Jason's cross-functional work as forcing, making, imposing, or driving other teams "into" a decision ("forced Sales, Legal, DevOps, and engineering into one sequence"). Jason works through influence and alignment, not authority he does not have — this framing is both inaccurate and off-voice. Use "built alignment across," "brought teams to a shared order of priorities," "got everyone to commit to," "aligned X and Y on." Soft-flagged as `LW-010` (WARN, not hard-block — "force" has legitimate uses) in `submission_linter.py`. This appeared in multiple 2026-07-21 cover letters (Nelnet, Principal) framing his quarterly prioritization as coercion. Related word-repetition tell caught the same day: don't lean on "sequence" as the noun for a prioritized plan more than once in a letter — vary it ("plan," "order of priorities," "roadmap").
+**Collaboration, not coercion.** Never frame Jason's cross-functional work as forcing, making, imposing, or driving other teams "into" a decision. Jason works through influence and alignment, not authority he doesn't have. Use "built alignment across," "brought teams to a shared order of priorities," "got everyone to commit to," "aligned X and Y on." Soft-flagged as `LW-010` (WARN — "force" has legitimate uses). Related tell: don't lean on "sequence" as the noun for a prioritized plan more than once in a letter — vary it ("plan," "order of priorities," "roadmap").
 
 ---
 
@@ -307,7 +249,7 @@ Best regards,
 [Name]
 ```
 
-This exact structure is missing on 6 of 9 real submissions from the 2026-07-20/21 batch (Principal, Relativity, Nelnet, Kintsugi, Monks, Stripe) — `check_and_repair_cover_letter()` already existed in `quality_checker.py` and already auto-repairs both the missing header (`H-001`) and the missing sign-off (`H-002`, added 2026-07-21) in place, but nothing in the process ever called it until it was added to Required Verification below. Don't assume `Cover_Letter_Reference.md`'s template alone guarantees this gets followed — it didn't, in practice, across two-thirds of a real batch.
+This exact structure was missing on 6 of 9 real submissions in the 2026-07-20/21 batch — `check_and_repair_cover_letter()` already existed in `quality_checker.py` and auto-repairs both the missing header (`H-001`) and missing sign-off (`H-002`) in place, but nothing called it until it was added to Required Verification below. Don't assume `Cover_Letter_Reference.md`'s template alone guarantees this gets followed.
 
 ---
 
@@ -333,9 +275,9 @@ data/submissions/
     jd_profile_cache.json    — parsed JD profile (pipeline-generated)
 ```
 
-**No `Interview_Cheat_Sheet.md` at draft time** (removed 2026-07-23, Jason-supplied) — generating Q&A prep for every submission regardless of whether it reaches an interview wastes tokens and implied web research this pipeline doesn't do. Generate it later, on demand, via `generate_cheat_sheet.py`, only once a real interview is actually scheduled for that company.
+**No `Interview_Cheat_Sheet.md` at draft time** — generating Q&A prep for every submission regardless of whether it reaches an interview wastes tokens and implied web research this pipeline doesn't do. Generate it later, on demand, via `generate_cheat_sheet.py`, only once a real interview is actually scheduled for that company.
 
-**If the job posting URL is known when `Original_JD.txt` is created, it MUST be the file's first line, formatted exactly as `URL: <the url>`, followed by a blank line before the raw JD text starts** (added 2026-07-24, Jason-supplied, after a full 13-submission batch went into the `jobs` database with `url` left `NULL` on every row — the parsing logic for this exact line already existed in `server/submissionFolders.ts`'s `readJdMeta()`, it just had never once been fed a file that used it). This is not cosmetic: `reconcileOrphanSubmissionFolders()` reads this line to populate the `jobs.url` column when a folder gets linked to a DB row, and it silently falls back to `null` if the line is absent — there is no other mechanism that backfills it. If a submission is authored without a known URL (e.g., practice runs, or a JD pasted with no source), leave the raw JD text as the first line exactly as before; do not fabricate a placeholder URL.
+**If the job posting URL is known when `Original_JD.txt` is created, it MUST be the file's first line**, formatted exactly as `URL: <the url>`, followed by a blank line before the raw JD text starts. Not cosmetic: `reconcileOrphanSubmissionFolders()` reads this line to populate the `jobs.url` column when a folder gets linked to a DB row, and silently falls back to `null` if absent — there is no other mechanism that backfills it. If a submission is authored without a known URL (practice runs, a JD pasted with no source), leave the raw JD text as the first line as before; don't fabricate a placeholder URL.
 
 To compile MD → PDF: `python scripts/compile_single.py <md_path> <pdf_path>`
 
@@ -352,11 +294,14 @@ Never tell Jason a resume or cover letter is finished without running this from 
 python scripts/compile_single.py data/submissions/COMPANY/Resume.md data/submissions/COMPANY/Resume.pdf
 python scripts/compile_single.py data/submissions/COMPANY/CoverLetter.md data/submissions/COMPANY/CoverLetter.pdf
 
-# 2. One required verification command -- lint (both documents plus the resume/cover-letter
+# 2. Two required verification commands -- lint (both documents plus the resume/cover-letter
 #    pair checks), resume structure/QA, cover-letter structure/QA (auto-repairs H-001/H-002 in
 #    place -- if it reports a repair, recompile the PDFs and re-run this), the unapproved-metrics
-#    sweep, and page counts, all in one script, writing verification_receipt.json into the folder.
+#    sweep, and page counts, all in one script, writing verification_receipt.json into the folder;
+#    plus a mechanical scan for JD-relevant ground truth that never made it into the document,
+#    writing ground_truth_coverage.json into the folder.
 python scripts/verify_submission.py data/submissions/COMPANY
+python scripts/check_ground_truth_coverage.py data/submissions/COMPANY
 
 # 3. After Stage 2's rubric_score is hand-scored into draft_manifest.json (see generate-submission
 #    SKILL.md Stage 2 point 1 -- a script cannot assign this, it requires an actual read against
@@ -365,7 +310,9 @@ python scripts/verify_submission.py data/submissions/COMPANY
 python scripts/verify_submission.py --audit data/submissions/COMPANY
 ```
 
-**Why one script, not five separate commands (rewritten 2026-07-23):** this section and `generate-submission/SKILL.md`'s own Stage 2 code sample had already drifted from each other twice (2026-07-20, missing the pair-check requirement; 2026-07-21, missing the cover-letter check) before a cross-harness session found the sharper version of the same problem — a harness ran the lint check on the cover letter only, saved that single result as `lint_report.json`, and the resume's lint check silently never ran at all. Two descriptions of the same requirement, however carefully worded, can still drift or get partially followed. `scripts/verify_submission.py` is the one command every harness runs, producing one receipt file instead of a self-report. **The rubric score itself still cannot be mechanized** — `--audit` doesn't verify judgment quality, it catches the one failure mode a script actually can catch: byte-identical rubric sub-scores across different JDs, checked against a persistent cross-session log at `data/.rubric_score_history.json`. Found real 2026-07-23: 8 submissions in one batch had identical resume (94/100) and cover-letter (100/100) sub-scores down to the sub-criterion, across 8 unrelated companies -- a templated pass presented as a genuine one. If `--audit` flags a match, re-score both documents for real; don't dismiss the warning as a false positive without actually re-reading the flagged pair.
+**Why one script, not five separate commands:** this section and `generate-submission/SKILL.md`'s own Stage 2 sample had drifted from each other before (missing the pair-check, missing the cover-letter check), and a harness once ran lint on the cover letter only and silently skipped the resume's check entirely. Two descriptions of the same requirement can still drift or get partially followed. `scripts/verify_submission.py` is the one command every harness runs, producing one receipt file instead of a self-report. **The rubric score itself still cannot be mechanized** — `--audit` doesn't verify judgment quality, it catches the one failure mode a script actually can: byte-identical rubric sub-scores across different JDs, checked against a persistent cross-session log at `data/.rubric_score_history.json`. Found real: 8 submissions in one batch had identical resume/cover-letter sub-scores down to the sub-criterion across 8 unrelated companies — a templated pass presented as a genuine one. If `--audit` flags a match, re-score both documents for real; don't dismiss the warning as a false positive without actually re-reading the flagged pair.
+
+**`check_ground_truth_coverage.py` exists because the "ask whether ground truth was left unused" instruction below it in this same file was already written down once (after the Bazaarvoice dry run), and still recurred on a real 10-submission batch on 2026-07-31, caught by Jason, not by the prose.** It cross-references every claim's tags in `master_claims_tags_only.json` against the target JD and flags claims whose metrics/tags don't appear in the drafted documents. It's a heuristic — freshly-authored bullets won't always contain a tag's literal words, so it produces real false positives — check each `ATTENTION` flag against the actual document rather than blindly forcing every one in, but it must be run and its output actually read before a submission is called done.
 
 If any step fails or the resume is 2 pages, fix the content and re-run — do not hand back a "done" answer with a failing check.
 
@@ -373,21 +320,21 @@ If any step fails or the resume is 2 pages, fix the content and re-run — do no
 
 ## Cover Letter Proof-Point Selection
 
-Choose each letter's proof points purely on fit to that letter's own JD — score against `data/conversion_rubric.md` C2 (Proof Density) and C3 (Role Fit Logic) for that document alone. Do not compare a letter to other companies' letters and do not edit one because it resembles another: each hiring manager only ever reads their own letter, so cross-letter similarity has no direct effect on whether any single letter converts. (Corrected 2026-07-07 — an earlier version of this section framed cross-letter distinctiveness as a goal in itself, which led to reassigning proof points to make letters look different rather than to make them fit better. In practice the two often point the same direction, since a repeated skeleton across many letters is usually a symptom that the proof point was never actually chosen for the JD in front of it. Treat it as exactly that: a symptom to investigate via C2/C3, not a target to optimize directly.)
+Choose each letter's proof points purely on fit to that letter's own JD — score against `data/conversion_rubric.md` C2 (Proof Density) and C3 (Role Fit Logic) for that document alone. Do not compare a letter to other companies' letters and do not edit one because it resembles another: each hiring manager only ever reads their own letter, so cross-letter similarity has no direct effect on whether any single letter converts. (Corrected 2026-07-07 — an earlier version framed cross-letter distinctiveness as a goal in itself, which led to reassigning proof points to look different rather than to fit better. A repeated skeleton across letters is usually a symptom the proof point was never actually chosen for the JD in front of it — investigate via C2/C3, not by optimizing distinctiveness directly.)
 
 If two letters for different companies independently land on the same true accomplishment because it is genuinely the strongest fit for both JDs, that is correct — leave it alone. Only revisit reused phrasing if it fails C2/C3 for that letter on its own merits, or if the language itself is generic/AI-sounding within that one letter (a C4 Authenticity issue — see Forbidden Language below), not because it also appears elsewhere.
 
 Keep cover letters 250-400 words, one page, opening with something specific to the company rather than generic enthusiasm (C1 Opening Hook). Avoid generic AI closers (e.g. "I would welcome the opportunity to speak with your team") when they read as filler for that letter — this is a per-letter authenticity check, not a batch-variety check.
 
-**This covers sentence-level phrasing too, not just proof-point selection** (corrected again 2026-07-16 — the 2026-07-07 correction above didn't stop the same mistake from recurring in a different form). Finding that several cover letters share a similar opening-hook structure or closing line is not, by itself, a defect. No hiring manager reads two of Jason's letters side by side, so a shared closer like "I would welcome a conversation about how this maps to X" across many companies carries zero real conversion risk — it is invisible to every actual reader. Before flagging or rewriting anything that spans multiple submissions, ask: would this be noticeable to someone who only ever reads this one document? If answering requires comparing it to another company's letter, it is out of scope — do not raise it, not even as a secondary point stacked alongside a real single-letter issue. Judge each line only on whether it reads as generic or AI-sounding standing completely alone.
+**This covers sentence-level phrasing too, not just proof-point selection** (a 2026-07-16 correction to the 2026-07-07 note above, which didn't stop the same mistake recurring in a different form). A shared opening-hook structure or closing line across letters is not, by itself, a defect — no hiring manager reads two of Jason's letters side by side, so a shared closer carries zero real conversion risk. Before flagging anything spanning multiple submissions, ask: would this be noticeable to someone who only reads this one document? If answering requires comparing to another letter, it's out of scope. Judge each line only on whether it reads as generic or AI-sounding standing completely alone.
 
-**Two compelling-ness anti-patterns, now mechanically flagged (added 2026-07-21, Jason-supplied):** These are the difference between a letter that is merely *clean* (no tells) and one that is actually *compelling*. Both are WARNs, not hard blocks, because both need a judgment call — but the flag forces the call.
-- **`LW-011` — JD-paraphrase hook.** The opening paragraph must not read the posting's own descriptive prose back to the reader. Mechanically: if the hook shares 6+ word verbatim sequences with `Original_JD.txt`, it is parroting. Naming the role/team is fine; mirroring the JD's sentences signals nothing to the person who wrote them. Open with a specific observation or insight about the company's problem instead.
-- **`LW-012` — assertion-of-fit overclaim.** "maps directly," "exact fit," "the exact shape of," "perfectly suited," "uniquely qualified," etc. These assert a fit instead of demonstrating it, and in practice they paper over a real gap (Stripe's "maps directly" to an API-primitives role, Relativity's "exact shape of" an enrichment role). When one fires, check the underlying claim: if the fit is real, show it with a specific fact; if it is a stretch, name the honest transferable bridge instead of asserting a direct match.
+**Two compelling-ness anti-patterns, mechanically flagged:** the difference between a letter that's merely *clean* (no tells) and one that's actually *compelling*. Both WARN, not hard block — both need a judgment call, but the flag forces it.
+- **`LW-011` — JD-paraphrase hook.** The opening paragraph must not read the posting's own prose back to the reader. Mechanically: 6+ verbatim word sequences shared with `Original_JD.txt` means parroting. Naming the role/team is fine; mirroring the JD's sentences signals nothing. Open with a specific observation or insight instead.
+- **`LW-012` — assertion-of-fit overclaim.** "maps directly," "exact fit," "the exact shape of," "perfectly suited," "uniquely qualified." These assert fit instead of demonstrating it, and in practice paper over a real gap. When one fires: if the fit is real, show it with a specific fact; if it's a stretch, name the honest transferable bridge instead of asserting a direct match.
 
-Neither check makes a letter compelling on its own — they raise the floor by killing the two most common ways a letter reads as competent-but-generic. Whether a hook shows genuine *insight* (versus competent paraphrase that happens to share no 6-word runs) is the irreducible judgment a mechanical check cannot make; that still needs a real read.
+Neither makes a letter compelling on its own — they raise the floor. Whether a hook shows genuine *insight* versus competent paraphrase is the judgment a mechanical check can't make; that still needs a real read.
 
-**Gap-confession language is now hard-blocked, not just a prose rule (`LR-016`, added 2026-07-21, Jason-supplied).** The letter's job is to stress why Jason is a fit, never to acknowledge where he isn't — a rule already stated in the `generate-submission` skill, and one that still got violated in 5 of 11 real letters the same week it was written ("is new territory for me," "I have not yet applied that thinking," "are new to me"), each time as a lead-in to a transferable-skill pivot that should have stood on its own. A prose instruction alone did not survive drafting pressure, hence hard-coding it: cut the confession clause, keep only the positive claim. The narrow exception — a single, plain, factual disclosure of a genuinely unbridgeable hard constraint (e.g. the 15% travel ceiling) — uses different, non-confessional phrasing and does not trip this rule.
+**Gap-confession language is hard-blocked (`LR-016`).** The letter's job is to argue why Jason is a fit, never to acknowledge where he isn't. Cut the confession clause, keep only the positive claim — a prose instruction alone didn't survive drafting pressure (violated in 5 of 11 real letters the same week it was written: "is new territory for me," "I have not yet applied that thinking," "are new to me"), hence hard-coding it. Narrow exception: a single, plain, factual disclosure of a genuinely unbridgeable hard constraint (e.g. a travel ceiling) uses different, non-confessional phrasing and doesn't trip this rule.
 
 ---
 
@@ -408,11 +355,11 @@ Neither check makes a letter compelling on its own — they raise the floor by k
 - Recompile PDFs after edits
 - Run the Required Verification steps above before reporting anything as complete
 
-**Conversion thresholds — a floor, not a stop signal (revised 2026-07-21, Jason-supplied):**
+**Conversion thresholds — a floor, not a stop signal:**
 - Resume: 70+ = CONVERT-READY
 - Cover Letter: 65+ = CONVERT-READY
 
-These numbers were previously read as "stop improving once reached" — that produced real submissions that barely cleared threshold with real, available ground truth sitting unused (found 2026-07-21: the Bazaarvoice dry run scored 73/100, and an independent reviewer found MET-09's SQL-database footprint and ACC-117's Pendo analytics work were both real, both relevant to explicitly required JD items, and neither made it into the document). **"Done" is not "clears the number." Done is: every required JD item is engaged with the single strongest available piece of ground truth for it, not merely an adequate one, and nothing genuinely usable was left on the table.** This is a real bar, not a bigger number to chase — do not pad, stretch a claim, or force in extra content just to raise a score; the failure mode this is correcting is *unused* evidence, not *insufficient volume* of evidence. If the strongest available evidence is already in the document, stop — that is done, whatever the score reads. Chasing points for their own sake above what real ground truth supports is still wrong.
+These numbers were previously read as "stop improving once reached" — that produced real submissions that barely cleared threshold with real, available ground truth sitting unused (found 2026-07-21: the Bazaarvoice dry run scored 73/100, with MET-09's SQL-database footprint and ACC-117's Pendo analytics work both real, both relevant to explicitly required JD items, and neither used). **"Done" is not "clears the number." Done is: every required JD item is engaged with the single strongest available piece of ground truth for it, not merely an adequate one, and nothing genuinely usable was left on the table.** This is a real bar, not a bigger number to chase — do not pad, stretch a claim, or force in extra content just to raise a score; the failure mode being corrected is *unused* evidence, not *insufficient volume*. If the strongest available evidence is already in the document, stop — that is done, whatever the score reads. Chasing points above what real ground truth supports is still wrong.
 
 ---
 

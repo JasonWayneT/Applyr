@@ -12,8 +12,9 @@ import json
 import os
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Set
 
 # Split literals so public-repo PII audit does not flag rule definitions.
 _PHONE_PLACEHOLDER = "[" + "REDACTED_" + "PHONE]"
@@ -80,8 +81,11 @@ HARD_BLOCK_RULES: List[LintRule] = [
         rule_id="LR-003",
         severity="HARD_BLOCK",
         check_type="regex",
-        pattern=r"I am confident that",
-        message="Forbidden phrase: 'I am confident that'",
+        # Widened 2026-07-30 (Perplexity-sourced cliché audit, Jason-supplied) to also catch "I am
+        # confident in my ability to" -- same forbidden assertion-of-confidence shape, different
+        # grammatical tail, which the original "I am confident that" pattern didn't reach.
+        pattern=r"I am confident (that|in my ability to)",
+        message="Forbidden phrase: 'I am confident that/in my ability to'",
         suggestion="State the evidence directly instead of asserting confidence.",
         doc_types=["cover_letter"],
     ),
@@ -139,7 +143,7 @@ HARD_BLOCK_RULES: List[LintRule] = [
         # plain \bdriven\b matched these too (a hyphen still counts as a word-boundary character,
         # so "data-driven" was silently hard-blocking ordinary, non-buzzwordy PM vocabulary).
         # Standalone "driven" ("a driven professional") still blocks.
-        pattern=r"\b(leverage|passionate|dynamic|innovative|seamless|transformative|synergy|tapestry|revolutionize|revenue-bearing)\b|(?<!-)\bdriven\b",
+        pattern=r"\b(leverage|passionate|dynamic|innovative|seamless|transformative|synergy|tapestry|revolutionize|revenue-bearing|robust|unwavering)\b|(?<!-)\bdriven\b",
         message="Forbidden buzzword detected",
         suggestion="Replace with plain language that describes what you actually did or built.",
         doc_types=["cover_letter", "resume"],
@@ -324,6 +328,15 @@ HARD_BLOCK_RULES: List[LintRule] = [
         message="Primary employer (Cision) bullet count exceeds maximum cap of 6 bullets",
         suggestion="Trim Cision bullets to 5-6 bullets to prevent 2-page resume overflow and visual clutter.",
         doc_types=["resume"],
+    ),
+    LintRule(
+        rule_id="LR-023",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        pattern=r"look forward to discussing how\b[^.!?]{0,60}\balign",
+        message="Forbidden closer: 'look forward to discussing how my/our skills align'",
+        suggestion="Name the specific thing you'd want to talk through instead of this stock phrase.",
+        doc_types=["cover_letter"],
     ),
 ]
 
@@ -520,6 +533,68 @@ WARN_RULES: List[LintRule] = [
         message="Binary-contrast two-sentence shape detected ('It's not X. It's Y.')",
         suggestion="State Y directly instead of negating X first. ('The eval matters more than the model,' not 'It's not the model. It's the eval.')",
         doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-022",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-30 (Jason-supplied): "X sits/lives/operates at the intersection of Y and
+        # Z" cliche opener. Found in 3 of the real cover letters in one batch (Newsela, CivicPlus,
+        # Empower Pharmacy) -- not Jason's voice, and not caught by any existing rule since it isn't
+        # a banned single word, a metric problem, or a JD-paraphrase. A recurring drafting habit,
+        # not a one-off, hence mechanized rather than left as a one-time fix.
+        pattern=r"\b(sits?|sitting|lives?|living|operates?|stands?)\s+(right\s+)?at\s+(the|that|this)\s+intersection\b",
+        message="'Sits/lives at the intersection of X and Y' cliche opener detected -- not Jason's voice.",
+        suggestion="State the actual specific tension in plain language instead of the intersection metaphor.",
+        doc_types=["cover_letter"],
+    ),
+    LintRule(
+        rule_id="LW-023",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-30 (Perplexity-sourced cliché audit, Jason-supplied): stacked self-
+        # descriptor adjectives ("results-driven, highly motivated, and dedicated"). Curated word
+        # list rather than a generic adjective-stacking grammar rule, matching this file's existing
+        # convention (precision over recall) -- a generic POS-based stacking detector would false-
+        # positive on legitimate comma/and-joined verb lists ("iterated, prioritized, and shipped"),
+        # which are fine. Two-or-more of these specific cliche self-descriptors within one sentence
+        # is the actual tell.
+        pattern=(
+            r"(results-driven|highly motivated|detail-oriented|hard-working|self-starter"
+            r"|go-getter|team player|dedicated|motivated)\b(?:(?!\.).){0,60}?"
+            r"\b(results-driven|highly motivated|detail-oriented|hard-working|self-starter"
+            r"|go-getter|team player|dedicated|motivated)\b"
+        ),
+        message="Stacked self-descriptor cliches detected (e.g. 'results-driven, highly motivated, and dedicated')",
+        suggestion="Cut to one real descriptor or, better, show it with a specific fact instead of naming the trait.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-024",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-30 (Perplexity-sourced cliché audit, Jason-supplied). Same family as LW-020
+        # (binary-contrast "It's not X. It's Y." shape) -- a different templated sentence shape that
+        # asserts a trait via a rhetorical setup instead of just stating the fact.
+        pattern=r"\bWhether\b[^.!?]{0,80}\bor\b[^.!?]{0,40},?\s+I(\s+have)?\s+(consistently|always)\b",
+        message="'Whether doing X or Y, I have consistently...' template sentence detected",
+        suggestion="State the specific thing you did instead of the rhetorical whether-or setup.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-025",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-07-30 (Perplexity-sourced cliché audit, Jason-supplied). Generic mission-
+        # alignment phrasing ("[Company]'s mission to X aligns with my commitment to Y"). Real risk
+        # specifically because this pipeline never does outside company research (no web research at
+        # any stage, any purpose) -- but a JD's own "About Company" section often states a mission
+        # statement in its own text, which a draft could echo back as this cliche without needing any
+        # external lookup at all.
+        pattern=r"\bmission\s+to\s+[^.!?]{0,60}\baligns?\s+with\b",
+        message="Generic mission-alignment phrasing detected ('[Company]'s mission to X aligns with my Y')",
+        suggestion="Name the specific product/role reason you fit instead of asserting mission alignment abstractly.",
+        doc_types=["cover_letter"],
     ),
 ]
 
@@ -979,6 +1054,186 @@ def check_b2b_saas_positioning(resume_text: str, jd_text: str) -> List[LintViola
     )]
 
 
+_CROSS_JD_GENERIC_WORDS = {
+    "product", "products", "team", "teams", "platform", "platforms", "roadmap",
+    "customer", "customers", "user", "users", "feature", "features", "data",
+    "engineering", "engineer", "engineers", "stakeholder", "stakeholders",
+    "priority", "priorities", "requirement", "requirements", "experience",
+    "company", "role", "manager", "managers", "management", "software",
+    "solution", "solutions", "growth", "market", "business", "problem",
+    "problems", "opportunity", "opportunities", "impact", "quality", "process",
+    "processes", "scale", "success", "partner", "partners", "partnership",
+    "build", "building", "built", "deliver", "delivery", "work", "working",
+    "workflow", "workflows", "compensation", "benefits", "remote", "location",
+    "background", "months", "years", "annual", "monthly", "employer",
+    "daily", "every", "tools", "genuine", "comfort", "strong", "direct",
+    "directly", "ability", "including", "using", "shape", "throughout",
+    "across", "alignment", "automation", "backlog", "capabilities", "client",
+    "clients", "committed", "complex", "customer-facing", "decisions", "deploy",
+    "deployment", "development", "enterprise", "feasibility", "government",
+    "integration", "integrations", "issues", "maintain", "monitoring",
+    "operational", "organization", "owner", "owners", "planning", "prioritize",
+    "prioritized", "prioritization", "programs", "regulated", "release",
+    "sales", "streamline", "support", "supporting", "trade-offs", "validate",
+    "validation", "ai-assisted", "go-to-market", "cross-functional",
+}
+
+_PAST_EMPLOYER_NAMES = ("cision", "sterkly", "zero to sixty")
+
+# Section-header employer name is authoritative for resume bullets -- a bullet almost
+# never repeats "Cision" inline, it's implied by the "### Title | Employer | dates"
+# header above it, so bullet-level string matching on employer name alone always misses.
+_RESUME_SECTION_RE = re.compile(
+    r"^###\s+.*?\|\s*(.+?)\s*\|.*$", re.MULTILINE,
+)
+
+
+def _jd_distinctive_words(jd_text: str, company_name: str = "", min_count: int = 2) -> Set[str]:
+    words = re.findall(r"[a-zA-Z][a-zA-Z-]{4,}", jd_text.lower())
+    counts = Counter(words)
+    exclude = set(_CROSS_JD_GENERIC_WORDS)
+    for tok in re.findall(r"[a-zA-Z]+", company_name.lower()):
+        exclude.add(tok)
+    return {w for w, c in counts.items() if c >= min_count and w not in exclude}
+
+
+def _find_hits(text: str, distinctive: Set[str]) -> List[str]:
+    lower = text.lower()
+    return sorted(w for w in distinctive if re.search(rf"\b{re.escape(w)}\b", lower))
+
+
+def _resume_bullets_by_employer(resume_text: str) -> List[tuple]:
+    """Split PROFESSIONAL EXPERIENCE into (employer, bullet_text) pairs using each
+    '### Title | Employer | dates' header to attribute the bullets under it."""
+    out = []
+    current_employer = ""
+    for line in resume_text.splitlines():
+        header = _RESUME_SECTION_RE.match(line)
+        if header:
+            current_employer = header.group(1).strip().lower()
+            continue
+        stripped = line.strip()
+        if stripped.startswith("* ") or stripped.startswith("- "):
+            out.append((current_employer, stripped[2:].strip()))
+    return out
+
+
+def check_cross_employer_audience_bleed(
+    resume_text: str, cover_letter_text: str, jd_text: str, company_name: str = ""
+) -> List[LintViolation]:
+    """LW-021: flag the target JD's own distinctive audience/domain vocabulary (e.g.
+    'teachers', 'classroom', 'patients') showing up inside a bullet or paragraph
+    narrating a DIFFERENT, past employer's story (Cision/Sterkly/Zero to Sixty).
+
+    Ground-truth stories about a past employer should stay in that employer's own real
+    vocabulary. The JD's target company is a separate audience/domain and belongs only in
+    sentences explicitly drawing the analogy ("the same discipline this role needs"),
+    never blended into the factual narration of what a different employer's product or
+    users actually were. Found real 2026-07-30 (Newsela, found in an audit, not authored
+    by this session): a Cision-attributed Pendo bullet said "fixes teachers and users
+    would feel in the product" -- Cision has no teachers as users; Newsela's own audience
+    language leaked into the wrong employer's sentence. Not caught by any existing rule
+    because it isn't forbidden language, a metric problem, or a JD-paraphrase in the
+    hook -- it's a distinct failure class: cross-employer vocabulary bleed. WARN, not
+    HARD_BLOCK: a shared word can be a coincidence, or a legitimate different sense of the
+    same word (e.g. "prompt design" vs instructional "design"), so this forces a human
+    read rather than an automatic rewrite.
+
+    Resume bullets are checked per-bullet, attributed to their enclosing '### ... |
+    Employer | ...' section header, since a bullet almost never repeats the employer name
+    inline (a first attempt at plain sentence-splitting missed the real bug entirely for
+    exactly this reason). Cover letter paragraphs are checked as whole paragraphs, not
+    sentences, so a later sentence that refers back anaphorically ("at the same company")
+    still gets caught even though it never repeats the employer's proper noun.
+    """
+    if not jd_text.strip():
+        return []
+    distinctive = _jd_distinctive_words(jd_text, company_name=company_name)
+    if not distinctive:
+        return []
+    violations = []
+
+    if resume_text.strip():
+        for employer, bullet in _resume_bullets_by_employer(resume_text):
+            if not any(emp in employer for emp in _PAST_EMPLOYER_NAMES):
+                continue
+            hit_words = _find_hits(bullet, distinctive)
+            if hit_words:
+                violations.append(LintViolation(
+                    rule_id="LW-021",
+                    severity="WARN",
+                    message=(
+                        f"Resume.md ({employer.title()}): bullet uses this JD's own distinctive "
+                        f"vocabulary ({', '.join(hit_words)}) -- possible audience/domain bleed "
+                        f"from the target company into a different employer's story: \"{bullet}\""
+                    ),
+                    suggestion=(
+                        "Keep this bullet in that employer's own real vocabulary (its actual "
+                        "customers/users/product), not the target company's audience language."
+                    ),
+                ))
+
+    if cover_letter_text.strip():
+        for para in re.split(r"\n\s*\n", cover_letter_text):
+            para = para.strip()
+            if not para or not any(emp in para.lower() for emp in _PAST_EMPLOYER_NAMES):
+                continue
+            hit_words = _find_hits(para, distinctive)
+            if hit_words:
+                violations.append(LintViolation(
+                    rule_id="LW-021",
+                    severity="WARN",
+                    message=(
+                        f"CoverLetter.md: a paragraph naming a past employer also uses this "
+                        f"JD's own distinctive vocabulary ({', '.join(hit_words)}) -- possible "
+                        f"audience/domain bleed: \"{para}\""
+                    ),
+                    suggestion=(
+                        "Keep this paragraph's employer story in its own real vocabulary. Draw "
+                        "the analogy to the target company in a separate sentence explicitly "
+                        "framed as a parallel, not blended into the factual narration."
+                    ),
+                ))
+
+    return violations
+
+
+def check_jd_specificity_floor(cover_letter_text: str, jd_text: str, company_name: str = "") -> List[LintViolation]:
+    """LW-026: flag a cover letter that could plausibly have been sent to any employer.
+
+    Added 2026-07-30 (Perplexity-sourced cliché audit, Jason-supplied): "require the letter to
+    reference at least 2 concrete details unique to the job posting... reject drafts that could be
+    sent to any employer unchanged." Reuses LW-021's JD-distinctive-word extraction rather than
+    doing outside company research -- this pipeline never looks anything up externally, so
+    "specific to this posting" has to mean specific to the JD's own text, not researched detail.
+    A floor check, not a real specificity judge: passing this only means the letter engages with
+    something the JD itself said, not that the engagement is any good. WARN, not HARD_BLOCK -- a
+    short or generic-sounding JD can legitimately have very few distinctive words to draw from.
+    """
+    if not cover_letter_text.strip() or not jd_text.strip():
+        return []
+    distinctive = _jd_distinctive_words(jd_text, company_name=company_name)
+    if not distinctive:
+        return []
+    hits = _find_hits(cover_letter_text, distinctive)
+    if len(hits) >= 2:
+        return []
+    return [LintViolation(
+        rule_id="LW-026",
+        severity="WARN",
+        message=(
+            f"Cover letter engages with only {len(hits)} of this JD's own distinctive term(s) "
+            f"({', '.join(hits) if hits else 'none'}) -- could plausibly read as generic to any "
+            f"similar role."
+        ),
+        suggestion=(
+            "Ground at least one more paragraph in something this specific JD actually said "
+            "(a named responsibility, a product/team detail, a stated constraint), not just the "
+            "generic PM vocabulary any posting would share."
+        ),
+    )]
+
+
 def lint_folder(folder: str) -> List[dict]:
     """Lint all .md files in a submission folder. Returns list of summary dicts."""
     results = []
@@ -1068,6 +1323,53 @@ def lint_folder(folder: str) -> List[dict]:
                 "warns": len(positioning_warns),
                 "infos": 0,
                 "result": LintResult(passed=True, warns=positioning_warns, document_type="positioning"),
+            })
+
+    # LW-021: cross-employer audience/domain vocabulary bleed check (needs Original_JD.txt).
+    if ("resume" in texts_by_doc_type or "cover_letter" in texts_by_doc_type) and os.path.exists(jd_path):
+        try:
+            with open(jd_path, encoding="utf-8") as f:
+                jd_text = f.read()
+        except OSError:
+            jd_text = ""
+        bleed_warns = check_cross_employer_audience_bleed(
+            texts_by_doc_type.get("resume", ""),
+            texts_by_doc_type.get("cover_letter", ""),
+            jd_text,
+            company_name=os.path.basename(folder),
+        )
+        if bleed_warns:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "cross-employer audience bleed",
+                "doc_type": "bleed",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(bleed_warns),
+                "infos": 0,
+                "result": LintResult(passed=True, warns=bleed_warns, document_type="bleed"),
+            })
+
+    # LW-026: JD-specificity floor check (needs Original_JD.txt).
+    if "cover_letter" in texts_by_doc_type and os.path.exists(jd_path):
+        try:
+            with open(jd_path, encoding="utf-8") as f:
+                jd_text = f.read()
+        except OSError:
+            jd_text = ""
+        specificity_warns = check_jd_specificity_floor(
+            texts_by_doc_type["cover_letter"], jd_text, company_name=os.path.basename(folder)
+        )
+        if specificity_warns:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "cover letter JD-specificity floor",
+                "doc_type": "specificity",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(specificity_warns),
+                "infos": 0,
+                "result": LintResult(passed=True, warns=specificity_warns, document_type="specificity"),
             })
 
     return results

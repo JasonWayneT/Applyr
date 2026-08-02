@@ -135,12 +135,11 @@ export function shouldApplyAdjacentRoleDeny(searchTerms: string[]): boolean {
   return searchTerms.some((term) => /product/i.test(term || ''));
 }
 
-/** Adjacent-role titles rejected on broad category feeds (product marketing, program manager, etc.). */
+/** Adjacent-role titles rejected on broad category feeds (product marketing, project manager, etc.). */
 export const ADJACENT_ROLE_DENY_PATTERNS: RegExp[] = [
   /\bproduct marketing\b/i,
   /\bproduct design/i,
   /\bproduct analyt/i,
-  /\bprogram manager\b/i,
   /\bproject manager\b/i,
   /\bsolutions engineer\b/i,
   /\bsales development\b/i,

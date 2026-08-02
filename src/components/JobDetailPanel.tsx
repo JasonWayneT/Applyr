@@ -1070,10 +1070,10 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Outcome</label>
                     <div className="flex flex-wrap gap-1.5">
                       {[
-                        { value: 'Rejected', label: 'Rejected', color: 'bg-error-container text-on-error-container border border-error-variant/20' },
-                        { value: 'Ghosted', label: 'Ghosted', color: 'bg-error-container text-on-error-container border border-error-variant/20' },
-                        { value: 'Self-Rejected', label: 'Self-Reject (Not a Fit)', color: 'bg-amber-100 text-amber-800 border border-amber-300' },
-                        { value: 'No Longer Available', label: 'No Longer Available', color: 'bg-slate-100 text-slate-800 border border-slate-300' }
+                        { value: 'Rejected', label: 'Archived', color: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600' },
+                        { value: 'Ghosted', label: 'Ghosted', color: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600' },
+                        { value: 'Self-Rejected', label: 'Self-Reject (Not a Fit)', color: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700' },
+                        { value: 'No Longer Available', label: 'No Longer Available', color: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600' }
                       ].map(t => (
                         <button
                           key={t.value}
@@ -1131,9 +1131,8 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                       }
                     }}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition-all text-white ${
-                      closureData.type === 'No Longer Available' ? 'bg-slate-600' :
-                      closureData.type === 'Self-Rejected' ? 'bg-amber-600' :
-                      'bg-error'
+                      closureData.type === 'Self-Rejected' ? 'bg-amber-600 dark:bg-amber-500' :
+                      'bg-slate-600 dark:bg-slate-500'
                     }`}
                   >
                     {closureData.type === 'No Longer Available' ? 'Confirm Deletion' :

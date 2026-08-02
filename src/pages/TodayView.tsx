@@ -12,6 +12,15 @@ const CONTACT_TYPE_LABELS: Record<Contact['contact_type'], string> = {
   informational: 'Informational',
 };
 
+type PipelineSortOption = 'newest' | 'oldest' | 'company-asc' | 'company-desc';
+
+const PIPELINE_SORT_OPTIONS: { value: PipelineSortOption; label: string }[] = [
+  { value: 'newest', label: 'Date Added (Newest)' },
+  { value: 'oldest', label: 'Date Added (Oldest)' },
+  { value: 'company-asc', label: 'Company (A-Z)' },
+  { value: 'company-desc', label: 'Company (Z-A)' },
+];
+
 type NeedsAttentionFormState = {
   company: string;
   contact_name: string;
@@ -46,8 +55,7 @@ const getGreeting = () => {
 
 const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpportunities, onStatusChange }) => {
   const [firstName, setFirstName] = useState('');
-  const [isReranking, setIsReranking] = useState(false);
-  const [rerankQuery, setRerankQuery] = useState('');
+  const [pipelineSortBy, setPipelineSortBy] = useState<PipelineSortOption>('newest');
 
   const [markingAppliedId, setMarkingAppliedId] = useState<string | null>(null);
   const [applyToast, setApplyToast] = useState<{ company: string } | null>(null);
@@ -140,28 +148,20 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
     .filter(c => !c.next_follow_up_due && Date.now() - new Date(c.last_touch_at).getTime() >= SIXTY_DAYS_MS)
     .sort((a, b) => new Date(a.last_touch_at).getTime() - new Date(b.last_touch_at).getTime());
 
-  const handleRerank = async () => {
-    if (!rerankQuery.trim()) return;
-    setIsReranking(true);
-    try {
-      await fetch(api('/api/jobs/rerank'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: rerankQuery })
-      });
-      // Optionally you could trigger a global job refresh here
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsReranking(false);
-      setRerankQuery('');
-    }
-  };
-
   const backlogs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status));
-  const pipelineJobs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
+  const pipelineJobs = jobs
+    .filter(j => j.status === 'Backlog' && j.has_assets)
+    .sort((a, b) => {
+      switch (pipelineSortBy) {
+        case 'company-asc': return a.company.localeCompare(b.company);
+        case 'company-desc': return b.company.localeCompare(a.company);
+        case 'oldest': return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        case 'newest':
+        default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
   const now = Date.now();
   const upcomingInterviews = jobs
     .filter(j => {
@@ -257,9 +257,9 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
                 key={item.label}
                 {...funnelClickProps(item.label)}
                 className={`flex-1 rounded-t-lg transition-all duration-500 hover:opacity-80 relative group ${
-                  item.count === 0 
-                    ? 'bg-outline-variant/20' 
-                    : i === 2 ? 'bg-primary' : i === 4 ? 'bg-secondary-container' : 'bg-primary-container/50'
+                  item.count === 0
+                    ? 'bg-outline-variant'
+                    : i === 4 ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-primary'
                 } ${onNavigateToOpportunities ? 'cursor-pointer hover:brightness-110' : ''}`}
                 style={{ height: item.height }}
               >
@@ -269,9 +269,9 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               </div>
             ))}
             {/* Grid lines */}
-            <div className="absolute inset-x-0 top-1/4 border-b border-outline-variant/10 border-dashed"></div>
-            <div className="absolute inset-x-0 top-2/4 border-b border-outline-variant/10 border-dashed"></div>
-            <div className="absolute inset-x-0 top-3/4 border-b border-outline-variant/10 border-dashed"></div>
+            <div className="absolute inset-x-0 top-1/4 border-b border-outline-variant border-dashed"></div>
+            <div className="absolute inset-x-0 top-2/4 border-b border-outline-variant border-dashed"></div>
+            <div className="absolute inset-x-0 top-3/4 border-b border-outline-variant border-dashed"></div>
           </div>
           <div className="flex justify-between mt-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-2">
             {statusCounts.map(s => (
@@ -332,31 +332,24 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-2">
             <h3 className="text-2xl font-headline font-bold text-on-surface">Ready to Apply</h3>
             <div className="flex items-center gap-2 mt-4 md:mt-0">
-              <input
-                type="text"
-                placeholder="Semantic search (e.g. HealthTech)"
-                value={rerankQuery}
-                onChange={(e) => setRerankQuery(e.target.value)}
-                className="px-4 py-2 bg-surface-container rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/50 text-on-surface"
-              />
-              <button
-                onClick={handleRerank}
-                disabled={isReranking || !rerankQuery.trim()}
-                className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-50 hover:bg-primary/90 transition-colors"
+              <select
+                value={pipelineSortBy}
+                onChange={(e) => setPipelineSortBy(e.target.value as PipelineSortOption)}
+                className="px-3 py-2 bg-surface-container rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary/50 text-on-surface cursor-pointer"
+                title="Sort Ready to Apply"
               >
-                {isReranking ? 'Reranking...' : 'Rerank Backlog'}
-              </button>
+                {PIPELINE_SORT_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
           </div>
-          <p className="text-xs text-on-surface-variant mb-6 md:text-right">
-            Search and reorder your Ready-to-Apply backlog by company, role, or keyword.
-          </p>
           <div className="space-y-4">
             {pipelineJobs.slice(0, 10).map(job => (
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 editorial-shadow hover:shadow-lg transition-all border border-transparent hover:border-outline-variant/10 cursor-pointer"
+                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
               >
                 <div className="flex items-center gap-4 flex-1">
                   <div className="w-14 h-14 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary text-lg">
@@ -436,7 +429,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 editorial-shadow hover:shadow-lg transition-all border border-transparent hover:border-outline-variant/10 cursor-pointer"
+                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
               >
                 <div className="flex items-center gap-4 flex-1">
                   <div className="w-14 h-14 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary text-lg">
@@ -504,7 +497,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               <div 
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="bg-surface-container-lowest p-6 rounded-3xl editorial-shadow border border-outline-variant/10 hover:border-primary/20 transition-all cursor-pointer group"
+                className="bg-surface-container-lowest p-6 rounded-3xl editorial-shadow border border-outline-variant hover:border-primary transition-all cursor-pointer group"
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-12 h-12 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary">
@@ -713,7 +706,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
             } : undefined}
             className={`bg-surface-container-lowest rounded-2xl p-6 editorial-shadow ${
               stat.navigable && onNavigateToOpportunities
-                ? 'cursor-pointer hover:border-primary/20 border border-transparent transition-all hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
+                ? 'cursor-pointer hover:border-primary border border-outline-variant transition-all hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
                 : ''
             }`}
             title={stat.navigable && onNavigateToOpportunities ? `View ${stat.label} in Opportunities` : undefined}

@@ -12,7 +12,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [accountLabel, setAccountLabel] = useState('Local account');
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    document.documentElement.classList.toggle('dark', next);
+    localStorage.setItem('applyr-theme', next ? 'dark' : 'light');
+    setIsDark(next);
+  };
 
   const newJobsCount = jobs.filter(j => j.status === 'Backlog' && j.has_assets).length;
 
@@ -56,11 +64,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
   };
 
   return (
-    <aside className="w-64 bg-surface-container-low flex flex-col h-full py-8 px-6 shrink-0 relative">
-      {/* Brand */}
-      <div className="mb-10 flex items-center gap-3 px-2">
-        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-          <span className="material-symbols-outlined text-on-primary text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>spa</span>
+    <aside className="w-64 bg-surface border-r border-outline-variant flex flex-col h-full shrink-0 relative">
+      {/* Brand — same h-16 row height as the top header, so the two align */}
+      <div className="h-16 flex items-center gap-3 px-6 shrink-0">
+        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
+          <span className="material-symbols-outlined text-on-primary text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>work</span>
         </div>
         <div>
           <h2 className="text-lg font-bold text-primary font-headline tracking-tight leading-tight">Applyr</h2>
@@ -69,15 +77,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1">
+      <nav className="flex-1 space-y-1 px-6 pt-6">
         {mainNav.map((item) => (
           <button
             key={item.name}
             onClick={() => handleNavigate(item.name)}
-            className={`w-full flex items-center gap-3 py-3 px-4 rounded-xl text-sm transition-all active:translate-x-1 duration-200 ${
+            className={`w-full flex items-center gap-3 py-3 px-4 rounded-xl text-sm transition-all active:translate-x-1 duration-200 border ${
               activeTab === item.name
-                ? 'text-primary font-bold border-r-2 border-primary bg-surface-container'
-                : 'text-on-surface-variant hover:text-primary'
+                ? 'text-primary font-bold border-primary/30 bg-primary/10'
+                : 'text-on-surface-variant border-transparent hover:text-on-surface hover:border-outline-variant'
             }`}
           >
             <span
@@ -97,7 +105,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
       </nav>
 
       {/* ChatGPT-Style Profile & Settings Footer Menu */}
-      <div className="mt-auto pt-6 border-t border-outline-variant/10 relative" ref={menuRef}>
+      <div className="mt-auto pt-6 pb-8 px-6 border-t border-outline-variant/10 relative" ref={menuRef}>
         
         {/* Floating Popup Menu */}
         {isMenuOpen && (
@@ -140,6 +148,21 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
                   Applyr v2.5 Multi-LLM Agent. All services connected and running on local SQLite.
                 </div>
               )}
+
+              <button
+                onClick={toggleTheme}
+                className="w-full flex items-center justify-between gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+              >
+                <span className="flex items-center gap-3.5">
+                  <span className="material-symbols-outlined text-sm">{isDark ? 'dark_mode' : 'light_mode'}</span>
+                  {isDark ? 'Dark mode' : 'Light mode'}
+                </span>
+                <span className={`relative w-8 h-4.5 rounded-full transition-colors ${isDark ? 'bg-primary' : 'bg-surface-container-highest'}`}>
+                  <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${isDark ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                </span>
+              </button>
+
+              <div className="h-[1px] bg-outline-variant/10 my-1" />
 
               <button
                 onClick={() => {

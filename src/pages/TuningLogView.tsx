@@ -177,7 +177,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="group bg-surface-container-lowest p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-transparent hover:border-outline-variant/10 hover:shadow-lg transition-all cursor-pointer editorial-shadow"
+                className="group bg-surface-container-lowest p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-outline-variant hover:border-outline hover:shadow-lg transition-all cursor-pointer editorial-shadow"
               >
                 {/* Job Metadata Column */}
                 <div className="flex items-start gap-4 flex-1 min-w-0">

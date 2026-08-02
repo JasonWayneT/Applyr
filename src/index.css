@@ -3,81 +3,111 @@
 @import "tailwindcss" source(none);
 @source "../../index.html";
 @source "./**/*.{js,ts,jsx,tsx,html}";
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   /* ===== APPLYR — Design Tokens ===== */
+  /* Rebuilt 2026-08-02: earthy/domestic palette (sage, terracotta, warm stone, cream
+     paper) replaced with a neutral productivity-tool palette. Revised same day after
+     the first pass measured out too low-contrast (card-vs-page contrast ratio 1.1:1,
+     cards had no real border) — moved to a higher-contrast "utility SaaS" base: near-
+     white canvas, pure-white bordered cards, near-black text, punchier cobalt accent.
+     Rationale in CHANGELOG.md under [Unreleased] > Changed. */
 
-  /* --- Primary (Sage Green) --- */
-  --color-primary: #526452;
-  --color-primary-dim: #465746;
-  --color-primary-container: #d4e8d1;
-  --color-on-primary: #ebfee7;
-  --color-on-primary-container: #455645;
+  /* --- Primary (Claude Coral) --- */
+  /* Swapped from Electric Cobalt 2026-08-02 — Jason: "that blue doesn't look
+     right, stick closer to claude." Claude.ai's actual accent, confirmed live
+     via getComputedStyle during the dark-mode research pass, is #D97757 — used
+     unchanged across their own light and dark UI, so it's reused unchanged
+     here too rather than re-tuned per theme. Scoped to the accent only: the
+     cool-neutral surface base stays as-is rather than also adopting Claude's
+     warm canvas, since that would re-touch the "not cozy, not home" call from
+     the earlier palette work — an accent pop reads differently than a warm
+     background wash. */
+  --color-primary: #D97757;
+  --color-primary-dim: #BC5D3F;
+  --color-primary-container: #FBE8DE;
+  --color-on-primary: #FFFFFF;
+  --color-on-primary-container: #7A3520;
 
-  /* --- Secondary (Terracotta) --- */
-  --color-secondary: #8b4f3a;
-  --color-secondary-dim: #7d4330;
-  --color-secondary-container: #ffdbd0;
-  --color-on-secondary: #fff7f5;
-  --color-on-secondary-container: #7c422e;
+  /* --- Secondary (Deep Teal) --- */
+  --color-secondary: #0F766E;
+  --color-secondary-dim: #115E59;
+  --color-secondary-container: #CCFBF1;
+  --color-on-secondary: #FFFFFF;
+  --color-on-secondary-container: #134E4A;
 
-  /* --- Tertiary (Warm Stone) --- */
-  --color-tertiary: #605f5a;
-  --color-tertiary-dim: #54534e;
-  --color-tertiary-container: #fdffda;
-  --color-on-tertiary-container: #62615b;
+  /* --- Tertiary (Slate Neutral) --- */
+  --color-tertiary: #475569;
+  --color-tertiary-dim: #334155;
+  --color-tertiary-container: #E2E8F0;
+  --color-on-tertiary-container: #1E293B;
 
-  /* --- Surfaces (The Paper Stack) --- */
-  --color-surface: #faf9f6;
-  --color-surface-dim: #d9dbd6;
-  --color-surface-bright: #faf9f6;
-  --color-surface-container-lowest: #ffffff;
-  --color-surface-container-low: #f4f4f0;
-  --color-surface-container: #eeeeea;
-  --color-surface-container-high: #e8e9e4;
-  --color-surface-container-highest: #e1e3de;
-  --color-surface-variant: #e1e3de;
-  --color-surface-tint: #526452;
-  --color-background: #faf9f6;
+  /* --- Surfaces (Google Store-inspired, 2026-08-02: Jason pointed at two
+       screenshots of the real google.com/store — white canvas, light-gray
+       card fills, no reliance on a stark white-on-white split) --- */
+  /* Inverts the earlier relationship on purpose: that pass made canvas the
+     off-white tier and cards pure white; Google's actual pattern is the
+     opposite — canvas is white, elevated surfaces get Google's own literal
+     gray scale (#F1F3F4/#F8F9FA/#E8EAED/#DADCE0, the same values Google's own
+     products use). Border kept and strengthened (card-vs-border now 1.63:1,
+     up from the previous pass's 1.05:1 canvas-vs-card) — same lesson as the
+     dark-mode work: a confident fill plus a real border, not fill alone. */
+  --color-surface: #FFFFFF;
+  --color-surface-dim: #F1F3F4;
+  --color-surface-bright: #FFFFFF;
+  --color-surface-container-lowest: #F1F3F4;
+  --color-surface-container-low: #F8F9FA;
+  --color-surface-container: #F1F3F4;
+  --color-surface-container-high: #E8EAED;
+  --color-surface-container-highest: #DADCE0;
+  --color-surface-variant: #E8EAED;
+  --color-surface-tint: #D97757;
+  --color-background: #FFFFFF;
 
   /* --- On Surfaces (Text) --- */
-  --color-on-surface: #303330;
-  --color-on-surface-variant: #5d605c;
-  --color-on-background: #303330;
+  --color-on-surface: #0F172A;
+  --color-on-surface-variant: #5F6368;
+  --color-on-background: #0F172A;
 
-  /* --- Outline --- */
-  --color-outline: #797b78;
-  --color-outline-variant: #b0b3ae;
+  /* --- Outline (Google's own icon/border grays) --- */
+  --color-outline: #9AA0A6;
+  --color-outline-variant: #BDC1C6;
 
-  /* --- Error (Clay Red) --- */
-  --color-error: #a73b21;
-  --color-error-dim: #791903;
-  --color-error-container: #fd795a;
-  --color-on-error: #fff7f6;
-  --color-on-error-container: #6e1400;
+  /* --- Error (true system errors only, not job rejections — see status chips) --- */
+  --color-error: #DC2626;
+  --color-error-dim: #B91C1C;
+  --color-error-container: #FEE2E2;
+  --color-on-error: #FFFFFF;
+  --color-on-error-container: #7F1D1D;
 
   /* --- Inverse --- */
-  --color-inverse-surface: #0d0f0d;
-  --color-inverse-on-surface: #9d9d9a;
-  --color-inverse-primary: #ebffe7;
+  --color-inverse-surface: #0F172A;
+  --color-inverse-on-surface: #CBD5E1;
+  --color-inverse-primary: #F0A57C;
 
   /* --- Status Chips (Applyr Palette) --- */
-  --color-status-backlog-bg: #e1e3de;
-  --color-status-backlog-text: #5d605c;
-  --color-status-applied-bg: #d4e8d1;
-  --color-status-applied-text: #455645;
-  --color-status-recruiter-bg: #eeeeea;
-  --color-status-recruiter-text: #5d605c;
-  --color-status-core-bg: #ffdbd0;
-  --color-status-core-text: #7c422e;
-  --color-status-offer-bg: #d4e8d1;
-  --color-status-offer-text: #334333;
-  --color-status-closed-bg: #e1e3de;
-  --color-status-closed-text: #5d605c;
-  --color-status-new-bg: #d0e8f2;
-  --color-status-new-text: #1a4c6b;
-  --color-status-drafted-bg: #fff0d4;
-  --color-status-drafted-text: #7b4f00;
+  /* Hue tracks pipeline stage, not emotional valence. Rejected/Closed share the
+     same neutral slate as Backlog — a closed application is a status, not a
+     failure, so it gets no alarm color. Offer keeps the one true accent green,
+     kept scarce so it still reads as a real signal when it appears. Tints deepened
+     from the first pass so chips read as distinct pills, not page-background noise. */
+  --color-status-backlog-bg: #E2E8F0;
+  --color-status-backlog-text: #334155;
+  --color-status-applied-bg: #CCFBF1;
+  --color-status-applied-text: #115E59;
+  --color-status-recruiter-bg: #ECEFF3;
+  --color-status-recruiter-text: #475569;
+  --color-status-core-bg: #DBEAFE;
+  --color-status-core-text: #1E3A8A;
+  --color-status-offer-bg: #D1FAE5;
+  --color-status-offer-text: #065F46;
+  --color-status-closed-bg: #E2E8F0;
+  --color-status-closed-text: #475569;
+  --color-status-new-bg: #CFFAFE;
+  --color-status-new-text: #155E75;
+  --color-status-drafted-bg: #FEF3C7;
+  --color-status-drafted-text: #92400E;
 
   /* --- Typography --- */
   --font-headline: "Manrope", sans-serif;
@@ -92,6 +122,104 @@
   --radius-xl: 1.5rem;
   --radius-2xl: 2rem;
   --radius-full: 9999px;
+}
+
+/* ===== DARK MODE ===== */
+/* Added 2026-08-02. Researched live: Linear's dark UI (cool near-black canvas
+   #08090A, brand accent reused unchanged across themes, elevation via lightness
+   steps not shadow, borders mostly solid/visible) and Claude.ai's dark UI (warm
+   #201F1F canvas, warm off-white text, coral #D97757 accent). Took Linear's
+   structure — cool near-black base, lightness-step elevation, real borders —
+   and kept Applyr's own cobalt/teal identity rather than Claude's warm coral,
+   since going warm here would partly undo the "not home, not cozy" call made
+   earlier the same day (see the palette entries above in CHANGELOG.md). Same
+   token slots as light mode, same status-chip rules (Rejected/Closed stay
+   neutral, not red; Offer stays a scarce accent; error stays reserved for real
+   system errors) — only the values change. Borders are solid colors, not
+   low-alpha overlays, learned directly from the light-mode contrast bug fixed
+   earlier: an invisible border is invisible in any theme. */
+.dark {
+  /* --- Primary (Claude Coral — same value as light mode, see note above) --- */
+  --color-primary: #D97757;
+  --color-primary-dim: #C1633F;
+  --color-primary-container: #4A2A1D;
+  --color-on-primary: #FFFFFF;
+  --color-on-primary-container: #F0A57C;
+
+  /* --- Secondary (Deep Teal, brightened one step) --- */
+  --color-secondary: #0D9488;
+  --color-secondary-dim: #0F766E;
+  --color-secondary-container: #134E4A;
+  --color-on-secondary: #FFFFFF;
+  --color-on-secondary-container: #5EEAD4;
+
+  /* --- Tertiary (Slate Neutral) --- */
+  --color-tertiary: #94A3B8;
+  --color-tertiary-dim: #64748B;
+  --color-tertiary-container: #1E293B;
+  --color-on-tertiary-container: #CBD5E1;
+
+  /* --- Surfaces (cool near-black, Linear-style lightness-step elevation) ---
+       First pass measured canvas-vs-card at 1.10:1 with a 1.25:1 border — the
+       same low-separation bug fixed in light mode, just recurring in dark
+       values. A 1.1-1.2:1 canvas-vs-card ratio is expected and fine near black
+       (Linear's own real site measures ~1.11:1 there) — WCAG contrast is a
+       text-legibility metric, not a surface-separation one. What actually
+       needed fixing was the border: bumped from 1.25:1 to 1.57:1 against the
+       card, 2.39:1 for the stronger hover/focus outline. */
+  --color-surface: #0B0D11;
+  --color-surface-dim: #06070A;
+  --color-surface-bright: #0B0D11;
+  --color-surface-container-lowest: #1E2129;
+  --color-surface-container-low: #14161B;
+  --color-surface-container: #171A20;
+  --color-surface-container-high: #1B1E25;
+  --color-surface-container-highest: #262A34;
+  --color-surface-variant: #1B1E25;
+  --color-surface-tint: #D97757;
+  --color-background: #0B0D11;
+
+  /* --- On Surfaces (Text) --- */
+  --color-on-surface: #EEF2F7;
+  --color-on-surface-variant: #94A3B8;
+  --color-on-background: #EEF2F7;
+
+  /* --- Outline (solid, not alpha — a border that vanishes at 10% opacity is
+       still the same bug whether the canvas is white or black) --- */
+  --color-outline: #545C6B;
+  --color-outline-variant: #3A4150;
+
+  /* --- Error (true system errors only, not job rejections) --- */
+  --color-error: #F87171;
+  --color-error-dim: #EF4444;
+  --color-error-container: #450A0A;
+  --color-on-error: #FFFFFF;
+  --color-on-error-container: #FCA5A5;
+
+  /* --- Inverse (flips: a light surface for things that need to pop off a
+       dark canvas, e.g. tooltips) --- */
+  --color-inverse-surface: #EEF2F7;
+  --color-inverse-on-surface: #1D2028;
+  --color-inverse-primary: #D97757;
+
+  /* --- Status Chips: dark tint + bright saturated text, same per-stage hue
+       logic as light mode. Rejected/Closed share the same neutral as Backlog. */
+  --color-status-backlog-bg: #1E2530;
+  --color-status-backlog-text: #94A3B8;
+  --color-status-applied-bg: #0F2E2A;
+  --color-status-applied-text: #2DD4BF;
+  --color-status-recruiter-bg: #171A20;
+  --color-status-recruiter-text: #94A3B8;
+  --color-status-core-bg: #16233D;
+  --color-status-core-text: #60A5FA;
+  --color-status-offer-bg: #0B2E22;
+  --color-status-offer-text: #34D399;
+  --color-status-closed-bg: #1E2530;
+  --color-status-closed-text: #94A3B8;
+  --color-status-new-bg: #0E2E38;
+  --color-status-new-text: #22D3EE;
+  --color-status-drafted-bg: #3A2A0C;
+  --color-status-drafted-text: #FBBF24;
 }
 
 /* --- Material Symbols --- */
@@ -113,15 +241,30 @@
 
 /* --- Component Classes --- */
 @layer components {
-  /* Editorial Shadow (ghostly, organic) */
+  /* Editorial Shadow — the shared card-separation treatment used across every
+     view (Dashboard, Opportunities, Job Search, etc). A shadow alone at this
+     opacity was measured at ~1.05:1 contrast against the page background —
+     effectively invisible. Border is the real separator; shadow just adds lift. */
   .editorial-shadow {
-    box-shadow: 0px 12px 32px rgba(48, 51, 48, 0.06);
+    @apply border border-outline-variant;
+    box-shadow: 0px 12px 32px rgba(15, 23, 42, 0.06);
+  }
+
+  .dark .editorial-shadow {
+    /* A dark shadow on a near-black canvas does nothing — the border (already
+       solid, see --color-outline-variant above) does the real separating work
+       here; the shadow is just a slightly stronger black to keep some lift. */
+    box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.4);
   }
 
   /* Glass Nav */
   .glass-nav {
-    background: rgba(250, 249, 246, 0.8);
+    background: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(24px);
+  }
+
+  .dark .glass-nav {
+    background: rgba(11, 13, 17, 0.8);
   }
 
   /* Applyr Buttons */
@@ -130,9 +273,12 @@
     @apply hover:opacity-90 active:scale-[0.98] transition-all duration-200;
   }
 
+  /* Outlined pill, modeled on the Google Store "Learn more" button: neutral
+     dark text (not brand-colored), transparent-ish fill that sits a shade
+     brighter than whatever card it's on, definition from the border alone. */
   .btn-secondary {
-    @apply bg-surface-container-high text-primary font-semibold px-5 py-2.5 rounded-xl;
-    @apply hover:bg-surface-container-highest active:scale-[0.98] transition-all duration-200;
+    @apply bg-surface text-on-surface font-semibold px-5 py-2.5 rounded-full border border-outline-variant;
+    @apply hover:border-outline hover:bg-surface-container-low active:scale-[0.98] transition-all duration-200;
   }
 
   .btn-ghost {
@@ -144,15 +290,18 @@
     @apply hover:scale-105 active:scale-95 transition-all;
   }
 
-  /* Applyr Cards (No borders, tonal separation) */
+  /* Applyr Cards (bordered, white-on-neutral for real separation) */
   .card-applyr {
-    @apply bg-surface-container-lowest rounded-2xl p-6;
-    box-shadow: 0px 12px 32px rgba(48, 51, 48, 0.06);
+    @apply bg-surface-container-lowest border border-outline-variant rounded-2xl p-6;
+    box-shadow: 0px 12px 32px rgba(15, 23, 42, 0.06);
+  }
+
+  .dark .card-applyr {
+    box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.4);
   }
 
   .card-applyr:hover {
-    @apply shadow-lg;
-    border-color: rgba(176, 179, 174, 0.1);
+    @apply shadow-lg border-outline;
   }
 
   /* Status Chips */
@@ -224,8 +373,12 @@
     background: transparent;
   }
   .applyr-scrollbar::-webkit-scrollbar-thumb {
-    background: #e1e3de;
+    background: #D6DEE6;
     border-radius: 10px;
+  }
+
+  .dark .applyr-scrollbar::-webkit-scrollbar-thumb {
+    background: #242832;
   }
 
   /* No scrollbar utility */

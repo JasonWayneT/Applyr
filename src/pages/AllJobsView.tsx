@@ -144,7 +144,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                   <div
                     key={job.id}
                     onClick={() => onJobClick(job)}
-                    className="group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between editorial-shadow hover:shadow-lg transition-all border border-transparent hover:border-outline-variant/10 cursor-pointer"
+                    className="group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
                       <div className="w-12 h-12 bg-surface-container rounded-xl flex items-center justify-center font-headline font-bold text-primary shrink-0">

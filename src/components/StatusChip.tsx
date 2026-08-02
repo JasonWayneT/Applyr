@@ -24,7 +24,10 @@ interface StatusChipProps {
 
 const StatusChip: React.FC<StatusChipProps> = ({ status, long = false, hasAssets = true }) => {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG['Closed'];
-  let label = long ? status : config.label;
+  // 'Rejected' is a real status value (server normalizes it to 'Closed' + a
+  // rejection_type in the common path, but legacy/unnormalized rows can still
+  // carry it) — never show that raw word to the user, even in `long` mode.
+  let label = long ? (status === 'Rejected' ? 'Archived' : status) : config.label;
   let chipClass = config.chipClass;
   let dotClass = config.dotClass;
   

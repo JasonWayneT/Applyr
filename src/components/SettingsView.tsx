@@ -876,8 +876,8 @@ const SettingsView: React.FC = () => {
                     <p className="text-[10px] text-on-surface-variant mt-1">After apply, no response</p>
                   </div>
                   <div className="bg-surface-container-lowest border border-outline/8 p-5 rounded-2xl shadow-sm">
-                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Rejected</p>
-                    <p className="text-3xl font-headline font-extrabold text-error">
+                    <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">Archived</p>
+                    <p className="text-3xl font-headline font-extrabold text-on-surface-variant">
                       {stats.outcomes.byType.find(t => t.rejection_type === 'Rejected')?.count || 0}
                     </p>
                     <p className="text-[10px] text-on-surface-variant mt-1">Explicit no after apply</p>
@@ -910,7 +910,7 @@ const SettingsView: React.FC = () => {
                     <div className="space-y-3">
                       {stats.outcomes.byType.map((row) => (
                         <div key={row.rejection_type} className="flex justify-between items-center text-sm py-1">
-                          <span className="text-on-surface-variant">{row.rejection_type}</span>
+                          <span className="text-on-surface-variant">{row.rejection_type === 'Rejected' ? 'Archived' : row.rejection_type}</span>
                           <span className="font-semibold text-on-surface bg-surface px-2.5 py-1 rounded-lg border border-outline/10">{row.count}</span>
                         </div>
                       ))}

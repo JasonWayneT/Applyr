@@ -12,8 +12,7 @@ import {
   reconcileDraftedJobsWithAssets,
   reconcileOrphanSubmissionFolders,
 } from '../../submissionFolders.js';
-import { isSafeHttpUrl, isValidJobId, runPythonScript } from '../../middleware.js';
-import { pythonScriptPath } from '../../pipeline/processRunner.js';
+import { isSafeHttpUrl, isValidJobId } from '../../middleware.js';
 import { insertJob, patchJob, deleteJobRecord } from '../../repository/jobRepository.js';
 import {
   statusRequiresInterviewDateTime,
@@ -197,30 +196,6 @@ router.get('/api/jobs/stats', (_req, res) => {
     });
   } catch {
     res.status(500).json({ error: 'Failed to fetch stats' });
-  }
-});
-
-// Static path before /:id — Express would treat "rerank" as an id otherwise
-router.post('/api/jobs/rerank', async (req, res) => {
-  try {
-    const { query, threshold } = req.body;
-    if (!query || typeof query !== 'string') return res.status(400).json({ error: 'Query is required' });
-
-    logActivity('INFO', 'System', `Reranking backlog for query: "${query}"`);
-    const args = [pythonScriptPath('rerank_backlog.py'), '--query', query];
-    if (threshold !== undefined && threshold !== null) {
-      args.push('--threshold', String(threshold));
-    }
-
-    const { code, stdout, stderr } = await runPythonScript(args);
-    if (code !== 0) {
-      console.error(`Rerank error: ${stderr}`);
-      return res.status(500).json({ error: 'Failed to rerank backlog' });
-    }
-    res.json({ success: true, output: stdout.trim() });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error during rerank' });
   }
 });
 

@@ -275,13 +275,13 @@ const SettingsView: React.FC = () => {
       Saving
     </span>
   ) : saveStatus === 'saved' ? (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-on-success-container bg-success-container px-3 py-1 rounded-full border border-success/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-success" />
       Saved
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-on-success-container bg-success-container px-3 py-1 rounded-full border border-success/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-success" />
       Local
     </span>
   );
@@ -673,7 +673,7 @@ const SettingsView: React.FC = () => {
                         )}
                       </td>
                       <td className="py-4 pr-4">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${llmSettings.localUrl ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${llmSettings.localUrl ? 'bg-success-container text-on-success-container' : 'bg-surface-container text-on-surface-variant'}`}>
                           {llmSettings.localUrl ? 'Configured' : 'Not set'}
                         </span>
                       </td>
@@ -704,7 +704,7 @@ const SettingsView: React.FC = () => {
                         )}
                       </td>
                       <td className="py-4 pr-4">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.geminiApiKey || envStatus.gemini) ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.geminiApiKey || envStatus.gemini) ? 'bg-success-container text-on-success-container' : 'bg-surface-container text-on-surface-variant'}`}>
                           {(llmSettings.geminiApiKey || envStatus.gemini) ? 'Connected' : 'Not set'}
                         </span>
                       </td>
@@ -739,7 +739,7 @@ const SettingsView: React.FC = () => {
                         )}
                       </td>
                       <td className="py-4 pr-4">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.claudeApiKey || envStatus.claude) ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.claudeApiKey || envStatus.claude) ? 'bg-success-container text-on-success-container' : 'bg-surface-container text-on-surface-variant'}`}>
                           {(llmSettings.claudeApiKey || envStatus.claude) ? 'Connected' : 'Not set'}
                         </span>
                       </td>
@@ -768,7 +768,7 @@ const SettingsView: React.FC = () => {
                         )}
                       </td>
                       <td className="py-4 pr-4">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.perplexityApiKey || envStatus.perplexity) ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.perplexityApiKey || envStatus.perplexity) ? 'bg-success-container text-on-success-container' : 'bg-surface-container text-on-surface-variant'}`}>
                           {(llmSettings.perplexityApiKey || envStatus.perplexity) ? 'Connected' : 'Not set'}
                         </span>
                       </td>
@@ -798,7 +798,7 @@ const SettingsView: React.FC = () => {
                 <div className="rounded-xl border border-outline/10 bg-surface p-5 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-on-surface">Adzuna</p>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'bg-success-container text-on-success-container' : 'bg-surface-container text-on-surface-variant'}`}>
                       {(apiConnections.adzunaAppId && apiConnections.adzunaAppKey) || envStatus.adzuna ? 'Connected' : 'Not connected'}
                     </span>
                   </div>
@@ -822,7 +822,7 @@ const SettingsView: React.FC = () => {
                 <div className="rounded-xl border border-outline/10 bg-surface p-5 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-on-surface">TheirStack</p>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${apiConnections.theirstackApiKey ? 'bg-emerald-500/10 text-emerald-700' : 'bg-surface-container text-on-surface-variant'}`}>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${apiConnections.theirstackApiKey ? 'bg-success-container text-on-success-container' : 'bg-surface-container text-on-surface-variant'}`}>
                       {apiConnections.theirstackApiKey ? 'Connected' : 'Not connected'}
                     </span>
                   </div>

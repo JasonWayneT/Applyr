@@ -25,6 +25,9 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilter, onFilterChange }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const newFromScout = jobs.filter(j => j.status === 'New');
 
   const processedJobs = jobs.filter(job => {
     if (job.status === 'Drafted') return false;
@@ -116,6 +119,24 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
         </div>
       </div>
 
+      {/* New-from-scout banner */}
+      {newFromScout.length > 0 && !bannerDismissed && (
+        <div className="flex items-center gap-3 bg-status-drafted-bg text-status-drafted-text px-5 py-3 rounded-2xl">
+          <span className="material-symbols-outlined text-xl shrink-0">refresh</span>
+          <p className="flex-1 text-sm font-bold">
+            There {newFromScout.length === 1 ? 'is' : 'are'} {newFromScout.length} new role{newFromScout.length > 1 ? 's' : ''} from your last scout.
+          </p>
+          <button
+            type="button"
+            onClick={() => setBannerDismissed(true)}
+            className="text-status-drafted-text/60 hover:text-status-drafted-text shrink-0"
+            title="Dismiss"
+          >
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+      )}
+
       {/* Grouped List */}
       <div className="space-y-10">
         {groups.map(group => {
@@ -144,7 +165,13 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                   <div
                     key={job.id}
                     onClick={() => onJobClick(job)}
-                    className="group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
+                    className={`group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline border-l-4 cursor-pointer ${
+                      job.score && job.score >= 80
+                        ? 'border-l-primary'
+                        : job.score && job.score >= 60
+                        ? 'border-l-secondary'
+                        : 'border-l-outline-variant'
+                    }`}
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
                       <div className="w-12 h-12 bg-surface-container rounded-xl flex items-center justify-center font-headline font-bold text-primary shrink-0">

@@ -1005,8 +1005,8 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
               <div className="bg-inverse-surface rounded-xl p-4 font-mono text-[11px] leading-relaxed overflow-hidden flex flex-col max-h-[180px] overflow-y-auto applyr-scrollbar">
                 {systemStatus && ['scout_running', 'evaluate_running', 'drafting'].includes(systemStatus.status) && systemStatus.current_item?.toLowerCase().includes(job.company.toLowerCase()) && (
-                  <div className="flex gap-2 text-emerald-400 font-bold animate-pulse border-b border-emerald-500/10 pb-1 mb-1">
-                    <span className="text-emerald-400/50 shrink-0">
+                  <div className="flex gap-2 text-success font-bold animate-pulse border-b border-success/10 pb-1 mb-1">
+                    <span className="text-success/50 shrink-0">
                       [{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}]
                     </span>
                     <span className="shrink-0">ACTIVE</span>
@@ -1020,7 +1020,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     </span>
                     <span className={`font-bold shrink-0 ${
                       log.level === 'ERROR' ? 'text-error-container' :
-                      log.level === 'WARN' ? 'text-secondary-container' :
+                      log.level === 'WARN' ? 'text-warning-container' :
                       'text-primary-container'
                     }`}>
                       {log.level}
@@ -1070,10 +1070,10 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Outcome</label>
                     <div className="flex flex-wrap gap-1.5">
                       {[
-                        { value: 'Rejected', label: 'Archived', color: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600' },
-                        { value: 'Ghosted', label: 'Ghosted', color: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600' },
-                        { value: 'Self-Rejected', label: 'Self-Reject (Not a Fit)', color: 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700' },
-                        { value: 'No Longer Available', label: 'No Longer Available', color: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-600' }
+                        { value: 'Rejected', label: 'Archived', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' },
+                        { value: 'Ghosted', label: 'Ghosted', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' },
+                        { value: 'Self-Rejected', label: 'Self-Reject (Not a Fit)', color: 'bg-warning-container text-on-warning-container border border-warning/30' },
+                        { value: 'No Longer Available', label: 'No Longer Available', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' }
                       ].map(t => (
                         <button
                           key={t.value}
@@ -1131,8 +1131,8 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                       }
                     }}
                     className={`flex-1 py-2.5 rounded-xl text-xs font-bold shadow-md hover:opacity-90 transition-all text-white ${
-                      closureData.type === 'Self-Rejected' ? 'bg-amber-600 dark:bg-amber-500' :
-                      'bg-slate-600 dark:bg-slate-500'
+                      closureData.type === 'Self-Rejected' ? 'bg-warning' :
+                      'bg-tertiary'
                     }`}
                   >
                     {closureData.type === 'No Longer Available' ? 'Confirm Deletion' :

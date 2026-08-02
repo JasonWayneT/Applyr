@@ -7,107 +7,131 @@
 
 @theme {
   /* ===== APPLYR — Design Tokens ===== */
-  /* Rebuilt 2026-08-02: earthy/domestic palette (sage, terracotta, warm stone, cream
-     paper) replaced with a neutral productivity-tool palette. Revised same day after
-     the first pass measured out too low-contrast (card-vs-page contrast ratio 1.1:1,
-     cards had no real border) — moved to a higher-contrast "utility SaaS" base: near-
-     white canvas, pure-white bordered cards, near-black text, punchier cobalt accent.
-     Rationale in CHANGELOG.md under [Unreleased] > Changed. */
+  /* Repivoted 2026-08-02 (second pass, same day): Jason pointed at a social-listening
+     dashboard screenshot (dark navy icon rail, light blue-gray canvas, white cards,
+     indigo-blue accent, green/red/amber used for status signal) and asked for light
+     mode to move closer to it. This replaces the Claude-coral identity from the first
+     pass below with a cool indigo/blue system. Dark mode (the .dark block) is
+     explicitly out of scope for this pass and stays exactly as it was. */
 
-  /* --- Primary (Claude Coral) --- */
-  /* Swapped from Electric Cobalt 2026-08-02 — Jason: "that blue doesn't look
-     right, stick closer to claude." Claude.ai's actual accent, confirmed live
-     via getComputedStyle during the dark-mode research pass, is #D97757 — used
-     unchanged across their own light and dark UI, so it's reused unchanged
-     here too rather than re-tuned per theme. Scoped to the accent only: the
-     cool-neutral surface base stays as-is rather than also adopting Claude's
-     warm canvas, since that would re-touch the "not cozy, not home" call from
-     the earlier palette work — an accent pop reads differently than a warm
-     background wash. */
-  --color-primary: #D97757;
-  --color-primary-dim: #BC5D3F;
-  --color-primary-container: #FBE8DE;
+  /* --- Primary (Indigo Blue) --- */
+  /* Corrected 2026-08-02 (third pass, same day) — Jason supplied an exact
+     hex-mapping table against the reference screenshot; the prior pass's
+     #3457D9 was an approximation. #3457D9 is reused below as secondary-dim's
+     sibling shade rather than thrown away. */
+  --color-primary: #3B5FE0;
+  --color-primary-dim: #2A47C4;
+  --color-primary-container: #DFE6FC;
   --color-on-primary: #FFFFFF;
-  --color-on-primary-container: #7A3520;
+  --color-on-primary-container: #1F2E7A;
 
-  /* --- Secondary (Deep Teal) --- */
-  --color-secondary: #0F766E;
-  --color-secondary-dim: #115E59;
-  --color-secondary-container: #CCFBF1;
+  /* --- Secondary (Cyan Blue) --- */
+  --color-secondary: #0EA5E9;
+  --color-secondary-dim: #0284C7;
+  --color-secondary-container: #E0F2FE;
   --color-on-secondary: #FFFFFF;
-  --color-on-secondary-container: #134E4A;
+  --color-on-secondary-container: #0C4A6E;
 
-  /* --- Tertiary (Slate Neutral) --- */
+  /* --- Tertiary (Slate Neutral — unchanged, already reads cool) --- */
   --color-tertiary: #475569;
   --color-tertiary-dim: #334155;
   --color-tertiary-container: #E2E8F0;
   --color-on-tertiary-container: #1E293B;
 
-  /* --- Surfaces (Google Store-inspired, 2026-08-02: Jason pointed at two
-       screenshots of the real google.com/store — white canvas, light-gray
-       card fills, no reliance on a stark white-on-white split) --- */
-  /* Inverts the earlier relationship on purpose: that pass made canvas the
-     off-white tier and cards pure white; Google's actual pattern is the
-     opposite — canvas is white, elevated surfaces get Google's own literal
-     gray scale (#F1F3F4/#F8F9FA/#E8EAED/#DADCE0, the same values Google's own
-     products use). Border kept and strengthened (card-vs-border now 1.63:1,
-     up from the previous pass's 1.05:1 canvas-vs-card) — same lesson as the
-     dark-mode work: a confident fill plus a real border, not fill alone. */
-  --color-surface: #FFFFFF;
-  --color-surface-dim: #F1F3F4;
+  /* --- Surfaces (light blue-gray canvas, white cards — matches the screenshot's
+       card-on-canvas separation rather than Google Store's gray-on-white) --- */
+  --color-surface: #EEF1F7;
+  --color-surface-dim: #E3E8F3;
   --color-surface-bright: #FFFFFF;
-  --color-surface-container-lowest: #F1F3F4;
-  --color-surface-container-low: #F8F9FA;
-  --color-surface-container: #F1F3F4;
-  --color-surface-container-high: #E8EAED;
-  --color-surface-container-highest: #DADCE0;
-  --color-surface-variant: #E8EAED;
-  --color-surface-tint: #D97757;
-  --color-background: #FFFFFF;
+  --color-surface-container-lowest: #FFFFFF;
+  --color-surface-container-low: #F7F9FC;
+  --color-surface-container: #FFFFFF;
+  --color-surface-container-high: #EEF1F7;
+  --color-surface-container-highest: #E1E6F2;
+  --color-surface-variant: #E4E8F1;
+  --color-surface-tint: #3B5FE0;
+  --color-background: #EEF1F7;
 
   /* --- On Surfaces (Text) --- */
-  --color-on-surface: #0F172A;
-  --color-on-surface-variant: #5F6368;
-  --color-on-background: #0F172A;
+  --color-on-surface: #0F1729;
+  --color-on-surface-variant: #5B6478;
+  --color-on-background: #0F1729;
 
-  /* --- Outline (Google's own icon/border grays) --- */
-  --color-outline: #9AA0A6;
-  --color-outline-variant: #BDC1C6;
+  /* --- Outline (card border corrected to #E4E8F1 per Jason's hex table,
+       was #E1E6F2) --- */
+  --color-outline: #A7AFC4;
+  --color-outline-variant: #E4E8F1;
 
   /* --- Error (true system errors only, not job rejections — see status chips) --- */
-  --color-error: #DC2626;
-  --color-error-dim: #B91C1C;
-  --color-error-container: #FEE2E2;
+  --color-error: #E5484D;
+  --color-error-dim: #C93A3F;
+  --color-error-container: #FDE8E8;
   --color-on-error: #FFFFFF;
   --color-on-error-container: #7F1D1D;
 
+  /* --- Warning / Success (general UI state — notices, connection badges, live
+       indicators. Added 2026-08-02 consistency pass: every component that needed
+       a "caution" or "good/connected" signal had been reaching for raw Tailwind
+       amber-* / emerald-* at a different shade each time instead of a shared
+       token. Warning values match the amber already used most consistently
+       (amber-600/100/800); Success reuses --color-status-offer's exact values
+       rather than the emerald hue components had been using, so "success"
+       means one green app-wide instead of two. Kept distinct from the
+       status-offer tokens themselves since job-pipeline status and general UI
+       state are different concepts that happen to share a hue. --- */
+  --color-warning: #D97706;
+  --color-warning-dim: #B45309;
+  --color-warning-container: #FEF3C7;
+  --color-on-warning-container: #92400E;
+  --color-success: #16A34A;
+  --color-success-dim: #15803D;
+  --color-success-container: #DCFCE7;
+  --color-on-success-container: #16A34A;
+
   /* --- Inverse --- */
-  --color-inverse-surface: #0F172A;
-  --color-inverse-on-surface: #CBD5E1;
-  --color-inverse-primary: #F0A57C;
+  --color-inverse-surface: #131A3A;
+  --color-inverse-on-surface: #DCE1F0;
+  --color-inverse-primary: #A3B4F7;
+
+  /* --- Sidebar (new, 2026-08-02) --- */
+  /* Fixed dark-navy rail, independent of the light/dark theme toggle — matches
+     the screenshot's icon rail, which stays dark regardless of the rest of the
+     page. Lives at the top level (not inside .dark) so it's constant in both
+     themes. */
+  --color-sidebar-bg: #131A3A;
+  --color-sidebar-container: #1B234C;
+  --color-sidebar-border: #262F5C;
+  --color-sidebar-hover: #1E2650;
+  --color-sidebar-active: #3B5FE0;
+  --color-sidebar-text: #8891B8;
+  --color-sidebar-text-active: #FFFFFF;
 
   /* --- Status Chips (Applyr Palette) --- */
   /* Hue tracks pipeline stage, not emotional valence. Rejected/Closed share the
      same neutral slate as Backlog — a closed application is a status, not a
      failure, so it gets no alarm color. Offer keeps the one true accent green,
-     kept scarce so it still reads as a real signal when it appears. Tints deepened
-     from the first pass so chips read as distinct pills, not page-background noise. */
-  --color-status-backlog-bg: #E2E8F0;
-  --color-status-backlog-text: #334155;
-  --color-status-applied-bg: #CCFBF1;
-  --color-status-applied-text: #115E59;
-  --color-status-recruiter-bg: #ECEFF3;
-  --color-status-recruiter-text: #475569;
-  --color-status-core-bg: #DBEAFE;
-  --color-status-core-text: #1E3A8A;
-  --color-status-offer-bg: #D1FAE5;
-  --color-status-offer-text: #065F46;
-  --color-status-closed-bg: #E2E8F0;
-  --color-status-closed-text: #475569;
-  --color-status-new-bg: #CFFAFE;
-  --color-status-new-text: #155E75;
-  --color-status-drafted-bg: #FEF3C7;
-  --color-status-drafted-text: #92400E;
+     kept scarce so it still reads as a real signal when it appears. Retinted
+     2026-08-02 to the indigo/sky/green family above — same per-chip roles,
+     new values only. */
+  --color-status-backlog-bg: #E7EAF3;
+  --color-status-backlog-text: #4A5578;
+  --color-status-applied-bg: #E0F2FE;
+  --color-status-applied-text: #0369A1;
+  --color-status-recruiter-bg: #EEF1F7;
+  --color-status-recruiter-text: #5B6478;
+  --color-status-core-bg: #DFE6FC;
+  --color-status-core-text: #2A47C4;
+  --color-status-offer-bg: #DCFCE7;
+  --color-status-offer-text: #16A34A;
+  --color-status-closed-bg: #E7EAF3;
+  --color-status-closed-text: #4A5578;
+  --color-status-new-bg: #E0F2FE;
+  --color-status-new-text: #0284C7;
+  /* Amber corrected to #F5B301 per Jason's hex table (was a pastel
+     #FEF3C7/#92400E pair) — used as a bolder fill since #F5B301 is too
+     light to work as text; dark brown text keeps it readable. */
+  --color-status-drafted-bg: #F5B301;
+  --color-status-drafted-text: #7A3E00;
 
   /* --- Typography --- */
   --font-headline: "Manrope", sans-serif;
@@ -196,6 +220,19 @@
   --color-on-error: #FFFFFF;
   --color-on-error-container: #FCA5A5;
 
+  /* --- Warning / Success (same slots as light mode; --color-warning matches
+       the amber-500 components already hardcoded via dark: variants, so this
+       is a like-for-like swap, not a new look. Success reuses status-offer's
+       dark values for the same one-green-app-wide reason as light mode. --- */
+  --color-warning: #F59E0B;
+  --color-warning-dim: #D97706;
+  --color-warning-container: #451A03;
+  --color-on-warning-container: #FBBF24;
+  --color-success: #34D399;
+  --color-success-dim: #10B981;
+  --color-success-container: #0B2E22;
+  --color-on-success-container: #34D399;
+
   /* --- Inverse (flips: a light surface for things that need to pop off a
        dark canvas, e.g. tooltips) --- */
   --color-inverse-surface: #EEF2F7;
@@ -220,6 +257,20 @@
   --color-status-new-text: #22D3EE;
   --color-status-drafted-bg: #3A2A0C;
   --color-status-drafted-text: #FBBF24;
+}
+
+/* --- Native UI hint --- */
+/* Tells the browser which palette this page is using so it paints browser-native
+   chrome (the main window scrollbar, unstyled form controls) to match instead of
+   falling back to the OS default — on Windows that default follows the system
+   accent color, which shows up as a blue scrollbar thumb against an otherwise
+   coral/indigo dark-mode app. .applyr-scrollbar (above) only themes a few inner
+   panels; this covers the document-level scrollbar those don't reach. */
+:root {
+  color-scheme: light;
+}
+.dark {
+  color-scheme: dark;
 }
 
 /* --- Material Symbols --- */

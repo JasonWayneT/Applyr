@@ -64,15 +64,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
   };
 
   return (
-    <aside className="w-64 bg-surface border-r border-outline-variant flex flex-col h-full shrink-0 relative">
+    <aside className="w-64 bg-sidebar-bg border-r border-sidebar-border flex flex-col h-full shrink-0 relative">
       {/* Brand — same h-16 row height as the top header, so the two align */}
       <div className="h-16 flex items-center gap-3 px-6 shrink-0">
-        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
-          <span className="material-symbols-outlined text-on-primary text-lg" style={{ fontVariationSettings: "'FILL' 1" }}>work</span>
-        </div>
+        <svg className="w-10 h-10 shrink-0" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Applyr">
+          <rect width="40" height="40" rx="10" fill="#3B5FE0" />
+          <path
+            d="M20,8 L21.88,12.41 L26.66,12.84 L23.04,15.99 L24.11,20.66 L20,18.2 L15.89,20.66 L16.96,15.99 L13.34,12.84 L18.12,12.41 Z"
+            fill="#FFFFFF"
+          />
+          <rect x="9" y="24" width="22" height="2.2" rx="1.1" fill="#FFFFFF" />
+          <rect x="9" y="28" width="22" height="2.2" rx="1.1" fill="#FFFFFF" />
+          <rect x="9" y="32" width="14" height="2.2" rx="1.1" fill="#FFFFFF" />
+        </svg>
         <div>
-          <h2 className="text-lg font-bold text-primary font-headline tracking-tight leading-tight">Applyr</h2>
-          <p className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Curated Job Search</p>
+          <h2 className="text-lg font-bold text-sidebar-text-active font-headline tracking-tight leading-tight">Applyr</h2>
+          <p className="text-[10px] text-sidebar-text uppercase tracking-widest font-bold">Curated Job Search</p>
         </div>
       </div>
 
@@ -84,8 +91,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
             onClick={() => handleNavigate(item.name)}
             className={`w-full flex items-center gap-3 py-3 px-4 rounded-xl text-sm transition-all active:translate-x-1 duration-200 border ${
               activeTab === item.name
-                ? 'text-primary font-bold border-primary/30 bg-primary/10'
-                : 'text-on-surface-variant border-transparent hover:text-on-surface hover:border-outline-variant'
+                ? 'text-sidebar-text-active font-bold border-transparent bg-sidebar-active'
+                : 'text-sidebar-text border-transparent hover:text-sidebar-text-active hover:bg-sidebar-hover'
             }`}
           >
             <span
@@ -105,17 +112,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
       </nav>
 
       {/* ChatGPT-Style Profile & Settings Footer Menu */}
-      <div className="mt-auto pt-6 pb-8 px-6 border-t border-outline-variant/10 relative" ref={menuRef}>
-        
+      <div className="mt-auto pt-6 pb-8 px-6 border-t border-sidebar-border relative" ref={menuRef}>
+
         {/* Floating Popup Menu */}
         {isMenuOpen && (
-          <div className="absolute bottom-full mb-3 left-0 right-0 bg-surface-container-high border border-outline-variant/20 rounded-2xl p-2 shadow-2xl animate-fade-in z-50 overflow-hidden w-[220px]">
+          <div className="absolute bottom-full mb-3 left-6 right-6 bg-sidebar-container border border-sidebar-border rounded-2xl p-2 shadow-2xl animate-fade-in z-50 overflow-hidden">
             {/* Account Header */}
-            <div className="px-3 py-2 border-b border-outline-variant/10 mb-1">
-              <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest leading-none">Account</p>
-              <p className="text-xs text-on-surface truncate font-semibold mt-1">{accountLabel}</p>
+            <div className="px-3 py-2 border-b border-sidebar-border mb-1">
+              <p className="text-[10px] text-sidebar-text font-bold uppercase tracking-widest leading-none">Account</p>
+              <p className="text-xs text-sidebar-text-active truncate font-semibold mt-1">{accountLabel}</p>
             </div>
-            
+
             {/* Menu Items */}
             <div className="space-y-0.5">
               <button
@@ -123,17 +130,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
                   setActiveTab('Settings');
                   setIsMenuOpen(false);
                 }}
-                className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+                className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-sidebar-hover rounded-xl text-xs font-semibold text-sidebar-text hover:text-sidebar-text-active transition-colors"
               >
-                <span className="material-symbols-outlined text-sm text-tertiary">settings</span>
+                <span className="material-symbols-outlined text-sm">settings</span>
                 Settings
               </button>
 
-              <div className="h-[1px] bg-outline-variant/10 my-1" />
+              <div className="h-[1px] bg-sidebar-border my-1" />
 
               <button
                 onClick={() => setIsHelpOpen(prev => !prev)}
-                className="w-full flex items-center justify-between gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+                className="w-full flex items-center justify-between gap-3.5 px-3 py-2 hover:bg-sidebar-hover rounded-xl text-xs font-semibold text-sidebar-text hover:text-sidebar-text-active transition-colors"
               >
                 <span className="flex items-center gap-3.5">
                   <span className="material-symbols-outlined text-sm">help</span>
@@ -144,32 +151,32 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
                 </span>
               </button>
               {isHelpOpen && (
-                <div className="px-3 pb-2 pt-1 text-[11px] text-on-surface-variant leading-relaxed">
+                <div className="px-3 pb-2 pt-1 text-[11px] text-sidebar-text leading-relaxed">
                   Applyr v2.5 Multi-LLM Agent. All services connected and running on local SQLite.
                 </div>
               )}
 
               <button
                 onClick={toggleTheme}
-                className="w-full flex items-center justify-between gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-on-surface-variant hover:text-on-surface transition-colors"
+                className="w-full flex items-center justify-between gap-3.5 px-3 py-2 hover:bg-sidebar-hover rounded-xl text-xs font-semibold text-sidebar-text hover:text-sidebar-text-active transition-colors"
               >
                 <span className="flex items-center gap-3.5">
                   <span className="material-symbols-outlined text-sm">{isDark ? 'dark_mode' : 'light_mode'}</span>
                   {isDark ? 'Dark mode' : 'Light mode'}
                 </span>
-                <span className={`relative w-8 h-4.5 rounded-full transition-colors ${isDark ? 'bg-primary' : 'bg-surface-container-highest'}`}>
-                  <span className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${isDark ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                <span className={`relative w-8 h-4.5 rounded-full overflow-hidden transition-colors ${isDark ? 'bg-sidebar-active' : 'bg-sidebar-text/30'}`}>
+                  <span className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${isDark ? 'translate-x-3.5' : 'translate-x-0'}`} />
                 </span>
               </button>
 
-              <div className="h-[1px] bg-outline-variant/10 my-1" />
+              <div className="h-[1px] bg-sidebar-border my-1" />
 
               <button
                 onClick={() => {
                   localStorage.clear();
                   window.location.reload();
                 }}
-                className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-surface-container-lowest rounded-xl text-xs font-semibold text-error/80 hover:text-error transition-colors"
+                className="w-full flex items-center gap-3.5 px-3 py-2 hover:bg-sidebar-hover rounded-xl text-xs font-semibold text-error/80 hover:text-error transition-colors"
               >
                 <span className="material-symbols-outlined text-sm">restart_alt</span>
                 Reset local session
@@ -182,9 +189,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
         <button
           onClick={() => setIsMenuOpen(prev => !prev)}
           className={`w-full flex items-center gap-3 p-2.5 rounded-2xl transition-all border duration-200 ${
-            isMenuOpen 
-              ? 'bg-surface-container border-outline-variant/30 scale-98 shadow-sm' 
-              : 'border-transparent hover:bg-surface-container/60 hover:scale-[1.01]'
+            isMenuOpen
+              ? 'bg-sidebar-container border-sidebar-border scale-98 shadow-sm'
+              : 'border-transparent hover:bg-sidebar-hover hover:scale-[1.01]'
           }`}
         >
           {/* Avatar */}
@@ -193,10 +200,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
           </div>
           {/* Name */}
           <div className="text-left flex-1 min-w-0">
-            <p className="text-xs font-extrabold text-on-surface truncate leading-tight">{accountLabel}</p>
+            <p className="text-xs font-extrabold text-sidebar-text-active truncate leading-tight">{accountLabel}</p>
           </div>
           {/* Chevron */}
-          <span className="material-symbols-outlined text-on-surface-variant text-base select-none">
+          <span className="material-symbols-outlined text-sidebar-text text-base select-none">
             {isMenuOpen ? 'expand_less' : 'expand_more'}
           </span>
         </button>

@@ -33,9 +33,9 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
             Review discrepancies between automated fit scoring and your manual self-rejections.
           </p>
         </div>
-        <div className="flex bg-amber-500/10 border border-amber-500/20 px-4 py-2 rounded-xl items-center gap-2 max-w-sm">
-          <span className="material-symbols-outlined text-amber-600 text-lg">tune</span>
-          <p className="text-[11px] font-medium text-amber-800 leading-normal">
+        <div className="flex bg-warning-container border border-warning/20 px-4 py-2 rounded-xl items-center gap-2 max-w-sm">
+          <span className="material-symbols-outlined text-warning text-lg">tune</span>
+          <p className="text-[11px] font-medium text-on-warning-container leading-normal">
             These critiques help refine which roles get automatically matched to you.
           </p>
         </div>
@@ -181,7 +181,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
               >
                 {/* Job Metadata Column */}
                 <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center font-headline font-bold text-amber-700 shrink-0">
+                  <div className="w-12 h-12 bg-warning-container border border-warning/20 rounded-xl flex items-center justify-center font-headline font-bold text-warning-dim shrink-0">
                     {job.company.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 space-y-1">
@@ -189,7 +189,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
                       <span className="text-base font-bold text-on-surface truncate">
                         {job.company}
                       </span>
-                      <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-[9px] font-bold border border-amber-200">
+                      <span className="bg-warning-container text-on-warning-container px-2 py-0.5 rounded-full text-[9px] font-bold border border-warning/20">
                         Self-Rejected
                       </span>
                     </div>

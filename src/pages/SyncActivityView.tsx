@@ -609,10 +609,10 @@ const SyncActivityView: React.FC = () => {
         <span className="text-[10px] font-bold text-primary uppercase tracking-widest">{job.company}</span>
         <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${
           job.status === 'Backlog' && job.has_assets
-            ? 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400'
+            ? 'bg-success-container text-on-success-container'
             : job.status === 'Drafted'
-              ? 'bg-sky-500/10 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400'
-              : 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400'
+              ? 'bg-secondary-container text-on-secondary-container'
+              : 'bg-warning-container text-on-warning-container'
         }`}>
           {job.status === 'Needs Retry'
             ? 'Needs retry'
@@ -633,7 +633,7 @@ const SyncActivityView: React.FC = () => {
           <button
             onClick={() => handleDraftAssets(job.id)}
             disabled={draftingJobId === job.id || isEvaluatePhase(systemStatus.status)}
-            className="btn-secondary py-1 px-3 text-[11px] font-bold flex items-center gap-1.5 rounded-lg border border-amber-500/20 text-amber-700 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+            className="btn-secondary py-1 px-3 text-[11px] font-bold flex items-center gap-1.5 rounded-lg border border-warning/30 text-warning-dim hover:bg-warning-container transition-colors"
           >
             <span className={`material-symbols-outlined text-[13px] ${draftingJobId === job.id ? 'animate-spin' : ''}`}>auto_fix</span>
             {draftingJobId === job.id ? 'Drafting...' : 'Draft Assets'}
@@ -904,16 +904,16 @@ const SyncActivityView: React.FC = () => {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {sources.map(src => {
-            let badgeClass = 'bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 border border-emerald-500/20';
+            let badgeClass = 'bg-success-container text-on-success-container border border-success/20';
             let statusText = 'Active';
             if (src.status === 'warning') {
-              badgeClass = 'bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20 animate-pulse';
+              badgeClass = 'bg-warning-container text-on-warning-container border border-warning/20 animate-pulse';
               statusText = 'Warning';
             } else if (src.status === 'error') {
-              badgeClass = 'bg-red-500/10 text-red-600 dark:bg-red-500/20 dark:text-red-400 border border-red-500/20';
+              badgeClass = 'bg-error-container text-on-error-container border border-error/20';
               statusText = 'Error';
             } else if (src.status === 'paused') {
-              badgeClass = 'bg-slate-500/10 text-slate-600 dark:bg-slate-500/20 dark:text-slate-400 border border-slate-500/20';
+              badgeClass = 'bg-surface-container-high text-on-surface-variant border border-outline-variant';
               statusText = 'Paused';
             }
             return (
@@ -1068,7 +1068,7 @@ const SyncActivityView: React.FC = () => {
                 </span>
                 <span className={`font-bold w-12 ${
                   level === 'ERROR' ? 'text-error-container' :
-                  level === 'WARN'  ? 'text-secondary-container' :
+                  level === 'WARN'  ? 'text-warning-container' :
                   'text-primary-container'
                 }`}>{level}</span>
                 <span className="text-inverse-on-surface/60 w-16">[{log.source}]</span>
@@ -1076,14 +1076,14 @@ const SyncActivityView: React.FC = () => {
               </div>
             );})}
             {isPipelineActive(systemStatus.status) && (
-              <div className="flex gap-3 leading-relaxed text-emerald-400 font-bold animate-pulse">
-                <span className="text-emerald-400/50 whitespace-nowrap">[{new Date().toLocaleTimeString()}]</span>
+              <div className="flex gap-3 leading-relaxed text-success font-bold animate-pulse">
+                <span className="text-success/50 whitespace-nowrap">[{new Date().toLocaleTimeString()}]</span>
                 <span className="w-12">ACTIVE</span>
-                <span className="text-emerald-400/60 w-16">[System]</span>
+                <span className="text-success/60 w-16">[System]</span>
                 <span className="break-all">
                   {systemStatus.current_item || 'Processing...'}
                   {isEvaluatePhase(systemStatus.status) && evaluateProgress !== null && (
-                    <span className="text-emerald-400/80 font-normal"> ({systemStatus.items_completed}/{systemStatus.items_total})</span>
+                    <span className="text-success/80 font-normal"> ({systemStatus.items_completed}/{systemStatus.items_total})</span>
                   )}
                 </span>
               </div>

@@ -278,7 +278,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
             </div>
           )}
           {grammarIssues.length > 0 && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+            <div className="p-3 bg-warning-container border border-warning/20 rounded-xl">
               <p className="text-[10px] font-bold text-on-surface mb-1">Grammar notes (text unchanged)</p>
               <ul className="text-[10px] text-on-surface-variant list-disc pl-4 space-y-1">
                 {grammarIssues.map((g, i) => (

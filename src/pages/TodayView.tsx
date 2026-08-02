@@ -259,7 +259,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
                 className={`flex-1 rounded-t-lg transition-all duration-500 hover:opacity-80 relative group ${
                   item.count === 0
                     ? 'bg-outline-variant'
-                    : i === 4 ? 'bg-emerald-600 dark:bg-emerald-500' : 'bg-primary'
+                    : i === 4 ? 'bg-success' : 'bg-primary'
                 } ${onNavigateToOpportunities ? 'cursor-pointer hover:brightness-110' : ''}`}
                 style={{ height: item.height }}
               >
@@ -268,10 +268,6 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
                 </div>
               </div>
             ))}
-            {/* Grid lines */}
-            <div className="absolute inset-x-0 top-1/4 border-b border-outline-variant border-dashed"></div>
-            <div className="absolute inset-x-0 top-2/4 border-b border-outline-variant border-dashed"></div>
-            <div className="absolute inset-x-0 top-3/4 border-b border-outline-variant border-dashed"></div>
           </div>
           <div className="flex justify-between mt-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-widest px-2">
             {statusCounts.map(s => (

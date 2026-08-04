@@ -3,6 +3,11 @@ Per-stage LLM provider preferences.
 
 Implements FR-093 (CR-014), FR-133, FR-134 (CR-021);
 local-only routing when FR-100–104 policy active (CR-017).
+
+OPT-IN / LOCAL-LLM SURFACE (CR-070 kept-intact decision): still used by the
+UI Draft path (batch_pipeline → drafting_engine) and by CR-062 local_rewrite.
+Default generate-submission Stage 1 authoring does not call this. Do not
+archive until the server batch_pipeline wire is intentionally retired.
 """
 import os
 

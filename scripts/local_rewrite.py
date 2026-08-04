@@ -1,5 +1,8 @@
 """Local-model sentence naturalization (CR-062 / Phase 1 of the local-LLM builder redesign).
 
+OPT-IN (not default): activated only when DRAFT_MODE=local_rewrite. Default drafting
+does not call this path. Kept deliberately per CR-062 — do not archive as dead code.
+
 Deliberately the narrowest possible LLM surface: every call site hands this module ONE
 already-selected, already-fact-checked piece of text and gets back either a naturalized
 rewrite (same facts, same numbers, same entities, different wording) or the exact same

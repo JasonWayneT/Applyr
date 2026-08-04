@@ -1,3 +1,9 @@
+"""Ollama / local-model VRAM helpers.
+
+OPT-IN FALLBACK (CR-070 / CR-017): kept intact per Jason's instruction not to
+delete local-LLM call sites. Default generate-submission authoring does not
+use this. Do not archive as dead code.
+"""
 import os
 import sys
 import subprocess

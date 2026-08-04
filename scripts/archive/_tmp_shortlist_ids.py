@@ -1,0 +1,21 @@
+#!/usr/bin/env python3
+# Archived 2026-08-04 — legacy pipeline isolation audit.
+# Parent scripts/ stays on sys.path so imports of still-live modules keep working.
+import sys
+from pathlib import Path
+_parent = str(Path(__file__).resolve().parent.parent)
+if _parent not in sys.path:
+    sys.path.insert(0, _parent)
+
+import sqlite3
+from pathlib import Path
+
+DB = Path(__file__).resolve().parent.parent / "data" / "jobagent.sqlite"
+conn = sqlite3.connect(DB)
+for name in ("Business Wire", "Avetta", "Endava", "Donorbox"):
+    row = conn.execute(
+        "SELECT id, company, title, status, score, LENGTH(jd_text) FROM jobs WHERE company = ?",
+        (name,),
+    ).fetchone()
+    print(row)
+conn.close()

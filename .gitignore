@@ -53,6 +53,8 @@ career-ops-main/
 data/jobs/
 data/submissions/
 !data/submissions/.gitkeep
+data/pending_review/
+!data/pending_review/.gitkeep
 data/archive/
 # Real PII (name/phone/email in every Resume.md header) — found missing 2026-07-20 by an audit
 # specifically checking for this; was untracked but not yet ignored, one `git add -A` away from

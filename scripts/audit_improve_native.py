@@ -1,10 +1,16 @@
 """Claude-native replacement for audit_and_improve.py's tailoring + safety net
-(CR-070 Epic 3). Reuses the existing deterministic guards unchanged - only the
+(CR-070 Epic 3).
+
+OPT-IN / IN-PROGRESS (CR-070 Epic 3): not the default authoring path today
+(generate-submission Stage 1 authors directly). Kept in scripts/ on purpose —
+do not archive. scripts/audit_and_improve.py stays reachable as the opt-in
+legacy local-LLM path per CR-070.
+
+Reuses the existing deterministic guards unchanged - only the
 three call_llm functions (analyze_company_context, improve_resume_summary,
 improve_cover_letter) are replaced, by having Claude produce new_summary/
 new_cover_letter as arguments during a live skill turn instead of a subprocess
-LLM call. scripts/audit_and_improve.py itself is untouched and stays reachable
-as an opt-in legacy path.
+LLM call.
 """
 import re
 from dataclasses import dataclass, field

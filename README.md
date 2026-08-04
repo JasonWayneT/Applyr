@@ -249,20 +249,15 @@ Rubric reference: `.agent/rules/job_fit_engine.md` (v5.0). Formal spec: `docs/sp
 
 ### Drafting assets
 
-**Note (2026-07-19):** the automatic flow below is the web UI's own "Draft" button and scout-triggered path (`server/routes/jobs/draft.ts`/`pipeline.ts`/`scout.ts`, still spawning `batch_pipeline.py`) — it's live code, not deleted, but it is not how documents actually get authored day to day anymore. The default workflow is Claude authoring resumes/cover letters directly from job-description text and ground truth, verified against `data/conversion_rubric.md` — see `.claude/skills/generate-submission/SKILL.md`. Whether this button's automatic path should be retired or brought in line with the new process is an open question, not yet decided.
+**Note (2026-08-04):** Sync no longer auto-drafts. After scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` Stage 0–3 in a chat session — no Ollama, no `batch_pipeline` on Sync. The Sync "Draft Assets" button and `POST /api/jobs/:id/draft` were removed. **Still live (flagged):** Find New Jobs (`POST /api/evaluate` via `usePipeline`) still spawns `batch_pipeline.py --mode single` — not yet retired. Day-to-day authoring remains Claude + ground truth via `.claude/skills/generate-submission/SKILL.md`.
 
-Roles that pass scoring automatically get a full asset pack drafted:
+Roles that pass Sync gates are exported for review (not drafted automatically). Authoring still produces:
 
-1. Company research via Perplexity (if configured) or your primary LLM with web grounding
-2. A tailored 1-page resume — every claim grounded in your `workExperience.md` proof codes
-3. A tailored cover letter
-4. An interview cheat sheet
+1. A tailored 1-page resume — every claim grounded in your `workExperience.md` proof codes
+2. A tailored cover letter
+3. PDFs compiled via `compile_single.py` after verification
 
-Output lands in `submissions/[company-name]/`. PDFs are compiled automatically.
-
-Post-draft audit must converge; a failed audit reports `passed: false` in the pipeline and restores pre-audit submission files so bad enhanced drafts cannot ship under normal filenames.
-
-You can also trigger a manual draft on any Backlog role from the **Opportunities** view.
+Output for finished applications lands in `data/submissions/[company-name]/`.
 
 ### Editing documents
 

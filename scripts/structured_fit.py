@@ -3,6 +3,12 @@ Evidence-tiered structured job-fit scoring (CR-053 Epic 2).
 
 Replaces holistic LLM 0-100 scores with: deterministic extraction → narrow
 equivalence judgments (yes/partial/no, no numbers) → deterministic score math.
+
+OPT-IN / FALLBACK STATUS (legacy-pipeline isolation audit, 2026-08-04):
+Still imported by batch_pipeline.py (UI Draft path). Also the fallback behind
+fit_judgment_io.py for CR-070 Epic 2 Claude-native fit judgments. Do NOT archive
+until CR-070 Epic 3+ retires this path and the server no longer shells out to
+batch_pipeline.py. Not dead — Tier 2 (live via UI) / Tier 3 (CR-070 fallback).
 """
 from __future__ import annotations
 

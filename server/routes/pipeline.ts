@@ -33,6 +33,11 @@ function parsePipelineResultLine(line: string): PipelineResult | null {
 
 // ---------------------------------------------------------------------------
 // Evaluate — single-JD fit scoring + asset drafting via SSE stream
+//
+// FLAG (2026-08-04): Still live via Find New Jobs (`usePipeline` → this route).
+// Sync no longer calls batch_pipeline; this path still does. Do not remove until
+// Find New Jobs is deliberately reworked. See SESSION-HANDOFF-2026-08-04-URGENT-
+// disable-silent-autodraft.md ("Do not touch /api/evaluate yet").
 // ---------------------------------------------------------------------------
 
 router.post('/api/evaluate', (req, res) => {

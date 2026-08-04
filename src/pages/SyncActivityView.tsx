@@ -70,7 +70,7 @@ function isEvaluatePhase(status: PipelineStatus): boolean {
 function pipelineStatusLabel(status: PipelineStatus): string {
   switch (status) {
     case 'scout_running': return 'Scouting';
-    case 'evaluate_running': return 'Evaluating & drafting';
+    case 'evaluate_running': return 'Exporting for review';
     case 'drafting': return 'Drafting';
     case 'completed': return 'Complete';
     case 'idle': return 'Idle';
@@ -81,7 +81,7 @@ function pipelineStatusLabel(status: PipelineStatus): string {
 function runButtonLabel(status: PipelineStatus, isSyncing: boolean): string {
   if (isSyncing) return 'Starting...';
   if (status === 'scout_running') return 'Scouting...';
-  if (status === 'evaluate_running') return 'Evaluating...';
+  if (status === 'evaluate_running') return 'Exporting...';
   if (status === 'drafting') return 'Drafting...';
   return 'Run Job Search';
 }
@@ -193,7 +193,6 @@ const SyncActivityView: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [serverError, setServerError] = useState(false);
   const [isActivityOpen, setIsActivityOpen] = useState(false);
-  const [draftingJobId, setDraftingJobId] = useState<string | null>(null);
   const [assetStages, setAssetStages] = useState<Stage[]>(INITIAL_ASSET_STAGES);
   const [activeAssetCompany, setActiveAssetCompany] = useState<string | null>(null);
   const assetCompanyRef = useRef<string | null>(null);
@@ -374,28 +373,6 @@ const SyncActivityView: React.FC = () => {
     setActiveAssetCompany(null);
     setAssetStages(INITIAL_ASSET_STAGES.map((s) => ({ ...s })));
   }, []);
-
-  const handleDraftAssets = async (jobId: string) => {
-    const job = matchedJobs.find((j) => j.id === jobId);
-    if (job) {
-      assetCompanyRef.current = job.company;
-      setActiveAssetCompany(job.company);
-      setAssetStages(INITIAL_ASSET_STAGES.map((s) => ({ ...s })));
-    }
-    setDraftingJobId(jobId);
-    try {
-      await fetch(api(`/api/jobs/${jobId}/draft`), { method: 'POST' });
-      for (let i = 0; i < 120; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        const res = await fetch(api('/api/system-status'));
-        const data = await res.json();
-        if (data?.status !== 'drafting') break;
-      }
-      fetchSystemStatus();
-      fetchMatchedJobs();
-    } catch { /* ignore */ }
-    finally { setDraftingJobId(null); }
-  };
 
   const handleDismissJob = async (jobId: string, mode: 'remove' | 'not_a_fit') => {
     try {
@@ -588,9 +565,7 @@ const SyncActivityView: React.FC = () => {
 
   const isRunning = isSyncing || isPipelineActive(systemStatus.status);
   const showAssetTracker =
-    isEvaluatePhase(systemStatus.status) ||
     systemStatus.status === 'drafting' ||
-    draftingJobId !== null ||
     assetStages.some((s) => s.status === 'running' || s.status === 'done');
   const evaluateProgress =
     (systemStatus.items_total ?? 0) > 0
@@ -617,7 +592,7 @@ const SyncActivityView: React.FC = () => {
           {job.status === 'Needs Retry'
             ? 'Needs retry'
             : job.status === 'Drafted' && !job.has_assets
-              ? 'Awaiting evaluation'
+              ? 'Awaiting review'
               : (job.status === 'Backlog' || job.status === 'Drafted') && job.has_assets
                 ? 'Ready to Apply'
                 : 'Pending Assets'}
@@ -629,16 +604,6 @@ const SyncActivityView: React.FC = () => {
         <span>Discovered: {new Date(job.created_at).toLocaleDateString()}</span>
       </div>
       <div className="mt-2.5 flex flex-wrap justify-end gap-2">
-        {((job.status === 'Backlog' && !job.has_assets) || job.status === 'Needs Retry') && (
-          <button
-            onClick={() => handleDraftAssets(job.id)}
-            disabled={draftingJobId === job.id || isEvaluatePhase(systemStatus.status)}
-            className="btn-secondary py-1 px-3 text-[11px] font-bold flex items-center gap-1.5 rounded-lg border border-warning/30 text-warning-dim hover:bg-warning-container transition-colors"
-          >
-            <span className={`material-symbols-outlined text-[13px] ${draftingJobId === job.id ? 'animate-spin' : ''}`}>auto_fix</span>
-            {draftingJobId === job.id ? 'Drafting...' : 'Draft Assets'}
-          </button>
-        )}
         <button type="button" onClick={() => handleDismissJob(job.id, 'not_a_fit')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Not a fit</button>
         <button type="button" onClick={() => handleDismissJob(job.id, 'remove')} className="py-1 px-3 text-[11px] font-bold rounded-lg border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-colors">Remove</button>
       </div>
@@ -651,7 +616,7 @@ const SyncActivityView: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Job Search</h1>
-          <p className="text-on-surface-variant mt-1 text-sm">Configure your search criteria, then run the scout to find and evaluate matching roles.</p>
+          <p className="text-on-surface-variant mt-1 text-sm">Configure your search criteria, then run the scout to find matching roles for review.</p>
         </div>
         <div className="flex items-center gap-3">
           {saveStatus === 'saving' && (
@@ -957,8 +922,8 @@ const SyncActivityView: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { key: 'scout_running', icon: 'search_spark', label: 'Step 1: Scouting & Matching', desc: 'Crawling job feeds and applying your search criteria' },
-            { key: 'drafting',      icon: 'edit_note',    label: 'Step 2: Evaluating & Drafting', desc: 'Fit scoring, gate filters, resume, cover letter & cheat sheet' },
-            { key: 'completed',    icon: 'check_circle',  label: 'Step 3: Ready for Action', desc: 'All processes finished. Check your matches to apply' },
+            { key: 'drafting',      icon: 'folder_open',  label: 'Step 2: Export for Review', desc: 'Write new JDs to data/pending_review/ — Stage 0 happens later in chat' },
+            { key: 'completed',    icon: 'check_circle',  label: 'Step 3: Ready for Action', desc: 'Sync finished. Review exported JDs, then author via generate-submission' },
           ].map(step => {
             const active =
               step.key === 'scout_running'
@@ -1004,7 +969,7 @@ const SyncActivityView: React.FC = () => {
           {isEvaluatePhase(systemStatus.status) && evaluateProgress !== null && (
             <div className="space-y-1.5">
               <div className="flex justify-between text-[11px] font-bold text-on-surface-variant uppercase tracking-wide">
-                <span>Batch evaluate & draft</span>
+                <span>Review export</span>
                 <span>
                   {systemStatus.items_completed ?? 0} / {systemStatus.items_total} jobs
                 </span>

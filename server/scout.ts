@@ -1,9 +1,9 @@
 import { db, logActivity } from './db.js';
 import { buildPythonEnv, buildTsxSpawn } from './shared.js';
 import { isPipelineBusy } from './pipelineLock.js';
-import { runStreamLines, resolvePythonExecutable, pythonScriptPath } from './pipeline/processRunner.js';
+import { runStreamLines } from './pipeline/processRunner.js';
 import { runConnectorOrchestration } from './services/scoutOrchestrator.js';
-import { ensureOllamaReady } from './services/ollamaLifecycle.js';
+import { exportPendingReviewJobs } from './services/exportPendingReview.js';
 
 function spawnProcessAsync(
   command: string,
@@ -65,11 +65,6 @@ function handleStderr(source: string, stderr: string) {
 }
 
 import { broadcastSyncEvent } from './routes/pipeline.js';
-import {
-  parseAssetProgressLine,
-  parseBatchProgressLine,
-  publishAssetProgress,
-} from './assetProgress.js';
 
 export const runScoutSync = async () => {
   if (isPipelineBusy()) {
@@ -169,97 +164,43 @@ export const runScoutSync = async () => {
       activeStage = 'EVALUATE';
     }
 
-    // --- STAGE 4: EVALUATE ---
+    // --- STAGE 4: REVIEW EXPORT (was EVALUATE — silent auto-draft removed 2026-08-04) ---
+    // No Ollama, no batch_pipeline. Gate-passed Drafted jobs with JD text → data/pending_review/.
     if (activeStage === 'EVALUATE') {
       broadcastSyncEvent('stage_handoff', { type: 'stage_handoff', from: 'SCRAPE', to: 'EVALUATE', total_passed: 0 });
 
-      updateCheckpoint(runId, 'EVALUATE', 'Starting local Ollama for fit scoring and drafting...');
-      logActivity('INFO', 'Scout', 'Ensuring Ollama is running before evaluate/draft stage.');
-      const llmRow = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as
-        | { value: string }
-        | undefined;
-      let ollamaBaseUrl: string | undefined;
-      if (llmRow?.value) {
-        try {
-          ollamaBaseUrl = JSON.parse(llmRow.value).localUrl;
-        } catch {
-          /* ignore malformed settings */
-        }
-      }
-      await ensureOllamaReady({
-        baseUrl: ollamaBaseUrl,
-        onLog: (msg) => logActivity('INFO', 'Ollama', msg),
-      });
+      updateCheckpoint(runId, 'EVALUATE', 'Exporting new JDs to pending review...');
+      logActivity(
+        'INFO',
+        'Scout',
+        'Executing Stage 5/5: Exporting gate-passed JDs to data/pending_review/ (no LLM, no auto-draft).',
+      );
 
-      updateCheckpoint(runId, 'EVALUATE', 'Exporting staged jobs from database...');
-      logActivity('INFO', 'Scout', 'Executing Stage 5/5: Exporting DB jobs to staging before evaluate.');
+      db.prepare(`
+        UPDATE system_status SET status = 'evaluate_running', current_item = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = 'global'
+      `).run('Exporting jobs to pending review...');
 
-      const exportSpawn = buildTsxSpawn('scripts/export_staging_from_db.ts');
-      const exportCode = await spawnProcessAsync(exportSpawn.command, exportSpawn.args, extraEnv, (output) => {
-        output.trim().split('\n').forEach(line => line.trim() && logActivity('INFO', 'Export', line.trim()));
-      }, (stderr) => {
-        handleStderr('Export', stderr);
-      });
-
-      if (exportCode !== 0) throw new Error(`Export staging stage exited with non-zero code ${exportCode}`);
-
-      updateCheckpoint(runId, 'EVALUATE', 'Evaluating fit and generating PDF assets...');
-      logActivity('INFO', 'Scout', 'Executing Stage 5/5: Evaluating fit and drafting assets.');
-
-      const code = await spawnProcessAsync(
-        resolvePythonExecutable(),
-        [pythonScriptPath('batch_pipeline.py'), '--mode', 'batch'],
-        extraEnv,
-        (output) => {
-        const lines = output.trim().split('\n');
-        for (const line of lines) {
-          const clean = line.trim();
-          if (!clean) continue;
-          if (clean.startsWith('[BATCH_PROGRESS]')) {
-            const progress = parseBatchProgressLine(clean);
-            if (progress) {
-              publishAssetProgress(progress);
-            } else {
-              const completed = clean.match(/completed=(\d+)/);
-              const total = clean.match(/total=(\d+)/);
-              const current = clean.match(/current=([^\s]+)/);
-              const phase = clean.match(/phase=(\w+)/);
-              const item =
-                current && phase
-                  ? `Job ${completed?.[1] ?? '?'}/${total?.[1] ?? '?'}: ${current[1]} (${phase[1]})`
-                  : current?.[1];
-              db.prepare(`
-                UPDATE system_status SET
-                  status = 'evaluate_running',
-                  current_item = COALESCE(?, current_item),
-                  items_completed = COALESCE(?, items_completed),
-                  items_total = COALESCE(?, items_total),
-                  updated_at = CURRENT_TIMESTAMP
-                WHERE id = 'global'
-              `).run(
-                item ?? null,
-                completed ? Number(completed[1]) : null,
-                total ? Number(total[1]) : null,
-              );
-            }
-          } else if (clean.startsWith('[ASSET_PROGRESS]')) {
-            const progress = parseAssetProgressLine(clean);
-            if (progress) publishAssetProgress(progress);
-          } else if (clean.startsWith('[JOB_PROGRESS]')) {
-            const statusMsg = clean.replace('[JOB_PROGRESS]', '').trim();
-            db.prepare(`
-              UPDATE system_status SET status = 'evaluate_running', current_item = ?, updated_at = CURRENT_TIMESTAMP
-              WHERE id = 'global'
-            `).run(statusMsg);
-          }
-          logActivity('INFO', 'Pipeline', clean);
-        }
-      }, (stderr) => {
-        handleStderr('Pipeline', stderr);
-      });
-
-
-      if (code !== 0) throw new Error(`Evaluation stage exited with non-zero code ${code}`);
+      const result = exportPendingReviewJobs();
+      const total = result.exported + result.skippedExisting;
+      db.prepare(`
+        UPDATE system_status SET
+          status = 'evaluate_running',
+          current_item = ?,
+          items_completed = ?,
+          items_total = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = 'global'
+      `).run(
+        `Review export: ${result.exported} new, ${result.skippedExisting} already on disk`,
+        total,
+        total,
+      );
+      logActivity(
+        'INFO',
+        'Scout',
+        `Review export complete: ${result.exported} written, ${result.skippedExisting} already present (${total} total this run).`,
+      );
     }
 
     // Final completion updates

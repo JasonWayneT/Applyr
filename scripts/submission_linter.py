@@ -16,9 +16,18 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import List, Literal, Optional, Set
 
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
+
 # Split literals so public-repo PII audit does not flag rule definitions.
 _PHONE_PLACEHOLDER = "[" + "REDACTED_" + "PHONE]"
 _EMAIL_PLACEHOLDER = "[" + "REDACTED_" + "EMAIL]"
+
+# Parameterized years of experience
+CURRENT_YEARS_EXPERIENCE = 7
+PREVIOUS_YEARS_EXPERIENCE = CURRENT_YEARS_EXPERIENCE - 1
+_NUM_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
+PREVIOUS_YEARS_WORD = _NUM_WORDS.get(PREVIOUS_YEARS_EXPERIENCE, str(PREVIOUS_YEARS_EXPERIENCE))
 
 
 # ---------------------------------------------------------------------------
@@ -194,9 +203,9 @@ HARD_BLOCK_RULES: List[LintRule] = [
         # cannot catch this by design — it deliberately excludes 1-2 digit bare numbers to avoid noisy
         # false positives on small unrelated counts, so a superseded years figure needs its own
         # narrow, specific rule rather than a hack in the generic numeric sweep.
-        pattern=r"\b6\+?\s*years\b|\bsix years\b",
-        message="Superseded years-of-experience figure detected (should be 7, not 6/6+/six)",
-        suggestion="Use 7 years, per workExperience.md §1.0's explicit correction.",
+        pattern=fr"\b{PREVIOUS_YEARS_EXPERIENCE}\+?\s*years\b|\b{PREVIOUS_YEARS_WORD} years\b",
+        message=f"Superseded years-of-experience figure detected (should be {CURRENT_YEARS_EXPERIENCE}, not {PREVIOUS_YEARS_EXPERIENCE}/{PREVIOUS_YEARS_EXPERIENCE}+/{PREVIOUS_YEARS_WORD})",
+        suggestion=f"Use {CURRENT_YEARS_EXPERIENCE} years, per workExperience.md §1.0's explicit correction.",
         doc_types=["cover_letter", "resume"],
     ),
     LintRule(
@@ -383,8 +392,16 @@ WARN_RULES: List[LintRule] = [
         check_type="regex",
         pattern=(
             r"\b(delve|pivotal|cutting-edge|game-changer|future-ready|elevate your"
-            r"|drive impact|spearheaded|orchestrated|groundbreaking|harness|unlock the (potential|value))\b"
+            r"|drive impact|orchestrated|groundbreaking|harness|unlock the (potential|value)"
+            r"|paramount|foster(?:ed)?|showcas(?:e|es|ing))\b"
         ),
+        # "spearheaded" deliberately excluded from this list (was here until 2026-08-05) --
+        # it's used as a trusted high-confidence ownership-verb signal in the attribution-fidelity
+        # check below (_OWNERSHIP_VERBS_METRIC), which directly contradicted banning it here: one
+        # rule told the author never to write it, the other used its presence as evidence a claim
+        # was genuinely owned. Found auditing recruiter-research vocabulary gaps (2026-08-05
+        # planning doc). Kept off both as a buzzword and as a false positive -- it's a specific,
+        # concrete verb, not a vague AI-tell like "pivotal"/"cutting-edge".
         message="AI-tell buzzword detected (CR-070 Epic 8 authenticity research)",
         suggestion="Replace with plain language describing what you actually did.",
         doc_types=["cover_letter", "resume"],
@@ -596,6 +613,15 @@ WARN_RULES: List[LintRule] = [
         suggestion="Name the specific product/role reason you fit instead of asserting mission alignment abstractly.",
         doc_types=["cover_letter"],
     ),
+    LintRule(
+        rule_id="LW-027",
+        severity="WARN",
+        check_type="length",
+        pattern=None,
+        message="Resume character count exceeds 4000",
+        suggestion="Trim the resume. Resumes over 4000 characters risk getting truncated or penalized by certain ATS parsers.",
+        doc_types=["resume"],
+    ),
 ]
 
 INFO_RULES: List[LintRule] = [
@@ -790,6 +816,14 @@ def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResu
                         rule_id=rule.rule_id,
                         severity=rule.severity,
                         message=f"Resume is {wc} words (target: under 750)",
+                        suggestion=rule.suggestion,
+                    )
+            elif rule.rule_id == "LW-027" and doc_type == "resume":
+                if len(text) > 4000:
+                    violation = LintViolation(
+                        rule_id=rule.rule_id,
+                        severity=rule.severity,
+                        message=f"Resume is {len(text)} characters (target: under 4000)",
                         suggestion=rule.suggestion,
                     )
             elif rule.rule_id == "LI-001" and doc_type == "cover_letter":
@@ -1234,6 +1268,195 @@ def check_jd_specificity_floor(cover_letter_text: str, jd_text: str, company_nam
     )]
 
 
+# ---------------------------------------------------------------------------
+# LW-028: claim-attribution vs. ownership-verb mismatch
+# ---------------------------------------------------------------------------
+
+# High-confidence ownership verbs, checked against metric-based claim matching.
+# Deliberately narrower than a full seniority-signal word list -- "led", "drove",
+# "owned", "designed", and "established" were all tried against the real catalog
+# and dropped because each produced a real false positive on a legitimately-owned
+# claim that happens to share a metric with a 'contributed'/'influenced' one, e.g.
+# ACC-101-ANCHOR's "Owned and stabilized a $40M ARR platform..." shares $40M/3,500
+# with the 'contributed'-tagged ACC-101-RETENTION churn claim, and ACC-115-
+# REQUIREMENTS's "Designed the migration requirements..." shares 700 with the
+# 'contributed'-tagged ACC-115-RETENTION/ACC-104 migration claims. Verified zero
+# collisions against the full catalog as of 2026-08-04 with this narrower list --
+# re-run that check (see git history for the one-off script) if new claims are added.
+# "spearheaded" is deliberately NOT in LW-006's banned-buzzword pattern above (see that rule's
+# comment) precisely because it's trusted here -- keep both edits in sync if either list changes.
+_OWNERSHIP_VERBS_METRIC = {
+    "built", "build", "personally", "single-handedly", "singlehandedly",
+    "spearheaded", "founded", "architected",
+}
+
+# ACC-120 (the AI-research exposure claim) has no numeric metric to match on, so it's
+# checked via distinctive anchor phrases from its own text instead of generic tags --
+# generic shared tags ("AI Tools", "Prompt Engineering") collide with ACC-401-AITOOLS,
+# Jason's own legitimately-owned side project, which genuinely says "designing and
+# building" right next to "prompt engineering." "designed"/"design" is included in the
+# anchor-path verb set (not the metric-path set above) per CLAUDE.md's explicit "never
+# say 'I built' or 'I designed'" instruction for this claim specifically -- these
+# anchor phrases don't reproduce the ACC-115-REQUIREMENTS collision that excluded
+# "designed" from the general list.
+_METRICLESS_CLAIM_ANCHORS = {
+    "ACC-120": {
+        "orchestration", "content-generation", "content generation",
+        "per-specialization", "prompt orchestration", "prompt-orchestration",
+    },
+}
+_OWNERSHIP_VERBS_ANCHOR = _OWNERSHIP_VERBS_METRIC | {"designed", "design"}
+
+
+def _load_attribution_claims() -> dict:
+    """Groups claims from master_claims_tags_only.json (falls back to
+    master_claims.json) by project_id, keeping only those explicitly tagged
+    attribution: 'contributed' or 'influenced'. A project_id's lenses share one
+    ownership level in the current catalog (verified 2026-08-04) -- if that ever
+    stops being true, this needs to key by claim id instead of project_id."""
+    tags_only_path = os.path.join(_REPO_ROOT, "data", "master_claims_tags_only.json")
+    fallback_path = os.path.join(_REPO_ROOT, "data", "master_claims.json")
+    path = tags_only_path if os.path.exists(tags_only_path) else fallback_path
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except OSError:
+        return {}
+
+    projects: dict = {}
+    for entry in raw.values():
+        if entry.get("disabled"):
+            continue
+        attribution = entry.get("attribution")
+        if attribution not in ("contributed", "influenced"):
+            continue
+        pid = entry.get("project_id", "")
+        bucket = projects.setdefault(pid, {"attribution": attribution, "metrics": set()})
+        bucket["metrics"] |= set(entry.get("metrics", []))
+    return projects
+
+
+def _attribution_metric_variants(metric: str) -> list:
+    """Same floor as check_ground_truth_coverage.py's _metric_variants -- kept as an
+    independent copy since these two scripts don't share a module today (see that
+    script's own docstring for why: each is deliberately self-contained)."""
+    variants = {metric}
+    bare = metric.replace(",", "").replace("$", "").replace("%", "")
+    is_dollar = metric.startswith("$")
+    if bare.isdigit():
+        n = int(bare)
+        variants.add(bare)
+        variants.add(f"{n:,}")
+        if is_dollar:
+            variants.add(f"${bare}")
+            variants.add(f"${n:,}")
+            if n >= 1_000_000 and n % 1_000_000 == 0:
+                variants.add(f"${n // 1_000_000}m")
+                variants.add(f"${n // 1_000_000} million")
+            elif n >= 1_000 and n % 1_000 == 0:
+                variants.add(f"${n // 1_000}k")
+    return [v.lower() for v in variants]
+
+
+def _split_resume_bullets(resume_text: str) -> List[str]:
+    return [
+        line.strip()[2:].strip()
+        for line in resume_text.splitlines()
+        if line.strip().startswith("* ") or line.strip().startswith("- ")
+    ]
+
+
+def _split_sentences(text: str) -> List[str]:
+    # Doesn't need to be a perfect sentence splitter, only needs to keep a
+    # metric/verb pair inside the same unit they actually co-occur in.
+    return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+
+
+def check_attribution_verb_strength(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
+    """LW-028: flag a bullet/sentence pairing a high-confidence ownership verb with a
+    metric (or, for the one metric-less claim, an anchor phrase) belonging to a claim
+    explicitly tagged attribution: 'contributed' or 'influenced' in master_claims.json.
+
+    Generalizes CLAUDE.md's hand-written ACC-120 exception ("CONTRIBUTED at most...
+    never say 'I built' or 'I designed'") to every claim carrying an explicit
+    attribution tag, instead of relying on that one instance being remembered
+    per-draft. Reinforces the same failure mode the attribution-discipline memory
+    already tracks: a real metric welded to a real action with an inflated causal
+    verb passes every other guard because the metric itself is true.
+
+    WARN, not HARD_BLOCK -- matching a bullet back to the claim it's drawn from is a
+    heuristic (metric co-occurrence, or curated anchor phrases for the one metric-less
+    claim), same tolerance already extended to LW-021/LW-026. Only 10 of 67 claims in
+    the current catalog carry an explicit attribution tag; claims without one are not
+    checked (treated as the implicit default: owned).
+    """
+    projects = _load_attribution_claims()
+    if not projects:
+        return []
+
+    units: List[str] = []
+    if resume_text.strip():
+        units.extend(_split_resume_bullets(resume_text))
+    if cover_letter_text.strip():
+        for para in re.split(r"\n\s*\n", cover_letter_text):
+            units.extend(_split_sentences(para))
+
+    violations: List[LintViolation] = []
+    seen = set()  # (project_id, unit) -- don't double-report the same pair
+
+    for pid, bucket in sorted(projects.items()):
+        anchors = _METRICLESS_CLAIM_ANCHORS.get(pid)
+        for unit in units:
+            unit_lower = unit.lower()
+            if anchors is not None:
+                if not any(a in unit_lower for a in anchors):
+                    continue
+                verb_hits = [
+                    v for v in _OWNERSHIP_VERBS_ANCHOR
+                    if re.search(rf"\b{re.escape(v)}\b", unit_lower)
+                ]
+            else:
+                if not bucket["metrics"]:
+                    continue
+                # Alnum-boundary check, not plain substring containment -- a bare
+                # digit variant like "7" (from metric "7%") is a substring of
+                # "700" and would otherwise cross-match an unrelated claim's
+                # metric. Not a plain \b: \b fails right before "$" since both
+                # "$" and a preceding space are non-word chars.
+                metric_hit = any(
+                    re.search(rf"(?<![A-Za-z0-9]){re.escape(variant)}(?![A-Za-z0-9])", unit_lower)
+                    for m in bucket["metrics"]
+                    for variant in _attribution_metric_variants(m)
+                )
+                if not metric_hit:
+                    continue
+                verb_hits = [
+                    v for v in _OWNERSHIP_VERBS_METRIC
+                    if re.search(rf"\b{re.escape(v)}\b", unit_lower)
+                ]
+
+            if not verb_hits or (pid, unit) in seen:
+                continue
+            seen.add((pid, unit))
+            violations.append(LintViolation(
+                rule_id="LW-028",
+                severity="WARN",
+                message=(
+                    f"{pid} is tagged attribution: '{bucket['attribution']}' in "
+                    f"master_claims.json, but this line uses ownership-tier language "
+                    f"({', '.join(sorted(verb_hits))}): \"{unit}\""
+                ),
+                suggestion=(
+                    "Confirm this line is actually drawn from a different, genuinely-owned "
+                    f"claim. If it is describing {pid}, reword to participation-level "
+                    "language (e.g. 'contributed to,' 'supported,' 'partnered on') -- see "
+                    "that claim's own allowed_claims/prohibited_claims in master_claims.json."
+                ),
+            ))
+
+    return violations
+
+
 def lint_folder(folder: str) -> List[dict]:
     """Lint all .md files in a submission folder. Returns list of summary dicts."""
     results = []
@@ -1370,6 +1593,24 @@ def lint_folder(folder: str) -> List[dict]:
                 "warns": len(specificity_warns),
                 "infos": 0,
                 "result": LintResult(passed=True, warns=specificity_warns, document_type="specificity"),
+            })
+
+    # LW-028: claim-attribution vs. ownership-verb mismatch check (no JD needed).
+    if "resume" in texts_by_doc_type or "cover_letter" in texts_by_doc_type:
+        attribution_warns = check_attribution_verb_strength(
+            texts_by_doc_type.get("resume", ""),
+            texts_by_doc_type.get("cover_letter", ""),
+        )
+        if attribution_warns:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "claim attribution vs. verb strength",
+                "doc_type": "attribution",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(attribution_warns),
+                "infos": 0,
+                "result": LintResult(passed=True, warns=attribution_warns, document_type="attribution"),
             })
 
     return results

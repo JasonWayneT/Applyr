@@ -170,7 +170,13 @@ def main():
             text-align: center;
             margin: 0 0 4px 0;
             padding: 0;
-            text-transform: uppercase;
+            /* No text-transform: uppercase here (removed 2026-08-05) -- this heading is the
+               candidate's name, and PDF text-extraction reads the rendered glyphs, not the
+               markdown source, so an uppercase CSS transform made every ATS parse "JASON TAYLOR"
+               regardless of how the name was typed in Resume.md. All-caps names are a known ATS
+               name-entity-recognition gotcha (read as an acronym/header, not a proper name).
+               h2 below keeps its uppercase transform -- section headers like "PROFESSIONAL
+               EXPERIENCE" don't have this problem; only the name field does. */
             letter-spacing: 0.5px;
         }}
         /* Contact Info line directly under h1 */
@@ -300,6 +306,22 @@ def main():
                 )
                 
             browser.close()
+
+        # Generate .docx fallback
+        try:
+            import subprocess
+            import shutil
+            docx_path = pdf_path.rsplit('.', 1)[0] + '.docx'
+            pandoc_exe = "pandoc"
+            if shutil.which(pandoc_exe):
+                subprocess.run(
+                    [pandoc_exe, md_path, "-o", docx_path],
+                    check=True, capture_output=True
+                )
+            else:
+                print(f"Warning: Pandoc executable not found in PATH", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Pandoc .docx fallback generation failed: {e}", file=sys.stderr)
 
         print("SUCCESS")
     except Exception as e:

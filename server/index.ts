@@ -11,6 +11,8 @@ import profileRouter  from './routes/profile.js';
 import pipelineRouter from './routes/pipeline.js';
 import sourcesRouter  from './routes/sources.js';
 import contactsRouter from './routes/contacts.js';
+import gmailSyncRouter from './routes/gmailSync.js';
+import { startGmailSyncScheduler } from './services/gmailSyncScheduler.js';
 import { resetTheirstackCreditsIfNewMonth } from './services/theirstackCreditLedger.js';
 
 // Ensure workspace dirs exist before status transitions (FR-030)
@@ -49,6 +51,7 @@ app.use('/', profileRouter);
 app.use('/', pipelineRouter);
 app.use('/', sourcesRouter);
 app.use('/', contactsRouter);
+app.use('/', gmailSyncRouter);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n${'='.repeat(48)}`);
@@ -56,6 +59,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`${'='.repeat(48)}\n`);
   resetTheirstackCreditsIfNewMonth();
   logActivity('INFO', 'Server', 'System initialized. Ready for local and Tailscale syncing.');
+
+  startGmailSyncScheduler(); // CR-072 Epic 3 — immediate pass now, then every 10 minutes
 
   setInterval(() => {
     void runBuffered([pythonScriptPath('auto_prune_db.py')]).then(({ code }) => {

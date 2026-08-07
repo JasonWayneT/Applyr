@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -48,6 +49,7 @@ sys.path.insert(0, _SCRIPT_DIR)  # so this runs regardless of invocation cwd
 import submission_linter  # noqa: E402
 import quality_checker  # noqa: E402
 import approved_metrics  # noqa: E402
+import jd_term_extractor  # noqa: E402
 
 HISTORY_PATH = os.path.join(_REPO_ROOT, "data", ".rubric_score_history.json")
 
@@ -89,6 +91,42 @@ def _pdf_page_count(pdf_path: str):
     except Exception as e:  # noqa: BLE001
         return f"error: {e}"
     return None
+
+
+def _check_reading_order(pdf_path: str, md_text: str) -> dict:
+    """CR-073 Epic 1 (regression guard): confirm the compiled PDF's `##` section
+    headings extract via pdftotext in the same relative order as the source
+    Markdown. Investigated 2026-08-04 as a suspected live risk (CORE COMPETENCIES
+    rendering as an HTML <table> that could scramble ATS reading order) -- direct
+    check against real compiled PDFs found no <table> exists in current output
+    (build_skills_section emits bold-label + comma text, not a pipe table), so
+    this is not catching a known live defect. It stays in as a cheap standing
+    guard in case the dead pipe-table code path in compile_single.py is ever
+    reactivated. WARN-only -- does not affect `mechanically_verified`.
+    """
+    if not os.path.exists(pdf_path):
+        return {"checked": False, "reason": "pdf not found"}
+    headings = re.findall(r"(?m)^##\s+(.+?)\s*$", md_text)
+    if len(headings) < 2:
+        return {"checked": False, "reason": "fewer than 2 headings to order-check"}
+    try:
+        out = subprocess.run(
+            ["pdftotext", "-layout", pdf_path, "-"], capture_output=True, text=True, timeout=15
+        )
+        extracted = out.stdout.lower()
+    except Exception as e:  # noqa: BLE001
+        return {"checked": False, "reason": f"pdftotext error: {e}"}
+    positions = [(h, extracted.find(h.strip().lower())) for h in headings]
+    missing = [h for h, idx in positions if idx == -1]
+    found = [(h, idx) for h, idx in positions if idx != -1]
+    in_order = all(found[i][1] < found[i + 1][1] for i in range(len(found) - 1))
+    return {
+        "checked": True,
+        "headings_found": [h for h, _ in found],
+        "headings_missing": missing,
+        "in_order": in_order,
+        "ok": in_order and not missing,
+    }
 
 
 def verify_one(folder: str) -> dict:
@@ -153,6 +191,14 @@ def verify_one(folder: str) -> dict:
         receipt["page_counts"]["Resume.pdf"] == 1 and receipt["page_counts"]["CoverLetter.pdf"] == 1
     )
 
+    # CR-073 Epic 1 -- WARN-only regression guard, does not affect mechanically_verified.
+    if os.path.exists(resume_md):
+        receipt["reading_order"] = _check_reading_order(
+            os.path.join(folder, "Resume.pdf"), open(resume_md, encoding="utf-8").read()
+        )
+    else:
+        receipt["reading_order"] = {"checked": False, "reason": "Resume.md not found"}
+
     # A real, computed number -- not a substitute for genuine rubric judgment
     # (R2 in conversion_rubric.md still needs a human/LLM read), but a floor
     # that can't be templated identically across different JDs the way a
@@ -161,8 +207,13 @@ def verify_one(folder: str) -> dict:
         jd_text = open(jd_path, encoding="utf-8").read()
         resume_text = open(resume_md, encoding="utf-8").read()
         receipt["jd_keyword_coverage"] = _keyword_coverage(jd_text, resume_text, _load_candidate_keywords())
+        # CR-073 Epic 2 -- per-JD literal hard-skill/tool coverage, distinct from the
+        # generic static-list check above. WARN-level: informational, not a hard gate.
+        cover_text = open(cover_md, encoding="utf-8").read() if os.path.exists(cover_md) else ""
+        receipt["jd_literal_term_gaps"] = jd_term_extractor.find_jd_term_gaps(jd_text, resume_text, cover_text)
     else:
         receipt["jd_keyword_coverage"] = None
+        receipt["jd_literal_term_gaps"] = None
 
     receipt["rubric_score"] = (
         "NOT SCORED BY THIS SCRIPT -- score by hand against data/conversion_rubric.md, "
@@ -258,6 +309,7 @@ def main() -> None:
         print(f"Rubric score audit clean for: {', '.join(os.path.basename(f.rstrip('/\\')) for f in folders)}")
         return
 
+    any_failed = False
     for folder in folders:
         receipt = verify_one(folder)
         out_path = os.path.join(folder.rstrip("/\\"), "verification_receipt.json")
@@ -265,6 +317,17 @@ def main() -> None:
             json.dump(receipt, f, indent=2)
         status = "MECHANICALLY CLEAN" if receipt["mechanically_verified"] else "FAILED -- see verification_receipt.json"
         print(f"{receipt['submission']}: {status} (rubric_score still needs manual entry + --audit pass)")
+        if not receipt["mechanically_verified"]:
+            any_failed = True
+
+    # 2026-08-06: this used to return exit code 0 unconditionally, even when a receipt printed
+    # FAILED -- the exit code was purely cosmetic and anything checking "did the command
+    # succeed" instead of parsing the printed text got a false pass. That's the exact fail-open
+    # bug this whole process exists to prevent, just one level lower than where it was already
+    # being guarded against. Non-zero here now means what it should: at least one folder did not
+    # pass mechanical verification.
+    if any_failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

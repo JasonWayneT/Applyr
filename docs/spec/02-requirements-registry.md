@@ -540,6 +540,20 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 |---|---|---|---|---|---|---|
 | `FR-251` | functional | P1 | implemented | Status transitions to Recruiter Screen or Core Interviews require a valid `interview_date` (UI block + API 400) | CR-051 acceptance criteria | `CR-051` |
 
+### CR-074 Token-conscious authoring packet (FR-252–FR-255)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-252` | functional | P0 | implemented | Deterministic Stage 0 builder produces `stage0_fit_gate.json` (DB cooldown, prefs/exclusion gates, JD buckets, hard/soft gaps) without a cloud LLM call on the common path | `AC-272` | CR-074 |
+| `FR-253` | functional | P0 | implemented | Authoring packet builder emits fail-closed `authoring_packet.json` (evidence map + workExperience excerpts only for selected ACC/MET IDs + soft gaps + rule digest version) under the documented size budget | `AC-273`, `AC-274` | CR-074 |
+| `FR-254` | functional | P0 | implemented | Single cloud authoring pass drafts Resume.md + CoverLetter.md from packet + lean rule digest only (closed world: no inventing claims outside packet IDs) | `AC-275` | CR-074 |
+| `FR-255` | functional | P0 | implemented | Default Stage 2 verification is scripts-first (`verify_submission`, coverage, jd terms, `--audit`); fresh-cloud independent review is optional / send-batch only | `AC-276`, `AC-277` | CR-074 |
+| `AC-272` | acceptance | P0 | implemented | Stage 0 script succeeds for ≥3 real JDs with no cloud LLM | `FR-252` | CR-074 |
+| `AC-273` | acceptance | P0 | implemented | Packet build fails if any required item lacks claim_ids and bridge, or selected claim is disabled, or excerpt missing | `FR-253` | CR-074 |
+| `AC-274` | acceptance | P0 | implemented | Estimated packet tokens ≤ budget locked in Epic 1 metrics (initial ceiling 8k est. tokens) | `FR-253` | CR-074 |
+| `AC-275` | acceptance | P0 | implemented | Author path does not require `agent_context_pack.md` as an input | `FR-254` | CR-074 |
+| `AC-276` | acceptance | P0 | implemented | SKILL.md Stage 2 default is scripts-only; multi-agent Stage 2 demoted | `FR-255` | CR-074 |
+| `AC-277` | acceptance | P0 | implemented | Calibration ≥3 real submissions clear mechanical verify; Jason send-ready judgment recorded | `FR-254`, `FR-255` | CR-074 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |
@@ -550,6 +564,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `NFR-004` | performance | P1 | implemented | Adzuna API calls capped at 10 per scout run with 3s inter-call delay to respect 25 req/min free-tier limit |
 | `NFR-005` | cost | P0 | implemented | No LLM provider is called unless `_is_configured()` returns True — zero silent token waste from misconfigured providers |
 | `NFR-006` | infrastructure | P1 | implemented | Zero-Trust Remote Binding — Vite client and Express server bind to `0.0.0.0` to permit authorized access across overlay networks (Tailscale) |
+| `NFR-007` | cost | P0 | implemented | Cloud authoring input context per company must use a lean packet + rule digest; default path must not reload full `agent_context_pack.md` + full skill into a second independent cloud review agent per company (CR-074) |
 
 ## Security Requirements
 

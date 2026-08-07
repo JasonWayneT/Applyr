@@ -1,0 +1,70 @@
+{
+  "schema_version": "1.0",
+  "company": "ExampleCorp",
+  "role_title": "Product Manager",
+  "slug": "examplecorp",
+  "url": "https://example.com/jobs/pm",
+  "tier": "Tier 1",
+  "reach_out": false,
+  "jd_buckets": {
+    "required": [
+      "5+ years product management on B2B SaaS platforms",
+      "Experience prioritizing roadmaps with engineering"
+    ],
+    "preferred": [
+      "Familiarity with SQL and analytics tools"
+    ],
+    "responsibilities": [
+      "Own platform reliability roadmap with cross-functional partners"
+    ],
+    "culture": [
+      "Customer-obsessed, pragmatic shipping culture"
+    ]
+  },
+  "evidence_map": [
+    {
+      "jd_item": "5+ years product management on B2B SaaS platforms",
+      "bucket": "required",
+      "claim_ids": ["ACC-101-ANCHOR"],
+      "bridge": null
+    },
+    {
+      "jd_item": "Experience prioritizing roadmaps with engineering",
+      "bucket": "required",
+      "claim_ids": ["ACC-108-SUPPORT", "ACC-109-PI"],
+      "bridge": null
+    },
+    {
+      "jd_item": "Own platform reliability roadmap with cross-functional partners",
+      "bucket": "responsibilities",
+      "claim_ids": ["ACC-101-ANCHOR"],
+      "bridge": null
+    },
+    {
+      "jd_item": "Familiarity with SQL and analytics tools",
+      "bucket": "preferred",
+      "claim_ids": ["MET-09"],
+      "bridge": null
+    }
+  ],
+  "excerpts": {
+    "ACC-101-ANCHOR": "[EXAMPLE ONLY — replace with real workExperience excerpt] Owned and stabilized a customer-facing B2B SaaS platform (~$40M ARR, ~3,500 accounts).",
+    "ACC-108-SUPPORT": "[EXAMPLE ONLY] Built a prioritization system for support-driven work across engineering partners.",
+    "ACC-109-PI": "[EXAMPLE ONLY] Ran quarterly planning with large cross-functional stakeholder sets.",
+    "MET-09": "[EXAMPLE ONLY] Customer databases managed: ~200 SQL databases."
+  },
+  "soft_gaps": [],
+  "hard_constraints": [
+    "Use only claim_ids present in excerpts; never invent metrics or tools.",
+    "Resume: exact ## PROFESSIONAL SUMMARY / EXPERIENCE / EDUCATION headers; exactly 3 summary sentences; all three canonical roles.",
+    "Cover letter: argue fit; no gap-confession language; no em dashes or semicolons.",
+    "Do not copy excerpt sentences verbatim; write fresh from the facts."
+  ],
+  "hook_fact": null,
+  "rule_digest_version": "pending-epic-4",
+  "packet_status": "ready",
+  "incomplete_reasons": [],
+  "estimated_tokens": 1200,
+  "stage_signal": null,
+  "thin_jd": false
+}

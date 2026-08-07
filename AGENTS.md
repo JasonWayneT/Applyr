@@ -8,7 +8,7 @@ If you only do one thing before touching `data/submissions/`, do this: **run the
 
 **Trigger phrase binding:** when Jason says a resume/cover letter should be "conversion ready," "apply ready," "ready to send," or asks you to "review" or "check" one — that always means running the full three-pass workflow in [.claude/skills/conversion-ready-pass/SKILL.md](.claude/skills/conversion-ready-pass/SKILL.md): rubric scoring against `data/conversion_rubric.md` (R1–R8 resume / C1–C5 cover letter), a mechanical truth-grounding sweep, and a qualitative hiring-manager read, looped up to 3 rounds. That file is plain markdown with no Claude-Code-specific mechanism required to use it — if you are a different coding agent and have no automatic skill-loading step, open and follow it directly rather than stopping at the rubric. He should not have to name these files or re-link the research report each time. Don't just eyeball a document for typos and call it done, and don't stop after the rubric score alone — that is Pass 1 of three, not the whole workflow. **Scoping note (2026-07-19):** for a document authored via the `generate-submission` skill, its own Stage 2 already satisfies this trigger — don't run `conversion-ready-pass` a second time on top of it. `conversion-ready-pass` is for checking a document *not* produced by that flow.
 
-**Processing job descriptions today?** Invoke the `generate-submission` skill (`.claude/skills/generate-submission/SKILL.md`) — the single operational entry point for JD triage (fit-gating before any drafting), direct authoring, and verification. It's the current authoritative process, not the CR-070 tracker referenced below (superseded for generation — see the note just below).
+**Processing job descriptions today?** Invoke the `generate-submission` skill (`.claude/skills/generate-submission/SKILL.md`) — the single operational entry point for JD triage, authoring, and verification. **Default path is CR-074** (v2.1.0+): deterministic Stage 0 (`build_stage0_fit_gate.py`) → lean `authoring_packet.json` + `authoring_rule_digest.md` → **one** cloud draft from packet/digest only → scripts-first Stage 2 (`author_from_packet.py --verify-only`, then `verify_submission.py`). Do **not** load `agent_context_pack.md` into the Stage 1 author session. Multi-agent / full-pack Stage 2 review is optional (send-batch / ladder), not the default. Not the CR-070 tracker (superseded for generation).
 
 **Drafting a message to reach out to someone at a target company?** Invoke the `networking-outreach` skill (`.claude/skills/networking-outreach/SKILL.md`) — covers both a hiring-manager/role-relevant contact and an unrelated-department warm connection (alum, former coworker), since those need different message structures. Added 2026-07-30 after two drafts of a message to a CivicPlus contact missed the mark (too soft, then no relationship framing) before the pattern got written down.
 
@@ -19,12 +19,10 @@ If you only do one thing before touching `data/submissions/`, do this: **run the
 Not needed for drafting/reviewing submissions or networking outreach — this section is engineering-only
 (same reason it's excluded from `data/agent_context_pack.md`'s digest). Skip it unless you're building.
 
-**START HERE:** [SESSION-HANDOFF-2026-07-20-process-hardening.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-20-process-hardening.md)
-— the direct-authoring pivot (`generate-submission` skill v2.0.0, the authoritative Stage 0-3 process) is
-done and stable; this doc covers the self-repair fixes from its first real run: a DB check so Stage 0
-never drafts for a company already Rejected/Closed, a mechanical resume↔letter restatement check, and the
-standing rule that cover letters argue fit rather than confess gaps. Six of nine submissions from that
-batch verified clean; three blocked on a database-status decision only Jason can make.
+**START HERE (authoring):** [CR-074 epics](docs/spec/08-implementation/CR-074-token-conscious-authoring-packet-epics.md) + `generate-submission` skill v2.1.0 — token-conscious packet path is the default; calibration report at `docs/reports/cr074-calibration-report.md`.
+
+**Process-hardening handoff (still useful):** [SESSION-HANDOFF-2026-07-20-process-hardening.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-20-process-hardening.md)
+— Stage 0 DB check, resume↔letter restatement, cover letters argue fit rather than confess gaps.
 
 Three previously-active threads, each a self-contained handoff doc with checkbox-tracked stories — open
 it, find the first unchecked item, start there:
@@ -76,7 +74,9 @@ To protect candidate privacy:
 
 | File | Purpose | Read When |
 |------|---------|-----------|
-| `data/agent_context_pack.md` | **Generated fast-path digest** of this file's operative sections + `generate-submission/SKILL.md`'s operative sections + `workExperience.md` + `conversion_rubric.md`, built by `scripts/generate_context_pack.py` so a drafting/reviewing agent reads one lean file instead of four full ones (~19% smaller than the sum of sources; excludes engineering-only content this file carries that a drafting agent never needs). **Verify freshness first** — `python scripts/check_context_pack_freshness.py` must print FRESH; if STALE, regenerate before relying on it. Not a replacement for this file when doing engineering/process work — see below. | Before drafting or reviewing any submission, instead of separately reading this file + SKILL.md + workExperience.md + conversion_rubric.md |
+| `data/authoring_packet.json` (per submission) | **CR-074 Stage 1 input.** Lean JD buckets + evidence map + bounded `workExperience` excerpts only. Built by `scripts/build_authoring_packet.py`. | Default cloud authoring pass — with the rule digest below; **not** the full context pack |
+| `data/authoring_rule_digest.md` | **CR-074 lean rules** (~1.6k tokens) for the cloud author. Generated by `scripts/generate_authoring_rule_digest.py`. | Every CR-074 Stage 1 author session (SYSTEM block) |
+| `data/agent_context_pack.md` | **Generated fast-path digest** of this file's operative sections + `generate-submission/SKILL.md`'s operative sections + `workExperience.md` + `conversion_rubric.md`, built by `scripts/generate_context_pack.py`. **Not** the default Stage 1 author load after CR-074 — keep for process/engineering sessions and optional send-batch review. **Verify freshness first** — `python scripts/check_context_pack_freshness.py` must print FRESH; if STALE, regenerate before relying on it. | Process work, optional ladder-2 review, or pre-CR-074 flows — not default Stage 1 |
 | `data/workExperience.md` | **Ground truth.** Every metric, accomplishment, and claim must trace back here. Contains VOC codes (vocabulary translation), MET codes (verified metrics), ACC codes (approved accomplishments), and explicit DO NOT CLAIM lists. | Before writing any bullet, proof paragraph, or metric |
 | `data/master_claims.json` | Structured claim catalog. 59+ active claims. Claims with `"disabled": true` are quarantined and must NOT be used. **Read `tags` only as a retrieval index into `workExperience.md`'s full stories** — `text` and especially `cover_story` (a full first-person cover-letter-register paragraph per claim) are legacy write-only artifacts from the retired deterministic pipeline; never place either directly in an output document. | When selecting proof points for cover letters |
 | `data/master_claims_tags_only.json` | Generated sidecar of the above with `text`/`cover_story` already stripped from every claim by construction (`scripts/generate_context_pack.py`) — makes "tags only" true by construction instead of relying on every agent to self-police it. Regenerated alongside `agent_context_pack.md`. | Same as `master_claims.json` above — prefer this file when it exists |
@@ -291,6 +291,9 @@ To compile MD → PDF: `python scripts/compile_single.py <md_path> <pdf_path>`
 Never tell Jason a resume or cover letter is finished without running this from the repo root and confirming clean output:
 
 ```bash
+# 0. (CR-074 default) After packet-based authoring, run the Stage 1 exit gate first:
+python scripts/author_from_packet.py data/submissions/COMPANY --verify-only
+
 # 1. Compile to PDF first -- verify_submission.py reads the PDFs for page counts.
 python scripts/compile_single.py data/submissions/COMPANY/Resume.md data/submissions/COMPANY/Resume.pdf
 python scripts/compile_single.py data/submissions/COMPANY/CoverLetter.md data/submissions/COMPANY/CoverLetter.pdf

@@ -9,6 +9,9 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 
 ## [Unreleased]
 
+### Added
+- **CR-074: token-conscious authoring packet — Implemented** (2026-08-06): Deterministic Stage 0, lean `authoring_packet.json` (≤8k), ~1.6k-token rule digest, one cloud draft (~4k input vs ~100–150k old path), scripts-first Stage 2. Calibration: Limble + Camunda + Paylocity all `--verify-only` PASS + send-ready Y (Ncontracts skipped). `generate-submission` v2.1.0; AGENTS.md/CLAUDE.md cut over. Epic 8 (local assists) deferred. Report: `docs/reports/cr074-calibration-report.md`. `FR-252`–`FR-255`, `NFR-007`.
+
 ### Fixed
 - **Resume name rendered ALL CAPS by the PDF compiler regardless of source casing (2026-08-05):** `compile_single.py`'s CSS applied `text-transform: uppercase` to the `h1` selector (the candidate's name heading), so PDF text-extraction always read "JASON TAYLOR" no matter how the name was typed in `Resume.md` — a known ATS name-entity-recognition gotcha (an all-caps run reads as an acronym/header, not a proper name), and the recurring reason Jason had to manually correct his parsed name on submission portals. Removed the transform from `h1` only; `h2` (section headers like "PROFESSIONAL EXPERIENCE") keeps it, since that's expected/harmless there.
 - **`spearheaded` simultaneously banned and trusted in `submission_linter.py` (2026-08-05):** `LW-006`'s AI-tell buzzword pattern banned it, while `_OWNERSHIP_VERBS_METRIC` (the attribution-fidelity check) treated its presence as high-confidence evidence a claim was genuinely owned — two rules giving opposite verdicts on the same word. Removed it from the banned pattern; kept it in the ownership-verb list, cross-referenced with a comment in both places so a future edit to one doesn't silently reintroduce the contradiction.

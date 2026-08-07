@@ -247,6 +247,12 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-247` | CR-054 | Blocked companies gate | `scripts/batch_pipeline.py` | implemented |
 | `FR-248` | CR-053/055 | Gate prefs preserved on UI materialize | `server/domain/jobSearchPrefs.ts`, `scripts/prefs_rollout.py` | implemented |
 | `IMP-CR-053-055` | CR-053/054/055 | FEAT-002, FEAT-004, FEAT-009 | `docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md` | in_progress |
+| `FR-252` | CR-074 | Deterministic Stage 0 builder | `scripts/build_stage0_fit_gate.py`, `scripts/stage0_db_gate.py`, `scripts/stage0_prefs_gate.py` | implemented |
+| `FR-253` | CR-074 | Authoring packet builder (fail-closed) | `scripts/build_authoring_packet.py`, `scripts/contracts/authoring_packet_schema.json` | implemented |
+| `FR-254` | CR-074 | Single cloud author from packet | `scripts/author_from_packet.py`, `data/authoring_rule_digest.md`, `.claude/skills/generate-submission/SKILL.md` v2.1.0 | implemented |
+| `FR-255` | CR-074 | Scripts-first Stage 2 default | `scripts/author_from_packet.py --verify-only`, `scripts/verify_submission.py` | implemented |
+| `NFR-007` | CR-074 | Cloud token budget for authoring | `docs/reports/cr074-token-baseline.md`, `docs/reports/cr074-calibration-report.md`, packet size guard | implemented |
+| `IMP-CR-074` | CR-074 | Token-conscious authoring packet | `docs/spec/08-implementation/CR-074-token-conscious-authoring-packet-epics.md` | implemented |
 
 
 ## Coverage checklist

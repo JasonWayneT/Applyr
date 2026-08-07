@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://applyr.local/schemas/authoring_packet.schema.json",
+  "title": "AuthoringPacket",
+  "description": "CR-074 lean closed-world brief for one cloud Resume+CoverLetter authoring pass. Implements FR-253 / AC-273 / AC-274.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "company",
+    "role_title",
+    "tier",
+    "jd_buckets",
+    "evidence_map",
+    "excerpts",
+    "soft_gaps",
+    "hard_constraints",
+    "hook_fact",
+    "rule_digest_version",
+    "packet_status"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "company": { "type": "string", "minLength": 1 },
+    "role_title": { "type": "string", "minLength": 1 },
+    "slug": { "type": "string" },
+    "url": { "type": ["string", "null"] },
+    "tier": {
+      "type": "string",
+      "enum": ["Tier 1", "Tier 2", "Skip"]
+    },
+    "reach_out": { "type": "boolean", "default": false },
+    "jd_buckets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "preferred", "responsibilities", "culture"],
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "preferred": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "responsibilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "culture": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "evidence_map": {
+      "type": "array",
+      "description": "Every required (and mapped preferred/responsibility) JD item → strongest claim IDs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["jd_item", "bucket", "claim_ids"],
+        "properties": {
+          "jd_item": { "type": "string" },
+          "bucket": {
+            "type": "string",
+            "enum": ["required", "preferred", "responsibilities"]
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "bridge": {
+            "type": ["string", "null"],
+            "description": "Soft-gap bridge tag/hint when claim_ids alone are incomplete; null if full anchor."
+          }
+        }
+      }
+    },
+    "excerpts": {
+      "type": "object",
+      "description": "claim_id → bounded ground-truth excerpt only. No full workExperience dump.",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "soft_gaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "class", "note"],
+        "properties": {
+          "item": { "type": "string" },
+          "class": { "type": "string", "enum": ["SOFT", "HARD"] },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "hard_constraints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Closed-world rules restated for the author (no inventing claims, no gap confession, structure)."
+    },
+    "hook_fact": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "source_url": { "type": ["string", "null"] },
+        "fetched_at": { "type": ["string", "null"] }
+      },
+      "required": ["text"]
+    },
+    "rule_digest_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Content hash / version of data/authoring_rule_digest.md used with this packet."
+    },
+    "packet_status": {
+      "type": "string",
+      "enum": ["ready", "incomplete"],
+      "description": "ready = cloud author may run. incomplete = fail-closed; do not draft."
+    },
+    "incomplete_reasons": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Required when packet_status is incomplete."
+    },
+    "estimated_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Builder-estimated tokens (chars/4 or tokenizer); must be ≤ budget when ready."
+    },
+    "stage_signal": { "type": ["string", "null"] },
+    "thin_jd": { "type": "boolean" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "packet_status": { "const": "incomplete" } }
+      },
+      "then": {
+        "required": ["incomplete_reasons"],
+        "properties": {
+          "incomplete_reasons": { "minItems": 1 }
+        }
+      }
+    }
+  ]
+}

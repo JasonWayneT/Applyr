@@ -4,11 +4,14 @@ import {
     passesIndustryGate,
     passesGeographicGate,
     passesSeniorityGate,
+    passesYearsExperienceGate,
     passesBuiltInPmTitleScope,
     passesBroadPmTitleScope,
     passesTargetRoleTitleScope,
     passesBuiltInStrictRemoteCard,
     parseMaxYearsRequired,
+    parseYearsForIngestGate,
+    YEARS_EXPERIENCE_REJECT_BUFFER,
     titleMatchesBlocked,
     type ScrapedJob,
     type GateConfig,
@@ -80,6 +83,20 @@ describe('parseMaxYearsRequired', () => {
     });
     it('keeps plausible years while ignoring outliers', () => {
         expect(parseMaxYearsRequired('Requires 8+ years; team supports 100+ products.')).toBe(8);
+    });
+    it('ignores age requirements ("18 years old")', () => {
+        expect(
+            parseMaxYearsRequired(
+                'Must be at least 18 years old. 6 years of direct and relevant experience in product.',
+            ),
+        ).toBe(6);
+    });
+    it('ignores company-tenure marketing ("over 20 years of experience building")', () => {
+        expect(
+            parseMaxYearsRequired(
+                '3+ years of experience in product management. With over 20 years of experience building long-term client relationships.',
+            ),
+        ).toBe(3);
     });
 });
 
@@ -295,13 +312,74 @@ describe('passesBuiltInStrictRemoteCard', () => {
     });
 });
 
+describe('passesYearsExperienceGate', () => {
+    // cfg.maxExperienceYears = 7; buffer = 2 → reject only when required > 9
+    it(`uses buffer of ${YEARS_EXPERIENCE_REJECT_BUFFER} above max`, () => {
+        expect(YEARS_EXPERIENCE_REJECT_BUFFER).toBe(2);
+    });
+    it('passes a mid-level PM with 5 years required', () => {
+        const job = baseJob({ description: 'Requires 5 years of product management experience. Remote role.' });
+        expect(passesYearsExperienceGate(job, cfg)).toBe(true);
+    });
+    it('passes one year over max (inside buffer) — CR-056 class', () => {
+        const job = baseJob({ description: 'Requires 8 years of product management experience in SaaS. Remote-friendly team.' });
+        expect(passesYearsExperienceGate(job, cfg)).toBe(true);
+    });
+    it('passes at max + buffer boundary (9 with max 7)', () => {
+        const job = baseJob({ description: 'Requires 9 years of product management experience in B2B SaaS platforms.' });
+        expect(passesYearsExperienceGate(job, cfg)).toBe(true);
+    });
+    it('rejects when required exceeds max + buffer (10 with max 7)', () => {
+        const job = baseJob({ description: 'Minimum 10 years of product management experience required. Must have SaaS background.' });
+        expect(passesYearsExperienceGate(job, cfg)).toBe(false);
+    });
+    it('passes unparseable / no years found', () => {
+        const job = baseJob({ description: 'Passionate about product and customers. Collaborative team environment. Remote US.' });
+        expect(passesYearsExperienceGate(job, cfg)).toBe(true);
+    });
+    it('passes when description is too short to extract years (<80 chars)', () => {
+        const job = baseJob({ title: 'Product Manager', description: 'Requires 15 years experience.' });
+        expect(passesYearsExperienceGate(job, cfg)).toBe(true);
+    });
+    it('with real prefs max=8, lets 5-10 year ranges through (ingest uses range floor)', () => {
+        const realCfg = { ...cfg, maxExperienceYears: 8 };
+        const job = baseJob({ description: 'Looking for someone with 5-10 years of product management experience in SaaS.' });
+        expect(parseMaxYearsRequired(job.description)).toBe(10);
+        expect(parseYearsForIngestGate(job.description)).toBe(5);
+        expect(passesYearsExperienceGate(job, realCfg)).toBe(true);
+    });
+    it('lets 8-12 year ranges through when floor is within max (ingest uses range floor)', () => {
+        const realCfg = { ...cfg, maxExperienceYears: 8 };
+        const job = baseJob({
+            description: "Bachelor's degree and a minimum of 8-12 years of related experience in product roles.",
+        });
+        expect(parseYearsForIngestGate(job.description)).toBe(8);
+        expect(passesYearsExperienceGate(job, realCfg)).toBe(true);
+    });
+    it('rejects anchored minimum far above ceiling', () => {
+        const realCfg = { ...cfg, maxExperienceYears: 8 };
+        const job = baseJob({
+            description: 'Minimum 12 years of product management experience required for this senior platform role.',
+        });
+        expect(passesYearsExperienceGate(job, realCfg)).toBe(false);
+    });
+    it('treats scraped space-range "9 11 years" as floor 9 (passes inside buffer)', () => {
+        const realCfg = { ...cfg, maxExperienceYears: 8 };
+        const job = baseJob({
+            description:
+                '9 11 years of overall experience in Product Management. 3+ years of direct experience as a Product Owner.',
+        });
+        expect(parseYearsForIngestGate(job.description)).toBe(9);
+        expect(passesYearsExperienceGate(job, realCfg)).toBe(true);
+    });
+});
+
 describe('passesSeniorityGate', () => {
     it('passes a mid-level PM with 5 years required', () => {
         const job = baseJob({ description: 'Requires 5 years of product management experience. Remote role.' });
         expect(passesSeniorityGate(job, cfg)).toBe(true);
     });
-    it('rejects when required years exceed max (description ≥80 chars)', () => {
-        // Year extraction only runs when desc.length >= 80 chars.
+    it('rejects when required years exceed max + buffer (description ≥80 chars)', () => {
         const job = baseJob({ description: 'Minimum 10 years of product management experience required. Must have SaaS background.' });
         expect(passesSeniorityGate(job, cfg)).toBe(false);
     });
@@ -317,8 +395,8 @@ describe('passesSeniorityGate', () => {
         const job = baseJob({ description: 'Requires 7 years of product management experience in SaaS.' });
         expect(passesSeniorityGate(job, cfg)).toBe(true);
     });
-    it('rejects one year over max (description ≥80 chars)', () => {
+    it('passes one year over max (inside buffer)', () => {
         const job = baseJob({ description: 'Requires 8 years of product management experience in SaaS. Remote-friendly team.' });
-        expect(passesSeniorityGate(job, cfg)).toBe(false);
+        expect(passesSeniorityGate(job, cfg)).toBe(true);
     });
 });

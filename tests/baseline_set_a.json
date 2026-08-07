@@ -1,0 +1,30 @@
+{
+  "json_ld_role.html": {
+    "source": "structured",
+    "confidence": "high",
+    "flags": [],
+    "length": 1049
+  },
+  "next_data_role.html": {
+    "source": "dom",
+    "confidence": "low",
+    "flags": [
+      "no_requirements_section"
+    ],
+    "length": 0
+  },
+  "normal_pm_role.html": {
+    "source": "dom",
+    "confidence": "medium",
+    "flags": [],
+    "length": 972
+  },
+  "thin_jd.html": {
+    "source": "dom",
+    "confidence": "low",
+    "flags": [
+      "no_requirements_section"
+    ],
+    "length": 78
+  }
+}

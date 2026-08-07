@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Job } from '../types/job';
 import { api } from '../lib/api';
+import logoMark from '../assets/logo-mark.png';
 
 interface SidebarProps {
   activeTab: string;
@@ -67,16 +68,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     <aside className="w-64 bg-sidebar-bg border-r border-sidebar-border flex flex-col h-full shrink-0 relative">
       {/* Brand — same h-16 row height as the top header, so the two align */}
       <div className="h-16 flex items-center gap-3 px-6 shrink-0">
-        <svg className="w-10 h-10 shrink-0" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Applyr">
-          <rect width="40" height="40" rx="10" fill="#3B5FE0" />
-          <path
-            d="M20,8 L21.88,12.41 L26.66,12.84 L23.04,15.99 L24.11,20.66 L20,18.2 L15.89,20.66 L16.96,15.99 L13.34,12.84 L18.12,12.41 Z"
-            fill="#FFFFFF"
-          />
-          <rect x="9" y="24" width="22" height="2.2" rx="1.1" fill="#FFFFFF" />
-          <rect x="9" y="28" width="22" height="2.2" rx="1.1" fill="#FFFFFF" />
-          <rect x="9" y="32" width="14" height="2.2" rx="1.1" fill="#FFFFFF" />
-        </svg>
+        <span
+          className="w-10 h-10 shrink-0"
+          role="img"
+          aria-label="Applyr"
+          style={{
+            backgroundColor: 'var(--color-logo-icon)',
+            WebkitMaskImage: `url(${logoMark})`,
+            maskImage: `url(${logoMark})`,
+            WebkitMaskSize: 'contain',
+            maskSize: 'contain',
+            WebkitMaskRepeat: 'no-repeat',
+            maskRepeat: 'no-repeat',
+            WebkitMaskPosition: 'center',
+            maskPosition: 'center',
+          }}
+        />
         <div>
           <h2 className="text-lg font-bold text-sidebar-text-active font-headline tracking-tight leading-tight">Applyr</h2>
           <p className="text-[10px] text-sidebar-text uppercase tracking-widest font-bold">Curated Job Search</p>

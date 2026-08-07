@@ -14,7 +14,7 @@ import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional, Set
+from typing import Dict, List, Literal, Optional, Set, Tuple
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
@@ -28,6 +28,14 @@ CURRENT_YEARS_EXPERIENCE = 7
 PREVIOUS_YEARS_EXPERIENCE = CURRENT_YEARS_EXPERIENCE - 1
 _NUM_WORDS = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
 PREVIOUS_YEARS_WORD = _NUM_WORDS.get(PREVIOUS_YEARS_EXPERIENCE, str(PREVIOUS_YEARS_EXPERIENCE))
+
+# LR-024: titles above Senior IC PM, per CLAUDE.md's Exclusion Zones ("no Director, Head of,
+# Principal, VP, Staff, Group PM"). Scoped at call sites to role headers/summary subtitle only.
+_FORBIDDEN_TITLE_PATTERN = re.compile(
+    r"\b(Director|VP|Vice President|Head of|Principal\s+(?:Product|Program)|"
+    r"Staff\s+(?:Product|Program)|Group\s+Product\s+Manager|Chief\s+\w+\s+Officer|CPO|CTO|CEO|COO)\b",
+    re.IGNORECASE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -347,6 +355,51 @@ HARD_BLOCK_RULES: List[LintRule] = [
         suggestion="Name the specific thing you'd want to talk through instead of this stock phrase.",
         doc_types=["cover_letter"],
     ),
+    # LR-024 through LR-027 added 2026-08-06 (senior-eng/AI 360 review): CLAUDE.md's "Hard
+    # Anti-Hallucination Rules" calls people management, titles above Senior IC PM, and
+    # revenue/billing ownership "absolute" -- but until now nothing mechanically checked any of
+    # them against real drafted output; enforcement was 100% agent judgment during drafting, the
+    # exact pattern that already failed silently for LR-016/LW-013/LW-021 before each got
+    # hard-coded after a real miss. Separately: BLOCKED_TOOLS (referenced in this file's own
+    # self-repair-protocol history and in CLAUDE.md) turned out to only exist in the retired
+    # local_rewrite.py/drafting_engine.py/local_draft_stages.py pipeline that direct authoring no
+    # longer calls -- it was dead code relative to the active path. LR-026 replaces it here.
+    LintRule(
+        rule_id="LR-024",
+        severity="HARD_BLOCK",
+        check_type="structural",
+        pattern=None,
+        message="Title-ceiling violation: a title above Senior IC PM appears in a role header or the summary subtitle",
+        suggestion="Jason has never held a title above Senior IC PM (no Director, VP, Head of, Principal, Staff, Group PM, or C-suite title). Use the real held title.",
+        doc_types=["resume"],
+    ),
+    LintRule(
+        rule_id="LR-025",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        pattern=r"\b(direct reports?|managed a team of \d+|led a team of \d+|people manager|supervis(?:e|ed|ing) (?:a team|staff|employees)|hir(?:e|ed|ing) and (?:fir(?:e|ed|ing)|onboard))\b",
+        message="People-management claim detected (direct reports / managed a team / hired / supervised staff)",
+        suggestion="Jason has never managed people, hired, fired, or had direct reports (CLAUDE.md Exclusion Zones). Remove or reframe as cross-functional influence, not people management.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LR-026",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        pattern=r"\b(Snowflake|Tableau|FHIR|Docker|Kubernetes|Looker|Amplitude|Mixpanel|Power BI|Databricks)\b",
+        message="Unverified tool claim detected -- not in workExperience.md or master_claims.json",
+        suggestion="Remove this tool, or if Jason has genuinely used it, add it to workExperience.md/skills_catalog.json first and treat this as a self-repair-protocol miss.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LR-027",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        pattern=r"\b(owned (?:the )?P&L|P&L ownership|owned revenue|revenue ownership|managed billing|owned (?:the )?billing (?:system|process)|owned payment processing|payment system owner)\b",
+        message="Revenue/billing/P&L ownership claim detected",
+        suggestion="Jason has never owned revenue, billing, or payment systems (CLAUDE.md Exclusion Zones). Reframe around the actual owned system (e.g. platform reliability, data integrity) instead.",
+        doc_types=["cover_letter", "resume"],
+    ),
 ]
 
 WARN_RULES: List[LintRule] = [
@@ -622,6 +675,21 @@ WARN_RULES: List[LintRule] = [
         suggestion="Trim the resume. Resumes over 4000 characters risk getting truncated or penalized by certain ATS parsers.",
         doc_types=["resume"],
     ),
+    LintRule(
+        rule_id="LW-030",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-08-06 alongside LR-024/025/026/027 -- WARN not HARD_BLOCK deliberately.
+        # ACC-120 (contributed, joint prompt-engineering research on a colleague's AI system) and
+        # ACC-401-AITOOLS (Jason's own real, owned AI-tooling side projects, data/aiProjects.md) are
+        # both legitimate and both mention AI/building. The exclusion zone is specifically AI/ML
+        # MODEL training/ownership/engineering, not "used AI to build something" -- a distinction a
+        # regex can misjudge, so this flags for a human read rather than blocking outright.
+        pattern=r"\b(built|design(?:ed)?|train(?:ed)?|own(?:ed)?|architected)\b[^.]{0,40}\b(AI|ML|machine[- ]learning)\s+(model|pipeline)\b",
+        message="Possible AI/ML model ownership claim detected -- verify against the Exclusion Zone (no AI/ML model training/ownership/engineering) vs. legitimate ACC-120/ACC-401 AI-tooling claims",
+        suggestion="If this describes using AI tools to build something (ACC-401) or contributing/researching (ACC-120), it's fine as worded elsewhere -- if it asserts owning/training/architecting the underlying model itself, cut it.",
+        doc_types=["cover_letter", "resume"],
+    ),
 ]
 
 INFO_RULES: List[LintRule] = [
@@ -783,6 +851,26 @@ def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResu
                             message=f"Primary employer Cision has {len(bullets)} bullets (exceeds maximum cap of 6 bullets)",
                             suggestion=rule.suggestion,
                         )
+            elif rule.rule_id == "LR-024" and doc_type == "resume":
+                # Scoped to exactly where Jason's own titles legitimately appear (role headers,
+                # the summary subtitle) -- not a blanket document-wide scan, which would false-
+                # positive on a bullet mentioning a real cross-functional partner's title (e.g.
+                # "partnered with the VP of Engineering", CLAUDE.md's own verified-partner list).
+                role_headers = re.findall(r"(?m)^###\s+(.+)$", text)
+                candidate_lines = list(role_headers)
+                summary_match = re.search(r"##\s*PROFESSIONAL SUMMARY\s*\n+\*\*(.+?)\*\*", text)
+                if summary_match:
+                    candidate_lines.append(summary_match.group(1))
+                for line in candidate_lines:
+                    m = _FORBIDDEN_TITLE_PATTERN.search(line)
+                    if m:
+                        violation = LintViolation(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            message=f"Title-ceiling violation: '{m.group(0)}' in {line.strip()!r}",
+                            suggestion=rule.suggestion,
+                        )
+                        break
             elif rule.rule_id == "LI-002":
                 pass  # checked externally (requires filesystem knowledge)
             elif rule.rule_id == "LI-003" and doc_type == "cover_letter":
@@ -1005,6 +1093,102 @@ def check_cross_document_repetition(resume_text: str, cover_letter_text: str) ->
                 "Rewrite the letter's proof sentences so none of these phrases survive."
             ),
         ))
+    return violations
+
+
+_BATCH_MIN_LEN = 6
+_BATCH_MIN_COMPANIES = 3  # matches the real incident this rule encodes -- see docstring
+
+
+def check_batch_repetition(docs_by_company: Dict[str, Dict[str, str]]) -> List[LintViolation]:
+    """LW-029: cross-batch stylistic-repetition check.
+
+    Catches a drafting HABIT recurring across different companies' submissions -- a shared
+    sentence skeleton, opening-hook shape, or closing-line phrase -- that no single-company
+    check (LW-008-PAIR/LW-009-PAIR) can see, because those only ever compare one company's
+    resume against its OWN cover letter. This mechanizes the "cross-batch critical-hiring-
+    manager pass" CLAUDE.md already describes as a standing trigger (the real incident it
+    cites: "sits at the intersection of X and Y" recurring in 3 of 8 real letters, caught only
+    when Jason asked for a manual sweep). Added 2026-08-05 after a second, worse instance of
+    the same failure mode: "I'd welcome the chance to talk through how" was the literal closing
+    line in 9 of 9 cover letters drafted in one batch, undetected until Jason asked to brainstorm
+    what checks were still missing. A prose reminder to "run the sweep" did not survive a long
+    drafting session either time -- this is the mechanized version so it can't be skipped again.
+
+    Cover letters only, deliberately. A resume's employer names, dates, education line, and
+    largely-fixed early-career bullets are TRUE, FIXED facts that are supposed to recur across
+    every submission -- that is not the habit this rule targets, and an early trial run on real
+    data confirmed it fires as pure noise there (every hit was "Education / Bachelor of..." or
+    the Sterkly employment-block header). A cover letter's argument is supposed to be built
+    fresh per company every time, so identical phrasing there is the actual signal.
+
+    Never fires below _BATCH_MIN_COMPANIES (a coincidence between two letters isn't a habit;
+    three or more is the bar the real incidents above were both caught at).
+
+    docs_by_company: {company_name: {"resume": text, "cover_letter": text}}. Company names
+    with no cover-letter text are skipped, not treated as an empty match.
+    """
+    violations: List[LintViolation] = []
+    for doc_type in ("cover_letter",):
+        texts = {
+            company: _strip_header_block(docs[doc_type])
+            for company, docs in docs_by_company.items()
+            if docs.get(doc_type)
+        }
+        if len(texts) < _BATCH_MIN_COMPANIES:
+            continue
+
+        phrase_companies: Dict[str, Set[str]] = {}
+        for company, text in texts.items():
+            toks = _word_tokens(text)
+            if len(toks) < _BATCH_MIN_LEN:
+                continue
+            seen_in_this_doc: Set[str] = set()
+            for n in range(_BATCH_MIN_LEN, min(12, len(toks) + 1)):
+                for i in range(len(toks) - n + 1):
+                    seen_in_this_doc.add(" ".join(toks[i : i + n]))
+            for phrase in seen_in_this_doc:
+                phrase_companies.setdefault(phrase, set()).add(company)
+
+        hits = {p: c for p, c in phrase_companies.items() if len(c) >= _BATCH_MIN_COMPANIES}
+
+        # Collapse to one entry per repeated span: a 6-word core and its many overlapping
+        # 7-, 8-, 9-word extensions are the SAME finding, not distinct ones (their company
+        # sets naturally diverge at the boundary as some companies' phrasing continues
+        # further than others' before diverging). Process widest-reach-first (most companies,
+        # then longest) so the most informative variant of each cluster wins the slot instead
+        # of an incidental longer-but-narrower extension swallowing a shorter, more-widely-
+        # shared core phrase -- confirmed as a real ordering bug on a first pass over real
+        # data, where a 9-company 6-word finding got dropped in favor of a 4-company 11-word
+        # one. Any later candidate that overlaps (either direction) with an already-kept
+        # phrase is the same cluster and gets skipped, not added as a near-duplicate.
+        maximal: List[Tuple[str, Set[str]]] = []
+        for phrase, companies in sorted(hits.items(), key=lambda kv: (len(kv[1]), len(kv[0])), reverse=True):
+            if not any(phrase in kept or kept in phrase for kept, _ in maximal):
+                maximal.append((phrase, companies))
+
+        # Cap reported findings per doc_type -- a real habit shows up as a handful of distinct
+        # clusters, not dozens; anything past this is the same handful sliced differently.
+        maximal = maximal[:8]
+
+        for phrase, companies in maximal:
+            company_list = ", ".join(sorted(companies))
+            doc_label = doc_type.replace("_", " ")
+            violations.append(LintViolation(
+                rule_id="LW-029",
+                severity="WARN",
+                message=(
+                    f'Cross-batch repetition ({doc_type}): the phrase "{phrase}" appears '
+                    f"identically in {len(companies)} companies' {doc_label}s: {company_list}"
+                ),
+                suggestion=(
+                    "No hiring manager reads two of Jason's letters side by side, so this is not "
+                    "a per-document defect -- it is a drafting habit repeating across the batch, "
+                    "usually from anchoring on recently-written output rather than writing each "
+                    "fresh. Rewrite this phrase in all but one of the flagged documents so no "
+                    "shared skeleton survives."
+                ),
+            ))
     return violations
 
 
@@ -1647,9 +1831,26 @@ def _print_violation(v: LintViolation, indent: int = 4) -> None:
     print(f"{prefix}  → {v.suggestion}")
 
 
+def _read_company_docs(folder: str) -> Dict[str, str]:
+    """Read Resume.md/CoverLetter.md text for the LW-029 cross-batch check, by doc_type."""
+    docs: Dict[str, str] = {}
+    for fname in os.listdir(folder):
+        if not fname.endswith(".md"):
+            continue
+        fpath = os.path.join(folder, fname)
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            continue
+        docs[_detect_doc_type(text, fname)] = text
+    return docs
+
+
 def _run_cli(paths: List[str]) -> int:
     """CLI entry point. Returns exit code."""
     all_results: List[dict] = []
+    docs_by_company: Dict[str, Dict[str, str]] = {}
 
     for path in paths:
         path = os.path.normpath(path)
@@ -1660,9 +1861,12 @@ def _run_cli(paths: List[str]) -> int:
             md_files = [f for f in os.listdir(path) if f.endswith(".md")]
             if md_files:
                 all_results.extend(lint_folder(path))
+                docs_by_company[os.path.basename(path)] = _read_company_docs(path)
             elif subdirs:
                 for sub in sorted(subdirs):
-                    all_results.extend(lint_folder(os.path.join(path, sub)))
+                    subpath = os.path.join(path, sub)
+                    all_results.extend(lint_folder(subpath))
+                    docs_by_company[sub] = _read_company_docs(subpath)
         elif path.endswith(".md"):
             try:
                 with open(path, encoding="utf-8") as f:
@@ -1685,6 +1889,21 @@ def _run_cli(paths: List[str]) -> int:
     if not all_results:
         print("[submission_linter] No markdown files found.")
         return 0
+
+    # LW-029: cross-batch repetition check -- only meaningful with 3+ companies in one run.
+    if len(docs_by_company) >= _BATCH_MIN_COMPANIES:
+        batch_warns = check_batch_repetition(docs_by_company)
+        if batch_warns:
+            all_results.append({
+                "submission": f"(batch: {len(docs_by_company)} companies)",
+                "document": "cross-batch repetition",
+                "doc_type": "batch",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(batch_warns),
+                "infos": 0,
+                "result": LintResult(passed=True, warns=batch_warns, document_type="batch"),
+            })
 
     # Summary table
     col_w = [20, 22, 14, 8, 8, 8]

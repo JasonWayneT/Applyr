@@ -75,13 +75,14 @@ export function parseMaxYearsRequired(text: string): number | null {
     /(?:minimum|min\.?|at least|requires?)\s*(\d+)\s*\+?\s*(?:years?|yrs?)/gi,
     /(\d+)\s*\+\s*years?/gi,
     /(\d+)\s*[-–]\s*(\d+)\s*years?/gi,
-    /(\d+)\s+years?\s+(?:of\s+)?experience/gi,
+    /(\d+)\s+years?\s+(?:of\s+)?(?:[\w/-]+\s+){0,4}experience/gi,
   ];
   const found: number[] = [];
   for (const pat of patterns) {
     let m: RegExpExecArray | null;
     const re = new RegExp(pat.source, pat.flags);
     while ((m = re.exec(text)) !== null) {
+      if (isIncidentalYearsMatch(text, m.index, m.index + m[0].length)) continue;
       const nums = m.slice(1).filter(Boolean).map((g) => parseInt(g, 10));
       if (!nums.length) continue;
       const maxInMatch = nums.length === 1 ? nums[0] : Math.max(...nums);
@@ -91,6 +92,110 @@ export function parseMaxYearsRequired(text: string): number | null {
     }
   }
   return found.length ? Math.max(...found) : null;
+}
+
+/**
+ * Buffer above experience_range.max before a years requirement is rejected at ingest.
+ * CR-056 previously silently killed valid Senior PM roles with a zero-buffer cutoff;
+ * Stage 0 (not this gate) owns nuanced fit judgment. Ambiguous / borderline / unparseable
+ * JDs must pass through.
+ */
+export const YEARS_EXPERIENCE_REJECT_BUFFER = 2;
+
+/**
+ * Drop age / company-tenure years so ingest never silently kills a real fit (CR-055 class).
+ * Scope checks to THIS match only — a nearby marketing "20 years building" must not poison
+ * a real "3+ years of experience" requirement in the same paragraph.
+ */
+function isIncidentalYearsMatch(text: string, start: number, end: number): boolean {
+  const after = text.slice(end, end + 24);
+  if (/^\s*old\b/i.test(after)) return true;
+
+  const before = text.slice(Math.max(0, start - 28), start);
+  const match = text.slice(start, end);
+  const matchPlus = `${before}${match}${after}`;
+
+  // Company/product tenure marketing: "backed by 18 years", "with over 20 years building…"
+  if (/\b(?:backed by|with over|for over|nearly|almost)\s+\d+\s+years?\b/i.test(matchPlus)) {
+    return true;
+  }
+  if (
+    /\b(?:with\s+)?over\s+\d+\s+years?\b/i.test(matchPlus) &&
+    /\b(?:building|serving|helping|delivering)\b/i.test(text.slice(end, end + 80)) &&
+    !/\b(?:minimum|min\.?|requires?|at least|required)\b/i.test(matchPlus)
+  ) {
+    return true;
+  }
+  // Soft industry-boilerplate without a hard requirement verb on this match
+  if (
+    /\b\d+\s+years?\s+of\s+industry\s+experience\b/i.test(matchPlus) &&
+    !/\b(?:minimum|min\.?|requires?|at least|required)\b/i.test(matchPlus)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Years figure used for the ingest reject decision.
+ * Explicit ranges (e.g. "5-10 years") contribute their LOW end — Stage 0 owns the
+ * aspirational high end. Anchored singles ("minimum 12 years", "10+ years") still count
+ * at face value. Returns null when nothing reliable is found.
+ */
+export function parseYearsForIngestGate(text: string): number | null {
+  const found: number[] = [];
+  // Explicit dash ranges, plus space-separated "9 11 years" (common scrape artifact for 9-11)
+  const rangeRe = /(\d+)\s*[-–]\s*(\d+)\s*years?|(\d+)\s+(\d+)\s+years?/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rangeRe.exec(text)) !== null) {
+    if (isIncidentalYearsMatch(text, m.index, m.index + m[0].length)) continue;
+    const lo = parseInt(m[1] || m[3], 10);
+    const hi = parseInt(m[2] || m[4], 10);
+    if (Number.isFinite(lo) && lo > 0 && lo <= 25 && Number.isFinite(hi) && hi >= lo && hi <= 25) {
+      found.push(lo);
+    }
+  }
+  const anchored = [
+    /(?:minimum|min\.?|at least|requires?)\s*(\d+)\s*\+?\s*(?:years?|yrs?)/gi,
+    /(\d+)\s*\+\s*years?/gi,
+    /(\d+)\s+or\s+more\s+years?/gi,
+    /(\d+)\s+years?\s+(?:of\s+)?(?:[\w/-]+\s+){0,4}experience/gi,
+  ];
+  for (const pat of anchored) {
+    const re = new RegExp(pat.source, pat.flags);
+    while ((m = re.exec(text)) !== null) {
+      // Skip if this match sits inside a range we already handled via low-end
+      const span = text.slice(Math.max(0, m.index - 4), m.index + m[0].length + 3);
+      if (/\d+\s*[-–]\s*\d+\s*years?/i.test(span)) continue;
+      if (/\d+\s+\d+\s+years?/i.test(span)) continue;
+      if (isIncidentalYearsMatch(text, m.index, m.index + m[0].length)) continue;
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > 0 && n <= 25) found.push(n);
+    }
+  }
+  return found.length ? Math.max(...found) : null;
+}
+
+/**
+ * Years-only ingest gate (no title blocklist — scoutOrchestrator already runs that).
+ * Rejects only when a clearly extractable required-years value exceeds
+ * maxExperienceYears + YEARS_EXPERIENCE_REJECT_BUFFER. Short/missing descriptions
+ * and unparseable years always pass.
+ */
+export function passesYearsExperienceGate(job: ScrapedJob, config: GateConfig): boolean {
+  const desc = (job.description || '').trim();
+  if (desc.length < 80) return true;
+  const title = (job.title || '').trim();
+  const required = parseYearsForIngestGate(`${title}\n${desc}`);
+  if (required === null) return true;
+  const ceiling = config.maxExperienceYears + YEARS_EXPERIENCE_REJECT_BUFFER;
+  if (required > ceiling) {
+    console.log(
+      `[REJECT] ${title} at ${job.company} — required_years_${required}_exceeds_max_${config.maxExperienceYears}_plus_buffer_${YEARS_EXPERIENCE_REJECT_BUFFER}`,
+    );
+    return false;
+  }
+  return true;
 }
 
 export function passesTitleBlocklist(title: string, config: GateConfig): boolean {
@@ -280,15 +385,5 @@ export function passesSeniorityGate(job: ScrapedJob, config: GateConfig): boolea
       return false;
     }
   }
-  const desc = (job.description || '').trim();
-  if (desc.length >= 80) {
-    const required = parseMaxYearsRequired(`${title}\n${desc}`);
-    if (required !== null && required > config.maxExperienceYears) {
-      console.log(
-        `[REJECT] ${title} at ${job.company} — required_years_${required}_exceeds_max_${config.maxExperienceYears}`,
-      );
-      return false;
-    }
-  }
-  return true;
+  return passesYearsExperienceGate(job, config);
 }

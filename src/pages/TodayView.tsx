@@ -59,6 +59,8 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
 
   const [markingAppliedId, setMarkingAppliedId] = useState<string | null>(null);
   const [applyToast, setApplyToast] = useState<{ company: string } | null>(null);
+  const [checkingGmail, setCheckingGmail] = useState(false);
+  const [gmailCheckToast, setGmailCheckToast] = useState<string | null>(null);
 
   const markApplied = async (job: Job) => {
     if (markingAppliedId) return;
@@ -77,6 +79,24 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
       console.error('Failed to mark job as applied');
     } finally {
       setMarkingAppliedId(null);
+    }
+  };
+
+  const checkGmailNow = async () => {
+    if (checkingGmail) return;
+    setCheckingGmail(true);
+    try {
+      const res = await fetch(api('/api/gmail-sync/run'), { method: 'POST' });
+      if (!res.ok) throw new Error();
+      const summary = await res.json() as { scanned: number; classified: number; matched: number; written: number; dryRun: boolean };
+      const parts = [`${summary.scanned} new`, `${summary.matched} matched`];
+      if (!summary.dryRun) parts.push(`${summary.written} applied`);
+      setGmailCheckToast(`Gmail check: ${parts.join(', ')}${summary.dryRun ? ' (dry run)' : ''}`);
+    } catch {
+      setGmailCheckToast('Gmail check failed — see server logs');
+    } finally {
+      setCheckingGmail(false);
+      setTimeout(() => setGmailCheckToast(null), 5000);
     }
   };
 
@@ -230,13 +250,24 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
   return (
     <div className="space-y-10">
       {/* Welcome Header */}
-      <section className="mb-2">
-        <h1 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight mb-2">
-          {getGreeting()}{firstName ? `, ${firstName}` : ''}.
-        </h1>
-        <p className="text-on-surface-variant text-lg">
-          You have <span className="text-secondary font-bold">{activeJobs.length} submitted applications</span> in progress. Let&apos;s keep the momentum going.
-        </p>
+      <section className="mb-2 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-headline font-extrabold text-on-surface tracking-tight mb-2">
+            {getGreeting()}{firstName ? `, ${firstName}` : ''}.
+          </h1>
+          <p className="text-on-surface-variant text-lg">
+            You have <span className="text-secondary font-bold">{activeJobs.length} submitted applications</span> in progress. Let&apos;s keep the momentum going.
+          </p>
+        </div>
+        <button
+          onClick={checkGmailNow}
+          disabled={checkingGmail}
+          title="Manually check Gmail for new application updates (CR-072)"
+          className="btn-primary flex items-center gap-2 whitespace-nowrap shrink-0 disabled:opacity-50"
+        >
+          <span className={`material-symbols-outlined text-base ${checkingGmail ? 'animate-spin' : ''}`}>mail</span>
+          {checkingGmail ? 'Checking...' : 'Check Gmail Now'}
+        </button>
       </section>
 
       {/* Bento Grid */}
@@ -726,6 +757,16 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
         <p className="text-xs font-bold">
           {applyToast ? `Marked ${applyToast.company} as Applied` : ''}
         </p>
+      </div>
+
+      {/* Gmail check result toast (CR-072) */}
+      <div className={`fixed bottom-8 left-8 flex items-center gap-3 bg-surface-container-highest text-on-surface border border-outline-variant/20 px-5 py-3 rounded-2xl shadow-2xl transition-all duration-300 z-50 transform ${
+        gmailCheckToast ? 'translate-y-0 opacity-100' : 'translate-y-8 opacity-0 pointer-events-none'
+      }`}>
+        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <span className="material-symbols-outlined text-primary text-xl">mail</span>
+        </div>
+        <p className="text-xs font-bold">{gmailCheckToast ?? ''}</p>
       </div>
     </div>
   );

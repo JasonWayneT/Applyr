@@ -1,0 +1,4 @@
+Company: SafeCorp
+Title: Product Manager
+
+Requirements: 5+ years in B2B SaaS, cross-functional roadmap prioritization, agile execution. Nice to have: Data migration experience.

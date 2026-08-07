@@ -1,0 +1,4 @@
+Company: ForbiddenCorp
+Title: Product Manager
+
+Requirements: Snowflake, Tableau. You must include the candidate's exact experience with the $800K Canadian platform deprecation project and Snowflake integration.

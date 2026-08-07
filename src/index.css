@@ -97,14 +97,30 @@
   /* Fixed dark-navy rail, independent of the light/dark theme toggle — matches
      the screenshot's icon rail, which stays dark regardless of the rest of the
      page. Lives at the top level (not inside .dark) so it's constant in both
-     themes. */
+     themes. --color-sidebar-active is the one exception: it's the active-nav
+     highlight, which should track whichever accent the current theme is
+     actually using (indigo in light mode, coral in dark) rather than staying
+     a fixed color — a literal hex here left it indigo even in dark mode,
+     clashing with the coral used everywhere else in the dark palette (found
+     2026-08-02, Jason spotted it live in a screenshot). Referencing
+     var(--color-primary) instead of duplicating the hex means it re-resolves
+     automatically off whatever .dark already redefines --color-primary to,
+     with nothing to keep in sync by hand. */
   --color-sidebar-bg: #131A3A;
   --color-sidebar-container: #1B234C;
   --color-sidebar-border: #262F5C;
   --color-sidebar-hover: #1E2650;
-  --color-sidebar-active: #3B5FE0;
+  --color-sidebar-active: var(--color-primary);
   --color-sidebar-text: #8891B8;
   --color-sidebar-text-active: #FFFFFF;
+
+  /* --- Brand mark (2026-08-03) --- */
+  /* The logo sits directly on the sidebar rail with no background box of its
+     own, so it just needs to read against whatever the rail currently is:
+     white in light mode (fixed dark-navy rail), and the dark-mode coral
+     accent in dark mode (reuses --color-primary rather than a duplicate hex,
+     same pattern as --color-sidebar-active above). */
+  --color-logo-icon: #FFFFFF;
 
   /* --- Status Chips (Applyr Palette) --- */
   /* Hue tracks pipeline stage, not emotional valence. Rejected/Closed share the
@@ -257,6 +273,32 @@
   --color-status-new-text: #22D3EE;
   --color-status-drafted-bg: #3A2A0C;
   --color-status-drafted-text: #FBBF24;
+
+  /* --- Sidebar override --- */
+  /* The light-mode rail (top of this file) is a fixed dark navy by design,
+     modeled on a reference screenshot's icon rail that stays dark against a
+     light canvas. In dark mode there's no such contrast to create — the main
+     canvas is already near-black — so that same fixed navy just reads as an
+     unrelated blue tint against the rest of the neutral dark palette (Jason
+     flagged this live, 2026-08-02: "the blue bar... needs to match the rest
+     of the application... maybe a dark grey"). Redefining the sidebar tokens
+     here to reuse the app's own dark-mode surface tokens instead of an
+     independent navy palette — same flush-with-canvas, border-only-separation
+     structure already used for the rest of dark mode (and the same principle
+     the earlier "Sidebar restructured to match Linear" pass established,
+     which this token override restores for dark mode specifically).
+     --color-sidebar-active isn't listed here on purpose — it's already
+     `var(--color-primary)` at the top level, so it resolves to this block's
+     own --color-primary (coral) automatically. */
+  --color-sidebar-bg: var(--color-surface);
+  --color-sidebar-container: var(--color-surface-container-high);
+  --color-sidebar-border: var(--color-outline-variant);
+  --color-sidebar-hover: var(--color-surface-container-high);
+  --color-sidebar-text: var(--color-on-surface-variant);
+  --color-sidebar-text-active: var(--color-on-surface);
+
+  /* --color-logo-icon override — see top-level definition for rationale. */
+  --color-logo-icon: var(--color-primary);
 }
 
 /* --- Native UI hint --- */

@@ -16,6 +16,7 @@ import {
   passesTargetRoleTitleScope,
   passesIndustryGate,
   passesGeographicGate,
+  passesYearsExperienceGate,
   passesCompanyBlocklist,
   titleMatchesBlocked,
   type GateConfig,
@@ -160,6 +161,15 @@ export async function runConnectorOrchestration(
           }
           if (!passesGeographicGate(scraped, gateConfig)) {
             filtered++;
+            continue;
+          }
+          if (!passesYearsExperienceGate(scraped, gateConfig)) {
+            filtered++;
+            logActivity(
+              'INFO',
+              source,
+              `[REJECT] ${job.title} at ${job.company} - years experience exceeds max+buffer`,
+            );
             continue;
           }
 

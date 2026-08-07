@@ -112,6 +112,24 @@ function hasResumeAndCoverPdfs(folder: string): boolean {
   }
 }
 
+/**
+ * True when a folder holds Stage 0 fit-gate output from generate-submission/SKILL.md but hasn't
+ * reached Stage 1 drafting yet (2026-08-03, Jason-prompted after a real data loss). Stage 0's own
+ * step 5 tells an agent to persist stage0_fit_gate.json + Original_JD.txt in the submission folder
+ * ahead of drafting, as a deliberate hold point between triage and authoring -- but
+ * reconcileActiveSubmissionFolders() ran on every server startup and treated exactly that folder
+ * shape (no PDFs, no jobs row yet) as an "orphan stub" and fs.rmSync'd it. Five real Tier-2
+ * fit-gate folders were deleted this way the first time a dev server restarted mid-batch. A folder
+ * carrying this file is legitimate in-progress work, not cruft -- exempt it from the orphan sweep.
+ */
+function hasStage0FitGate(folder: string): boolean {
+  try {
+    return fs.existsSync(path.join(folder, 'stage0_fit_gate.json'));
+  } catch {
+    return false;
+  }
+}
+
 function findJobsForFolder(folderName: string): { company: string; status: string }[] {
   const rows = db.prepare('SELECT company, status FROM jobs').all() as { company: string; status: string }[];
   return rows.filter(j => folderNamesMatch(companySlug(j.company), folderName));
@@ -140,10 +158,11 @@ export function reconcileActiveSubmissionFolders(): { archived: string[]; remove
     if (hasResumeAndCoverPdfs(activePath)) {
       const company = matches[0]?.company ?? folderName;
       if (archiveActiveSubmission(company)) archived.push(folderName);
-    } else {
+    } else if (!hasStage0FitGate(activePath)) {
       fs.rmSync(activePath, { recursive: true, force: true });
       removed.push(folderName);
     }
+    // else: Stage 0 fit-gate-only folder, no PDFs yet -- leave it in place, see hasStage0FitGate().
   }
 
   return { archived, removed };

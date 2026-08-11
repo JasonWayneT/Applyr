@@ -29,3 +29,39 @@ When status is `ready`, the author may use **only**:
 - the short authoring prompt contract (Epic 5).
 
 It must not load `agent_context_pack.md`, full `CLAUDE.md`, or the full claims catalog as drafting inputs.
+
+## CR-085 (2026-08-10): jd_buckets and hard_constraints trimmed
+
+`jd_buckets.required`/`preferred`/`responsibilities` are always empty in the assembled
+packet. `build_evidence_map` emits exactly one row per Stage-0 item in each of those three
+buckets (same order, unconditionally), so the text is always fully reconstructable from
+`evidence_map` — populating both duplicated the same JD requirement text a second time in
+the serialized prompt. Only `culture` (which has no `evidence_map` counterpart) is still
+populated. All four keys remain present so the schema's required-keys check still passes.
+
+`hard_constraints` is trimmed to two items (verbatim-copy rule + geo-collaboration note).
+The other six are redundant with `authoring_rule_digest.md`, which is loaded into every
+author session alongside this packet.
+
+Excerpts prefer each claim's own `text` field (merged in from `master_claims.json` by
+`load_claims`) over regex-slicing `workExperience.md` by `project_id`. This is also what
+resolves the historical duplicate-excerpt problem across a project's lenses (e.g.
+`ACC-102-TECH` vs `ACC-102-BUS`) — each lens now has genuinely distinct text instead of
+falling back to the same single `[ACC-NNN]` bracket-marker slice.
+
+`evidence_map` claim selection is capped at `_MAX_SLOTS_PER_PROJECT` (3) rows per
+underlying project, applied globally across the whole map — a capped-out claim is replaced
+by that requirement's own next-best-scoring match, never dropped silently (a required item
+with no viable fallback still trips Rule 1 above, same as before this CR).
+
+## Intentionally omitted fields (Cluster C item 11, 2026-08-08)
+
+The packet schema does **not** include name, contact, location, education line, or
+historical job titles/dates. That is deliberate: those values are static PII /
+ground-truth identity fields with zero JD-specific reasoning value, and sending them
+into a cloud author call is unnecessary risk.
+
+Closed-world compose may leave digest-template placeholders (`# [Name]`, `[Location]`,
+`[Degree]`, `### [Title] | …`). The canonical fix is **not** expanding the packet —
+it is `scripts/apply_resume_header.py`, which `author_from_packet.py --verify-only`
+runs before lint. Do not invent header content in the cloud author session.

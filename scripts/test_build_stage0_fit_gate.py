@@ -30,6 +30,8 @@ from build_stage0_fit_gate import (
     classify_gaps,
     build_stage0_fit_gate,
     _load_anchor_vocab,
+    _has_extraction_override,
+    batch_report,
 )
 from stage0_prefs_gate import (
     run_prefs_gate,
@@ -265,6 +267,29 @@ class TestThinJd(unittest.TestCase):
         result = _build(_CLEAN_PM_JD)
         self.assertFalse(result["thin_jd"], "full JD should not be thin")
 
+    def test_sparse_headerless_prose_over_80_words_is_thin(self):
+        """Cluster C item 10: clear_capital-class ~99-word headerless prose."""
+        # ~99 words, no Requirements/What we're looking for headers → 0 requireds.
+        words = (
+            "Clear Capital is hiring a Product Manager to own roadmap work across "
+            "data products and client workflows in real estate valuation. "
+            "You will partner with engineering and stakeholders, ship incremental "
+            "improvements, and use data to prioritize. The role needs someone who "
+            "can write crisp specs, run discovery with customers, and keep delivery "
+            "honest when scope shifts. Experience with SaaS platforms, analytics, "
+            "and cross-functional alignment matters. Apply with a resume that shows "
+            "ownership of ambiguous problems and measurable outcomes over several "
+            "years of product work in enterprise software environments today."
+        )
+        self.assertGreaterEqual(len(words.split()), 80)
+        self.assertLess(len(words.split()), 150)
+        self.assertTrue(
+            _detect_thin_jd(words, required_items=[]),
+            "headerless sparse prose under 150 words with 0 requireds must be thin",
+        )
+        # Same word count but with extractable requireds is not thin.
+        self.assertFalse(_detect_thin_jd(words, required_items=["a", "b"]))
+
 
 # ---------------------------------------------------------------------------
 # Test: Stage signal detection
@@ -296,6 +321,292 @@ class TestSectionExtraction(unittest.TestCase):
     def test_responsibilities_extracted(self):
         sections = _extract_sections(_CLEAN_PM_JD)
         self.assertGreater(len(sections["responsibilities"]), 0)
+
+    def test_curly_apostrophe_headers_extract(self):
+        """Greenhouse-style curly apostrophes must not empty the buckets."""
+        jd = textwrap.dedent(
+            """
+            Product Manager
+
+            What you\u2019ll do:
+            - Own the product roadmap and backlog for digital servicing
+            - Partner with engineering and design on delivery
+
+            What we\u2019re looking for:
+            - 3+ years of product management experience
+            - Strong analytical and communication skills
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreater(len(sections["responsibilities"]), 0)
+        self.assertGreater(len(sections["required"]), 0)
+
+    def test_pinterest_tail_boilerplate_not_in_required(self):
+        """Relocation / Inclusion / salary after quals must not become soft-gap bait."""
+        jd = textwrap.dedent(
+            """
+            Product Manager II, Search Experience
+
+            What you\u2019ll do:
+            - Develop and execute a cohesive Search strategy and roadmap
+
+            What we\u2019re looking for:
+            Strong product sense: Strong product sense and ability to collaborate and get buy-in.
+            Experience building AI/ML products: Demonstrated success working on AI/ML based products.
+            Bring structure to ambiguity: Proven ability to lead in ambiguous environments.
+            Bachelor\u2019s degree in a relevant field such as computer science or equivalent experience.
+
+            Relocation Statement:
+
+            This position is not eligible for relocation assistance. Visit our PinFlex page to learn more about our working model.
+
+            In-Office Requirement Statement:
+
+            This role will need to be in the office for in-person collaboration 1-2 times/quarter.
+
+            #LI-NM4
+
+            #LI-REMOTE
+
+            Information regarding the culture at Pinterest and benefits available for this position can be found here.
+
+            US based applicants only
+            $114,297\u2014$235,319 USD
+
+            Our Commitment to Inclusion:
+
+            Pinterest is an equal opportunity employer and makes employment decisions on the basis of merit.
+            """
+        )
+        sections = _extract_sections(jd)
+        required_blob = " | ".join(sections["required"]).lower()
+        self.assertGreaterEqual(len(sections["required"]), 3)
+        self.assertTrue(any("product sense" in r.lower() for r in sections["required"]))
+        self.assertTrue(any("ai/ml" in r.lower() for r in sections["required"]))
+        for junk in (
+            "relocation",
+            "pinflex",
+            "inclusion",
+            "equal opportunity",
+            "us based applicants",
+            "114,297",
+            "#li-",
+            "in-office",
+        ):
+            self.assertNotIn(junk, required_blob, f"junk leaked into required: {junk}")
+
+    def test_labeled_requirement_with_colon_body_kept(self):
+        """'Label: body…' hire criteria must not be treated as section-ending headers."""
+        jd = textwrap.dedent(
+            """
+            What we're looking for:
+            Strong product sense: Ability to collaborate and set longer term vision.
+            Technical strength: Partner closely with Engineering on Machine Learning.
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertEqual(len(sections["required"]), 2)
+
+    def test_success_metrics_section_not_in_required(self):
+        """Post-hire KPI sections ('Success Metrics' / 'will be measured on:') are
+        not candidate requirements -- found 2026-08-07 on envision_technology_solutions,
+        where these bled into required and produced fake soft-gap noise."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+
+            5-8+ years of experience in Product Ownership or Product Management.
+            At least 3 years of experience working within Agile/Scrum teams.
+
+            Success Metrics
+
+            The successful Product Owner will be measured on:
+
+            Delivery predictability and sprint success
+            Stakeholder satisfaction
+            Reduction in production defects due to requirement clarity
+            """
+        )
+        sections = _extract_sections(jd)
+        required_blob = " | ".join(sections["required"]).lower()
+        self.assertTrue(any("5-8+ years" in r for r in sections["required"]))
+        for junk in ("stakeholder satisfaction", "delivery predictability", "production defects"):
+            self.assertNotIn(junk, required_blob, f"post-hire KPI leaked into required: {junk}")
+
+    def test_colon_leadin_not_captured_as_standalone_item(self):
+        """A short lead-in line ending in a bare colon ('Experience working on one
+        or more of:') is an intro to the list below it, not a requirement on its
+        own -- found 2026-08-07 on envision_technology_solutions. The real items
+        below the lead-in must still be captured."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+
+            Experience working on one or more of:
+
+            eCommerce Platforms
+            Digital Commerce Marketplace
+
+            Hands-on experience with:
+
+            Agile Product Management Tools
+            """
+        )
+        sections = _extract_sections(jd)
+        required_blob = " | ".join(sections["required"]).lower()
+        self.assertNotIn("experience working on one or more of", required_blob)
+        self.assertNotIn("hands-on experience with", required_blob)
+        self.assertTrue(any("ecommerce platforms" in r.lower() for r in sections["required"]))
+        self.assertTrue(any("agile product management" in r.lower() for r in sections["required"]))
+
+    def test_benefits_eeo_other_duties_headers_end_required(self):
+        """'We Offer All Full-time Team Members' / 'AAP/EEO Statement' / 'Other
+        Duties' are boilerplate section headers, not requirement headers -- found
+        2026-08-07 on ncontracts, where an entire benefits/EEO/legal list bled
+        into required (11 paid holidays, 401k, AAP/EEO statement text)."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+
+            3+ years of relevant B2B SaaS product management experience.
+
+            We Offer All Full-time Team Members
+
+            11 paid holidays per year
+            401k with company match
+
+            AAP/EEO Statement
+
+            We are an equal opportunity employer and value diversity.
+
+            Other Duties
+
+            This job description is not an exhaustive list of duties.
+            """
+        )
+        sections = _extract_sections(jd)
+        required_blob = " | ".join(sections["required"]).lower()
+        self.assertTrue(any("b2b saas" in r.lower() for r in sections["required"]))
+        for junk in ("paid holidays", "401k", "equal opportunity", "exhaustive list of duties"):
+            self.assertNotIn(junk, required_blob, f"benefits/EEO/legal boilerplate leaked into required: {junk}")
+
+    def test_recruiter_third_person_leadin_recognized(self):
+        """'A few things they're looking for:' (recruiter's third-person phrasing)
+        must open the required bucket -- found 2026-08-07 on w_talent_client, where
+        this phrasing wasn't recognized at all and the entire required bucket
+        extracted empty, silently missing a real hard requirement."""
+        jd = textwrap.dedent(
+            """
+            A few things they're looking for:
+
+            Capital Markets experience is essential.
+            5+ years of product management experience.
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        self.assertTrue(any("capital markets" in r.lower() for r in sections["required"]))
+
+    def test_inline_is_preferred_routes_to_preferred_bucket(self):
+        """A line that self-labels 'is preferred' should land in the preferred
+        bucket even though the surrounding section header is 'Qualifications' --
+        found 2026-08-07 on envision_technology_solutions, where the CSPO
+        certification line stayed lumped into required as a hard requirement."""
+        jd = textwrap.dedent(
+            """
+            Qualifications
+
+            Bachelor's degree in Business, Computer Science, or a related field.
+            Certified Scrum Product Owner (CSPO) or equivalent certification is preferred.
+            """
+        )
+        sections = _extract_sections(jd)
+        required_blob = " | ".join(sections["required"]).lower()
+        self.assertNotIn("cspo", required_blob)
+        self.assertTrue(any("cspo" in p.lower() for p in sections["preferred"]))
+
+    def test_cr086_amn_job_responsibilities_header_switches_bucket(self):
+        """CR-086: 'Job Responsibilities' mid-JD must switch to responsibilities,
+        not land as a required *item* (AMN Healthcare bleed)."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+
+            4+ years of product management experience in SaaS.
+            Hands-on experience using AI/ML in daily product workflows.
+
+            Job Responsibilities
+
+            Evaluate market trends and competitors to improve the product.
+            Develop product briefs and define achievable acceptance criteria.
+
+            Work Environment / Physical Requirements
+
+            Work is performed in an office/home office environment.
+            Team Members must have the ability to operate standard office equipment and keyboards.
+            AMN Healthcare will provide reasonable accommodations to qualified individuals with disabilities to perform essential functions.
+            Final pay rate is dependent on experience, training, education, and location.
+
+            Our Core Values
+
+            At AMN we recognize that in-person connections have value.
+            """
+        )
+        sections = _extract_sections(jd)
+        required_blob = " | ".join(sections["required"]).lower()
+        resp_blob = " | ".join(sections["responsibilities"]).lower()
+        all_scored = " | ".join(
+            sections["required"] + sections["preferred"] + sections["responsibilities"]
+        ).lower()
+
+        self.assertNotIn("job responsibilities", required_blob)
+        self.assertNotIn("work environment", required_blob)
+        self.assertNotIn("our core values", required_blob)
+        self.assertTrue(any("4+" in r or "years" in r.lower() for r in sections["required"]))
+        self.assertTrue(any("market trends" in r.lower() for r in sections["responsibilities"]))
+        self.assertTrue(any("product briefs" in r.lower() for r in sections["responsibilities"]))
+        for junk in (
+            "office/home office",
+            "office equipment",
+            "reasonable accommodations",
+            "final pay rate",
+        ):
+            self.assertNotIn(junk, all_scored, f"physical/comp/ADA boilerplate leaked: {junk}")
+        # Core values body should not stay in required
+        self.assertNotIn("in-person connections", required_blob)
+
+    def test_cr086_orphan_header_item_dropped(self):
+        """Belt-and-suspenders: a bare Title-Case label with no verb is not a criterion."""
+        from build_stage0_fit_gate import _is_boilerplate_item, _is_orphan_header_item
+
+        self.assertTrue(_is_orphan_header_item("Job Responsibilities"))
+        self.assertTrue(_is_orphan_header_item("Our Core Values"))
+        self.assertTrue(_is_boilerplate_item("Job Responsibilities"))
+        # Real criteria must survive
+        self.assertFalse(
+            _is_orphan_header_item(
+                "3-5 years of product management experience in a B2B SaaS environment"
+            )
+        )
+        self.assertFalse(
+            _is_boilerplate_item(
+                "3-5 years of product management experience in a B2B SaaS environment"
+            )
+        )
+
+    def test_domain_qualified_preferred_is_soft_gap(self):
+        """Banking+compliance preferred stays SOFT even if 'compliance' tags match."""
+        vocab = _load_anchor_vocab()
+        # Ensure compliance-ish anchors exist so this isn't a no-anchor soft gap
+        vocab = set(vocab) | {"compliance", "regulatory", "privacy"}
+        prefs = [
+            "Familiarity with regulatory and compliance considerations in banking product development."
+        ]
+        _, classified_pref, flagged = classify_gaps([], prefs, vocab=vocab)
+        self.assertTrue(classified_pref[0]["gap"])
+        self.assertEqual(classified_pref[0]["gap_class"], "SOFT")
+        self.assertTrue(classified_pref[0].get("domain_soft"))
+        self.assertTrue(any("banking" in g["item"].lower() for g in flagged))
 
 
 # ---------------------------------------------------------------------------
@@ -589,6 +900,59 @@ class TestWriteToDisk(unittest.TestCase):
         self.assertTrue(out_path.exists())
         loaded = json.loads(out_path.read_text())
         self.assertEqual(loaded["decision"], result["decision"])
+
+
+class TestExtractionOverrideProtection(unittest.TestCase):
+    """Found 2026-08-08 (session-005 R14): a bare re-run had zero awareness of a
+    hand-corrected extraction_override:true flag and would silently clobber it."""
+
+    def _protected_folder(self) -> Path:
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        out_path = folder / "stage0_fit_gate.json"
+        out_path.write_text(
+            json.dumps({"tier": "Tier 2", "decision": "PASS", "extraction_override": True,
+                        "override_reason": "hand-reconstructed, extractor mis-parsed"}, indent=2),
+            encoding="utf-8",
+        )
+        return folder
+
+    def test_has_extraction_override_detects_flag(self):
+        folder = self._protected_folder()
+        self.assertTrue(_has_extraction_override(folder / "stage0_fit_gate.json"))
+
+    def test_has_extraction_override_false_when_absent(self):
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        self.assertFalse(_has_extraction_override(folder / "stage0_fit_gate.json"))
+
+    def test_has_extraction_override_false_when_no_file(self):
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        missing = folder / "does_not_exist.json"
+        self.assertFalse(_has_extraction_override(missing))
+
+    def test_batch_report_does_not_overwrite_protected_folder_by_default(self):
+        folder = self._protected_folder()
+        out_path = folder / "stage0_fit_gate.json"
+        before = out_path.read_text(encoding="utf-8")
+        batch_report([folder], write=True, force=False)
+        after = out_path.read_text(encoding="utf-8")
+        self.assertEqual(before, after, "protected gate must not be overwritten without --force")
+
+    def test_batch_report_overwrites_protected_folder_with_force(self):
+        folder = self._protected_folder()
+        out_path = folder / "stage0_fit_gate.json"
+        before = out_path.read_text(encoding="utf-8")
+        batch_report([folder], write=True, force=True)
+        after = out_path.read_text(encoding="utf-8")
+        self.assertNotEqual(before, after, "--force must overwrite even a protected gate")
+        loaded = json.loads(after)
+        self.assertNotIn("extraction_override", loaded, "a fresh run's own output has no override flag")
+
+    def test_batch_report_writes_unprotected_folder_normally(self):
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        out_path = folder / "stage0_fit_gate.json"
+        self.assertFalse(out_path.exists())
+        batch_report([folder], write=True, force=False)
+        self.assertTrue(out_path.exists())
 
 
 # ---------------------------------------------------------------------------

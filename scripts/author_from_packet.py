@@ -17,9 +17,12 @@ Default mode (--prompt-only / no flags):
     Print: PROMPT_READY — {company} — ~{tokens} input — paste authoring_prompt.md into a fresh agent
 
 Verify mode (--verify-only):
-    Post-author mechanical gate: run lint, ground-truth coverage, and JD term checks
-    against Resume.md + CoverLetter.md already in the folder.
-    Exit 0 on clean pass; exit 1 on any hard block.
+    First enforces Stage 1 exit (CR-075): authoring_packet.json with packet_status=ready
+    plus Resume.md and CoverLetter.md must exist -- no --force override for this gate.
+    Then runs apply_resume_header.py (deterministic PII/header/education patch — packet
+    intentionally has no name/contact fields), then the post-author mechanical gate: lint,
+    ground-truth coverage, and JD term checks against those documents.
+    Exit 0 on clean pass; exit 1 on Stage 1 gate failure or any hard block.
 
 Fix-loop protocol (as per CR-074-authoring-prompt.md):
     After composing, run --verify-only. If FAIL, the agent re-edits using
@@ -27,6 +30,9 @@ Fix-loop protocol (as per CR-074-authoring-prompt.md):
     before escalating to Jason.
 
 Usage:
+    # Prefer the orchestrator for normal progression/completion:
+    #   python scripts/run_submission.py data/submissions/COMPANY [--resume|--finalize]
+    # This script remains a debug/worker CLI the orchestrator calls:
     python scripts/author_from_packet.py data/submissions/COMPANY
     python scripts/author_from_packet.py data/submissions/COMPANY --force
     python scripts/author_from_packet.py data/submissions/COMPANY --verify-only
@@ -43,6 +49,11 @@ from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
+
+sys.path.insert(0, str(_SCRIPT_DIR))
+import contracts  # noqa: E402
+import stage_gate  # noqa: E402
+from stage_gate import StageGateForceError  # noqa: E402
 
 _RULE_DIGEST_PATH = _REPO_ROOT / "data" / "authoring_rule_digest.md"
 _RULE_DIGEST_VERSION_PATH = _REPO_ROOT / "data" / "authoring_rule_digest.version"
@@ -61,11 +72,36 @@ Do not load any external file. Do not call any tool (tools are not needed for v1
 The packet field `packet_status` MUST be "ready" before you proceed.
 If it is not "ready", stop and print the incomplete_reasons — do not draft.
 
-Output exactly two fenced Markdown code blocks in this order:
+`jd_buckets` below only lists culture/values items (not tied to specific evidence).
+Required, preferred, and responsibility JD items appear in `evidence_map` together with
+their claim_ids — there is no separate list of them elsewhere in this packet.
+
+Output exactly three fenced code blocks in this order:
   1. A block labeled "Resume.md" containing the full resume Markdown.
   2. A block labeled "CoverLetter.md" containing the full cover letter Markdown.
+  3. A block labeled "claim_provenance.json" containing a JSON object that records, for every
+     bullet and proof point you just drafted, which packet claim_ids you used to back it. You
+     are already choosing this evidence from the packet's evidence_map as you write each
+     bullet — this block just records the choice you already made, it is not new work. Exact
+     schema:
+       {
+         "company": "<packet's company>",
+         "resume_claims": [
+           {"bullet": "<first several words or full text of the bullet>", "claim_ids": ["ACC-104", "MET-10"]},
+           ...
+         ],
+         "cover_letter_claims": [
+           {"proof_point": "<first several words or full text of the proof point>", "claim_ids": ["ACC-117"]},
+           ...
+         ]
+       }
+     Use only claim_ids present in the packet below. Every resume bullet and every cover
+     letter proof point needs at least one claim_id.
 
-Do not output anything else between the two blocks.\
+Write each block to its own file in this submission folder, named exactly after the block's
+label: Resume.md, CoverLetter.md, and claim_provenance.json.
+
+Do not output anything else between the three blocks.\
 """
 
 
@@ -202,6 +238,35 @@ def build_authoring_prompt(
 # Post-author gate (Story 5.3)
 # ---------------------------------------------------------------------------
 
+def _apply_resume_header_if_available(folder: Path) -> str:
+    """Deterministic PII/header/education patch (Cluster C item 11).
+
+    Packet intentionally omits name/contact/location/education/dates so cloud
+    authoring never receives real PII. Placeholders left by closed-world compose
+    are substituted from workExperience.md via apply_resume_header.py before lint.
+    """
+    try:
+        from apply_resume_header import load_real_header, patch_file  # type: ignore
+    except Exception as exc:
+        return f"SKIP [apply_resume_header] — import failed: {exc}"
+
+    try:
+        header = load_real_header()
+    except Exception as exc:
+        return f"SKIP [apply_resume_header] — {exc}"
+
+    parts: list[str] = []
+    for fname in ("Resume.md", "CoverLetter.md"):
+        path = folder / fname
+        if not path.exists():
+            continue
+        result = patch_file(str(path), header)
+        parts.append(f"{fname}: {result}")
+    if not parts:
+        return "SKIP [apply_resume_header] — no Resume.md/CoverLetter.md"
+    return "PASS [apply_resume_header]: " + "; ".join(parts)
+
+
 def _run_subprocess_check(script: str, folder: Path) -> tuple[bool, str]:
     """Run a script against folder; return (passed, summary_line).
 
@@ -266,6 +331,9 @@ def run_verify_only(folder: Path) -> bool:
         print("\nVERIFY RESULT: FAIL")
         return False
 
+    # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
+    lines.append(_apply_resume_header_if_available(folder))
+
     # 2. Lint Resume.md + CoverLetter.md only (never authoring_prompt.md —
     # that file lists forbidden phrases as negative examples and would false-fail).
     try:
@@ -313,11 +381,113 @@ def run_verify_only(folder: Path) -> bool:
             passed = False
             lines.append(summary)
 
+    # 5. Round 4 optimization bar — soft_gap + required evidence_map claim_ids
+    # must appear in claim_provenance.json (fail-closed; coverage ATTENTION stays WARN).
+    opt_ok, opt_lines = _check_optimization_bar_provenance(folder)
+    lines.extend(opt_lines)
+    if not opt_ok:
+        passed = False
+
     # Summary
     print("\n".join(lines))
     verdict = "PASS" if passed else "FAIL"
     print(f"\nVERIFY RESULT: {verdict} — {folder.name}")
     return passed
+
+
+def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
+    """Fail-closed: packet soft_gap / required claim_ids must be cited in provenance."""
+    lines: list[str] = []
+    packet_path = folder / "authoring_packet.json"
+    prov_path = folder / "claim_provenance.json"
+    if not packet_path.exists():
+        lines.append("FAIL [optimization_bar]: authoring_packet.json not found")
+        return False, lines
+    if not prov_path.exists():
+        lines.append(
+            "FAIL [optimization_bar]: claim_provenance.json not found — every soft_gap "
+            "and required evidence_map claim_id must be cited before Stage 1 exit"
+        )
+        return False, lines
+
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        lines.append(f"FAIL [optimization_bar]: could not parse packet/provenance: {exc}")
+        return False, lines
+
+    cited: set[str] = set()
+    for section in ("resume_claims", "cover_letter_claims"):
+        for row in provenance.get(section) or []:
+            if not isinstance(row, dict):
+                continue
+            for cid in row.get("claim_ids") or []:
+                if isinstance(cid, str) and cid.strip():
+                    cited.add(cid.strip())
+                    # Also accept base ACC-107 when provenance cites ACC-107-COMPLIANCE
+                    base = cid.split("-")
+                    if len(base) >= 2:
+                        cited.add("-".join(base[:2]) if base[0] in ("ACC", "MET", "VOC") else cid)
+
+    def _id_used(cid: str) -> bool:
+        if cid in cited:
+            return True
+        # packet may use ACC-107-COMPLIANCE while provenance cites ACC-107
+        parts = cid.split("-")
+        if len(parts) >= 2 and parts[0] in ("ACC", "MET", "VOC"):
+            base = f"{parts[0]}-{parts[1]}"
+            if base in cited:
+                return True
+            if any(c.startswith(base) for c in cited):
+                return True
+        return any(c.startswith(cid) or cid.startswith(c) for c in cited)
+
+    ok = True
+    for sg in packet.get("soft_gaps") or []:
+        if not isinstance(sg, dict):
+            continue
+        if (sg.get("class") or "SOFT") == "HARD":
+            continue
+        item = (sg.get("item") or "")[:80]
+        ids = [c for c in (sg.get("claim_ids") or []) if isinstance(c, str) and c.strip()]
+        if not ids:
+            # extraction_empty / incomplete packet — surface but don't double-fail here
+            if "empty buckets" in (sg.get("item") or "").lower():
+                continue
+            lines.append(
+                f"FAIL [optimization_bar]: soft_gap has no claim_ids — {item}"
+            )
+            ok = False
+            continue
+        unused = [c for c in ids if not _id_used(c)]
+        # Soft gap passes if at least one mapped claim_id is cited
+        if len(unused) == len(ids):
+            lines.append(
+                f"FAIL [optimization_bar]: soft_gap bridge unused — {item} "
+                f"(need one of: {', '.join(ids)})"
+            )
+            ok = False
+
+    for row in packet.get("evidence_map") or []:
+        if not isinstance(row, dict):
+            continue
+        if row.get("bucket") != "required":
+            continue
+        ids = [c for c in (row.get("claim_ids") or []) if isinstance(c, str) and c.strip()]
+        if not ids:
+            continue
+        if all(not _id_used(c) for c in ids):
+            item = (row.get("jd_item") or "")[:80]
+            lines.append(
+                f"FAIL [optimization_bar]: required evidence unused — {item} "
+                f"(need one of: {', '.join(ids)})"
+            )
+            ok = False
+
+    if ok:
+        lines.append("PASS [optimization_bar]: soft_gap/required claim_ids cited in provenance")
+    return ok, lines
 
 
 # ---------------------------------------------------------------------------
@@ -363,7 +533,17 @@ Examples:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Ignore rule_digest_version mismatch and proceed anyway.",
+        help=(
+            "Compose mode: ignore rule_digest_version mismatch. "
+            "Verify-only mode (CR-075 Stage 2): with --force-reason, override a failed "
+            "Stage 2 gate when a rubric_score is present (AC10). Bare --force alone is "
+            "rejected at Stage 2."
+        ),
+    )
+    parser.add_argument(
+        "--force-reason",
+        default=None,
+        help="Required with --force at Stage 2 (--verify-only) when overriding check_stage2_ready.",
     )
     parser.add_argument(
         "--invoke",
@@ -382,8 +562,38 @@ Examples:
 
     # --verify-only mode
     if args.verify_only:
+        # CR-075 Story 4.3 / AC3: Stage 1 exit gate before mechanical checks.
+        # No --force override for packet_status (OQ-1) -- call contracts directly,
+        # not stage_gate.require_stage_ready, so there is no force path at all.
+        stage1_ok, stage1_errors = contracts.check_stage1_ready(str(folder))
+        if not stage1_ok:
+            print(f"{folder} is not ready for Stage 1 exit / Stage 2 entry:")
+            for err in stage1_errors:
+                print(f"  - {err}")
+            print(
+                "Fix the items above (ready authoring_packet.json + Resume.md + "
+                "CoverLetter.md). There is no --force override for this gate (AC3)."
+            )
+            sys.exit(1)
         ok = run_verify_only(folder)
-        sys.exit(0 if ok else 1)
+
+        # CR-075 Story 5.3: same Stage 2 verdict + force policy as verify_submission.py.
+        # --verify-only does not rewrite verification_receipt.json; it evaluates whatever
+        # receipt is already on disk (or reports INCOMPLETE if none).
+        any_failed = not ok
+        try:
+            gate_failed = stage_gate.apply_stage2_verdict(
+                str(folder),
+                force=bool(args.force),
+                force_reason=args.force_reason,
+                argv=sys.argv,
+            )
+        except StageGateForceError as exc:
+            print(str(exc), file=sys.stderr)
+            sys.exit(1)
+        if gate_failed:
+            any_failed = True
+        sys.exit(1 if any_failed else 0)
 
     # --invoke guard (v1: not implemented)
     if args.invoke:
@@ -431,4 +641,6 @@ Examples:
 
 
 if __name__ == "__main__":
+    from workflow.entry_warning import warn_worker_cli
+    warn_worker_cli("author_from_packet.py")
     _main()

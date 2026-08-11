@@ -7,16 +7,9 @@
   "tier": "Tier 1",
   "reach_out": false,
   "jd_buckets": {
-    "required": [
-      "5+ years product management on B2B SaaS platforms",
-      "Experience prioritizing roadmaps with engineering"
-    ],
-    "preferred": [
-      "Familiarity with SQL and analytics tools"
-    ],
-    "responsibilities": [
-      "Own platform reliability roadmap with cross-functional partners"
-    ],
+    "required": [],
+    "preferred": [],
+    "responsibilities": [],
     "culture": [
       "Customer-obsessed, pragmatic shipping culture"
     ]
@@ -55,10 +48,8 @@
   },
   "soft_gaps": [],
   "hard_constraints": [
-    "Use only claim_ids present in excerpts; never invent metrics or tools.",
-    "Resume: exact ## PROFESSIONAL SUMMARY / EXPERIENCE / EDUCATION headers; exactly 3 summary sentences; all three canonical roles.",
-    "Cover letter: argue fit; no gap-confession language; no em dashes or semicolons.",
-    "Do not copy excerpt sentences verbatim; write fresh from the facts."
+    "Do not copy excerpt sentences verbatim — author fresh prose from the facts. This applies even when an excerpt is a short, clean claim description (master_claims.json's `text` field) — it is grounding evidence, not draftable prose.",
+    "[EXAMPLE ONLY] Geo-collaboration note goes here (see _GEO_COLLAB_CONSTRAINT in build_authoring_packet.py)."
   ],
   "hook_fact": null,
   "rule_digest_version": "pending-epic-4",

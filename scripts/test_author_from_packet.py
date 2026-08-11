@@ -25,6 +25,7 @@ from author_from_packet import (
     _load_packet,
     build_authoring_prompt,
 )
+import contracts  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -276,6 +277,77 @@ class TestLoadCurrentDigestVersion(unittest.TestCase):
             digest_path = Path(tmpdir) / "authoring_rule_digest.md"
             result = _load_current_digest_version(version_path, digest_path)
             self.assertEqual(result, "")
+
+
+class TestStage1VerifyOnlyGate(unittest.TestCase):
+    """CR-075 Story 4.3: --verify-only calls check_stage1_ready before lint/coverage."""
+
+    def _run_verify_only(self, folder: Path) -> "subprocess.CompletedProcess":
+        import subprocess
+
+        return subprocess.run(
+            [
+                sys.executable,
+                str(Path(__file__).parent / "author_from_packet.py"),
+                str(folder),
+                "--verify-only",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_missing_packet_exits_nonzero_with_itemized_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "Resume.md").write_text("# Name\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("# Name\n", encoding="utf-8")
+            result = self._run_verify_only(folder)
+            self.assertNotEqual(result.returncode, 0)
+            combined = (result.stdout + result.stderr).lower()
+            self.assertIn("authoring_packet", combined)
+            self.assertIn("no --force", combined)
+
+    def test_incomplete_packet_not_bypassed_by_force_flag(self):
+        """AC3 / OQ-1: --force on --verify-only must NOT bypass packet_status."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "packet_status": "incomplete",
+                "incomplete_reasons": ["unmapped required: Foo"],
+            }
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(packet), encoding="utf-8"
+            )
+            (folder / "Resume.md").write_text("# Name\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("# Name\n", encoding="utf-8")
+            import subprocess
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).parent / "author_from_packet.py"),
+                    str(folder),
+                    "--verify-only",
+                    "--force",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            combined = (result.stdout + result.stderr).lower()
+            self.assertIn("packet_status", combined)
+
+    def test_check_stage1_ready_direct_for_missing_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(_READY_PACKET), encoding="utf-8"
+            )
+            (folder / "CoverLetter.md").write_text("# Name\n", encoding="utf-8")
+            ok, errors = contracts.check_stage1_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("Resume.md" in e for e in errors))
 
 
 if __name__ == "__main__":

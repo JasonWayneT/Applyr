@@ -22,10 +22,18 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from build_authoring_packet import (
+    _build_jd_buckets,
+    _build_soft_gaps,
     _check_fail_closed,
+    _claim_ids_for_soft_gap,
+    _distinctive_overlap,
     _employers_covered,
+    _excerpt_for_claim,
     _extract_excerpt_for_project,
+    _is_boilerplate_item,
+    _score_claims_for_item,
     _synthetic_excerpt,
+    _MAX_SLOTS_PER_PROJECT,
     assemble_packet,
     build_evidence_map,
     build_excerpts,
@@ -693,6 +701,375 @@ class TestSoftGapBridge(unittest.TestCase):
         soft_gaps = packet.get("soft_gaps", [])
         for g in soft_gaps:
             self.assertIn(g["class"], ("SOFT", "HARD"))
+
+    def test_soft_gaps_prefer_hand_claim_ids(self):
+        """Cluster C item 9: extraction_override hand claim_ids must not be dropped."""
+        stage0 = {
+            "flagged_gaps": [
+                {
+                    "item": "Prioritization Frameworks",
+                    "gap_class": "SOFT",
+                    "bridge_used": "ACC-105 bridge",
+                    "claim_ids": ["ACC-105-AGILE"],
+                }
+            ]
+        }
+        evidence_map = [
+            {
+                "jd_item": "Prioritization Frameworks (MoSCoW, RICE)",
+                "claim_ids": ["ACC-108-PROC"],
+            }
+        ]
+        gaps = _build_soft_gaps(stage0, evidence_map)
+        self.assertEqual(gaps[0]["claim_ids"], ["ACC-105-AGILE"])
+
+    def test_soft_gaps_normalized_and_containment_match(self):
+        """Cluster C item 9: exact-key miss still resolves via norm/containment."""
+        evidence_map = [
+            {
+                "jd_item": "Prioritization Frameworks (MoSCoW, RICE)",
+                "claim_ids": ["ACC-105-AGILE"],
+            }
+        ]
+        # Short label vs full evidence_map jd_item
+        ids = _claim_ids_for_soft_gap(
+            {"item": "Prioritization Frameworks", "gap_class": "SOFT"},
+            evidence_map,
+        )
+        self.assertEqual(ids, ["ACC-105-AGILE"])
+        # Whitespace/case drift
+        ids2 = _claim_ids_for_soft_gap(
+            {"item": "  prioritization   frameworks (moscow, rice) "},
+            evidence_map,
+        )
+        self.assertEqual(ids2, ["ACC-105-AGILE"])
+
+
+# ---------------------------------------------------------------------------
+# CR-075 Story 4.2 — Stage 0 CLI gate (exit non-zero unless --force)
+# ---------------------------------------------------------------------------
+
+class TestStage0CliGate(unittest.TestCase):
+    """CLI-level Stage 0 gate. Deliberately separate from build_packet() unit tests:
+    those still raise FileNotFoundError on missing stage0 (library API unchanged).
+    The exit-code change is only on the _main() gate path (CR-075 AC2)."""
+
+    def _run_cli(
+        self,
+        folder: Path,
+        extra_args: list[str] | None = None,
+        env_extra: dict[str, str] | None = None,
+    ) -> "subprocess.CompletedProcess":
+        import subprocess
+
+        cmd = [
+            sys.executable,
+            str(Path(__file__).parent / "build_authoring_packet.py"),
+            str(folder),
+            "--no-hook",
+            "--no-write",
+        ]
+        if extra_args:
+            cmd.extend(extra_args)
+        env = os.environ.copy()
+        if env_extra:
+            env.update(env_extra)
+        return subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+    def test_missing_stage0_exits_nonzero(self):
+        """CR-075 AC2: missing stage0_fit_gate.json must exit non-zero (was exit 0 pre-CR-075)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            result = self._run_cli(folder)
+            self.assertNotEqual(result.returncode, 0, msg=result.stderr)
+            self.assertTrue(
+                "stage0" in result.stderr.lower() or "not ready" in result.stderr.lower(),
+                msg=result.stderr,
+            )
+
+    def test_invalid_stage0_exits_nonzero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "stage0_fit_gate.json").write_text(
+                json.dumps({"company": "X"}),  # missing required list keys
+                encoding="utf-8",
+            )
+            result = self._run_cli(folder)
+            self.assertNotEqual(result.returncode, 0, msg=result.stderr)
+
+    def test_force_overrides_missing_stage0_gate(self):
+        """--force clears the gate (and logs); build_packet then fails with exit 0 (unchanged)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            log_path = Path(tmp) / "force_log.json"
+            # Gate was overridden: we should not see StageGateNotReadyError exit 1
+            # from the gate itself. build_packet fails -> exit 0.
+            result = self._run_cli(
+                folder,
+                extra_args=["--force"],
+                env_extra={"APPLYR_FORCE_OVERRIDE_LOG": str(log_path)},
+            )
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            self.assertTrue(log_path.exists(), "force override should have been logged")
+            records = json.loads(log_path.read_text(encoding="utf-8"))
+            self.assertEqual(records[-1]["stage"], "stage0")
+
+
+# ---------------------------------------------------------------------------
+# Test: CR-085 — dedup, domination cap, boilerplate filter
+# ---------------------------------------------------------------------------
+
+class TestExcerptForClaim(unittest.TestCase):
+
+    def test_prefers_claim_text_over_we_extraction(self):
+        rec = {"project_id": "ACC-101", "text": "Clean lens-specific claim text."}
+        excerpt = _excerpt_for_claim("ACC-101-TECH", rec, _WE_TEXT_FIXTURE, "")
+        self.assertEqual(excerpt, "Clean lens-specific claim text.")
+
+    def test_falls_back_to_we_extraction_when_text_missing(self):
+        rec = {"project_id": "ACC-101"}  # no 'text' field, matches tags-only fixtures
+        excerpt = _excerpt_for_claim("ACC-101-TECH", rec, _WE_TEXT_FIXTURE, "")
+        self.assertIn("stabilization", excerpt.lower())
+
+    def test_claim_text_truncated_to_max_chars(self):
+        rec = {"project_id": "ACC-101", "text": "X" * 600}
+        excerpt = _excerpt_for_claim("ACC-101-TECH", rec, _WE_TEXT_FIXTURE, "", max_chars=50)
+        self.assertEqual(len(excerpt), 50)
+
+    def test_distinct_lens_text_no_longer_collapses_to_same_string(self):
+        """Two lenses of the same project, each with its own text, must not produce
+        byte-identical excerpts (the pre-CR-085 duplicate-excerpt bug)."""
+        claims = {
+            "ACC-102-TECH": {"project_id": "ACC-102", "text": "Technical lens text."},
+            "ACC-102-BUS": {"project_id": "ACC-102", "text": "Business lens text."},
+        }
+        em = [
+            {"jd_item": "A", "bucket": "required", "claim_ids": ["ACC-102-TECH"], "bridge": None},
+            {"jd_item": "B", "bucket": "preferred", "claim_ids": ["ACC-102-BUS"], "bridge": None},
+        ]
+        excerpts = build_excerpts(em, claims, _WE_TEXT_FIXTURE, _AI_TEXT_FIXTURE)
+        self.assertNotEqual(excerpts["ACC-102-TECH"], excerpts["ACC-102-BUS"])
+
+
+class TestBoilerplateFilter(unittest.TestCase):
+
+    def test_known_boilerplate_phrases_detected(self):
+        self.assertTrue(_is_boilerplate_item("Excellent communication skills required"))
+        self.assertTrue(_is_boilerplate_item("Must be a team player"))
+        self.assertTrue(_is_boilerplate_item("Thrives in a fast-paced environment"))
+
+    def test_real_requirement_not_flagged(self):
+        self.assertFalse(_is_boilerplate_item("5+ years product management on B2B SaaS platforms"))
+        self.assertFalse(_is_boilerplate_item("Agile sprint planning and roadmap experience"))
+
+    def test_empty_string_not_flagged(self):
+        self.assertFalse(_is_boilerplate_item(""))
+
+    def test_boilerplate_preferred_item_dropped_from_evidence_map(self):
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [{"item": "Agile sprint planning and roadmap experience"}],
+            "preferred": [{"item": "Excellent communication skills"}],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, "agile roadmap", _CLAIMS_FIXTURE, _DISABLED_FIXTURE, jd_profile=None)
+        items = [r["jd_item"] for r in em]
+        self.assertNotIn("Excellent communication skills", items)
+
+    def test_boilerplate_required_item_never_dropped(self):
+        """Guardrail (session-007 R4): boilerplate filter must never touch required —
+        the fail-closed gate's unmapped-required-item rule must stay authoritative."""
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [{"item": "Excellent communication skills"}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, "communication", _CLAIMS_FIXTURE, _DISABLED_FIXTURE, jd_profile=None)
+        items = [r["jd_item"] for r in em if r["bucket"] == "required"]
+        self.assertIn("Excellent communication skills", items)
+
+
+class TestDominationCap(unittest.TestCase):
+
+    def test_no_project_exceeds_max_slots_and_alt_is_promoted(self):
+        """A dominant project's lenses win by score, but once it hits
+        _MAX_SLOTS_PER_PROJECT, subsequent rows fall back to their own next-best
+        candidate instead of the slot going empty or the same project repeating
+        unbounded (the real ACC-104-CS / ACC-113-ADOPTION domination pattern)."""
+        claims = {
+            "ACC-DOM-A": {"project_id": "ACC-DOM", "tags": ["Alpha", "Widget"], "metrics": []},
+            "ACC-DOM-B": {"project_id": "ACC-DOM", "tags": ["Alpha", "Widget"], "metrics": []},
+            "ACC-DOM-C": {"project_id": "ACC-DOM", "tags": ["Alpha", "Widget"], "metrics": []},
+            "ACC-DOM-D": {"project_id": "ACC-DOM", "tags": ["Alpha", "Widget"], "metrics": []},
+            "ACC-ALT-X": {"project_id": "ACC-ALT", "tags": ["Alpha"], "metrics": []},
+        }
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [
+                {"item": "Requires alpha widget work one"},
+                {"item": "Requires alpha widget work two"},
+                {"item": "Requires alpha widget work three"},
+                {"item": "Requires alpha widget work four"},
+            ],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, "alpha widget", claims, set(), jd_profile=None)
+
+        from collections import Counter
+        project_counts = Counter()
+        for row in em:
+            for cid in row["claim_ids"]:
+                project_counts[claims[cid]["project_id"]] += 1
+
+        self.assertLessEqual(project_counts["ACC-DOM"], _MAX_SLOTS_PER_PROJECT)
+        # The alternate project must have been promoted in once ACC-DOM capped out,
+        # not left as a dropped/empty slot.
+        self.assertGreater(project_counts["ACC-ALT"], 0)
+        # No row should be silently empty when a positive-scoring alternative exists.
+        self.assertTrue(all(row["claim_ids"] for row in em))
+
+
+class TestJdBucketsDedup(unittest.TestCase):
+
+    def test_required_preferred_responsibilities_empty_culture_kept(self):
+        buckets = _build_jd_buckets({
+            "required": [{"item": "5+ years PM experience"}],
+            "preferred": [{"item": "SQL experience"}],
+            "responsibilities": ["Own the roadmap"],
+            "culture": ["Customer-obsessed culture"],
+        })
+        self.assertEqual(buckets["required"], [])
+        self.assertEqual(buckets["preferred"], [])
+        self.assertEqual(buckets["responsibilities"], [])
+        self.assertEqual(buckets["culture"], ["Customer-obsessed culture"])
+
+
+class TestHardConstraintsTrimmed(unittest.TestCase):
+
+    def test_hard_constraints_is_two_items(self):
+        """CR-085: trimmed from 8 to 2 (verbatim-copy rule + geo note); the rest
+        duplicated authoring_rule_digest.md, which is loaded alongside every packet."""
+        from build_authoring_packet import _HARD_CONSTRAINTS
+        self.assertEqual(len(_HARD_CONSTRAINTS), 2)
+        self.assertTrue(any("verbatim" in c.lower() for c in _HARD_CONSTRAINTS))
+
+
+class TestItemOverlapPrecision(unittest.TestCase):
+    """CR-087: generic-token denylist + no jd_score-only Top-2 nomination."""
+
+    def test_team_alone_is_not_distinctive_overlap(self):
+        # Only shared token is generic "team"
+        self.assertEqual(
+            _distinctive_overlap({"team", "equipped", "epics"}, {"team", "cross"}),
+            set(),
+        )
+        self.assertEqual(
+            _distinctive_overlap({"agile", "sprint", "team"}, {"agile", "team", "planning"}),
+            {"agile"},
+        )
+
+    def test_camunda_epics_line_does_not_select_acc120(self):
+        """Regression: 'equip team for epics' must not map to ACC-120 via 'team'."""
+        claims = {
+            "ACC-120-AIRESEARCH": {
+                "employer": "cision",
+                "project_id": "ACC-120",
+                "lens": "airesearch",
+                "tags": [
+                    "AI Tools",
+                    "Prompt Engineering",
+                    "Content Generation Systems",
+                    "Cross-Team Learning",
+                ],
+                "metrics": [],
+            },
+            "ACC-107-PLATFORM": {
+                "employer": "cision",
+                "project_id": "ACC-107",
+                "lens": "platform",
+                "tags": ["Platform Architecture", "Automated Workflows", "Governance"],
+                "metrics": [],
+            },
+            "ACC-105-EXECUTION": {
+                "employer": "cision",
+                "project_id": "ACC-105",
+                "lens": "execution",
+                "tags": ["Prioritization", "Delivery", "Engineering Alignment", "Epics"],
+                "metrics": [],
+            },
+        }
+        item = "Keep the self-managed team equipped to work on the appropriate epics."
+        scored = _score_claims_for_item(item, claims, set(), jd_profile=None, jd_text=item)
+        positive = [(cid, s) for cid, s in scored if s > 0]
+        top_ids = [cid for cid, _ in positive[:2]]
+        self.assertNotIn("ACC-120-AIRESEARCH", top_ids)
+        # Distinctive overlap on "epics" should prefer ACC-105 when tagged for it
+        self.assertIn("ACC-105-EXECUTION", top_ids)
+        score_120 = next(s for cid, s in scored if cid == "ACC-120-AIRESEARCH")
+        self.assertEqual(score_120, 0)
+
+    def test_ai_item_still_boosts_acc120(self):
+        """Capability boost path must keep working when the JD actually names AI/ML."""
+        claims = {
+            "ACC-120-AIRESEARCH": {
+                "employer": "cision",
+                "project_id": "ACC-120",
+                "lens": "airesearch",
+                "tags": ["AI Tools", "Prompt Engineering", "Cross-Team Learning"],
+                "metrics": [],
+            },
+            "ACC-105-EXECUTION": {
+                "employer": "cision",
+                "project_id": "ACC-105",
+                "lens": "execution",
+                "tags": ["Prioritization", "Delivery"],
+                "metrics": [],
+            },
+        }
+        item = "Hands-on experience using AI/ML in daily product workflows (prompt engineering)."
+        scored = _score_claims_for_item(item, claims, set(), jd_profile=None, jd_text=item)
+        top = scored[0][0]
+        self.assertEqual(top, "ACC-120-AIRESEARCH")
+        self.assertGreater(scored[0][1], 10000)
+
+    def test_zero_overlap_jd_score_alone_does_not_fill_evidence_map(self):
+        """Full-JD relevance without item overlap must not occupy Top-2 slots."""
+        claims = {
+            "ACC-999-GENERIC": {
+                "employer": "cision",
+                "project_id": "ACC-999",
+                "lens": "generic",
+                # Shares only generic tokens with the item
+                "tags": ["Team", "Work", "Product Experience"],
+                "metrics": [],
+            },
+            "ACC-105-EXECUTION": {
+                "employer": "cision",
+                "project_id": "ACC-105",
+                "lens": "execution",
+                "tags": ["Prioritization", "Epics", "Backlog"],
+                "metrics": [],
+            },
+        }
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [],
+            "preferred": [],
+            "responsibilities": [
+                {"item": "Keep the self-managed team equipped to work on the appropriate epics."}
+            ],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, "epics backlog prioritization", claims, set(), jd_profile=None)
+        self.assertEqual(len(em), 1)
+        ids = em[0]["claim_ids"]
+        self.assertNotIn("ACC-999-GENERIC", ids)
+        self.assertIn("ACC-105-EXECUTION", ids)
 
 
 if __name__ == "__main__":

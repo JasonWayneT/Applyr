@@ -13,6 +13,8 @@ Usage:
     python scripts/build_stage0_fit_gate.py data/context_pack_validation/limble
 
 Exit: always 0; read "tier" and "decision" in the JSON to branch.
+Prefer ``python scripts/run_submission.py <folder>`` for normal progression
+(this script is a worker the orchestrator calls).
 
 No LLM / no Ollama required.
 """
@@ -141,7 +143,9 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
     ("required", re.compile(
         r"^(?:#+\s*)?"
         r"(?:requirements?|qualifications?|what\s+you(?:'|')ll?\s+(?:need|bring|have)|"
-        r"what\s+we(?:'|')re?\s+looking\s+for|who\s+you\s+are|must\s+have|"
+        r"what\s+we(?:'|')re?\s+looking\s+for|"
+        r"a\s+few\s+things\s+(?:they|we)(?:'|')re\s+looking\s+for|"
+        r"who\s+you\s+are|must\s+have|the\s+ideal\s+candidate|"
         r"minimum\s+qualifications?|required\s+(?:skills?|qualifications?|experience)|"
         r"key\s+requirements?|basic\s+qualifications?|you\s+bring|about\s+you|"
         r"experience\s+(?:required|needed)|"
@@ -153,32 +157,287 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         r"(?:preferred\s+(?:qualifications?|skills?|experience|requirements?)|"
         r"nice\s+to\s+have|bonus\s+(?:points?|if|qualifications?)|"
         r"additional\s+qualifications?|plus(?:es?)?|"
-        r"preferred|ideally\s+you|you\s+may\s+also\s+have)\b",
+        r"preferred|ideally\s+you|you\s+may\s+also\s+have|"
+        # CR-086: Thermo-class preferred lead-in headers ("Key Capabilities for Success:")
+        r"key\s+capabilities?(?:\s+for\s+success)?)\b",
         re.I,
     )),
     ("responsibilities", re.compile(
         r"^(?:#+\s*)?"
-        r"(?:responsibilities?|what\s+you(?:'|')ll?\s+do|"
+        r"(?:responsibilities?|what\s+you(?:'|')ll?\s+do|what\s+you\s+will\s+(?:do|be\s+doing|own)|"
         r"the\s+role|in\s+this\s+role|what\s+you(?:'|')ll?\s+(?:be\s+doing|own)|"
         r"key\s+responsibilities?|your\s+responsibilities?|"
+        # CR-086: AMN-class — "Job Responsibilities" mid-JD was captured as a required *item*
+        # because the header regex required the line to *start* with "responsibilities".
+        r"job\s+responsibilities?|"
         r"day.to.day|primary\s+responsibilities?|core\s+responsibilities?|"
         r"what\s+success\s+looks?\s+like|"
+        # CR-090 follow-up: measured 2026-08-10 -- this single header alone was the
+        # top blocker in 6 of 10 remaining incomplete real submissions (bled the
+        # company-intro paragraph, "You'll report to:", and downstream interview
+        # steps all into whatever bucket was active before it).
+        r"what\s+the\s+job\s+involves|"
         r"you\s+will)\b",
         re.I,
     )),
     ("culture", re.compile(
-        r"^(?:#+\s*)?"
+        # CR-089: tolerate a short company-name prefix before the trigger phrase
+        # (e.g. "LeafLink Perks & Benefits") -- header regexes anchored strictly at
+        # line-start silently fail on this very common real-world JD convention,
+        # leaving current_bucket unchanged so every benefits bullet underneath
+        # gets miscategorized as a requirement. Bounded to 0-3 short capitalized
+        # tokens so this can't drift into matching mid-paragraph.
+        r"^(?:#+\s*)?(?:[A-Z][\w'&.-]{1,20}\s+){0,3}"
         r"(?:about\s+us|our\s+(?:culture|values?|team|mission|company)|"
-        r"why\s+(?:us|join|we)|company\s+overview|who\s+we\s+are|"
+        # CR-086: "Our Core Values" did not match `our values` (intervening "Core").
+        r"(?:our\s+)?core\s+values?|"
+        r"why\s+(?:us|join|we|this\s+role)|company\s+overview|who\s+we\s+are|"
+        # CR-089: "What We Offer" / "Our Perks" were already filtered as orphan
+        # *items* (_ORPHAN_HEADER_LABEL_RE) but never redirected current_bucket,
+        # so this is the fix that actually stops the leak rather than just hiding
+        # the header line itself.
+        r"what\s+we(?:'|')ll?\s+offer|what\s+we\s+offer|our\s+perks|"
+        r"what\s+you(?:'|')ll?\s+(?:get|receive)|"
+        # CR-090 follow-up: measured 2026-08-10 -- neither a header-redirect trigger
+        # nor the orphan-item filter, so this fell straight through as a standalone
+        # required/preferred item on its own bucket-inheritance.
+        r"what'?s?\s+in\s+this\s+for\s+you|"
         r"benefits?|perks?|compensation)\b",
         re.I,
     )),
 ]
 
-_NEXT_MAJOR_SECTION_RE = re.compile(
-    r"^(?:#+\s*)?[A-Z][A-Za-z\s/&,']{3,60}(?::|$)",
-    re.MULTILINE,
+# Boilerplate / policy / EEO / logistics headers. Matching one ends the current
+# quals bucket and discards following body until another known section header.
+# Found 2026-08-07: Pinterest "What we're looking for" bled Relocation /
+# Inclusion / salary into required → fake soft gaps + optimization-bar noise.
+#
+# Anchored to end-of-line (optional colon) so "Remote: prioritizing CT/ET…" or
+# "Salary depends on experience and level" do NOT kill a live quals section.
+_IGNORE_SECTION_HEADERS = re.compile(
+    # CR-089: same company-name-prefix tolerance as the culture header above --
+    # "Company Perks & Benefits" style headers were silently defeating this
+    # anchored match too.
+    r"^(?:#+\s*)?(?:[A-Z][\w'&.-]{1,20}\s+){0,3}"
+    r"(?:"
+    r"relocation(?:\s+statement)?|"
+    r"in-?office(?:\s+requirement)?(?:\s+statement)?|"
+    r"remote\s+work(?:\s+(?:statement|policy|model))?|"
+    r"our\s+commitment\s+to\s+inclusion|"
+    r"commitment\s+to\s+(?:diversity|inclusion|equity)|"
+    r"equal\s+opportunity(?:\s+employer)?|"
+    r"eeo(?:\s+statement)?|"
+    r"aap\s*/\s*eeo(?:\s+statement)?|"
+    r"diversity(?:\s*,?\s*equity)?,?\s*(?:and\s+)?inclusion|"
+    r"salary(?:\s+range)?|"
+    r"compensation(?:\s+(?:and|&)\s+benefits)?|"
+    r"benefits(?:\s+(?:and|&)\s+perks)?|"
+    r"perks(?:\s+and\s+benefits)?|"
+    r"additional\s+information|"
+    r"legal\s+notices?|"
+    r"privacy\s+notice|"
+    r"accommodations?(?:\s+statement)?|"
+    r"about\s+(?:the\s+)?(?:interview|hiring)\s+process|"
+    r"(?:our\s+)?interview\s+process|"
+    r"success\s+metrics|"
+    r"(?:the\s+)?successful\s+(?:\w+\s+){0,4}will\s+be\s+measured\s+on|"
+    r"we\s+offer\s+all\s+(?:full-?time\s+)?(?:team\s+members|employees)|"
+    r"other\s+duties|"
+    # CR-086: physical / work-environment headers end quals collection
+    r"work\s+environment(?:\s*/\s*physical\s+requirements?)?|"
+    r"physical\s+requirements?|"
+    r"working\s+conditions?"
+    r")"
+    r"\s*:?\s*$",
+    re.I,
 )
+
+_TRACKING_TAG_RE = re.compile(r"^#li-[\w-]*\s*$", re.I)
+
+_BOILERPLATE_ITEM_RE = re.compile(
+    r"(?i)(?:"
+    r"relocation\s+assistance|"
+    r"not\s+eligible\s+for\s+relocation|"
+    r"relocation\s+statement|"
+    r"in-?office\s+requirement|"
+    r"equal\s+opportunity(?:\s*/\s*affirmative\s+action)?(?:\s+employer)?|"
+    r"commitment\s+to\s+inclusion|"
+    r"all\s+qualified\s+applicants\s+will\s+receive\s+consideration|"
+    r"without\s+regard\s+to\s+race|"
+    r"us[\s-]?based\s+applicants\s+only|"
+    r"by\s+submitting\s+this\s+application|"
+    r"base\s+salary\s+range|"
+    r"(?:typical\s+)?hiring\s+range|"
+    r"(?:expected\s+)?(?:base\s+)?(?:pay|salary)\s+range|"
+    r"target\s+salary\s+range|"
+    r"competitive\s+base\s+salary|"
+    r"discretionary\s+bonus|"
+    r"annual\s+base\s+salary|"
+    r"pay\s+rate\s*\$|"
+    r"us\s+hiring\s+range|"
+    r"position\s+is\s+(?:also\s+)?eligible\s+for\s+(?:total\s+compensation|equity)|"
+    r"visit\s+our\s+\w[\w\s-]{0,40}\s+page\s+to\s+learn\s+more|"
+    r"information\s+regarding\s+the\s+culture|"
+    r"benefits\s+available\s+for\s+this\s+position|"
+    r"pinflex|"
+    r"#li-|"
+    r"\$[\d,]+\.?\d*\s*[—–\-to]+\s*\$[\d,]+\.?\d*|"
+    r"rate:\s*~?\$|"
+    r"make\s+employment\s+decisions\s+on\s+the\s+basis\s+of\s+merit|"
+    r"protected\s+veteran|"
+    r"criminal\s+histories,?\s+consistent\s+with\s+legal|"
+    r"additional\s+compensation\s+such\s+as\s+bonus|"
+    r"dice\s+id\s*:|"
+    r"position\s+id\s*:|"
+    r"create\s+job\s+alert|"
+    r"search\s+all\s+similar\s+jobs|"
+    r"never\s+miss\s+an\s+opportunity|"
+    r"go\s+to\s+company\s+profile|"
+    r"posted\s+\d+\+?\s*days?\s+ago|"
+    r"view\s+all\s+(?:jobs|companies)\b|"
+    r"top\s+remote\s+companies|"
+    r"employers\s+have\s+access\s+to\s+artificial\s+intelligence\s+language\s+tools|"
+    r"our\s+interview\s+process|"
+    r"gone\s+through\s+the\s+interview\s+process|"
+    r"during\s+the\s+interview\s+process|"
+    r"hiring\s+and\s+interview\s+process|"
+    r"following\s+a\s+completed\s+interview\s+process|"
+    r"interview\s+process\s+meets\s+the\s+needs|"
+    r"image\s+\(video\s+or\s+screenshot\)\s+during\s+the\s+interview|"
+    # CR-086: physical / ADA / residual compensation lines that appear as "items"
+    r"work\s+is\s+performed\s+in\s+an\s+(?:office|home\s+office)|"
+    r"operate\s+standard\s+office\s+equipment|"
+    r"office\s+equipment\s+and\s+keyboards?|"
+    r"reasonable\s+accommodations?\s+to\s+qualified\s+individuals|"
+    r"individuals\s+with\s+disabilities\s+to\s+perform|"
+    r"final\s+pay\s+rate\s+is\s+dependent|"
+    r"pay\s+(?:rate|range)\s+is\s+dependent\s+on\s+experience|"
+    r"dependent\s+on\s+experience,\s*training,\s*education|"
+    # CR-089: content-level safety net for benefits/perks copy that leaked into
+    # required/preferred/responsibilities (measured 2026-08-10: dominant noise
+    # category across 54 real submissions, ~18.5% of companies affected) --
+    # catches it item-by-item regardless of whether the header redirect above
+    # actually fired, since no header regex will ever cover every real-world
+    # phrasing. Same belt-and-suspenders pattern as the physical/ADA items above.
+    r"\b(?:medical|dental|vision)\s*,?\s*(?:and\s+)?(?:dental|vision|coverage|insurance|plans?)\b|"
+    r"\b401\(?k\)?\b|"
+    r"\bpaid\s+time\s+off\b|\bflexible\s+pto\b|\bgenerous\s+pto\b|\bpto\s+and\s+sick\s+leave\b|"
+    r"\bstock\s+options?\b|\bequity\s+(?:grant|package)\b|\b529\s+college\s+savings\b|"
+    r"\bparental\s+leave\b|\bcompany\s+match(?:ing)?\b|"
+    r"\ball-round\s+benefits\s+package|\bperks\s*&\s*benefits|"
+    # CR-089/090: interview-process / application-instruction copy (smaller share
+    # of the same measured noise, but real). CR-090 follow-up: the "(?:our|the|a)"
+    # requirement missed bare "Interview with recruiter" / "Interview with CTO" --
+    # broadened to any word, not just an article.
+    r"interview\s+with\s+\w|"
+    r"\b(?:bar\s+raiser|phone\s+screen|product\s+deep\s+dive)\b|"
+    r"upload\s+your\s+(?:resume|cv)\b|submit\s+your\s+(?:resume|cv|application)\b|"
+    r"convinced\?\s*submit\s+your\s+application|"
+    r"^start\s+date:?\s*|"
+    r"^offer\s*\+\s*prior\s+employment|"
+    r"if\s+you\s+don'?t\s+have\s+an?\s+up\s+to\s+date\s+cv"
+    r")"
+)
+
+
+# Known orphan section labels that sometimes appear as bullets when header routing
+# missed them. Prefer this allowlist over a generic Title-Case heuristic — the latter
+# false-positives on short skill/tool list items (e.g. "Agile Product Management Tools").
+_ORPHAN_HEADER_LABEL_RE = re.compile(
+    r"^(?:#+\s*)?"
+    r"(?:"
+    r"job\s+responsibilities?|"
+    r"(?:our\s+)?core\s+values?|"
+    r"work\s+environment(?:\s*/\s*physical\s+requirements?)?|"
+    r"physical\s+requirements?|"
+    r"key\s+capabilities?(?:\s+for\s+success)?|"
+    r"key\s+capabilities?\s+for\s+success|"
+    r"about\s+(?:the\s+)?(?:role|company|us)|"
+    r"what\s+we\s+offer|"
+    r"benefits?\s+(?:and|&)\s+perks?"
+    r")"
+    r"\s*:?\s*$",
+    re.I,
+)
+
+
+def _is_orphan_header_item(text: str) -> bool:
+    """CR-086: section labels wrongly captured as hire-criteria bullets.
+
+    Two cases only (conservative on purpose):
+    1. Known header labels (`Job Responsibilities`, `Our Core Values`, …).
+    2. Very short trailing-colon lead-ins that somehow bypassed `_is_list_leadin`
+       (defense in depth; leadin already skips most of these at extract time).
+    """
+    clean = (text or "").strip().lstrip("-•*◦▪▸→").strip()
+    if not clean:
+        return False
+    if _ORPHAN_HEADER_LABEL_RE.match(clean):
+        return True
+    if clean.endswith(":"):
+        words = re.findall(r"[A-Za-z0-9']+", clean)
+        if 1 <= len(words) <= 8 and not _REQUIREMENT_VERB_RE.search(clean):
+            return True
+    return False
+
+
+def _is_boilerplate_item(text: str) -> bool:
+    """True when an extracted bullet is ATS/policy boilerplate, not a hire criterion."""
+    clean = (text or "").strip()
+    if not clean:
+        return True
+    if _TRACKING_TAG_RE.match(clean):
+        return True
+    if _BOILERPLATE_ITEM_RE.search(clean):
+        return True
+    # Header-only leftovers that snuck into the item list.
+    if _IGNORE_SECTION_HEADERS.match(clean):
+        return True
+    # CR-086: orphan section labels captured as items (e.g. bare "Job Responsibilities"
+    # when header routing missed — belt-and-suspenders with expanded header patterns).
+    if _is_orphan_header_item(clean):
+        return True
+    return False
+
+
+# Found 2026-08-07 (envision_technology_solutions): sub-list lead-in lines like
+# "Experience working on one or more of:" / "Hands-on experience with:" pass the
+# item-length filter and get captured as standalone required items even though
+# they're just an intro to the bullets below, not a requirement themselves. A
+# short line (<=12 words) ending in a bare colon is a lead-in, not an item —
+# skip capturing it but do NOT reset current_bucket, so the real items below it
+# still get collected normally.
+def _is_list_leadin(clean: str) -> bool:
+    if not clean.endswith(":"):
+        return False
+    word_count = len(re.findall(r"\w+", clean))
+    return word_count <= 12
+
+
+# Found 2026-08-07 (envision_technology_solutions: "...CSPO... is preferred."):
+# an inline preferred marker on an otherwise-required-looking line should route
+# that single item to the preferred bucket, not the required one — the section
+# header controls where MOST lines in the section go, but this one line
+# self-labels as preferred and the extractor should trust that over the header.
+_INLINE_PREFERRED_RE = re.compile(
+    r"(?:\bis\s+(?:strongly\s+)?preferred\b|\(preferred\)|,\s*preferred\b)\s*\.?\s*$",
+    re.I,
+)
+
+
+def _normalize_jd_punctuation(text: str) -> str:
+    """Normalize curly/smart quotes so section-header regexes match real JDs.
+
+    Greenhouse/Lever/HTML exports often use U+2018/U+2019 apostrophes in
+    headings like \"What you'll do\" / \"What we're looking for\". Without this,
+    those sections extract empty and Stage 0 can falsely report a clean Tier 1.
+    """
+    return (
+        text.replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201b", "'")
+        .replace("\u2032", "'")
+    )
 
 
 def _extract_sections(jd_text: str) -> dict[str, list[str]]:
@@ -187,6 +446,10 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
 
     Returns dict with keys: required, preferred, responsibilities, culture.
     Each value is a list of bullet-like strings extracted from that section.
+
+    Trailing ATS boilerplate (relocation / EEO / salary / #LI-…) is excluded:
+    matching ignore headers ends the current quals bucket, and any remaining
+    boilerplate strings are stripped via `_is_boilerplate_item`.
     """
     buckets: dict[str, list[str]] = {
         "required": [],
@@ -195,7 +458,7 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
         "culture": [],
     }
 
-    lines = jd_text.splitlines()
+    lines = _normalize_jd_punctuation(jd_text).splitlines()
     current_bucket: str | None = None
 
     for i, raw_line in enumerate(lines):
@@ -203,7 +466,7 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
         if not line:
             continue
 
-        # Check if this line is a section header
+        # Known section header → switch bucket
         matched_bucket: str | None = None
         for bucket_name, header_re in _SECTION_HEADERS:
             if header_re.match(line):
@@ -214,27 +477,50 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
             current_bucket = matched_bucket
             continue
 
+        # Boilerplate / policy header → stop collecting into quals buckets
+        if _IGNORE_SECTION_HEADERS.match(line) or _TRACKING_TAG_RE.match(line):
+            current_bucket = None
+            continue
+
         if current_bucket is None:
             continue
 
         # Extract meaningful bullet items (20–300 chars, starts with letter or digit)
         clean = line.lstrip("-•*◦▪▸→").strip()
         if 15 <= len(clean) <= 300 and (clean[0].isalnum() or clean[0] in '"\''):
-            buckets[current_bucket].append(clean)
+            if _is_list_leadin(clean):
+                continue
+            if not _is_boilerplate_item(clean):
+                target_bucket = current_bucket
+                if current_bucket == "required" and _INLINE_PREFERRED_RE.search(clean):
+                    target_bucket = "preferred"
+                buckets[target_bucket].append(clean)
+
+    # Final safety net for items that never rode a header boundary
+    for key in buckets:
+        buckets[key] = [x for x in buckets[key] if not _is_boilerplate_item(x)]
 
     return buckets
 
 
 def _detect_thin_jd(jd_text: str, required_items: list) -> bool:
-    """True when the JD is sparse (very short AND has almost no structured requirements).
+    """True when the JD is sparse (very short AND/OR almost no structured requirements).
 
     A JD with ≥2 extracted required items is never thin regardless of raw word count.
-    Only mark thin when the JD is very short (< 80 words) OR has fewer than 2 extractable items.
+    Otherwise:
+    - under 80 words → thin (original threshold)
+    - zero extractable requireds and under 150 words → thin (2026-08-08 Cluster C item 10:
+      clear_capital-class headerless prose at ~99 words was missing the old cutoff and
+      produced a false clean Stage 0 shape)
     """
     if len(required_items) >= 2:
         return False
     word_count = len(re.findall(r"\w+", jd_text or ""))
-    return word_count < 80
+    if word_count < 80:
+        return True
+    if len(required_items) == 0 and word_count < 150:
+        return True
+    return False
 
 
 _STAGE_SIGNALS: list[tuple[re.Pattern, str]] = [
@@ -286,6 +572,86 @@ _GENERIC_TAG_WORDS: frozenset[str] = frozenset({
     "ability", "deliver", "drive", "build", "lead", "grow",
 })
 
+# Domain/industry qualifiers that must themselves be anchored. A capability tag
+# match (e.g. "compliance") does NOT clear a soft gap when the item also names
+# an unanchored domain (e.g. "banking") — Round 4 hard/soft split.
+_DOMAIN_QUALIFIER_RE = re.compile(
+    r"\b("
+    r"banking|bank|insurance|healthcare|health\s*care|fintech|"
+    r"pharma(?:ceutical)?s?|clinical|mortgage|lending|"
+    r"wealth\s+management|payments?|crypto(?:currency)?|"
+    r"biotech|medtech|telehealth"
+    r")\b",
+    re.I,
+)
+
+
+def _unanchored_domain_qualifiers(
+    item_lower: str, vocab: set[str], anchors: list[str]
+) -> list[str]:
+    """Return domain tokens in the item that have no vocab/anchor hit."""
+    found: list[str] = []
+    for match in _DOMAIN_QUALIFIER_RE.finditer(item_lower):
+        compact = re.sub(r"\s+", " ", match.group(0).lower()).strip()
+        anchored = any(
+            compact in a.lower() or a.lower() in compact for a in anchors
+        ) or any(
+            compact == v or compact in v or v in compact
+            for v in vocab
+            if len(v) >= 4
+        )
+        if not anchored and compact not in found:
+            found.append(compact)
+    return found
+
+
+# CR-090: items that will never anchor against a claim tag (no skill/tool vocabulary
+# to match) but also aren't real transferable-skill gaps -- they're binary eligibility
+# facts already resolved elsewhere or genuinely satisfied by Jason's real profile.
+# Measured 2026-08-10 across 54 real submissions: 106 SOFT gaps total, with years-of-
+# experience and Bachelor's-degree lines the two largest clean-cut categories (~20+
+# combined). Falling through to the generic "no anchor -> soft gap needing a bridge"
+# path for these produces an unbridgeable gap (nothing in master_claims.json is a
+# claim about "having a bachelor's degree"), which then hard-blocks the packet via
+# the fail-closed gate -- even though these aren't real gaps at all.
+#
+# Years-of-experience: already independently parsed and gated by
+# seniority_gate.check_years_gate() against candidate_preferences.json's real
+# threshold. Flagging the same line again here as an unbridgeable soft gap is not
+# just redundant, it's actively wrong -- either it duplicates a signal that already
+# exists correctly elsewhere, or it conflicts with it.
+_YEARS_EXPERIENCE_LEADIN_RE = re.compile(
+    r"^(?:minimum\s+(?:of\s+)?|approximately\s+)?"
+    r"\d{1,2}\s*[-–+]?\s*(?:to\s+|-\s*)?\d{0,2}\+?\s*years?\b",
+    re.I,
+)
+
+# Bachelor's-degree requirements: Jason has one (workExperience.md Section 7).
+# Deliberately does NOT exempt lines that mandate a higher degree as required
+# (Master's/MBA/PhD/JD/MD "required") -- those remain real gaps. A mention of a
+# higher degree as merely *preferred* alongside a Bachelor's requirement is not a
+# gap (the Bachelor's already satisfies the line).
+_BACHELORS_SATISFIED_RE = re.compile(r"\bbachelor(?:'s|s)?\s+degree\b", re.I)
+_HIGHER_DEGREE_MANDATORY_RE = re.compile(
+    r"\b(?:master'?s?|mba|ph\.?d\.?|j\.?d\.?|m\.?d\.?)\s+degree\s+required\b|"
+    r"\brequires?\s+an?\s+(?:master'?s?|mba|ph\.?d\.?)\b",
+    re.I,
+)
+
+
+def _is_administratively_satisfied(item_lower: str) -> bool:
+    """True for items that should never enter the generic soft-gap-needs-a-claim-
+    bridge path -- see module comment above for why. Deliberately narrow and
+    conservative: citizenship/work-authorization/security-clearance/travel/
+    supervisory-responsibility statements are NOT covered here (left for a
+    separate, more careful pass -- some are legally sensitive and shouldn't be
+    silently resolved without confirming Jason's actual status)."""
+    if _YEARS_EXPERIENCE_LEADIN_RE.match(item_lower.strip()):
+        return True
+    if _BACHELORS_SATISFIED_RE.search(item_lower) and not _HIGHER_DEGREE_MANDATORY_RE.search(item_lower):
+        return True
+    return False
+
 
 def _item_has_anchor(item_lower: str, vocab: set[str]) -> list[str]:
     """
@@ -310,7 +676,7 @@ def _classify_one_item(
     vocab: set[str],
 ) -> dict:
     """
-    Classify a single required item string.
+    Classify a single required/preferred item string.
 
     Returns::
         {
@@ -318,6 +684,7 @@ def _classify_one_item(
             "anchor": str,    # matched tag names or "none"
             "gap": bool,
             "gap_class": "HARD" | "SOFT" | None,
+            "domain_soft": bool,
         }
     """
     item_lower = item.lower()
@@ -330,18 +697,48 @@ def _classify_one_item(
             "anchor": "none",
             "gap": True,
             "gap_class": "HARD",
+            "domain_soft": False,
         }
 
-    # Check anchor vocabulary
     anchors = _item_has_anchor(item_lower, vocab)
+    unanchored_domains = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
+
+    # Domain qualifier with no domain anchor → SOFT even if capability tags matched
+    if unanchored_domains:
+        display = ", ".join(sorted(set(anchors))[:3]) if anchors else "none"
+        anchor_str = (
+            f"tags: {display}; domain soft-gap: {', '.join(unanchored_domains)}"
+            if anchors
+            else f"none; domain soft-gap: {', '.join(unanchored_domains)}"
+        )
+        return {
+            "item": item,
+            "anchor": anchor_str,
+            "gap": True,
+            "gap_class": "SOFT",
+            "domain_soft": True,
+        }
+
     if anchors:
-        # Cap display to 3 most relevant tags
         display = ", ".join(sorted(set(anchors))[:3])
         return {
             "item": item,
             "anchor": f"tags: {display}",
             "gap": False,
             "gap_class": None,
+            "domain_soft": False,
+        }
+
+    # CR-090: eligibility facts that are already resolved elsewhere (years-of-
+    # experience) or genuinely satisfied (Bachelor's degree) -- never claim-
+    # bridgeable, so don't route them into the soft-gap-needs-a-bridge path.
+    if _is_administratively_satisfied(item_lower):
+        return {
+            "item": item,
+            "anchor": "satisfied: administrative (years-of-experience / education)",
+            "gap": False,
+            "gap_class": None,
+            "domain_soft": False,
         }
 
     # No hard tool, no anchor → soft gap (domain/methodology bridgeable)
@@ -350,6 +747,7 @@ def _classify_one_item(
         "anchor": "none",
         "gap": True,
         "gap_class": "SOFT",
+        "domain_soft": False,
     }
 
 
@@ -362,7 +760,8 @@ def classify_gaps(
     Classify required and preferred items for gaps.
 
     Returns (classified_required, classified_preferred, flagged_gaps).
-    flagged_gaps contains items where gap=True (HARD or SOFT).
+    flagged_gaps contains required items where gap=True (HARD or SOFT), plus
+    preferred items marked domain_soft (Round 4 domain-qualifier soft gaps).
     """
     if vocab is None:
         vocab = _load_anchor_vocab()
@@ -374,13 +773,19 @@ def classify_gaps(
     classified_preferred: list[dict] = []
     for item in preferred_items:
         result = _classify_one_item(item, vocab)
+        if result.get("domain_soft"):
+            handling = "soft gap -- transferable-skill bridge required"
+        elif result["gap"]:
+            handling = "not claimed -- not in ground truth"
+        else:
+            handling = "addressed -- see resume/cover letter"
         classified_preferred.append({
             "item": result["item"],
             "anchor": result["anchor"],
-            "handling": (
-                "not claimed -- not in ground truth" if result["gap"]
-                else "addressed -- see resume/cover letter"
-            ),
+            "gap": result["gap"],
+            "gap_class": result["gap_class"],
+            "domain_soft": bool(result.get("domain_soft")),
+            "handling": handling,
         })
 
     flagged_gaps: list[dict] = [
@@ -388,6 +793,9 @@ def classify_gaps(
         for r in classified_required
         if r.get("gap")
     ]
+    for p in classified_preferred:
+        if p.get("domain_soft") and p.get("gap_class") == "SOFT":
+            flagged_gaps.append({"item": p["item"], "gap_class": "SOFT"})
 
     return classified_required, classified_preferred, flagged_gaps
 
@@ -502,7 +910,7 @@ def build_stage0_fit_gate(
     # --- Step 1: DB gate ---
     if db_gate_result is None:
         from stage0_db_gate import evaluate_db_gate
-        db_gate_result = evaluate_db_gate(company_display, db_path=_DEFAULT_DB)
+        db_gate_result = evaluate_db_gate(company_display, role=role, db_path=_DEFAULT_DB)
 
     db_action = db_gate_result.get("action", "clear")
 
@@ -547,6 +955,21 @@ def build_stage0_fit_gate(
         required_raw, preferred_raw, vocab=vocab
     )
 
+    # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)
+    word_count = len(re.findall(r"\w+", jd_text or ""))
+    extraction_empty = (
+        not required_raw
+        and not preferred_raw
+        and not responsibilities
+        and word_count >= 80
+    )
+    if extraction_empty:
+        flagged_gaps.append({
+            "item": "Stage 0 extraction returned empty buckets on a non-thin JD",
+            "gap_class": "SOFT",
+            "bridge": "extraction_empty — re-check JD section headers before drafting",
+        })
+
     # --- Step 5: Determine tier ---
     tier, decision = _determine_tier(prefs_result, flagged_gaps, db_action)
 
@@ -572,9 +995,19 @@ def build_stage0_fit_gate(
     if tier == "Tier 1":
         notes_parts.append("Clean Tier 1 pass. No flagged gaps.")
     elif tier == "Tier 2":
+        if extraction_empty:
+            notes_parts.append(
+                "Tier 2: extraction_empty — non-thin JD produced empty required/preferred/responsibilities."
+            )
         soft_items = [g["item"][:60] for g in flagged_gaps if g.get("gap_class") == "SOFT"]
-        if soft_items:
+        if soft_items and not extraction_empty:
             notes_parts.append(f"Tier 2: soft gap(s) — {'; '.join(soft_items[:2])}.")
+        elif soft_items and extraction_empty:
+            # already noted extraction_empty; still surface other soft gaps briefly
+            other = [g["item"][:60] for g in flagged_gaps if g.get("gap_class") == "SOFT"
+                     and "empty buckets" not in g.get("item", "")]
+            if other:
+                notes_parts.append(f"Also soft gap(s) — {'; '.join(other[:2])}.")
     elif tier == "Skip":
         if skip_reason:
             notes_parts.append(f"Skip: {skip_reason}.")
@@ -644,6 +1077,24 @@ def _one_line(result: dict, folder: Path) -> str:
     )
 
 
+def _has_extraction_override(out_path: Path) -> bool:
+    """True when an existing stage0_fit_gate.json was hand-corrected and flagged
+    extraction_override: true — a fresh re-run must not silently clobber it.
+
+    Found 2026-08-08: build_stage0_fit_gate.py had zero awareness of this flag
+    (set by the hand-reconstruct workaround agreed in session-005 R10 when the
+    extractor demonstrably mis-parses a JD), so a bare re-run would overwrite a
+    verified-correct gate with a fresh, possibly still-buggy one. See R14.
+    """
+    if not out_path.exists():
+        return False
+    try:
+        existing = json.loads(out_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
+    return existing.get("extraction_override") is True
+
+
 def _resolve_folder(raw: str) -> Path:
     """Resolve a slug or path to a submission-like folder with Original_JD.txt."""
     p = Path(raw)
@@ -656,7 +1107,7 @@ def _resolve_folder(raw: str) -> Path:
     return p
 
 
-def batch_report(folders: list[Path], write: bool = True) -> str:
+def batch_report(folders: list[Path], write: bool = True, force: bool = False) -> str:
     """Story 2.6 — run Stage 0 on many folders; return Markdown Tier 1/2/Skip table.
 
     # Implements FR-252 (batch triage without a cloud agent)
@@ -668,8 +1119,9 @@ def batch_report(folders: list[Path], write: bool = True) -> str:
         except FileNotFoundError as e:
             buckets["Skip"].append(f"| {folder.name} | ERROR: {e} |")
             continue
-        if write:
-            out_path = folder / "stage0_fit_gate.json"
+        out_path = folder / "stage0_fit_gate.json"
+        protected = (not force) and _has_extraction_override(out_path)
+        if write and not protected:
             out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         tier = result.get("tier", "Skip")
         if tier not in buckets:
@@ -677,6 +1129,8 @@ def batch_report(folders: list[Path], write: bool = True) -> str:
         reason = result.get("skip_reason") or result.get("notes") or ""
         # Avoid Windows cp1252 crashes on arrows/dashes in reason strings
         reason = reason.replace("\u2192", "->").replace("\u2014", "-").replace("\u2013", "-")
+        if protected:
+            reason = f"{reason} [NOT WRITTEN -- extraction_override protected, use --force]"
         company = result.get("company", folder.name)
         buckets[tier].append(f"| {company} | {reason} |")
 
@@ -715,6 +1169,12 @@ def _main() -> None:
         action="store_true",
         help="Print a Markdown Tier 1 / Tier 2 / Skip table for all folders (Story 2.6)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing stage0_fit_gate.json even if it's hand-corrected "
+        "(extraction_override: true). Without this flag such a file is never touched.",
+    )
     args = parser.parse_args()
 
     if not args.folder:
@@ -724,7 +1184,7 @@ def _main() -> None:
     write = not args.no_write
 
     if args.batch_table or len(folders) > 1:
-        print(batch_report(folders, write=write))
+        print(batch_report(folders, write=write, force=args.force))
         sys.exit(0)
 
     folder = folders[0]
@@ -738,13 +1198,22 @@ def _main() -> None:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(0)
 
-    if write:
-        out_path = folder / "stage0_fit_gate.json"
+    out_path = folder / "stage0_fit_gate.json"
+    protected = (not args.force) and _has_extraction_override(out_path)
+    if write and not protected:
         out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+    elif protected:
+        print(
+            f"NOTE: '{out_path}' has extraction_override: true — not overwritten. "
+            "Pass --force to override.",
+            file=sys.stderr,
+        )
 
     print(_one_line(result, folder))
     sys.exit(0)
 
 
 if __name__ == "__main__":
+    from workflow.entry_warning import warn_worker_cli
+    warn_worker_cli("build_stage0_fit_gate.py")
     _main()

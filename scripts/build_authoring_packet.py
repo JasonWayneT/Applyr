@@ -15,7 +15,10 @@ Usage:
 Requires stage0_fit_gate.json to already exist (run build_stage0_fit_gate.py first)
 unless --with-stage0 is passed, which runs Stage 0 automatically first.
 
-Exit: always 0.
+Exit: 0 on success (and on most non-gate errors, preserved from CR-074).
+Exit: non-zero when the Stage 0 readiness gate fails (missing or structurally invalid
+stage0_fit_gate.json) unless --force is passed (CR-075 AC2). --force is logged to
+data/.force_override_log.json.
 Writes: authoring_packet.json
 Prints: ready|incomplete — {company} — {tokens} tokens — {reason}
 """
@@ -31,6 +34,9 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
+from build_stage0_fit_gate import _is_administratively_satisfied  # noqa: E402
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -74,6 +80,49 @@ _CANONICAL_ROLE_CLAIMS: dict[str, list[str]] = {
     ],
 }
 _MIN_EXCERPTS_PER_CANONICAL_EMPLOYER = 2
+
+# CR-085: cap how many evidence_map rows a single underlying project can win, so one
+# strong story can't monopolize unrelated requirements. Real measured cases before this
+# cap: ACC-104-CS in 14/18 rows (Thermo Fisher), ACC-113-ADOPTION in 5/10 and 5/8 rows
+# (Limble, Paylocity) across genuinely unrelated requirements. Applied globally across
+# the whole evidence_map, not per-item — each row still picks from its own ranked
+# candidate list, so a capped-out claim is replaced by that row's own next-best match,
+# never an unrelated claim forced in just to fill a slot.
+_MAX_SLOTS_PER_PROJECT = 3
+
+# CR-085: short, explicit, conservative boilerplate phrase list. Generic JD lines that
+# carry no evidence-worthy signal still consumed a full 67-claim scoring pass and an
+# evidence_map row before this. Deliberately narrow (substring match, not a classifier)
+# to keep false-positive risk low, and NEVER applied to the `required` bucket — the
+# fail-closed gate's unmapped-required-item rule must stay authoritative.
+_BOILERPLATE_PHRASES: tuple[str, ...] = (
+    "excellent communication skills",
+    "strong communication skills",
+    "excellent written and verbal communication",
+    "team player",
+    "self-starter",
+    "self starter",
+    "fast-paced environment",
+    "fast paced environment",
+    "wear multiple hats",
+    "detail-oriented",
+    "detail oriented",
+    "positive attitude",
+    "work independently and collaboratively",
+    "ability to multitask",
+    "strong work ethic",
+)
+
+
+def _is_boilerplate_item(item_text: str) -> bool:
+    """True for generic, non-differentiating JD lines (Part 10's 'don't spend equal
+    evidence budget on communicate effectively and lead migration of a mission-critical
+    platform' idea). Never call this on a `required` item.
+    """
+    text_l = (item_text or "").strip().lower()
+    if not text_l:
+        return False
+    return any(phrase in text_l for phrase in _BOILERPLATE_PHRASES)
 
 # When the JD names these skills/tools, force-pull a matching claim excerpt so the
 # closed-world author can place the literal term without inventing history.
@@ -139,15 +188,16 @@ def _load_rule_digest_version() -> str:
     return "pending-epic-4"
 
 
-# Fixed hard constraints restated from AGENTS.md / RULES.md for cloud author.
+# CR-085 Phase 1: trimmed from 8 items to 2. The other 6 (resume/cover-letter structure,
+# exclusion zones, VOC translations, forbidden words) are verified line-for-line redundant
+# with authoring_rule_digest.md sections 2/3/4/5/8/9, which is loaded into every author
+# session alongside this packet — repeating them here cost ~245 tokens (~9% of a real
+# packet) for content the author already has. Only the verbatim-copy rule and the geo note
+# are genuinely packet-specific / not already in the digest.
 _HARD_CONSTRAINTS: list[str] = [
-    "Use only claim_ids listed in excerpts; never invent metrics, tools, companies, or facts.",
-    "Resume structure: exact ## PROFESSIONAL SUMMARY / ## PROFESSIONAL EXPERIENCE / ## EDUCATION headings; exactly 3 summary sentences; all three canonical roles present (Cision, Sterkly, Zero To Sixty).",
-    "Cover letter: argue fit only — no gap-confession language; no em dashes (—), semicolons, or double-hyphen (--); no bullet points; 250–400 words.",
-    "No people-management claims, no titles above Senior IC PM, no AI/ML model ownership, no revenue/billing ownership.",
-    "No internal codenames: use plain-English VOC translations (e.g. 'Airo' → 'a macOS security product', 'Platform Data Remediation' → 'centralized platform data remediation initiative').",
-    "Do not copy excerpt sentences verbatim — author fresh prose from the facts.",
-    "Forbidden words: 'leverage', 'passionate', 'driven', 'dynamic', 'innovative', 'seamless', 'transformative', 'proven track record', 'layoffs'.",
+    "Do not copy excerpt sentences verbatim — author fresh prose from the facts. This applies "
+    "even when an excerpt is a short, clean claim description (master_claims.json's `text` "
+    "field) — it is grounding evidence, not draftable prose.",
     _GEO_COLLAB_CONSTRAINT,
 ]
 
@@ -162,6 +212,14 @@ def load_claims(
 ) -> tuple[dict[str, dict], set[str]]:
     """Load claims from master_claims_tags_only.json; identify disabled IDs from master_claims.json.
 
+    CR-085: also merges each claim's lens-specific `text` field from the full catalog into
+    the returned record (e.g. ACC-101-TECH's own text, distinct from ACC-101-PM's). This lets
+    excerpt retrieval use the claim's own clean, bounded description instead of regex-slicing
+    workExperience.md by project_id — which is also what was producing byte-identical excerpts
+    across a project's different lenses (only one [ACC-NNN] marker per project in WE, so every
+    lens fell back to the same slice). `text` is grounding evidence for the closed-world author,
+    not draftable prose — the "do not copy verbatim" hard constraint already covers that.
+
     Returns (claims_by_id, disabled_ids_set).
     """
     tags_path = claims_tags_path or _CLAIMS_TAGS_PATH
@@ -175,6 +233,7 @@ def load_claims(
             pass
 
     disabled: set[str] = set()
+    full: dict = {}
     if full_path.exists():
         try:
             full = json.loads(full_path.read_text(encoding="utf-8"))
@@ -188,6 +247,13 @@ def load_claims(
         for cid, rec in claims.items():
             if isinstance(rec, dict) and rec.get("disabled"):
                 disabled.add(cid)
+
+    for cid, rec in claims.items():
+        full_rec = full.get(cid)
+        if isinstance(full_rec, dict):
+            text = full_rec.get("text")
+            if isinstance(text, str) and text.strip():
+                rec["text"] = text.strip()
 
     return claims, disabled
 
@@ -210,6 +276,93 @@ def _claim_text_for_scoring(cid: str, rec: dict) -> str:
     return " ".join(parts)
 
 
+# CR-087: tokens that must not drive item↔claim overlap. One shared generic word
+# (e.g. "team" from "Cross-Team Learning") was enough to score ACC-120 at 1015 against
+# an unrelated Camunda epics-staffing line via overlap*1000. Keep this list short and
+# boring — distinctive domain tokens (agile, migration, privacy, epics, …) still count.
+_GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
+    {
+        "able",
+        "about",
+        "across",
+        "after",
+        "also",
+        "appropriate",
+        "based",
+        "been",
+        "before",
+        "between",
+        "during",
+        "equipped",
+        "excellent",
+        "experience",
+        "from",
+        "good",
+        "have",
+        "help",
+        "helping",
+        "high",
+        "include",
+        "including",
+        "into",
+        "keep",
+        "kept",
+        "make",
+        "made",
+        "managed",
+        "more",
+        "most",
+        "only",
+        "other",
+        "others",
+        "over",
+        "product",
+        "products",
+        "related",
+        "role",
+        "roles",
+        "same",
+        "self",
+        "skills",
+        "some",
+        "strong",
+        "such",
+        "team",
+        "teams",
+        "than",
+        "that",
+        "their",
+        "them",
+        "there",
+        "these",
+        "they",
+        "this",
+        "those",
+        "through",
+        "under",
+        "used",
+        "using",
+        "well",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "will",
+        "with",
+        "within",
+        "work",
+        "working",
+        "years",
+    }
+)
+
+
+def _distinctive_overlap(item_words: set[str], claim_words: set[str]) -> set[str]:
+    """CR-087 — item↔claim token intersection after dropping generic fillers."""
+    return {w for w in (item_words & claim_words) if w not in _GENERIC_OVERLAP_TOKENS}
+
+
 def _score_claims_for_item(
     item_text: str,
     claims: dict[str, dict],
@@ -224,6 +377,9 @@ def _score_claims_for_item(
     The full-JD score from score_claim_for_jd is a SECONDARY tiebreaker.
     This prevents high-JD-relevance but low-item-relevance claims from winning
     every item uniformly.
+
+    CR-087: overlap ignores generic tokens; jd_score alone (no distinctive overlap
+    and no capability_boost) cannot nominate a claim into Top-2.
 
     Uses score_claim_for_jd from jd_tailoring.py when available; falls back to
     pure overlap scoring so tests can inject a mocked scorer.
@@ -244,8 +400,50 @@ def _score_claims_for_item(
         ct = _claim_text_for_scoring(cid, rec)
         tag_words = set(re.findall(r"[a-z]{4,}", ct.lower()))
 
-        # Primary: item-specific overlap (weighted heavily)
-        overlap = len(item_words & tag_words)
+        # Primary: distinctive item-specific overlap (weighted heavily)
+        overlap_words = _distinctive_overlap(item_words, tag_words)
+        overlap = len(overlap_words)
+
+        # Soft-gap capability boost: when the JD item names compliance/privacy/
+        # regulatory work, prefer claims whose *primary* theme is that capability
+        # (ACC-107/112-class) over security/ops claims that merely list Compliance
+        # as a secondary tag.
+        capability_boost = 0
+        capability_tokens = {"compliance", "privacy", "regulatory", "gdpr", "ccpa"}
+        if item_words & capability_tokens:
+            tags_lower = [str(t).lower() for t in (rec.get("tags") or [])]
+            claim_tag_blob = " ".join(tags_lower)
+            cid_l = cid.lower()
+            if any(tok in claim_tag_blob for tok in capability_tokens):
+                capability_boost = 5000
+            # Primary compliance/privacy claims outrank secondary-tag matches
+            if any(
+                t in {"compliance", "privacy", "gdpr/ccpa", "gdpr", "ccpa"}
+                for t in tags_lower
+            ) and (
+                "privacy" in claim_tag_blob
+                or "gdpr" in claim_tag_blob
+                or "107" in cid_l
+                or "112" in cid_l
+                or "compliance" in cid_l
+            ):
+                capability_boost += 8000
+
+        # AI/ML product experience soft gaps → ACC-120 (CONTRIBUTED joint research),
+        # never invent model-ownership claims. Match short tokens in raw item text
+        # (item_words only keeps length>=4, so "AI"/"ML" would otherwise miss).
+        item_l = item_text.lower()
+        if re.search(r"\b(ai|ml|ai/ml|machine\s+learning|llm)\b", item_l):
+            cid_l = cid.lower()
+            tags_lower = [str(t).lower() for t in (rec.get("tags") or [])]
+            claim_tag_blob = " ".join(tags_lower)
+            if (
+                "120" in cid_l
+                or "airesearch" in cid_l
+                or "ai" in claim_tag_blob
+                or "prompt" in claim_tag_blob
+            ):
+                capability_boost += 12000
 
         # Secondary: full-JD scorer as tiebreaker
         if use_jd_scorer and jd_profile is not None:
@@ -253,8 +451,12 @@ def _score_claims_for_item(
         else:
             jd_score = overlap
 
-        # Combined: overlap dominates; jd_score breaks ties
-        total = overlap * 1000 + jd_score
+        # Combined: capability boost + overlap dominate; jd_score breaks ties
+        total = capability_boost + overlap * 1000 + jd_score
+        # CR-087: full-JD score alone must not put a claim into Top-2 when the item
+        # shares no distinctive tokens and no soft-gap capability boost fired.
+        if overlap == 0 and capability_boost == 0:
+            total = 0
         scored.append((cid, total))
 
     scored.sort(key=lambda x: (-x[1], x[0]))
@@ -282,6 +484,14 @@ def build_evidence_map(
     Covers required, preferred, and responsibilities buckets.
     Soft-gap bridge notes from stage0 are attached to required rows.
     Accepts both CR-074 dict items (`{item, ...}`) and legacy bare strings.
+
+    CR-085: two passes instead of one. Pass 1 scores every non-filtered item against the
+    full claim catalog (unchanged scoring logic). Pass 2 does a single global left-to-right
+    assignment with a running per-project_id counter capped at _MAX_SLOTS_PER_PROJECT, so
+    one dominant claim can't win every requirement — each row still picks from its own
+    ranked list, so a capped-out claim is replaced by that row's own next-best match. Also
+    filters generic boilerplate lines out of preferred/responsibilities (never required)
+    before they consume a scoring pass at all.
     """
     # Build a soft-gap bridge lookup from flagged_gaps + required item bridges
     soft_gap_bridges: dict[str, str] = {}
@@ -304,42 +514,83 @@ def build_evidence_map(
             if bridge:
                 soft_gap_bridges[item] = bridge
 
-    def _map_item(item_text: str, bucket: str, is_required: bool = False) -> dict:
-        scored = _score_claims_for_item(item_text, claims, disabled, jd_profile, jd_text)
-        # Pick top 2 with score > 0
-        top = [cid for cid, score in scored[:2] if score > 0]
-
-        bridge: str | None = None
+    def _bridge_for(item_text: str, is_required: bool) -> str | None:
         if is_required and item_text in soft_gap_bridges:
             raw_bridge = soft_gap_bridges[item_text]
-            bridge = raw_bridge or "Soft gap — transferable-skill bridge; see soft_gaps for detail."
+            return raw_bridge or "Soft gap — transferable-skill bridge; see soft_gaps for detail."
+        return None
 
-        return {
-            "jd_item": item_text,
-            "bucket": bucket,
-            "claim_ids": top,
-            "bridge": bridge,
-        }
-
-    evidence_map: list[dict] = []
+    # Pass 1: score every item, don't pick claim_ids yet.
+    pending: list[dict] = []
 
     for req in stage0.get("required", []):
         item = _stage0_item_text(req)
         if not item:
             continue
-        evidence_map.append(_map_item(item, "required", is_required=True))
+        scored = _score_claims_for_item(item, claims, disabled, jd_profile, jd_text)
+        pending.append({
+            "jd_item": item,
+            "bucket": "required",
+            "bridge": _bridge_for(item, True),
+            "scored": scored,
+        })
 
     for pref in stage0.get("preferred", []):
         item = _stage0_item_text(pref)
         if not item:
             continue
-        evidence_map.append(_map_item(item, "preferred"))
+        if _is_boilerplate_item(item):
+            print(f"INFO: filtered boilerplate preferred item: {item[:80]!r}", file=sys.stderr)
+            continue
+        scored = _score_claims_for_item(item, claims, disabled, jd_profile, jd_text)
+        pending.append({"jd_item": item, "bucket": "preferred", "bridge": None, "scored": scored})
 
     for resp in stage0.get("responsibilities", []):
         item = _stage0_item_text(resp)
         if not item:
             continue
-        evidence_map.append(_map_item(item, "responsibilities"))
+        if _is_boilerplate_item(item):
+            print(f"INFO: filtered boilerplate responsibility item: {item[:80]!r}", file=sys.stderr)
+            continue
+        scored = _score_claims_for_item(item, claims, disabled, jd_profile, jd_text)
+        pending.append({"jd_item": item, "bucket": "responsibilities", "bridge": None, "scored": scored})
+
+    # Pass 2: global assignment with per-project_id cap.
+    def _project_of(cid: str) -> str:
+        return (claims.get(cid) or {}).get("project_id") or cid
+
+    project_counts: dict[str, int] = {}
+    evidence_map: list[dict] = []
+    for row in pending:
+        picked: list[str] = []
+        for cid, score in row["scored"]:
+            if score <= 0 or len(picked) >= 2:
+                break
+            proj = _project_of(cid)
+            if project_counts.get(proj, 0) >= _MAX_SLOTS_PER_PROJECT:
+                continue
+            picked.append(cid)
+            project_counts[proj] = project_counts.get(proj, 0) + 1
+        bridge = row["bridge"]
+        # CR-090 follow-up: an administratively-satisfied required item (Bachelor's
+        # degree, years-of-experience already gated by seniority_gate.py) correctly
+        # has no claim_ids -- there's no claim about "having a degree" -- but with
+        # no bridge either, Rule 2 (unmapped required item) hard-blocks the packet
+        # anyway. Same root cause as the soft-gap fix in build_stage0_fit_gate.py,
+        # different fail-closed rule. Auto-supply a bridge note for this narrow,
+        # already-vetted category instead of leaving it to trip a second rule.
+        if row["bucket"] == "required" and not picked and not bridge:
+            if _is_administratively_satisfied(row["jd_item"].lower()):
+                bridge = (
+                    "Administratively satisfied (education / years-of-experience) -- "
+                    "not a skill claim, no evidence required."
+                )
+        evidence_map.append({
+            "jd_item": row["jd_item"],
+            "bucket": row["bucket"],
+            "claim_ids": picked,
+            "bridge": bridge,
+        })
 
     return evidence_map
 
@@ -432,6 +683,27 @@ def _extract_excerpt_for_project(
     return clean[:max_chars]
 
 
+def _excerpt_for_claim(
+    cid: str,
+    rec: dict,
+    we_text: str,
+    ai_text: str,
+    max_chars: int = _EXCERPT_MAX_CHARS,
+) -> str:
+    """CR-085: prefer the claim's own lens-specific `text` (merged in by load_claims from
+    master_claims.json) over regex-slicing workExperience.md by project_id. Falls back to
+    the existing project-level extraction when a claim has no `text` — legacy/test fixtures,
+    or any future claim added without one. This is what actually fixes the duplicate-excerpt
+    problem for real data: each lens gets genuinely distinct text instead of every lens of a
+    project collapsing to the same WE bracket-marker slice.
+    """
+    text = (rec.get("text") or "").strip()
+    if text:
+        return text[:max_chars]
+    project_id = rec.get("project_id") or cid
+    return _extract_excerpt_for_project(project_id, we_text, ai_text, rec, max_chars=max_chars)
+
+
 def _synthetic_excerpt(project_id: str, claim_rec: dict) -> str:
     """Fallback excerpt built from claim metadata when source text is unavailable."""
     tags = claim_rec.get("tags") or []
@@ -487,8 +759,7 @@ def _ensure_canonical_role_excerpts(
                 if cid in disabled or cid not in claims or cid in excerpts:
                     continue
                 rec = claims[cid]
-                project_id = rec.get("project_id") or cid
-                excerpt = _extract_excerpt_for_project(project_id, we_text, ai_text, rec)
+                excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text)
                 if excerpt:
                     excerpts[cid] = excerpt
                     counts[employer] = counts.get(employer, 0) + 1
@@ -520,8 +791,7 @@ def _ensure_jd_skill_anchor_excerpts(
             if cid in disabled or cid not in claims:
                 continue
             rec = claims[cid]
-            project_id = rec.get("project_id") or cid
-            excerpt = _extract_excerpt_for_project(project_id, we_text, ai_text, rec)
+            excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text)
             if excerpt:
                 excerpts[cid] = excerpt
                 break
@@ -543,8 +813,7 @@ def build_excerpts(
             if cid in excerpts:
                 continue
             rec = claims.get(cid, {})
-            project_id = rec.get("project_id") or cid
-            excerpt = _extract_excerpt_for_project(project_id, we_text, ai_text, rec)
+            excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text)
             if excerpt and not _is_thin_synthetic_excerpt(excerpt):
                 excerpts[cid] = excerpt
             elif excerpt and cid not in excerpts:
@@ -632,14 +901,98 @@ def _check_fail_closed(
     if estimated_tokens > _TOKEN_BUDGET:
         reasons.append(f"Over token budget: {estimated_tokens} > {_TOKEN_BUDGET}")
 
+    # Rule 6: Empty JD buckets on a non-thin JD (extraction_empty fail-closed)
+    req = stage0.get("required") or []
+    pref = stage0.get("preferred") or []
+    resp = stage0.get("responsibilities") or []
+    thin = bool(stage0.get("thin_jd", False))
+    if not req and not pref and not resp and not thin:
+        reasons.append(
+            "Empty JD buckets on a non-thin JD (extraction_empty) — rebuild Stage 0 "
+            "or fix section-header extraction before drafting."
+        )
+
+    # Rule 7: Soft gaps must carry claim_ids (or an explicit bridge note already present)
+    soft_gaps = _build_soft_gaps(stage0, evidence_map)
+    for sg in soft_gaps:
+        if sg.get("class") == "HARD":
+            continue
+        if sg.get("claim_ids"):
+            continue
+        note = (sg.get("note") or "").strip()
+        if note and "extraction_empty" in note:
+            # synthetic extraction gap — incomplete already via Rule 6
+            continue
+        if not note or note.startswith("Soft gap flagged"):
+            reasons.append(
+                f"Soft gap has no claim_ids to bridge: {(sg.get('item') or '')[:80]}"
+            )
+
     status = "incomplete" if reasons else "ready"
     return status, reasons
 
 
-def _build_soft_gaps(stage0: dict) -> list[dict]:
-    """Build soft_gaps list from stage0 flagged_gaps."""
+def _normalize_gap_item_key(text: str) -> str:
+    """Collapse case/whitespace so soft_gaps can match evidence_map jd_item text."""
+    return re.sub(r"\s+", " ", (text or "").casefold()).strip()
+
+
+def _claim_ids_for_soft_gap(gap: dict, evidence_map: list[dict]) -> list[str]:
+    """Resolve claim_ids for a Stage 0 flagged gap.
+
+    Preference order (2026-08-08 Cluster C item 9):
+    1. Hand-supplied ``claim_ids`` on the flagged_gaps row (extraction_override path).
+    2. Exact ``jd_item`` match against evidence_map.
+    3. Normalized (casefold + whitespace) match.
+    4. Containment match either direction (short gap label vs full required line).
+    """
+    hand = gap.get("claim_ids")
+    if isinstance(hand, list) and any(isinstance(x, str) and x.strip() for x in hand):
+        return [str(x).strip() for x in hand if isinstance(x, str) and x.strip()]
+
+    item = gap.get("item") or ""
+    if not item:
+        return []
+
+    by_exact: dict[str, list[str]] = {}
+    by_norm: dict[str, list[str]] = {}
+    for row in evidence_map:
+        jd_item = row.get("jd_item") or ""
+        ids = list(row.get("claim_ids") or [])
+        if not jd_item or not ids:
+            continue
+        by_exact[jd_item] = ids
+        by_norm[_normalize_gap_item_key(jd_item)] = ids
+
+    if item in by_exact:
+        return list(by_exact[item])
+
+    norm = _normalize_gap_item_key(item)
+    if norm in by_norm:
+        return list(by_norm[norm])
+
+    # Containment: prefer the longest evidence_map jd_item that overlaps.
+    best_ids: list[str] = []
+    best_len = -1
+    for jd_item, ids in by_exact.items():
+        jd_norm = _normalize_gap_item_key(jd_item)
+        if not jd_norm:
+            continue
+        if norm in jd_norm or jd_norm in norm:
+            if len(jd_norm) > best_len:
+                best_len = len(jd_norm)
+                best_ids = list(ids)
+    return best_ids
+
+
+def _build_soft_gaps(stage0: dict, evidence_map: list[dict] | None = None) -> list[dict]:
+    """Build soft_gaps list from stage0 flagged_gaps, with packet claim_ids attached."""
+    evidence_map = evidence_map or []
+
     soft_gaps: list[dict] = []
     for gap in stage0.get("flagged_gaps", []):
+        if not isinstance(gap, dict):
+            continue
         item = gap.get("item", "")
         if not item:
             continue
@@ -649,32 +1002,35 @@ def _build_soft_gaps(stage0: dict) -> list[dict]:
             or gap.get("bridge")
             or "Soft gap flagged at Stage 0; argue as transferable-skill fit in cover letter."
         )
-        soft_gaps.append({"item": item, "class": gap_class, "note": note})
+        soft_gaps.append({
+            "item": item,
+            "class": gap_class,
+            "note": note,
+            "claim_ids": _claim_ids_for_soft_gap(gap, evidence_map),
+        })
     return soft_gaps
 
 
 def _build_jd_buckets(stage0: dict) -> dict:
-    """Extract jd_buckets from stage0 in the packet schema shape."""
-    required = [
-        item for item in (_stage0_item_text(r) for r in stage0.get("required", []))
-        if item
-    ]
-    preferred = [
-        item for item in (_stage0_item_text(p) for p in stage0.get("preferred", []))
-        if item
-    ]
-    responsibilities = [
-        item for item in (_stage0_item_text(r) for r in stage0.get("responsibilities", []))
-        if item
-    ]
+    """Extract jd_buckets from stage0 in the packet schema shape.
+
+    CR-085: required/preferred/responsibilities are deliberately left empty here.
+    build_evidence_map emits exactly one row per Stage-0 item in each of those three
+    buckets (unconditionally, same order), so their text is always fully reconstructable
+    from evidence_map — populating both duplicated the same JD requirement text twice in
+    the serialized prompt (author_from_packet.py dumps the whole packet as JSON), measured
+    at ~8% of a real packet. Only `culture` has no evidence_map counterpart (culture items
+    are never scored/mapped), so it's the only bucket still populated. Keys are kept for
+    all four so authoring_packet_schema.json's required-keys check still passes.
+    """
     culture = [
         item for item in (_stage0_item_text(c) for c in stage0.get("culture", []))
         if item
     ]
     return {
-        "required": required,
-        "preferred": preferred,
-        "responsibilities": responsibilities,
+        "required": [],
+        "preferred": [],
+        "responsibilities": [],
         "culture": culture,
     }
 
@@ -697,7 +1053,7 @@ def assemble_packet(
     thin_jd = bool(stage0.get("thin_jd", False))
 
     jd_buckets = _build_jd_buckets(stage0)
-    soft_gaps = _build_soft_gaps(stage0)
+    soft_gaps = _build_soft_gaps(stage0, evidence_map)
 
     # Compute estimated_tokens before status check
     # Build a draft packet without status for size estimation
@@ -947,6 +1303,7 @@ Examples:
         action="store_true",
         help="Print result without writing authoring_packet.json.",
     )
+    add_force_args(parser, "stage0")
     args = parser.parse_args()
 
     folder = _resolve_folder(args.folder)
@@ -955,27 +1312,33 @@ Examples:
         sys.exit(0)
 
     stage0_path = folder / "stage0_fit_gate.json"
-    if not stage0_path.exists():
-        if args.with_stage0:
-            print("stage0_fit_gate.json missing — running build_stage0_fit_gate.py first...", file=sys.stderr)
-            try:
-                result = subprocess.run(
-                    [sys.executable, str(_SCRIPT_DIR / "build_stage0_fit_gate.py"), str(folder)],
-                    timeout=60,
-                )
-                if result.returncode != 0 or not stage0_path.exists():
-                    print("ERROR: build_stage0_fit_gate.py failed.", file=sys.stderr)
-                    sys.exit(0)
-            except Exception as exc:
-                print(f"ERROR running Stage 0: {exc}", file=sys.stderr)
-                sys.exit(0)
-        else:
-            print(
-                f"ERROR: stage0_fit_gate.json not found in {folder}. "
-                "Run build_stage0_fit_gate.py first, or pass --with-stage0.",
-                file=sys.stderr,
+    if not stage0_path.exists() and args.with_stage0:
+        print("stage0_fit_gate.json missing — running build_stage0_fit_gate.py first...", file=sys.stderr)
+        try:
+            result = subprocess.run(
+                [sys.executable, str(_SCRIPT_DIR / "build_stage0_fit_gate.py"), str(folder)],
+                timeout=60,
             )
+            if result.returncode != 0 or not stage0_path.exists():
+                print("ERROR: build_stage0_fit_gate.py failed.", file=sys.stderr)
+                sys.exit(0)
+        except Exception as exc:
+            print(f"ERROR running Stage 0: {exc}", file=sys.stderr)
             sys.exit(0)
+
+    # CR-075 Story 4.2 / AC2: Stage 0 exit gate. Missing or structurally invalid
+    # stage0_fit_gate.json exits non-zero unless --force (logged). Replaces the old
+    # "missing file => exit 0" path; other exit-0 error paths above/below stay as-is.
+    try:
+        require_stage_ready(
+            "stage0",
+            str(folder),
+            force=bool(args.force),
+            argv=sys.argv,
+        )
+    except StageGateNotReadyError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
 
     try:
         packet = build_packet(folder, no_hook=args.no_hook)

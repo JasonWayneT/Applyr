@@ -31,19 +31,13 @@ score anything -- verify_submission.py handles mechanical
 lint/structure/metrics/page-count checks, and the qualitative rubric_score
 still requires a real read against data/conversion_rubric.md.
 
-Separately caught while building this (2026-07-31): data/master_claims.json
-contains project_ids (ACC-111, ACC-113, ACC-115) with real-sounding, specific
-accomplishment text that have NO corresponding entry anywhere in
-workExperience.md's Approved Accomplishments Inventory -- the reverse of the
-documented architecture, where workExperience.md is supposed to be the
-source of truth and master_claims.json a tags-only index into it. This
-script treats those three as UNVERIFIED and never surfaces them as usable
-evidence, regardless of tag overlap, until Jason confirms they're real and
-they get written into workExperience.md properly. Also found ACC-117
-(Pendo) had the opposite problem -- documented in workExperience.md but
-absent from master_claims.json entirely, invisible to the tag-scan
-retrieval step Stage 1 instructs authors to use. Fixed by adding it to
-master_claims.json directly (see CHANGELOG.md).
+Historically (2026-07-31): ACC-111/113/115 existed in master_claims.json before
+their WE narratives landed; this script gated them via UNVERIFIED_PROJECT_IDS.
+Those three now have full WE backing (2026-08-10); the set was cleared in CR-088.
+Keep the empty-set hook so a future phantom project_id can be gated the same way.
+ACC-117 (Pendo) had the opposite problem (in WE, missing from claims) and was
+added to master_claims earlier -- see CHANGELOG.md. Catalog WE<->claims coverage
+is now also checked by scripts/audit_claims_coverage.py (CR-088).
 
 Usage:
     python scripts/check_ground_truth_coverage.py data/submissions/{company}
@@ -59,11 +53,10 @@ import sys
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 
-# Claims that exist in master_claims.json with no backing narrative in
-# workExperience.md as of 2026-07-31. Never surfaced as usable evidence by
-# this script until Jason confirms them and they get written into
-# workExperience.md for real -- tag overlap alone is not verification.
-UNVERIFIED_PROJECT_IDS = {"ACC-111", "ACC-113", "ACC-115"}
+# Project ids in master_claims with no backing WE narrative. Empty after CR-088
+# cleared ACC-111/113/115 (now in workExperience.md as of 2026-08-10). Add here
+# only for genuine phantoms — tag overlap alone is not verification.
+UNVERIFIED_PROJECT_IDS: set[str] = set()
 
 _WORD_RE = re.compile(r"[A-Za-z0-9$%]+")
 

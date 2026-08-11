@@ -956,6 +956,445 @@ class TestExtractionOverrideProtection(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Test: 2026-08-10 batch remediation (54-submission Stage 0 audit)
+# ---------------------------------------------------------------------------
+
+class TestBareRequiredHeader(unittest.TestCase):
+    """Deloitte-class: bare 'Required:' must open the required bucket.
+    Regex was requirements? only (requirement/requirements), never 'Required'."""
+
+    def test_bare_required_colon_extracts_items(self):
+        jd = textwrap.dedent(
+            """
+            Product Manager
+
+            The Key Responsibilities:
+            - Own the product roadmap for the research center
+            - Partner with engineering on delivery
+
+            Required:
+            - 5+ years of product management experience in B2B SaaS
+            - Strong stakeholder management and roadmap planning skills
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["responsibilities"]), 2)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        self.assertTrue(any("5+ years" in r for r in sections["required"]))
+
+
+class TestWorkYoullDoAndRolesHeaders(unittest.TestCase):
+    def test_work_youll_do_is_responsibilities(self):
+        jd = textwrap.dedent(
+            """
+            Work you'll do
+            - Define product strategy for the platform
+            - Lead cross-functional delivery with engineering
+
+            Requirements
+            - 4+ years of product management experience
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["responsibilities"]), 2)
+        self.assertTrue(any("product strategy" in r.lower() for r in sections["responsibilities"]))
+
+    def test_roles_and_responsibilities_header(self):
+        jd = textwrap.dedent(
+            """
+            Roles and Responsibilities:
+            - Coordinate product submissions with licensees
+            - Track deadlines across the global team
+
+            Experience and Qualifications
+            - Bachelor's degree in Business or related field
+            - 3+ years of product coordination experience
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["responsibilities"]), 2)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+
+
+class TestKnowledgeSkillsAbilitiesHeader(unittest.TestCase):
+    def test_ksa_header_opens_required(self):
+        jd = textwrap.dedent(
+            """
+            Knowledge, Skills, and Abilities
+            - Strong written communication and stakeholder management
+            - Ability to manage multiple deadlines under ambiguity
+
+            Benefits
+            - Medical, dental, and vision coverage
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        required_blob = " | ".join(sections["required"]).lower()
+        self.assertNotIn("medical, dental", required_blob)
+
+
+class TestLeadingBonusRoutesPreferred(unittest.TestCase):
+    """Seed Health: 'Bonus: ... Braze ...' stayed in required, hit hard-blocked
+    Braze, and forced Skip. Leading Bonus: must route to preferred so a bonus
+    tool mention cannot Skip the whole JD."""
+
+    def test_leading_bonus_line_goes_to_preferred(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Strong roadmap and prioritization skills
+            Bonus: experience in DTC e-commerce; familiarity with Shopify or lifecycle/CRM systems (e.g., Klaviyo, Braze, Iterable)
+            """
+        )
+        sections = _extract_sections(jd)
+        required_blob = " | ".join(sections["required"]).lower()
+        self.assertNotIn("braze", required_blob)
+        self.assertTrue(any("braze" in p.lower() for p in sections["preferred"]))
+
+    def test_bonus_braze_does_not_skip_jd(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Strong roadmap and prioritization skills
+            Bonus: exposure to lifecycle/CRM systems (e.g., Klaviyo, Braze, Iterable)
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["tier"], "Skip")
+        self.assertNotEqual(result["decision"], "SKIP")
+        hard = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
+        self.assertEqual(hard, [], f"preferred Bonus tool must not produce HARD flagged gaps: {hard}")
+
+
+class TestBoilerplateNoiseNotSoftGaps(unittest.TestCase):
+    """Measured 2026-08-10 on live submissions: E-Verify, pay notes, orphan
+    section labels, and benefits headers were becoming SOFT gaps."""
+
+    def test_everify_and_pay_notes_dropped(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            Amplify is an E-Verify participant.
+            Note: Starting pay will be based on a number of factors and commensurate with qualifications & experience.
+            We also have a location based compensation structure; there may be a different range for candidates in this and other locations
+            """
+        )
+        sections = _extract_sections(jd)
+        blob = " | ".join(sections["required"]).lower()
+        for junk in ("e-verify", "starting pay", "location based compensation"):
+            self.assertNotIn(junk, blob, f"boilerplate leaked into required: {junk}")
+
+    def test_orphan_labels_and_benefits_headers_dropped(self):
+        from build_stage0_fit_gate import _is_boilerplate_item
+
+        for label in (
+            "Your Qualifications",
+            "What You Can Expect From Us",
+            "How Will You Make An Impact",
+            "More about Nash",
+            "Ways of Working",
+            "Anticipated Position Close Date",
+            "Disability, Life Insurance and Ancillary Benefits",
+        ):
+            self.assertTrue(
+                _is_boilerplate_item(label),
+                f"expected orphan/benefits label to be boilerplate: {label!r}",
+            )
+
+    def test_hybrid_policy_blurb_dropped(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 4+ years of product management experience
+            Please note that per our policy on hybrid/virtual work, candidates not within a reasonable commuting distance from the posting location(s) will not be considered for employment, unless accommodation is granted as required by law.
+            """
+        )
+        sections = _extract_sections(jd)
+        blob = " | ".join(sections["required"]).lower()
+        self.assertNotIn("hybrid/virtual work", blob)
+
+
+class TestReadyNetStyleInformalHeaders(unittest.TestCase):
+    """Ready Net: informal 'About Your Role' / 'A Bit About You' headers left
+    all buckets empty → false extraction_empty Tier 2."""
+
+    def test_about_your_role_and_bit_about_you(self):
+        jd = textwrap.dedent(
+            """
+            Technical Product Manager
+
+            About Your Role At Ready
+
+            Define and communicate a clear product vision that aligns with business goals.
+            Develop and maintain a comprehensive product roadmap with key milestones.
+
+            A Bit About You
+
+            Bachelor's or Master's degree in a relevant technical field or equivalent experience.
+            Proven experience as a Technical Product Manager at the mid to senior level.
+            Strong technical background with software development processes.
+
+            About Ready
+
+            Humble but ambitious, knowledgeable but curious, persistent but not obnoxious
+            Comfortable working remotely
+
+            About What You Get
+
+            Competitive salary plus meaningful equity upside
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["responsibilities"]), 2)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        self.assertTrue(any("technical product manager" in r.lower() for r in sections["required"]))
+        required_blob = " | ".join(sections["required"]).lower()
+        for junk in ("humble but ambitious", "comfortable working remotely"):
+            self.assertNotIn(junk, required_blob, f"culture personality leaked into required: {junk}")
+
+
+class TestRealtimeAllCapsHeaders(unittest.TestCase):
+    """RealTime eClinical: WHO ARE WE? / WHAT ARE WE LOOKING FOR? / WHAT WILL
+    YOU BE DOING? left buckets empty."""
+
+    def test_all_caps_looking_for_and_doing(self):
+        jd = textwrap.dedent(
+            """
+            Product Owner
+
+            WHO ARE WE?
+            RealTime is a SaaS company for clinical research.
+
+            WHAT ARE WE LOOKING FOR?
+            5+ years of product ownership experience in B2B SaaS
+            Strong agile backlog and user story writing skills
+
+            WHAT WILL YOU BE DOING?
+            Translate product initiatives into clear user stories and acceptance criteria
+            Partner with engineering on sprint delivery
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        self.assertGreaterEqual(len(sections["responsibilities"]), 2)
+        self.assertTrue(any("product ownership" in r.lower() for r in sections["required"]))
+
+
+class TestThinStubSkips(unittest.TestCase):
+    """Netradyne-class career-page stub: thin + empty buckets must Skip, not
+    Tier 2 PASS with extraction_empty."""
+
+    def test_thin_empty_stub_is_skip(self):
+        jd = textwrap.dedent(
+            """
+            Careers at ExampleCo
+
+            Thank you for your interest in ExampleCo.
+            Want to protect drivers and reduce costs?
+            Book Demo
+            Book Demo
+            """
+        )
+        result = _build(jd)
+        self.assertTrue(result["thin_jd"])
+        self.assertEqual(result["tier"], "Skip")
+        self.assertEqual(result["decision"], "SKIP")
+        self.assertIn("thin", (result.get("skip_reason") or "").lower())
+
+
+class TestMixedBucketRecovery(unittest.TestCase):
+    """When required is empty but responsibilities holds a mixed duty+qual list
+    (SDL / Shazam / Camunda-class), recover quals into required/preferred."""
+
+    def test_sdl_style_mixed_position_splits_quals(self):
+        jd = textwrap.dedent(
+            """
+            Product Manager
+
+            The Position
+
+            Own the product roadmap and prioritize based on customer needs
+            Run sprint planning, standups, retros, and backlog grooming
+            Write clear specs, user stories, and acceptance criteria
+            Work closely with engineering leads to keep velocity high
+            5+ years in product management, with real experience running agile teams
+            A track record of shipping software and owning outcomes, not just outputs
+            Strong opinions about AI and how it's changing product work
+            Bonus: experience in GovTech, SaaS, or selling to non-technical buyers
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["responsibilities"]), 3)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        self.assertTrue(any("5+ years" in r for r in sections["required"]))
+        self.assertTrue(any("track record" in r.lower() for r in sections["required"]))
+        self.assertTrue(any("govtech" in p.lower() for p in sections["preferred"]))
+        resp_blob = " | ".join(sections["responsibilities"]).lower()
+        self.assertNotIn("5+ years", resp_blob)
+        self.assertTrue(any("own the product roadmap" in r.lower() for r in sections["responsibilities"]))
+
+    def test_does_not_split_when_required_already_populated(self):
+        """Well-structured JDs must not have responsibilities reclassified."""
+        jd = textwrap.dedent(
+            """
+            What you'll do
+            - Own the product roadmap for the platform
+            - Partner with engineering on delivery
+            - 5+ years of experience mentoring junior PMs as a stretch duty phrasing
+
+            What we're looking for
+            - 3-5 years of product management experience in B2B SaaS
+            - Strong agile and backlog grooming skills
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        # The stretch "5+ years" line under responsibilities must stay there —
+        # recovery only fires when required is empty.
+        self.assertTrue(
+            any("mentoring" in r.lower() for r in sections["responsibilities"]),
+            "must not move duty-section lines when required already has items",
+        )
+
+
+class TestMidJdQualsHeaders(unittest.TestCase):
+    def test_what_do_you_need_opens_required(self):
+        jd = textwrap.dedent(
+            """
+            WHAT WILL YOU BE DOING?
+            Translate product initiatives into clear user stories
+
+            WHAT DO YOU NEED?
+            5+ years of product ownership experience in B2B SaaS
+            Strong agile backlog and user story writing skills
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        self.assertTrue(any("product ownership" in r.lower() for r in sections["required"]))
+
+    def test_ideal_candidate_profile_opens_required(self):
+        jd = textwrap.dedent(
+            """
+            What you'll do
+            Own the accounting platform integrations across customers
+
+            Ideal Candidate Profile
+            5 years of product management experience, ideally in B2B SaaS
+            Exceptional soft skills and stakeholder navigation
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["required"]), 2)
+        self.assertTrue(any("5 years of product management" in r.lower() for r in sections["required"]))
+
+
+class TestNoiseHeadersAndFluff(unittest.TestCase):
+    def test_realtime_what_sets_you_apart_not_a_gap(self):
+        jd = textwrap.dedent(
+            """
+            WHAT DO YOU NEED?
+            5+ years of product ownership experience in B2B SaaS
+            Strong agile backlog skills
+
+            WHAT SETS YOU APART?
+            Experience working in regulated product environments
+
+            WHAT IS IN IT FOR YOU?
+            Competitive salary and benefits
+            """
+        )
+        sections = _extract_sections(jd)
+        blob = " | ".join(sections["required"] + sections["preferred"] + sections["responsibilities"]).lower()
+        self.assertNotIn("what sets you apart", blob)
+        self.assertNotIn("what is in it for you", blob)
+        self.assertTrue(any("regulated" in r.lower() for r in sections["required"] + sections["preferred"]))
+
+    def test_acushnet_benefits_cta_not_in_resp(self):
+        jd = textwrap.dedent(
+            """
+            The Position
+            Own the product roadmap for golf equipment lines
+            5+ years of product management experience
+
+            Our Commitment to You
+            Additionally, you'll enjoy perks like pet insurance, legal planning, education assistance
+            Ready to Make an Impact?
+            """
+        )
+        sections = _extract_sections(jd)
+        resp_blob = " | ".join(sections["responsibilities"]).lower()
+        for junk in ("commitment to you", "pet insurance", "ready to make an impact"):
+            self.assertNotIn(junk, resp_blob, f"benefits/CTA leaked into resp: {junk}")
+
+    def test_dependable_fluff_dropped(self):
+        from build_stage0_fit_gate import _is_boilerplate_item
+
+        self.assertTrue(
+            _is_boilerplate_item(
+                "Dependable, accountable, and able to work effectively in dynamic, fast-paced settings."
+            )
+        )
+
+
+class TestUndergraduateSatisfied(unittest.TestCase):
+    def test_undergraduate_degree_not_soft_gap(self):
+        from build_stage0_fit_gate import classify_gaps, _load_anchor_vocab
+
+        _, _, gaps = classify_gaps(
+            ["Undergraduate degree", "3+ years of product management experience in B2B SaaS"],
+            [],
+            vocab=_load_anchor_vocab(),
+        )
+        items = [g["item"].lower() for g in gaps]
+        self.assertFalse(any("undergraduate" in i for i in items))
+
+
+class TestFamiliarityHardToolIsSoft(unittest.TestCase):
+    def test_familiarity_with_docker_is_soft_not_skip(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Familiarity with technologies such as Kubernetes, Docker, and cloud services (AWS, GCP, Azure)
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["tier"], "Skip")
+        hard = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
+        soft = [g for g in result["flagged_gaps"] if g.get("gap_class") == "SOFT"]
+        self.assertEqual(hard, [], f"familiarity hedge must not HARD-skip: {hard}")
+        self.assertTrue(any("docker" in g["item"].lower() for g in soft))
+
+    def test_deep_familiarity_snowflake_still_hard(self):
+        """Intensified familiarity stays HARD — existing Snowflake Skip contract."""
+        result = _build(_SNOWFLAKE_JD)
+        self.assertEqual(result["tier"], "Skip")
+        self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+
+
+class TestEmptyRequiredNotTier1(unittest.TestCase):
+    def test_preferred_only_is_tier2(self):
+        jd = textwrap.dedent(
+            """
+            Preferred qualifications
+            - Experience with Jira and Confluence
+            - Prior work in integration-heavy platforms
+            - Strong written communication skills
+            """
+        )
+        result = _build(jd)
+        self.assertEqual(len(result["required"]), 0)
+        self.assertGreater(len(result["preferred"]), 0)
+        self.assertEqual(result["tier"], "Tier 2")
+        self.assertEqual(result["decision"], "PASS")
+
+
+# ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
 

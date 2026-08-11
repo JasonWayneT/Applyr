@@ -142,14 +142,34 @@ def _get_hard_tool_pattern() -> re.Pattern:
 _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
     ("required", re.compile(
         r"^(?:#+\s*)?"
-        r"(?:requirements?|qualifications?|what\s+you(?:'|')ll?\s+(?:need|bring|have)|"
+        r"(?:"
+        # Bare "Required" / "Required:" (Deloitte-class, 2026-08-10 batch).
+        # Must be its own $-anchored alternative — a trailing \b after the group
+        # fails when the line ends in ":" (non-word char), so do not share \b.
+        r"required\s*:?\s*$|"
+        r"(?:"
+        r"requirements?|qualifications?|your\s+qualifications?|"
+        r"what\s+you(?:'|')ll?\s+(?:need|bring|have)|"
         r"what\s+we(?:'|')re?\s+looking\s+for|"
         r"a\s+few\s+things\s+(?:they|we)(?:'|')re\s+looking\s+for|"
         r"who\s+you\s+are|must\s+have|the\s+ideal\s+candidate|"
         r"minimum\s+qualifications?|required\s+(?:skills?|qualifications?|experience)|"
         r"key\s+requirements?|basic\s+qualifications?|you\s+bring|about\s+you|"
+        # Ready-Net informal quals header; Dr Seuss KSA / Experience and Qualifications
+        r"a\s+bit\s+about\s+you|"
+        r"knowledge\s*,?\s*skills\s*,?\s*(?:and\s+)?abilities|"
+        r"experience\s+and\s+qualifications?|"
         r"experience\s+(?:required|needed)|"
-        r"what\s+you\s+offer)\b",
+        # RealTime eClinical all-caps: "WHAT ARE WE LOOKING FOR?" / "WHAT DO YOU NEED?"
+        r"what\s+are\s+we\s+looking\s+for|"
+        r"what\s+do\s+you\s+need|"
+        r"what\s+sets\s+you\s+apart|"
+        # Paylocity / PointClickCare mid-JD quals labels
+        r"ideal\s+candidate\s+profile|"
+        r"(?:your\s+)?key\s+strengths|"
+        r"what\s+you\s+offer"
+        r")\b"
+        r")",
         re.I,
     )),
     ("preferred", re.compile(
@@ -165,8 +185,15 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
     ("responsibilities", re.compile(
         r"^(?:#+\s*)?"
         r"(?:responsibilities?|what\s+you(?:'|')ll?\s+do|what\s+you\s+will\s+(?:do|be\s+doing|own)|"
-        r"the\s+role|in\s+this\s+role|what\s+you(?:'|')ll?\s+(?:be\s+doing|own)|"
-        r"key\s+responsibilities?|your\s+responsibilities?|"
+        # Deloitte / Greenhouse variants measured 2026-08-10
+        r"work\s+you(?:'|')ll?\s+do|"
+        r"(?:the\s+)?key\s+responsibilities?|"
+        r"roles?\s+and\s+responsibilities?|"
+        r"how\s+(?:will\s+you|you(?:'|')ll?\s+)\s*make\s+an?\s+impact|"
+        r"the\s+role|the\s+position|in\s+this\s+role|what\s+you(?:'|')ll?\s+(?:be\s+doing|own)|"
+        r"your\s+responsibilities?|"
+        # Ready-Net informal role header ("About Your Role At Ready")
+        r"about\s+(?:your\s+)?role(?:\s+at\s+\S+)?|"
         # CR-086: AMN-class — "Job Responsibilities" mid-JD was captured as a required *item*
         # because the header regex required the line to *start* with "responsibilities".
         r"job\s+responsibilities?|"
@@ -177,6 +204,8 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         # company-intro paragraph, "You'll report to:", and downstream interview
         # steps all into whatever bucket was active before it).
         r"what\s+the\s+job\s+involves|"
+        # RealTime eClinical all-caps: "WHAT WILL YOU BE DOING?"
+        r"what\s+will\s+you\s+be\s+doing|"
         r"you\s+will)\b",
         re.I,
     )),
@@ -187,21 +216,37 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         # leaving current_bucket unchanged so every benefits bullet underneath
         # gets miscategorized as a requirement. Bounded to 0-3 short capitalized
         # tokens so this can't drift into matching mid-paragraph.
-        r"^(?:#+\s*)?(?:[A-Z][\w'&.-]{1,20}\s+){0,3}"
+        # Company-name prefix must stay CASE-SENSITIVE even though the rest of
+        # this pattern uses re.I. With IGNORECASE, [A-Z] also matches lowercase,
+        # so "Strong opinions about AI" was matching as a fake "About {Company}"
+        # culture header (2026-08-10 mixed-bucket recovery) and dumping the
+        # trailing Bonus: line into culture.
+        r"^(?:#+\s*)?(?-i:(?:[A-Z][\w'&.-]{1,20}\s+){0,3})"
         r"(?:about\s+us|our\s+(?:culture|values?|team|mission|company)|"
+        # "More about {Company}" / bare "About {Company}" founder blurbs
+        # (Nash / Ready Net, 2026-08-10). Negative lookahead keeps "About you" /
+        # "About your role" / "About what you get" on their real buckets.
+        r"more\s+about\s+\w+|"
+        r"about\s+(?!you\b|your\b|what\b)\w+|"
         # CR-086: "Our Core Values" did not match `our values` (intervening "Core").
         r"(?:our\s+)?core\s+values?|"
         r"why\s+(?:us|join|we|this\s+role)|company\s+overview|who\s+we\s+are|"
+        r"who\s+are\s+(?:we|[\w&]+)|"
         # CR-089: "What We Offer" / "Our Perks" were already filtered as orphan
         # *items* (_ORPHAN_HEADER_LABEL_RE) but never redirected current_bucket,
         # so this is the fix that actually stops the leak rather than just hiding
         # the header line itself.
         r"what\s+we(?:'|')ll?\s+offer|what\s+we\s+offer|our\s+perks|"
         r"what\s+you(?:'|')ll?\s+(?:get|receive)|"
+        r"what\s+you\s+can\s+expect(?:\s+from\s+us)?|"
+        r"about\s+what\s+you\s+get|"
         # CR-090 follow-up: measured 2026-08-10 -- neither a header-redirect trigger
         # nor the orphan-item filter, so this fell straight through as a standalone
         # required/preferred item on its own bucket-inheritance.
         r"what'?s?\s+in\s+this\s+for\s+you|"
+        r"what\s+is\s+in\s+it\s+for\s+you|"
+        r"our\s+commitment\s+to\s+you|"
+        r"ready\s+to\s+make\s+an?\s+impact|"
         r"benefits?|perks?|compensation)\b",
         re.I,
     )),
@@ -217,8 +262,9 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
 _IGNORE_SECTION_HEADERS = re.compile(
     # CR-089: same company-name-prefix tolerance as the culture header above --
     # "Company Perks & Benefits" style headers were silently defeating this
-    # anchored match too.
-    r"^(?:#+\s*)?(?:[A-Z][\w'&.-]{1,20}\s+){0,3}"
+    # anchored match too. (?-i:...) keeps the prefix case-sensitive under re.I
+    # (see culture-header note above).
+    r"^(?:#+\s*)?(?-i:(?:[A-Z][\w'&.-]{1,20}\s+){0,3})"
     r"(?:"
     r"relocation(?:\s+statement)?|"
     r"in-?office(?:\s+requirement)?(?:\s+statement)?|"
@@ -246,7 +292,15 @@ _IGNORE_SECTION_HEADERS = re.compile(
     # CR-086: physical / work-environment headers end quals collection
     r"work\s+environment(?:\s*/\s*physical\s+requirements?)?|"
     r"physical\s+requirements?|"
-    r"working\s+conditions?"
+    r"working\s+conditions?|"
+    # 2026-08-10 batch: logistics / process labels that aren't hire criteria
+    r"ways\s+of\s+working|"
+    r"anticipated\s+position\s+close\s+date|"
+    r"disability\s*,?\s*life\s+insurance(?:\s+and\s+ancillary\s+benefits?)?|"
+    r"our\s+commitment\s+to\s+you|"
+    r"ready\s+to\s+make\s+an?\s+impact|"
+    r"what\s+sets\s+you\s+apart|"
+    r"what\s+is\s+in\s+it\s+for\s+you"
     r")"
     r"\s*:?\s*$",
     re.I,
@@ -335,7 +389,26 @@ _BOILERPLATE_ITEM_RE = re.compile(
     r"convinced\?\s*submit\s+your\s+application|"
     r"^start\s+date:?\s*|"
     r"^offer\s*\+\s*prior\s+employment|"
-    r"if\s+you\s+don'?t\s+have\s+an?\s+up\s+to\s+date\s+cv"
+    r"if\s+you\s+don'?t\s+have\s+an?\s+up\s+to\s+date\s+cv|"
+    # 2026-08-10 batch: E-Verify / pay-structure / hybrid-policy / close-date noise
+    r"\be-?verify\s+participant\b|"
+    r"note:\s*starting\s+pay\s+will\s+be\s+based|"
+    r"location\s+based\s+compensation\s+structure|"
+    r"policy\s+on\s+hybrid\s*/?\s*virtual\s+work|"
+    r"anticipated\s+position\s+close\s+date|"
+    r"ways\s+of\s+working|"
+    r"disability\s*,?\s*life\s+insurance(?:\s+and\s+ancillary\s+benefits?)?|"
+    # Acushnet / Realtime CTA + benefits copy
+    r"our\s+commitment\s+to\s+you|"
+    r"ready\s+to\s+make\s+an?\s+impact|"
+    r"additionally,?\s+you(?:'|')ll?\s+enjoy\s+perks|"
+    r"pet\s+insurance|"
+    r"what\s+sets\s+you\s+apart|"
+    r"what\s+is\s+in\s+it\s+for\s+you|"
+    # Soft-skill personality fluff (Acushnet-class) — not hire criteria
+    r"^dependable\s*,?\s*accountable|"
+    r"^self-?motivated\s+(?:and|,)|"
+    r"^passionate\s+about\s+making\s+a\s+difference"
     r")"
 )
 
@@ -353,7 +426,18 @@ _ORPHAN_HEADER_LABEL_RE = re.compile(
     r"key\s+capabilities?(?:\s+for\s+success)?|"
     r"key\s+capabilities?\s+for\s+success|"
     r"about\s+(?:the\s+)?(?:role|company|us)|"
+    r"more\s+about\s+\w+|"
     r"what\s+we\s+offer|"
+    r"what\s+you\s+can\s+expect(?:\s+from\s+us)?|"
+    r"your\s+qualifications?|"
+    r"how\s+(?:will\s+you|you(?:'|')ll?\s+)\s*make\s+an?\s+impact|"
+    r"ways\s+of\s+working|"
+    r"anticipated\s+position\s+close\s+date|"
+    r"disability\s*,?\s*life\s+insurance(?:\s+and\s+ancillary\s+benefits?)?|"
+    r"our\s+commitment\s+to\s+you|"
+    r"ready\s+to\s+make\s+an?\s+impact|"
+    r"what\s+sets\s+you\s+apart|"
+    r"what\s+is\s+in\s+it\s+for\s+you|"
     r"benefits?\s+(?:and|&)\s+perks?"
     r")"
     r"\s*:?\s*$",
@@ -419,8 +503,13 @@ def _is_list_leadin(clean: str) -> bool:
 # that single item to the preferred bucket, not the required one — the section
 # header controls where MOST lines in the section go, but this one line
 # self-labels as preferred and the extractor should trust that over the header.
+# 2026-08-10 (Seed Health): leading "Bonus: … Braze …" stayed in required, hit a
+# hard-blocked tool, and forced Skip — leading Bonus: is also an inline preferred.
 _INLINE_PREFERRED_RE = re.compile(
-    r"(?:\bis\s+(?:strongly\s+)?preferred\b|\(preferred\)|,\s*preferred\b)\s*\.?\s*$",
+    r"(?:"
+    r"^(?:bonus\s*(?:points?)?\s*:|bonus\s+(?:if|qualifications?)\b)|"
+    r"(?:\bis\s+(?:strongly\s+)?preferred\b|\(preferred\)|,\s*preferred\b)\s*\.?\s*$"
+    r")",
     re.I,
 )
 
@@ -500,7 +589,100 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
     for key in buckets:
         buckets[key] = [x for x in buckets[key] if not _is_boilerplate_item(x)]
 
+    # Recovery: mixed duty+qual list landed entirely in responsibilities with
+    # required empty (SDL / Shazam / Camunda-class). Only fires when required is
+    # empty so well-structured JDs are untouched.
+    _recover_mixed_responsibilities(buckets)
+
     return buckets
+
+
+# Duty-imperative lead-ins for mixed-bucket recovery. Anchored at start so a
+# quals line that merely *mentions* "lead" mid-sentence stays a qual.
+_DUTY_LEADIN_RE = re.compile(
+    r"^(?:"
+    r"own|run|write|work|bring|talk|report|define|develop|lead|partner|"
+    r"translate|engage|champion|contribute|leverage|scope|prioritize|build|"
+    r"conduct|act|exhibit|manage|keep|gather|collaborate|participate|support|"
+    r"optimize|monitor|communicate|maintain|serve|establish|enable|"
+    r"standardize|assess|influence|create|identify|ensure|facilitate|"
+    r"fully\s+evaluate|continuous(?:ly)?\s+assess|proactively\s+identify"
+    r")\b",
+    re.I,
+)
+
+# Qualification-shaped lead-ins that are not years/degree (those use existing
+# helpers) but still belong in required, not responsibilities.
+_QUAL_LEADIN_RE = re.compile(
+    r"^(?:"
+    r"a\s+track\s+record|"
+    r"proven\s+(?:ability|experience|track)|"
+    r"strong\s+(?:opinions?|understanding|communication|golf|problem)|"
+    r"excellent\s+(?:written|verbal|communication|business)|"
+    r"exceptional\s+(?:soft\s+skills|problem|communication)|"
+    r"comfortable\b|"
+    r"clear\s+writer|"
+    r"ability\s+(?:to|and)|"
+    r"familiarity\s+with|"
+    r"experience\s+(?:of|with|working|supporting|in)\b|"
+    r"design\s+taste|"
+    r"a\s+lot\s+of\s+agency|"
+    r"a\s+convincing|"
+    r"dependable\b|"
+    r"intermediate\s+to\s+advanced|"
+    r"operational\s+product\s+management"
+    r")",
+    re.I,
+)
+
+
+def _looks_like_duty(text: str) -> bool:
+    clean = (text or "").strip().lstrip("-•*◦▪▸→").strip()
+    return bool(_DUTY_LEADIN_RE.match(clean))
+
+
+def _looks_like_qualification(text: str) -> bool:
+    clean = (text or "").strip().lstrip("-•*◦▪▸→").strip()
+    if not clean:
+        return False
+    lower = clean.lower()
+    if _YEARS_EXPERIENCE_LEADIN_RE.match(lower):
+        return True
+    if _BACHELORS_SATISFIED_RE.search(lower) or re.search(
+        r"\b(?:master'?s?|mba|ph\.?d\.?)\s+degree\b", lower
+    ):
+        return True
+    if _QUAL_LEADIN_RE.match(clean):
+        return True
+    return False
+
+
+def _recover_mixed_responsibilities(buckets: dict[str, list[str]]) -> None:
+    """Move qualification-shaped lines out of responsibilities when required is empty.
+
+    Mutates *buckets* in place. No-op when required already has items, or when
+    responsibilities is empty. Preferred markers (leading Bonus:) go to preferred.
+    Ambiguous non-duty / non-qual lines stay in responsibilities (avoid inventing
+    soft-gap noise from culture fluff that leaked into the duty list).
+    """
+    if buckets.get("required") or not buckets.get("responsibilities"):
+        return
+
+    kept_resp: list[str] = []
+    for item in buckets["responsibilities"]:
+        if _INLINE_PREFERRED_RE.search(item):
+            buckets["preferred"].append(item)
+            continue
+        if _looks_like_qualification(item) and not _looks_like_duty(item):
+            buckets["required"].append(item)
+            continue
+        if _looks_like_duty(item):
+            kept_resp.append(item)
+            continue
+        # Ambiguous: leave in responsibilities rather than invent soft gaps
+        kept_resp.append(item)
+
+    buckets["responsibilities"] = kept_resp
 
 
 def _detect_thin_jd(jd_text: str, required_items: list) -> bool:
@@ -631,12 +813,36 @@ _YEARS_EXPERIENCE_LEADIN_RE = re.compile(
 # (Master's/MBA/PhD/JD/MD "required") -- those remain real gaps. A mention of a
 # higher degree as merely *preferred* alongside a Bachelor's requirement is not a
 # gap (the Bachelor's already satisfies the line).
-_BACHELORS_SATISFIED_RE = re.compile(r"\bbachelor(?:'s|s)?\s+degree\b", re.I)
+_BACHELORS_SATISFIED_RE = re.compile(
+    r"\b(?:bachelor(?:'s|s)?\s+degree|undergraduate\s+degree)\b",
+    re.I,
+)
 _HIGHER_DEGREE_MANDATORY_RE = re.compile(
     r"\b(?:master'?s?|mba|ph\.?d\.?|j\.?d\.?|m\.?d\.?)\s+degree\s+required\b|"
     r"\brequires?\s+an?\s+(?:master'?s?|mba|ph\.?d\.?)\b",
     re.I,
 )
+
+# Soft familiarity hedges on hard-blocked tools → Tier 2 SOFT, not Skip.
+# Intensifiers (deep/strong/hands-on) keep HARD so "Deep familiarity with Snowflake"
+# still Skips. Plain "Familiarity with Docker/K8s" stays draftable as soft.
+_SOFT_FAMILIARITY_HEDGE_RE = re.compile(
+    r"\b(?:familiarity\s+with|familiar\s+with|exposure\s+to|awareness\s+of|"
+    r"working\s+knowledge\s+of|basic\s+(?:understanding|knowledge)\s+of)\b",
+    re.I,
+)
+_FAMILIARITY_INTENSIFIER_RE = re.compile(
+    r"\b(?:deep|strong|extensive|expert|hands-?on)\b",
+    re.I,
+)
+
+
+def _is_soft_familiarity_hedge(item_lower: str) -> bool:
+    if not _SOFT_FAMILIARITY_HEDGE_RE.search(item_lower):
+        return False
+    if _FAMILIARITY_INTENSIFIER_RE.search(item_lower):
+        return False
+    return True
 
 
 def _is_administratively_satisfied(item_lower: str) -> bool:
@@ -689,9 +895,19 @@ def _classify_one_item(
     """
     item_lower = item.lower()
 
-    # Check for hard-blocked tools first
+    # Check for hard-blocked tools first. Plain familiarity/exposure hedges stay
+    # SOFT (Tier 2) so an unconfirmed tool mention does not Skip the JD; intensified
+    # phrasing (deep/strong/hands-on) still HARD-Skips.
     hard_match = _get_hard_tool_pattern().search(item_lower)
     if hard_match:
+        if _is_soft_familiarity_hedge(item_lower):
+            return {
+                "item": item,
+                "anchor": "none",
+                "gap": True,
+                "gap_class": "SOFT",
+                "domain_soft": False,
+            }
         return {
             "item": item,
             "anchor": "none",
@@ -808,6 +1024,9 @@ def _determine_tier(
     prefs_result: dict,
     flagged_gaps: list[dict],
     db_action: str,
+    *,
+    thin_incomplete: bool = False,
+    required_empty: bool = False,
 ) -> tuple[str, str]:
     """
     Return (tier, decision) based on gate results.
@@ -823,12 +1042,22 @@ def _determine_tier(
     if not prefs_result.get("passed", True):
         return "Skip", "SKIP"
 
+    # Thin career-page stubs with no extractable hire criteria (Netradyne-class,
+    # 2026-08-10): Skip, never a clean Tier 1 / extraction_empty Tier 2 PASS.
+    if thin_incomplete:
+        return "Skip", "SKIP"
+
     # Any HARD gap forces Skip
     if any(g.get("gap_class") == "HARD" for g in flagged_gaps):
         return "Skip", "SKIP"
 
     # DB reapply flag or any SOFT gap → Tier 2
     if db_action == "reapply_flag" or any(g.get("gap_class") == "SOFT" for g in flagged_gaps):
+        return "Tier 2", "PASS"
+
+    # Preferred-only / no-required extract must not look like a clean Tier 1
+    # (Beyond-class, 2026-08-10 monitor) — force Tier 2 so under-extraction is visible.
+    if required_empty:
         return "Tier 2", "PASS"
 
     return "Tier 1", "PASS"
@@ -963,21 +1192,50 @@ def build_stage0_fit_gate(
         and not responsibilities
         and word_count >= 80
     )
-    if extraction_empty:
+    # Thin stub with nothing extractable (career-page / demo CTA, not a real JD)
+    thin_incomplete = bool(
+        thin_jd
+        and not required_raw
+        and not preferred_raw
+        and not responsibilities
+    )
+    if thin_incomplete:
+        flagged_gaps.append({
+            "item": "Stage 0: thin JD stub with no extractable requirements/responsibilities",
+            "gap_class": "HARD",
+            "bridge": "thin_incomplete — posting is not a real JD; Skip rather than draft",
+        })
+    elif extraction_empty:
         flagged_gaps.append({
             "item": "Stage 0 extraction returned empty buckets on a non-thin JD",
             "gap_class": "SOFT",
             "bridge": "extraction_empty — re-check JD section headers before drafting",
         })
+    elif not required_raw and (preferred_raw or responsibilities):
+        # Preferred-only (or duties-only) extract — surface so Tier 1 can't fake clean
+        flagged_gaps.append({
+            "item": "Stage 0: no required items extracted (preferred/responsibilities only)",
+            "gap_class": "SOFT",
+            "bridge": "required_empty — confirm quals headers before treating as clean pass",
+        })
 
     # --- Step 5: Determine tier ---
-    tier, decision = _determine_tier(prefs_result, flagged_gaps, db_action)
+    tier, decision = _determine_tier(
+        prefs_result,
+        flagged_gaps,
+        db_action,
+        thin_incomplete=thin_incomplete,
+        required_empty=not required_raw,
+    )
 
     # --- Step 6: Build skip_reason if needed ---
     skip_reason: str | None = None
     skip_reason_code: str | None = None
     if tier == "Skip":
-        if not prefs_result.get("passed"):
+        if thin_incomplete:
+            skip_reason = "Thin JD stub with no extractable hire criteria"
+            skip_reason_code = "thin_incomplete"
+        elif not prefs_result.get("passed"):
             first_reject = prefs_result["rejects"][0]
             skip_reason = first_reject["reason"]
             skip_reason_code = first_reject["code"]

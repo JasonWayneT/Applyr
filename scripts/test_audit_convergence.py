@@ -147,10 +147,16 @@ class TestAuditConvergence(unittest.TestCase):
             final_issues=["summary sentence count"],
         )
 
+        # Must clear batch_pipeline.get_min_jd_chars_evaluate()'s real threshold (800 chars,
+        # data/candidate_preferences.json's min_jd_chars_evaluate is unset so the 800 default
+        # applies) or _jd_meets_evaluate_threshold() rejects it before ever reaching the mocked
+        # gates below, silently returning {"score": 0, "passed": False} from an earlier,
+        # unmocked branch -- which is exactly what was happening here (this test's original
+        # ~130-char JD never actually exercised the audit-failure path it claims to test).
         jd = (
             "Product Manager. Remote US only. B2B SaaS platform. "
-            "Cross-functional roadmap ownership. 5+ years experience."
-        )
+            "Cross-functional roadmap ownership. 5+ years experience. "
+        ) * 12
 
         buf = io.StringIO()
         with patch.object(batch_pipeline, "passes_jd_keyword_gate", return_value=True):

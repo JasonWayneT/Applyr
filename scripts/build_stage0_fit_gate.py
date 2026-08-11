@@ -72,10 +72,23 @@ def _load_anchor_vocab() -> set[str]:
             for terms in catalog.values():
                 for t in terms:
                     term = t.strip().lower()
+                    if not term:
+                        continue
                     vocab.add(term)
-                    # Split "Technical Literacy: HTML/CSS/JavaScript" at delimiters
-                    for word in re.findall(r"[a-z]{3,}", term):
-                        vocab.add(word)
+                    # Skill catalog entries are product/tool phrases. Do NOT whitespace-split
+                    # them into bare words — "Microsoft Teams" / "Google Suite" previously
+                    # added "microsoft" and "suite", which falsely anchored unrelated
+                    # "Microsoft Office Suite" requirements as grounded (Central Bank,
+                    # 2026-08-11). Keep slash/colon/comma components only (e.g.
+                    # "HTML/CSS/JavaScript" → html, css, javascript).
+                    for part in re.split(r"[/,:]+", term):
+                        part = part.strip()
+                        if len(part) < 3:
+                            continue
+                        vocab.add(part)
+                        if " " in part:
+                            # Still allow the component phrase; do not add its words.
+                            continue
         except Exception:
             pass
 
@@ -86,38 +99,10 @@ def _load_anchor_vocab() -> set[str]:
 # Hard-blocked tool list (Story 2.4)
 # ---------------------------------------------------------------------------
 
-# Tools that Jason definitively does not have experience with.
-# Drawn from AGENTS.md hard anti-hallucination rules and common industry tools.
-# NOT a comprehensive list — add to it; err on SOFT when uncertain.
-_HARD_BLOCKED_TOOLS: frozenset[str] = frozenset({
-    # Healthcare data standards
-    "fhir", "hl7", "epic", "cerner", "meditech", "athenahealth",
-    "redox", "mirth", "smartonfhir", "dicom",
-    # Data warehouse / analytics infrastructure
-    "snowflake", "databricks", "dbt", "fivetran", "airbyte",
-    "tableau", "looker", "power bi", "powerbi", "qlik", "sisense",
-    # Infrastructure / cloud infra
-    "docker", "kubernetes", "k8s", "terraform", "helm",
-    "ansible", "puppet", "chef",
-    # Cloud platforms (PM roles that require cloud certification / ownership)
-    # Note: general cloud-aware is NOT a gap; only direct ownership
-    # ML / AI frameworks (engineering, not tooling)
-    "tensorflow", "pytorch", "keras", "scikit-learn", "huggingface",
-    "mlflow", "kubeflow", "sagemaker",
-    # Specific tools from blocked list
-    "mixpanel",         # analytics (Pendo is in catalog; mixpanel is not)
-    "braze",            # marketing automation
-    "zendesk", "freshdesk",  # support tooling (not in resume)
-    "intercom",         # support/chat
-    # Finance/payments/billing tools
-    "stripe", "braintree", "adyen", "recurly", "chargebee",
-    "netsuite", "workday", "sap",
-    # Legal/contract
-    "ironclad", "docusign",
-    # Domain-specific
-    "coupa",            # procurement
-    "veeva",            # pharma CRM
-})
+# Single source of truth: scripts/blocked_tools.py (shared with submission_linter
+# LR-026). Do not maintain a second copy here.
+from blocked_tools import HARD_BLOCKED_TOOLS as _HARD_BLOCKED_TOOLS  # noqa: E402
+from blocked_tools import hard_blocked_tool_pattern as _shared_hard_tool_pattern  # noqa: E402
 
 # Regex pattern to detect hard-blocked tool names in a requirement string.
 # Compiled lazily.
@@ -127,9 +112,7 @@ _HARD_TOOL_RE: re.Pattern | None = None
 def _get_hard_tool_pattern() -> re.Pattern:
     global _HARD_TOOL_RE
     if _HARD_TOOL_RE is None:
-        escaped = sorted(_HARD_BLOCKED_TOOLS, key=len, reverse=True)
-        pattern = r"\b(?:" + "|".join(re.escape(t) for t in escaped) + r")\b"
-        _HARD_TOOL_RE = re.compile(pattern, re.I)
+        _HARD_TOOL_RE = _shared_hard_tool_pattern()
     return _HARD_TOOL_RE
 
 
@@ -398,6 +381,17 @@ _BOILERPLATE_ITEM_RE = re.compile(
     r"anticipated\s+position\s+close\s+date|"
     r"ways\s+of\s+working|"
     r"disability\s*,?\s*life\s+insurance(?:\s+and\s+ancillary\s+benefits?)?|"
+    # Zoom / enterprise ATS compensation + apply-window copy (Common Room,
+    # 2026-08-11 corpus). Also false-anchored via skills_catalog "Zoom".
+    r"total\s+direct\s+compensation|"
+    r"base\s+salary\s+and/?\s*or\s+ote|"
+    r"\bote\s+listed\b|"
+    r"window\s+of\s+at\s+least\s+\d+\s+days?\s+for\s+you\s+to\s+apply|"
+    r"we\s+believe\s+in\s+giving\s+you\s+every\s+opportunity\s+to\s+apply|"
+    # Soft-skill personality fluff that is not a hire-evidence criterion
+    r"navigate\s+ambiguity|"
+    r"drive\s+clarity\s+across\s+teams|"
+    r"team-?oriented\s+mindset|"
     # Acushnet / Realtime CTA + benefits copy
     r"our\s+commitment\s+to\s+you|"
     r"ready\s+to\s+make\s+an?\s+impact|"
@@ -749,9 +743,11 @@ def _parse_url_and_jd(raw_text: str) -> tuple[str, str]:
 # Without this guard, broad tags like "compliance" could mask a gap for e.g. "HIPAA/HL7".
 _GENERIC_TAG_WORDS: frozenset[str] = frozenset({
     "experience", "management", "work", "ability", "skills",
-    "knowledge", "understanding", "background", "team", "product",
+    "knowledge", "understanding", "background", "team", "teams", "product",
     "cross", "functional", "strong", "proven", "excellent",
     "ability", "deliver", "drive", "build", "lead", "grow",
+    # "teams" alone previously false-anchored soft-skill lines like
+    # "navigate ambiguity … across teams" (LeafLink, 2026-08-11 corpus).
 })
 
 # Domain/industry qualifiers that must themselves be anchored. A capability tag
@@ -814,7 +810,7 @@ _YEARS_EXPERIENCE_LEADIN_RE = re.compile(
 # higher degree as merely *preferred* alongside a Bachelor's requirement is not a
 # gap (the Bachelor's already satisfies the line).
 _BACHELORS_SATISFIED_RE = re.compile(
-    r"\b(?:bachelor(?:'s|s)?\s+degree|undergraduate\s+degree)\b",
+    r"\b(?:bachelor(?:'s|s)?(?:\s+or\s+master'?s?)?\s+degree|undergraduate\s+degree)\b",
     re.I,
 )
 _HIGHER_DEGREE_MANDATORY_RE = re.compile(
@@ -838,9 +834,19 @@ _FAMILIARITY_INTENSIFIER_RE = re.compile(
 
 
 def _is_soft_familiarity_hedge(item_lower: str) -> bool:
-    if not _SOFT_FAMILIARITY_HEDGE_RE.search(item_lower):
+    """Plain familiarity/exposure of a blocked tool stays SOFT (Tier 2).
+
+    Intensifiers only count when they modify the hedge itself (appear shortly
+    before it). A trailing \"strong plus\" / earlier \"strong communication\"
+    must not flip Familiarity-with-Amplitude into HARD Skip (Seed Health,
+    2026-08-11 — after Amplitude joined the shared blocked-tool list).
+    """
+    hedge = _SOFT_FAMILIARITY_HEDGE_RE.search(item_lower)
+    if not hedge:
         return False
-    if _FAMILIARITY_INTENSIFIER_RE.search(item_lower):
+    window_start = max(0, hedge.start() - 40)
+    prefix = item_lower[window_start : hedge.start()]
+    if _FAMILIARITY_INTENSIFIER_RE.search(prefix):
         return False
     return True
 

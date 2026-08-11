@@ -96,7 +96,7 @@ def check_and_repair_cover_letter(file_path):
         
     # Check for bracket placeholders or redactions (Rule CL-009: Zero-Placeholder Integrity)
     placeholders = re.findall(r'\[[^\]]{2,}\]', content)
-    cleaned_placeholders = [p for p in placeholders if not re.search(r'https?://', p) and 'REDACTED' in p.upper() or any(k in p.upper() for k in ['COMPANY', 'NAME', 'DATE', 'INSERT', 'TITLE', 'ROLE'])]
+    cleaned_placeholders = [p for p in placeholders if not re.search(r'https?://', p) and 'REDACTED' in p.upper() or any(k in p.upper() for k in ['COMPANY', 'NAME', 'DATE', 'INSERT', 'TITLE', 'ROLE', 'LOCATION'])]
     if cleaned_placeholders:
         messages.append(f"[CL-009 FAIL] Corrupted placeholder brackets found: {', '.join(cleaned_placeholders)}")
 
@@ -183,7 +183,7 @@ def check_resume(file_path):
     # Check for bracket placeholders or redactions (Rule R-009: Zero-Placeholder Integrity)
     placeholders = re.findall(r'\[[^\]]{2,}\]', content)
     # Exclude valid markdown links or image syntax
-    cleaned_placeholders = [p for p in placeholders if not re.search(r'https?://', p) and 'REDACTED' in p.upper() or any(k in p.upper() for k in ['COMPANY', 'NAME', 'DATE', 'INSERT', 'TITLE', 'ROLE'])]
+    cleaned_placeholders = [p for p in placeholders if not re.search(r'https?://', p) and 'REDACTED' in p.upper() or any(k in p.upper() for k in ['COMPANY', 'NAME', 'DATE', 'INSERT', 'TITLE', 'ROLE', 'LOCATION'])]
     if cleaned_placeholders:
         messages.append(f"[R-009 FAIL] Corrupted placeholder brackets found: {', '.join(cleaned_placeholders)}")
 

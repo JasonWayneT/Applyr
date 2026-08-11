@@ -57,6 +57,16 @@ do not fabricate a claim to fill it.
 
 ---
 
+## 1b. Optimization bar (hard — Round 4)
+
+Done is NOT "clears rubric 70/65." Done is: every soft_gap / domain soft stretch uses the
+packet's mapped claim_ids (strongest honest bridge); never substitute a weaker proxy when
+that bridge excerpt is present; hard gaps are never claimed as owned. Rubric 70/65 is a
+floor check after the bridges are in — not the stop condition. Prefer the JD's bare honest
+base title only (no borrowed domain qualifier). Bullets stay ~2–3 lines for scan.
+
+---
+
 ## 2. Resume Structure
 
 **Section order (exact headings required):**

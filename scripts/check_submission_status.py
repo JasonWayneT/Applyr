@@ -91,6 +91,25 @@ def compute_status(folder: str) -> dict:
         record("draft_manifest.json exists", False, ["not found -- rubric_score was never recorded"])
 
     done = all(c["passed"] for c in checks)
+
+    # CR-078 AC-302/303: surface the CR-076/077/084 workflow-authority signal alongside the
+    # existing DONE oracle -- additive only, never folded into `checks`/`done` above. Per AC-303,
+    # a hard cutover would fail its own bar right now: check_workflow_complete() requires real
+    # stage_receipts through Stage 3, and as of this CR essentially no real folder has been run
+    # through scripts/run_submission.py yet, so requiring it here would flip every already-DONE
+    # submission to INCOMPLETE -- the exact regression this CR exists to prevent. This field is
+    # informational only ("has this folder been adopted into the new system, and if so what does
+    # it say") until a real migration pass populates receipts for the existing folders and a
+    # follow-up CR can safely fold it into `done`.
+    wf_state_path = os.path.join(folder, "workflow_state.json")
+    workflow_authority: dict = {"adopted": os.path.exists(wf_state_path)}
+    if workflow_authority["adopted"]:
+        wf_ok, wf_errors = contracts.check_workflow_complete(folder)
+        state, _ = contracts.load_json(wf_state_path)
+        workflow_authority["status"] = (state or {}).get("status")
+        workflow_authority["check_workflow_complete"] = wf_ok
+        workflow_authority["complete_reasons"] = wf_errors
+
     return {
         "submission": company,
         "checks": checks,
@@ -98,6 +117,7 @@ def compute_status(folder: str) -> dict:
         "resume_rubric_score": resume_score,
         "cover_letter_rubric_score": cover_score,
         "done": done,
+        "workflow_authority": workflow_authority,
     }
 
 
@@ -111,6 +131,14 @@ def _print_report(status: dict) -> None:
     for w in status["warnings"]:
         print(f"  [WARN] {w}")
     print(f"  STATUS: {'DONE' if status['done'] else 'INCOMPLETE'}")
+    wf = status.get("workflow_authority") or {}
+    if wf.get("adopted"):
+        print(
+            f"  [INFO] workflow-authority (CR-076+): status={wf.get('status')} "
+            f"check_workflow_complete={'YES' if wf.get('check_workflow_complete') else 'NO'}"
+        )
+    else:
+        print("  [INFO] workflow-authority (CR-076+): not yet adopted (no workflow_state.json)")
 
 
 def main() -> None:

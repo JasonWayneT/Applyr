@@ -52,6 +52,9 @@ class TestCandidateContext(unittest.TestCase):
         self.assertIn(slug, set(load_employers()) | {"example_inc"})
 
     def test_build_contact_header_generic(self):
+        # 2026-08-09: header casing now preserves the profile's real name casing rather than
+        # forcing uppercase (Jason's explicit call, after a real submission's header got silently
+        # rewritten to "JASON TAYLOR" -- see utils.format_contact_header_block's docstring).
         header = build_contact_header({
             "name": "John Doe",
             "location": "City, State",
@@ -59,7 +62,8 @@ class TestCandidateContext(unittest.TestCase):
             "email": "email@example.com",
             "linkedin": "linkedin.com/in/johndoe",
         })
-        self.assertIn("# JOHN DOE", header)
+        self.assertIn("# John Doe", header)
+        self.assertNotIn("JOHN DOE", header)
         self.assertIn("email@example.com", header)
         self.assertNotIn("jason.wayne", header.lower())
 

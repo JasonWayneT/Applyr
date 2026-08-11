@@ -1376,6 +1376,146 @@ class TestFamiliarityHardToolIsSoft(unittest.TestCase):
         self.assertEqual(result["tier"], "Skip")
         self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
+    def test_strong_plus_after_familiarity_does_not_harden(self):
+        """Trailing 'strong plus' must not cancel a plain Familiarity-with hedge.
+
+        Seed Health (2026-08-11): compound analytics line ended with
+        'Familiarity with … (e.g., Amplitude) is a strong plus' and was HARD-Skipped
+        because 'strong' matched the intensifier anywhere in the line.
+        """
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - You're analytically fluent with cohort analysis and funnel metrics. Familiarity with SQL and product analytics tools (e.g., Amplitude) is a strong plus
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["tier"], "Skip", result.get("skip_reason") or result.get("notes"))
+        hard = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
+        self.assertEqual(hard, [], hard)
+        soft = [g for g in result["flagged_gaps"] if g.get("gap_class") == "SOFT"]
+        self.assertTrue(any("amplitude" in g["item"].lower() for g in soft))
+
+
+class TestSkillsCatalogDoesNotFalseAnchorOffice(unittest.TestCase):
+    """Invariant: skill-catalog product phrases must not word-split into false anchors.
+
+    skills_catalog has 'Microsoft Teams' and 'Google Suite'. Whitespace-splitting those
+    into 'microsoft' / 'suite' previously marked 'Microsoft Office Suite' as grounded
+    even though Office is not in Jason's verified tools — Stage 1 then fail-closed with
+    an unmapped required item (Central Bank, 2026-08-11).
+    """
+
+    def test_microsoft_office_suite_is_soft_gap_not_false_anchor(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Strong command of Microsoft Office Suite.
+            """
+        )
+        result = _build(jd)
+        office_rows = [
+            r for r in result["required"]
+            if "microsoft office" in r["item"].lower()
+        ]
+        self.assertEqual(len(office_rows), 1, result["required"])
+        row = office_rows[0]
+        self.assertTrue(row["gap"], f"expected gap, got anchor={row.get('anchor')!r}")
+        self.assertEqual(row["gap_class"], "SOFT")
+        self.assertNotIn("microsoft", (row.get("anchor") or "").lower())
+        self.assertNotIn("suite", (row.get("anchor") or "").lower())
+
+    def test_microsoft_teams_full_phrase_still_anchors(self):
+        """Full catalog phrase 'Microsoft Teams' must still count as an anchor."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Experience collaborating in Microsoft Teams with engineering partners
+            """
+        )
+        result = _build(jd)
+        teams_rows = [
+            r for r in result["required"]
+            if "microsoft teams" in r["item"].lower()
+        ]
+        self.assertEqual(len(teams_rows), 1, result["required"])
+        self.assertFalse(teams_rows[0]["gap"], teams_rows[0])
+
+
+class TestBoilerplateAndGenericAnchorGuards(unittest.TestCase):
+    """2026-08-11 corpus: LeafLink teams-false-anchor + Common Room Zoom boilerplate."""
+
+    def test_navigate_ambiguity_not_false_anchored_by_teams(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Ability to navigate ambiguity and drive clarity across teams
+            """
+        )
+        result = _build(jd)
+        # Filtered as soft-skill fluff boilerplate, or at worst SOFT with no teams anchor.
+        amb = [
+            r for r in result["required"]
+            if "ambiguity" in r["item"].lower()
+        ]
+        if amb:
+            self.assertTrue(amb[0]["gap"], amb[0])
+            self.assertNotIn("teams", (amb[0].get("anchor") or "").lower())
+        # Preferred outcome: stripped entirely as boilerplate.
+        self.assertTrue(
+            len(amb) == 0
+            or amb[0]["gap"],
+            f"ambiguity line should be filtered or soft-gapped: {result['required']}",
+        )
+
+    def test_zoom_apply_window_and_tdc_filtered(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - In addition to the base salary and/or OTE listed Zoom has a Total Direct Compensation philosophy that takes into account multiple factors.
+            - At Zoom, we offer a window of at least 5 days for you to apply because we believe in giving you every opportunity to apply.
+            """
+        )
+        result = _build(jd)
+        leaked = [
+            r["item"] for r in result["required"]
+            if "total direct compensation" in r["item"].lower()
+            or "window of at least" in r["item"].lower()
+            or "ote listed" in r["item"].lower()
+        ]
+        self.assertEqual(leaked, [], f"compensation/apply-window boilerplate leaked: {leaked}")
+
+
+class TestSharedBlockedTools(unittest.TestCase):
+    def test_amplitude_is_hard_blocked_at_stage0(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Hands-on experience with Amplitude for product analytics
+            """
+        )
+        result = _build(jd)
+        self.assertEqual(result["tier"], "Skip")
+        self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+
+    def test_linter_and_stage0_share_blocked_source(self):
+        import re
+
+        from blocked_tools import HARD_BLOCKED_TOOLS, hard_blocked_tools_lint_alternation
+        from build_stage0_fit_gate import _HARD_BLOCKED_TOOLS as stage0_tools
+
+        self.assertIs(stage0_tools, HARD_BLOCKED_TOOLS)
+        alt = hard_blocked_tools_lint_alternation()
+        pat = re.compile(rf"\b({alt})\b")
+        for sample in ("Amplitude", "Procore", "Smartsheet", "Power BI", "Monday.com"):
+            self.assertIsNotNone(pat.search(sample), sample)
+
 
 class TestEmptyRequiredNotTier1(unittest.TestCase):
     def test_preferred_only_is_tier2(self):

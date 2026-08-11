@@ -554,6 +554,87 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-276` | acceptance | P0 | implemented | SKILL.md Stage 2 default is scripts-only; multi-agent Stage 2 demoted | `FR-255` | CR-074 |
 | `AC-277` | acceptance | P0 | implemented | Calibration ≥3 real submissions clear mechanical verify; Jason send-ready judgment recorded | `FR-254`, `FR-255` | CR-074 |
 
+### CR-075 Stage 0-2 completion gates & verification lineage (FR-256)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-256` | functional | P0 | implemented | Stage 0-2 completion is machine-enforced via `contracts.check_stage{0,1,2}_ready` / `check_finalize_ready` predicates plus `stage_gate.py` enforcement at producing scripts; verification receipts carry content hashes; Stage 2 records rubric-audit + claim_provenance WARN fields; batch Author path uses CR-074 packet context | `AC-278`–`AC-288` | CR-075 |
+| `AC-278` | acceptance | P0 | implemented | `check_stage1_ready()` and `check_stage2_ready()` exist in `contracts.py`, return `(bool, list[str])`, with unit tests (CR-075 AC1) | `FR-256` | CR-075 |
+| `AC-279` | acceptance | P0 | implemented | `build_authoring_packet.py` refuses invalid/missing `stage0_fit_gate.json` unless `--force`; override logged (CR-075 AC2) | `FR-256` | CR-075 |
+| `AC-280` | acceptance | P0 | implemented | `author_from_packet.py` / `--verify-only` refuse `packet_status != ready` with **no** `--force` override for that condition (CR-075 AC3) | `FR-256` | CR-075 |
+| `AC-281` | acceptance | P0 | implemented | Stage 2 complete requires fresh hash-verified receipt + populated `rubric_score` + claim_provenance field present in receipt (WARN content non-blocking) (CR-075 AC4) | `FR-256` | CR-075 |
+| `AC-282` | acceptance | P0 | implemented | Known-stale folders (camunda/ncontracts/paylocity) fail freshness under hash-aware `check_freshness` (CR-075 AC5) | `FR-256` | CR-075 |
+| `AC-283` | acceptance | P0 | implemented | Rubric `--audit` runs inline whenever `rubric_score` is present and gates `verification_passed` (CR-075 AC6) | `FR-256` | CR-075 |
+| `AC-284` | acceptance | P0 | implemented | Batch `authorPrompt()` uses packet+digest; company-count guard ≤3 without opt-in (CR-075 AC7) | `FR-256` | CR-075 |
+| `AC-285` | acceptance | P0 | implemented | `check_submission_status.py` report shape unchanged (CR-075 AC8) | `FR-256` | CR-075 |
+| `AC-286` | acceptance | P0 | implemented | `claim_provenance` WARN never blocks `check_stage2_ready`; script listed in Required Verification (CR-075 AC9) | `FR-256` | CR-075 |
+| `AC-287` | acceptance | P0 | implemented | Stage 2 bare `--force` rejected; requires `--force-reason`; Stages 0/3 bare `--force` unchanged (CR-075 AC10) | `FR-256` | CR-075 |
+| `AC-288` | acceptance | P0 | implemented | Post-CR-075 compose emits valid `claim_provenance.json` from packet evidence_map (CR-075 AC11) | `FR-256` | CR-075 |
+
+### CR-076 Workflow authority foundation (FR-257)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-257` | functional | P0 | in_progress | Authoritative `run_submission` CLI + `scripts/workflow/` owns workflow_state/stage_receipts; workers never write those files; Stage 0→packet/prompt→WAITING_FOR_LLM vertical slice; `check_workflow_complete` is the DONE oracle (full COMPLETE in later CRs) | `AC-289`–`AC-293` | CR-076 |
+| `AC-289` | acceptance | P0 | in_progress | Stage 0 via existing builder + receipt; Skip → workflow SKIPPED | `FR-257` | CR-076 |
+| `AC-290` | acceptance | P0 | in_progress | Pass builds packet+prompt and stops at WAITING_FOR_LLM | `FR-257` | CR-076 |
+| `AC-291` | acceptance | P0 | in_progress | Only workflow.receipts writes stage_receipts | `FR-257` | CR-076 |
+| `AC-292` | acceptance | P0 | in_progress | check_workflow_complete False for mid-states; reports WAITING_FOR_LLM/SKIPPED | `FR-257` | CR-076 |
+| `AC-293` | acceptance | P0 | in_progress | Adopt existing valid Stage 0/packet/prompt artifacts into receipts | `FR-257` | CR-076 |
+
+### CR-077 Receipt chaining + hash invalidation (FR-258)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-258` | functional | P0 | in_progress | After WAITING_FOR_LLM, docs → verify-only → Stage 1 COMPLETE receipt with prior chain; Stage 2 READY only; hash reconcile marks STALE + locks downstream; `--resume` | `AC-294`–`AC-298` | CR-077 |
+| `AC-294` | acceptance | P0 | in_progress | Docs present after WAITING_FOR_LLM → verify-only + Stage 1 COMPLETE with prior_receipt_id | `FR-258` | CR-077 |
+| `AC-295` | acceptance | P0 | in_progress | Stage 2 READY only when Stage 1 COMPLETE and hashes fresh | `FR-258` | CR-077 |
+| `AC-296` | acceptance | P0 | in_progress | Edit Resume/CL after Stage 1 COMPLETE → Stage 1 STALE, Stage 2 LOCKED | `FR-258` | CR-077 |
+| `AC-297` | acceptance | P0 | in_progress | `--resume` continues WAITING→validate or rebuilds from STALE without inventing COMPLETE | `FR-258` | CR-077 |
+| `AC-298` | acceptance | P0 | in_progress | CR-075 `check_stage1_ready` still enforced (no force for packet_status) | `FR-258` | CR-077 |
+
+### CR-079 Truth / Evidence review (FR-260)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-260` | functional | P0 | in_progress | Stage 2A Truth: mechanical collectors → reviews/truth_findings.json; dispositions; WAITING_FOR_HUMAN or truth COMPLETE + ats READY; no stage2 receipt | `AC-307`–`AC-311` | CR-079 |
+| `AC-307` | acceptance | P0 | in_progress | Stage1 COMPLETE → Truth collectors + truth_findings.json | `FR-260` | CR-079 |
+| `AC-308` | acceptance | P0 | in_progress | Open findings → WAITING_FOR_HUMAN + dispositions stub; no Stage 2 COMPLETE receipt | `FR-260` | CR-079 |
+| `AC-309` | acceptance | P0 | in_progress | CLEAN dispositions → truth COMPLETE + ats READY | `FR-260` | CR-079 |
+| `AC-310` | acceptance | P0 | in_progress | HUMAN_ACCEPTED_RISK → PASS with OVERRIDDEN integrity | `FR-260` | CR-079 |
+| `AC-311` | acceptance | P0 | in_progress | BLOCK+FALSE_POSITIVE fails; Stage1 STALE resets truth subphase | `FR-260` | CR-079 |
+
+### CR-080 ATS / AI review (FR-261)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-261` | functional | P0 | in_progress | Stage 2B ATS: jd_term_extractor → reviews/ats_findings.json; dispositions; WAITING_FOR_HUMAN or ats COMPLETE + hm READY | `AC-312`–`AC-315` | CR-080 |
+| `AC-312` | acceptance | P0 | in_progress | Truth COMPLETE → ATS collectors + ats_findings.json | `FR-261` | CR-080 |
+| `AC-313` | acceptance | P0 | in_progress | Open ATS findings → WAITING_FOR_HUMAN; no Stage 2 receipt | `FR-261` | CR-080 |
+| `AC-314` | acceptance | P0 | in_progress | CLEAN dispositions → ats COMPLETE + hm READY | `FR-261` | CR-080 |
+| `AC-315` | acceptance | P0 | in_progress | ATS blocked until Truth COMPLETE | `FR-261` | CR-080 |
+
+### CR-081 HM + mech + Stage 2 receipt (FR-262)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-262` | functional | P0 | in_progress | Stage 2C–2E: HM findings, mech compile+verify_one, check_stage2_ready → stage2 COMPLETE receipt + stage3 READY | `AC-316`–`AC-320` | CR-081 |
+| `AC-316` | acceptance | P0 | in_progress | HM critical_read + lint findings; WAITING_FOR_HUMAN until disposed | `FR-262` | CR-081 |
+| `AC-317` | acceptance | P0 | in_progress | Mech wraps compile_single + verify_one | `FR-262` | CR-081 |
+| `AC-318` | acceptance | P0 | in_progress | Policy PASS writes stage2 COMPLETE + stage3 READY | `FR-262` | CR-081 |
+| `AC-319` | acceptance | P0 | in_progress | check_stage2_ready FAIL → policy WAITING_FOR_HUMAN | `FR-262` | CR-081 |
+| `AC-320` | acceptance | P0 | in_progress | Sole receipt writer + OVERRIDDEN integrity carry-forward | `FR-262` | CR-081 |
+
+### CR-084 Stage 3 finalize under orchestrator (FR-263)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-263` | functional | P0 | in_progress | Stage 3: `--finalize` wraps finalize_submission_job; stage3 COMPLETE receipt; terminal COMPLETE / COMPLETE_WITH_OVERRIDE / PRACTICE_COMPLETE | `AC-321`–`AC-325` | CR-084 |
+| `AC-321` | acceptance | P0 | in_progress | Stage2 COMPLETE + `--finalize` wraps finalize worker | `FR-263` | CR-084 |
+| `AC-322` | acceptance | P0 | in_progress | Production → stage3 receipt + workflow COMPLETE | `FR-263` | CR-084 |
+| `AC-323` | acceptance | P0 | in_progress | Practice → PRACTICE_COMPLETE, no DB | `FR-263` | CR-084 |
+| `AC-324` | acceptance | P0 | in_progress | OVERRIDDEN → COMPLETE_WITH_OVERRIDE; check_workflow_complete True | `FR-263` | CR-084 |
+| `AC-325` | acceptance | P0 | in_progress | Without `--finalize`, stop at Stage 3 READY | `FR-263` | CR-084 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

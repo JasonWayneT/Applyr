@@ -17,7 +17,7 @@ Resolved 90% of a 300-item security vulnerability backlog.
 
 RESUME_HEADER = (
     "# Jason Taylor\n\n"
-    "[REDACTED_EMAIL] | linkedin.com/in/jasontaylor\n\n"
+    "email@example.com | linkedin.com/in/jasontaylor\n\n"
 )
 
 RESUME_BODY_TAIL = (
@@ -33,7 +33,7 @@ RESUME_BODY_TAIL = (
 
 CL_HEADER = (
     "# Jason Taylor\n\n"
-    "[REDACTED_EMAIL] | linkedin.com/in/jasontaylor\n\n"
+    "email@example.com | linkedin.com/in/jasontaylor\n\n"
 )
 
 CL_TAIL = "\n\nRegards,\n\nJason Taylor\n"

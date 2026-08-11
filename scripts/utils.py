@@ -327,21 +327,30 @@ def format_contact_line(profile: dict | None = None) -> str:
 
 
 def format_contact_header_block(profile: dict | None = None) -> str:
-    """Markdown header block: # NAME + contact line."""
+    """Markdown header block: # Name + contact line.
+
+    2026-08-09: was `# {name.upper()}` with a blank line before the contact line -- a different,
+    older convention than the CR-074 packet path (apply_resume_header.py), which preserves
+    workExperience.md's real casing ("Jason Taylor", not "JASON TAYLOR"). The inconsistency was
+    latent until a real, already-CR-074-authored submission (camunda) went through this function
+    for the first time via the editor-save route and got its header silently rewritten to the
+    wrong case. Jason's call: real casing wins everywhere, and the spacing matches CLAUDE.md's
+    documented Required Document Structure (`# [Name]` then the contact line on the very next
+    line, no blank line between them) -- this function was also violating that.
+    """
     profile = profile or load_identity_profile()
     name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
-    return f"# {name.upper()}\n\n{format_contact_line(profile)}\n\n"
+    return f"# {name}\n{format_contact_line(profile)}\n\n"
 
 
 def contact_placeholder_map(profile: dict | None = None, target_company: str | None = None) -> dict:
     """Template placeholder â†’ profile values for draft post-processing."""
     profile = profile or load_identity_profile()
     name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
-    name_upper = name.upper()
     placeholders = {
-        "[Your Name]": name_upper,
-        "*[Your Name]*": name_upper,
-        "[Full Name]": name_upper,
+        "[Your Name]": name,
+        "*[Your Name]*": name,
+        "[Full Name]": name,
         "[Your Phone Number]": profile.get("phone", ""),
         "[Phone Number]": profile.get("phone", ""),
         "[Your Email Address]": profile.get("email", ""),
@@ -351,7 +360,7 @@ def contact_placeholder_map(profile: dict | None = None, target_company: str | N
         "[LinkedIn Profile URL]": profile.get("linkedin", ""),
         "[LinkedIn URL]": profile.get("linkedin", ""),
         "[LinkedIn]": profile.get("linkedin", ""),
-        "## [Your Name]": f"# {name_upper}",
+        "## [Your Name]": f"# {name}",
         "[Your City, State]": profile.get("location", ""),
         "[City, State]": profile.get("location", ""),
         "[Hiring Manager Name]": "Hiring Team",

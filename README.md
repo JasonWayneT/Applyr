@@ -249,7 +249,7 @@ Rubric reference: `.agent/rules/job_fit_engine.md` (v5.0). Formal spec: `docs/sp
 
 ### Drafting assets
 
-**Note (2026-08-04):** Sync no longer auto-drafts. After scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` Stage 0–3 in a chat session — no Ollama, no `batch_pipeline` on Sync. The Sync "Draft Assets" button and `POST /api/jobs/:id/draft` were removed. **Still live (flagged):** Find New Jobs (`POST /api/evaluate` via `usePipeline`) still spawns `batch_pipeline.py --mode single` — not yet retired. Day-to-day authoring remains Claude + ground truth via `.claude/skills/generate-submission/SKILL.md`.
+**Note (2026-08-04):** Sync no longer auto-drafts. After scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` via `scripts/run_submission.py` — no Ollama, no `batch_pipeline` on Sync. The Sync "Draft Assets" button and `POST /api/jobs/:id/draft` were removed. **Still live (flagged):** Find New Jobs (`POST /api/evaluate` via `usePipeline`) still spawns `batch_pipeline.py --mode single` — not yet retired. Day-to-day authoring remains Claude + ground truth via `.claude/skills/generate-submission/SKILL.md` → `run_submission.py`.
 
 Roles that pass Sync gates are exported for review (not drafted automatically). Authoring still produces:
 
@@ -291,39 +291,114 @@ Scouts read/write `data/archive/OpenPostings-extracted/OpenPostings-main/jobs.db
 
 ## Project structure
 
+**Last verified against the actual file tree 2026-08-07** — this section had drifted stale before (see the note at the end of it); if you find it wrong again, fix it in place rather than letting it rot, since it's the map both engineers and coding agents are meant to check before grepping the codebase to relocate something.
+
 ```
 server/
-  index.ts          — Entry point: middleware, router mounts, app.listen (33 lines)
+  index.ts          — Entry point: middleware, router mounts, app.listen
   shared.ts         — Shared path constants, buildPythonEnv (PYTHONUNBUFFERED only), resolveCompanyFolder
-  domain/jobSearchPrefs.ts — materializeJobSearchPrefs + gate-key preservation (FR-248)
-  scout.ts          — Scout orchestrator: spawns scout → backfill → scrape → evaluate
   db.ts             — SQLite init, logActivity helper
+  scout.ts          — Scout run orchestrator: checkpoints, stderr routing, delegates connector-level work to services/scoutOrchestrator.ts
+  middleware.ts     — requireApiToken, isValidJobId, and other cross-route guards
+  pipelineLock.ts / migrationRunner.ts / assetProgress.ts / submissionFolders.ts — pipeline concurrency lock, DB migrations, asset-generation progress tracking, submission-folder helpers
+
+  domain/
+    jobSearchPrefs.ts — materializeJobSearchPrefs + gate-key preservation (FR-248)
+    jobStatus.ts       — canonical job-status rules for submission-folder placement (CR-ARCH-002 / FR-030)
+    paths.ts           — PROJECT_ROOT and other path constants
+    pythonBin.ts       — resolves the Python interpreter to spawn
+
+  middleware/
+    crawlPolicy.ts    — per-host scrape allow/pause/block status, backed by the DB
+
+  pipeline/
+    processRunner.ts  — unified subprocess spawning (CR-ARCH-004), transport only, no line parsing
+
+  repository/
+    jobRepository.ts             — single write boundary for the jobs table (keeps FTS sync + stale-job bookkeeping from ever being skipped)
+    interviewDebriefRepository.ts — interview-debrief CRUD
+
   routes/
-    system.ts       — /api/system-status, /api/ats-pipeline, /api/logs
-    jobs.ts         — All /api/jobs/* routes (CRUD, files, AI rewrite, ZIP download, manual draft)
-    profile.ts      — /api/profile/*, /api/experience (includes proof-code codification)
-    pipeline.ts     — /api/evaluate (SSE stream), /api/sync
+    system.ts / pipeline.ts / profile.ts — /api/system-status·/api/logs, /api/evaluate (SSE)·/api/sync, /api/profile·/api/experience
+    contacts.ts / sources.ts     — networking-contact CRUD, connector source management
+    gmailSync.ts                 — manual "check inbox now" trigger for the CR-072 Gmail intake sync
+    jobs/                        — split out from one jobs.ts: index.ts (router mount), crud.ts (CRUD + status transitions), files.ts (ZIP download, PDF assets), debriefs.ts, shared.ts (jobBaseDir helper)
+
+  services/
+    scoutOrchestrator.ts   — connector wiring; buildDefaultConnectors() is the single source of truth for which connectors run
+    jobMatcher.ts           — CR-072 layered job-matching for inbound Gmail signals (highest-confidence signal first, ambiguous ⇒ skip rather than guess)
+    jobStaging.ts / jobStatusService.ts — staging-dir helpers; shared status-transition path used by both the UI route and Gmail sync (CR-072)
+    emailClassifier.ts / emailSyncCursor.ts / gmailSyncConfig.ts / gmailClient.ts / gmailSyncOrchestrator.ts / gmailSyncScheduler.ts — CR-072 Gmail intake sync: keyword-only classifier (no LLM call), per-label processed-message cursor, dry-run-by-default config, client, orchestrator, background scheduler
+    clusterDedup.ts / ingestDedup.ts — job de-duplication on ingest
+    exportPendingReview.ts  — exports scraped, gate-passed jobs to data/pending_review/ for human Stage 0 review
+    theirstackCreditLedger.ts / ollamaLifecycle.ts — TheirStack API credit tracking; local Ollama process lifecycle
 
 scripts/
-  scout_local.ts    — 7-source parallel job scraper (reads candidate_preferences.json)
-  scrape_new_jobs.ts — Fetches full JD text for newly discovered jobs
-  batch_pipeline.py — Fit scoring + asset generation engine (--mode batch | single)
-  structured_fit.py — Evidence-tiered fit scoring (default when STRUCTURED_FIT=1)
-  seniority_gate.py — Years + contextual title blocklist gates
-  zero_shot_classifier.py — Location zero-token gate
-  prefs_rollout.py / apply_gate_rollout.py — One-time gate-prefs migration (see Manual utilities)
-  drafting_engine.py             — Entry + research + hard-fact guards (delegates to draft_compiler)
-  draft_compiler.py              — Unified resume/cover compiler (CR-014)
-  bullet_generation.py           — Per-claim bullets (Stage 3)
-  jd_tailoring.py / llm_stages.py — JD profile + per-stage LLM routing
-  generate_experience_summary.py — Auto-generates scoring brief from workExperience.md (background)
-  research-engine.py             — Company intelligence via Perplexity or primary LLM
-  compile_single.py              — Markdown → PDF via Playwright
-  style_compliance_guard.py — Resume/CL format validation
-  ai_rewrite.py      — LLM-powered document editing
-  utils.py           — Shared: LLM call with fallback chain, path constants, file I/O
-  archive/
-    backfill_urls.ts — URL backfill crawler (spawned automatically after scout)
+  Scout/scrape (TypeScript):
+    scout_local.ts        — 7-source parallel job scraper (reads candidate_preferences.json)
+    scrape_new_jobs.ts    — fetches full JD text for newly discovered jobs
+    archive/backfill_urls.ts — URL backfill crawler (spawned automatically after scout)
+
+  Workflow authority (CR-076–084 — canonical entry point):
+    run_submission.py              — sole writer of workflow_state.json + stage_receipts/; Stage 0→1→2→3
+    workflow/                      — state, receipts, transitions, policy, runner, reviews, invalidate, entry_warning
+
+  Stage 0 / fit gates (Python) — workers under run_submission, not the default CLI entry:
+    build_stage0_fit_gate.py — deterministic Stage 0 fit gate (orchestrator calls this)
+    stage0_db_gate.py / stage0_prefs_gate.py — DB application-history and preferences sub-gates
+    domain_gate.py / industry_gate.py / seniority_gate.py / solo_pm_gate.py / anchor_gate.py — individual hard gates
+    fit_policy.py / structured_fit.py — evidence-tiered fit scoring
+    zero_shot_classifier.py — location zero-token gate
+
+  CR-074 authoring packet (Stage 1 workers under run_submission):
+    build_authoring_packet.py         — builds the lean authoring_packet.json (JD buckets + evidence map + bounded workExperience excerpts)
+    generate_authoring_rule_digest.py — builds authoring_rule_digest.md (~1.6k-token rule digest)
+    author_from_packet.py             — prompt emit + Stage 1 exit gate (--verify-only); debug CLI warns to prefer run_submission
+
+  Full-pack path (optional, non-default — see CLAUDE.md):
+    generate_context_pack.py / check_context_pack_freshness.py — agent_context_pack.md generation + freshness check
+
+  Verification / QA (Mech 2D under run_submission — see "Required Verification Before You're Done" in CLAUDE.md):
+    verify_submission.py           — lint + structure/QA + unapproved-metrics + page-count check in one pass, writes verification_receipt.json; --audit flags byte-identical rubric scores across submissions (worker; prefer --resume)
+    submission_linter.py           — LR/LW rule engine (forbidden language, structural hard blocks)
+    check_ground_truth_coverage.py — unused-claim sweep against master_claims_tags_only.json, writes ground_truth_coverage.json
+    jd_term_extractor.py           — this JD's own hard-skill/tool term-gap sweep (CR-073), writes jd_term_gaps.json
+    quality_checker.py             — structure auto-repair (cover-letter header/sign-off, resume section headings)
+
+  Cover letter subsystem:
+    cover_letter_plan.py / cover_plan_builder.py — plan construction
+    cover_claim_picker.py / cover_jd_needs.py     — proof-point selection, JD-requirement extraction
+    cover_letter_compiler.py / cover_letter_renderer.py — compile/render the final letter
+    cover_letter_slots.py / cover_letter_structure.py / cover_narrative_templates.py / cover_phrasing.py / cover_prose.py — structural template + phrasing helpers
+    cover_letter_audit.py — audit pass
+
+  Claims / vocabulary:
+    claim_catalog.py / claim_composer.py / claim_provenance.py — master_claims.json access layer, claim assembly, attribution tracking (owned/contributed/influenced — see LW-028)
+    generate_master_claims.py — regenerates master_claims.json + the tags-only sidecar
+    voc_map.py — codename → plain-language translation (VOC codes)
+
+  Style/tone guards:
+    tone_guard.py             — R-011 layoff-language guard
+    style_compliance_guard.py — resume/cover-letter format validation
+    pii_guard.py               — PII-leak guard
+
+  Compilation:
+    compile_single.py  — Markdown → PDF via Playwright
+    draft_compiler.py  — unified resume/cover compiler (CR-014)
+    drafting_engine.py — entry + research + hard-fact guards, delegates to draft_compiler
+
+  Batch orchestration / maintenance:
+    batch_pipeline.py       — fit scoring + asset generation engine (--mode batch | single)
+    local_draft_stages.py   — stage-based local drafting, builds the Core Competencies section (FR-195)
+    finalize_submission_job.py / reconcile_submissions.py — job finalization; archive/remove stale submission folders (FR-030)
+    audit_all_submissions.py / audit_and_improve.py / audit_improve_native.py — audit/improvement passes
+    regenerate_all_resumes.py / regenerate_all_cover_letters.py / regenerate_all_submissions.py — bulk regeneration utilities
+    prefs_rollout.py / apply_gate_rollout.py — one-time gate-prefs migration (see Manual utilities below)
+    research-engine.py / generate_experience_summary.py / ai_rewrite.py / utils.py — company intelligence lookups, auto-generated scoring brief, LLM-powered manual editing, shared LLM-call/path/file-I/O helpers
+
+  test_*.py (~55 files) — one test module per script above; run the full suite via `npm test` / `run_all_tests.py`
+
+  archive/ — one-off historical/diagnostic scripts (batch imports, calibration harnesses, dry-run diagnostics). Not part of the live pipeline — don't treat anything in here as current behavior, and don't grep here first when tracing how something works today.
 
 src/
   App.tsx           — Root: 5s job poll, status handler, routing
@@ -336,12 +411,14 @@ data/
   workExperience.md             — Full codified work history (edited via Settings > Experience)
   workExperience_summary.md     — Condensed scoring brief (auto-generated on every experience save)
   candidate_preferences.example.json — Template for gate rollout keys (blocked_role_titles, etc.)
+  (Authoring/verification content files — master_claims.json, conversion_rubric.md, Resume.md, Cover_Letter_Reference.md, etc. — are catalogued in CLAUDE.md's own File Map table, not duplicated here; this list is infra files the server itself reads/writes.)
 
-.agent/rules/
-  job_fit_engine.md             — Scoring rubric loaded by Python fit path
-  Resume.md                     — Master resume template
-  Cover_Letter_Reference.md     — Master cover letter template
+.agent/
+  rules/claim_verifier.md — the one rule file still live (reference-only, trigger: manual)
+  DEPRECATED.md — everything else that used to live under .agent/ (job_fit_engine.md, the old workflows/skills files) is archived here with a "use instead" pointer; read it before assuming any other .agent/ path is current. job_fit_engine.md's Stage-0 role was superseded by .claude/skills/generate-submission/SKILL.md; the master Resume.md and Cover_Letter_Reference.md templates now live at data/Resume.md and data/Cover_Letter_Reference.md, not under .agent/.
 ```
+
+This section previously listed `.agent/rules/job_fit_engine.md`, `Resume.md`, and `Cover_Letter_Reference.md` as live, and `server/` with only 5 top-level files — both wrong by the time this was caught (2026-08-07): the rule files had been archived and the master templates moved to `data/`, and `server/` had grown `domain/`, `middleware/`, `pipeline/`, `repository/`, and a 14-file `services/` directory (CR-072 Gmail sync) with nothing here describing any of it. Caught only because a token-efficiency question prompted a from-scratch grep against the real tree instead of trusting this section — don't let that be the only trigger next time.
 
 ---
 
@@ -366,7 +443,7 @@ These scripts are not part of the automated pipeline but are useful for maintena
 |---|---|
 | `npm run gate-rollout` | **One-time** (not per `git pull`): merge missing gate keys from `candidate_preferences.example.json` into live prefs; dry-run location rescore on Backlog/New jobs |
 | `npm run gate-rollout:apply` | Same as above, but apply location rejects to the database |
-| `python scripts/calibration_harness.py` | Compare structured vs legacy fit scores on stored JDs |
+| `python scripts/archive/calibration_harness.py` | Compare structured vs legacy fit scores on stored JDs (archived — compares against the pre-CR-074 legacy scorer, not the current default path) |
 | `python scripts/rescore_location_gates.py` | Location-gate-only rescore utility |
 | `scripts/reconcile_submissions.py` | Archive or remove stale folders in `submissions/` (FR-030) |
 | `scripts/audit_all_submissions.py` | Audit quality of all generated assets |

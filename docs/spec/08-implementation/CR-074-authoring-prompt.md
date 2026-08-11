@@ -47,11 +47,32 @@ Do not load any external file. Do not call any tool (tools are not needed for v1
 The packet field `packet_status` MUST be "ready" before you proceed.
 If it is not "ready", stop and print the incomplete_reasons — do not draft.
 
-Output exactly two fenced Markdown code blocks in this order:
+Output exactly three fenced code blocks in this order:
   1. A block labeled "Resume.md" containing the full resume Markdown.
   2. A block labeled "CoverLetter.md" containing the full cover letter Markdown.
+  3. A block labeled "claim_provenance.json" containing a JSON object that records, for every
+     bullet and proof point you just drafted, which packet claim_ids you used to back it. You
+     are already choosing this evidence from the packet's evidence_map as you write each
+     bullet — this block just records the choice you already made, it is not new work. Exact
+     schema:
+       {
+         "company": "<packet's company>",
+         "resume_claims": [
+           {"bullet": "<first several words or full text of the bullet>", "claim_ids": ["ACC-104", "MET-10"]},
+           ...
+         ],
+         "cover_letter_claims": [
+           {"proof_point": "<first several words or full text of the proof point>", "claim_ids": ["ACC-117"]},
+           ...
+         ]
+       }
+     Use only claim_ids present in the packet below. Every resume bullet and every cover
+     letter proof point needs at least one claim_id.
 
-Do not output anything else between the two blocks.
+Write each block to its own file in this submission folder, named exactly after the block's
+label: Resume.md, CoverLetter.md, and claim_provenance.json.
+
+Do not output anything else between the three blocks.
 ```
 
 ---
@@ -76,8 +97,9 @@ The composing agent MUST produce exactly:
 |---|---|---|
 | `Resume.md` | Yes | Exact structure per digest §2; all three canonical roles; exactly 3 summary sentences; one page. |
 | `CoverLetter.md` | Yes | Exact structure per digest §4; 250–400 words; no bullet points. |
+| `claim_provenance.json` | Yes (CR-075 Story 5.0) | Records which packet `claim_ids` back each resume bullet / cover letter proof point. Schema in `scripts/claim_provenance.py`'s docstring; checked (WARN-tier) by `verify_submission.py`. |
 
-No other files. No commentary outside the two fenced code blocks.
+No other files. No commentary outside the three fenced code blocks.
 
 ---
 

@@ -455,6 +455,20 @@ def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
             # extraction_empty / incomplete packet — surface but don't double-fail here
             if "empty buckets" in (sg.get("item") or "").lower():
                 continue
+            # Packet Rule 7 parity (2026-08-11): empty claim_ids are allowed when an
+            # explicit honesty/bridge note is present. The incomplete filler
+            # "Soft gap flagged…" is NOT enough — that fails Rule 7 at packet build.
+            # Also accept legacy honesty phrases from force-empty evidence bridges.
+            note = (sg.get("note") or "").strip()
+            note_l = note.lower()
+            if note and not note.startswith("Soft gap flagged"):
+                continue
+            if (
+                "named tool not in verified" in note_l
+                or "not a skill claim" in note_l
+                or "administratively satisfied" in note_l
+            ):
+                continue
             lines.append(
                 f"FAIL [optimization_bar]: soft_gap has no claim_ids — {item}"
             )

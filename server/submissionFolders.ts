@@ -236,7 +236,50 @@ function readJdMeta(folderPath: string): { title: string; url: string; jdText: s
   }
 
   let title = '';
-  for (let i = start; i < Math.min(lines.length, start + 8); i++) {
+  const junkExact = new Set([
+    'the role',
+    'the position',
+    'the opportunity',
+    'about the role',
+    'about your role',
+    'job summary',
+    'job description',
+    'job overview',
+    'overview',
+    'responsibilities',
+    'requirements',
+    'qualifications',
+    'who we are',
+    'about us',
+    'register here',
+    'register here!',
+    'apply here',
+    'apply here!',
+    'apply now',
+    'apply now!',
+    'click here',
+    'click here!',
+    'please apply here',
+    'join our team',
+    'join us',
+  ]);
+  const junkRe =
+    /^(?:the\s+)?(?:role|position|opportunity)\s*!?\s*$|^(?:register|apply|click|sign\s*up)\s+here\b|^(?:please\s+)?apply\b|^job\s+(?:summary|description|overview)\b|^what\s+you(?:'|')?ll?\s+(?:do|be\s+doing|need|bring)\b|^who\s+(?:we\s+are|you\s+are)\b|^join\s+(?:our\s+)?(?:team|us)\b/i;
+  const roleWordRe = /\b(?:manager|owner|director|lead|pm)\b/i;
+  const pmRoleRe =
+    /\b(?:senior\s+|staff\s+)?(?:technical\s+|platform\s+)?product\s+(?:manager|owner)\b/i;
+
+  const isImplausibleTitle = (value: string): boolean => {
+    const t = value.trim();
+    if (!t || t.length > 120) return true;
+    const low = t.toLowerCase();
+    if (junkExact.has(low)) return true;
+    if (junkRe.test(t)) return true;
+    if (t.endsWith('!') && !roleWordRe.test(t)) return true;
+    return false;
+  };
+
+  for (let i = start; i < Math.min(lines.length, start + 40); i++) {
     const line = lines[i]?.trim() || '';
     if (!line) continue;
     const low = line.toLowerCase();
@@ -250,11 +293,31 @@ function readJdMeta(folderPath: string): { title: string; url: string; jdText: s
       low.startsWith('job description') ||
       low.startsWith('position ')
     ) {
-      break;
+      // Keep scanning — do not treat chrome as a hard stop (LeafLink "About …" then "The Role").
+      continue;
     }
-    if (line.length < 120 && !line.endsWith('.')) {
+    if (line.length >= 120) {
+      const embedded = line.match(pmRoleRe);
+      if (embedded) {
+        title = embedded[0].replace(/\s+/g, ' ').trim();
+        break;
+      }
+      continue;
+    }
+    if (isImplausibleTitle(line)) {
+      continue;
+    }
+    if (line.length < 120 && !line.endsWith('.') && roleWordRe.test(line)) {
       title = line;
       break;
+    }
+  }
+
+  if (!title) {
+    const body = lines.slice(start).join('\n');
+    const embedded = body.match(pmRoleRe);
+    if (embedded) {
+      title = embedded[0].replace(/\s+/g, ' ').trim();
     }
   }
 

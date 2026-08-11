@@ -36,7 +36,12 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
-from build_stage0_fit_gate import _is_administratively_satisfied  # noqa: E402
+from build_stage0_fit_gate import (  # noqa: E402
+    _BACHELORS_SATISFIED_RE,
+    _HIGHER_DEGREE_MANDATORY_RE,
+    _get_hard_tool_pattern,
+    _is_administratively_satisfied,
+)
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -109,8 +114,13 @@ _BOILERPLATE_PHRASES: tuple[str, ...] = (
     "detail oriented",
     "positive attitude",
     "work independently and collaboratively",
+    "work independently and manage multiple priorities",
+    "ability to work independently",
     "ability to multitask",
+    "manage multiple priorities",
     "strong work ethic",
+    "willingness to use our product",
+    "ability and/or willingness to use our product",
 )
 
 
@@ -339,6 +349,11 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "this",
         "those",
         "through",
+        # "tools"/"tooling" — ACC-120/401 "AI Tools" was winning Smartsheet/Power BI
+        # lines on the shared word alone (evidence_map pressure test 2026-08-10).
+        "tool",
+        "tools",
+        "tooling",
         "under",
         "used",
         "using",
@@ -356,6 +371,86 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "years",
     }
 )
+
+# Required lines that must never receive claim_ids (keep the row + bridge; do not drop —
+# required-bucket drop is forbidden by session-007 R4).
+_COMPENSATION_NOISE_RE = re.compile(
+    r"\b(?:compensation\s+practices?|equitable\s+compensation|competitive(?:ly)?(?:,?\s*fair,?)?\s+"
+    r"(?:and\s+)?(?:equitable\s+)?compensation|"
+    r"final\s+offered\s+salary|offered\s+salary\s+will\s+be\s+based|"
+    r"salary\s+will\s+be\s+based\s+on\s+several\s+factors|"
+    r"total\s+compensation|total\s+direct\s+compensation|"
+    r"base\s+salary\s+and/?\s*or\s+ote|\bote\s+listed\b|"
+    r"base\s+salary\s+range|pay\s+range\s+is|"
+    r"window\s+of\s+at\s+least\s+\d+\s+days?\s+for\s+you\s+to\s+apply)\b",
+    re.I,
+)
+
+_HARD_TOOL_EVIDENCE_BRIDGE = (
+    "Named tool not in verified history — do not claim ownership of this tool; "
+    "transferable-skill bridge in prose only if Stage 0 marked SOFT."
+)
+
+_NON_CLAIMABLE_BRIDGE_DEGREE = (
+    "Administratively satisfied (education / years-of-experience) -- "
+    "not a skill claim, no evidence required."
+)
+
+_NON_CLAIMABLE_BRIDGE_COMP = (
+    "Not a skill claim (compensation/benefits boilerplate) -- no evidence required."
+)
+
+_NON_CLAIMABLE_BRIDGE_PRODUCTIVITY = (
+    "Not a skill claim (named productivity suite not in verified history) -- "
+    "no evidence required; do not invent Office/Workspace proficiency."
+)
+
+_PRODUCTIVITY_SUITE_RE = re.compile(
+    r"\b(?:microsoft\s+office(?:\s+suite)?|google\s+(?:workspace|suite)|ms\s+office)\b",
+    re.I,
+)
+
+
+def _is_degree_non_claimable(item_text: str) -> bool:
+    """Bachelor's/undergrad lines map to no ACC — force empty claim_ids."""
+    item_l = (item_text or "").lower()
+    if not _BACHELORS_SATISFIED_RE.search(item_l):
+        return False
+    if _HIGHER_DEGREE_MANDATORY_RE.search(item_l):
+        return False
+    return True
+
+
+def _is_compensation_non_claimable(item_text: str) -> bool:
+    return bool(_COMPENSATION_NOISE_RE.search(item_text or ""))
+
+
+def _is_productivity_suite_non_claimable(item_text: str) -> bool:
+    """Microsoft Office / Google Workspace lines are not Jason skill claims."""
+    return bool(_PRODUCTIVITY_SUITE_RE.search(item_text or ""))
+
+
+def _item_names_hard_blocked_tool(item_text: str) -> bool:
+    """True when the JD line names a Stage-0 hard-blocked tool Jason must not claim."""
+    if not (item_text or "").strip():
+        return False
+    return _get_hard_tool_pattern().search(item_text) is not None
+
+
+def _force_empty_claim_scoring(item_text: str) -> str | None:
+    """If this item must not receive claim_ids, return the bridge note to attach.
+
+    Returns None when normal scoring should run.
+    """
+    if _is_degree_non_claimable(item_text):
+        return _NON_CLAIMABLE_BRIDGE_DEGREE
+    if _is_compensation_non_claimable(item_text):
+        return _NON_CLAIMABLE_BRIDGE_COMP
+    if _is_productivity_suite_non_claimable(item_text):
+        return _NON_CLAIMABLE_BRIDGE_PRODUCTIVITY
+    if _item_names_hard_blocked_tool(item_text):
+        return _HARD_TOOL_EVIDENCE_BRIDGE
+    return None
 
 
 def _distinctive_overlap(item_words: set[str], claim_words: set[str]) -> set[str]:
@@ -432,6 +527,9 @@ def _score_claims_for_item(
         # AI/ML product experience soft gaps → ACC-120 (CONTRIBUTED joint research),
         # never invent model-ownership claims. Match short tokens in raw item text
         # (item_words only keeps length>=4, so "AI"/"ML" would otherwise miss).
+        # Claim-side match must be word-bounded: substring "ai" false-positives inside
+        # "training"/"email"/"details" and, once tools was denylisted, tied every claim
+        # at +12000 so ACC-105 sorted ahead of ACC-120 on real AI lines.
         item_l = item_text.lower()
         if re.search(r"\b(ai|ml|ai/ml|machine\s+learning|llm)\b", item_l):
             cid_l = cid.lower()
@@ -440,8 +538,10 @@ def _score_claims_for_item(
             if (
                 "120" in cid_l
                 or "airesearch" in cid_l
-                or "ai" in claim_tag_blob
-                or "prompt" in claim_tag_blob
+                or "401" in cid_l
+                or "aitools" in cid_l
+                or re.search(r"\b(ai|ml|prompt)\b", claim_tag_blob)
+                or any("ai tool" in t or "prompt" in t for t in tags_lower)
             ):
                 capability_boost += 12000
 
@@ -515,10 +615,33 @@ def build_evidence_map(
                 soft_gap_bridges[item] = bridge
 
     def _bridge_for(item_text: str, is_required: bool) -> str | None:
-        if is_required and item_text in soft_gap_bridges:
+        # Required and preferred Stage-0 soft gaps both need a bridge when claim
+        # scoring finds nothing (LeafLink marketplace preferred, 2026-08-11).
+        if item_text in soft_gap_bridges:
             raw_bridge = soft_gap_bridges[item_text]
-            return raw_bridge or "Soft gap — transferable-skill bridge; see soft_gaps for detail."
+            return raw_bridge or (
+                "Soft gap — transferable-skill bridge; see soft_gaps for detail."
+            )
         return None
+
+    def _enqueue(item: str, bucket: str, *, is_required: bool) -> None:
+        forced_bridge = _force_empty_claim_scoring(item)
+        soft_raw = (soft_gap_bridges.get(item) or "").strip()
+        if forced_bridge is not None:
+            # No claim_ids: prefer a real Stage-0 soft-gap bridge, else the honesty note.
+            # Do not use the generic "Soft gap — transferable…" filler here — that exists for
+            # scored soft gaps; for hard-tools/degree/pay it would hide the real reason.
+            scored: list[tuple[str, int]] = []
+            bridge = soft_raw or forced_bridge
+        else:
+            scored = _score_claims_for_item(item, claims, disabled, jd_profile, jd_text)
+            bridge = _bridge_for(item, is_required)
+        pending.append({
+            "jd_item": item,
+            "bucket": bucket,
+            "bridge": bridge,
+            "scored": scored,
+        })
 
     # Pass 1: score every item, don't pick claim_ids yet.
     pending: list[dict] = []
@@ -527,13 +650,7 @@ def build_evidence_map(
         item = _stage0_item_text(req)
         if not item:
             continue
-        scored = _score_claims_for_item(item, claims, disabled, jd_profile, jd_text)
-        pending.append({
-            "jd_item": item,
-            "bucket": "required",
-            "bridge": _bridge_for(item, True),
-            "scored": scored,
-        })
+        _enqueue(item, "required", is_required=True)
 
     for pref in stage0.get("preferred", []):
         item = _stage0_item_text(pref)
@@ -542,8 +659,7 @@ def build_evidence_map(
         if _is_boilerplate_item(item):
             print(f"INFO: filtered boilerplate preferred item: {item[:80]!r}", file=sys.stderr)
             continue
-        scored = _score_claims_for_item(item, claims, disabled, jd_profile, jd_text)
-        pending.append({"jd_item": item, "bucket": "preferred", "bridge": None, "scored": scored})
+        _enqueue(item, "preferred", is_required=False)
 
     for resp in stage0.get("responsibilities", []):
         item = _stage0_item_text(resp)
@@ -552,8 +668,7 @@ def build_evidence_map(
         if _is_boilerplate_item(item):
             print(f"INFO: filtered boilerplate responsibility item: {item[:80]!r}", file=sys.stderr)
             continue
-        scored = _score_claims_for_item(item, claims, disabled, jd_profile, jd_text)
-        pending.append({"jd_item": item, "bucket": "responsibilities", "bridge": None, "scored": scored})
+        _enqueue(item, "responsibilities", is_required=False)
 
     # Pass 2: global assignment with per-project_id cap.
     def _project_of(cid: str) -> str:
@@ -1000,13 +1115,28 @@ def _build_soft_gaps(stage0: dict, evidence_map: list[dict] | None = None) -> li
         note = (
             gap.get("bridge_used")
             or gap.get("bridge")
-            or "Soft gap flagged at Stage 0; argue as transferable-skill fit in cover letter."
+            or ""
         )
+        claim_ids = _claim_ids_for_soft_gap(gap, evidence_map)
+        if not note.strip():
+            # Prefer the evidence_map bridge (hard-tool / degree / compensation honesty)
+            # so Rule 7 and verify-only can accept empty claim_ids when that is correct.
+            item_norm = _normalize_gap_item_key(item)
+            for row in evidence_map:
+                if _normalize_gap_item_key(row.get("jd_item") or "") == item_norm:
+                    em_bridge = (row.get("bridge") or "").strip()
+                    if em_bridge:
+                        note = em_bridge
+                        break
+        if not note.strip():
+            note = (
+                "Soft gap flagged at Stage 0; argue as transferable-skill fit in cover letter."
+            )
         soft_gaps.append({
             "item": item,
             "class": gap_class,
             "note": note,
-            "claim_ids": _claim_ids_for_soft_gap(gap, evidence_map),
+            "claim_ids": claim_ids,
         })
     return soft_gaps
 

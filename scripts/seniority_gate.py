@@ -80,25 +80,131 @@ _TITLE_BOILERPLATE_PREFIXES = (
     "http",
 )
 
+# JD chrome that extract_job_title_line used to treat as the role (found live
+# 2026-08-11: LeafLink "The Role", Camunda "Register Here!" finalized into jobs).
+_TITLE_JUNK_EXACT = frozenset(
+    {
+        "the role",
+        "the position",
+        "the opportunity",
+        "about the role",
+        "about your role",
+        "job summary",
+        "job description",
+        "job overview",
+        "overview",
+        "responsibilities",
+        "requirements",
+        "qualifications",
+        "who we are",
+        "about us",
+        "register here",
+        "register here!",
+        "apply here",
+        "apply here!",
+        "apply now",
+        "apply now!",
+        "click here",
+        "click here!",
+        "please apply here",
+        "join our team",
+        "join us",
+    }
+)
+
+_TITLE_JUNK_RE = re.compile(
+    r"^(?:the\s+)?(?:role|position|opportunity)\s*!?\s*$|"
+    r"^about\s+(?:the\s+|your\s+)?(?:role|position|company|us|you)\b|"
+    r"^(?:register|apply|click|sign\s*up)\s+here\b|"
+    r"^(?:please\s+)?apply\b|"
+    r"^job\s+(?:summary|description|overview)\b|"
+    r"^what\s+you(?:'|')?ll?\s+(?:do|be\s+doing|need|bring)\b|"
+    r"^who\s+(?:we\s+are|you\s+are)\b|"
+    r"^join\s+(?:our\s+)?(?:team|us)\b",
+    re.I,
+)
+
+_TITLE_ROLE_WORD_RE = re.compile(
+    r"\b(?:manager|owner|director|lead|pm)\b",
+    re.I,
+)
+
+
+def is_implausible_job_title(title: str) -> bool:
+    """True when `title` is JD chrome (section header / CTA), not a real role name.
+
+    Used by Stage 0 extraction cleanup and Stage 3 finalize so scrape junk cannot
+    land in `jobs.title` again.
+    """
+    t = (title or "").strip()
+    if not t or len(t) > 120:
+        return True
+    lower = t.lower().strip()
+    if lower in _TITLE_JUNK_EXACT:
+        return True
+    if _TITLE_JUNK_RE.search(t):
+        return True
+    # Imperative CTA chrome almost always ends with !
+    if t.rstrip().endswith("!") and not _TITLE_ROLE_WORD_RE.search(t):
+        return True
+    return False
+
+
+def _embedded_pm_title(text: str) -> str:
+    """Pull the first Product Manager/Owner span out of prose."""
+    m = _PM_ROLE_RE.search(text or "")
+    if not m:
+        return ""
+    return re.sub(r"\s+", " ", m.group(0)).strip()
+
 
 def extract_job_title_line(jd_text: str) -> str:
-    """First line or explicit Title: header from staging CSV imports."""
+    """Best-effort job title from JD text (explicit header, short title line, or embedded PM).
+
+    Prefers real role lines over section headers / apply CTAs. Falls back to the first
+    Product Manager/Owner mention in the body when the top of the JD is chrome.
+    """
     if not jd_text:
         return ""
-    for line in jd_text.splitlines()[:20]:
+
+    short_candidates: list[str] = []
+    for line in jd_text.splitlines()[:40]:
         stripped = _strip_html(line.strip())
         if not stripped:
             continue
         lower = stripped.lower()
         if lower.startswith("title:"):
-            return stripped.split(":", 1)[1].strip()
+            value = stripped.split(":", 1)[1].strip()
+            if value and not is_implausible_job_title(value):
+                return value
+            continue
         if lower.startswith("position:"):
-            return stripped.split(":", 1)[1].strip()
+            value = stripped.split(":", 1)[1].strip()
+            if value and not is_implausible_job_title(value):
+                return value
+            continue
         if len(stripped) >= 120:
+            embedded = _embedded_pm_title(stripped)
+            if embedded:
+                return embedded
             continue
         if any(lower.startswith(prefix) for prefix in _TITLE_BOILERPLATE_PREFIXES):
             continue
-        return stripped
+        if is_implausible_job_title(stripped):
+            continue
+        # Prefer a short non-sentence line that already looks like a role title
+        if not stripped.endswith(".") and _TITLE_ROLE_WORD_RE.search(stripped):
+            return stripped
+        if not stripped.endswith("."):
+            short_candidates.append(stripped)
+
+    embedded = _embedded_pm_title(jd_text)
+    if embedded:
+        return embedded
+
+    for candidate in short_candidates:
+        if not is_implausible_job_title(candidate):
+            return candidate
     return ""
 
 

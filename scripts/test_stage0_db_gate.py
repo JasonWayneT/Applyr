@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from stage0_db_gate import (
     company_token_match,
     evaluate_db_gate,
+    is_different_role,
 )
 
 # ---------------------------------------------------------------------------
@@ -126,6 +127,83 @@ class TestSelfRejected(unittest.TestCase):
         result = evaluate_db_gate("Acme Corp", _conn=conn)
         self.assertEqual(result["action"], "reject")
         self.assertEqual(result["reason_code"], "self_rejected")
+
+
+class TestIsDifferentRole(unittest.TestCase):
+    """Found 2026-08-08 (thermo_fisher_scientific): a self-rejected 'Gas
+    Analyzers' PM posting permanently blocked an unrelated 'Digital Product
+    Manager' role at the same company. is_different_role() is the heuristic
+    that tells the two apart -- conservative by design (stays blocking) unless
+    it can positively prove the roles differ."""
+
+    def test_gas_analyzers_differs_from_digital_pm(self):
+        self.assertTrue(is_different_role(
+            "Digital Product Manager", "Product Manager, Gas Analyzers"
+        ))
+
+    def test_identical_titles_not_different(self):
+        self.assertFalse(is_different_role(
+            "Digital Product Manager", "Digital Product Manager"
+        ))
+
+    def test_generic_both_sides_stays_conservative(self):
+        # Neither title has a non-generic remainder -- can't prove different.
+        self.assertFalse(is_different_role("Product Manager", "Senior Product Manager"))
+
+    def test_missing_row_title_stays_conservative(self):
+        self.assertFalse(is_different_role("Digital Product Manager", ""))
+
+    def test_missing_query_role_stays_conservative(self):
+        self.assertFalse(is_different_role("", "Product Manager, Gas Analyzers"))
+
+    def test_shared_distinguishing_token_not_different(self):
+        # Both sides specifically call out "Healthcare" -- same domain, same role family.
+        self.assertFalse(is_different_role(
+            "Healthcare Product Manager", "Senior Product Manager, Healthcare Platform"
+        ))
+
+
+class TestRoleScopedDbGate(unittest.TestCase):
+    """evaluate_db_gate(role=...) end-to-end: a positively-different-role prior
+    row no longer blocks, but stays visible in matched_rows, and the default
+    (role=None or ambiguous titles) behaves exactly as before -- company-wide."""
+
+    def test_different_role_self_reject_does_not_block(self):
+        conn = _make_conn()
+        _insert(conn, company="Thermo Fisher Scientific", title="Product Manager, Gas Analyzers",
+                status="Self-Rejected", status_changed_at=_dt(60))
+        result = evaluate_db_gate(
+            "Thermo Fisher Scientific", role="Digital Product Manager", _conn=conn
+        )
+        self.assertNotEqual(result["action"], "reject")
+        self.assertEqual(len(result["matched_rows"]), 1, "row stays visible even though not blocking")
+
+    def test_same_role_self_reject_still_blocks(self):
+        conn = _make_conn()
+        _insert(conn, company="Thermo Fisher Scientific", title="Digital Product Manager",
+                status="Self-Rejected", status_changed_at=_dt(60))
+        result = evaluate_db_gate(
+            "Thermo Fisher Scientific", role="Digital Product Manager", _conn=conn
+        )
+        self.assertEqual(result["action"], "reject")
+        self.assertEqual(result["reason_code"], "self_rejected")
+
+    def test_no_role_passed_keeps_prior_company_wide_behavior(self):
+        conn = _make_conn()
+        _insert(conn, company="Thermo Fisher Scientific", title="Product Manager, Gas Analyzers",
+                status="Self-Rejected", status_changed_at=_dt(60))
+        result = evaluate_db_gate("Thermo Fisher Scientific", _conn=conn)  # no role kwarg
+        self.assertEqual(result["action"], "reject")
+
+    def test_different_role_cooldown_row_does_not_block(self):
+        conn = _make_conn()
+        _insert(conn, company="Thermo Fisher Scientific", title="Field Applications Scientist",
+                status="Rejected", rejection_type="Rejected", status_changed_at=_dt(10))
+        result = evaluate_db_gate(
+            "Thermo Fisher Scientific", role="Digital Product Manager", _conn=conn
+        )
+        self.assertNotEqual(result["action"], "reject")
+        self.assertEqual(result["reason_code"], "different_role_at_company")
 
 
 class TestSelfRejectedPendingAssets(unittest.TestCase):

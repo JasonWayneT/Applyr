@@ -1072,5 +1072,202 @@ class TestItemOverlapPrecision(unittest.TestCase):
         self.assertIn("ACC-105-EXECUTION", ids)
 
 
+class TestEvidenceMapBestMatchGuards(unittest.TestCase):
+    """Pressure-test fixes: tools denylist, hard-tool empty, degree/comp noise."""
+
+    _AI_CLAIM = {
+        "ACC-120-AIRESEARCH": {
+            "employer": "cision",
+            "project_id": "ACC-120",
+            "lens": "airesearch",
+            "tags": [
+                "AI Tools",
+                "Prompt Engineering",
+                "Content Generation Systems",
+                "Cross-Team Learning",
+            ],
+            "metrics": [],
+        },
+        "ACC-401-AITOOLS": {
+            "employer": "side",
+            "project_id": "ACC-401",
+            "lens": "aitools",
+            "tags": ["AI Tools", "Prompt Engineering", "Agentic Workflows", "Automation"],
+            "metrics": [],
+        },
+        "ACC-101-ANCHOR": {
+            "employer": "cision",
+            "project_id": "ACC-101",
+            "lens": "anchor",
+            "tags": ["Platform Scale", "Revenue Protection", "Enterprise", "Reliability"],
+            "metrics": [],
+        },
+        "ACC-102-INT": {
+            "employer": "cision",
+            "project_id": "ACC-102",
+            "lens": "int",
+            "tags": ["API / Integration", "Cross-functional Alignment", "Data Pipeline"],
+            "metrics": [],
+        },
+    }
+
+    def test_tools_token_alone_does_not_pick_ai_claims(self):
+        item = (
+            "Expert-level proficiency in Smartsheet (and experience in similar tools "
+            "like Monday.com). You can build the dashboards and trackers."
+        )
+        scored = _score_claims_for_item(
+            item, self._AI_CLAIM, set(), jd_profile=None, jd_text=item
+        )
+        # Hard-tool force-empty is in build_evidence_map; scoring itself must not
+        # promote ACC-120 on the shared word "tools".
+        score_120 = next(s for cid, s in scored if cid == "ACC-120-AIRESEARCH")
+        self.assertEqual(score_120, 0)
+
+    def test_smartsheet_line_gets_empty_claim_ids_and_bridge(self):
+        item = (
+            "Expert-level proficiency in Smartsheet (and experience in similar tools "
+            "like Monday.com)."
+        )
+        stage0 = {
+            "tier": "Tier 2",
+            "required": [{"item": item}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [{"item": item, "gap_class": "SOFT", "bridge_used": ""}],
+        }
+        em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
+        self.assertEqual(em[0]["claim_ids"], [])
+        self.assertTrue(em[0]["bridge"])
+        self.assertIn("Named tool", em[0]["bridge"])
+
+    def test_procore_line_gets_empty_not_platform_proxy(self):
+        item = (
+            "5+ years of experience in a Procore administration, product ownership, "
+            "systems analyst, or construction technology role."
+        )
+        stage0 = {
+            "tier": "Tier 2",
+            "required": [{"item": item}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
+        self.assertEqual(em[0]["claim_ids"], [])
+        self.assertNotIn("ACC-101-ANCHOR", em[0]["claim_ids"])
+
+    def test_power_bi_familiarity_empty_not_ai_tools(self):
+        item = (
+            "Familiarity with Power BI or comparable BI tools — able to build working "
+            "proof-of-concept reports independently."
+        )
+        stage0 = {
+            "tier": "Tier 2",
+            "required": [{"item": item}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [{"item": item, "gap_class": "SOFT"}],
+        }
+        em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
+        self.assertEqual(em[0]["claim_ids"], [])
+        sgs = _build_soft_gaps(stage0, em)
+        self.assertEqual(sgs[0]["claim_ids"], [])
+        self.assertIn("Named tool", sgs[0]["note"])
+
+    def test_bachelors_line_empty_claim_ids(self):
+        item = (
+            "Bachelor's degree in business, Computer Science, Engineering, or Design "
+            "or comparable work experience."
+        )
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [{"item": item}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
+        self.assertEqual(em[0]["claim_ids"], [])
+        self.assertIn("Administratively satisfied", em[0]["bridge"] or "")
+
+    def test_compensation_boilerplate_empty_claim_ids(self):
+        item = (
+            "Relativity is committed to competitive, fair, and equitable "
+            "compensation practices."
+        )
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [{"item": item}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
+        self.assertEqual(em[0]["claim_ids"], [])
+        self.assertIn("compensation", (em[0]["bridge"] or "").lower())
+
+    def test_bachelors_or_masters_line_empty_claim_ids(self):
+        item = (
+            "Bachelor's or Master's degree in a relevant technical field "
+            "(e.g., Computer Science, Engineering) or equivalent experience."
+        )
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [{"item": item}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
+        self.assertEqual(em[0]["claim_ids"], [])
+        self.assertIn("Administratively satisfied", em[0]["bridge"] or "")
+
+    def test_real_ai_item_still_boosts(self):
+        item = "Strong opinions about AI and how it's changing product work, backed by hands-on experience using AI tools yourself"
+        scored = _score_claims_for_item(
+            item, self._AI_CLAIM, set(), jd_profile=None, jd_text=item
+        )
+        self.assertEqual(scored[0][0], "ACC-120-AIRESEARCH")
+        self.assertGreater(scored[0][1], 10000)
+
+    def test_ai_boost_does_not_fire_on_training_substring(self):
+        """Regression: 'ai' inside 'training' must not grant +12000 to every claim."""
+        claims = {
+            "ACC-110-RESILIENCE": {
+                "employer": "cision",
+                "project_id": "ACC-110",
+                "lens": "resilience",
+                "tags": ["Knowledge Transfer", "Cross-training", "Documentation"],
+                "metrics": [],
+            },
+            "ACC-120-AIRESEARCH": {
+                "employer": "cision",
+                "project_id": "ACC-120",
+                "lens": "airesearch",
+                "tags": ["AI Tools", "Prompt Engineering"],
+                "metrics": [],
+            },
+        }
+        item = "Hands-on experience using AI tools in product workflows"
+        scored = _score_claims_for_item(item, claims, set(), jd_profile=None, jd_text=item)
+        score_110 = next(s for cid, s in scored if cid == "ACC-110-RESILIENCE")
+        score_120 = next(s for cid, s in scored if cid == "ACC-120-AIRESEARCH")
+        self.assertEqual(score_110, 0)
+        self.assertGreater(score_120, 10000)
+
+    def test_integration_item_still_picks_int_claim(self):
+        item = "Experience with APIs and data pipeline integrations across enterprise systems"
+        stage0 = {
+            "tier": "Tier 1",
+            "required": [{"item": item}],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
+        self.assertIn("ACC-102-INT", em[0]["claim_ids"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

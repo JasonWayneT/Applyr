@@ -19,6 +19,11 @@ from typing import Dict, List, Literal, Optional, Set, Tuple
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
+from blocked_tools import hard_blocked_tools_lint_alternation  # noqa: E402
+
 # Split literals so public-repo PII audit does not flag rule definitions.
 _PHONE_PLACEHOLDER = "[" + "REDACTED_" + "PHONE]"
 _EMAIL_PLACEHOLDER = "[" + "REDACTED_" + "EMAIL]"
@@ -386,7 +391,7 @@ HARD_BLOCK_RULES: List[LintRule] = [
         rule_id="LR-026",
         severity="HARD_BLOCK",
         check_type="regex",
-        pattern=r"\b(Snowflake|Tableau|FHIR|Docker|Kubernetes|Looker|Amplitude|Mixpanel|Power BI|Databricks)\b",
+        pattern=rf"\b({hard_blocked_tools_lint_alternation()})\b",
         message="Unverified tool claim detected -- not in workExperience.md or master_claims.json",
         suggestion="Remove this tool, or if Jason has genuinely used it, add it to workExperience.md/skills_catalog.json first and treat this as a self-repair-protocol miss.",
         doc_types=["cover_letter", "resume"],
@@ -1641,12 +1646,27 @@ def check_attribution_verb_strength(resume_text: str, cover_letter_text: str) ->
     return violations
 
 
+# Process artifacts that live beside Resume.md / CoverLetter.md but must not be
+# linted as submissions (CR-074 authoring_prompt.md lists forbidden phrases as
+# negative examples and false-fails the whole folder — same class of bug as the
+# old stage0_fit_gate.md misclassification).
+_LINT_FOLDER_SKIP = frozenset({
+    "authoring_prompt.md",
+    "authoring_rule_digest.md",
+})
+
+
 def lint_folder(folder: str) -> List[dict]:
-    """Lint all .md files in a submission folder. Returns list of summary dicts."""
+    """Lint Resume.md and CoverLetter.md in a submission folder (not process sidecars)."""
     results = []
     texts_by_doc_type = {}
     for fname in os.listdir(folder):
         if not fname.endswith(".md"):
+            continue
+        if fname.lower() in _LINT_FOLDER_SKIP:
+            continue
+        # Only the two application documents — ignore any other .md sidecars.
+        if fname not in ("Resume.md", "CoverLetter.md"):
             continue
         fpath = os.path.join(folder, fname)
         try:

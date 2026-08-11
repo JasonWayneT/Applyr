@@ -27,6 +27,19 @@ const REJECTION_PHRASES = [
   'not selected for this position',
   'not selected to move forward',
   'unable to move forward with your application',
+  // Added 2026-08-10 after a real-mailbox sweep found these exact templates going unmatched (see
+  // CHANGELOG) — each pulled verbatim from a real rejection that was Gmail-labeled Applyr/Rejected but
+  // fell through this classifier as null.
+  'position has now been filled',
+  'this position has been filled',
+  'tough decision to not move forward',
+  "aren't able to move forward in the process",
+  'decided to move forward with candidates who more closely align',
+  'decided to move forward with another candidate',
+  'will not be progressing forward with your application',
+  'focusing our search on other candidates',
+  'will not move you forward in the hiring process',
+  'have not been selected for the position',
 ];
 
 const CONFIRMATION_PHRASES = [
@@ -67,11 +80,27 @@ function containsUnconditionalPhrase(haystackLower: string, phrases: string[]): 
   });
 }
 
+// Added 2026-08-10 (real-mailbox sweep, see CHANGELOG). Two things were silently defeating every phrase
+// in the lists above on real mail:
+//   1. Typographic quotes — "we've decided" in REJECTION_PHRASES uses a straight apostrophe, but real
+//      email clients/ATS templates render a curly one (U+2019). Byte-exact .includes() never matched.
+//   2. Hard-wrapped plain text — a phrase can straddle a line's wrap point ("...decided to move\nforward
+//      with other candidates..."), so the literal newline breaks what would otherwise be a normal-space
+//      match. Confirmed against a real ARInsights rejection.
+// Normalizing curly quotes to straight ones and collapsing all whitespace (including newlines) to single
+// spaces before matching fixes both without touching the phrase lists themselves.
+function normalizeForMatching(text: string): string {
+  return text
+    .replace(/[‘’‛]/g, "'")
+    .replace(/[“”‟]/g, '"')
+    .replace(/\s+/g, ' ');
+}
+
 /** Rejection is checked first — a message can't be both, and rejection auto-writes a real status
  *  transition while confirmation only logs, so on the (rare, likely nonexistent) chance both phrase sets
  *  somehow matched the same message, treating it as a rejection is the safer default. */
 export function classifyEmailText(subject: string, bodyText: string): EmailCategory | null {
-  const combined = `${subject}\n${bodyText}`.toLowerCase();
+  const combined = normalizeForMatching(`${subject}\n${bodyText}`).toLowerCase();
   if (containsUnconditionalPhrase(combined, REJECTION_PHRASES)) return 'rejection';
   if (containsAny(combined, CONFIRMATION_PHRASES)) return 'confirmation';
   return null;
@@ -81,19 +110,63 @@ function decodeBase64Url(data: string): string {
   return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
 }
 
-/** Walks a Gmail message's MIME parts for the first text/plain body. Falls back to the API's own
- *  `snippet` (always present, short) if no text/plain part is found — good enough for keyword matching,
- *  since these phrases are short and appear early in auto-generated ATS emails. */
-function findPlainTextBody(part: gmail_v1.Schema$MessagePart | undefined): string | null {
+/** Walks a Gmail message's MIME parts for the first body matching the given mimeType. */
+function findBodyByMimeType(
+  part: gmail_v1.Schema$MessagePart | undefined,
+  mimeType: string,
+): string | null {
   if (!part) return null;
-  if (part.mimeType === 'text/plain' && part.body?.data) {
+  if (part.mimeType === mimeType && part.body?.data) {
     return decodeBase64Url(part.body.data);
   }
   for (const child of part.parts ?? []) {
-    const found = findPlainTextBody(child);
+    const found = findBodyByMimeType(child, mimeType);
     if (found) return found;
   }
   return null;
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  '#39': "'",
+  nbsp: ' ',
+  rsquo: '’',
+  lsquo: '‘',
+  rdquo: '”',
+  ldquo: '“',
+  mdash: '—',
+  ndash: '–',
+};
+
+function decodeHtmlEntities(text: string): string {
+  return text.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+\d*);/gi, (match, code: string) => {
+    if (code[0] === '#') {
+      const codePoint =
+        code[1]?.toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : parseInt(code.slice(1), 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return HTML_ENTITIES[code.toLowerCase()] ?? match;
+  });
+}
+
+// Added 2026-08-10 (real-mailbox sweep, see CHANGELOG) — a real-mailbox sweep found several ATS senders
+// (Workday, iCIMS-derived templates, etc.) send HTML-only bodies with no text/plain MIME part at all.
+// Without this, extractSubjectAndBody fell straight through to Gmail's `snippet` field, which is only
+// ~200 chars of opening boilerplate — it never reaches the actual decision sentence, so every one of
+// these was an unconditional miss regardless of phrase-list coverage. Deliberately not a real HTML
+// renderer — just enough tag-stripping to get plain, matchable text out of a rejection template.
+function htmlToText(html: string): string {
+  const withoutNonContent = html.replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, ' ');
+  const withBreaks = withoutNonContent.replace(
+    /<\/(p|div|tr|li|h[1-6]|br)\s*\/?>|<br\s*\/?>/gi,
+    '\n',
+  );
+  const withoutTags = withBreaks.replace(/<[^>]+>/g, ' ');
+  return decodeHtmlEntities(withoutTags);
 }
 
 export function extractSubjectAndBody(message: gmail_v1.Schema$Message): {
@@ -101,6 +174,8 @@ export function extractSubjectAndBody(message: gmail_v1.Schema$Message): {
   bodyText: string;
 } {
   const subject = message.payload?.headers?.find((h) => h.name === 'Subject')?.value ?? '';
-  const bodyText = findPlainTextBody(message.payload ?? undefined) ?? message.snippet ?? '';
+  const plainText = findBodyByMimeType(message.payload ?? undefined, 'text/plain');
+  const htmlText = plainText ? null : findBodyByMimeType(message.payload ?? undefined, 'text/html');
+  const bodyText = plainText ?? (htmlText ? htmlToText(htmlText) : null) ?? message.snippet ?? '';
   return { subject, bodyText };
 }

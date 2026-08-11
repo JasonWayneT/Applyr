@@ -18,6 +18,36 @@ export interface JobMatchResult {
 
 const LEGAL_SUFFIXES = /\b(inc|llc|ltd|corp|co|company|group)\b\.?/g;
 
+// Added 2026-08-10 (real-mailbox investigation, see CHANGELOG) — found via a real Principal rejection
+// that a correct classification still landed on matchJobForEmail returning null. Root cause: two jobs
+// rows in the DB have a `company` value that isn't actually an employer name at all — one is a LinkedIn
+// "Auto Apply" placeholder (no JD text, never applied to), the other a Stage-0-rejected job (never
+// applied to, score 0) whose company field is "ICIMS" — the ATS *vendor* badge got scraped instead of the
+// real employer. Both normalize to common words ("linkedin", "icims") that show up as routine boilerplate
+// in almost any iCIMS-relayed ATS email (tracking.icims.com links, a "follow us on LinkedIn" footer
+// icon), so Stage 2's whole-word match found 3 candidates instead of 1 and correctly refused to guess.
+// The real employer for the "ICIMS" row is unknown — not invented here — so the fix is to stop treating
+// known ATS/job-board platform names as employer identities at all, not to fabricate a company for either
+// row. Applies to every match stage: a platform name is never a legitimate signal, domain or otherwise.
+const NON_COMPANY_PLATFORM_NAMES = new Set([
+  'linkedin',
+  'icims',
+  'indeed',
+  'greenhouse',
+  'lever',
+  'workday',
+  'ashby',
+  'ashbyhq',
+  'smartrecruiters',
+  'taleo',
+  'workable',
+  'breezy',
+  'bamboohr',
+  'jobvite',
+  'successfactors',
+  'paylocity',
+]);
+
 function normalizeCompanyName(text: string): string {
   return text
     .toLowerCase()
@@ -53,7 +83,12 @@ export interface EmailMatchInput {
   bodyText: string;
 }
 
-export function matchJobForEmail(jobs: MatchableJob[], input: EmailMatchInput): JobMatchResult | null {
+export function matchJobForEmail(rawJobs: MatchableJob[], input: EmailMatchInput): JobMatchResult | null {
+  // Exclude jobs whose company field is itself an ATS/job-board platform name, not a real employer — see
+  // NON_COMPANY_PLATFORM_NAMES above. Applied before every stage: a platform name is never a legitimate
+  // signal, whether via domain, exact text, or fuzzy match.
+  const jobs = rawJobs.filter((j) => !NON_COMPANY_PLATFORM_NAMES.has(normalizeCompanyName(j.company)));
+
   // Stage 1: sender-domain match against the job's own posting URL domain. Exact hostname equality only
   // — deliberately not a subdomain/suffix match, since shared-ATS hosts (boards.greenhouse.io,
   // jobs.lever.co) would make every company on that ATS collide on the same suffix.

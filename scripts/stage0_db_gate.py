@@ -74,6 +74,45 @@ def company_token_match(query: str, row_company: str) -> bool:
     return True
 
 
+# Generic role words that carry no distinguishing signal on their own — a title
+# reduced to only these (e.g. "Product Manager") is not specific enough to prove
+# or disprove a role match, so it's treated as ambiguous (conservative: blocking).
+_GENERIC_ROLE_WORDS = frozenset({
+    "product", "manager", "owner", "senior", "sr", "jr", "junior", "lead",
+    "principal", "staff", "associate", "director", "head", "vp", "of", "the",
+    "a", "an", "and", "i", "ii", "iii", "iv",
+})
+
+
+def is_different_role(query_role: str, row_title: str) -> bool:
+    """True only when both titles have a real, non-generic remainder after
+    stripping generic PM words, and those remainders share no token — i.e. we
+    can positively tell these are different roles at the same company, not
+    just that we don't know.
+
+    Found 2026-08-08 (session-005 R14/R15, thermo_fisher_scientific): the
+    cooldown/self-reject gate matched by company name only, so a self-rejected
+    "Product Manager, Gas Analyzers" posting permanently blocked an unrelated
+    "Digital Product Manager" role at the same company. Ambiguous cases (no
+    row title on record, or either title reduces to only generic words) stay
+    conservative and are NOT treated as different — this only carves out roles
+    that are clearly, distinguishably different, it never widens what counts
+    as a match.
+    """
+    if not query_role or not row_title:
+        return False
+
+    def _remainder(text: str) -> set[str]:
+        tokens = re.split(r"[\s\W]+", text.strip().lower())
+        return {t for t in tokens if t and t not in _GENERIC_ROLE_WORDS}
+
+    query_remainder = _remainder(query_role)
+    row_remainder = _remainder(row_title)
+    if not query_remainder or not row_remainder:
+        return False  # nothing distinguishing on one side — stay conservative
+    return query_remainder.isdisjoint(row_remainder)
+
+
 # ---------------------------------------------------------------------------
 # Row classifier
 # ---------------------------------------------------------------------------
@@ -103,6 +142,7 @@ def classify_rejection_row(
     rejection_type = (row.get("rejection_type") or "").strip()
     outcome_notes = (row.get("outcome_notes") or "").strip()
     changed_at_raw = row.get("status_changed_at")
+    title = row.get("title") or ""
 
     # --- Self-Rejected ---
     if status == "Self-Rejected":
@@ -113,6 +153,7 @@ def classify_rejection_row(
         else:
             return {
                 "company": row.get("company", ""),
+                "title": title or None,
                 "status": status,
                 "rejection_type": rejection_type or None,
                 "outcome_notes": outcome_notes or None,
@@ -136,6 +177,7 @@ def classify_rejection_row(
         # Not a terminal row — should not reach here in normal usage
         return {
             "company": row.get("company", ""),
+            "title": title or None,
             "status": status,
             "rejection_type": rejection_type or None,
             "outcome_notes": outcome_notes or None,
@@ -174,6 +216,7 @@ def classify_rejection_row(
 
     return {
         "company": row.get("company", ""),
+        "title": title or None,
         "status": status,
         "rejection_type": rejection_type or None,
         "outcome_notes": outcome_notes or None,
@@ -190,6 +233,7 @@ def classify_rejection_row(
 
 def evaluate_db_gate(
     company: str,
+    role: str | None = None,
     db_path: Path | None = None,
     now: datetime | None = None,
     _conn: "sqlite3.Connection | None" = None,
@@ -202,6 +246,16 @@ def evaluate_db_gate(
     ----------
     company:
         The company name to look up (matched with word-boundary logic).
+    role:
+        The current job's title/role, if known. When provided, a prior
+        terminal row is only treated as blocking if its own title can't be
+        positively distinguished from *role* (see is_different_role). A row
+        whose title is clearly a different role at the same company (e.g. a
+        self-rejected "Gas Analyzers" PM posting vs. a "Digital Product
+        Manager" role) no longer blocks — found 2026-08-08, see R14/R15 in
+        harness-bridge session-005. Ambiguous cases (no title on file, or
+        either title reduces to only generic PM words) stay conservative and
+        still block, matching the pre-existing company-wide behavior.
     db_path:
         Path to the SQLite file.  Defaults to ``data/jobagent.sqlite`` at
         repo root.  Ignored when *_conn* is provided.
@@ -247,7 +301,7 @@ def evaluate_db_gate(
     try:
         cur = conn.execute(
             """
-            SELECT status, rejection_type, status_changed_at, company, outcome_notes
+            SELECT status, rejection_type, status_changed_at, company, outcome_notes, title
             FROM jobs
             WHERE lower(company) LIKE ?
             """,
@@ -281,8 +335,16 @@ def evaluate_db_gate(
 
     classified = [classify_rejection_row(r, now=now) for r in terminal_raw]
 
+    # Rows whose title is positively a different role at the same company don't
+    # count toward blocking — they're kept in matched_rows for visibility, just
+    # excluded from perm_blocks/active_blocks below. See is_different_role().
+    def _blocks(c: dict) -> bool:
+        if role and c.get("title") and is_different_role(role, c["title"]):
+            return False
+        return True
+
     # Self-Rejected permanent blocks
-    perm_blocks = [c for c in classified if c["category"] == "self_rejected"]
+    perm_blocks = [c for c in classified if c["category"] == "self_rejected" and _blocks(c)]
     if perm_blocks:
         return {
             "action": "reject",
@@ -295,7 +357,7 @@ def evaluate_db_gate(
         }
 
     # Any row still within cooldown
-    active_blocks = [c for c in classified if c.get("within_cooldown")]
+    active_blocks = [c for c in classified if c.get("within_cooldown") and _blocks(c)]
     if active_blocks:
         first = active_blocks[0]
         return {
@@ -308,7 +370,22 @@ def evaluate_db_gate(
             "matched_rows": classified,
         }
 
-    # All past cooldown
+    # All remaining blocking rows are either past cooldown, or were excluded
+    # entirely because their title is a positively different role at this
+    # company (never blocking in the first place, not "expired").
+    blocking_candidates = [c for c in classified if _blocks(c)]
+    if role and not blocking_candidates and classified:
+        return {
+            "action": "reapply_flag",
+            "reason_code": "different_role_at_company",
+            "reason": (
+                f"'{company}' has prior terminal row(s), but title(s) on file "
+                f"({', '.join(sorted({c['title'] for c in classified if c.get('title')}))}) "
+                f"are a different role than '{role}'; proceed with Tier 2 reapply flag"
+            ),
+            "matched_rows": classified,
+        }
+
     return {
         "action": "reapply_flag",
         "reason_code": "reapply_eligible",

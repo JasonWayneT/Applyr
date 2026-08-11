@@ -250,9 +250,34 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-252` | CR-074 | Deterministic Stage 0 builder | `scripts/build_stage0_fit_gate.py`, `scripts/stage0_db_gate.py`, `scripts/stage0_prefs_gate.py` | implemented |
 | `FR-253` | CR-074 | Authoring packet builder (fail-closed) | `scripts/build_authoring_packet.py`, `scripts/contracts/authoring_packet_schema.json` | implemented |
 | `FR-254` | CR-074 | Single cloud author from packet | `scripts/author_from_packet.py`, `data/authoring_rule_digest.md`, `.claude/skills/generate-submission/SKILL.md` v2.1.0 | implemented |
-| `FR-255` | CR-074 | Scripts-first Stage 2 default | `scripts/author_from_packet.py --verify-only`, `scripts/verify_submission.py` | implemented |
+| `FR-255` | CR-074 | Scripts-first Stage 2 default (superseded as *entry sequencing* by CR-076–084 / `run_submission.py`; workers still run under Mech 2D) | `scripts/run_submission.py --resume` → Mech → `verify_submission.py`; debug: `author_from_packet.py --verify-only` | implemented (workers); sequencing superseded by FR-257+ |
 | `NFR-007` | CR-074 | Cloud token budget for authoring | `docs/reports/cr074-token-baseline.md`, `docs/reports/cr074-calibration-report.md`, packet size guard | implemented |
 | `IMP-CR-074` | CR-074 | Token-conscious authoring packet | `docs/spec/08-implementation/CR-074-token-conscious-authoring-packet-epics.md` | implemented |
+| `FR-256` | CR-075 | Stage 0-2 gates + hash lineage + provenance WARN | `scripts/contracts.py`, `scripts/stage_gate.py`, `scripts/verify_submission.py`, `scripts/claim_provenance.py`, `scripts/build_authoring_packet.py`, `scripts/author_from_packet.py`, `scripts/finalize_submission_job.py`, `.claude/workflows/generate-submission-batch.js` | implemented |
+| `AC-278` | CR-075 | Stage1/Stage2 contract predicates + tests | `scripts/contracts.py`, `scripts/test_contracts.py` | implemented |
+| `AC-279` | CR-075 | Stage 0 gate in packet builder | `scripts/build_authoring_packet.py`, `scripts/stage_gate.py` | implemented |
+| `AC-280` | CR-075 | Stage 1 packet_status gate (no force) | `scripts/author_from_packet.py` | implemented |
+| `AC-281` | CR-075 | Stage 2 complete gate | `scripts/contracts.py` `check_stage2_ready`, `scripts/verify_submission.py`, `scripts/stage_gate.py` `apply_stage2_verdict` | implemented |
+| `AC-282` | CR-075 | Content-hash freshness | `scripts/verify_submission.py` `content_hashes`, `scripts/contracts.py` `check_freshness` | implemented |
+| `AC-283` | CR-075 | Inline rubric audit on verify | `scripts/verify_submission.py` `rubric_audit` | implemented |
+| `AC-284` | CR-075 | Batch Author CR-074 path + company cap | `.claude/workflows/generate-submission-batch.js` | implemented |
+| `AC-285` | CR-075 | Status oracle shape unchanged | `scripts/check_submission_status.py`, `scripts/test_check_submission_status.py` | implemented |
+| `AC-286` | CR-075 | claim_provenance WARN + Required Verification | `scripts/claim_provenance.py`, `CLAUDE.md`, `AGENTS.md` | implemented |
+| `AC-287` | CR-075 | Stage 2 force-reason policy + override log | `scripts/stage_gate.py`, `data/.force_override_log.json` | implemented |
+| `AC-288` | CR-075 | Compose emits claim_provenance.json | `scripts/author_from_packet.py` | implemented |
+| `IMP-CR-075` | CR-075 | Stage completion gates epics | `docs/spec/08-implementation/CR-075-stage-completion-gates-epics.md` | implemented |
+| `FR-257` | CR-076 | Workflow authority foundation | `scripts/run_submission.py`, `scripts/workflow/`, `scripts/contracts.py` `check_workflow_complete`, `scripts/test_workflow_authority.py` | in_progress |
+| `AC-289`–`AC-293` | CR-076 | Orchestrator slice + sole receipt writer + adopt + mid-state DONE oracle | same | in_progress |
+| `FR-258` | CR-077 | Receipt chaining + hash invalidation | `scripts/workflow/invalidate.py`, `runner.run_stage1_validate`, `run_submission --resume` | in_progress |
+| `AC-294`–`AC-298` | CR-077 | Stage1 COMPLETE chain, Stage2 READY, STALE cascade, resume, CR-075 gate | same | in_progress |
+| `FR-260` | CR-079 | Truth / Evidence review (Stage 2A) | `scripts/workflow/reviews.py`, `policy.evaluate_truth_findings`, `runner.run_stage2_truth` | in_progress |
+| `AC-307`–`AC-311` | CR-079 | Findings, WAITING_FOR_HUMAN, dispositions, OVERRIDDEN, STALE reset | same | in_progress |
+| `FR-261` | CR-080 | ATS / AI review (Stage 2B) | `runner.collect_ats_findings`, `runner.run_stage2_ats` | in_progress |
+| `AC-312`–`AC-315` | CR-080 | ATS findings, WAITING_FOR_HUMAN, hm READY, Truth gate | same | in_progress |
+| `FR-262` | CR-081 | HM + mech + Stage 2 receipt | `runner.run_stage2_hm/mech/policy` | in_progress |
+| `AC-316`–`AC-320` | CR-081 | critical_read, verify_one, stage2 COMPLETE, policy wait, sole writer | same | in_progress |
+| `FR-263` | CR-084 | Stage 3 finalize under orchestrator | `runner.run_stage3_finalize`, `run_submission --finalize` | in_progress |
+| `AC-321`–`AC-325` | CR-084 | finalize wrap, COMPLETE, practice, override, explicit flag | same | in_progress |
 
 
 ## Coverage checklist

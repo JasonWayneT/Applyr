@@ -225,7 +225,7 @@ _TEMPLATE_ENTERPRISE = (
     "Product Manager with {years} years owning {environment_type}, "
     "most recently at {company} where I managed {scope} supporting {scale}. "
     "I partner with {partner_1} and {partner_2} to drive roadmap decisions grounded in "
-    "customer trust and business outcomes: {outcome_1}, and {outcome_2}. "
+    "customer trust and measurable outcomes, including {outcome_1} and {outcome_2}. "
     "I'm strongest in technically complex environments where platform reliability "
     "and cross-functional alignment are competitive differentiators."
 )
@@ -234,8 +234,8 @@ _TEMPLATE_CONSUMER = (
     "Product Manager with {years} years working across {environment_type}, "
     "most recently at {company} where I owned {scope} used by {scale}. "
     "I work at the boundary of Engineering and {partner_1} "
-    "to convert customer-visible failures into measurable product improvements: "
-    "{outcome_1}. "
+    "to convert customer-visible failures into measurable product improvements, "
+    "including {outcome_1}. "
     "My background bridges enterprise platform discipline and user-behavior thinking."
 )
 

@@ -8,7 +8,7 @@ If you only do one thing before touching `data/submissions/`, do this: **run the
 
 **Trigger phrase binding:** when Jason says a resume/cover letter should be "conversion ready," "apply ready," "ready to send," or asks you to "review" or "check" one — that always means running the full three-pass workflow in [.claude/skills/conversion-ready-pass/SKILL.md](.claude/skills/conversion-ready-pass/SKILL.md): rubric scoring against `data/conversion_rubric.md` (R1–R8 resume / C1–C5 cover letter), a mechanical truth-grounding sweep, and a qualitative hiring-manager read, looped up to 3 rounds. That file is plain markdown with no Claude-Code-specific mechanism required to use it — if you are a different coding agent and have no automatic skill-loading step, open and follow it directly rather than stopping at the rubric. He should not have to name these files or re-link the research report each time. Don't just eyeball a document for typos and call it done, and don't stop after the rubric score alone — that is Pass 1 of three, not the whole workflow. **Scoping note (2026-07-19):** for a document authored via the `generate-submission` skill, its own Stage 2 already satisfies this trigger — don't run `conversion-ready-pass` a second time on top of it. `conversion-ready-pass` is for checking a document *not* produced by that flow.
 
-**Processing job descriptions today?** Invoke the `generate-submission` skill (`.claude/skills/generate-submission/SKILL.md`) — the single operational entry point for JD triage, authoring, and verification. **Default path is CR-074** (v2.1.0+): deterministic Stage 0 (`build_stage0_fit_gate.py`) → lean `authoring_packet.json` + `authoring_rule_digest.md` → **one** cloud draft from packet/digest only → scripts-first Stage 2 (`author_from_packet.py --verify-only`, then `verify_submission.py`). Do **not** load `agent_context_pack.md` into the Stage 1 author session. Multi-agent / full-pack Stage 2 review is optional (send-batch / ladder), not the default. Not the CR-070 tracker (superseded for generation).
+**Processing job descriptions today?** Invoke the `generate-submission` skill (`.claude/skills/generate-submission/SKILL.md`). **Canonical entry point is `python scripts/run_submission.py data/submissions/{slug}`** (CR-076–084): sole writer of `workflow_state.json` + `stage_receipts/`; sequences Stage 0 → packet/prompt → WAITING_FOR_LLM → Stage 1 validate → Truth/ATS/HM/Mech/Policy → optional `--finalize`. Under the hood it still uses CR-074 workers (`build_stage0_fit_gate`, packet/digest, `author_from_packet`, `verify_submission`, `finalize_submission_job`) and CR-075 gates — do not call those as the default sequencing path. Do **not** load `agent_context_pack.md` into the Stage 1 author session. Multi-agent / full-pack Stage 2 review (`.claude/workflows/generate-submission-batch.js`) is opt-in only. Not the CR-070 tracker (superseded for generation).
 
 **Drafting a message to reach out to someone at a target company?** Invoke the `networking-outreach` skill (`.claude/skills/networking-outreach/SKILL.md`) — covers both a hiring-manager/role-relevant contact and an unrelated-department warm connection (alum, former coworker), since those need different message structures. Added 2026-07-30 after two drafts of a message to a CivicPlus contact missed the mark (too soft, then no relationship framing) before the pattern got written down.
 
@@ -19,7 +19,9 @@ If you only do one thing before touching `data/submissions/`, do this: **run the
 Not needed for drafting/reviewing submissions or networking outreach — this section is engineering-only
 (same reason it's excluded from `data/agent_context_pack.md`'s digest). Skip it unless you're building.
 
-**START HERE (authoring):** [CR-074 epics](docs/spec/08-implementation/CR-074-token-conscious-authoring-packet-epics.md) + `generate-submission` skill v2.1.0 — token-conscious packet path is the default; calibration report at `docs/reports/cr074-calibration-report.md`.
+**START HERE (authoring, 2026-08-09):** `python scripts/run_submission.py data/submissions/{slug}` is now the canonical, machine-enforced Stage 0→1→2→3 orchestrator (CR-076/077/078/079-081/084) — sole writer of `workflow_state.json` + `stage_receipts/*.json`, wraps the same underlying scripts CR-074 already used (nothing under it was reimplemented), CR-075's per-stage gates stay live underneath it, and Stage 2 is a real Truth→ATS→HM→Mech→Policy review chain with mechanical findings + human dispositions instead of a second LLM self-grading the first. Full design + every landed CR independently spot-checked against real data: `harness-bridge/shared-sessions/session-006-applyr-workflow-authority.md`. `check_submission_status.py`'s `done` verdict is unchanged (CR-078 AC-302/303 landed additive-only — see that CR's spec for why a hard cutover would have broken every already-verified submission); it now also reports a `workflow_authority` info field once a folder is adopted into the new system. `generate-submission` skill v2.2.0's Stage 0-3 prose (JD triage reasoning, authoring judgment, the Stage 2 review checklist) is still the *content* of what happens at each stage — the orchestrator changed how completion is proven and sequenced, not what a human/agent has to think about at each step.
+
+**Prior authoring entry point (superseded as the default sequencing mechanism, not deleted):** [CR-074 epics](docs/spec/08-implementation/CR-074-token-conscious-authoring-packet-epics.md) — token-conscious packet path; calibration report at `docs/reports/cr074-calibration-report.md` (untracked as of 2026-08-09, kept on disk).
 
 **Process-hardening handoff (still useful):** [SESSION-HANDOFF-2026-07-20-process-hardening.md](docs/spec/08-implementation/SESSION-HANDOFF-2026-07-20-process-hardening.md)
 — Stage 0 DB check, resume↔letter restatement, cover letters argue fit rather than confess gaps.
@@ -59,6 +61,8 @@ Don't consider a pipeline/connector/gate change finished until the docs below ar
 - Settings UI: `src/components/SettingsView.tsx` — uses a per-settings-key debounce timer map (fixed in CR-056, was previously one shared timer that let unrelated field edits silently cancel each other's pending saves); don't reintroduce a single shared timer
 - OpenPostings: lives at `data/archive/OpenPostings-extracted/OpenPostings-main/`, not project root. Only needs 4 real deps (`cors`, `express`, `sqlite`, `sqlite3`) — do not run its full `npm install`, which pulls in an unrelated Expo/React Native app tree
 
+**Where the rest of the engineering surface lives:** `README.md`'s "Project structure" section has the full map — accurate `server/` layout (domain/middleware/pipeline/repository/routes/services) and `scripts/`'s ~150 live files grouped by subsystem (Stage 0 gates, CR-074 authoring packet, verification/QA, cover letter, claims, style guards, compilation, batch orchestration). Check it before grepping the codebase to relocate something. It's kept there, not duplicated here, so there's one source of truth — if you move where something lives or add a new subsystem, update it there, and if you find it's gone stale again, fix it in place rather than re-deriving the map from scratch and moving on (that's exactly how it went stale the first time — see the note at the end of that section).
+
 ---
 
 ## Who This Is For
@@ -78,8 +82,10 @@ To protect candidate privacy:
 | `data/authoring_rule_digest.md` | **CR-074 lean rules** (~1.6k tokens) for the cloud author. Generated by `scripts/generate_authoring_rule_digest.py`. | Every CR-074 Stage 1 author session (SYSTEM block) |
 | `data/agent_context_pack.md` | **Generated fast-path digest** of this file's operative sections + `generate-submission/SKILL.md`'s operative sections + `workExperience.md` + `conversion_rubric.md`, built by `scripts/generate_context_pack.py`. **Not** the default Stage 1 author load after CR-074 — keep for process/engineering sessions and optional send-batch review. **Verify freshness first** — `python scripts/check_context_pack_freshness.py` must print FRESH; if STALE, regenerate before relying on it. | Process work, optional ladder-2 review, or pre-CR-074 flows — not default Stage 1 |
 | `data/workExperience.md` | **Ground truth.** Every metric, accomplishment, and claim must trace back here. Contains VOC codes (vocabulary translation), MET codes (verified metrics), ACC codes (approved accomplishments), and explicit DO NOT CLAIM lists. | Before writing any bullet, proof paragraph, or metric |
-| `data/master_claims.json` | Structured claim catalog. 59+ active claims. Claims with `"disabled": true` are quarantined and must NOT be used. **Read `tags` only as a retrieval index into `workExperience.md`'s full stories** — `text` and especially `cover_story` (a full first-person cover-letter-register paragraph per claim) are legacy write-only artifacts from the retired deterministic pipeline; never place either directly in an output document. | When selecting proof points for cover letters |
+| `data/master_claims.json` | Structured claim catalog. 67 active lenses. Claims with `"disabled": true` are quarantined and must NOT be used. **Read `tags` only as a retrieval index into `workExperience.md`'s full stories** — `text` and especially `cover_story` (a full first-person cover-letter-register paragraph per claim) are legacy write-only artifacts from the retired deterministic pipeline; never place either directly in an output document. Construction rules: `data/CLAIMS_STANDARD.md` (CR-088). `ACC-401` is a side-corpus exception (`data/aiProjects.md`), not a WE ACC. | When selecting proof points for cover letters |
+| `data/CLAIMS_STANDARD.md` | CR-088 claim-construction checklist (id/project_id match, distinctive tags, rollup/synthesis claims, ACC-119→skills_catalog, ACC-401 side corpus). | Before adding or editing claims |
 | `data/master_claims_tags_only.json` | Generated sidecar of the above with `text`/`cover_story` already stripped from every claim by construction (`scripts/generate_context_pack.py`) — makes "tags only" true by construction instead of relying on every agent to self-police it. Regenerated alongside `agent_context_pack.md`. | Same as `master_claims.json` above — prefer this file when it exists |
+| `data/skills_catalog.json` | Verified tools for Core Competencies / JD term gaps. Keep aligned with WE ACC-119 (no ACC-119 claim lens). | When tools rows or skills matching drift from WE |
 | `data/conversion_rubric.md` | Scoring rubric R1–R8 (resume) and C1–C5 (cover letter). **Thresholds: Resume 70+ = CONVERT-READY, Cover Letter 65+ = CONVERT-READY.** Do not chase points above threshold. | When evaluating or scoring a submission — this is the actionable day-to-day tool |
 | `data/pm_resume_cover_letter_research_report.md` | Background research the rubric above was built from (same heuristics, cited evidence, narrative form). Not a scoring tool itself. | Only when you need the reasoning behind a specific rubric criterion, or when revising the rubric itself |
 | `data/candidate_preferences.json` | Filter preferences: no solo/founding PM roles, no 0-to-1, min fit score 72. | When evaluating job fit |
@@ -111,8 +117,7 @@ All metrics below are from `data/workExperience.md` Section 4. Use them exactly 
 | MET-14 | Certificate cost savings | ~$100/certificate |
 | MET-15 | Conversion improvement (Z2S) | ~40% (estimated) |
 | MET-16 | Fulfillment scale | 10/day → 100+/day |
-
-**ACC-114 ($800K Canadian platform deprecation) is DISABLED** — do not use this claim until Jason confirms it is real and it is added to workExperience.md.
+| MET-17 | Canadian ingest platform cost retired | ~$800K annually (ACC-114; CONTRIBUTED for full savings) |
 
 ---
 
@@ -120,24 +125,29 @@ All metrics below are from `data/workExperience.md` Section 4. Use them exactly 
 
 Full text in `data/workExperience.md` Sections 5.1–5.3. Quick reference:
 
-**Cision (ACC-101 to ACC-110)**
-- ACC-101: Platform stabilization / indexing server crashes
+**Cision (ACC-101 to ACC-110, plus later IDs)**
+- ACC-101: Platform stabilization — indexing/enrichment storage monitoring (~10 index servers; 80–90% alerts; DBA/DevOps moves storage)
 - ACC-102: Data remediation — 40% drop-off → zero
-- ACC-103: Security backlog triage — 90% resolved
+- ACC-103: Security backlog — capacity + bucket facilitation (~300 → ~90%); does not prescribe individual eng fixes
 - ACC-104: Migration tooling — ~700 accounts
 - ACC-105: Capacity modeling / T-shirt sizing
 - ACC-106: Mobile UVPM competitive gap
-- ACC-107: Compliance & privacy workflows
-- ACC-108: Jira ticket prioritization system
+- ACC-107: Compliance — AU/NZ content removal per contract + Google/Yahoo email-sender compliance comms
+- ACC-108: Jira priority-score triage — white-glove first, then weighted formula (quantity can lift low-severity)
 - ACC-109: Quarterly PI planning (~200–300 stakeholders)
-- ACC-110: Cross-team knowledge transfer through layoffs
+- ACC-110: Knowledge transfer — Visible (Java news ingest/enrichment for C3) teach-backs + legacy ETL SME risk
+- ACC-111: Dual customer-facing stacks (C3 + CPRE) plus Visible (news ingest/enrichment for C3); never print C3/CPRE/Visible; no CPRE user count (added 2026-08-10)
+- ACC-113: Google Analytics PR-value integration migration on C3 — change plan + customer cutover (~95% flipped estimate; switch required on GA side); do not claim other-team adoption (added 2026-08-10)
+- ACC-114: Last-consumer exit from dedicated Canadian news ingest platform (PIC) in one quarter; unlocked ~$800K annual cost retirement (MET-17); OWNED exit / CONTRIBUTED full savings; never invent PIC acronym (added 2026-08-10)
+- ACC-115: Critical Save migration — requirements + export tooling (not next-gen import / not CX renewals); Pendo+Salesforce prioritization; Datagroups → per-client data profiles (~25% usage); CONTRIBUTED on ~700 (MET-10) (added 2026-08-10)
+- ACC-121: Hands-on SQL across ~200 shared C3/CPRE customer DBs — mainly ticket triage/troubleshooting + migration/export checks; plain SQL via internal Ad Hoc tool; never schema design (added 2026-08-10)
 - ACC-120: AI content-generation system — adjacent exposure & joint prompt-engineering research with the PM who built it (added 2026-07-21). **CONTRIBUTED at most, for the joint research only** — Jason did not build, design, or own this system. Never say "I built" or "I designed" about it. Distinct from his own personal AI-tooling project (ACC-401-AITOOLS, `data/aiProjects.md` — six named side projects with real what/why/how/tech detail, a much stronger source for AI-fluency content than the thin "I use Claude and Gemini daily" line that had been recurring).
 
 **Sterkly (ACC-201 to ACC-204)**
-- ACC-201: Workflow standardization
-- ACC-202: Technical-to-business translation
+- ACC-201: Workflow / board standardization (Agile/Kanban epics & stories)
+- ACC-202: Technical-to-business translation + cross-geo Agile scoping (US/Israel/India)
 - ACC-203: Certificate bottleneck / $1M–$3M revenue sustained
-- ACC-204: QA ownership, global team coordination
+- ACC-204: First-pass QA (test lists + GitHub/PR inspection) before QA eng; never name Airo
 
 **Zero To Sixty (ACC-301 to ACC-303)**
 - ACC-301: Laptop fulfillment automation
@@ -158,7 +168,7 @@ These are absolute. Violating any of these requires immediate rewrite.
 - Tools not in Jason's history (no Snowflake, Tableau, FHIR, Docker, etc. unless in workExperience.md)
 - "Familiar with," "awareness of," or "literacy in" any tool — if it's not a hard skill in the source, it doesn't exist
 - Internal codenames (see VOC table below) — always translate to plain-language equivalents
-- $800K Canadian platform deprecation (ACC-114 — disabled pending verification)
+- Inventing the PIC acronym expansion or claiming sole causation of the full ~$800K Canadian-ingest savings without the ACC-114 CONTRIBUTED hedge
 
 **Cross-functional partners — only from this verified list (Cision):**
 Engineering, DBA, DevOps, Customer Experience (CX), Customer Support, Sales, Account Management, Legal, InfoSec, Product Marketing, Executive/Presidential Leadership, Upgrades (per ACC-104). Do NOT add teams from a JD that aren't on this list.
@@ -167,9 +177,13 @@ Engineering, DBA, DevOps, Customer Experience (CX), Customer Support, Sales, Acc
 | Codename | Use Instead |
 |----------|------------|
 | Platform Data Remediation | Centralized platform data remediation initiative |
-| Core B2B SaaS Platform | Customer-facing B2B SaaS media monitoring & contact database platform |
+| Core B2B SaaS Platform / C3 | Customer-facing B2B SaaS media monitoring & contact database platform (updated Cision Communications Cloud stack) |
+| CPRE | Legacy enterprise Cision Communications Cloud platform (~38 high-value orgs; never invent a user count) |
+| Visible | News content ingestion and enrichment platform for C3 media monitoring (Java; never print Visible) |
+| PIC | Dedicated Canadian news content ingestion platform (never invent acronym expansion) |
 | Centralized Contact Database | Centralized contact source-of-truth database |
 | Critical Save Program | High-risk account retention program |
+| Datagroups | Per-client data profiles (e.g. agency keeps Cisco vs AT&T data separate in one account) |
 | White Glove Accounts | Premium high-revenue enterprise clients |
 | Airo (Sterkly product) | "A macOS security product" — under NDA, never name it |
 
@@ -291,36 +305,31 @@ To compile MD → PDF: `python scripts/compile_single.py <md_path> <pdf_path>`
 Never tell Jason a resume or cover letter is finished without running this from the repo root and confirming clean output:
 
 ```bash
-# 0. (CR-074 default) After packet-based authoring, run the Stage 1 exit gate first:
-python scripts/author_from_packet.py data/submissions/COMPANY --verify-only
+# Canonical completion path (CR-076–084). Prefer this over hand-assembling workers.
+# After docs land: --resume advances Stage 1 validate + Truth/ATS/HM/Mech/Policy
+# (stops at WAITING_FOR_HUMAN for dispositions in reviews/dispositions.json).
+# After Stage 2 COMPLETE: --finalize mints stage3 (production writes jobs DB).
+python scripts/run_submission.py data/submissions/COMPANY
+python scripts/run_submission.py data/submissions/COMPANY --resume
+python scripts/run_submission.py data/submissions/COMPANY --status   # read-only
+# Done means: workflow COMPLETE / COMPLETE_WITH_OVERRIDE (or PRACTICE_COMPLETE in practice),
+# and check_workflow_complete prints YES for production COMPLETE*.
 
-# 1. Compile to PDF first -- verify_submission.py reads the PDFs for page counts.
-python scripts/compile_single.py data/submissions/COMPANY/Resume.md data/submissions/COMPANY/Resume.pdf
-python scripts/compile_single.py data/submissions/COMPANY/CoverLetter.md data/submissions/COMPANY/CoverLetter.pdf
-
-# 2. Three required verification commands -- lint (both documents plus the resume/cover-letter
-#    pair checks), resume structure/QA, cover-letter structure/QA (auto-repairs H-001/H-002 in
-#    place -- if it reports a repair, recompile the PDFs and re-run this), the unapproved-metrics
-#    sweep, and page counts, all in one script, writing verification_receipt.json into the folder;
-#    a mechanical scan for JD-relevant ground truth that never made it into the document, writing
-#    ground_truth_coverage.json into the folder; and a mechanical scan for this specific JD's own
-#    literal hard-skill/tool terms missing from the resume (CR-073 Epic 2 -- distinct from the
-#    ground-truth scan above: that one flags unused true claims, this one flags unmatched JD
-#    terms), writing jd_term_gaps.json into the folder.
-python scripts/verify_submission.py data/submissions/COMPANY
-python scripts/check_ground_truth_coverage.py data/submissions/COMPANY
-python scripts/jd_term_extractor.py data/submissions/COMPANY
-
-# 3. After Stage 2's rubric_score is hand-scored into draft_manifest.json (see generate-submission
-#    SKILL.md Stage 2 point 1 -- a script cannot assign this, it requires an actual read against
-#    conversion_rubric.md with cited evidence per criterion), audit it against every other
-#    submission's score, past and present, for the templating failure mode below.
-python scripts/verify_submission.py --audit data/submissions/COMPANY
+# Workers still exist for debug — the orchestrator already calls them. Do not treat the
+# block below as an alternate "done" path that skips run_submission receipts:
+#   python scripts/author_from_packet.py data/submissions/COMPANY --verify-only
+#   python scripts/compile_single.py ... / verify_submission.py / coverage / jd_terms /
+#   claim_provenance.py / verify_submission.py --audit
+# If you must run workers by hand (debug), still finish with:
+#   python scripts/run_submission.py data/submissions/COMPANY --resume
+# so workflow_state + stage_receipts stay authoritative.
 ```
 
-**Why one script, not five separate commands:** this section and `generate-submission/SKILL.md`'s own Stage 2 sample had drifted from each other before (missing the pair-check, missing the cover-letter check), and a harness once ran lint on the cover letter only and silently skipped the resume's check entirely. Two descriptions of the same requirement can still drift or get partially followed. `scripts/verify_submission.py` is the one command every harness runs, producing one receipt file instead of a self-report. **The rubric score itself still cannot be mechanized** — `--audit` doesn't verify judgment quality, it catches the one failure mode a script actually can: byte-identical rubric sub-scores across different JDs, checked against a persistent cross-session log at `data/.rubric_score_history.json`. Found real: 8 submissions in one batch had identical resume/cover-letter sub-scores down to the sub-criterion across 8 unrelated companies — a templated pass presented as a genuine one. If `--audit` flags a match, re-score both documents for real; don't dismiss the warning as a false positive without actually re-reading the flagged pair.
+**Why the orchestrator, not five separate commands:** agents used to self-report stage completion (`verification_passed`, hand-assembled lint runs, skipped pair checks). `scripts/run_submission.py` + `scripts/workflow/` is the sole writer of workflow receipts; Mech (2D) still runs `verify_submission.py` underneath and writes `verification_receipt.json` as evidence. **The rubric score itself still cannot be mechanized** — enter `rubric_score` into `draft_manifest.json` by hand (shape: `rubric_score.{resume|cover_letter}.{total, breakdown}`), then `--resume` so Mech/Policy can clear `check_stage2_ready`. `--audit` (inside or via `verify_submission.py --audit`) catches byte-identical rubric sub-scores across different JDs against `data/.rubric_score_history.json`. If `--audit` flags a match, re-score both documents for real.
 
 **`check_ground_truth_coverage.py` exists because the "ask whether ground truth was left unused" instruction below it in this same file was already written down once (after the Bazaarvoice dry run), and still recurred on a real 10-submission batch on 2026-07-31, caught by Jason, not by the prose.** It cross-references every claim's tags in `master_claims_tags_only.json` against the target JD and flags claims whose metrics/tags don't appear in the drafted documents. It's a heuristic — freshly-authored bullets won't always contain a tag's literal words, so it produces real false positives — check each `ATTENTION` flag against the actual document rather than blindly forcing every one in, but it must be run and its output actually read before a submission is called done.
+
+**`claim_provenance.py` (CR-075) is the same WARN tier:** every drafted resume bullet / cover-letter proof point must cite at least one real, non-disabled Fact ID (`ACC-*`/`MET-*`/`VOC-*`). Findings never block `mechanically_verified` on their own — read them the same way you read coverage ATTENTION flags. Submissions authored after CR-075 emit `claim_provenance.json` at compose time; older folders correctly report the file missing until re-authored.
 
 If any step fails or the resume is 2 pages, fix the content and re-run — do not hand back a "done" answer with a failing check.
 
@@ -363,11 +372,11 @@ Neither makes a letter compelling on its own — they raise the floor. Whether a
 - Recompile PDFs after edits
 - Run the Required Verification steps above before reporting anything as complete
 
-**Conversion thresholds — a floor, not a stop signal:**
-- Resume: 70+ = CONVERT-READY
-- Cover Letter: 65+ = CONVERT-READY
+**Conversion thresholds — a floor, not a stop signal (Round 4 optimization bar — hard):**
+- Resume: 70+ = CONVERT-READY floor
+- Cover Letter: 65+ = CONVERT-READY floor
 
-These numbers were previously read as "stop improving once reached" — that produced real submissions that barely cleared threshold with real, available ground truth sitting unused (found 2026-07-21: the Bazaarvoice dry run scored 73/100, with MET-09's SQL-database footprint and ACC-117's Pendo analytics work both real, both relevant to explicitly required JD items, and neither used). **"Done" is not "clears the number." Done is: every required JD item is engaged with the single strongest available piece of ground truth for it, not merely an adequate one, and nothing genuinely usable was left on the table.** This is a real bar, not a bigger number to chase — do not pad, stretch a claim, or force in extra content just to raise a score; the failure mode being corrected is *unused* evidence, not *insufficient volume*. If the strongest available evidence is already in the document, stop — that is done, whatever the score reads. Chasing points above what real ground truth supports is still wrong.
+These numbers were previously read as "stop improving once reached" — that produced real submissions that barely cleared threshold with real, available ground truth sitting unused (found 2026-07-21: the Bazaarvoice dry run scored 73/100, with MET-09's SQL-database footprint and ACC-117's Pendo analytics work both real, both relevant to explicitly required JD items, and neither used). **"Done" is not "clears the number." Done is: every required JD item and every Stage 0 soft gap / domain soft stretch is engaged with the single strongest available piece of ground truth for it (the packet's mapped soft_gap claim_ids), not merely an adequate proxy, and nothing genuinely usable for that item was left on the table.** Hard gaps stay Skip / never claimed as owned. This is fail-closed at Stage 1: `author_from_packet.py --verify-only` fails when soft_gap or required evidence_map claim_ids are unused in `claim_provenance.json`. Do not pad, stretch a claim, or force in extra content just to raise a score; the failure mode being corrected is *unused* evidence, not *insufficient volume*. If the strongest available evidence is already in the document, stop — that is done, whatever the score reads. Chasing points above what real ground truth supports is still wrong.
 
 ---
 

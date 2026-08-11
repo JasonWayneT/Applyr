@@ -85,15 +85,30 @@ router.put('/api/jobs/:id/files/:filename', async (req, res) => {
     if (safeFilename.endsWith('.md') && (safeFilename === 'Resume.md' || safeFilename === 'CoverLetter.md')) {
       const manifestPath = path.join(folder, 'draft_manifest.json');
       if (fs.existsSync(manifestPath)) {
+        // CR-078: this used to trust manifest.verification_passed directly -- a hand-edited or
+        // stale draft_manifest.json could flip that boolean and unlock export with no
+        // independent check. contracts.check_finalize_ready() re-derives pass/fail from the real
+        // verification_receipt.json (mechanically_verified, hash freshness, rubric shape), the
+        // same proven CR-075 gate finalize_submission_job.py already uses -- not a new check,
+        // just closing the gap where this route skipped it. See
+        // docs/spec/05-change-requests/CR-078-remove-agent-completion-authority.md Delta 3.
+        const finalizeCheckScript = path.join(SCRIPTS_DIR, 'check_finalize_ready.py');
+        const finalizeCheck = await runPythonScript([finalizeCheckScript, folder]);
+        let finalizeOk = false;
+        let finalizeErrors: string[] = [];
         try {
-          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-          if (manifest.verification_passed !== true) {
-            return res.status(400).json({
-              error: 'PDF export blocked: draft_manifest verification_passed is not true.',
-            });
-          }
+          const parsed = JSON.parse((finalizeCheck.stdout || '{}').trim());
+          finalizeOk = parsed.ok === true;
+          finalizeErrors = Array.isArray(parsed.errors) ? parsed.errors : [];
         } catch {
-          return res.status(400).json({ error: 'Invalid draft_manifest.json' });
+          finalizeOk = false;
+          finalizeErrors = ['check_finalize_ready.py returned invalid JSON'];
+        }
+        if (!finalizeOk) {
+          return res.status(400).json({
+            error: 'PDF export blocked: submission is not finalize-ready.',
+            details: finalizeErrors,
+          });
         }
       }
 
@@ -124,6 +139,27 @@ router.put('/api/jobs/:id/files/:filename', async (req, res) => {
         return res.status(500).json({ error: 'Document saved but PDF compilation failed' });
       }
       logActivity('INFO', 'System', `Successfully validated and compiled PDF for "${job.company}"`);
+
+      // CR-078 Delta 4: a manual save after Stage 2 was already complete must not leave the old
+      // completion status standing unchanged. Only folders already opted into the CR-076/077
+      // workflow-authority system (workflow_state.json present) get reconciled here -- calling
+      // run_submission.py on a folder with NO existing state would silently auto-adopt it (its
+      // default path adopts new folders), which is a broader behavior change than this save
+      // route should trigger on its own. Best-effort: a reconcile failure is logged, not fatal
+      // to the save the user just made. See CR-078-remove-agent-completion-authority.md Delta 4.
+      const workflowStatePath = path.join(folder, 'workflow_state.json');
+      if (fs.existsSync(workflowStatePath)) {
+        const runSubmissionScript = path.join(SCRIPTS_DIR, 'run_submission.py');
+        const reconcile = await runPythonScript([runSubmissionScript, folder]);
+        if (reconcile.code !== 0) {
+          logActivity(
+            'ERROR',
+            'System',
+            `Workflow reconcile after save failed for "${job.company}": ${(reconcile.stdout || reconcile.stderr || '').trim()}`,
+          );
+        }
+      }
+
       return res.json({ success: true, compiled: true });
     }
 

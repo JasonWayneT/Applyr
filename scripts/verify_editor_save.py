@@ -64,7 +64,7 @@ def verify_editor_save(
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 3:
         print("Usage: verify_editor_save.py <folder> <filename> (reads stdin)")
         raise SystemExit(2)
     folder, filename = sys.argv[1], sys.argv[2]

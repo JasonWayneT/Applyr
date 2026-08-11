@@ -33,9 +33,13 @@ Usage:
         running cross-session history log so templating is caught even when
         companies are drafted one at a time across separate sessions, not
         just when several are checked together in one invocation.
+    python scripts/verify_submission.py --force --force-reason "..." data/submissions/{company}
+        Stage 2 gate override (CR-075 AC10): only when a rubric_score is present
+        and check_stage2_ready fails. Bare --force without --force-reason is rejected.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -46,10 +50,14 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 sys.path.insert(0, _SCRIPT_DIR)  # so this runs regardless of invocation cwd
 
-import submission_linter  # noqa: E402
-import quality_checker  # noqa: E402
 import approved_metrics  # noqa: E402
+import claim_provenance  # noqa: E402
+import contracts  # noqa: E402
 import jd_term_extractor  # noqa: E402
+import quality_checker  # noqa: E402
+import stage_gate  # noqa: E402
+import submission_linter  # noqa: E402
+from stage_gate import StageGateForceError  # noqa: E402
 
 HISTORY_PATH = os.path.join(_REPO_ROOT, "data", ".rubric_score_history.json")
 
@@ -129,6 +137,15 @@ def _check_reading_order(pdf_path: str, md_text: str) -> dict:
     }
 
 
+def _sha256_hex(path: str) -> str | None:
+    """sha256 of a file's raw bytes, or None if the file doesn't exist. Hex digest,
+    not base64, to match the conventional git/sha256sum representation."""
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
 def verify_one(folder: str) -> dict:
     folder = folder.rstrip("/\\")
     company = os.path.basename(folder)
@@ -199,6 +216,15 @@ def verify_one(folder: str) -> dict:
     else:
         receipt["reading_order"] = {"checked": False, "reason": "Resume.md not found"}
 
+    # CR-075 Epic 5 Story 5.2 -- WARN-tier: does every drafted claim trace to a real Fact ID?
+    # Deliberately NOT folded into mechanically_verified's conjunction below (AC9) -- a
+    # provenance gap is something to review, not a hard block on an otherwise-clean submission.
+    # Submissions authored after CR-075 Story 5.0 landed carry a real claim_provenance.json; the
+    # legacy folders authored before it won't, and will correctly report
+    # "claim_provenance.json not found" here -- that is expected, not a bug.
+    cp_ok, cp_findings = claim_provenance.check_claim_provenance(folder)
+    receipt["claim_provenance"] = {"ran": True, "ok": cp_ok, "findings": cp_findings}
+
     # A real, computed number -- not a substitute for genuine rubric judgment
     # (R2 in conversion_rubric.md still needs a human/LLM read), but a floor
     # that can't be templated identically across different JDs the way a
@@ -222,6 +248,32 @@ def verify_one(folder: str) -> dict:
         "before telling Jason the submission is verified."
     )
 
+    # CR-075 Epic 5 Story 5.1 (AC6) -- run the duplicate-score audit inline once a real score
+    # exists, instead of relying on a separate --audit invocation actually happening. NOTE:
+    # audit_rubric_scores() mutates data/.rubric_score_history.json (appends this company's score
+    # fingerprint to the cross-session dedup log used to catch templated scores) -- re-running
+    # verify_submission.py for the same company afterward is idempotent (history[key] = company
+    # just re-writes the same mapping), so calling this on every verify pass is safe. When no
+    # rubric_score has been hand-entered yet, this is the normal mid-flow state, not a failure.
+    manifest_path = os.path.join(folder, "draft_manifest.json")
+    manifest_rubric_score = None
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest_rubric_score = json.load(f).get("rubric_score")
+        except (OSError, json.JSONDecodeError):
+            manifest_rubric_score = None
+
+    if manifest_rubric_score and isinstance(manifest_rubric_score, dict):
+        audit_findings = audit_rubric_scores([folder])
+        receipt["rubric_audit"] = {
+            "ran": True,
+            "clean": len(audit_findings) == 0,
+            "findings": audit_findings,
+        }
+    else:
+        receipt["rubric_audit"] = {"ran": False, "reason": "rubric_score not yet entered"}
+
     receipt["mechanically_verified"] = (
         receipt["lint_all_clean"]
         and receipt["check_resume"]["passed"]
@@ -229,6 +281,16 @@ def verify_one(folder: str) -> dict:
         and receipt["unapproved_metrics_clean"]
         and receipt["page_counts_ok"]
     )
+
+    # CR-075 Epic 2 Story 2.2 -- proves *which bytes* this receipt verified, so a future
+    # hash-comparison change (Story 2.3's check_freshness()) can detect an edit made after
+    # verification even if mtime alone would misread it as fresh. Additive only: every key
+    # above keeps its existing name, type and position.
+    receipt["content_hashes"] = {
+        "algorithm": "sha256",
+        "Resume.md": _sha256_hex(resume_md),
+        "CoverLetter.md": _sha256_hex(cover_md),
+    }
 
     return receipt
 
@@ -291,7 +353,15 @@ def audit_rubric_scores(folders: list[str]) -> list[str]:
 
 
 def main() -> None:
-    args = sys.argv[1:]
+    raw_args = sys.argv[1:]
+    try:
+        force, force_reason = stage_gate.parse_force_flags(raw_args)
+    except StageGateForceError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+
+    # Strip --force / --force-reason so folder parsing stays hand-rolled (multi-folder + --audit).
+    args = stage_gate.strip_force_flags(raw_args)
     audit_mode = "--audit" in args
     folders = [a for a in args if a != "--audit"]
 
@@ -311,8 +381,9 @@ def main() -> None:
 
     any_failed = False
     for folder in folders:
+        folder = folder.rstrip("/\\")
         receipt = verify_one(folder)
-        out_path = os.path.join(folder.rstrip("/\\"), "verification_receipt.json")
+        out_path = os.path.join(folder, "verification_receipt.json")
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(receipt, f, indent=2)
         status = "MECHANICALLY CLEAN" if receipt["mechanically_verified"] else "FAILED -- see verification_receipt.json"
@@ -320,15 +391,35 @@ def main() -> None:
         if not receipt["mechanically_verified"]:
             any_failed = True
 
+        # CR-075 Story 5.3: Stage 2 completion gate. Receipt must be on disk first so
+        # check_stage2_ready can read the fields this pass just wrote (rubric_audit,
+        # claim_provenance, content_hashes, lint). Exit non-zero on gate failure only
+        # when a rubric_score is present (mid-flow stays informational).
+        try:
+            gate_failed = stage_gate.apply_stage2_verdict(
+                folder,
+                force=force,
+                force_reason=force_reason,
+                argv=sys.argv,
+            )
+        except StageGateForceError as exc:
+            print(str(exc), file=sys.stderr)
+            any_failed = True
+            continue
+        if gate_failed:
+            any_failed = True
+
     # 2026-08-06: this used to return exit code 0 unconditionally, even when a receipt printed
     # FAILED -- the exit code was purely cosmetic and anything checking "did the command
     # succeed" instead of parsing the printed text got a false pass. That's the exact fail-open
     # bug this whole process exists to prevent, just one level lower than where it was already
     # being guarded against. Non-zero here now means what it should: at least one folder did not
-    # pass mechanical verification.
+    # pass mechanical verification (or a binding Stage 2 gate failed).
     if any_failed:
         sys.exit(1)
 
 
 if __name__ == "__main__":
+    from workflow.entry_warning import warn_worker_cli
+    warn_worker_cli("verify_submission.py")
     main()

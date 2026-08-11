@@ -350,5 +350,71 @@ class TestStage1VerifyOnlyGate(unittest.TestCase):
             self.assertTrue(any("Resume.md" in e for e in errors))
 
 
+class TestOptimizationBarSoftGapHonesty(unittest.TestCase):
+    """Packet Rule 7 parity: intentional empty soft_gap claim_ids must not fail verify."""
+
+    def test_transferable_bridge_empty_claim_ids_passes(self):
+        from author_from_packet import _check_optimization_bar_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "soft_gaps": [
+                    {
+                        "item": "Strong command of Microsoft Office Suite.",
+                        "class": "SOFT",
+                        "note": (
+                            "Soft gap — transferable-skill bridge; "
+                            "see soft_gaps for detail."
+                        ),
+                        "claim_ids": [],
+                    }
+                ],
+                "evidence_map": [],
+            }
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(packet), encoding="utf-8"
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_optimization_bar_provenance(folder)
+            self.assertTrue(ok, lines)
+            self.assertFalse(any("soft_gap has no claim_ids" in ln for ln in lines))
+
+    def test_soft_gap_flagged_filler_still_fails(self):
+        from author_from_packet import _check_optimization_bar_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "soft_gaps": [
+                    {
+                        "item": "Some soft gap without a real bridge",
+                        "class": "SOFT",
+                        "note": (
+                            "Soft gap flagged at Stage 0; argue as "
+                            "transferable-skill fit in cover letter."
+                        ),
+                        "claim_ids": [],
+                    }
+                ],
+                "evidence_map": [],
+            }
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(packet), encoding="utf-8"
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_optimization_bar_provenance(folder)
+            self.assertFalse(ok)
+            self.assertTrue(any("soft_gap has no claim_ids" in ln for ln in lines))
+
+
 if __name__ == "__main__":
     unittest.main()

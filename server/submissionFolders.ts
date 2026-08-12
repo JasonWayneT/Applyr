@@ -265,7 +265,12 @@ function readJdMeta(folderPath: string): { title: string; url: string; jdText: s
   ]);
   const junkRe =
     /^(?:the\s+)?(?:role|position|opportunity)\s*!?\s*$|^(?:register|apply|click|sign\s*up)\s+here\b|^(?:please\s+)?apply\b|^job\s+(?:summary|description|overview)\b|^what\s+you(?:'|')?ll?\s+(?:do|be\s+doing|need|bring)\b|^who\s+(?:we\s+are|you\s+are)\b|^join\s+(?:our\s+)?(?:team|us)\b/i;
-  const roleWordRe = /\b(?:manager|owner|director|lead|pm)\b/i;
+  const sloganRe =
+    /\b(?:by\s+becoming|join\s+(?:our\s+)?(?:team|us)\s+as|we(?:'|')?re\s+(?:looking|seeking|hiring)|(?:looking|seeking|hiring)\s+for\s+(?:a|an|our)|create\s+the\s+future|together\s+with\s+us|opportunity\s+to\s+(?:join|become)|come\s+join|excited\s+to\s+(?:announce|share))\b/i;
+  const qualLineRe =
+    /^(?:proven|strong|excellent|demonstrated|ability\s+to|experience\s+(?:with|in|and)|minimum\s+of|bachelor|master|years?\s+of\s+experience|\d+\+?\s+years?)\b/i;
+  const roleWordRe =
+    /\b(?:manager|owner|director|pm)\b|\b(?:product|technical|platform|team|group)\s+lead\b|\blead\s+(?:product|technical|platform)\b/i;
   const pmRoleRe =
     /\b(?:senior\s+|staff\s+)?(?:technical\s+|platform\s+)?product\s+(?:manager|owner)\b/i;
 
@@ -275,8 +280,37 @@ function readJdMeta(folderPath: string): { title: string; url: string; jdText: s
     const low = t.toLowerCase();
     if (junkExact.has(low)) return true;
     if (junkRe.test(t)) return true;
+    if (sloganRe.test(t)) return true;
+    if (qualLineRe.test(t)) return true;
+    if (t.split(/\s+/).length > 10) return true;
     if (t.endsWith('!') && !roleWordRe.test(t)) return true;
     return false;
+  };
+
+  const embeddedPm = (text: string): string => {
+    const m = text.match(pmRoleRe);
+    return m ? m[0].replace(/\s+/g, ' ').trim() : '';
+  };
+
+  const titleFromUrl = (rawUrl: string): string => {
+    if (!rawUrl) return '';
+    const workday = rawUrl.match(
+      /\/((?:Senior-|Staff-|Sr-)?(?:Technical-)?Product-(?:Manager|Owner)(?:-[A-Za-z0-9]+)?)(?:_|\/|\?|$)/i,
+    );
+    if (workday?.[1]) return workday[1].replace(/-/g, ' ').trim();
+    const parts = rawUrl.split('?', 1)[0].replace(/\/+$/, '').split('/').filter(Boolean);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      if (/^\d+$/.test(part)) continue;
+      if (!/product[-_](?:manager|owner)/i.test(part)) continue;
+      return part
+        .replace(/_/g, '-')
+        .split('-')
+        .filter(Boolean)
+        .map((w) => (['ii', 'iii', 'iv'].includes(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)))
+        .join(' ');
+    }
+    return '';
   };
 
   for (let i = start; i < Math.min(lines.length, start + 40); i++) {
@@ -297,17 +331,29 @@ function readJdMeta(folderPath: string): { title: string; url: string; jdText: s
       continue;
     }
     if (line.length >= 120) {
-      const embedded = line.match(pmRoleRe);
-      if (embedded) {
-        title = embedded[0].replace(/\s+/g, ' ').trim();
+      const embedded = embeddedPm(line);
+      if (embedded && !isImplausibleTitle(embedded)) {
+        title = embedded;
         break;
       }
       continue;
     }
     if (isImplausibleTitle(line)) {
+      const embedded = embeddedPm(line);
+      if (embedded && !isImplausibleTitle(embedded)) {
+        title = embedded;
+        break;
+      }
       continue;
     }
     if (line.length < 120 && !line.endsWith('.') && roleWordRe.test(line)) {
+      if (line.split(/\s+/).length > 6) {
+        const embedded = embeddedPm(line);
+        if (embedded && !isImplausibleTitle(embedded)) {
+          title = embedded;
+          break;
+        }
+      }
       title = line;
       break;
     }
@@ -315,9 +361,15 @@ function readJdMeta(folderPath: string): { title: string; url: string; jdText: s
 
   if (!title) {
     const body = lines.slice(start).join('\n');
-    const embedded = body.match(pmRoleRe);
-    if (embedded) {
-      title = embedded[0].replace(/\s+/g, ' ').trim();
+    const embedded = embeddedPm(body);
+    if (embedded && !isImplausibleTitle(embedded)) {
+      title = embedded;
+    }
+  }
+  if (!title) {
+    const fromUrl = titleFromUrl(url);
+    if (fromUrl && !isImplausibleTitle(fromUrl)) {
+      title = fromUrl;
     }
   }
 

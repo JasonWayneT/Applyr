@@ -124,14 +124,45 @@ _TITLE_JUNK_RE = re.compile(
     re.I,
 )
 
-_TITLE_ROLE_WORD_RE = re.compile(
-    r"\b(?:manager|owner|director|lead|pm)\b",
+# Recruiting slogans that name the role inside a sentence (Compugroup 2026-08-11:
+# "Create the future of e-health together with us by becoming a Product Manager").
+_TITLE_SLOGAN_RE = re.compile(
+    r"\b(?:"
+    r"by\s+becoming|"
+    r"join\s+(?:our\s+)?(?:team|us)\s+as|"
+    r"we(?:'|')?re\s+(?:looking|seeking|hiring)|"
+    r"(?:looking|seeking|hiring)\s+for\s+(?:a|an|our)|"
+    r"create\s+the\s+future|"
+    r"together\s+with\s+us|"
+    r"opportunity\s+to\s+(?:join|become)|"
+    r"come\s+join|"
+    r"excited\s+to\s+(?:announce|share)"
+    r")\b",
     re.I,
 )
 
+# Qualification / bullet lines that mention "lead" or "manager" but aren't titles
+# (Pinterest: "Proven ability to lead teams and work in a highly collaborative environment").
+_TITLE_QUAL_LINE_RE = re.compile(
+    r"^(?:proven|strong|excellent|demonstrated|ability\s+to|"
+    r"experience\s+(?:with|in|and)|minimum\s+of|bachelor|master|"
+    r"years?\s+of\s+experience|\d+\+?\s+years?)\b",
+    re.I,
+)
+
+# Real role titles are short; bare "lead" alone is too broad (matches "ability to lead").
+_TITLE_ROLE_WORD_RE = re.compile(
+    r"\b(?:manager|owner|director|pm)\b|"
+    r"\b(?:product|technical|platform|team|group)\s+lead\b|"
+    r"\blead\s+(?:product|technical|platform)\b",
+    re.I,
+)
+
+_MAX_TITLE_WORDS = 10
+
 
 def is_implausible_job_title(title: str) -> bool:
-    """True when `title` is JD chrome (section header / CTA), not a real role name.
+    """True when `title` is JD chrome (section header / CTA / slogan), not a real role name.
 
     Used by Stage 0 extraction cleanup and Stage 3 finalize so scrape junk cannot
     land in `jobs.title` again.
@@ -143,6 +174,12 @@ def is_implausible_job_title(title: str) -> bool:
     if lower in _TITLE_JUNK_EXACT:
         return True
     if _TITLE_JUNK_RE.search(t):
+        return True
+    if _TITLE_SLOGAN_RE.search(t):
+        return True
+    if _TITLE_QUAL_LINE_RE.search(t):
+        return True
+    if len(t.split()) > _MAX_TITLE_WORDS:
         return True
     # Imperative CTA chrome almost always ends with !
     if t.rstrip().endswith("!") and not _TITLE_ROLE_WORD_RE.search(t):
@@ -158,11 +195,52 @@ def _embedded_pm_title(text: str) -> str:
     return re.sub(r"\s+", " ", m.group(0)).strip()
 
 
+def _title_from_url(jd_text: str) -> str:
+    """Best-effort role from a Workday/Greenhouse-style URL slug."""
+    url = ""
+    for line in (jd_text or "").splitlines()[:5]:
+        stripped = line.strip()
+        if stripped.lower().startswith("url:"):
+            url = stripped.split(":", 1)[1].strip()
+            break
+        if stripped.startswith("http"):
+            url = stripped
+            break
+    if not url:
+        return ""
+
+    # Workday: .../Product-Manager_JR109379-1
+    m = re.search(
+        r"/((?:Senior-|Staff-|Sr-)?(?:Technical-)?Product-(?:Manager|Owner)"
+        r"(?:-[A-Za-z0-9]+)?)(?:_|/|\?|$)",
+        url,
+        re.I,
+    )
+    if m:
+        return m.group(1).replace("-", " ").strip()
+
+    # Path slug: .../product-manager-ii-content-compliance/
+    parts = [p for p in url.split("?", 1)[0].rstrip("/").split("/") if p]
+    for part in reversed(parts):
+        if part.isdigit():
+            continue
+        if not re.search(r"product[-_](?:manager|owner)", part, re.I):
+            continue
+        words = part.replace("_", "-").split("-")
+        titled = " ".join(
+            w.upper() if w.lower() in {"ii", "iii", "iv"} else w.capitalize()
+            for w in words
+            if w
+        )
+        return titled
+    return ""
+
+
 def extract_job_title_line(jd_text: str) -> str:
     """Best-effort job title from JD text (explicit header, short title line, or embedded PM).
 
-    Prefers real role lines over section headers / apply CTAs. Falls back to the first
-    Product Manager/Owner mention in the body when the top of the JD is chrome.
+    Prefers real role lines over section headers / apply CTAs / recruiting slogans.
+    Falls back to the first Product Manager/Owner mention, then a URL slug.
     """
     if not jd_text:
         return ""
@@ -185,22 +263,34 @@ def extract_job_title_line(jd_text: str) -> str:
             continue
         if len(stripped) >= 120:
             embedded = _embedded_pm_title(stripped)
-            if embedded:
+            if embedded and not is_implausible_job_title(embedded):
                 return embedded
             continue
         if any(lower.startswith(prefix) for prefix in _TITLE_BOILERPLATE_PREFIXES):
             continue
         if is_implausible_job_title(stripped):
+            # Slogan / qual line may still embed the real title ("...by becoming a Product Manager")
+            embedded = _embedded_pm_title(stripped)
+            if embedded and not is_implausible_job_title(embedded):
+                return embedded
             continue
         # Prefer a short non-sentence line that already looks like a role title
         if not stripped.endswith(".") and _TITLE_ROLE_WORD_RE.search(stripped):
+            if len(stripped.split()) > 6:
+                embedded = _embedded_pm_title(stripped)
+                if embedded and not is_implausible_job_title(embedded):
+                    return embedded
             return stripped
         if not stripped.endswith("."):
             short_candidates.append(stripped)
 
     embedded = _embedded_pm_title(jd_text)
-    if embedded:
+    if embedded and not is_implausible_job_title(embedded):
         return embedded
+
+    from_url = _title_from_url(jd_text)
+    if from_url and not is_implausible_job_title(from_url):
+        return from_url
 
     for candidate in short_candidates:
         if not is_implausible_job_title(candidate):

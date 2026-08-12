@@ -4,7 +4,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import pytest
-from submission_linter import lint_document, LintResult
+from submission_linter import lint_document, LintResult, check_b2b_saas_positioning
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -15,13 +15,13 @@ candidate@example.com
 
 Dear Hiring Manager,
 
-HubSpot's shift toward product-led growth created a specific kind of product problem. The platform had to earn adoption from users who hadn't been sold to yet.
+HubSpot's shift toward product-led growth created a specific kind of product problem. The platform had to earn adoption from users who hadn't been sold to yet, which changed how discovery and prioritization had to work across product, engineering, and go-to-market teams in the same planning cycle.
 
-At Cision, on a $40M ARR B2B platform, that was the kind of problem I was responsible for solving. I partnered with engineering, DBA, and DevOps to eliminate a 40% data drop-off that was eroding customer trust and contributing to churn.
+At Cision, on a $40M ARR B2B platform, that was the kind of problem I was responsible for solving. I partnered with engineering, DBA, and DevOps to eliminate a 40% data drop-off that was eroding customer trust and contributing to churn across thousands of active accounts.
 
-The data remediation work required coordinating across Legal, InfoSec, and Account Management while managing competing roadmap priorities. I treated the contact data failures as a product trust problem, not a minor bug, and drove the fix end-to-end.
+The data remediation work required coordinating across Legal, InfoSec, and Account Management while managing competing roadmap priorities. I treated the contact data failures as a product trust problem, not a minor bug, and drove the fix end-to-end through quarterly planning and clear success criteria tied to complaint volume. Separately, I used Pendo usage patterns and Salesforce subscription data to sequence migration work for high-risk accounts, so engineering capacity went to the features customers actually used instead of assumed must-haves.
 
-I welcome the opportunity to discuss how this experience maps to the platform challenges in this role.
+I would welcome a conversation about how this experience maps to the platform challenges in this role. Thank you for your time and consideration.
 
 Best regards,
 
@@ -48,6 +48,10 @@ Full Remote, San Diego, CA
 ### Product Manager | Sterkly Services | Feb 2019 - Aug 2021
 
 * Resolved a critical certificate distribution bottleneck for a macOS security product, sustaining an estimated $1M-$3M in product revenue.
+
+### Account Manager / Product Owner | Zero To Sixty | June 2017 - January 2019
+
+* Replaced a manual laptop-fulfillment process with a custom automated deployment script.
 
 ## EDUCATION
 
@@ -205,12 +209,26 @@ def test_LW001_warns_on_short_cover_letter():
 
 
 def test_LW001_no_warn_on_correct_length():
-    r = lint_document(CL_CLEAN, "cover_letter")
+    # Pad fixture body into the 220–450 WARN band without changing HARD_BLOCK coverage.
+    pad = (
+        " That work also meant writing clear requirements, defending tradeoffs in "
+        "quarterly planning, and keeping executive stakeholders aligned on what "
+        "shipped next versus what waited."
+    )
+    text = CL_CLEAN.replace(
+        "Thank you for your time and consideration.",
+        pad + " Thank you for your time and consideration.",
+    )
+    r = lint_document(text, "cover_letter")
     assert not any(v.rule_id == "LW-001" for v in r.warns)
 
 
 def test_LW002_warns_on_long_resume():
-    long_resume = RESUME_CLEAN + ("\n* " + "Managed platform deliverables with cross-functional teams across multiple quarters. " * 30)
+    long_resume = RESUME_CLEAN + (
+        "\n* "
+        + "Managed platform deliverables with cross-functional teams across multiple quarters of roadmap work under constrained capacity. "
+        * 80
+    )
     r = lint_document(long_resume, "resume")
     assert any(v.rule_id == "LW-002" for v in r.warns)
 
@@ -371,6 +389,93 @@ def test_lint_result_passed_false_on_hard_block():
 def test_lint_result_doc_type_set():
     r = lint_document(CL_CLEAN, "cover_letter")
     assert r.document_type == "cover_letter"
+
+
+def test_LR013_blocks_last_four_years():
+    text = CL_CLEAN.replace(
+        "that was the kind of problem I was responsible for solving",
+        "mirrors how I have worked for the last four years",
+    )
+    r = lint_document(text, "cover_letter")
+    assert not r.passed
+    assert any(v.rule_id == "LR-013" for v in r.blocks)
+
+
+def test_LR028_blocks_sdsu_education():
+    text = RESUME_CLEAN.replace(
+        "National University, San Diego, CA, 2019",
+        "San Diego State University",
+    )
+    r = lint_document(text, "resume")
+    assert not r.passed
+    assert any(v.rule_id == "LR-028" for v in r.blocks)
+
+
+def test_LR028_requires_national_university():
+    text = RESUME_CLEAN.replace("National University", "Example University")
+    r = lint_document(text, "resume")
+    assert not r.passed
+    assert any(v.rule_id == "LR-028" for v in r.blocks)
+
+
+def test_LR029_blocks_senior_cision_header():
+    text = RESUME_CLEAN.replace(
+        "### Product Manager | Cision | Sep 2021 - Jan 2026",
+        "### Senior Product Manager | Cision | 2021 - 2024",
+    )
+    r = lint_document(text, "resume")
+    assert not r.passed
+    assert any(v.rule_id == "LR-029" for v in r.blocks)
+
+
+def test_LR029_blocks_operations_manager_z2s():
+    text = RESUME_CLEAN.replace(
+        "### Account Manager / Product Owner | Zero To Sixty | June 2017 - January 2019",
+        "### Operations Manager | Zero To Sixty | 2017 - 2020",
+    )
+    r = lint_document(text, "resume")
+    assert not r.passed
+    assert any(v.rule_id == "LR-029" for v in r.blocks)
+
+
+def test_LR030_blocks_duplicate_welcome_closers():
+    text = CL_CLEAN.replace(
+        "I would welcome a conversation about how this experience maps to the platform challenges in this role. Thank you for your time and consideration.",
+        "I would welcome the chance to bring this experience to your team.\n\n"
+        "I would welcome a conversation about this role. Thank you for your time and consideration.",
+    )
+    r = lint_document(text, "cover_letter")
+    assert not r.passed
+    assert any(v.rule_id == "LR-030" for v in r.blocks)
+
+
+def test_LR030_allows_single_welcome_closer():
+    r = lint_document(CL_CLEAN, "cover_letter")
+    assert not any(v.rule_id == "LR-030" for v in r.blocks)
+
+
+def test_LR031_blocks_b2b_saas_summary_when_jd_lacks_saas():
+    # RESUME_CLEAN summary already contains "B2B SaaS platforms".
+    jd = "We are hiring a Product Manager for our marketplace. Build roadmaps with engineering."
+    blocks = check_b2b_saas_positioning(RESUME_CLEAN, jd)
+    assert len(blocks) == 1
+    assert blocks[0].rule_id == "LR-031"
+    assert blocks[0].severity == "HARD_BLOCK"
+
+
+def test_LR031_allows_b2b_saas_when_jd_says_saas():
+    jd = "Looking for a PM with B2B SaaS experience shipping enterprise products."
+    assert check_b2b_saas_positioning(RESUME_CLEAN, jd) == []
+
+
+def test_LR031_ignores_b2b_saas_outside_summary():
+    resume = RESUME_CLEAN.replace(
+        "Product Manager with 7 years across B2B SaaS platforms.",
+        "Product Manager with 7 years across digital platforms.",
+    )
+    resume += "\n* Owned product across two customer-facing B2B SaaS platform stacks."
+    jd = "Product Manager for a healthcare marketplace. No SaaS keyword here."
+    assert check_b2b_saas_positioning(resume, jd) == []
 
 
 if __name__ == "__main__":

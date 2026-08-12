@@ -216,8 +216,19 @@ HARD_BLOCK_RULES: List[LintRule] = [
         # cannot catch this by design — it deliberately excludes 1-2 digit bare numbers to avoid noisy
         # false positives on small unrelated counts, so a superseded years figure needs its own
         # narrow, specific rule rather than a hack in the generic numeric sweep.
-        pattern=fr"\b{PREVIOUS_YEARS_EXPERIENCE}\+?\s*years\b|\b{PREVIOUS_YEARS_WORD} years\b",
-        message=f"Superseded years-of-experience figure detected (should be {CURRENT_YEARS_EXPERIENCE}, not {PREVIOUS_YEARS_EXPERIENCE}/{PREVIOUS_YEARS_EXPERIENCE}+/{PREVIOUS_YEARS_WORD})",
+        # Widened 2026-08-11 (post-finalize audit): "last four years" shipped on a COMPLETE letter
+        # while resume correctly said 7 — LR-013 only blocked six/6. Also catch four/five and 4/5
+        # in last/past/of-experience shapes (not bare "5 years" alone elsewhere).
+        pattern=(
+            fr"\b{PREVIOUS_YEARS_EXPERIENCE}\+?\s*years\b|\b{PREVIOUS_YEARS_WORD} years\b|"
+            r"\b(?:last|past)\s+(?:four|five|six|[4-6])\+?\s*years\b|"
+            r"\b(?:four|five|six|[4-6])\+?\s*years\s+of\s+experience\b|"
+            r"\bwith\s+(?:four|five|six|[4-6])\+?\s*years\b"
+        ),
+        message=(
+            f"Superseded or undersold years-of-experience figure detected "
+            f"(should be {CURRENT_YEARS_EXPERIENCE} / seven, not 4–6 / four–six)"
+        ),
         suggestion=f"Use {CURRENT_YEARS_EXPERIENCE} years, per workExperience.md §1.0's explicit correction.",
         doc_types=["cover_letter", "resume"],
     ),
@@ -364,7 +375,7 @@ HARD_BLOCK_RULES: List[LintRule] = [
     # Anti-Hallucination Rules" calls people management, titles above Senior IC PM, and
     # revenue/billing ownership "absolute" -- but until now nothing mechanically checked any of
     # them against real drafted output; enforcement was 100% agent judgment during drafting, the
-    # exact pattern that already failed silently for LR-016/LW-013/LW-021 before each got
+    # exact pattern that already failed silently for LR-016/LR-031(was LW-013)/LW-021 before each got
     # hard-coded after a real miss. Separately: BLOCKED_TOOLS (referenced in this file's own
     # self-repair-protocol history and in CLAUDE.md) turned out to only exist in the retired
     # local_rewrite.py/drafting_engine.py/local_draft_stages.py pipeline that direct authoring no
@@ -404,6 +415,47 @@ HARD_BLOCK_RULES: List[LintRule] = [
         message="Revenue/billing/P&L ownership claim detected",
         suggestion="Jason has never owned revenue, billing, or payment systems (CLAUDE.md Exclusion Zones). Reframe around the actual owned system (e.g. platform reliability, data integrity) instead.",
         doc_types=["cover_letter", "resume"],
+    ),
+    # LR-028–031 added 2026-08-11 after a post-finalize audit found SDSU education,
+    # Senior Cision title, wrong employer date ranges, and stacked "I would welcome" closers
+    # on COMPLETE packs. Mech is the fail-closed owner; these are identity chrome, not taste.
+    LintRule(
+        rule_id="LR-028",
+        severity="HARD_BLOCK",
+        check_type="structural",
+        pattern=None,
+        message="Resume EDUCATION must cite National University (BBA); wrong school/degree chrome detected",
+        suggestion=(
+            "Use: Bachelor of Business Administration, Major in Management, "
+            "National University, San Diego, California, 2019 (workExperience.md §7)."
+        ),
+        doc_types=["resume"],
+    ),
+    LintRule(
+        rule_id="LR-029",
+        severity="HARD_BLOCK",
+        check_type="structural",
+        pattern=None,
+        message="Resume employer header chrome does not match workExperience.md §2.1",
+        suggestion=(
+            "Cision: Product Manager | September 2021 - January 2026 (never Senior). "
+            "Sterkly: Product Manager / Product Owner | February 2019 - August 2021. "
+            "Zero To Sixty: Account Manager / Product Owner | June 2017 - January 2019 "
+            "(never Operations Manager)."
+        ),
+        doc_types=["resume"],
+    ),
+    LintRule(
+        rule_id="LR-030",
+        severity="HARD_BLOCK",
+        check_type="structural",
+        pattern=None,
+        message="Duplicate 'I would welcome…' closers detected in cover letter",
+        suggestion=(
+            "Keep one closer. If CL-012 needs thanks, append thanks to the existing "
+            "custom closer — do not stack a second template 'I would welcome' sentence."
+        ),
+        doc_types=["cover_letter"],
     ),
 ]
 
@@ -876,6 +928,81 @@ def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResu
                             suggestion=rule.suggestion,
                         )
                         break
+            elif rule.rule_id == "LR-028" and doc_type == "resume":
+                edu = re.search(
+                    r"##\s*EDUCATION\s*\n([\s\S]*?)(?=\n##\s|\Z)", text, re.IGNORECASE
+                )
+                edu_block = edu.group(1) if edu else ""
+                edu_l = edu_block.lower()
+                if not edu_block.strip():
+                    violation = LintViolation(
+                        rule_id=rule.rule_id,
+                        severity=rule.severity,
+                        message="EDUCATION section missing or empty",
+                        suggestion=rule.suggestion,
+                    )
+                elif "san diego state" in edu_l or re.search(
+                    r"\bsdsu\b", edu_l
+                ):
+                    violation = LintViolation(
+                        rule_id=rule.rule_id,
+                        severity=rule.severity,
+                        message="Wrong school in EDUCATION (San Diego State / SDSU)",
+                        suggestion=rule.suggestion,
+                    )
+                elif "national university" not in edu_l:
+                    violation = LintViolation(
+                        rule_id=rule.rule_id,
+                        severity=rule.severity,
+                        message="EDUCATION must cite National University",
+                        suggestion=rule.suggestion,
+                    )
+            elif rule.rule_id == "LR-029" and doc_type == "resume":
+                headers = re.findall(r"(?m)^###\s+(.+)$", text)
+                detail = None
+                for h in headers:
+                    hl = h.lower()
+                    if "cision" in hl:
+                        if re.search(r"senior\s+product\s+manager", hl):
+                            detail = f"Senior Product Manager on Cision header: {h.strip()!r}"
+                        elif re.search(r"2021\s*[-–]\s*2024\b", h) and "2026" not in h:
+                            detail = f"Cision date range must end January 2026, got: {h.strip()!r}"
+                    if "sterkly" in hl and re.search(r"2020\s*[-–]\s*2021\b", h):
+                        detail = (
+                            f"Sterkly dates must be February 2019 - August 2021, got: {h.strip()!r}"
+                        )
+                    if "zero to sixty" in hl or "zero_to_sixty" in hl:
+                        if re.search(r"operations\s+manager", hl):
+                            detail = f"Operations Manager on Zero To Sixty header: {h.strip()!r}"
+                        elif re.search(r"2017\s*[-–]\s*2020\b", h):
+                            detail = (
+                                f"Zero To Sixty dates must be June 2017 - January 2019, "
+                                f"got: {h.strip()!r}"
+                            )
+                    if detail:
+                        break
+                if detail:
+                    violation = LintViolation(
+                        rule_id=rule.rule_id,
+                        severity=rule.severity,
+                        message=detail,
+                        suggestion=rule.suggestion,
+                    )
+            elif rule.rule_id == "LR-030" and doc_type == "cover_letter":
+                body = (
+                    text.split("Dear Hiring Manager,")[-1]
+                    if "Dear Hiring Manager," in text
+                    else text
+                )
+                body = re.split(r"\n(?:Best )?regards,", body, flags=re.IGNORECASE)[0]
+                hits = re.findall(r"\bi would welcome\b", body, flags=re.IGNORECASE)
+                if len(hits) >= 2:
+                    violation = LintViolation(
+                        rule_id=rule.rule_id,
+                        severity=rule.severity,
+                        message=f"Found {len(hits)} 'I would welcome…' closers (max 1)",
+                        suggestion=rule.suggestion,
+                    )
             elif rule.rule_id == "LI-002":
                 pass  # checked externally (requires filesystem knowledge)
             elif rule.rule_id == "LI-003" and doc_type == "cover_letter":
@@ -1245,15 +1372,17 @@ def _extract_summary(resume_text: str) -> str:
 
 
 def check_b2b_saas_positioning(resume_text: str, jd_text: str) -> List[LintViolation]:
-    """LW-013: flag a resume summary that defaults to 'B2B SaaS' framing the JD itself never uses.
+    """LR-031 (was LW-013): HARD_BLOCK resume summary 'B2B SaaS' when the JD never says SaaS.
 
     CLAUDE.md's "Required Document Structure" section already states this as a prose rule (added
     2026-07-21): the optional positioning subtitle "must mirror the specific JD's own framing --
     never default to 'B2B SaaS Platform Product Manager'". Found violated on all 9 real summaries
     in the 2026-07-21 batch review despite the rule already being written down -- a prose instruction
-    alone did not survive drafting pressure, same failure mode as LR-016/LR-015 before this was
-    mechanized. WARN, not HARD_BLOCK: a JD can genuinely be B2B SaaS without using the literal term
-    (an enterprise software JD, for instance) -- this forces a check, not an automatic rewrite.
+    alone did not survive drafting pressure, same failure mode as LR-016/LR-015. Promoted from WARN
+    to HARD_BLOCK on 2026-08-11 after live COMPLETE packs kept shipping the default summary opener
+    ("7 years of B2B SaaS platform experience") on non-SaaS JDs. Tradeoff accepted: a JD that is
+    genuinely SaaS but never uses the literal term "SaaS" will also block -- mirror that JD's own
+    words instead of asserting B2B SaaS.
     """
     summary = _extract_summary(resume_text)
     if not summary or not jd_text.strip():
@@ -1263,11 +1392,11 @@ def check_b2b_saas_positioning(resume_text: str, jd_text: str) -> List[LintViola
     if re.search(r"\bsaas\b", jd_text, re.IGNORECASE):
         return []
     return [LintViolation(
-        rule_id="LW-013",
-        severity="WARN",
+        rule_id="LR-031",
+        severity="HARD_BLOCK",
         message=(
             "Resume summary frames the role as 'B2B SaaS' but Original_JD.txt never uses the term "
-            "'SaaS' anywhere -- likely default positioning rather than positioning drawn from this JD."
+            "'SaaS' anywhere -- default positioning rather than positioning drawn from this JD."
         ),
         suggestion=(
             "Re-read the JD's own framing of what it is (vertical software, marketplace, platform, "
@@ -1732,24 +1861,28 @@ def lint_folder(folder: str) -> List[dict]:
                 "result": LintResult(passed=True, warns=hook_warns, document_type="hook"),
             })
 
-    # LW-013: resume summary vs JD B2B SaaS positioning check (needs Original_JD.txt).
+    # LR-031: resume summary vs JD B2B SaaS positioning check (needs Original_JD.txt).
     if "resume" in texts_by_doc_type and os.path.exists(jd_path):
         try:
             with open(jd_path, encoding="utf-8") as f:
                 jd_text = f.read()
         except OSError:
             jd_text = ""
-        positioning_warns = check_b2b_saas_positioning(texts_by_doc_type["resume"], jd_text)
-        if positioning_warns:
+        positioning_blocks = check_b2b_saas_positioning(texts_by_doc_type["resume"], jd_text)
+        if positioning_blocks:
             results.append({
                 "submission": os.path.basename(folder),
                 "document": "resume summary vs JD",
                 "doc_type": "positioning",
-                "status": "WARN",
-                "blocks": 0,
-                "warns": len(positioning_warns),
+                "status": "BLOCK",
+                "blocks": len(positioning_blocks),
+                "warns": 0,
                 "infos": 0,
-                "result": LintResult(passed=True, warns=positioning_warns, document_type="positioning"),
+                "result": LintResult(
+                    passed=False,
+                    blocks=positioning_blocks,
+                    document_type="positioning",
+                ),
             })
 
     # LW-021: cross-employer audience/domain vocabulary bleed check (needs Original_JD.txt).

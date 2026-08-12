@@ -344,6 +344,25 @@ export function reconcileOrphanSubmissionFolders(): string[] {
     const id = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
     const summary = `Ready to apply — ${company} (assets on disk; linked from submissions/).`;
 
+    // Guard against jobs.url's UNIQUE constraint: a folder can be "orphan" by company-slug match
+    // (findJobsForFolder above) while its JD URL already belongs to a differently-named job row --
+    // e.g. the same posting scouted once under a mis-captured company name and drafted separately
+    // under its real name. That used to throw here and 500 the entire /api/jobs route on every
+    // request (found 2026-08-11: realtime_eclinical_solutions vs. an existing "Realtime Software
+    // Solutions" row, both the same ADP posting). Skip + log instead of inserting a duplicate.
+    if (meta.url) {
+      const existing = db.prepare('SELECT id, company FROM jobs WHERE url = ?').get(meta.url) as
+        { id: string; company: string } | undefined;
+      if (existing) {
+        logActivity(
+          'WARN',
+          'System',
+          `Skipped linking orphan folder "${folderName}" as a new job — its JD URL already belongs to job ${existing.id} ("${existing.company}"). Reconcile the company name mismatch manually.`,
+        );
+        continue;
+      }
+    }
+
     db.prepare(`
       INSERT INTO jobs (id, company, title, url, score, status, summary, jd_text, retry_count)
       VALUES (?, ?, ?, ?, 80, 'Backlog', ?, ?, 0)

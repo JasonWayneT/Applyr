@@ -37,6 +37,37 @@ def _run_preflight_lint(md_path: str, md_text: str) -> None:
         print(f"[Linter] Warning: linter failed ({e}); continuing.", file=sys.stderr)
 
 
+def prepare_markdown_for_compile(md_text: str) -> str:
+    """Normalize MD so PDF (Python-Markdown) and DOCX (Pandoc) both keep real lists.
+
+    Without a blank line between a location/paragraph line and `* ` / `- ` bullets,
+    both renderers absorb the bullets into the preceding paragraph as literal text
+    (DOCX symptom: Word shows one paragraph starting with "* Eliminated...").
+    """
+    md_text = md_text.lstrip("\ufeff")
+
+    # Strip legacy <div style="..."> wrappers that old cover letter templates
+    # injected around the whole document. Python-Markdown does not process
+    # Markdown syntax (e.g. # Heading) inside raw HTML blocks, so the name
+    # heading renders as literal "# Jason Taylor" text in the PDF.
+    md_text = re.sub(
+        r'^\s*<div[^>]*>\s*', '', md_text, flags=re.IGNORECASE
+    )
+    md_text = re.sub(
+        r'\s*</div>\s*$', '', md_text, flags=re.IGNORECASE
+    )
+
+    # Ensure blank line before bullet lists that directly follow a paragraph line.
+    # Match: a non-list, non-header line immediately followed by a "* " or "- " line.
+    md_text = re.sub(r'(?m)^((?!\* |\- |#).+)\n(\* |\- )', r'\1\n\n\2', md_text)
+
+    # Ensure blank line between consecutive pipe-delimited lines (CORE COMPETENCIES rows).
+    # Without this, "Skills Row\nTools Row" merges into one paragraph and the section
+    # boundary between the two rows disappears (e.g. "...Product Roadmap Jira | SQL").
+    md_text = re.sub(r'(?m)^([^\n#\*\-].+\|.+)\n([^\n#\*\-].+\|.+)', r'\1\n\n\2', md_text)
+    return md_text
+
+
 def main():
     if len(sys.argv) < 3:
         print("Usage: python compile_single.py <md_path> <pdf_path>", file=sys.stderr)
@@ -54,30 +85,7 @@ def main():
             md_text = f.read()
 
         _run_preflight_lint(md_path, md_text)
-        # Strip any remaining BOM.
-        md_text = md_text.lstrip("\ufeff")
-
-        # Strip legacy <div style="..."> wrappers that old cover letter templates
-        # injected around the whole document. Python-Markdown does not process
-        # Markdown syntax (e.g. # Heading) inside raw HTML blocks, so the name
-        # heading renders as literal "# Jason Taylor" text in the PDF.
-        md_text = re.sub(
-            r'^\s*<div[^>]*>\s*', '', md_text, flags=re.IGNORECASE
-        )
-        md_text = re.sub(
-            r'\s*</div>\s*$', '', md_text, flags=re.IGNORECASE
-        )
-
-        # Ensure blank line before bullet lists that directly follow a paragraph line.
-        # Python-Markdown requires a blank line between a <p> and a list; without it
-        # the bullets get absorbed into the paragraph as literal text.
-        # Match: a non-list, non-header line immediately followed by a "* " or "- " line.
-        md_text = re.sub(r'(?m)^((?!\* |\- |#).+)\n(\* |\- )', r'\1\n\n\2', md_text)
-
-        # Ensure blank line between consecutive pipe-delimited lines (CORE COMPETENCIES rows).
-        # Without this, "Skills Row\nTools Row" merges into one paragraph and the section
-        # boundary between the two rows disappears (e.g. "...Product Roadmap Jira | SQL").
-        md_text = re.sub(r'(?m)^([^\n#\*\-].+\|.+)\n([^\n#\*\-].+\|.+)', r'\1\n\n\2', md_text)
+        md_text = prepare_markdown_for_compile(md_text)
 
         # Convert standard Markdown to HTML
         html_content = markdown.markdown(md_text, extensions=['extra', 'tables'])
@@ -307,17 +315,35 @@ def main():
                 
             browser.close()
 
-        # Generate .docx fallback
+        # Generate .docx fallback from the same preprocessed markdown as the PDF.
+        # Do not pass raw md_path — location lines glued to "* " bullets become
+        # plain paragraphs with a literal asterisk in Word.
         try:
             import subprocess
             import shutil
+            import tempfile
             docx_path = pdf_path.rsplit('.', 1)[0] + '.docx'
             pandoc_exe = "pandoc"
             if shutil.which(pandoc_exe):
-                subprocess.run(
-                    [pandoc_exe, md_path, "-o", docx_path],
-                    check=True, capture_output=True
-                )
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    suffix=".md",
+                    delete=False,
+                ) as tmp:
+                    tmp.write(md_text)
+                    tmp_path = tmp.name
+                try:
+                    subprocess.run(
+                        [pandoc_exe, tmp_path, "-o", docx_path],
+                        check=True,
+                        capture_output=True,
+                    )
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
             else:
                 print(f"Warning: Pandoc executable not found in PATH", file=sys.stderr)
         except Exception as e:

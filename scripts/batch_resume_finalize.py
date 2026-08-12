@@ -64,6 +64,9 @@ def auto_dispose(slug: str) -> int:
             changed += 1
 
     for fp in (folder / "reviews").glob("*_findings.json"):
+        # HM prose findings must not be batch-auto-disposed (2026-08-11 audit).
+        if fp.name.startswith("hm_"):
+            continue
         try:
             fj = json.loads(fp.read_text(encoding="utf-8"))
         except Exception:
@@ -82,6 +85,9 @@ def auto_dispose(slug: str) -> int:
                 continue
             fid = it.get("id") or it.get("finding_id")
             if not fid or by_id.get(fid):
+                continue
+            # Skip hm.* finding ids even if they appear in another file
+            if str(fid).startswith("hm."):
                 continue
             sev = str(it.get("severity") or it.get("level") or "WARN").upper()
             if sev in ("BLOCK", "CRITICAL", "ERROR", "HARD_BLOCK"):

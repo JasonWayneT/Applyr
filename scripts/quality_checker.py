@@ -103,8 +103,25 @@ def check_and_repair_cover_letter(file_path):
     # Check for professional closing transition (Rule CL-012)
     body_text = content.split("Dear Hiring Manager,")[-1] if "Dear Hiring Manager," in content else content
     body_clean = body_text.split("Regards,")[0].split("Best regards,")[0].strip()
-    has_cta = any(w in body_clean.lower() for w in ["discuss", "conversation", "speaking", "interview", "opportunity to", "talk", "meet", "forward to"])
-    has_thanks = any(w in body_clean.lower() for w in ["thank you", "thanks", "consideration", "time"])
+    has_cta = any(
+        w in body_clean.lower()
+        for w in [
+            "discuss",
+            "conversation",
+            "speaking",
+            "interview",
+            "opportunity to",
+            "chance to",
+            "welcome the chance",
+            "talk",
+            "meet",
+            "forward to",
+        ]
+    )
+    has_thanks = any(
+        w in body_clean.lower()
+        for w in ["thank you", "thanks", "consideration", "time"]
+    )
     if not has_cta and not has_thanks:
         messages.append(
             "[CL-012 FAIL] Cover letter is missing a professional closing transition. "

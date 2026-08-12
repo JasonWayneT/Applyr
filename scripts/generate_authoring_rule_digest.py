@@ -96,6 +96,8 @@ base title only (no borrowed domain qualifier). Bullets stay ~2–3 lines for sc
 - If a proof sentence is needed: at most 1. Preferred default: 0 proof sentences.
 - Never recite the full cross-functional partner list — say "cross-functionally."
 - The heading must be literally `## PROFESSIONAL SUMMARY` — no substitutions.
+- Optional bold subtitle must mirror THIS JD's framing. Never default to "B2B SaaS Platform Product Manager."
+- HARD_BLOCK (LR-031): do not put "B2B SaaS" in the summary (subtitle or body) unless Original_JD.txt itself uses the word "SaaS." If the JD does not say SaaS, use the JD's own framing or drop the label.
 
 **1-page hard rule:** Resume PDF must fit on exactly one page. No extra sections beyond the four above.
 

@@ -19,9 +19,9 @@ from quality_checker import check_and_repair_cover_letter, check_resume  # noqa:
 from workflow.runner import run_until_stage1_complete  # noqa: E402
 from workflow.state import load_state  # noqa: E402
 
-CLOSING = (
-    "I would welcome a conversation about this role. "
-    "Thank you for your time and consideration."
+CLOSING_THANKS = "Thank you for your time and consideration."
+CLOSING_FULL = (
+    "I would welcome a conversation about this role. " + CLOSING_THANKS
 )
 
 ALWAYS_SKIP = {
@@ -46,6 +46,7 @@ def _load_keeps() -> list[str]:
 
 
 def fix_cl012(path: Path) -> bool:
+    """Satisfy CL-012 without stacking a second 'I would welcome' template."""
     try:
         check_and_repair_cover_letter(str(path))
         return False
@@ -54,14 +55,22 @@ def fix_cl012(path: Path) -> bool:
             raise
     text = path.read_text(encoding="utf-8")
     for marker in ("\nBest regards,", "\nRegards,"):
-        if marker in text:
-            body, rest = text.split(marker, 1)
-            body = body.rstrip()
-            if "thank you for your time" not in body.lower():
-                body = body + "\n\n" + CLOSING
-            path.write_text(body + marker + rest, encoding="utf-8")
-            check_and_repair_cover_letter(str(path))
-            return True
+        if marker not in text:
+            continue
+        body, rest = text.split(marker, 1)
+        body = body.rstrip()
+        body_l = body.lower()
+        has_thanks = any(w in body_l for w in ("thank you", "thanks", "consideration"))
+        has_welcome = "i would welcome" in body_l or "welcome the chance" in body_l
+        if has_welcome and not has_thanks:
+            body = body + " " + CLOSING_THANKS
+        elif not has_welcome and not has_thanks:
+            body = body + "\n\n" + CLOSING_FULL
+        elif not has_welcome and has_thanks:
+            body = body + "\n\nI would welcome a conversation about this role."
+        path.write_text(body + marker + rest, encoding="utf-8")
+        check_and_repair_cover_letter(str(path))
+        return True
     raise RuntimeError(f"No sign-off in {path}")
 
 
@@ -160,17 +169,27 @@ def repair_folder(folder: Path) -> list[str]:
         if fix_cl012(cl):
             notes.append("cl012")
     except SelfCorrectionError as e:
-        # try still inject closing
+        # Fallback: in-place thanks only when a welcome/chance closer already exists
         text = cl.read_text(encoding="utf-8")
-        if "CL-012" in str(e) or True:
-            for marker in ("\nBest regards,", "\nRegards,"):
-                if marker in text:
-                    body, rest = text.split(marker, 1)
-                    if "thank you for your time" not in body.lower():
-                        body = body.rstrip() + "\n\n" + CLOSING
-                        cl.write_text(body + marker + rest, encoding="utf-8")
-                        notes.append("cl012_force")
-                    break
+        for marker in ("\nBest regards,", "\nRegards,"):
+            if marker in text:
+                body, rest = text.split(marker, 1)
+                body_l = body.lower()
+                has_thanks = any(
+                    w in body_l for w in ("thank you", "thanks", "consideration")
+                )
+                has_welcome = (
+                    "i would welcome" in body_l or "welcome the chance" in body_l
+                )
+                if has_welcome and not has_thanks:
+                    body = body.rstrip() + " " + CLOSING_THANKS
+                    cl.write_text(body + marker + rest, encoding="utf-8")
+                    notes.append("cl012_force")
+                elif not has_welcome and not has_thanks:
+                    body = body.rstrip() + "\n\n" + CLOSING_FULL
+                    cl.write_text(body + marker + rest, encoding="utf-8")
+                    notes.append("cl012_force")
+                break
         try:
             check_and_repair_cover_letter(str(cl))
         except Exception as e2:

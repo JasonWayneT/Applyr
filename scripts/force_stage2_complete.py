@@ -40,41 +40,62 @@ from workflow.state import load_state  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 
-def _fill_all(folder: str) -> None:
+def _fill_phase(folder: str, phase: str) -> None:
+    """Auto-dispose findings for one Stage 2 phase (never use for hm)."""
+    if phase == "hm":
+        raise ValueError("HM findings must not be auto-disposed — leave WAITING_FOR_HUMAN")
     disp = load_dispositions(folder)
     by_id = dict(disp.get("by_finding_id") or {})
     bound = dict(disp.get("bound_findings_hashes") or {})
-    for phase in ("truth", "ats", "hm", "mech"):
-        path = os.path.join(folder, "reviews", f"{phase}_findings.json")
-        if not os.path.exists(path):
+    path = os.path.join(folder, "reviews", f"{phase}_findings.json")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as f:
+        doc = json.load(f)
+    for item in doc.get("findings") or []:
+        fid = item.get("id")
+        if not fid:
             continue
-        with open(path, encoding="utf-8") as f:
-            doc = json.load(f)
-        for item in doc.get("findings") or []:
-            fid = item.get("id")
-            if not fid:
-                continue
-            sev = str(item.get("severity") or "WARN").upper()
-            if sev in ("BLOCK", "CRITICAL", "ERROR", "HARD_BLOCK"):
-                by_id[fid] = "HUMAN_ACCEPTED_RISK"
-            else:
-                by_id[str(fid)] = by_id.get(fid) or "ACCEPTED_AS_CORRECT"
-        bound[phase] = findings_content_hash(doc)
-    # write via sync helper path
+        sev = str(item.get("severity") or "WARN").upper()
+        if sev in ("BLOCK", "CRITICAL", "ERROR", "HARD_BLOCK"):
+            by_id[fid] = "HUMAN_ACCEPTED_RISK"
+        else:
+            by_id[str(fid)] = by_id.get(fid) or "ACCEPTED_AS_CORRECT"
+    bound[phase] = findings_content_hash(doc)
     from workflow.reviews import _write_dispositions
 
     _write_dispositions(folder, by_id, bound)
 
 
+def _fill_all(folder: str) -> None:
+    """Auto-dispose truth/ats/mech only. HM is human-owned (2026-08-11)."""
+    for phase in ("truth", "ats", "mech"):
+        path = os.path.join(folder, "reviews", f"{phase}_findings.json")
+        if os.path.exists(path):
+            _fill_phase(folder, phase)
+
+
 def _pass_phase(folder: str, phase: str, collect_fn) -> dict:
     doc = collect_fn(folder)
     sync_dispositions_for_phase(folder, phase, doc)
-    _fill_all(folder)
+    if phase == "hm":
+        findings = doc.get("findings") or []
+        if findings:
+            # Do not auto-dispose — force WAITING so prose smell gets a human read
+            return {
+                "verdict": "WAITING",
+                "integrity": "CLEAN",
+                "open_finding_ids": [f.get("id") for f in findings if f.get("id")],
+                "note": "HM findings require human disposition (batch auto-dispose disabled)",
+            }
+        # empty findings — pass without dispositions
+        disp = load_dispositions(folder)
+        return policy.evaluate_truth_findings(doc, disp)
+    _fill_phase(folder, phase)
     disp = load_dispositions(folder)
     verdict = policy.evaluate_truth_findings(doc, disp)
     if verdict["verdict"] != "PASS":
-        # force remaining open to HUMAN_ACCEPTED_RISK and re-eval
-        _fill_all(folder)
+        _fill_phase(folder, phase)
         for fid in verdict.get("open_finding_ids") or []:
             d = load_dispositions(folder)
             by = dict(d.get("by_finding_id") or {})
@@ -85,8 +106,7 @@ def _pass_phase(folder: str, phase: str, collect_fn) -> dict:
         disp = load_dispositions(folder)
         verdict = policy.evaluate_truth_findings(doc, disp)
     if verdict["verdict"] == "FAIL":
-        # convert FAIL from wrong BLOCK disposition into risk accept
-        _fill_all(folder)
+        _fill_phase(folder, phase)
         disp = load_dispositions(folder)
         by = dict(disp.get("by_finding_id") or {})
         for item in doc.get("findings") or []:
@@ -111,6 +131,17 @@ def complete_stage2(folder: str, state: dict) -> dict:
     ):
         verdict = _pass_phase(folder, phase, collect)
         print(f"  {phase}: {verdict['verdict']} integrity={verdict.get('integrity')}")
+        if verdict["verdict"] == "WAITING" and phase == "hm":
+            s2["subphases"]["hm"]["status"] = "WAITING_FOR_HUMAN"
+            s2["status"] = "WAITING_FOR_HUMAN"
+            state["status"] = "WAITING_FOR_HUMAN"
+            state["active_stage"] = "stage2"
+            write_state(folder, state)
+            print(
+                "  HM findings present — stopping for human disposition "
+                f"({len(verdict.get('open_finding_ids') or [])} open)"
+            )
+            return state
         if verdict["verdict"] != "PASS":
             raise SystemExit(f"{folder} {phase} still {verdict}")
         sub = s2["subphases"][phase]

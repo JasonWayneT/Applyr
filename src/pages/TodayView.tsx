@@ -88,9 +88,10 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
     try {
       const res = await fetch(api('/api/gmail-sync/run'), { method: 'POST' });
       if (!res.ok) throw new Error();
-      const summary = await res.json() as { scanned: number; classified: number; matched: number; written: number; dryRun: boolean };
+      const summary = await res.json() as { scanned: number; classified: number; matched: number; written: number; unmatched: number; dryRun: boolean };
       const parts = [`${summary.scanned} new`, `${summary.matched} matched`];
       if (!summary.dryRun) parts.push(`${summary.written} applied`);
+      if (summary.unmatched > 0) parts.push(`${summary.unmatched} unmatched`);
       setGmailCheckToast(`Gmail check: ${parts.join(', ')}${summary.dryRun ? ' (dry run)' : ''}`);
     } catch {
       setGmailCheckToast('Gmail check failed — see server logs');

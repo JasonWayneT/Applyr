@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Job } from '../types/job';
+import { api } from '../lib/api';
 
 interface Notification {
   id: string;
@@ -11,6 +12,16 @@ interface Notification {
   action?: () => void;
 }
 
+interface GmailSyncNotification {
+  id: number;
+  timestamp: string;
+  category: 'confirmation' | 'rejection';
+  job_id: string | null;
+  company: string | null;
+  subject: string | null;
+  message: string;
+}
+
 interface NotificationPanelProps {
   jobs: Job[];
   isOpen: boolean;
@@ -19,13 +30,74 @@ interface NotificationPanelProps {
   onNavigate: (tab: string) => void;
 }
 
+/** Coarse "time ago" label — matches the plain-language style of this panel's other time labels. */
+function timeAgo(timestamp: string): string {
+  const then = new Date(timestamp + ' Z').getTime();
+  const diffMs = Date.now() - then;
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+// Polls independently of the Job Search page's own log console — this component stays mounted for the
+// whole session (App.tsx renders it unconditionally, gating visibility internally), so it picks up
+// findings from both the manual "Check Gmail Now" button and the 10-minute background scheduler without
+// either trigger needing to know about the Notifications panel at all.
+const GMAIL_POLL_MS = 10000;
+
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onClose, onJobClick, onNavigate }) => {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [gmailNotifs, setGmailNotifs] = useState<GmailSyncNotification[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchGmailNotifs = async () => {
+      try {
+        const res = await fetch(api('/api/gmail-sync/notifications'));
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data)) setGmailNotifs(data);
+      } catch {
+        // silent — notification panel shouldn't surface its own fetch errors
+      }
+    };
+    fetchGmailNotifs();
+    const interval = setInterval(fetchGmailNotifs, GMAIL_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   if (!isOpen) return null;
 
   const notifications: Notification[] = [];
   const now = Date.now();
+
+  // 0. Gmail sync findings (manual "Check Gmail Now" or the 10-minute background scheduler — both
+  // write to the same activity_log source, so this one list covers both without extra plumbing).
+  for (const g of gmailNotifs) {
+    const job = g.job_id ? jobs.find(j => j.id === g.job_id) : undefined;
+    notifications.push({
+      id: `gmail-${g.id}`,
+      icon: g.category === 'rejection' ? 'mail' : 'mark_email_read',
+      iconClass: g.category === 'rejection'
+        ? 'bg-error-container text-on-error-container'
+        : 'bg-secondary-container text-on-secondary-container',
+      title: g.category === 'rejection'
+        ? `Rejected: ${g.company ?? 'Unknown company'}`
+        : `Application confirmed: ${g.company ?? 'Unknown company'}`,
+      detail: g.category === 'rejection'
+        ? `Job closed automatically — "${g.subject ?? ''}"`
+        : `${g.subject ?? ''}`,
+      time: timeAgo(g.timestamp),
+      action: job ? () => { onJobClick(job); onClose(); } : () => { onNavigate('Job Search'); onClose(); },
+    });
+  }
 
   // 1. New jobs from scout (status = 'New')
   const newJobs = jobs.filter(j => j.status === 'New');
@@ -97,6 +169,14 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
     setDismissedIds(prev => new Set(prev).add(id));
   };
 
+  const clearAll = () => {
+    setDismissedIds(prev => {
+      const next = new Set(prev);
+      notifications.forEach(n => next.add(n.id));
+      return next;
+    });
+  };
+
   return (
     <>
       {/* Backdrop */}
@@ -106,7 +186,18 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
       <div className="absolute right-8 top-14 z-50 w-96 bg-surface-container-lowest rounded-2xl editorial-shadow border border-outline-variant/10 animate-slide-up overflow-hidden">
         <div className="px-5 py-4 border-b border-outline-variant/10 flex items-center justify-between">
           <h3 className="text-sm font-headline font-bold text-on-surface">Notifications</h3>
-          <span className="text-[10px] text-on-surface-variant">{visibleNotifications.length} active</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-on-surface-variant">{visibleNotifications.length} active</span>
+            {visibleNotifications.length > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-[10px] font-extrabold text-primary uppercase tracking-wider hover:underline"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="max-h-[400px] overflow-y-auto applyr-scrollbar">

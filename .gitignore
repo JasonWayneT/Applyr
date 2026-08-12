@@ -4,7 +4,6 @@
 
 __pycache__/
 debug_output*.txt
-pipeline_log.txt
 *.pdf
 scratch/
 
@@ -60,6 +59,14 @@ data/archive/
 # specifically checking for this; was untracked but not yet ignored, one `git add -A` away from
 # committing real candidate data, directly violating CLAUDE.md's own PII rule.
 data/authored_drafts/
+# CR-074 local before/after fixtures (Resume/CL headers carry real contact chrome) — keep on disk,
+# never commit. Same PII class as authored_drafts / submissions.
+data/context_pack_validation/
+# Batch/Stage0/packet-eval run dumps. Already-tracked files under data/reports/ stay tracked;
+# new dated dumps stay local (Layer D hygiene, 2026-08-12).
+data/reports/
+pipeline-log.md
+pipeline_log.txt
 
 # Materialized from SQLite - source of truth is the Job Search settings UI
 data/candidate_preferences.json

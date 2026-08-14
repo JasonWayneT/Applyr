@@ -515,6 +515,7 @@ def collect_truth_findings(folder: str) -> dict[str, Any]:
 
 def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-079: Stage 2A Truth/Evidence — findings + dispositions; never Stage 2 COMPLETE."""
+    folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
 
@@ -625,6 +626,7 @@ def collect_ats_findings(folder: str) -> dict[str, Any]:
 
 def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-080: Stage 2B ATS/AI — findings + dispositions; never Stage 2 COMPLETE."""
+    folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
 
@@ -798,6 +800,7 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
 
 def run_stage2_hm(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-081: Stage 2C Critical HM review."""
+    folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
     _require_stage1_fresh(folder)
@@ -954,6 +957,7 @@ def run_stage2_mech(
     folder: str, state: dict[str, Any], *, compile_pdfs: bool = True
 ) -> dict[str, Any]:
     """CR-081: Stage 2D final mechanical verify."""
+    folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
     _require_stage1_fresh(folder)
@@ -975,6 +979,7 @@ def run_stage2_mech(
 
 def run_stage2_policy(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-081: Stage 2E — write Stage 2 COMPLETE receipt when all subphases + check_stage2_ready."""
+    folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
     r1 = _require_stage1_fresh(folder)
@@ -1344,6 +1349,7 @@ def run_until_truth_settled(
     finalize_db_path: str | None = None,
 ) -> dict[str, Any]:
     """CR-079–084: Stage 1 → … → Stage 2 policy; optional Stage 3 finalize."""
+    folder = _resolve_folder(folder)
     state = run_until_stage1_complete(
         folder,
         mode=mode,

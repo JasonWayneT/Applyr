@@ -304,10 +304,37 @@ class TestEvidenceMapper(unittest.TestCase):
         self.assertTrue(any(r["bucket"] == "responsibilities" for r in em))
         self.assertTrue(all(isinstance(r["jd_item"], str) and r["jd_item"] for r in em))
 
+    def test_anchored_unscored_required_gets_slot_cap_bridge(self):
+        """Stage 0 gap=false with no scored claims must still get a Rule 2 bridge.
+
+        Found 2026-08-14 on Nava: 'IT modernization' tagged as anchored, then
+        left unmapped after scoring/slot-cap, which hard-blocked a PASS JD.
+        """
+        stage0 = {
+            "tier": "Tier 2",
+            "required": [{
+                "item": "Experience with long term IT modernization efforts.",
+                "gap": False,
+            }],
+            "preferred": [],
+            "responsibilities": [],
+            "flagged_gaps": [],
+        }
+        em = build_evidence_map(
+            stage0, "modernization",
+            _CLAIMS_FIXTURE, _DISABLED_FIXTURE,
+            jd_profile=None,
+        )
+        row = next(r for r in em if r["bucket"] == "required")
+        self.assertTrue(row.get("claim_ids") or row.get("bridge"))
+        if not row.get("claim_ids"):
+            self.assertIn("no claim slot", (row.get("bridge") or "").lower())
+
 
 # ---------------------------------------------------------------------------
 # Test: Story 3.2 — Excerpt Slicer
 # ---------------------------------------------------------------------------
+
 
 class TestExcerptSlicer(unittest.TestCase):
 
@@ -1267,6 +1294,54 @@ class TestEvidenceMapBestMatchGuards(unittest.TestCase):
         }
         em = build_evidence_map(stage0, item, self._AI_CLAIM, set(), jd_profile=None)
         self.assertIn("ACC-102-INT", em[0]["claim_ids"])
+
+
+class TestLiveCatalogQuarantine(unittest.TestCase):
+    """Production catalog must quarantine ACC-114-COST; fixture-only tests hid the Nava miss."""
+
+    def test_live_catalog_marks_acc_114_cost_disabled(self):
+        claims, disabled = load_claims()
+        self.assertIn("ACC-114-COST", claims)
+        self.assertIn("ACC-114-COST", disabled)
+
+    def test_quarantine_holds_when_catalog_flag_is_missing(self):
+        rec = {
+            "employer": "cision",
+            "project_id": "ACC-114",
+            "lens": "cost",
+            "tags": ["Cost Reduction", "Canadian Content"],
+            "metrics": ["$800,000"],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            tags_path = Path(tmp) / "tags.json"
+            full_path = Path(tmp) / "full.json"
+            tags_path.write_text(json.dumps({"ACC-114-COST": rec}), encoding="utf-8")
+            full_path.write_text(json.dumps({"ACC-114-COST": rec}), encoding="utf-8")
+            _claims, disabled = load_claims(tags_path, full_path)
+        self.assertIn("ACC-114-COST", disabled)
+
+    def test_scoring_skips_quarantined_claim_even_without_flag(self):
+        claims = {
+            "ACC-114-COST": {
+                "project_id": "ACC-114",
+                "tags": ["Cost Reduction", "Canadian Content", "Ingestion"],
+                "metrics": ["$800,000"],
+            },
+            "ACC-101-TECH": {
+                "project_id": "ACC-101",
+                "tags": ["Platform", "Monitoring"],
+                "metrics": [],
+            },
+        }
+        scored = _score_claims_for_item(
+            "Canadian content ingestion cost reduction",
+            claims,
+            {"ACC-114-COST"},
+            jd_profile=None,
+            jd_text="Canadian content ingestion cost reduction",
+        )
+        scored_ids = [cid for cid, _ in scored]
+        self.assertNotIn("ACC-114-COST", scored_ids)
 
 
 if __name__ == "__main__":

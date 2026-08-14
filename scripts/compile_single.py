@@ -4,6 +4,9 @@ import re
 import markdown
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from playwright_env import ensure_playwright_browsers_env
+
 def _run_preflight_lint(md_path: str, md_text: str) -> None:
     """Run submission linter before PDF generation. Exit(1) on HARD_BLOCK."""
     import json as _json
@@ -278,6 +281,10 @@ def main():
     {html_content}
 </body>
 </html>"""
+
+        browsers_dir = ensure_playwright_browsers_env()
+        if browsers_dir:
+            print(f"[compile] Playwright browsers: {browsers_dir}", file=sys.stderr)
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)

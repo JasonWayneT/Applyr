@@ -462,6 +462,49 @@ class TruthReviewTests(unittest.TestCase):
         with mock.patch("workflow.runner.run_verify_only", return_value=True):
             return run_stage1_validate(str(self.folder), load_state(str(self.folder)))
 
+    def test_truth_settled_resolves_bare_slug_before_stage2(self):
+        """--resume with a slug must not look for ./slug under cwd.
+
+        Found 2026-08-14: run_until_stage1_complete resolved data/submissions/{slug},
+        then run_until_truth_settled passed the bare slug into run_stage2_truth,
+        which reconciled a newly created repo-root folder and raised
+        'Stage 1 receipt missing'.
+        """
+        from workflow import runner as runner_mod
+
+        resolved = str(self.folder)
+        complete_state = {
+            "status": "IN_PROGRESS",
+            "stages": {
+                "stage1": {"status": "COMPLETE"},
+                "stage2": {
+                    "status": "READY",
+                    "subphases": {"truth": {"status": "READY"}},
+                },
+            },
+        }
+        waiting_state = {
+            "status": "WAITING_FOR_HUMAN",
+            "stages": {
+                "stage1": {"status": "COMPLETE"},
+                "stage2": {
+                    "subphases": {"truth": {"status": "WAITING_FOR_HUMAN"}},
+                },
+            },
+        }
+        with mock.patch.object(
+            runner_mod, "run_until_stage1_complete", return_value=complete_state
+        ):
+            with mock.patch.object(
+                runner_mod, "run_stage2_truth", return_value=waiting_state
+            ) as truth:
+                with mock.patch.object(
+                    runner_mod, "_resolve_folder", return_value=resolved
+                ) as resolve:
+                    runner_mod.run_until_truth_settled("skyflow")
+        resolve.assert_called_with("skyflow")
+        self.assertEqual(truth.call_args[0][0], resolved)
+
     def test_truth_clean_passes_and_unlocks_ats(self):
         from workflow.runner import run_stage2_truth, run_until_truth_settled
 

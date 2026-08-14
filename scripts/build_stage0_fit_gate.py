@@ -402,9 +402,20 @@ _BOILERPLATE_ITEM_RE = re.compile(
     # Soft-skill personality fluff (Acushnet-class) — not hire criteria
     r"^dependable\s*,?\s*accountable|"
     r"^self-?motivated\s+(?:and|,)|"
-    r"^passionate\s+about\s+making\s+a\s+difference"
+    r"^passionate\s+about\s+making\s+a\s+difference|"
+    # "How to apply" instruction lines. Real miss found 2026-08-13 (Decisiv/pop_up_talent):
+    # a mid-JD "To apply for quick consideration:" line followed by the apply-link URL on
+    # its own line got swept into `required` (the second inline "REQUIRED:" travel/residency
+    # block never closed before this text), then fail-closed the packet build as an
+    # unmapped required item since it isn't real hire criteria to begin with.
+    r"to\s+apply\s+for\s+(?:quick\s+)?consideration|"
+    r"^apply\s+(?:now|here|today|via)\b"
     r")"
 )
+
+# A line that, once trimmed, is nothing but a bare URL is never real hire criteria —
+# belt-and-suspenders for apply-link lines regardless of the lead-in phrasing above.
+_BARE_URL_ITEM_RE = re.compile(r"^https?://\S+$", re.I)
 
 
 # Known orphan section labels that sometimes appear as bullets when header routing
@@ -467,6 +478,8 @@ def _is_boilerplate_item(text: str) -> bool:
     if _TRACKING_TAG_RE.match(clean):
         return True
     if _BOILERPLATE_ITEM_RE.search(clean):
+        return True
+    if _BARE_URL_ITEM_RE.match(clean):
         return True
     # Header-only leftovers that snuck into the item list.
     if _IGNORE_SECTION_HEADERS.match(clean):
@@ -883,6 +896,53 @@ def _item_has_anchor(item_lower: str, vocab: set[str]) -> list[str]:
     return matched
 
 
+# "X, Y, Z, or similar" / "or equivalent" style requirement lines name several
+# alternative tools where any one (or an equivalent) satisfies the line -- not
+# every named tool individually. If a hard-blocked tool (e.g. Amplitude) is
+# listed alongside a tool Jason genuinely has (e.g. Pendo, from
+# skills_catalog.json), the "or similar" framing means the verified tool
+# already satisfies it. Real miss found 2026-08-13: Decisiv's "product
+# analytics tools (Pendo, Amplitude, Mixpanel, or similar)" HARD-skipped pop_up_talent
+# even though Jason has verified Pendo experience + a Pendo certification
+# (workExperience.md ACC-117/ACC-118) -- the hard-block check never looked for
+# an anchored alternative before short-circuiting.
+_ALT_HEDGE_RE = re.compile(r"\bor\s+(?:similar|equivalent|the\s+like)\b", re.I)
+
+
+def _load_skills_catalog_terms() -> set[str]:
+    terms: set[str] = set()
+    if _SKILLS_PATH.exists():
+        try:
+            catalog = json.loads(_SKILLS_PATH.read_text(encoding="utf-8"))
+            for values in catalog.values():
+                for t in values:
+                    t = t.strip().lower()
+                    if t:
+                        terms.add(t)
+        except Exception:
+            pass
+    return terms
+
+
+_SKILLS_CATALOG_TERMS = _load_skills_catalog_terms()
+
+
+def _alt_list_anchor(item_lower: str) -> str | None:
+    """Return the matched skills_catalog term if *item_lower* is an "or
+    similar"/"or equivalent" alternatives list containing a tool Jason
+    genuinely has, else None. Deliberately narrow: only fires on that explicit
+    hedge phrasing, not on "such as"/"like", so a real single-tool requirement
+    (no alternatives framing) still HARD-skips as before."""
+    if not _ALT_HEDGE_RE.search(item_lower):
+        return None
+    for term in _SKILLS_CATALOG_TERMS:
+        if len(term) < 3:
+            continue
+        if re.search(r"\b" + re.escape(term) + r"\b", item_lower):
+            return term
+    return None
+
+
 def _classify_one_item(
     item: str,
     vocab: set[str],
@@ -906,6 +966,15 @@ def _classify_one_item(
     # phrasing (deep/strong/hands-on) still HARD-Skips.
     hard_match = _get_hard_tool_pattern().search(item_lower)
     if hard_match:
+        alt_term = _alt_list_anchor(item_lower)
+        if alt_term:
+            return {
+                "item": item,
+                "anchor": f"tags: {alt_term} (or-similar alternative to listed tool)",
+                "gap": False,
+                "gap_class": None,
+                "domain_soft": False,
+            }
         if _is_soft_familiarity_hedge(item_lower):
             return {
                 "item": item,

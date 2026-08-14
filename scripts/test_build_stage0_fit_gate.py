@@ -1504,6 +1504,38 @@ class TestSharedBlockedTools(unittest.TestCase):
         self.assertEqual(result["tier"], "Skip")
         self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
+    def test_or_similar_alternative_satisfied_by_anchored_tool(self):
+        """"(Pendo, Amplitude, Mixpanel, or similar)" is an alternatives list --
+        Jason's verified Pendo experience (skills_catalog.json) satisfies it even
+        though Amplitude/Mixpanel are individually hard-blocked. Real miss found
+        2026-08-13 on Decisiv/pop_up_talent."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Experience defining and tracking outcome-based success metrics, using product analytics tools (Pendo, Amplitude, Mixpanel, or similar) to measure adoption and guide iteration
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["tier"], "Skip")
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+
+    def test_amplitude_still_hard_blocked_without_anchored_alternative(self):
+        """Same alternatives phrasing, but no anchored tool present -- must
+        still HARD-skip (guards against over-broadening the fix above)."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Hands-on experience with product analytics and experimentation
+              tools such as Amplitude, Mixpanel, Looker, Mode, Optimizely, or
+              Statsig
+            """
+        )
+        result = _build(jd)
+        self.assertEqual(result["tier"], "Skip")
+        self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+
     def test_linter_and_stage0_share_blocked_source(self):
         import re
 

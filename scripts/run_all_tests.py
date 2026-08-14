@@ -27,6 +27,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_check_submission_status.py",
     "scripts/test_build_stage0_fit_gate.py",
     "scripts/test_build_authoring_packet.py",
+    "scripts/test_playwright_env.py",
     "scripts/test_audit_claims_coverage.py",
     "scripts/test_author_from_packet.py",
     "scripts/test_cover_voice.py",

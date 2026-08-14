@@ -10,6 +10,16 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Fixed
+- **Disabled claims in a ready packet (2026-08-14):** Live `master_claims.json` had no `"disabled": true` on `ACC-114-COST` while packet tests injected that flag, so Nava selected a quarantined $800K / Canadian-ingest lens. Catalog now sets `disabled: true`; `load_claims()` always unions `_QUARANTINED_CLAIM_IDS`; live-catalog test fails if the flag drifts.
+- **Playwright sandbox PDF compile (2026-08-14):** Cursor sets `PLAYWRIGHT_BROWSERS_PATH` to `%TEMP%\cursor-sandbox-cache\<hash>\playwright`, which often has no Chromium. `compile_single.py` / `audit_all_submissions.py` now prefer `%USERPROFILE%\AppData\Local\ms-playwright` when that install has a `chromium*` dir.
+
+### Removed
+- **`scripts/run_stage0_pending_batch.py`:** Called `build_stage0_fit_gate(..., write=True)` but that function has no `write` argument (08-11 batch report was all `stage0_error`). Unused. Canonical batch path remains `python scripts/build_stage0_fit_gate.py … --batch-table`.
+
+### Added
+- **CR-089 (proposed):** Stage 0 extraction precision — false Tier 1s, Ad Tech in JD body, people-mgmt phrasing, benefits scraped as requirements. Tracker only; no extractor rewrite in this send.
+
+### Fixed
 - **Recruiting-slogan job titles (2026-08-11):** Compugroup landed as `Create the future of e-health together with us by becoming a Product Manager`; Pinterest II Content Compliance as a qualifications bullet (`Proven ability to lead…`). `is_implausible_job_title` now rejects slogans / qual lines / >10-word titles; bare `lead` no longer counts as a role word; extractor pulls embedded `Product Manager` or a Workday/Greenhouse URL slug. Same rules mirrored in `server/submissionFolders.ts` `readJdMeta`.
 - **DOCX bullets collapsed into paragraphs (2026-08-11):** `compile_single.py` already inserted a blank line before `* `/`- ` lists for the PDF path (Python-Markdown), but Pandoc DOCX still read the raw `.md`. Location lines glued to bullets became one Word paragraph with a literal asterisk. DOCX now compiles the same preprocessed markdown as the PDF.
 - **LR-031 B2B SaaS summary HARD_BLOCK (2026-08-11):** Promoted former WARN `LW-013` to Mech HARD_BLOCK `LR-031`. Resume Professional Summary (subtitle or body) may not say "B2B SaaS" unless `Original_JD.txt` itself uses "SaaS". Stops the recurring default opener ("7 years of B2B SaaS platform experience") on non-SaaS roles. Authoring digest updated; experience bullets still allowed to describe Cision as B2B SaaS when true.

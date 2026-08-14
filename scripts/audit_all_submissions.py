@@ -4,6 +4,9 @@ import markdown
 from style_compliance_guard import run_guard
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from playwright_env import ensure_playwright_browsers_env
+
 # Define path constants
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
@@ -142,6 +145,7 @@ def compile_pdf(md_path, pdf_path):
 </body>
 </html>"""
 
+        ensure_playwright_browsers_env()
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()

@@ -309,6 +309,26 @@ def _lead_is_role_designation(title: str) -> bool:
     return any(re.search(p, title, re.I) for p in patterns)
 
 
+_HYPHEN_FIRST_RE = re.compile(r"[a-z]+-first\b", re.I)
+
+
+def _first_is_role_designation(title: str) -> bool:
+    """Block First only as a founding/first-hire signal ('First Product Manager',
+    'PM, First'), not a hyphenated methodology modifier ('AI-First', 'Mobile-First',
+    'Customer-First', 'Remote-First') and not a domain phrase ('First Value',
+    'Onboarding & First Value'). False positive found 2026-08-13: "Senior
+    Program Manager – AI-First". False positive found 2026-08-14: Dexcom
+    "Product Manager, Patient Onboarding & First Value"."""
+    stripped = _HYPHEN_FIRST_RE.sub("", title)
+    patterns = (
+        r"\bfirst\s+(?:product|technical|platform|senior|group|principal|pm|engineer|hire)\b",
+        r"\b(?:product|technical|platform)\s+(?:manager|owner|pm),?\s+first\b",
+        r"\bpm,?\s+first\b",
+        r"^first\b",
+    )
+    return any(re.search(p, stripped, re.I) for p in patterns)
+
+
 def blocked_title_lists(prefs: dict | None) -> Tuple[list[str], list[str]]:
     """Return (role_designation_terms, focus_area_words) from prefs with legacy fallback."""
     prefs = prefs or {}
@@ -367,6 +387,8 @@ def title_blocked(title: str, prefs: dict | None) -> Optional[str]:
                 if all_matches and len(all_matches) == len(product_matches):
                     continue
             if term.lower() == "lead" and not _lead_is_role_designation(title):
+                continue
+            if term.lower() == "first" and not _first_is_role_designation(title):
                 continue
             return term
     for term in focus_terms:

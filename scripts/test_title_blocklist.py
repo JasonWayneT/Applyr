@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from seniority_gate import title_blocked
 
 PREFS = {
-    "blocked_role_titles": ["Head", "Lead", "Director", "Staff", "Principal"],
+    "blocked_role_titles": ["Head", "Lead", "Director", "Staff", "Principal", "First"],
     "blocked_focus_area_words": ["Growth", "Developer", "Designer", "Marketer"],
 }
 
@@ -39,6 +39,17 @@ def main() -> int:
     failed += _assert("Lead PM blocks", "Lead Product Manager", True)
     failed += _assert("leaders lead with passes", "leaders lead with a people-first approach", False)
     failed += _assert("Software Developer blocks", "Senior Software Developer", True)
+    failed += _assert(
+        "AI-First methodology suffix passes",
+        "Senior Program Manager – AI-First",
+        False,
+    )
+    failed += _assert("First Product Manager blocks", "First Product Manager", True)
+    failed += _assert(
+        "First Value domain phrase passes",
+        "Product Manager, Patient Onboarding & First Value",
+        False,
+    )
     return 1 if failed else 0
 
 

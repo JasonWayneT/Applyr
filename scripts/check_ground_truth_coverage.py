@@ -136,7 +136,7 @@ def check_folder(folder: str) -> dict:
     unverified_relevant = []
 
     for pid, bucket in sorted(claims.items()):
-        relevant_tags = [t for t in bucket["tags"] if t.lower() in jd_text]
+        relevant_tags = sorted(t for t in bucket["tags"] if t.lower() in jd_text)
         if not relevant_tags:
             continue
 

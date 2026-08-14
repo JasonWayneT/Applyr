@@ -19,12 +19,19 @@ def sanitize(name: str) -> str:
 
 
 def existing_urls() -> set[str]:
-    urls: set[str] = set()
+    return set(url_to_slug().keys())
+
+
+def url_to_slug() -> dict[str, str]:
+    """Map lowercase URL -> submission slug (folder wins over DB-only rows)."""
+    mapping: dict[str, str] = {}
     if DB.exists():
         conn = sqlite3.connect(DB)
-        for (u,) in conn.execute("SELECT url FROM jobs WHERE url IS NOT NULL"):
+        for u, company in conn.execute(
+            "SELECT url, company FROM jobs WHERE url IS NOT NULL"
+        ):
             if u:
-                urls.add(u.strip().lower())
+                mapping[u.strip().lower()] = sanitize(company or "")
         conn.close()
     for folder in SUBMISSIONS.iterdir():
         if not folder.is_dir():
@@ -34,8 +41,8 @@ def existing_urls() -> set[str]:
             continue
         first = jd.read_text(encoding="utf-8", errors="ignore").splitlines()[:1]
         if first and first[0].lower().startswith("url:"):
-            urls.add(first[0].split(":", 1)[1].strip().lower())
-    return urls
+            mapping[first[0].split(":", 1)[1].strip().lower()] = folder.name
+    return mapping
 
 
 def unique_slug(base: str) -> str:
@@ -64,7 +71,7 @@ def write_jd(slug: str, url: str, position: str, jd: str) -> Path:
     return path
 
 
-def import_csv(path: Path, known_urls: set[str]) -> list[str]:
+def import_csv(path: Path, known_urls: set[str], url_slugs: dict[str, str]) -> list[str]:
     created: list[str] = []
     with path.open(encoding="utf-8-sig", errors="ignore", newline="") as f:
         for row in csv.DictReader(f):
@@ -76,7 +83,12 @@ def import_csv(path: Path, known_urls: set[str]) -> list[str]:
                 print(f"  skip empty: {company!r}")
                 continue
             if url and url.lower() in known_urls:
-                print(f"  skip dup URL: {company} | {url[:60]}")
+                existing = url_slugs.get(url.lower())
+                if existing and (SUBMISSIONS / existing / "Original_JD.txt").exists():
+                    created.append(existing)
+                    print(f"  reuse {existing} | {position}")
+                else:
+                    print(f"  skip dup URL: {company} | {url[:60]}")
                 continue
             base = sanitize(company)
             if base in SKIP_COMPLETE:
@@ -107,6 +119,7 @@ def import_csv(path: Path, known_urls: set[str]) -> list[str]:
             write_jd(slug, url, position, jd)
             if url:
                 known_urls.add(url.lower())
+                url_slugs[url.lower()] = slug
             created.append(slug)
             print(f"  wrote {slug} | {position}")
     return created
@@ -116,16 +129,26 @@ def main(argv: list[str]) -> int:
     paths = [Path(p) for p in argv] or [
         Path(r"c:\Users\Jason\Downloads\applyr_jobs.csv"),
         Path(r"c:\Users\Jason\Downloads\applyr_jobs (1).csv"),
+        Path(r"c:\Users\Jason\Downloads\applyr_jobs (2).csv"),
+        Path(r"c:\Users\Jason\Downloads\applyr_jobs (3).csv"),
     ]
-    known = existing_urls()
+    url_slugs = url_to_slug()
+    known = set(url_slugs.keys())
     all_slugs: list[str] = []
     for p in paths:
         print(f"Importing {p}")
-        all_slugs.extend(import_csv(p, known))
-    print(f"Imported {len(all_slugs)} folders")
-    out = ROOT / "data" / "reports" / "csv_import_slugs_2026-08-11.txt"
+        all_slugs.extend(import_csv(p, known, url_slugs))
+    # Preserve order, drop empty, keep first occurrence of each slug
+    seen: set[str] = set()
+    unique: list[str] = []
+    for slug in all_slugs:
+        if slug and slug not in seen:
+            seen.add(slug)
+            unique.append(slug)
+    print(f"Imported {len(unique)} folders ({len(all_slugs)} CSV rows mapped)")
+    out = ROOT / "data" / "reports" / "csv_import_slugs_2026-08-14.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text("\n".join(all_slugs) + "\n", encoding="utf-8")
+    out.write_text("\n".join(unique) + "\n", encoding="utf-8")
     print(f"slug list: {out}")
     return 0
 

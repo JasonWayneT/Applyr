@@ -216,6 +216,12 @@ _HARD_CONSTRAINTS: list[str] = [
 # Story 3.1 — Evidence Mapper helpers
 # ---------------------------------------------------------------------------
 
+# Catalog IDs that stay quarantined even if master_claims.json drops the flag.
+# 2026-08-14 Nava: tests injected ACC-114-COST as disabled; the live catalog had
+# no disabled:true, so a ready packet selected it.
+_QUARANTINED_CLAIM_IDS = frozenset({"ACC-114-COST"})
+
+
 def load_claims(
     claims_tags_path: Path | None = None,
     claims_full_path: Path | None = None,
@@ -242,7 +248,7 @@ def load_claims(
         except Exception:
             pass
 
-    disabled: set[str] = set()
+    disabled: set[str] = set(_QUARANTINED_CLAIM_IDS)
     full: dict = {}
     if full_path.exists():
         try:
@@ -252,11 +258,9 @@ def load_claims(
                     disabled.add(cid)
         except Exception:
             pass
-    else:
-        # Fallback: check tags-only for disabled field (in case it was included)
-        for cid, rec in claims.items():
-            if isinstance(rec, dict) and rec.get("disabled"):
-                disabled.add(cid)
+    for cid, rec in claims.items():
+        if isinstance(rec, dict) and rec.get("disabled"):
+            disabled.add(cid)
 
     for cid, rec in claims.items():
         full_rec = full.get(cid)
@@ -670,6 +674,15 @@ def build_evidence_map(
             continue
         _enqueue(item, "responsibilities", is_required=False)
 
+    # Required items Stage 0 did not mark as a gap. If scoring/slot-cap later
+    # leaves them with no claim_ids, Rule 2 would hard-block a PASS JD
+    # (found 2026-08-14: Nava "IT modernization" anchored on a tag, then unscored).
+    stage0_anchored_required = {
+        _stage0_item_text(r)
+        for r in stage0.get("required", [])
+        if isinstance(r, dict) and r.get("gap") is False
+    }
+
     # Pass 2: global assignment with per-project_id cap.
     def _project_of(cid: str) -> str:
         return (claims.get(cid) or {}).get("project_id") or cid
@@ -699,6 +712,12 @@ def build_evidence_map(
                 bridge = (
                     "Administratively satisfied (education / years-of-experience) -- "
                     "not a skill claim, no evidence required."
+                )
+            elif row["jd_item"] in stage0_anchored_required:
+                bridge = (
+                    "Stage 0 treated as anchored but no claim slot remained. "
+                    "Use the nearest packet excerpt as a transferable bridge. "
+                    "Do not claim the JD's literal domain as owned."
                 )
         evidence_map.append({
             "jd_item": row["jd_item"],

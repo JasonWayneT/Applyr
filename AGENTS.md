@@ -65,64 +65,13 @@ To protect candidate privacy:
 
 ---
 
-## Verified Metrics (MET Codes) — Never Extrapolate These
+## Verified Metrics (MET Codes) and Approved Accomplishments (ACC Codes)
 
-All metrics below are from `data/workExperience.md` Section 4. Use them exactly as stated. Do not round up, combine, or imply causation beyond what is written.
-
-| Code | Metric | Value |
-|------|--------|-------|
-| MET-01 | Platform ARR | $40M (approx) |
-| MET-02 | Active accounts | ~3,500 |
-| MET-03 | Active users | ~25,000 |
-| MET-04 | Platform churn rate | 7% annually |
-| MET-05 | Infrastructure savings (Cision) | ~$2M cumulative |
-| MET-06 | Contact data drop-off (pre-fix) | 40% |
-| MET-07 | Data drop-off post-remediation | 100% reduction |
-| MET-08 | Security backlog resolved | ~90% of ~300 items |
-| MET-09 | Customer databases managed | ~200 SQL databases |
-| MET-10 | Voluntary migrations | ~700 accounts |
-| MET-11 | Fulfillment contract value | $288K; saved $34K/yr |
-| MET-12 | Onboarding automation savings | $22,100/yr |
-| MET-13 | Sterkly revenue sustained | ~$1M–$3M (estimated) |
-| MET-14 | Certificate cost savings | ~$100/certificate |
-| MET-15 | Conversion improvement (Z2S) | ~40% (estimated) |
-| MET-16 | Fulfillment scale | 10/day → 100+/day |
-| MET-17 | Canadian ingest platform cost retired | ~$800K annually (ACC-114; CONTRIBUTED for full savings) |
-
----
-
-## Approved Accomplishments (ACC Codes)
-
-Full text in `data/workExperience.md` Sections 5.1–5.3. Quick reference:
-
-**Cision (ACC-101 to ACC-110, plus later IDs)**
-- ACC-101: Platform stabilization — indexing/enrichment storage monitoring (~10 index servers; 80–90% alerts; DBA/DevOps moves storage)
-- ACC-102: Data remediation — 40% drop-off → zero
-- ACC-103: Security backlog — capacity + bucket facilitation (~300 → ~90%); does not prescribe individual eng fixes
-- ACC-104: Migration tooling — ~700 accounts
-- ACC-105: Capacity modeling / T-shirt sizing
-- ACC-106: Mobile UVPM competitive gap
-- ACC-107: Compliance — AU/NZ content removal per contract + Google/Yahoo email-sender compliance comms
-- ACC-108: Jira priority-score triage — white-glove first, then weighted formula (quantity can lift low-severity)
-- ACC-109: Quarterly PI planning (~200–300 stakeholders)
-- ACC-110: Knowledge transfer — Visible (Java news ingest/enrichment for C3) teach-backs + legacy ETL SME risk
-- ACC-111: Dual customer-facing stacks (C3 + CPRE) plus Visible (news ingest/enrichment for C3); never print C3/CPRE/Visible; no CPRE user count (added 2026-08-10)
-- ACC-113: Google Analytics PR-value integration migration on C3 — change plan + customer cutover (~95% flipped estimate; switch required on GA side); do not claim other-team adoption (added 2026-08-10)
-- ACC-114: Last-consumer exit from dedicated Canadian news ingest platform (PIC) in one quarter; unlocked ~$800K annual cost retirement (MET-17); OWNED exit / CONTRIBUTED full savings; never invent PIC acronym (added 2026-08-10)
-- ACC-115: Critical Save migration — requirements + export tooling (not next-gen import / not CX renewals); Pendo+Salesforce prioritization; Datagroups → per-client data profiles (~25% usage); CONTRIBUTED on ~700 (MET-10) (added 2026-08-10)
-- ACC-121: Hands-on SQL across ~200 shared C3/CPRE customer DBs — mainly ticket triage/troubleshooting + migration/export checks; plain SQL via internal Ad Hoc tool; never schema design (added 2026-08-10)
-- ACC-120: AI content-generation system — adjacent exposure & joint prompt-engineering research with the PM who built it (added 2026-07-21). **CONTRIBUTED at most, for the joint research only** — Jason did not build, design, or own this system. Never say "I built" or "I designed" about it. Distinct from his own personal AI-tooling project (ACC-401-AITOOLS, `data/aiProjects.md` — six named side projects with real what/why/how/tech detail, a much stronger source for AI-fluency content than the thin "I use Claude and Gemini daily" line that had been recurring).
-
-**Sterkly (ACC-201 to ACC-204)**
-- ACC-201: Workflow / board standardization (Agile/Kanban epics & stories)
-- ACC-202: Technical-to-business translation + cross-geo Agile scoping (US/Israel/India)
-- ACC-203: Certificate bottleneck / $1M–$3M revenue sustained
-- ACC-204: First-pass QA (test lists + GitHub/PR inspection) before QA eng; never name Airo
-
-**Zero To Sixty (ACC-301 to ACC-303)**
-- ACC-301: Laptop fulfillment automation
-- ACC-302: Salesforce onboarding automation
-- ACC-303: Conversion funnel / landing page
+Canonical, full text: `data/workExperience.md` Section 4 (MET-01 through MET-17) and Sections 5.1–5.3
+(ACC-101 through ACC-303, plus later IDs). Use every value exactly as stated there — do not round up,
+combine, or imply causation beyond what is written. This file no longer carries a quick-reference copy
+of either table (moved out 2026-08-14, harness-bridge session-009 R25-R32, Phase 2) — read
+`workExperience.md` directly rather than relying on a duplicate here.
 
 ---
 

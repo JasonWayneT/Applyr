@@ -53,7 +53,6 @@ class TestRealAgentsMdExtraction(unittest.TestCase):
     def test_keeps_operative_content(self):
         must_survive = [
             "revenue-bearing",  # Forbidden Language
-            "$40M (approx)",  # MET-01 quick reference
             "0-to-1 greenfield PM",  # Exclusion Zones
             "## PROFESSIONAL SUMMARY",  # Required Document Structure
             "Dear Hiring Manager,",  # Required Cover Letter Structure
@@ -63,6 +62,22 @@ class TestRealAgentsMdExtraction(unittest.TestCase):
         ]
         for needle in must_survive:
             self.assertIn(needle, self.trimmed, f"Lost operative content: {needle!r}")
+
+    def test_met_acc_relocated_not_lost(self):
+        """MET/ACC quick-reference tables were cut from AGENTS.md (harness-bridge
+        session-009, R25-R32, Phase 2) -- workExperience.md is the canonical
+        source and was already the stated source of truth even when AGENTS.md
+        carried a duplicate copy. This confirms the fact actually lives there,
+        not just that AGENTS.md points at it."""
+        with open(gcp.WORK_EXPERIENCE_MD, encoding="utf-8") as f:
+            work_experience = f.read()
+        self.assertIn("MET-01", work_experience)
+        self.assertIn("40,000,000", work_experience)
+        self.assertIn("ACC-101", work_experience)
+        # AGENTS.md itself must still point to workExperience.md for these,
+        # not silently drop the pointer along with the table.
+        self.assertIn("workExperience.md", self.trimmed)
+        self.assertIn("MET-01", self.trimmed)  # named in the pointer paragraph
 
     def test_meaningfully_smaller_than_raw(self):
         # No percentage floor here (dropped in harness-bridge session-009,
@@ -203,14 +218,17 @@ class TestAgentsMdLineBudget(unittest.TestCase):
     generated. This is a direct budget on that, not a derived ratio.
 
     Interim ceiling, not the final target: the frozen design (session-009)
-    targets AGENTS.md at <=200 lines, human-written cut, achieved by moving
-    MET/ACC tables, Required Document/Cover-Letter Structure, Proof-Point
-    Selection, and Submission Folder Structure out to pointers -- deferred to
-    a separate pass because it requires rewriting several SKILL.md
+    targets AGENTS.md at <=200 lines, human-written cut. Phase 1 (Active
+    Engineering Work / Documentation Update Checklist trim) landed first,
+    390 -> 360 lines. Phase 2 (this pass, MET/ACC tables moved to a pointer
+    at data/workExperience.md) landed next, 360 -> 309 lines. Still deferred:
+    Required Document/Cover-Letter Structure, Proof-Point Selection, and
+    Submission Folder Structure -- each needs rewriting several SKILL.md
     cross-references that name those sections by exact title in the same
-    commit. This test's ceiling should ratchet down as that work lands;
-    it exists now to catch NEW bloat from regressing past this pass's cut,
-    not to assert the end state prematurely.
+    commit, more cross-reference risk than Phase 1/2 carried. This test's
+    ceiling should keep ratcheting down as that work lands; it exists now to
+    catch NEW bloat regressing past this pass's cut, not to assert the end
+    state prematurely.
     """
 
     def test_agents_md_under_interim_line_budget(self):
@@ -218,12 +236,12 @@ class TestAgentsMdLineBudget(unittest.TestCase):
             line_count = sum(1 for _ in f)
         self.assertLessEqual(
             line_count,
-            375,
+            330,
             f"AGENTS.md grew to {line_count} lines, past this pass's interim "
-            "budget (360 measured after the Active Engineering Work / "
-            "Documentation Update Checklist trim) -- either this is new "
-            "bloat that should be trimmed, or a deliberate addition that "
-            "should also raise this ceiling explicitly, not silently.",
+            "budget (309 measured after the Phase 2 MET/ACC cut) -- either "
+            "this is new bloat that should be trimmed, or a deliberate "
+            "addition that should also raise this ceiling explicitly, not "
+            "silently.",
         )
 
 

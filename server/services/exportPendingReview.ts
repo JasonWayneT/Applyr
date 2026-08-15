@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { db, logActivity } from '../db.js';
 import { PROJECT_ROOT, sanitizeCompanySlug } from '../shared.js';
+import { lookupStage0Skip } from '../stage0SkipLedger.js';
 
 export const PENDING_REVIEW_DIR = path.join(PROJECT_ROOT, 'data', 'pending_review');
 
@@ -76,6 +77,12 @@ export function exportPendingReviewJobs(): ExportPendingReviewResult {
   );
 
   for (const row of rows) {
+    const alreadySkipped = lookupStage0Skip(db, row.url, row.company, row.title);
+    if (alreadySkipped) {
+      stamp.run(row.id);
+      skippedExisting += 1;
+      continue;
+    }
     const folderName = pendingReviewFolderName(row.company, row.id);
     const folderPath = path.join(PENDING_REVIEW_DIR, folderName);
     const jdPath = path.join(folderPath, 'Original_JD.txt');

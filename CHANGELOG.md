@@ -9,6 +9,9 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 
 ## [Unreleased]
 
+### Added
+- **CR-091: Stage 0 skip ledger (2026-08-14):** Incoming JDs land in `data/pending_review/`. A Skip is remembered in `stage0_skips` (URL, then company+title) and the folder moves to `data/archive/skipped/`. Only PASS folders are promoted into `data/submissions/`. Next CSV/Sync run does not recreate a skipped posting. Spec: `docs/spec/05-change-requests/CR-091-stage0-skip-ledger.md`. `FR-264`, `AC-326`–`AC-331`. Migration `016_add_stage0_skips.sql` is additive only (`CREATE TABLE IF NOT EXISTS`); it does not ALTER `jobs` or rewrite existing application rows.
+
 ### Fixed
 - **Disabled claims in a ready packet (2026-08-14):** Live `master_claims.json` had no `"disabled": true` on `ACC-114-COST` while packet tests injected that flag, so Nava selected a quarantined $800K / Canadian-ingest lens. Catalog now sets `disabled: true`; `load_claims()` always unions `_QUARANTINED_CLAIM_IDS`; live-catalog test fails if the flag drifts.
 - **Playwright sandbox PDF compile (2026-08-14):** Cursor sets `PLAYWRIGHT_BROWSERS_PATH` to `%TEMP%\cursor-sandbox-cache\<hash>\playwright`, which often has no Chromium. `compile_single.py` / `audit_all_submissions.py` now prefer `%USERPROFILE%\AppData\Local\ms-playwright` when that install has a `chromium*` dir.

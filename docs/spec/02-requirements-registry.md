@@ -635,6 +635,18 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-324` | acceptance | P0 | in_progress | OVERRIDDEN → COMPLETE_WITH_OVERRIDE; check_workflow_complete True | `FR-263` | CR-084 |
 | `AC-325` | acceptance | P0 | in_progress | Without `--finalize`, stop at Stage 3 READY | `FR-263` | CR-084 |
 
+### CR-091 Stage 0 skip ledger (FR-264)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-264` | functional | P0 | implemented | Stage 0 Skip is remembered by URL (then company+title) in `stage0_skips`; incoming JDs stay in pending_review until PASS; Skips move to archive/skipped | `AC-326`–`AC-331` | CR-091 |
+| `AC-326` | acceptance | P0 | implemented | Normalized URL hit returns the prior Skip without re-extraction | `FR-264` | CR-091 |
+| `AC-327` | acceptance | P0 | implemented | Same company, different title does not hit the ledger | `FR-264` | CR-091 |
+| `AC-328` | acceptance | P0 | implemented | CSV import writes to pending_review and skips ledger URLs | `FR-264` | CR-091 |
+| `AC-329` | acceptance | P0 | implemented | Production Skip → archive/skipped + ledger; PASS from pending_review → submissions | `FR-264` | CR-091 |
+| `AC-330` | acceptance | P0 | implemented | `--force` PASS deletes the ledger row | `FR-264` | CR-091 |
+| `AC-331` | acceptance | P0 | implemented | Reconcile sweeps SKIP fit-gate folders out of submissions | `FR-264` | CR-091 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

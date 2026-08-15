@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Import applyr_jobs CSVs into data/submissions/{slug}/Original_JD.txt (no DB finalize)."""
+"""Import applyr_jobs CSVs into data/pending_review/{slug}/Original_JD.txt (no DB finalize).
+
+# Implements FR-264 / CR-091 — incoming JDs do not land in submissions/.
+"""
 from __future__ import annotations
 
 import csv
@@ -8,7 +11,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from stage0_skip_ledger import lookup_skip
+
 ROOT = Path(__file__).resolve().parents[1]
+PENDING_REVIEW = ROOT / "data" / "pending_review"
 SUBMISSIONS = ROOT / "data" / "submissions"
 DB = ROOT / "data" / "jobagent.sqlite"
 SKIP_COMPLETE = {"ncontracts", "leaflink", "camunda", "central_bank"}
@@ -22,8 +28,23 @@ def existing_urls() -> set[str]:
     return set(url_to_slug().keys())
 
 
+def _scan_jd_urls(root: Path, mapping: dict[str, str]) -> None:
+    """Add URL → slug mappings from Original_JD.txt files under root."""
+    if not root.exists():
+        return
+    for folder in root.iterdir():
+        if not folder.is_dir():
+            continue
+        jd = folder / "Original_JD.txt"
+        if not jd.exists():
+            continue
+        first = jd.read_text(encoding="utf-8", errors="ignore").splitlines()[:1]
+        if first and first[0].lower().startswith("url:"):
+            mapping[first[0].split(":", 1)[1].strip().lower()] = folder.name
+
+
 def url_to_slug() -> dict[str, str]:
-    """Map lowercase URL -> submission slug (folder wins over DB-only rows)."""
+    """Map lowercase URL -> slug (pending_review / submissions win over DB-only rows)."""
     mapping: dict[str, str] = {}
     if DB.exists():
         conn = sqlite3.connect(DB)
@@ -33,30 +54,22 @@ def url_to_slug() -> dict[str, str]:
             if u:
                 mapping[u.strip().lower()] = sanitize(company or "")
         conn.close()
-    for folder in SUBMISSIONS.iterdir():
-        if not folder.is_dir():
-            continue
-        jd = folder / "Original_JD.txt"
-        if not jd.exists():
-            continue
-        first = jd.read_text(encoding="utf-8", errors="ignore").splitlines()[:1]
-        if first and first[0].lower().startswith("url:"):
-            mapping[first[0].split(":", 1)[1].strip().lower()] = folder.name
+    _scan_jd_urls(PENDING_REVIEW, mapping)
+    _scan_jd_urls(SUBMISSIONS, mapping)
     return mapping
 
 
 def unique_slug(base: str) -> str:
     slug = base
     n = 2
-    while (SUBMISSIONS / slug).exists():
-        # If folder already has same company but we're importing a new URL, disambiguate
+    while (PENDING_REVIEW / slug).exists() or (SUBMISSIONS / slug).exists():
         slug = f"{base}_{n}"
         n += 1
     return slug
 
 
 def write_jd(slug: str, url: str, position: str, jd: str) -> Path:
-    folder = SUBMISSIONS / slug
+    folder = PENDING_REVIEW / slug
     folder.mkdir(parents=True, exist_ok=True)
     parts = []
     if url:
@@ -82,9 +95,19 @@ def import_csv(path: Path, known_urls: set[str], url_slugs: dict[str, str]) -> l
             if not company or not jd:
                 print(f"  skip empty: {company!r}")
                 continue
+            prior = lookup_skip(url=url or None, company=company, title=position, db_path=DB)
+            if prior:
+                print(
+                    f"  skip ledger: {company} | {prior.get('skip_reason', 'prior Skip')}"
+                )
+                continue
             if url and url.lower() in known_urls:
                 existing = url_slugs.get(url.lower())
-                if existing and (SUBMISSIONS / existing / "Original_JD.txt").exists():
+                pending_jd = PENDING_REVIEW / existing / "Original_JD.txt" if existing else None
+                live_jd = SUBMISSIONS / existing / "Original_JD.txt" if existing else None
+                if existing and (
+                    (pending_jd and pending_jd.exists()) or (live_jd and live_jd.exists())
+                ):
                     created.append(existing)
                     print(f"  reuse {existing} | {position}")
                 else:
@@ -94,7 +117,7 @@ def import_csv(path: Path, known_urls: set[str], url_slugs: dict[str, str]) -> l
             if base in SKIP_COMPLETE:
                 # Prefer role-disambiguated slug rather than overwriting COMPLETE
                 base = sanitize(f"{company}_{position}") or base
-            folder = SUBMISSIONS / base
+            folder = PENDING_REVIEW / base
             if folder.exists() and (folder / "workflow_state.json").exists():
                 # Existing pending folder — overwrite JD only if no COMPLETE
                 import json

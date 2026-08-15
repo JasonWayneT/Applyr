@@ -330,8 +330,9 @@ server/
     jobStaging.ts / jobStatusService.ts — staging-dir helpers; shared status-transition path used by both the UI route and Gmail sync (CR-072)
     emailClassifier.ts / emailSyncCursor.ts / gmailSyncConfig.ts / gmailClient.ts / gmailSyncOrchestrator.ts / gmailSyncScheduler.ts — CR-072 Gmail intake sync: keyword-only classifier (no LLM call), per-label processed-message cursor, dry-run-by-default config, client, orchestrator, background scheduler
     clusterDedup.ts / ingestDedup.ts — job de-duplication on ingest
-    exportPendingReview.ts  — exports scraped, gate-passed jobs to data/pending_review/ for human Stage 0 review
+    exportPendingReview.ts  — exports scraped, gate-passed jobs to data/pending_review/ for Stage 0 (skips ledger hits)
     theirstackCreditLedger.ts / ollamaLifecycle.ts — TheirStack API credit tracking; local Ollama process lifecycle
+    stage0SkipLedger.ts     — URL-normalized Stage 0 skip lookup (CR-091; keep in sync with scripts/stage0_skip_ledger.py)
 
 scripts/
   Scout/scrape (TypeScript):
@@ -345,6 +346,8 @@ scripts/
 
   Stage 0 / fit gates (Python) — workers under run_submission, not the default CLI entry:
     build_stage0_fit_gate.py — deterministic Stage 0 fit gate (orchestrator calls this)
+    stage0_skip_ledger.py / stage0_placement.py — skip memory (URL then company+title) + pending_review/submissions/skipped folder moves (CR-091)
+    import_csv_to_submissions.py — CSV → data/pending_review/ (does not write submissions/)
     stage0_db_gate.py / stage0_prefs_gate.py — DB application-history and preferences sub-gates
     domain_gate.py / industry_gate.py / seniority_gate.py / solo_pm_gate.py / anchor_gate.py — individual hard gates
     fit_policy.py / structured_fit.py — evidence-tiered fit scoring

@@ -5,8 +5,10 @@ import { db, logActivity } from './db.js';
 import {
   SUBMISSION_DIR,
   ARCHIVE_DIR,
+  SKIPPED_ARCHIVE_DIR,
   resolveCompanyFolder,
 } from './shared.js';
+import { recordStage0Skip } from './stage0SkipLedger.js';
 import { isActivePipelineStatus } from './domain/jobStatus.js';
 
 /** Implements FR-030 — slug used for new folders; fuzzy match for existing ones. */
@@ -119,8 +121,9 @@ function hasResumeAndCoverPdfs(folder: string): boolean {
  * ahead of drafting, as a deliberate hold point between triage and authoring -- but
  * reconcileActiveSubmissionFolders() ran on every server startup and treated exactly that folder
  * shape (no PDFs, no jobs row yet) as an "orphan stub" and fs.rmSync'd it. Five real Tier-2
- * fit-gate folders were deleted this way the first time a dev server restarted mid-batch. A folder
- * carrying this file is legitimate in-progress work, not cruft -- exempt it from the orphan sweep.
+ * fit-gate folders were deleted this way the first time a dev server restarted mid-batch. A PASS
+ * folder carrying this file is legitimate in-progress work -- exempt it from the orphan sweep.
+ * SKIP gates are swept to data/archive/skipped/ (CR-091); they must not stay in submissions/.
  */
 function hasStage0FitGate(folder: string): boolean {
   try {
@@ -128,6 +131,54 @@ function hasStage0FitGate(folder: string): boolean {
   } catch {
     return false;
   }
+}
+
+function readStage0Decision(folder: string): { decision: string; company: string; title: string; url: string | null; reason: string } | null {
+  try {
+    const raw = fs.readFileSync(path.join(folder, 'stage0_fit_gate.json'), 'utf8');
+    const gate = JSON.parse(raw) as {
+      decision?: string;
+      company?: string;
+      role?: string;
+      url?: string | null;
+      skip_reason?: string;
+      notes?: string;
+    };
+    return {
+      decision: (gate.decision || '').toUpperCase(),
+      company: gate.company || path.basename(folder),
+      title: gate.role || '',
+      url: gate.url ?? null,
+      reason: gate.skip_reason || gate.notes || 'Stage 0 Skip',
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Move a SKIP fit-gate folder out of submissions so it cannot clutter the live workspace. */
+function sweepSkippedFitGate(folderName: string, activePath: string): boolean {
+  const gate = readStage0Decision(activePath);
+  if (!gate || gate.decision !== 'SKIP') return false;
+  fs.mkdirSync(SKIPPED_ARCHIVE_DIR, { recursive: true });
+  let dest = path.join(SKIPPED_ARCHIVE_DIR, folderName);
+  if (fs.existsSync(dest)) {
+    dest = `${dest}_${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  }
+  moveOrMergeFolder(activePath, dest);
+  try {
+    recordStage0Skip(db, {
+      url: gate.url,
+      company: gate.company,
+      title: gate.title,
+      skipReason: gate.reason,
+      slug: folderName,
+      archivePath: dest,
+    });
+  } catch (err) {
+    console.warn('[FR-264] skip ledger write failed for', folderName, err);
+  }
+  return true;
 }
 
 function findJobsForFolder(folderName: string): { company: string; status: string }[] {
@@ -158,11 +209,13 @@ export function reconcileActiveSubmissionFolders(): { archived: string[]; remove
     if (hasResumeAndCoverPdfs(activePath)) {
       const company = matches[0]?.company ?? folderName;
       if (archiveActiveSubmission(company)) archived.push(folderName);
+    } else if (sweepSkippedFitGate(folderName, activePath)) {
+      archived.push(folderName);
     } else if (!hasStage0FitGate(activePath)) {
       fs.rmSync(activePath, { recursive: true, force: true });
       removed.push(folderName);
     }
-    // else: Stage 0 fit-gate-only folder, no PDFs yet -- leave it in place, see hasStage0FitGate().
+    // else: PASS Stage 0 fit-gate-only folder, no PDFs yet -- leave it in place.
   }
 
   return { archived, removed };

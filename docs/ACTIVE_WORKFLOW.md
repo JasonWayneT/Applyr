@@ -16,6 +16,7 @@
 | 5 | Optional **Evaluate** (paste JD) | SSE stages → submission folder |
 | 6 | **Edit** assets → save | Verify + PDF recompile |
 | 7 | **Status** transitions | `data/submissions/` or `data/archive/submissions/` |
+| 7b | **Stage 0 triage** | Incoming JDs: `data/pending_review/`. Skip: `data/archive/skipped/` + `stage0_skips` ledger. PASS: `data/submissions/`. |
 
 ### Scout pipeline (code order)
 
@@ -41,6 +42,7 @@
 | Search prefs | `data/candidate_preferences.json` |
 | Jobs DB | `data/jobagent.sqlite` |
 | Submissions | `data/submissions/`, `data/archive/submissions/` |
+| Stage 0 inbox / skips | `data/pending_review/`, `data/archive/skipped/`, `stage0_skips` in `jobagent.sqlite` |
 
 ---
 

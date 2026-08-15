@@ -1163,11 +1163,14 @@ def build_stage0_fit_gate(
     db_gate_result: dict | None = None,
     prefs: dict | None = None,
     vocab: set[str] | None = None,
+    *,
+    ignore_skip_ledger: bool = False,
+    skip_ledger_db: Path | str | None = None,
 ) -> dict:
     """
     Full Stage 0 fit-gate for the submission folder at *folder_path*.
 
-    # Implements FR-252
+    # Implements FR-252, FR-264
 
     Parameters
     ----------
@@ -1180,6 +1183,10 @@ def build_stage0_fit_gate(
         Loaded candidate_preferences.json dict.  When None, loads from disk.
     vocab:
         Pre-built anchor vocabulary set.  When None, builds from disk files.
+    ignore_skip_ledger:
+        When True (--force), re-evaluate even if this posting is already skipped.
+    skip_ledger_db:
+        Optional sqlite path for the skip ledger (tests). Default is jobagent.sqlite.
 
     Returns
     -------
@@ -1210,6 +1217,41 @@ def build_stage0_fit_gate(
     # Load vocab
     if vocab is None:
         vocab = _load_anchor_vocab()
+
+    # --- Step 0.4: skip ledger (CR-091) — URL then company+title, no folder crawl ---
+    if not ignore_skip_ledger:
+        from stage0_skip_ledger import lookup_skip
+        prior = lookup_skip(
+            url=url or None,
+            company=company_display,
+            title=role,
+            db_path=skip_ledger_db,
+        )
+        if prior:
+            prior_reason = prior.get("skip_reason") or "prior Stage 0 Skip"
+            decided = prior.get("decided_at") or ""
+            note = f"Skip ledger: previously skipped ({prior_reason})"
+            if decided:
+                note = f"{note} on {decided}"
+            return {
+                "company": company_display,
+                "role": role,
+                "url": url or None,
+                "decision": "SKIP",
+                "tier": "Skip",
+                "reach_out": False,
+                "skip_reason": note,
+                "skip_reason_code": "skip_ledger",
+                "stage_signal": _detect_stage_signal(jd_text),
+                "thin_jd": _detect_thin_jd(jd_text, []),
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+                "flagged_gaps": [],
+                "exclusion_zone_check": "n/a (skipped at skip ledger)",
+                "notes": note,
+            }
 
     # --- Step 1: DB gate ---
     if db_gate_result is None:
@@ -1443,12 +1485,14 @@ def _resolve_folder(raw: str) -> Path:
 def batch_report(folders: list[Path], write: bool = True, force: bool = False) -> str:
     """Story 2.6 — run Stage 0 on many folders; return Markdown Tier 1/2/Skip table.
 
-    # Implements FR-252 (batch triage without a cloud agent)
+    # Implements FR-252 (batch triage without a cloud agent), FR-264 (placement)
     """
+    from stage0_placement import apply_stage0_placement
+
     buckets: dict[str, list[str]] = {"Tier 1": [], "Tier 2": [], "Skip": []}
     for folder in folders:
         try:
-            result = build_stage0_fit_gate(folder)
+            result = build_stage0_fit_gate(folder, ignore_skip_ledger=force)
         except FileNotFoundError as e:
             buckets["Skip"].append(f"| {folder.name} | ERROR: {e} |")
             continue
@@ -1456,6 +1500,7 @@ def batch_report(folders: list[Path], write: bool = True, force: bool = False) -
         protected = (not force) and _has_extraction_override(out_path)
         if write and not protected:
             out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+            apply_stage0_placement(folder, result)
         tier = result.get("tier", "Skip")
         if tier not in buckets:
             tier = "Skip"
@@ -1526,7 +1571,7 @@ def _main() -> None:
         sys.exit(0)
 
     try:
-        result = build_stage0_fit_gate(folder)
+        result = build_stage0_fit_gate(folder, ignore_skip_ledger=args.force)
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(0)
@@ -1535,6 +1580,8 @@ def _main() -> None:
     protected = (not args.force) and _has_extraction_override(out_path)
     if write and not protected:
         out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
+        from stage0_placement import apply_stage0_placement
+        folder = apply_stage0_placement(folder, result)
     elif protected:
         print(
             f"NOTE: '{out_path}' has extraction_override: true — not overwritten. "

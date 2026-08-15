@@ -9,6 +9,7 @@ export const PROJECT_ROOT         = path.join(__dirname, '..');
 export const SCRIPTS_DIR          = path.join(PROJECT_ROOT, 'scripts');
 export const SUBMISSION_DIR       = path.join(PROJECT_ROOT, 'data/submissions');
 export const ARCHIVE_DIR          = path.join(PROJECT_ROOT, 'data/archive/submissions');
+export const SKIPPED_ARCHIVE_DIR  = path.join(PROJECT_ROOT, 'data/archive/skipped');
 export const WORK_EXPERIENCE_PATH = path.join(PROJECT_ROOT, 'data/workExperience.md');
 // CANDIDATE_PREFS_PATH re-exported from ./domain/paths.js
 /** Local tsx CLI — used instead of `npx tsx` so Windows spawn works without shell (BUG-015 / FR-164). */

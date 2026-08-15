@@ -277,6 +277,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-262` | CR-081 | HM + mech + Stage 2 receipt | `runner.run_stage2_hm/mech/policy` | in_progress |
 | `AC-316`–`AC-320` | CR-081 | critical_read, verify_one, stage2 COMPLETE, policy wait, sole writer | same | in_progress |
 | `FR-263` | CR-084 | Stage 3 finalize under orchestrator | `runner.run_stage3_finalize`, `run_submission --finalize` | in_progress |
+| `FR-264` | CR-091 | Stage 0 skip ledger + folder placement | `scripts/stage0_skip_ledger.py`, `scripts/stage0_placement.py`, `server/stage0SkipLedger.ts`, `server/submissionFolders.ts`, `server/migrations/016_add_stage0_skips.sql`, `docs/spec/08-implementation/IMP-CR-091-stage0-skip-ledger.md` | implemented |
 | `AC-321`–`AC-325` | CR-084 | finalize wrap, COMPLETE, practice, override, explicit flag | same | in_progress |
 
 

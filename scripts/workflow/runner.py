@@ -56,10 +56,11 @@ class WorkflowError(Exception):
 def _resolve_folder(folder: str) -> str:
     path = Path(folder)
     if not path.is_absolute():
-        # Prefer data/submissions/{slug} when a bare slug is passed
-        cand = Path(_SCRIPT_DIR).parent / "data" / "submissions" / folder
-        if cand.is_dir():
-            return str(cand.resolve())
+        root = Path(_SCRIPT_DIR).parent
+        for base in ("submissions", "pending_review"):
+            cand = root / "data" / base / folder
+            if cand.is_dir():
+                return str(cand.resolve())
     if not path.is_dir():
         raise WorkflowError(f"folder not found: {folder}")
     return str(path.resolve())
@@ -71,6 +72,22 @@ def _load_json(path: str) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise WorkflowError(f"{os.path.basename(path)} is not a JSON object")
     return data
+
+
+def _place_after_stage0(folder: str, state: dict[str, Any]) -> str:
+    """Move Skip folders out of submissions/pending_review; promote PASS from pending.
+
+    # Implements FR-264
+    """
+    from stage0_placement import apply_stage0_placement
+
+    gate_path = os.path.join(folder, "stage0_fit_gate.json")
+    if not os.path.exists(gate_path):
+        return folder
+    result = _load_json(gate_path)
+    mode = state.get("mode") or "production"
+    new_folder = apply_stage0_placement(folder, result, mode=mode)
+    return str(new_folder)
 
 
 def _ensure_caller_mode(
@@ -196,7 +213,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
         raise WorkflowError("Original_JD.txt not found")
 
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
-    result = build_stage0_fit_gate(folder)
+    result = build_stage0_fit_gate(folder, ignore_skip_ledger=force)
     protected = False
     if os.path.exists(gate_path) and not force:
         try:
@@ -1271,6 +1288,8 @@ def run_until_stage1_complete(
     s0 = (state.get("stages") or {}).get("stage0") or {}
     if s0.get("status") == "STALE":
         state = run_stage0(folder, state, force=force)
+        folder = _place_after_stage0(folder, state)
+        state = load_state(folder) or state
         if state.get("status") == "SKIPPED":
             return state
 
@@ -1457,6 +1476,8 @@ def run_until_waiting_for_llm(
     s0 = (state.get("stages") or {}).get("stage0") or {}
     if s0.get("status") == "STALE" or s0.get("status") not in ("COMPLETE", "SKIPPED"):
         state = run_stage0(folder, state, force=force)
+        folder = _place_after_stage0(folder, state)
+        state = load_state(folder) or state
         if state.get("status") == "SKIPPED":
             return state
 

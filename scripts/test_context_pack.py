@@ -30,15 +30,17 @@ class TestSectionSplitting(unittest.TestCase):
         self.assertNotIn("Drop Me", out)
 
 
-class TestRealClaudeMdExtraction(unittest.TestCase):
-    """Golden-content tests against the REAL current CLAUDE.md -- catches the
-    real risk (silently dropping operative content), not just synthetic fixtures."""
+class TestRealAgentsMdExtraction(unittest.TestCase):
+    """Golden-content tests against the REAL current AGENTS.md (the canonical
+    rules file -- CLAUDE.md is now a thin @AGENTS.md import stub for Claude
+    Code, not a second copy) -- catches the real risk (silently dropping
+    operative content), not just synthetic fixtures."""
 
     @classmethod
     def setUpClass(cls):
-        with open(gcp.CLAUDE_MD, encoding="utf-8") as f:
+        with open(gcp.AGENTS_MD, encoding="utf-8") as f:
             cls.raw = f.read()
-        cls.trimmed = gcp.filter_sections(cls.raw, gcp.CLAUDE_MD_EXCLUDE_SECTIONS)
+        cls.trimmed = gcp.filter_sections(cls.raw, gcp.AGENTS_MD_EXCLUDE_SECTIONS)
 
     def test_excludes_engineering_only_sections(self):
         self.assertNotIn("Active Engineering Work", self.trimmed)
@@ -63,9 +65,17 @@ class TestRealClaudeMdExtraction(unittest.TestCase):
             self.assertIn(needle, self.trimmed, f"Lost operative content: {needle!r}")
 
     def test_meaningfully_smaller_than_raw(self):
+        # No percentage floor here (dropped in harness-bridge session-009,
+        # R25-R27, same reasoning as TestAgentsMdLineBudget above): once the
+        # excluded sections' own bodies get trimmed toward pointers, the
+        # *excluded* content shrinks too, so any ratio-based floor drifts
+        # down from legitimate content changes, not a real regression. The
+        # actually-precise check already lives in
+        # test_excludes_engineering_only_sections (the two named sections'
+        # content is gone, verbatim, from the trimmed output) -- this test
+        # just confirms filter_sections did non-zero real work at all,
+        # i.e. it isn't a silent no-op.
         self.assertLess(len(self.trimmed), len(self.raw))
-        reduction = 1 - (len(self.trimmed) / len(self.raw))
-        self.assertGreater(reduction, 0.10, "Expected a real, non-trivial size reduction")
 
 
 class TestRealSkillMdExtraction(unittest.TestCase):
@@ -176,32 +186,44 @@ class TestManifestKeysResolveToRealFiles(unittest.TestCase):
             self.assertTrue(is_fresh, problems)
 
 
-class TestPackSizeReduction(unittest.TestCase):
-    def test_generated_pack_smaller_than_sources(self):
-        pack_text, _manifest = gcp.generate_pack()
-        claims_tags_only = gcp.generate_claims_tags_only()
-        claims_chars = len(json.dumps(claims_tags_only, indent=2))
+class TestAgentsMdLineBudget(unittest.TestCase):
+    """Replaces the old pack-size-reduction-ratio test (harness-bridge
+    session-009, R25-R27). That test measured pack_chars vs. total source
+    bulk -- a metric that gets WORSE when engineering-only sections already
+    excluded from the pack are trimmed from AGENTS.md itself, since trimming
+    them shrinks the denominator without changing what's actually in the
+    pack. It also drifted from its original ~19.7%-at-writing baseline down
+    to 14.9% purely from legitimate content growth (ACC-113..121, no-ai-slop
+    integration, LR-031, etc.), with no real regression involved either time.
 
-        source_chars = sum(
-            os.path.getsize(p)
-            for p in (
-                gcp.CLAUDE_MD,
-                gcp.SKILL_MD,
-                gcp.WORK_EXPERIENCE_MD,
-                gcp.CONVERSION_RUBRIC_MD,
-                gcp.MASTER_CLAIMS_JSON,
-            )
-        )
-        new_total = len(pack_text) + claims_chars
-        self.assertLess(new_total, source_chars)
-        reduction = 1 - (new_total / source_chars)
-        # Threshold set from the real measured baseline (~19.7% at time of
-        # writing, section-level cuts only -- workExperience.md and
-        # conversion_rubric.md are deliberately copied verbatim, uncut, per
-        # the design rationale in generate_context_pack.py's docstring), not
-        # an arbitrary round number chosen before measuring.
-        self.assertGreater(
-            reduction, 0.15, f"Expected >=15% reduction, got {reduction:.1%}"
+    What actually matters is the thing the whole rules/reference split is
+    about: how much always-loaded content AGENTS.md itself carries, since
+    every harness (Claude Code via the @AGENTS.md import, Cursor, Antigravity)
+    pays that cost on every session regardless of whether the pack is ever
+    generated. This is a direct budget on that, not a derived ratio.
+
+    Interim ceiling, not the final target: the frozen design (session-009)
+    targets AGENTS.md at <=200 lines, human-written cut, achieved by moving
+    MET/ACC tables, Required Document/Cover-Letter Structure, Proof-Point
+    Selection, and Submission Folder Structure out to pointers -- deferred to
+    a separate pass because it requires rewriting several SKILL.md
+    cross-references that name those sections by exact title in the same
+    commit. This test's ceiling should ratchet down as that work lands;
+    it exists now to catch NEW bloat from regressing past this pass's cut,
+    not to assert the end state prematurely.
+    """
+
+    def test_agents_md_under_interim_line_budget(self):
+        with open(gcp.AGENTS_MD, encoding="utf-8") as f:
+            line_count = sum(1 for _ in f)
+        self.assertLessEqual(
+            line_count,
+            375,
+            f"AGENTS.md grew to {line_count} lines, past this pass's interim "
+            "budget (360 measured after the Active Engineering Work / "
+            "Documentation Update Checklist trim) -- either this is new "
+            "bloat that should be trimmed, or a deliberate addition that "
+            "should also raise this ceiling explicitly, not silently.",
         )
 
 

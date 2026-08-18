@@ -62,3 +62,20 @@ export const PRE_APPLY_STATUSES = new Set([
 export function isApplicationFunnelStatus(status: string): boolean {
   return APPLICATION_FUNNEL_SET.has(status);
 }
+
+/** Statuses that should auto-advance to 'Recruiter Screen' when an interview_date is set. */
+const PROMOTES_TO_RECRUITER_SCREEN = new Set<string>([...PRE_APPLY_STATUSES, 'Applied']);
+
+/**
+ * Forward-only status advance when a job's interview_date is set or changed.
+ * Not-yet-screening statuses (New/Backlog/Drafted/Needs Retry/Applied) move to
+ * 'Recruiter Screen'; 'Recruiter Screen' moves to 'Core Interviews'. Anything already
+ * at or past 'Core Interviews' (including 'Offer and Negotiation' and 'Closed') is left
+ * alone, so a later interview date (e.g. a second-round call) never demotes a job that
+ * already advanced further. Returns null when no promotion applies.
+ */
+export function deriveStatusForInterviewDateChange(currentStatus: string): string | null {
+  if (currentStatus === 'Recruiter Screen') return 'Core Interviews';
+  if (PROMOTES_TO_RECRUITER_SCREEN.has(currentStatus)) return 'Recruiter Screen';
+  return null;
+}

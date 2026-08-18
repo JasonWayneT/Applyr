@@ -5,6 +5,7 @@ import {
   toDatetimeLocalValue,
   toDateInputValue,
   isApplicationFunnelStatus,
+  deriveStatusForInterviewDateChange,
   PRE_APPLY_STATUSES,
   INTERVIEW_SCHEDULED_STATUSES,
 } from '../../shared/domain/jobPipeline.js';
@@ -47,5 +48,23 @@ describe('jobPipeline', () => {
     expect(PRE_APPLY_STATUSES.has('Backlog')).toBe(true);
     expect(PRE_APPLY_STATUSES.has('Drafted')).toBe(true);
     expect(PRE_APPLY_STATUSES.has('Applied')).toBe(false);
+  });
+
+  it('advances status forward-only when interview_date changes', () => {
+    // pre-screening statuses (and Applied) promote to Recruiter Screen
+    expect(deriveStatusForInterviewDateChange('New')).toBe('Recruiter Screen');
+    expect(deriveStatusForInterviewDateChange('Backlog')).toBe('Recruiter Screen');
+    expect(deriveStatusForInterviewDateChange('Drafted')).toBe('Recruiter Screen');
+    expect(deriveStatusForInterviewDateChange('Needs Retry')).toBe('Recruiter Screen');
+    expect(deriveStatusForInterviewDateChange('Applied')).toBe('Recruiter Screen');
+
+    // Recruiter Screen promotes to Core Interviews
+    expect(deriveStatusForInterviewDateChange('Recruiter Screen')).toBe('Core Interviews');
+
+    // already at or past Core Interviews, or terminal — never demoted/touched
+    expect(deriveStatusForInterviewDateChange('Core Interviews')).toBeNull();
+    expect(deriveStatusForInterviewDateChange('Offer and Negotiation')).toBeNull();
+    expect(deriveStatusForInterviewDateChange('Closed')).toBeNull();
+    expect(deriveStatusForInterviewDateChange('Rejected')).toBeNull();
   });
 });

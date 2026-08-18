@@ -8,7 +8,11 @@ import {
 } from '../../submissionFolders.js';
 import { isSafeHttpUrl, isValidJobId } from '../../middleware.js';
 import { insertJob, patchJob } from '../../repository/jobRepository.js';
-import { APPLICATION_FUNNEL_STATUSES } from '../../../shared/domain/jobPipeline.js';
+import {
+  APPLICATION_FUNNEL_STATUSES,
+  deriveStatusForInterviewDateChange,
+  isValidInterviewDateTime,
+} from '../../../shared/domain/jobPipeline.js';
 import { applyJobStatusUpdate } from '../../services/jobStatusService.js';
 
 const router = Router();
@@ -193,10 +197,31 @@ router.patch('/api/jobs/:id/status', (req, res) => {
 router.patch('/api/jobs/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
     const validKeys = Object.keys(updates).filter(k => k !== 'id');
     if (validKeys.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
-    patchJob(id, updates);
+
+    // Setting/changing interview_date through this generic route bypasses
+    // applyJobStatusUpdate's side effects (folder archive/restore, status_changed_at,
+    // rubric logging). If the caller didn't also pass an explicit status, derive the
+    // forward-only auto-advance here and route just that piece through the shared
+    // status-transition path so it gets those side effects too.
+    if (
+      typeof updates.interview_date === 'string' &&
+      isValidInterviewDateTime(updates.interview_date) &&
+      updates.status === undefined
+    ) {
+      const current = db.prepare('SELECT status FROM jobs WHERE id = ?').get(id) as { status: string } | undefined;
+      const derivedStatus = current ? deriveStatusForInterviewDateChange(current.status) : null;
+      if (derivedStatus) {
+        applyJobStatusUpdate(id, { status: derivedStatus, interview_date: updates.interview_date });
+        delete updates.interview_date;
+      }
+    }
+
+    if (Object.keys(updates).filter(k => k !== 'id').length > 0) {
+      patchJob(id, updates);
+    }
     res.json({ success: true });
   } catch (err) {
     console.error(err);

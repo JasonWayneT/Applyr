@@ -23,6 +23,17 @@ def local_only_mode() -> bool:
     return _flag("LOCAL_ONLY_MODE") in ("1", "true", "yes")
 
 
+def stage0_section_mode() -> str:
+    """llm | deterministic -- which extractor build_stage0_fit_gate.py's
+    _extract_sections_llm()/_extract_sections() split uses. Defaults to
+    "llm" (2026-08-17, Jason-supplied): the regex header-matcher proved
+    unreliable across real JD phrasing (see build_stage0_fit_gate.py's module
+    docstring). Falls back to "deterministic" automatically on any LLM
+    failure regardless of this setting -- this flag only controls whether the
+    LLM path is attempted at all, e.g. for offline/no-API-key runs."""
+    return _flag("STAGE0_SECTION_MODE", "llm")
+
+
 # DRAFT_MODE values that keep the compose-path deterministic defaults (JD profile,
 # cover hook). "local_rewrite" (CR-062) is an additive layer on top of "compose" — it
 # changes how already-selected text is phrased, not how the JD gets profiled or which

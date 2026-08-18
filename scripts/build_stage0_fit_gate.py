@@ -16,7 +16,28 @@ Exit: always 0; read "tier" and "decision" in the JSON to branch.
 Prefer ``python scripts/run_submission.py <folder>`` for normal progression
 (this script is a worker the orchestrator calls).
 
-No LLM / no Ollama required.
+Every gate below (DB cooldown, prefs/exclusions, anchor-checking, tier
+decision) is still deterministic -- no LLM involved, same as always.
+
+The one exception (2026-08-17, Jason-supplied): splitting the raw JD text
+into required/preferred/responsibilities/culture buckets now tries a small
+structured LLM call first (see _extract_sections_llm), because the
+regex-based header matcher (_extract_sections) proved unreliable across real
+JD phrasing variety -- see the CR-086/089/090 comments throughout this file
+and the 2026-08-17 fixes for the specific failure catalog. The LLM call is
+tightly bounded: it may only select text that appears verbatim in the JD
+(every returned string is checked against the raw JD text and dropped if it
+isn't a real substring -- see _substring_valid), and it never sees or
+influences the REJECT/PASS decision itself.
+
+Local-only, hard-pinned to Ollama (2026-08-17, Jason-supplied correction):
+this stage runs on every incoming JD, so it must never silently reach a paid
+cloud provider -- the first live test of this feature quietly billed a
+configured Gemini API key before this correction landed. If Ollama isn't
+running, _extract_sections_llm returns None with no cloud attempt at all,
+and the caller falls back to the deterministic regex extractor -- same as
+any other failure (malformed response, empty result). Set
+STAGE0_SECTION_MODE=deterministic to skip the LLM attempt entirely.
 """
 from __future__ import annotations
 
@@ -103,6 +124,8 @@ def _load_anchor_vocab() -> set[str]:
 # LR-026). Do not maintain a second copy here.
 from blocked_tools import HARD_BLOCKED_TOOLS as _HARD_BLOCKED_TOOLS  # noqa: E402
 from blocked_tools import hard_blocked_tool_pattern as _shared_hard_tool_pattern  # noqa: E402
+from blocked_tools import load_skills_catalog_terms as _load_skills_catalog_terms_shared  # noqa: E402
+from blocked_tools import looks_like_named_tool as _looks_like_named_tool  # noqa: E402
 
 # Regex pattern to detect hard-blocked tool names in a requirement string.
 # Compiled lazily.
@@ -132,7 +155,14 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         r"required\s*:?\s*$|"
         r"(?:"
         r"requirements?|qualifications?|your\s+qualifications?|"
-        r"what\s+you(?:'|')ll?\s+(?:need|bring|have)|"
+        # 2026-08-17 batch: the contraction was mandatory ("you'll") with no
+        # uncontracted or bare fallback -- real JDs write "What You Will Bring",
+        # "What You Will Likely Bring", and bare "What You Bring" just as often
+        # as "What You'll Bring", and none of those matched anything at all
+        # (confirmed real: Wabash, PracticeTek dropped 5-7 of their real
+        # required items this way, header never fired so current_bucket never
+        # switched). Modal suffix is now fully optional, not contraction-only.
+        r"what\s+you(?:'ll|\s+will(?:\s+likely)?)?\s+(?:need|bring|have)|"
         r"what\s+we(?:'|')re?\s+looking\s+for|"
         r"a\s+few\s+things\s+(?:they|we)(?:'|')re\s+looking\s+for|"
         r"who\s+you\s+are|must\s+have|the\s+ideal\s+candidate|"
@@ -146,7 +176,6 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         # RealTime eClinical all-caps: "WHAT ARE WE LOOKING FOR?" / "WHAT DO YOU NEED?"
         r"what\s+are\s+we\s+looking\s+for|"
         r"what\s+do\s+you\s+need|"
-        r"what\s+sets\s+you\s+apart|"
         # Paylocity / PointClickCare mid-JD quals labels
         r"ideal\s+candidate\s+profile|"
         r"(?:your\s+)?key\s+strengths|"
@@ -162,7 +191,14 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         r"additional\s+qualifications?|plus(?:es?)?|"
         r"preferred|ideally\s+you|you\s+may\s+also\s+have|"
         # CR-086: Thermo-class preferred lead-in headers ("Key Capabilities for Success:")
-        r"key\s+capabilities?(?:\s+for\s+success)?)\b",
+        r"key\s+capabilities?(?:\s+for\s+success)?|"
+        # 2026-08-17: moved here from "required" -- "what sets/could set/would
+        # set you apart" is differentiator language (Epicor: this is the real
+        # header introducing its actual preferred/nice-to-have list), not a
+        # required-quals header. Widened past bare "sets" at the same time
+        # (Epicor's own header is "What Could Set You Apart", which the
+        # original required-only, sets-only pattern never matched at all).
+        r"what\s+(?:sets|could\s+set|would\s+set)\s+you\s+apart)\b",
         re.I,
     )),
     ("responsibilities", re.compile(
@@ -226,10 +262,27 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         # CR-090 follow-up: measured 2026-08-10 -- neither a header-redirect trigger
         # nor the orphan-item filter, so this fell straight through as a standalone
         # required/preferred item on its own bucket-inheritance.
-        r"what'?s?\s+in\s+this\s+for\s+you|"
-        r"what\s+is\s+in\s+it\s+for\s+you|"
+        # 2026-08-17: this pair was meant to cover both "what's" (contracted)
+        # and "what is" (spelled out), each against "in it" and "in this" --
+        # but the contraction only ever got paired with "in this", not "in
+        # it", so the single most common real phrasing ("What's in it for
+        # you") never matched anything at all (saas_group: its whole "What's
+        # in it for you" section, including the closing pitch paragraph,
+        # bled into required). Now covers both determiners under both verb
+        # forms.
+        r"what(?:'s|\s+is)\s+in\s+(?:it|this)\s+for\s+you|"
         r"our\s+commitment\s+to\s+you|"
         r"ready\s+to\s+make\s+an?\s+impact|"
+        # "Why This Matters" (auxilius) / "Why This Role Matters" -- another
+        # "why work here" pitch header that never matched anything, so its
+        # narrative content bled into required.
+        r"why\s+this\s+(?:role\s+)?matters|"
+        # 2026-08-17: "Employee Value Proposition:" (Lexipol) is "why work
+        # here" framing -- real culture content, not a candidate requirement.
+        # Never matched anything before, so its content ("The organization is
+        # growing, committed to staff growth...") bled into whatever bucket
+        # was still active (usually required).
+        r"employee\s+value\s+proposition|"
         r"benefits?|perks?|compensation)\b",
         re.I,
     )),
@@ -268,7 +321,16 @@ _IGNORE_SECTION_HEADERS = re.compile(
     r"accommodations?(?:\s+statement)?|"
     r"about\s+(?:the\s+)?(?:interview|hiring)\s+process|"
     r"(?:our\s+)?interview\s+process|"
-    r"success\s+metrics|"
+    # 2026-08-17: "Target Outcomes/Success Metrics:" (Lexipol) never matched --
+    # the "/"-joined compound header defeats the company-name-prefix tolerance
+    # above (a "/" isn't in that prefix's allowed char class), and bare
+    # "success metrics" alone doesn't cover the "target outcomes" half. These
+    # describe business/company targets (e.g. "8% revenue growth attributable
+    # to product-led initiatives"), not candidate requirements -- real content
+    # bled into "required" with no boundary to stop it. Widened to tolerate an
+    # optional "target outcomes" lead-in joined by "/" or "and".
+    r"(?:target\s+outcomes\s*(?:/|and)\s*)?success\s+metrics|"
+    r"target\s+outcomes|"
     r"(?:the\s+)?successful\s+(?:\w+\s+){0,4}will\s+be\s+measured\s+on|"
     r"we\s+offer\s+all\s+(?:full-?time\s+)?(?:team\s+members|employees)|"
     r"other\s+duties|"
@@ -283,7 +345,15 @@ _IGNORE_SECTION_HEADERS = re.compile(
     r"our\s+commitment\s+to\s+you|"
     r"ready\s+to\s+make\s+an?\s+impact|"
     r"what\s+sets\s+you\s+apart|"
-    r"what\s+is\s+in\s+it\s+for\s+you"
+    r"what\s+is\s+in\s+it\s+for\s+you|"
+    # 2026-08-17: closing-CTA headers that end a JD's real qualifications
+    # section but don't switch to a recognized bucket, so quals collection
+    # ran on into trailing boilerplate (PracticeTek: "Ready to Join?" / "The
+    # Fine Print (That Really Matters)" / "This job description is not a
+    # contract..." all leaked into required once the real "What You Bring"
+    # header started matching correctly).
+    r"ready\s+to\s+join(?:\s+us)?\s*\?{0,2}|"
+    r"the\s+fine\s+print(?:\s*\([^)]*\))?"
     r")"
     r"\s*:?\s*$",
     re.I,
@@ -564,14 +634,47 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
 
         # Known section header → switch bucket
         matched_bucket: str | None = None
+        header_match: re.Match[str] | None = None
         for bucket_name, header_re in _SECTION_HEADERS:
-            if header_re.match(line):
+            m = header_re.match(line)
+            if m:
                 matched_bucket = bucket_name
+                header_match = m
                 break
 
         if matched_bucket is not None:
-            current_bucket = matched_bucket
-            continue
+            # Does the header match consume (almost) the whole line, or just
+            # its opening words? "Required Qualifications" is a pure label --
+            # the match covers the entire line, nothing real trails it.
+            # "Must have worked with patients/providers in a Healthcare
+            # setting" only matches "must have" (meant to catch a
+            # "Must-Haves:" label); everything after it is a real, unrelated
+            # sentence. That trailing-content check, not which bucket it
+            # would switch to, is what actually distinguishes a header from
+            # a bullet that happens to open with header-shaped words.
+            #
+            # 2026-08-17 batch: the first cut of this fix only suppressed a
+            # header match when it changed the active bucket, on the theory
+            # that a short repeated label would fail the item-length filter
+            # further down anyway. Measured false on a real 397-JD corpus
+            # sweep -- "Required Qualifications" (24 chars), "Key
+            # Responsibilities" (20 chars), "About Certara Data Sciences
+            # Team" (33 chars) all clear the 15-char minimum and leaked
+            # through as phantom requirement/responsibility items whenever
+            # they re-stated a header for the bucket already active (113 of
+            # 397 real JDs affected). Checking the actual trailing content
+            # after the match, not line length, is what correctly tells
+            # "Must have worked with patients..." (57 real chars trail the
+            # match) apart from "Required Qualifications" (0 chars trail
+            # it) regardless of bucket.
+            trailing = line[header_match.end():].strip(" \t:?.-–—")
+            is_pure_label = len(trailing) < 3
+            if is_pure_label or matched_bucket != current_bucket:
+                current_bucket = matched_bucket
+                continue
+            # else: same-bucket match with real trailing content -> an
+            # ordinary bullet that happens to open like a header. Fall
+            # through to normal item extraction below.
 
         # Boilerplate / policy header → stop collecting into quals buckets
         if _IGNORE_SECTION_HEADERS.match(line) or _TRACKING_TAG_RE.match(line):
@@ -664,6 +767,170 @@ def _looks_like_qualification(text: str) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# LLM-based section extraction (2026-08-17, Jason-supplied)
+# ---------------------------------------------------------------------------
+# Replaces _extract_sections as the default bucket-splitter. See the module
+# docstring for why: regex header-matching kept producing new real-world
+# failures (7 distinct root causes found and fixed on 2026-08-17 alone across
+# a handful of real JDs, on top of the CR-086/089/090 patches already in this
+# file). This function is deliberately narrow -- pure text bucketing, nothing
+# that touches the REJECT/PASS decision -- and every returned string is
+# verified as a real, verbatim substring of the JD before it's trusted. A
+# model that invents, paraphrases, or summarizes instead of quoting produces
+# an item that fails validation and gets silently dropped, not accepted.
+
+def _normalize_ws_for_substring_check(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip().lower()
+
+
+def _is_verbatim_substring(phrase: str, jd_text: str) -> bool:
+    """True iff *phrase* appears in *jd_text*, modulo whitespace collapsing.
+
+    Whitespace-only normalization (not case-insensitive-only, not fuzzy) --
+    deliberately strict. A model that reworded, summarized, or invented a
+    line fails this check and gets dropped; only real, quoted JD text passes.
+    """
+    phrase = (phrase or "").strip()
+    if not phrase:
+        return False
+    return _normalize_ws_for_substring_check(phrase) in _normalize_ws_for_substring_check(jd_text)
+
+
+_SECTION_SPLIT_SYSTEM_PROMPT = (
+    "You extract structure from job descriptions. You may ONLY copy text "
+    "that appears verbatim in the job description given to you -- never "
+    "paraphrase, summarize, invent, or combine sentences. Output ONLY valid "
+    "JSON, no other text."
+)
+
+_SECTION_SPLIT_USER_TEMPLATE = """Split this job description into four buckets. For each bucket, copy the \
+individual requirement/duty/statement lines VERBATIM from the text below -- \
+exact substrings, not paraphrases or summaries. Split a bucket's own \
+paragraph into its natural individual bullet-level statements rather than \
+copying a whole paragraph as one string, but never alter the wording itself.
+
+Buckets:
+- "required": what a candidate MUST have (labeled Requirements, Qualifications, \
+What You Bring, What You'll Need, Must Have, etc. -- whatever the JD calls it)
+- "preferred": nice-to-have / bonus / differentiator items (Preferred \
+Qualifications, Nice to Have, What Sets You Apart, Bonus Points, etc.)
+- "responsibilities": what the role actually DOES day to day (Responsibilities, \
+What You'll Do, duties, success-measurement criteria describing the work, etc.)
+- "culture": company description, mission, values, "why work here" / benefits \
+framing, and any other content about the COMPANY rather than the candidate or \
+the role's duties
+
+Do NOT include: EEO/diversity statements, salary/compensation/benefits \
+boilerplate, application-process or interview-process instructions, legal \
+notices, or recruiter/fraud-prevention notices, in ANY bucket -- leave that \
+content out entirely.
+
+Output ONLY this JSON shape, nothing else:
+{{"required": ["...", "..."], "preferred": ["...", "..."], "responsibilities": ["...", "..."], "culture": ["...", "..."]}}
+
+Job description:
+{jd_text}"""
+
+
+def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
+    """Attempt LLM-based section extraction. Returns None on ANY failure
+    (no configured provider, malformed/empty response, JSON that doesn't
+    parse) so the caller falls back to the deterministic regex extractor --
+    this function must never be the only path, only the preferred one."""
+    import pipeline_env
+    if pipeline_env.stage0_section_mode() == "deterministic":
+        return None
+
+    try:
+        from utils import call_llm, extract_json_from_text
+    except ImportError:
+        return None
+
+    # Local-only, hard-pinned (2026-08-17, Jason-supplied correction): this
+    # stage runs on every incoming JD in every batch, so a silent cloud
+    # fallback here means real per-JD billing outside Jason's Claude
+    # subscription -- confirmed real on the first live test, which quietly
+    # called the configured Gemini API key. Same "never silently substitute a
+    # different provider" contract as llm_stages.py's "rewrite" stage: if
+    # Ollama isn't running, this returns None (no cloud attempt at all) and
+    # the caller falls back to the deterministic regex extractor, same as any
+    # other failure. That's a real quality tradeoff -- see the module
+    # docstring's live-test results, all gathered against Gemini before this
+    # correction -- but it's Jason's call to make, not a default to assume.
+    # Model pinned to qwen2.5:7b-instruct-q4_K_M (2026-08-17, measured):
+    # call_llm's default local model (llama3.1:8b-instruct-q5_K_M, Jason's
+    # general-purpose local default) was tested head to head against every
+    # other locally-available model on the real PracticeTek JD and was the
+    # clear outlier -- it returned only the 4 top-level category headers plus
+    # 2 sub-bullets for "responsibilities" (6 items), silently dropping 10 of
+    # 12 real duty statements (Product Quality Assurance, Fluency with Data,
+    # Voice of the Customer, User Experience Design, Business Outcome
+    # Ownership, Product Vision and Roadmapping, Strategic Impact,
+    # Stakeholder Management, Team Leadership, Managing Up all vanished).
+    # qwen2.5:7b-instruct-q4_K_M captured all 12 correctly in 23s -- faster
+    # than every 14B model tested (qwen2.5-coder:14b, gemma2:9b, qwen3:14b,
+    # ministral-3-14b all took 45-65s) and more complete than the 8B default.
+    # Every model tested got "required" fully correct with zero invented
+    # items (the verbatim-substring check holds regardless of model
+    # strength); the real differentiation was responsibilities/culture
+    # completeness, where this model won clearly. phi4:14b crashed the
+    # underlying llama-server process outright on this machine (unrelated to
+    # this code) and is not usable at all here.
+    prompt = _SECTION_SPLIT_USER_TEMPLATE.format(jd_text=jd_text[:12000])
+    try:
+        raw = call_llm(
+            _SECTION_SPLIT_SYSTEM_PROMPT,
+            prompt,
+            temperature=0.0,
+            response_mime_type="application/json",
+            provider_override=["local"],
+            model="qwen2.5:7b-instruct-q4_K_M",
+        )
+    except Exception:
+        return None
+
+    if not raw:
+        return None
+
+    try:
+        cleaned = extract_json_from_text(raw)
+        data = json.loads(cleaned)
+    except Exception:
+        try:
+            data = json.loads(raw.strip().strip("`").removeprefix("json").strip())
+        except Exception:
+            return None
+
+    if not isinstance(data, dict):
+        return None
+
+    result: dict[str, list[str]] = {
+        "required": [], "preferred": [], "responsibilities": [], "culture": [],
+    }
+    for bucket in result:
+        raw_items = data.get(bucket)
+        if not isinstance(raw_items, list):
+            continue
+        for item in raw_items:
+            item = str(item).strip()
+            if not item:
+                continue
+            # 20-800 chars: same floor as the regex path's minimum, and a
+            # generous ceiling that still excludes an entire paragraph
+            # copied as "one item" (a model ignoring the split-into-bullets
+            # instruction) rather than the real per-line splits requested.
+            if not (20 <= len(item) <= 800):
+                continue
+            if not _is_verbatim_substring(item, jd_text):
+                continue
+            result[bucket].append(item)
+
+    if not any(result.values()):
+        return None
+    return result
+
+
 def _recover_mixed_responsibilities(buckets: dict[str, list[str]]) -> None:
     """Move qualification-shaped lines out of responsibilities when required is empty.
 
@@ -746,6 +1013,42 @@ def _parse_url_and_jd(raw_text: str) -> tuple[str, str]:
         body = "\n".join(lines[1:]).lstrip("\n")
         return url, body
     return "", raw_text
+
+
+# ---------------------------------------------------------------------------
+# ATS-platform page-chrome stripping (CR-092, 2026-08-15)
+# ---------------------------------------------------------------------------
+# Ingestion (CSV import / Sync export) sometimes scrapes a job board's own page
+# chrome along with the real posting text -- confirmed real on 3 of 9 flagged
+# archived JDs, byte-identical Greenhouse footer in each ("Apply for this Job /
+# Powered by / Privacy PolicySecurityVulnerability Disclosure"). This is an
+# ingestion-time artifact, not JD content, and should never reach bucketing at
+# all -- unlike arbitrary in-JD boilerplate (EEO text, anti-scam paragraphs,
+# handled item-by-item in _is_boilerplate_item), ATS platform chrome comes from
+# a small, closed, identifiable set of platforms and is cheap to strip as a
+# whole trailing block before section extraction ever runs. Deliberately
+# narrow and trailing-anchored (matches only at/near the end of the JD text)
+# so a real JD sentence that happens to contain "privacy" or "apply" mid-body
+# is never touched.
+_ATS_CHROME_TRAILERS: list[re.Pattern[str]] = [
+    # Greenhouse: "Apply for this Job\nPowered by\n\nPrivacy PolicySecurityVulnerability Disclosure"
+    re.compile(
+        r"\n\s*Apply for this Job\s*\n\s*Powered by\s*\n+\s*"
+        r"Privacy Policy\s*Security\s*Vulnerability Disclosure\s*\Z",
+        re.I,
+    ),
+]
+
+
+def _strip_ats_chrome(jd_text: str) -> str:
+    """Strip a known ATS-platform page-chrome trailer (Greenhouse, etc.) from
+    the end of *jd_text*, if present. Returns jd_text unchanged if no known
+    trailer matches -- never touches the middle of a JD, only a matched
+    trailing block, so this can only ever remove text, never corrupt it."""
+    stripped = jd_text
+    for pattern in _ATS_CHROME_TRAILERS:
+        stripped = pattern.sub("", stripped)
+    return stripped.rstrip()
 
 
 # ---------------------------------------------------------------------------
@@ -910,18 +1213,13 @@ _ALT_HEDGE_RE = re.compile(r"\bor\s+(?:similar|equivalent|the\s+like)\b", re.I)
 
 
 def _load_skills_catalog_terms() -> set[str]:
-    terms: set[str] = set()
-    if _SKILLS_PATH.exists():
-        try:
-            catalog = json.loads(_SKILLS_PATH.read_text(encoding="utf-8"))
-            for values in catalog.values():
-                for t in values:
-                    t = t.strip().lower()
-                    if t:
-                        terms.add(t)
-        except Exception:
-            pass
-    return terms
+    """Delegates to blocked_tools.load_skills_catalog_terms (CR-092,
+    2026-08-15) -- promoted there so Stage 0 and any future linter check
+    share one source, same reasoning as HARD_BLOCKED_TOOLS itself already
+    being shared. Kept as a thin wrapper (returning set, not frozenset) so
+    existing local callers (_SKILLS_CATALOG_TERMS, _alt_list_anchor) don't
+    need to change."""
+    return set(_load_skills_catalog_terms_shared())
 
 
 _SKILLS_CATALOG_TERMS = _load_skills_catalog_terms()
@@ -943,6 +1241,137 @@ def _alt_list_anchor(item_lower: str) -> str | None:
     return None
 
 
+# CR-092 (2026-08-15): mechanizes the "compound requirement lines must be
+# split into their sub-concepts before anchor-checking, never evaluated as
+# one unit" rule that .claude/skills/generate-submission/SKILL.md has
+# documented as prose since 2026-07-21 (the "Humana finding": "experience
+# managing product portfolios, intake processes, and prioritization
+# frameworks" is three separate things joined by commas, not one -- two of
+# the three were genuinely anchored, the third had zero anchor and was never
+# flagged because the whole line passed on the other two). That fix was
+# applied by hand each time a human ran Stage 0; it was never mechanized
+# into the classifier itself, so the identical bag-of-words failure recurred
+# in code with a different specific gap (Mercury Insurance / Guidewire).
+# Deliberately conservative: only splits on a real Oxford-style list (2+
+# commas, e.g. "X, Y, and Z") -- a single comma is too ambiguous (could be
+# an appositive, a trailing clause, many things) to safely split, and a bare
+# " and " with no commas at all is left alone too (avoids breaking a real
+# multi-word tool name or a genuinely-unified phrase like "product
+# management and delivery"). Parenthetical content is protected from
+# splitting so "(e.g. X, Y, or Z)" doesn't fragment.
+_PAREN_RE = re.compile(r"\([^)]*\)")
+_LIST_SPLIT_RE = re.compile(r",\s*(?:and\s+)?|\s+and\s+(?=[a-z0-9])")
+
+
+def _split_compound_item(item: str) -> list[str]:
+    """Split a compound requirement line into its sub-concept clauses. Returns
+    [item] unchanged (a single "clause") when the line doesn't look like a
+    real Oxford-style list -- see module note above for why this is
+    deliberately conservative rather than splitting on every comma."""
+    # Mask parenthetical spans so we don't split inside them; restore after.
+    masked = item
+    parens: list[str] = []
+    for m in _PAREN_RE.finditer(item):
+        placeholder = f"\x00PAREN{len(parens)}\x00"
+        parens.append(m.group(0))
+        masked = masked.replace(m.group(0), placeholder, 1)
+
+    if masked.count(",") < 2:
+        return [item]
+
+    parts = [p.strip(" .") for p in _LIST_SPLIT_RE.split(masked)]
+    parts = [p for p in parts if p]
+    if len(parts) < 2:
+        return [item]
+
+    restored = []
+    for p in parts:
+        for i, original in enumerate(parens):
+            p = p.replace(f"\x00PAREN{i}\x00", original)
+        restored.append(p)
+    return restored
+
+
+def _classify_single_clause(item: str, vocab: set[str]) -> dict:
+    """Anchor/domain/tool classification for ONE clause (either a whole
+    non-compound item, or one sub-clause of a compound item after
+    _split_compound_item). This is the pre-CR-092 body of _classify_one_item,
+    extracted so it can run once per sub-clause instead of once per whole
+    line -- see _classify_one_item's dispatch for why."""
+    item_lower = item.lower()
+
+    anchors = _item_has_anchor(item_lower, vocab)
+    unanchored_domains = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
+
+    unconfirmed_tools = []
+    for candidate in _looks_like_named_tool(item):
+        candidate_lower = candidate.lower()
+        if candidate_lower in _SKILLS_CATALOG_TERMS:
+            continue
+        if any(candidate_lower == a.lower() or candidate_lower in a.lower() or a.lower() in candidate_lower
+               for a in anchors):
+            continue
+        unconfirmed_tools.append(candidate)
+
+    if unconfirmed_tools and not unanchored_domains:
+        display = ", ".join(sorted(set(anchors))[:3]) if anchors else "none"
+        tools_display = ", ".join(sorted(set(unconfirmed_tools))[:3])
+        anchor_str = (
+            f"tags: {display}; unconfirmed tool(s): {tools_display}"
+            if anchors
+            else f"none; unconfirmed tool(s): {tools_display}"
+        )
+        return {
+            "item": item,
+            "anchor": anchor_str,
+            "gap": True,
+            "gap_class": "SOFT",
+            "domain_soft": False,
+        }
+
+    if unanchored_domains:
+        display = ", ".join(sorted(set(anchors))[:3]) if anchors else "none"
+        anchor_str = (
+            f"tags: {display}; domain soft-gap: {', '.join(unanchored_domains)}"
+            if anchors
+            else f"none; domain soft-gap: {', '.join(unanchored_domains)}"
+        )
+        return {
+            "item": item,
+            "anchor": anchor_str,
+            "gap": True,
+            "gap_class": "SOFT",
+            "domain_soft": True,
+        }
+
+    if anchors:
+        display = ", ".join(sorted(set(anchors))[:3])
+        return {
+            "item": item,
+            "anchor": f"tags: {display}",
+            "gap": False,
+            "gap_class": None,
+            "domain_soft": False,
+        }
+
+    if _is_administratively_satisfied(item_lower):
+        return {
+            "item": item,
+            "anchor": "satisfied: administrative (years-of-experience / education)",
+            "gap": False,
+            "gap_class": None,
+            "domain_soft": False,
+        }
+
+    return {
+        "item": item,
+        "anchor": "none",
+        "gap": True,
+        "gap_class": "SOFT",
+        "domain_soft": False,
+    }
+
+
 def _classify_one_item(
     item: str,
     vocab: set[str],
@@ -961,9 +1390,11 @@ def _classify_one_item(
     """
     item_lower = item.lower()
 
-    # Check for hard-blocked tools first. Plain familiarity/exposure hedges stay
-    # SOFT (Tier 2) so an unconfirmed tool mention does not Skip the JD; intensified
-    # phrasing (deep/strong/hands-on) still HARD-Skips.
+    # Check for hard-blocked tools first, on the WHOLE line -- a hard-blocked
+    # tool anywhere in a compound line still hard-skips regardless of what
+    # else is in the line. Plain familiarity/exposure hedges stay SOFT
+    # (Tier 2) so an unconfirmed tool mention does not Skip the JD;
+    # intensified phrasing (deep/strong/hands-on) still HARD-Skips.
     hard_match = _get_hard_tool_pattern().search(item_lower)
     if hard_match:
         alt_term = _alt_list_anchor(item_lower)
@@ -991,54 +1422,43 @@ def _classify_one_item(
             "domain_soft": False,
         }
 
-    anchors = _item_has_anchor(item_lower, vocab)
-    unanchored_domains = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
+    # CR-092 (2026-08-15): compound requirement lines (a real Oxford-style
+    # list -- "X, Y, and Z") are split and each sub-clause classified
+    # independently; a single non-compound item just runs _classify_single_
+    # clause once, on the whole item (identical to pre-CR-092 behavior).
+    # This mechanizes the "split into sub-concepts before anchor-checking"
+    # rule -- see _split_compound_item's module note for the full history.
+    clauses = _split_compound_item(item)
+    if len(clauses) <= 1:
+        return _classify_single_clause(item, vocab)
 
-    # Domain qualifier with no domain anchor → SOFT even if capability tags matched
-    if unanchored_domains:
-        display = ", ".join(sorted(set(anchors))[:3]) if anchors else "none"
-        anchor_str = (
-            f"tags: {display}; domain soft-gap: {', '.join(unanchored_domains)}"
-            if anchors
-            else f"none; domain soft-gap: {', '.join(unanchored_domains)}"
-        )
+    clause_results = [_classify_single_clause(c, vocab) for c in clauses]
+    gapped = [r for r in clause_results if r["gap"]]
+
+    if not gapped:
+        anchor_parts = [r["anchor"] for r in clause_results if r["anchor"] != "none"]
         return {
             "item": item,
-            "anchor": anchor_str,
-            "gap": True,
-            "gap_class": "SOFT",
-            "domain_soft": True,
-        }
-
-    if anchors:
-        display = ", ".join(sorted(set(anchors))[:3])
-        return {
-            "item": item,
-            "anchor": f"tags: {display}",
+            "anchor": "per-clause: " + "; ".join(anchor_parts) if anchor_parts else "clear (per-clause)",
             "gap": False,
             "gap_class": None,
             "domain_soft": False,
         }
 
-    # CR-090: eligibility facts that are already resolved elsewhere (years-of-
-    # experience) or genuinely satisfied (Bachelor's degree) -- never claim-
-    # bridgeable, so don't route them into the soft-gap-needs-a-bridge path.
-    if _is_administratively_satisfied(item_lower):
-        return {
-            "item": item,
-            "anchor": "satisfied: administrative (years-of-experience / education)",
-            "gap": False,
-            "gap_class": None,
-            "domain_soft": False,
-        }
-
-    # No hard tool, no anchor → soft gap (domain/methodology bridgeable)
+    # At least one sub-clause has no real anchor -- the whole compound line
+    # is a flagged gap, citing which specific sub-clause(s) lack it (the
+    # actual fix: previously a generic word matching in ANY sub-clause
+    # cleared the WHOLE line, masking a real gap in a different sub-clause).
+    # Escalate to the most severe gap_class present (HARD outranks SOFT).
+    severity = {"HARD": 0, "SOFT": 1}
+    worst_class = min((r["gap_class"] for r in gapped), key=lambda c: severity.get(c, 1))
+    failing_desc = "; ".join(f'"{r["item"]}" ({r["anchor"]})' for r in gapped)
     return {
         "item": item,
-        "anchor": "none",
+        "anchor": f"compound line, unanchored sub-clause(s): {failing_desc}",
         "gap": True,
-        "gap_class": "SOFT",
-        "domain_soft": False,
+        "gap_class": worst_class,
+        "domain_soft": any(r["domain_soft"] for r in gapped),
     }
 
 
@@ -1087,6 +1507,24 @@ def classify_gaps(
     for p in classified_preferred:
         if p.get("domain_soft") and p.get("gap_class") == "SOFT":
             flagged_gaps.append({"item": p["item"], "gap_class": "SOFT"})
+        elif p.get("gap_class") == "HARD":
+            # CR-092 follow-up (2026-08-15, Jason-supplied, real miss): a
+            # preferred-bucket item was never escalated into flagged_gaps
+            # unless it was a domain_soft SOFT gap -- a genuinely hard-
+            # blocked named tool (Guidewire, HARD_BLOCKED_TOOLS) sitting in
+            # "Preferred" instead of "Required" could clear the whole gate
+            # even after being correctly classified HARD, because the REJECT
+            # decision below only ever scans flagged_gaps. Confirmed real:
+            # Mercury Insurance's Guidewire requirement was in the JD's
+            # Preferred section and reached Tier 2 PASS / drafting despite
+            # being a real, unbridgeable gap. gap_class == "HARD" is only
+            # ever set by the hard-blocked-tools deny-list check (see
+            # _classify_single_clause) -- never by the softer "unconfirmed
+            # tool" WARN tier -- so this only escalates the confirmed-
+            # unbridgeable class, not every preferred-item miss. An ATS
+            # keyword filter doesn't care whether a JD labeled something
+            # "required" or "preferred" either.
+            flagged_gaps.append({"item": p["item"], "gap_class": "HARD"})
 
     return classified_required, classified_preferred, flagged_gaps
 
@@ -1200,6 +1638,7 @@ def build_stage0_fit_gate(
 
     raw_text = jd_file.read_text(encoding="utf-8", errors="replace")
     url, jd_text = _parse_url_and_jd(raw_text)
+    jd_text = _strip_ats_chrome(jd_text)
 
     # Company slug → display name
     company_slug = folder.name
@@ -1256,7 +1695,11 @@ def build_stage0_fit_gate(
     # --- Step 1: DB gate ---
     if db_gate_result is None:
         from stage0_db_gate import evaluate_db_gate
-        db_gate_result = evaluate_db_gate(company_display, role=role, db_path=_DEFAULT_DB)
+        # jd_text passed through (CR-092) so a job-board-mirror mismatch
+        # between the CSV company and the JD's own self-identified employer
+        # (e.g. "AdaMarie" carrying a Pinterest posting) gets checked under
+        # both names, not just whatever the CSV happened to say.
+        db_gate_result = evaluate_db_gate(company_display, role=role, db_path=_DEFAULT_DB, jd_text=jd_text)
 
     db_action = db_gate_result.get("action", "clear")
 
@@ -1287,7 +1730,16 @@ def build_stage0_fit_gate(
     prefs_result = run_prefs_gate_safe(company_display, jd_text, prefs)
 
     # --- Step 3: Extract JD buckets ---
-    sections = _extract_sections(jd_text)
+    # LLM extraction is the default (2026-08-17, Jason-supplied) -- see the
+    # module docstring and _extract_sections_llm's own docstring for why.
+    # Falls back to the deterministic regex extractor on any failure (no
+    # configured provider, malformed response, empty result), so this call
+    # never raises and Stage 0 never blocks on it.
+    sections = _extract_sections_llm(jd_text)
+    extraction_source = "llm"
+    if sections is None:
+        sections = _extract_sections(jd_text)
+        extraction_source = "deterministic"
     required_raw = sections["required"]
     preferred_raw = sections["preferred"]
     responsibilities = sections["responsibilities"]
@@ -1335,6 +1787,24 @@ def build_stage0_fit_gate(
             "gap_class": "SOFT",
             "bridge": "required_empty — confirm quals headers before treating as clean pass",
         })
+    elif len(required_raw) <= 1 and word_count >= 200:
+        # Non-empty but suspiciously thin: a JD this long should rarely
+        # produce 0-1 required items. This is a tripwire, not a fix — the
+        # 2026-08-17 header/item-boundary bugs above cover the specific real
+        # cases found so far (PracticeTek: 1 of 5 real required items
+        # captured), but this stays in place against whatever real-world JD
+        # phrasing shows up next that neither of those anticipated. Surfacing
+        # it turns a silent wrong answer into a visible one that a human
+        # re-checks against the raw JD text before trusting Tier 1/2.
+        flagged_gaps.append({
+            "item": (
+                f"Stage 0: only {len(required_raw)} required item(s) extracted "
+                f"from a {word_count}-word JD — verify against the raw JD text "
+                "before trusting this as a complete list"
+            ),
+            "gap_class": "SOFT",
+            "bridge": "required_thin — re-check JD required-section extraction manually before drafting",
+        })
 
     # --- Step 5: Determine tier ---
     tier, decision = _determine_tier(
@@ -1366,7 +1836,16 @@ def build_stage0_fit_gate(
 
     notes_parts: list[str] = []
     if db_action == "reapply_flag":
-        notes_parts.append("Reapply flag from DB (prior rejections, all cooldowns expired).")
+        # Use the DB gate's own reason text rather than a hardcoded phrase --
+        # "reapply_eligible" really means cooldowns expired, but
+        # "different_role_at_company" means cooldown was never evaluated
+        # (the prior row's title didn't match this role), and the old fixed
+        # string "all cooldowns expired" was false for that second case.
+        db_reason_code = db_gate_result.get("reason_code", "") if db_gate_result else ""
+        if db_reason_code == "different_role_at_company":
+            notes_parts.append(f"Reapply flag from DB ({db_gate_result.get('reason', 'different role on file at this company')}).")
+        else:
+            notes_parts.append("Reapply flag from DB (prior rejections, all cooldowns expired).")
     if tier == "Tier 1":
         notes_parts.append("Clean Tier 1 pass. No flagged gaps.")
     elif tier == "Tier 2":
@@ -1396,6 +1875,7 @@ def build_stage0_fit_gate(
         "reach_out": False,
         "stage_signal": stage_signal,
         "thin_jd": thin_jd,
+        "extraction_source": extraction_source,
         "required": classified_required,
         "preferred": classified_preferred,
         "responsibilities": responsibilities[:8],
@@ -1413,6 +1893,27 @@ def build_stage0_fit_gate(
     if db_action == "reapply_flag":
         output["db_reapply_flag"] = True
         output["db_reapply_note"] = db_gate_result.get("reason", "")
+
+    # CR-092 (2026-08-15): surface a CSV-vs-JD-self-identified company name
+    # mismatch in the batch table, not just buried in the raw DB-gate JSON --
+    # visible even when neither name has DB history, since "this posting is
+    # a job-board mirror" is worth knowing regardless of dedup outcome.
+    company_mismatch = db_gate_result.get("company_mismatch")
+    if company_mismatch:
+        output["company_mismatch"] = company_mismatch
+
+    # CR-092 follow-up (2026-08-15, Jason-supplied): an already-in-progress
+    # (non-terminal) application at this company/role is a real duplicate
+    # signal -- flagged for a human look (Tier 2), never an automatic Skip,
+    # since an active row could be a stale/abandoned entry as easily as a
+    # genuine live application (same "Kroll-style... belongs in Tier 2, not
+    # its own category" reasoning generate-submission/SKILL.md already
+    # applies to same-title active-row duplicates).
+    active_application = db_gate_result.get("active_application")
+    if active_application and output.get("decision") != "SKIP":
+        output["active_application"] = active_application
+        flag_note = f"DB shows an active (non-terminal) application already on file: {active_application[0].get('status')} -- verify this isn't a duplicate before sending."
+        output["notes"] = (output.get("notes") or "") + " " + flag_note
 
     return output
 

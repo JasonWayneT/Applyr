@@ -22,6 +22,14 @@ from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 2026-08-17: build_stage0_fit_gate() now tries an LLM call by default for
+# section extraction (see that module's docstring). This suite's own
+# docstring promises "no real DB, no LLM" -- force the deterministic regex
+# path for every test here so the suite stays fast, offline, and
+# network-free. The LLM path itself is covered separately with a mocked
+# call_llm, not real network I/O -- see TestSectionExtractionLLM below.
+os.environ["STAGE0_SECTION_MODE"] = "deterministic"
+
 from build_stage0_fit_gate import (
     _parse_url_and_jd,
     _detect_thin_jd,
@@ -1398,6 +1406,176 @@ class TestFamiliarityHardToolIsSoft(unittest.TestCase):
         self.assertTrue(any("amplitude" in g["item"].lower() for g in soft))
 
 
+class TestCompoundClauseSplitting(unittest.TestCase):
+    """CR-092 (2026-08-15): mechanizes generate-submission/SKILL.md's
+    "Humana finding" (2026-07-21) -- a compound requirement line joined by
+    commas must be split into sub-concepts before anchor-checking, not
+    evaluated as one bag-of-words unit. That rule was prose-only for three
+    weeks; a generic word matching in ANY sub-clause previously cleared the
+    WHOLE line, masking a real gap in a different sub-clause."""
+
+    def test_three_item_list_flags_the_unanchored_clause(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Experience managing product zoning matrices, intake processes, and prioritization frameworks.
+            """
+        )
+        result = _build(jd)
+        rows = [r for r in result["required"] if "zoning matrices" in r["item"].lower()]
+        self.assertEqual(len(rows), 1, result["required"])
+        row = rows[0]
+        self.assertTrue(row["gap"], f"expected gap, got anchor={row.get('anchor')!r}")
+        self.assertIn("unanchored sub-clause", row["anchor"])
+
+    def test_three_item_list_all_anchored_stays_clean(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Experience with roadmap planning, backlog prioritization, and cross-functional stakeholder alignment.
+            """
+        )
+        result = _build(jd)
+        rows = [r for r in result["required"] if "roadmap planning" in r["item"].lower()]
+        self.assertEqual(len(rows), 1, result["required"])
+        row = rows[0]
+        self.assertFalse(row["gap"], f"expected clean, got anchor={row.get('anchor')!r}")
+
+    def test_single_comma_not_treated_as_list(self):
+        """One comma is too ambiguous to safely split (appositive, trailing
+        clause, etc.) -- _split_compound_item requires 2+ commas."""
+        from build_stage0_fit_gate import _split_compound_item
+        item = "Experience with SQL, including complex joins"
+        self.assertEqual(_split_compound_item(item), [item])
+
+    def test_no_comma_not_treated_as_list(self):
+        from build_stage0_fit_gate import _split_compound_item
+        item = "Experience with product management and delivery"
+        self.assertEqual(_split_compound_item(item), [item])
+
+    def test_hard_blocked_tool_anywhere_in_compound_line_still_hard_skips(self):
+        """A hard-blocked tool inside a compound line must still hard-skip
+        the whole line regardless of what else is in it -- this check runs
+        on the whole line BEFORE the compound split, unchanged from before."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Experience with Snowflake, dbt, and data pipeline orchestration.
+            """
+        )
+        result = _build(jd)
+        rows = [r for r in result["required"] if "snowflake" in r["item"].lower()]
+        self.assertEqual(len(rows), 1, result["required"])
+        row = rows[0]
+        self.assertEqual(row["gap_class"], "HARD")
+
+
+class TestPreferredHardGapTriggersSkip(unittest.TestCase):
+    """CR-092 follow-up (2026-08-15, Jason-supplied, real miss): a hard-
+    blocked named tool sitting in the JD's Preferred section, not Required,
+    must still Skip the whole JD -- confirmed real on Mercury Insurance,
+    whose Guidewire requirement was in "Preferred" and reached Tier 2 PASS
+    even after being correctly classified HARD, because classify_gaps()
+    only ever escalated domain_soft SOFT preferred items into flagged_gaps,
+    never HARD ones."""
+
+    def test_hard_blocked_tool_in_preferred_section_skips(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 3+ years of product management experience
+
+            Preferred
+            - 1+ years of advanced knowledge of Guidewire product models specifically working on Guidewire Policy Center, with knowledge of its function in underwriting/sales workflows, policy rating, rules engine.
+            """
+        )
+        result = _build(jd)
+        self.assertEqual(result["decision"], "SKIP")
+        self.assertIn("guidewire", (result.get("skip_reason") or "").lower())
+
+    def test_domain_soft_preferred_gap_still_only_soft_pass(self):
+        """Regression guard: an ordinary domain-soft preferred gap (not a
+        hard-blocked tool) must NOT start Skipping JDs -- only gap_class ==
+        "HARD" escalates; this must stay Tier 2, not Skip."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 3+ years of product management experience in B2B SaaS
+
+            Preferred
+            - Experience in healthcare or clinical settings preferred.
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["decision"], "SKIP")
+
+
+class TestUnconfirmedToolAllowList(unittest.TestCase):
+    """CR-092 (2026-08-15): a named tool with no anchor of its own must not
+    silently clear a line just because some OTHER generic word in the same
+    line matched a vocab tag. Confirmed real: Mercury Insurance's "Guidewire
+    Policy Center... policy rating, rules engine" cleared as gap=False
+    because "workflows"/"sales" (generic tags) matched, even though
+    Guidewire itself has zero anchor anywhere in ground truth."""
+
+    def test_unlisted_named_tool_becomes_soft_gap_despite_generic_word_match(self):
+        # "ServiceMesh Pro" is not real, not in HARD_BLOCKED_TOOLS, not in
+        # skills_catalog.json -- a stand-in for "some tool nobody thought to
+        # deny-list in advance." "workflows" is a generic word likely to
+        # anchor via ordinary vocab tags.
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Advanced knowledge of ServiceMesh Pro workflows and configuration.
+            """
+        )
+        result = _build(jd)
+        rows = [r for r in result["required"] if "servicemesh" in r["item"].lower()]
+        self.assertEqual(len(rows), 1, result["required"])
+        row = rows[0]
+        self.assertTrue(row["gap"], f"expected gap, got anchor={row.get('anchor')!r}")
+        self.assertEqual(row["gap_class"], "SOFT")
+        self.assertIn("unconfirmed tool", (row.get("anchor") or "").lower())
+
+    def test_verified_tool_from_skills_catalog_not_flagged_as_unconfirmed(self):
+        # Salesforce and Pendo are both in data/skills_catalog.json --
+        # naming them must never trip the unconfirmed-tool WARN.
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+            - Experience with Salesforce and Pendo required.
+            """
+        )
+        result = _build(jd)
+        rows = [r for r in result["required"] if "salesforce" in r["item"].lower()]
+        self.assertEqual(len(rows), 1, result["required"])
+        row = rows[0]
+        self.assertNotIn("unconfirmed tool", (row.get("anchor") or "").lower())
+
+    def test_guidewire_now_hard_blocked_not_silently_clear(self):
+        """The real Mercury Insurance line, hard-blocked directly (added to
+        HARD_BLOCKED_TOOLS alongside this WARN layer, CR-092) since it's a
+        confirmed, named, unbridgeable insurance platform, not just an
+        unconfirmed one."""
+        jd = textwrap.dedent(
+            """
+            Preferred
+            - 1+ years of advanced knowledge of Guidewire product models specifically working on Guidewire Policy Center, with knowledge of its function in underwriting/sales workflows, policy rating, rules engine, and Guidewire product models.
+            """
+        )
+        result = _build(jd)
+        rows = [r for r in result["preferred"] if "guidewire" in r["item"].lower()]
+        self.assertEqual(len(rows), 1, result["preferred"])
+        row = rows[0]
+        self.assertTrue(row["gap"])
+        self.assertEqual(row["gap_class"], "HARD")
+
+
 class TestSkillsCatalogDoesNotFalseAnchorOffice(unittest.TestCase):
     """Invariant: skill-catalog product phrases must not word-split into false anchors.
 
@@ -1424,8 +1602,17 @@ class TestSkillsCatalogDoesNotFalseAnchorOffice(unittest.TestCase):
         row = office_rows[0]
         self.assertTrue(row["gap"], f"expected gap, got anchor={row.get('anchor')!r}")
         self.assertEqual(row["gap_class"], "SOFT")
-        self.assertNotIn("microsoft", (row.get("anchor") or "").lower())
-        self.assertNotIn("suite", (row.get("anchor") or "").lower())
+        # The original bug: word-splitting "Microsoft Teams"/"Google Suite" into
+        # bare "microsoft"/"suite" tokens made those false TAG anchors. Check
+        # specifically for that failure mode (a "tags:" match), not just any
+        # appearance of the word -- CR-092's unconfirmed-tool annotation now
+        # legitimately names "microsoft office suite" in a different, correct
+        # context (flagging it as an unverified tool), which is not the bug
+        # this test guards against.
+        anchor_str = (row.get("anchor") or "").lower()
+        tags_part = anchor_str.split(";")[0] if anchor_str.startswith("tags:") else ""
+        self.assertNotIn("microsoft", tags_part)
+        self.assertNotIn("suite", tags_part)
 
     def test_microsoft_teams_full_phrase_still_anchors(self):
         """Full catalog phrase 'Microsoft Teams' must still count as an anchor."""
@@ -1564,6 +1751,102 @@ class TestEmptyRequiredNotTier1(unittest.TestCase):
         self.assertGreater(len(result["preferred"]), 0)
         self.assertEqual(result["tier"], "Tier 2")
         self.assertEqual(result["decision"], "PASS")
+
+
+# ---------------------------------------------------------------------------
+# Test: LLM-based section extraction (2026-08-17) -- mocked, no real network
+# ---------------------------------------------------------------------------
+
+class TestSectionExtractionLLM(unittest.TestCase):
+    """_extract_sections_llm never makes a real network call in these tests --
+    call_llm is patched directly. Real network behavior is out of scope for
+    this fast/offline suite; what's tested here is the safety contract:
+    verbatim-substring validation, and graceful fallback on any failure."""
+
+    def setUp(self):
+        from build_stage0_fit_gate import _extract_sections_llm
+        self._extract_sections_llm = _extract_sections_llm
+        self.jd = textwrap.dedent(
+            """
+            Requirements
+            5+ years of product management experience in B2B SaaS
+            Strong analytical and communication skills
+
+            Preferred Qualifications
+            Experience with Salesforce or similar CRM platforms
+            """
+        )
+
+    def test_llm_mode_off_returns_none_without_calling_llm(self):
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "deterministic"}):
+            with patch("utils.call_llm") as mock_call:
+                result = self._extract_sections_llm(self.jd)
+        mock_call.assert_not_called()
+        self.assertIsNone(result)
+
+    def test_valid_verbatim_response_accepted(self):
+        payload = json.dumps({
+            "required": ["5+ years of product management experience in B2B SaaS"],
+            "preferred": ["Experience with Salesforce or similar CRM platforms"],
+            "responsibilities": [],
+            "culture": [],
+        })
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("utils.call_llm", return_value=payload):
+                result = self._extract_sections_llm(self.jd)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result["required"]), 1)
+        self.assertEqual(len(result["preferred"]), 1)
+
+    def test_invented_text_is_dropped_not_trusted(self):
+        """A model that invents a line not present in the JD must never have
+        that line survive into the output -- this is the core safety
+        guarantee that makes the LLM path acceptable at all."""
+        payload = json.dumps({
+            "required": [
+                "5+ years of product management experience in B2B SaaS",
+                "10+ years of experience leading a team of engineers",  # invented, not in JD
+            ],
+            "preferred": [],
+            "responsibilities": [],
+            "culture": [],
+        })
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("utils.call_llm", return_value=payload):
+                result = self._extract_sections_llm(self.jd)
+        self.assertIsNotNone(result)
+        joined = " | ".join(result["required"])
+        self.assertIn("5+ years of product management experience in B2B SaaS", joined)
+        self.assertNotIn("10+ years of experience leading a team of engineers", joined)
+
+    def test_empty_llm_response_falls_back_to_none(self):
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("utils.call_llm", return_value=""):
+                result = self._extract_sections_llm(self.jd)
+        self.assertIsNone(result)
+
+    def test_malformed_json_falls_back_to_none(self):
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("utils.call_llm", return_value="not json at all"):
+                result = self._extract_sections_llm(self.jd)
+        self.assertIsNone(result)
+
+    def test_llm_exception_falls_back_to_none(self):
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("utils.call_llm", side_effect=RuntimeError("network down")):
+                result = self._extract_sections_llm(self.jd)
+        self.assertIsNone(result)
+
+    def test_full_pipeline_falls_back_to_deterministic_when_llm_unavailable(self):
+        """build_stage0_fit_gate() end to end: with STAGE0_SECTION_MODE=llm
+        but no usable LLM response, the full pipeline must still produce a
+        correct result via the deterministic fallback, not fail or return
+        empty buckets."""
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("utils.call_llm", return_value=""):
+                result = _build(_CLEAN_PM_JD)
+        self.assertEqual(result["extraction_source"], "deterministic")
+        self.assertGreater(len(result["required"]), 0)
 
 
 # ---------------------------------------------------------------------------

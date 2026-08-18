@@ -24,6 +24,12 @@ jobs:
         run: npm ci
       - name: Typecheck and build frontend
         run: npm run build
+      - name: Create Applyr .venv
+        # invoke_applyr_python.mjs (used by `npm test`) refuses bare PATH python and
+        # requires the project's own .venv, same as local dev's `npm run setup:python`.
+        # Runs the real setup script rather than reimplementing it inline so CI stays
+        # in sync with what a developer actually runs locally.
+        run: python scripts/setup_python_env.py
       - name: Vitest (SSE parser)
         run: npm test
       - name: Bootstrap CI data fixtures

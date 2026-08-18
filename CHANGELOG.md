@@ -10,6 +10,7 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Added
+- **CR-092: 9-bug batch fix from a real 9-job CSV run (2026-08-15):** JD-extraction Greenhouse-footer stripping; ground-truth coverage re-keyed by claim lens instead of project_id; robust directory-move fallback for Windows rename `PermissionError`; job-board-mirror company dedup via JD self-identification; tool-name allow-list (`data/skills_catalog.json`) layered on top of the existing deny-list; compound-requirement clause splitting (mechanizes the "Humana finding" prose rule); `claim_provenance.json` existence now gates Stage 1 exit; CSV-import report filename no longer hardcoded/overwriting; a real-corpus regression ratchet test (`test_stage0_extraction_corpus.py`). Full plan + implementation log: `docs/spec/05-change-requests/CR-092-2026-08-15-bug-batch-implementation-plan.md`.
 - **CR-091: Stage 0 skip ledger (2026-08-14):** Incoming JDs land in `data/pending_review/`. A Skip is remembered in `stage0_skips` (URL, then company+title) and the folder moves to `data/archive/skipped/`. Only PASS folders are promoted into `data/submissions/`. Next CSV/Sync run does not recreate a skipped posting. Spec: `docs/spec/05-change-requests/CR-091-stage0-skip-ledger.md`. `FR-264`, `AC-326`–`AC-331`. Migration `016_add_stage0_skips.sql` is additive only (`CREATE TABLE IF NOT EXISTS`); it does not ALTER `jobs` or rewrite existing application rows.
 
 ### Fixed

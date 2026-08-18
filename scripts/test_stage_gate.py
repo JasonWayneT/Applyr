@@ -209,6 +209,10 @@ class TestRequireStageReady(StageGateTestCase):
         )
         _write(self.folder, "Resume.md", "# Name\n")
         _write(self.folder, "CoverLetter.md", "# Name\n")
+        # CR-092 (2026-08-15): claim_provenance.json's existence is now part
+        # of the Stage 1 gate too (see test_contracts.py's equivalent fixture
+        # update for the full reasoning).
+        _write(self.folder, "claim_provenance.json", {"ran": True, "ok": True, "findings": []})
         require_stage_ready("stage1", str(self.folder))
 
     def test_stage1_raises_on_incomplete_packet(self):

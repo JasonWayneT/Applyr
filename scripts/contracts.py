@@ -310,11 +310,29 @@ def check_stage1_ready(folder: str) -> tuple[bool, list[str]]:
       - authoring_packet.json present with packet_status == "ready" (CR-074's five fail-closed
         conditions -- content-safety gates, not staleness ones; see the epics doc's OQ-1
         resolution for why this has no --force override anywhere in this CR).
-      - Resume.md and CoverLetter.md both present in the folder (Stage 1's actual output).
+      - Resume.md, CoverLetter.md, and claim_provenance.json all present in the folder
+        (Stage 1's actual promised output -- see CR-092 below for why the third file is
+        checked here now).
 
     Does NOT check packet freshness/version (author_from_packet.py's own _check_packet_ready
     already owns that, with its own --force), and does NOT read verification_receipt.json or
-    draft_manifest.json -- those are Stage 2's concern (check_stage2_ready), not Stage 1's."""
+    draft_manifest.json -- those are Stage 2's concern (check_stage2_ready), not Stage 1's.
+
+    CR-092 (2026-08-15): claim_provenance.json used to be checked only conditionally
+    downstream (workflow/runner.py reads it "if os.path.exists(...)") and its *content*
+    findings are correctly WARN-tier by design (AC9) -- but the file's mere *existence*
+    had no gate at all. Stage 1 is a human/agent pasting authoring_prompt.md into a fresh
+    session and saving three promised fenced-code-block outputs to three files; nothing
+    mechanically enforced the third file actually landed, so a run could advance past
+    Stage 1 with only two of three files present and no signal that anything was missed.
+    Confirmed real on 2 of 4 real submissions in one batch (mercury_insurance, mckesson)
+    the same day this was found. Adding it here converts "silently missing" into "Stage 1
+    won't report ready until the human notices and re-runs the author session or
+    `author_from_packet.py --verify-only`" -- the same fail-closed posture already used
+    for Resume.md/CoverLetter.md, not a new one. This is an existence check only; content
+    validity (unknown/disabled claim IDs) stays WARN-tier via check_claim_provenance(),
+    not promoted to a hard gate here -- that would be a different, larger change than the
+    silent-missing-file bug this fixes."""
     errors: list[str] = []
 
     packet_path = os.path.join(folder, "authoring_packet.json")
@@ -334,7 +352,7 @@ def check_stage1_ready(folder: str) -> tuple[bool, list[str]]:
                     "(no incomplete_reasons recorded)"
                 )
 
-    for doc in ("Resume.md", "CoverLetter.md"):
+    for doc in ("Resume.md", "CoverLetter.md", "claim_provenance.json"):
         if not os.path.exists(os.path.join(folder, doc)):
             errors.append(f"{doc} not found -- Stage 1 has not produced this document yet")
 

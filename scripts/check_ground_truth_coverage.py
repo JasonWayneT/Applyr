@@ -66,21 +66,57 @@ def _normalize(text: str) -> str:
 
 
 def _load_claims() -> dict:
+    """Keyed by full claim key (e.g. "ACC-111-SCOPE"), NOT project_id.
+
+    CR-092 (2026-08-15): this used to group by project_id and union every
+    sibling lens's tags/metrics into one bucket (e.g. ACC-111-SCOPE +
+    ACC-111-ENTERPRISE merged into one "ACC-111"). Confirmed real false
+    positive: ACC-111-SCOPE has no metrics of its own (checked via a 2+-tag
+    fallback), but the merged bucket inherited ACC-111-ENTERPRISE's "$38"
+    metric, so the merged bucket took the metric-check path instead of the
+    tag-fallback path -- the wrong check for the lens that was actually
+    JD-relevant -- and flagged the whole project unused because "$38" (a
+    different lens's figure, about Cisco/AT&T enterprise accounts, never
+    JD-relevant here) doesn't appear in the doc. Keying by the full lens ID
+    means each lens is judged only on its own tags/metrics, never a sibling's."""
     tags_only_path = os.path.join(_REPO_ROOT, "data", "master_claims_tags_only.json")
     fallback_path = os.path.join(_REPO_ROOT, "data", "master_claims.json")
     path = tags_only_path if os.path.exists(tags_only_path) else fallback_path
     with open(path, encoding="utf-8") as f:
         raw = json.load(f)
 
-    projects: dict[str, dict] = {}
-    for entry in raw.values():
+    claims: dict[str, dict] = {}
+    for key, entry in raw.items():
         if entry.get("disabled"):
             continue
-        pid = entry["project_id"]
-        bucket = projects.setdefault(pid, {"tags": set(), "metrics": set()})
-        bucket["tags"] |= set(entry.get("tags", []))
-        bucket["metrics"] |= set(entry.get("metrics", []))
-    return projects
+        claims[key] = {
+            "project_id": entry.get("project_id", key),
+            "tags": set(entry.get("tags", [])),
+            "metrics": set(entry.get("metrics", [])),
+        }
+    return claims
+
+
+def _load_packet_claim_ids(folder: str) -> set[str] | None:
+    """Claim IDs actually offered to this submission's Stage 1 author, per its
+    authoring_packet.json (evidence_map + soft_gaps, unioned). Returns None
+    if the packet is missing/unreadable -- the caller should treat that as
+    "can't scope, don't claim to" rather than silently checking zero claims."""
+    packet_path = os.path.join(folder.rstrip("/\\"), "authoring_packet.json")
+    if not os.path.exists(packet_path):
+        return None
+    try:
+        with open(packet_path, encoding="utf-8") as f:
+            packet = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    ids: set[str] = set()
+    for item in packet.get("evidence_map", []) or []:
+        ids.update(item.get("claim_ids", []) or [])
+    for item in packet.get("soft_gaps", []) or []:
+        ids.update(item.get("claim_ids", []) or [])
+    return ids
 
 
 def _metric_variants(metric: str) -> list[str]:
@@ -132,10 +168,12 @@ def check_folder(folder: str) -> dict:
         return result
 
     claims = _load_claims()
+    packet_claim_ids = _load_packet_claim_ids(folder)
     flagged = []
     unverified_relevant = []
 
-    for pid, bucket in sorted(claims.items()):
+    for claim_key, bucket in sorted(claims.items()):
+        pid = bucket["project_id"]
         relevant_tags = sorted(t for t in bucket["tags"] if t.lower() in jd_text)
         if not relevant_tags:
             continue
@@ -143,6 +181,7 @@ def check_folder(folder: str) -> dict:
         if pid in UNVERIFIED_PROJECT_IDS:
             unverified_relevant.append(
                 {
+                    "claim_id": claim_key,
                     "project_id": pid,
                     "matched_tags": relevant_tags,
                     "note": "JD-relevant, but this claim has no backing narrative in workExperience.md -- "
@@ -163,16 +202,31 @@ def check_folder(folder: str) -> dict:
             used = tag_hits_in_doc >= 2
 
         if not used:
+            # CR-092: in_packet tells a human reviewer WHY this is worth a
+            # look. True means Stage 1 was actually offered this exact lens
+            # and it still didn't make it into the doc -- the strongest
+            # signal. False/None (packet missing) means it's a whole-catalog
+            # find: this lens was never even offered for this JD, which is
+            # either a real Stage 1 selection miss or a lens that genuinely
+            # doesn't fit -- still worth a human glance, just a different
+            # kind of flag than "offered and unused."
             flagged.append(
                 {
+                    "claim_id": claim_key,
                     "project_id": pid,
                     "matched_tags": relevant_tags,
                     "metrics": sorted(bucket["metrics"]),
+                    "in_packet": (claim_key in packet_claim_ids) if packet_claim_ids is not None else None,
                 }
             )
 
     result["jd_relevant_claims_possibly_unused"] = flagged
     result["jd_relevant_but_unverified_claims"] = unverified_relevant
+    result["packet_scoping"] = (
+        "unavailable -- authoring_packet.json missing/unreadable, in_packet always null"
+        if packet_claim_ids is None
+        else f"{len(packet_claim_ids)} claim_ids offered to Stage 1 for this submission"
+    )
     result["clean"] = len(flagged) == 0
     return result
 
@@ -200,7 +254,12 @@ def main() -> None:
             any_flagged = True
             print(f"{result['submission']}: ATTENTION -- {len(flagged)} possibly-unused, {len(unverified)} unverified-but-relevant")
             for f in flagged:
-                print(f"    - {f['project_id']} (tags matched: {', '.join(f['matched_tags'])})")
+                in_packet_note = (
+                    " [OFFERED IN PACKET, still unused]" if f.get("in_packet") is True
+                    else " [never offered to Stage 1]" if f.get("in_packet") is False
+                    else ""
+                )
+                print(f"    - {f['claim_id']} (tags matched: {', '.join(f['matched_tags'])}){in_packet_note}")
             for u in unverified:
                 print(f"    - {u['project_id']} [UNVERIFIED] (tags matched: {', '.join(u['matched_tags'])})")
         else:

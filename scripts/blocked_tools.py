@@ -46,6 +46,11 @@ HARD_BLOCKED_TOOLS: frozenset[str] = frozenset({
     "procore",
     "smartsheet",
     "monday.com",
+    # Insurance-industry platforms (2026-08-15, Mercury Insurance real miss --
+    # see looks_like_named_tool()/load_skills_catalog_terms() below for the
+    # allow-list layer that catches tools not on this necessarily-incomplete
+    # deny-list going forward)
+    "guidewire", "guidewire policycenter", "duck creek", "majesco",
 })
 
 # Prefer human-readable forms in lint messages / alternation (longest first).
@@ -108,3 +113,94 @@ def hard_blocked_tools_lint_alternation() -> str:
         else:
             parts.append(esc)
     return "|".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Allow-list layer (CR-092, 2026-08-15)
+# ---------------------------------------------------------------------------
+# HARD_BLOCKED_TOOLS above is a deny-list -- it will always miss a tool
+# nobody thought to add in advance (Guidewire's absence, found real on a
+# Mercury Insurance JD, was the entire failure mode, not a missing entry).
+# OWASP's Input Validation Cheat Sheet and general access-control practice
+# converge on the same fix whenever the safe set is enumerable and the
+# unsafe set is not: allow-list as the primary defense, deny-list layered on
+# top as a "confirmed cannot claim, ever" tier -- not the only mechanism.
+# Jason's verified tool set (data/skills_catalog.json) is small and
+# enumerable; the universe of tools a JD might name is not.
+
+import json as _json
+import os as _os
+
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+_DEFAULT_SKILLS_PATH = _os.path.join(_REPO_ROOT, "data", "skills_catalog.json")
+
+
+def load_skills_catalog_terms(skills_path: str | None = None) -> frozenset[str]:
+    """Every verified tool/skill term from data/skills_catalog.json, lowercased.
+
+    This is the allow-list: a requirement naming a tool that appears here is
+    a clean anchor (Jason genuinely has it). Promoted here from a private
+    copy that used to live only in build_stage0_fit_gate.py so Stage 0 and
+    any future linter check share one source, the same reasoning that
+    already keeps HARD_BLOCKED_TOOLS itself shared across Stage 0 and
+    submission_linter's LR-026 (see module docstring)."""
+    path = skills_path or _DEFAULT_SKILLS_PATH
+    terms: set[str] = set()
+    if _os.path.exists(path):
+        try:
+            catalog = _json.loads(open(path, encoding="utf-8").read())
+            for values in catalog.values():
+                for t in values:
+                    t = t.strip().lower()
+                    if t:
+                        terms.add(t)
+        except Exception:
+            pass
+    return frozenset(terms)
+
+
+# Common capitalized JD words that are not tool/product names -- excluded so
+# the mid-sentence-capitalization heuristic below doesn't false-positive on
+# ordinary JD vocabulary (role words, methodology names, day-to-day nouns).
+# Not exhaustive by design: false positives here just mean an extra soft WARN
+# a human dismisses in one glance, which is a far cheaper failure mode than
+# the silent false-negative this whole layer exists to fix.
+_TOOL_DETECTION_STOPWORDS: frozenset[str] = frozenset({
+    "product", "manager", "senior", "junior", "lead", "director", "head",
+    "agile", "scrum", "kanban", "waterfall", "saas", "b2b", "b2c",
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december",
+    "united", "states", "america", "remote", "hybrid", "onsite",
+    "experience", "requirements", "qualifications", "responsibilities",
+    "excellent", "strong", "proven", "demonstrated", "ability",
+})
+
+# Mid-sentence capitalized token run: NOT at the start of the string/sentence
+# (a lookbehind requiring a lowercase letter/comma-space before it), one or
+# more Title-Case words, optionally followed by a version number or a
+# tool-suffix qualifier (API/SDK/Platform/.com). Deliberately conservative --
+# gazetteer-plus-capitalization is the standard lightweight approach for this
+# shape of problem (product-name NER research consistently reaches for this
+# before full ML NER, which is unwarranted for a small, mostly-known universe
+# like Jason's JD corpus).
+_TOOL_TOKEN_RE = re.compile(
+    r"(?<=[a-z,]\s)(?-i:[A-Z][a-zA-Z0-9]{2,}(?:\.[a-z]{2,3}|(?:\s+[A-Z][a-zA-Z0-9]{1,}){0,2})"
+    r"(?:\s+(?:API|SDK|Platform|\d+(?:\.\d+)?))?)"
+)
+
+
+def looks_like_named_tool(text: str) -> list[str]:
+    """Best-effort detection of proper-noun tool/product names in *text* --
+    NOT a verdict on whether Jason has the tool, just "this line appears to
+    name a specific product," which the caller then checks against
+    load_skills_catalog_terms() (allow) and HARD_BLOCKED_TOOLS (deny).
+    Returns the matched surface strings (may be empty)."""
+    hits = []
+    for m in _TOOL_TOKEN_RE.finditer(text):
+        candidate = m.group(0).strip()
+        first_word = candidate.split()[0].lower()
+        if first_word in _TOOL_DETECTION_STOPWORDS:
+            continue
+        hits.append(candidate)
+    return hits

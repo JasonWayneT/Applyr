@@ -2092,6 +2092,18 @@ def _run_cli(paths: List[str]) -> int:
 
 
 if __name__ == "__main__":
+    # CLI output contains non-ASCII characters (e.g. the "->" suggestion arrow).
+    # Windows' default console codepage (cp1252) can't encode them, and this
+    # script crashed with UnicodeEncodeError there instead of just printing
+    # results -- reconfigure to utf-8 rather than relying on the caller to set
+    # PYTHONIOENCODING. Guarded because reconfigure() isn't available on every
+    # stream type (e.g. when stdout is captured/redirected in some contexts).
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     args = sys.argv[1:]
     if not args:
         print("Usage: python submission_linter.py <path> [<path> ...]", file=sys.stderr)

@@ -5,12 +5,14 @@
 """
 from __future__ import annotations
 
-import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from stage0_skip_ledger import clear_skip, record_skip
+from utils import move_folder_robust  # noqa: E402
 
 _SCRIPT_DIR = Path(__file__).parent
 REPO_ROOT = _SCRIPT_DIR.parent
@@ -45,10 +47,15 @@ def _unique_dest(parent: Path, slug: str) -> Path:
 
 
 def move_folder(src: Path, dest: Path) -> Path:
-    """Move src to dest. Dest parent is created. Returns dest."""
+    """Move src to dest. Dest parent is created. Returns dest.
+
+    CR-092 (2026-08-15): a plain shutil.move() failed with PermissionError on
+    two real submission folders this session (transient Windows file lock
+    somewhere under the tree). move_folder_robust() retries the rename with
+    backoff, then falls back to copy+delete -- same recovery this exact
+    failure needed by hand once already."""
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dest))
-    return dest
+    return Path(move_folder_robust(src, dest))
 
 
 def apply_stage0_placement(

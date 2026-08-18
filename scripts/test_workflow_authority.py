@@ -353,6 +353,10 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
         self._reach_waiting()
         _write(self.folder, "Resume.md", "# Name\nv1\n")
         _write(self.folder, "CoverLetter.md", "# Name\nletter\n")
+        # CR-092 (2026-08-15): claim_provenance.json is now part of the
+        # Stage 1 gate too -- see test_stage1_complete_chains_and_unlocks_
+        # stage2's equivalent fixture, above, for the full reasoning.
+        _write(self.folder, "claim_provenance.json", {"claims": []})
         with mock.patch("workflow.runner.run_verify_only", return_value=True):
             state = run_stage1_validate(str(self.folder), load_state(str(self.folder)))
         self.assertEqual(state["stages"]["stage1"]["status"], "COMPLETE")
@@ -374,6 +378,10 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
         self._reach_waiting()
         _write(self.folder, "Resume.md", "# Name\nv1\n")
         _write(self.folder, "CoverLetter.md", "# Name\nletter\n")
+        # CR-092 (2026-08-15): claim_provenance.json is now part of the
+        # Stage 1 gate too -- see test_stage1_complete_chains_and_unlocks_
+        # stage2's equivalent fixture, above, for the full reasoning.
+        _write(self.folder, "claim_provenance.json", {"claims": []})
         with mock.patch("workflow.runner.run_verify_only", return_value=True):
             run_stage1_validate(str(self.folder), load_state(str(self.folder)))
 

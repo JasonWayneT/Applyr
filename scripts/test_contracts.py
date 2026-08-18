@@ -607,6 +607,7 @@ class TestCheckStage1Ready(unittest.TestCase):
         _write_json(folder, "authoring_packet.json", _VALID_PACKET)
         _write_text(folder, "Resume.md")
         _write_text(folder, "CoverLetter.md")
+        _write_json(folder, "claim_provenance.json", _VALID_CLAIM_PROVENANCE_CLEAN)
 
     def test_valid_fixture_passes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -669,6 +670,21 @@ class TestCheckStage1Ready(unittest.TestCase):
             ok, errors = check_stage1_ready(str(folder))
             self.assertFalse(ok)
             self.assertTrue(any("CoverLetter.md not found" in e for e in errors))
+
+    def test_missing_claim_provenance_fails(self):
+        """CR-092 (2026-08-15): claim_provenance.json's existence used to have no gate at
+        all -- confirmed real on 2 of 4 real submissions in one batch, both advanced past
+        Stage 1 with the file silently absent. Resume.md/CoverLetter.md present, packet
+        ready, but the third promised Stage 1 artifact missing must now fail closed the
+        same way the other two already do."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_json(folder, "authoring_packet.json", _VALID_PACKET)
+            _write_text(folder, "Resume.md")
+            _write_text(folder, "CoverLetter.md")
+            ok, errors = check_stage1_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("claim_provenance.json not found" in e for e in errors))
 
 
 # ---------------------------------------------------------------------------

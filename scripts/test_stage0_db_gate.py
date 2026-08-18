@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from stage0_db_gate import (
     company_token_match,
     evaluate_db_gate,
+    extract_self_identified_company,
     is_different_role,
 )
 
@@ -360,6 +361,136 @@ class TestNoLongerAvailable(unittest.TestCase):
                 rejection_type="No Longer Available", status_changed_at=_dt(35))
         result = evaluate_db_gate("Poof Inc", _conn=conn)
         self.assertEqual(result["action"], "reapply_flag")
+
+
+class TestExtractSelfIdentifiedCompany(unittest.TestCase):
+    """CR-092 (2026-08-15): pull the real employer's own self-identification
+    out of JD body text, for job-board-mirror mismatch detection below."""
+
+    def test_about_company_colon(self):
+        jd = "About Pinterest:\n\nMillions of people come to our platform."
+        self.assertEqual(extract_self_identified_company(jd), "Pinterest")
+
+    def test_why_company_question_mark(self):
+        jd = "Why Tenna?\n\nAt Tenna, we believe the best is right in front of us."
+        self.assertEqual(extract_self_identified_company(jd), "Tenna")
+
+    def test_join_company(self):
+        jd = "Join Tenna today and make an impact."
+        self.assertEqual(extract_self_identified_company(jd), "Tenna")
+
+    def test_about_you_not_captured(self):
+        jd = "About you: you're a self-starter. About your role: own the roadmap."
+        self.assertIsNone(extract_self_identified_company(jd))
+
+    def test_about_us_not_captured(self):
+        jd = "About us: we're a great team to work with."
+        self.assertIsNone(extract_self_identified_company(jd))
+
+    def test_no_self_identification_returns_none(self):
+        jd = "We are looking for a product manager to own our roadmap."
+        self.assertIsNone(extract_self_identified_company(jd))
+
+
+class TestActiveApplicationFlag(unittest.TestCase):
+    """CR-092 follow-up (2026-08-15, Jason-supplied): an already-in-progress
+    (non-terminal) application is a real duplicate signal the cooldown/reject
+    gate was never designed to catch -- this is what the real Pinterest/
+    AdaMarie case actually was. Flagged (Tier 2), never auto-Skip."""
+
+    def test_applied_row_surfaces_as_active_application(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Applied",
+                title="Product Manager II, Search Experience")
+        result = evaluate_db_gate("Pinterest", role="Product Manager II, Search Experience", _conn=conn)
+        self.assertIn("active_application", result)
+        self.assertEqual(result["active_application"][0]["status"], "Applied")
+
+    def test_active_application_surfaces_under_self_identified_name_too(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Applied",
+                title="Product Manager II, Search Experience")
+        jd = "About Pinterest:\n\nMillions of people come to our platform.\n\nProduct Manager II, Search Experience\n"
+        result = evaluate_db_gate("Adamarie", role="Product Manager II, Search Experience", _conn=conn, jd_text=jd)
+        self.assertIn("active_application", result)
+
+    def test_terminal_status_not_double_counted_as_active(self):
+        conn = _make_conn()
+        _insert(conn, company="Poof Inc", status="Closed", rejection_type="Rejected")
+        result = evaluate_db_gate("Poof Inc", _conn=conn)
+        self.assertNotIn("active_application", result)
+
+    def test_different_role_not_flagged_active(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Applied", title="Data Engineer")
+        result = evaluate_db_gate("Pinterest", role="Product Manager II, Search Experience", _conn=conn)
+        self.assertNotIn("active_application", result)
+
+    def test_no_role_stays_conservative_and_flags(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Applied", title="Product Manager II, Search Experience")
+        result = evaluate_db_gate("Pinterest", _conn=conn)  # no role kwarg
+        self.assertIn("active_application", result)
+
+
+class TestCompanyMismatchDbGate(unittest.TestCase):
+    """CR-092 (2026-08-15): a job-board-mirrored posting carries the board's
+    name in the CSV company field, not the real employer's -- confirmed real
+    on a Pinterest posting mirrored via "AdaMarie" that missed a real prior
+    Rejected row at Pinterest. evaluate_db_gate(jd_text=...) should catch it."""
+
+    def _pinterest_jd(self) -> str:
+        return (
+            "About Pinterest:\n\n"
+            "Millions of people come to our platform to find creative ideas.\n\n"
+            "Product Manager II, Search Experience\n"
+        )
+
+    def test_without_jd_text_misses_the_mismatch(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Rejected",
+                rejection_type="Rejected", status_changed_at=_dt(10))
+        result = evaluate_db_gate("Adamarie", _conn=conn)
+        self.assertEqual(result["action"], "clear")
+        self.assertIsNone(result["company_mismatch"])
+
+    def test_with_jd_text_catches_the_real_employer(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Rejected",
+                rejection_type="Rejected", status_changed_at=_dt(10))
+        result = evaluate_db_gate("Adamarie", _conn=conn, jd_text=self._pinterest_jd())
+        self.assertEqual(result["action"], "reject")
+        self.assertEqual(
+            result["company_mismatch"],
+            {"csv": "Adamarie", "jd_self_identified": "Pinterest"},
+        )
+
+    def test_matching_names_no_mismatch_flagged(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Rejected",
+                rejection_type="Rejected", status_changed_at=_dt(10))
+        result = evaluate_db_gate("Pinterest", _conn=conn, jd_text=self._pinterest_jd())
+        self.assertIsNone(result["company_mismatch"])
+        self.assertEqual(result["action"], "reject")
+
+    def test_mismatch_surfaced_even_with_no_db_history_either_name(self):
+        conn = _make_conn()
+        result = evaluate_db_gate("Adamarie", _conn=conn, jd_text=self._pinterest_jd())
+        self.assertEqual(result["action"], "clear")
+        self.assertEqual(
+            result["company_mismatch"],
+            {"csv": "Adamarie", "jd_self_identified": "Pinterest"},
+        )
+
+    def test_more_restrictive_result_wins_when_names_disagree(self):
+        """CSV name clean, self-identified name within cooldown -- reject wins
+        (conservative default), matching this pipeline's existing fail-closed
+        posture (Stage 0's NULL-date cooldown handling does the same)."""
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Rejected",
+                rejection_type="Rejected", status_changed_at=_dt(5))
+        result = evaluate_db_gate("Adamarie", _conn=conn, jd_text=self._pinterest_jd())
+        self.assertEqual(result["action"], "reject")
 
 
 if __name__ == "__main__":

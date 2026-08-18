@@ -9,6 +9,7 @@ import csv
 import re
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from stage0_skip_ledger import lookup_skip
@@ -169,7 +170,13 @@ def main(argv: list[str]) -> int:
             seen.add(slug)
             unique.append(slug)
     print(f"Imported {len(unique)} folders ({len(all_slugs)} CSV rows mapped)")
-    out = ROOT / "data" / "reports" / "csv_import_slugs_2026-08-14.txt"
+    # Bug fix (2026-08-15): this used to be a hardcoded literal filename
+    # ("csv_import_slugs_2026-08-14.txt") that every run, on any date,
+    # silently overwrote -- destroyed a real 47-slug record from a prior
+    # cleanup with zero warning. One-file-per-run, timestamped to the
+    # second, matches this script's actual usage (an occasional batch
+    # import, not a continuous logger) and needs no merge/append logic.
+    out = ROOT / "data" / "reports" / f"csv_import_slugs_{datetime.now():%Y-%m-%dT%H%M%S}.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(unique) + "\n", encoding="utf-8")
     print(f"slug list: {out}")

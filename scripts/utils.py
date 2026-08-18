@@ -33,8 +33,10 @@ CL_BEST_PRACTICES = os.path.join(DATA_DIR, "cover-letter-conversion-best-practic
 CANDIDATE_PREFERENCES_FILE = os.path.join(DATA_DIR, "candidate_preferences.json")
 
 # Default cloud model â€” must have non-zero free-tier quota on the user's AI Studio project.
-# gemini-2.0-flash often returns limit:0 on free tier (see BUG-009); 2.5-flash-lite works.
-DEFAULT_MODEL = "gemini-2.5-flash-lite"
+# gemini-2.0-flash often returns limit:0 on free tier (see BUG-009); 2.5-flash-lite worked
+# until Google retired it (404 as of 2026-08-17 batch run); research-engine.py already
+# migrated to 3.5-flash-lite, this constant hadn't been updated to match.
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 
 # Max JD characters to send to LLM for scoring (token budget gate)
 SCORING_JD_MAX_CHARS = 1500
@@ -742,4 +744,68 @@ def send_notification(message: str, topic: str = "jobagent_alerts"):
     except Exception as e:
         import sys
         print(f"    [Warning] Failed to send notification: {e}", file=sys.stderr)
+
+
+def move_folder_robust(src, dest, attempts: int = 8):
+    """Move a directory tree from src to dest, tolerant of a transient Windows
+    PermissionError on the rename itself.
+
+    CR-092 (2026-08-15): a plain shutil.move() (which tries os.rename first
+    and only falls back to copy+delete on a cross-device error, never on
+    PermissionError) failed outright this session on two real submission
+    folders -- some process elsewhere briefly held a handle somewhere under
+    the tree (AV scan, indexer, an editor, a lingering process -- root cause
+    unconfirmed, but this class of transient lock is a well-documented
+    Windows rename failure mode, not specific to any one cause). A rename
+    needs one atomic, all-at-once exclusive lock across the whole tree; a
+    copy does not -- it can proceed file-by-file even while something
+    transiently touches one file, and a failed delete afterward doesn't
+    corrupt anything, it just leaves the source behind for the next attempt.
+
+    Retries the rename first (same short backoff as workflow/receipts.py's
+    _atomic_write_json, the existing pattern in this codebase for exactly
+    this class of transient PermissionError), then falls back to
+    copytree + rmtree on the last attempt -- the same recovery sequence
+    already used by hand once this session for these exact two folders.
+
+    Returns the destination path (str)."""
+    import shutil
+    import time
+    from pathlib import Path
+
+    src = Path(src)
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+
+    last_err: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            shutil.move(str(src), str(dest))
+            return str(dest)
+        except PermissionError as exc:
+            last_err = exc
+            time.sleep(0.05 * (attempt + 1))
+
+    # Rename never succeeded across all attempts -- fall back to copy+delete,
+    # which doesn't need one all-at-once exclusive lock the way a rename does.
+    try:
+        shutil.copytree(str(src), str(dest))
+    except FileExistsError:
+        # dest may have been partially created by a prior failed attempt's
+        # side effects -- merge rather than blow up, dirs_exist_ok handles it.
+        shutil.copytree(str(src), str(dest), dirs_exist_ok=True)
+    try:
+        shutil.rmtree(str(src))
+    except OSError as exc:
+        # Source cleanup failing is not fatal -- dest is a complete, correct
+        # copy at this point. Surface it (stderr) but don't raise: silently
+        # leaving a stale source folder behind is a much smaller problem
+        # than losing the move entirely, and a human can clean it up.
+        import sys
+        print(
+            f"    [Warning] move_folder_robust: copied {src} -> {dest} but "
+            f"could not remove source ({exc}); source left in place.",
+            file=sys.stderr,
+        )
+    return str(dest)
 

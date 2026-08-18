@@ -113,7 +113,7 @@ def load_real_header() -> dict:
     phone = _field("Phone")
     linkedin_raw = _field("LinkedIn")
     # Strip protocol/trailing slash to match the short form real resumes already use
-    # (e.g. "linkedin.com/in/redacted-linkedin-slug", not "https://www.linkedin.com/in/redacted-linkedin-slug/")
+    # (e.g. "linkedin.com/in/username", not "https://www.linkedin.com/in/username/")
     linkedin = re.sub(r"^https?://(www\.)?", "", linkedin_raw).rstrip("/")
 
     edu_match = re.search(

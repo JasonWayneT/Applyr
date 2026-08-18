@@ -26,36 +26,41 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils import contact_placeholder_map, format_contact_header_block
 
+# Fake fixture data (2026-08-19) -- this file is a public tracked test, not a real contact
+# record. Any real name/email/phone/LinkedIn belongs only in the gitignored workExperience.md,
+# per AGENTS.md's PII rule; a prior version of this fixture used real values and failed
+# scripts/audit_public_repo.py's public-repo PII scan. Only the casing behavior under test
+# matters here, so a fake mixed-case name exercises the same code path.
 _PROFILE = {
-    "name": "Jason Taylor",
-    "email": "[REDACTED_EMAIL]",
-    "phone": "[REDACTED_PHONE]",
+    "name": "Alex Example",
+    "email": "alex.example@example.com",
+    "phone": "555-010-1234",
     "location": "San Diego, CA",
-    "linkedin": "linkedin.com/in/redacted-linkedin-slug",
-    "portfolio": "Taylorbuilt.me",
+    "linkedin": "linkedin.com/in/alexexample",
+    "portfolio": "alexexample.dev",
 }
 
 
 class TestHeaderCasingPreserved(unittest.TestCase):
     def test_header_block_preserves_real_casing(self):
         block = format_contact_header_block(_PROFILE)
-        self.assertIn("# Jason Taylor", block)
-        self.assertNotIn("JASON TAYLOR", block)
+        self.assertIn("# Alex Example", block)
+        self.assertNotIn("ALEX EXAMPLE", block)
 
     def test_header_block_has_no_blank_line_before_contact(self):
         """CLAUDE.md's Required Document Structure: name line, contact line immediately after."""
         block = format_contact_header_block(_PROFILE)
         lines = block.split("\n")
-        self.assertEqual(lines[0], "# Jason Taylor")
-        self.assertEqual(lines[1], "San Diego, CA | [REDACTED_PHONE] | [REDACTED_EMAIL] | linkedin.com/in/redacted-linkedin-slug | Taylorbuilt.me")
+        self.assertEqual(lines[0], "# Alex Example")
+        self.assertEqual(lines[1], "San Diego, CA | 555-010-1234 | alex.example@example.com | linkedin.com/in/alexexample | alexexample.dev")
 
     def test_placeholder_map_preserves_real_casing(self):
         placeholders = contact_placeholder_map(_PROFILE)
-        self.assertEqual(placeholders["[Your Name]"], "Jason Taylor")
-        self.assertEqual(placeholders["[Full Name]"], "Jason Taylor")
-        self.assertEqual(placeholders["## [Your Name]"], "# Jason Taylor")
+        self.assertEqual(placeholders["[Your Name]"], "Alex Example")
+        self.assertEqual(placeholders["[Full Name]"], "Alex Example")
+        self.assertEqual(placeholders["## [Your Name]"], "# Alex Example")
         for value in placeholders.values():
-            self.assertNotEqual(value, "JASON TAYLOR")
+            self.assertNotEqual(value, "ALEX EXAMPLE")
 
 
 if __name__ == "__main__":

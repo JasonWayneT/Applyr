@@ -826,8 +826,15 @@ boilerplate, application-process or interview-process instructions, legal \
 notices, or recruiter/fraud-prevention notices, in ANY bucket -- leave that \
 content out entirely.
 
+Also identify "internal_terms": proper nouns naming THIS employer's OWN \
+products, platforms, or internal systems -- not third-party tools, vendors, \
+or technologies a candidate needs outside experience with. Example: if the \
+JD says "integrations across the Empower and Exchange platforms" and Empower/ \
+Exchange are this company's own platforms (not real external software), list \
+them: ["Empower", "Exchange"]. If nothing like that appears, use an empty list.
+
 Output ONLY this JSON shape, nothing else:
-{{"required": ["...", "..."], "preferred": ["...", "..."], "responsibilities": ["...", "..."], "culture": ["...", "..."]}}
+{{"required": ["...", "..."], "preferred": ["...", "..."], "responsibilities": ["...", "..."], "culture": ["...", "..."], "internal_terms": ["...", "..."]}}
 
 Job description:
 {jd_text}"""
@@ -936,6 +943,28 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
 
     if not any(result.values()):
         return None
+
+    # internal_terms (2026-08-19, Jason-supplied): the same model already
+    # reading the whole JD is well placed to recognize "Empower and Exchange"
+    # as this employer's own platforms, not real external tools -- fed into
+    # the tool-detection check downstream so it stops flagging a company's
+    # own product names as unconfirmed tools (real case: Dark Matter
+    # Technologies' own "Empower"/"Exchange" platforms). Short proper nouns,
+    # not full sentences -- different length bound than the buckets above,
+    # and no bullet-marker stripping needed since these are terms, not lines.
+    # Same verbatim-substring safety net: the model can only point at real
+    # words that actually appear in the JD, never invent a term.
+    internal_terms: list[str] = []
+    raw_terms = data.get("internal_terms")
+    if isinstance(raw_terms, list):
+        for term in raw_terms:
+            term = str(term).strip()
+            if not term or not (1 <= len(term) <= 60):
+                continue
+            if not _is_verbatim_substring(term, jd_text):
+                continue
+            internal_terms.append(term)
+    result["internal_terms"] = internal_terms
     return result
 
 
@@ -1417,7 +1446,12 @@ def _split_compound_item(item: str) -> list[str]:
     return restored
 
 
-def _classify_single_clause(item: str, vocab: set[str], company: str = "") -> dict:
+def _classify_single_clause(
+    item: str,
+    vocab: set[str],
+    company: str = "",
+    internal_terms: list[str] | None = None,
+) -> dict:
     """Anchor/domain/tool classification for ONE clause (either a whole
     non-compound item, or one sub-clause of a compound item after
     _split_compound_item). This is the pre-CR-092 body of _classify_one_item,
@@ -1427,20 +1461,28 @@ def _classify_single_clause(item: str, vocab: set[str], company: str = "") -> di
     company: this JD's own company display name (e.g. "Clerkie"), optional.
     Excludes the company talking about itself ("Clerkie's platform") from
     being flagged as an unconfirmed tool -- found 2026-08-18 live-testing
-    real archive JDs, the company name is not a skill/tool candidate."""
+    real archive JDs, the company name is not a skill/tool candidate.
+
+    internal_terms: proper nouns the section-extraction LLM identified as
+    this employer's own product/platform names (2026-08-19), optional --
+    same exclusion as company, for a name that isn't the company's own but
+    still isn't a real external tool. Real case: Dark Matter Technologies'
+    "Empower"/"Exchange" platforms, neither the company's name nor a tool
+    a candidate would need outside experience with."""
     item_lower = item.lower()
 
     anchors = _item_has_anchor(item_lower, vocab)
     unanchored_domains = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
 
     company_words = {w.lower() for w in (company or "").split() if w}
+    internal_term_words = {t.strip().lower() for t in (internal_terms or []) if t and t.strip()}
 
     unconfirmed_tools = []
     for candidate in _looks_like_named_tool(item):
         candidate_lower = candidate.lower()
         if candidate_lower in _SKILLS_CATALOG_TERMS:
             continue
-        if candidate_lower in company_words:
+        if candidate_lower in company_words or candidate_lower in internal_term_words:
             continue
         if any(candidate_lower == a.lower() or candidate_lower in a.lower() or a.lower() in candidate_lower
                for a in anchors):
@@ -1511,6 +1553,7 @@ def _classify_one_item(
     vocab: set[str],
     is_required: bool = True,
     company: str = "",
+    internal_terms: list[str] | None = None,
 ) -> dict:
     """
     Classify a single required/preferred item string.
@@ -1585,9 +1628,12 @@ def _classify_one_item(
     # rule -- see _split_compound_item's module note for the full history.
     clauses = _split_compound_item(item)
     if len(clauses) <= 1:
-        return _classify_single_clause(item, vocab, company=company)
+        return _classify_single_clause(item, vocab, company=company, internal_terms=internal_terms)
 
-    clause_results = [_classify_single_clause(c, vocab, company=company) for c in clauses]
+    clause_results = [
+        _classify_single_clause(c, vocab, company=company, internal_terms=internal_terms)
+        for c in clauses
+    ]
     gapped = [r for r in clause_results if r["gap"]]
 
     if not gapped:
@@ -1622,6 +1668,7 @@ def classify_gaps(
     preferred_items: list[str],
     vocab: set[str] | None = None,
     company: str = "",
+    internal_terms: list[str] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Classify required and preferred items for gaps.
@@ -1633,17 +1680,25 @@ def classify_gaps(
     company: this JD's own company display name, optional -- excludes the
     company's own name from the unconfirmed-tool check (see
     _classify_single_clause's docstring).
+    internal_terms: proper nouns the section-extraction LLM identified as
+    this employer's own product/platform names (e.g. "Empower", "Exchange"),
+    optional -- same exclusion, for names that aren't the company's own but
+    still aren't a real external tool a candidate needs experience with.
     """
     if vocab is None:
         vocab = _load_anchor_vocab()
 
     classified_required: list[dict] = []
     for item in required_items:
-        classified_required.append(_classify_one_item(item, vocab, company=company))
+        classified_required.append(
+            _classify_one_item(item, vocab, company=company, internal_terms=internal_terms)
+        )
 
     classified_preferred: list[dict] = []
     for item in preferred_items:
-        result = _classify_one_item(item, vocab, is_required=False, company=company)
+        result = _classify_one_item(
+            item, vocab, is_required=False, company=company, internal_terms=internal_terms
+        )
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
         elif result["gap"]:
@@ -1933,13 +1988,18 @@ def build_stage0_fit_gate(
     preferred_raw = sections["preferred"]
     responsibilities = sections["responsibilities"]
     culture = sections["culture"]
+    # Only present when extraction_source == "llm" -- the regex fallback
+    # path (_extract_sections) has no model reading the whole JD to notice
+    # a company's own product/platform names, so it never populates this.
+    internal_terms = sections.get("internal_terms") or []
 
     thin_jd = _detect_thin_jd(jd_text, required_raw)
     stage_signal = _detect_stage_signal(jd_text)
 
     # --- Step 4: Gap classification ---
     classified_required, classified_preferred, flagged_gaps = classify_gaps(
-        required_raw, preferred_raw, vocab=vocab, company=company_display
+        required_raw, preferred_raw, vocab=vocab, company=company_display,
+        internal_terms=internal_terms,
     )
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)

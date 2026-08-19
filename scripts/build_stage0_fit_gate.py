@@ -1180,7 +1180,7 @@ _DOMAIN_QUALIFIER_RE = re.compile(
     r"banking|bank|insurance|healthcare|health\s*care|fintech|"
     r"pharma(?:ceutical)?s?|clinical|mortgage|lending|"
     r"wealth\s+management|payments?|crypto(?:currency)?|"
-    r"biotech|medtech|telehealth"
+    r"biotech|medtech|telehealth|payroll(?:\s+tax)?|tax\s+filing"
     r")\b",
     re.I,
 )
@@ -1203,6 +1203,58 @@ def _unanchored_domain_qualifiers(
         if not anchored and compact not in found:
             found.append(compact)
     return found
+
+
+# Required-item unbridgeable named-domain requirement (2026-08-19, Jason-
+# supplied, real miss): OneSource Virtual required "5+ years... in a payroll
+# tax... industry" and "5+ years... with Payroll Tax filing... software" --
+# both landed as ordinary bridgeable SOFT domain gaps (the generic Round-4
+# domain-qualifier path a few lines up, which is always SOFT by design) even
+# though Jason has zero real evidence for either -- one of the two had an
+# empty claim_ids list in the authoring packet, not even a weak bridge.
+# A named regulated-domain qualifier carrying its own explicit years-of-
+# experience threshold, in a REQUIRED item, is a factual yes/no the same way
+# a degree is -- there's no substitute credential for "5 years in payroll
+# tax" the way generic PM experience substitutes for a bare degree mention.
+# Required-only (same is_required gate the degree check uses): a domain
+# mention in "preferred," or one with no years threshold of its own, stays
+# the ordinary soft/bridgeable Round-4 read -- this only escalates the
+# narrower, stronger-signal case.
+_YEARS_IN_DOMAIN_RE = re.compile(r"\d+\+?\s*(?:to\s+\d+\+?\s*)?years?\b", re.I)
+
+# Real corpus check (2026-08-19, run against all 402 archive JDs before
+# shipping this): a bare years+domain match alone hit 19 required lines, but
+# 18 of those were "X years of product management ... in [domain A], [domain
+# B], or [domain C]" -- an OR-list where "product management" (Jason's real,
+# literal background) is itself one of the acceptable alternatives, not a
+# strict domain-only requirement. Only 1 of 19 (Turquoise: "health care
+# revenue cycle or health tech, with background in managed care contracts
+# and health care reimbursement" -- no PM alternative anywhere in the line)
+# was a genuine match, same shape as OneSource Virtual's payroll tax case.
+# Excluding on the literal "product management/manager/owner" phrase --
+# Jason's actual job titles -- is a strong, precise signal the domain is
+# offered as an alternative background, not demanded outright. Also exclude
+# on ordinary hedge language, same spirit as the degree-alternative check.
+_DOMAIN_PM_ALTERNATIVE_RE = re.compile(r"\bproduct\s+(?:management|manager|owner)\b", re.I)
+_DOMAIN_HEDGE_RE = re.compile(
+    r"\bideally\b|\bpreferred\b|\bnice[\s-]to[\s-]have\b|\bis\s+a\s+plus\b|\ba\s+plus\b|"
+    r"\bbonus\b|\bdesirable\b|\boptional\b|\bsuch\s+as\b|\be\.g\.|\bfor\s+example\b",
+    re.I,
+)
+
+
+def _unbridgeable_domain_requirement(item_lower: str, vocab: set[str]) -> str | None:
+    """Return the matched domain phrase when a required line pairs a named,
+    unanchored regulated-domain qualifier with its own explicit years-of-
+    experience threshold in the same line, with no product-management
+    alternative or hedge language present -- else None."""
+    if not _YEARS_IN_DOMAIN_RE.search(item_lower):
+        return None
+    if _DOMAIN_PM_ALTERNATIVE_RE.search(item_lower) or _DOMAIN_HEDGE_RE.search(item_lower):
+        return None
+    anchors = _item_has_anchor(item_lower, vocab)
+    unanchored = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
+    return unanchored[0] if unanchored else None
 
 
 # CR-090: items that will never anchor against a claim tag (no skill/tool vocabulary
@@ -1587,6 +1639,21 @@ def _classify_one_item(
             "domain_soft": False,
         }
 
+    # Unbridgeable named-domain requirement (2026-08-19, Jason-supplied, real
+    # miss) -- required items only, same reasoning as the degree check above:
+    # see _unbridgeable_domain_requirement's module comment.
+    if is_required:
+        domain_match = _unbridgeable_domain_requirement(item_lower, vocab)
+        if domain_match:
+            return {
+                "item": item,
+                "anchor": "none",
+                "gap": True,
+                "gap_class": "HARD",
+                "gap_source": "domain",
+                "domain_soft": False,
+            }
+
     # Check for hard-blocked tools first, on the WHOLE line -- a hard-blocked
     # tool anywhere in a compound line still hard-skips regardless of what
     # else is in the line. Plain familiarity/exposure hedges stay SOFT
@@ -1792,15 +1859,22 @@ def _determine_tier(
     if thin_incomplete:
         return "Skip", "SKIP"
 
-    # A credential-type HARD gap (unbridgeable degree requirement) forces Skip
-    # regardless of everything else -- a factual yes/no no score can override.
-    # A tool-type HARD gap (2026-08-19, Jason-supplied) no longer auto-Skips:
-    # a single missing tool on an otherwise strong JD is bridgeable in a real
-    # conversation the way a missing degree isn't, so it falls through to the
-    # SOFT-gap branch below instead -- "not clean," not "reject outright."
-    # Real case this changed: Bamboo Health skipped on "Tableau" alone,
-    # sight-unseen on everything else in the posting.
-    if any(g.get("gap_class") == "HARD" and g.get("gap_source") == "degree" for g in flagged_gaps):
+    # A credential-type HARD gap (unbridgeable degree, or a named regulated-
+    # domain requirement with its own years threshold -- 2026-08-19) forces
+    # Skip regardless of everything else -- a factual yes/no no score can
+    # override. A tool-type HARD gap (2026-08-19, Jason-supplied) no longer
+    # auto-Skips: a single missing tool on an otherwise strong JD is
+    # bridgeable in a real conversation the way a missing degree or a named
+    # domain requirement isn't, so it falls through to the SOFT-gap branch
+    # below instead -- "not clean," not "reject outright." Real cases:
+    # Bamboo Health skipped on "Tableau" alone, sight-unseen on everything
+    # else (fixed by the tool exception); OneSource Virtual's "5+ years...
+    # payroll tax" scored Tier 1 despite zero real evidence for it (fixed by
+    # adding "domain" to this absolute-Skip set, same as "degree").
+    if any(
+        g.get("gap_class") == "HARD" and g.get("gap_source") in ("degree", "domain")
+        for g in flagged_gaps
+    ):
         return "Skip", "SKIP"
 
     # DB reapply flag, any SOFT gap, or a tool-only HARD gap → Tier 2 (fallback
@@ -2120,16 +2194,22 @@ def build_stage0_fit_gate(
             first_reject = prefs_result["rejects"][0]
             skip_reason = first_reject["reason"]
             skip_reason_code = first_reject["code"]
-        elif any(g.get("gap_class") == "HARD" and g.get("gap_source") == "degree" for g in flagged_gaps):
-            # Only a degree-type HARD gap actually causes this branch of
-            # Skip (see _determine_tier) -- checking gap_source, not just
-            # gap_class=="HARD", so a tool-only HARD gap that merely
+        elif any(
+            g.get("gap_class") == "HARD" and g.get("gap_source") in ("degree", "domain")
+            for g in flagged_gaps
+        ):
+            # Only a degree- or domain-type HARD gap actually causes this
+            # branch of Skip (see _determine_tier) -- checking gap_source,
+            # not just gap_class=="HARD", so a tool-only HARD gap that merely
             # co-exists alongside a real score-driven Skip below doesn't
             # produce a misleading "Hard gap(s)" reason when the real cause
             # was the score (2026-08-19 bug, found live on Bamboo Health:
             # its Tableau tool gap is HARD but not why it skipped -- its 44
             # fit score is).
-            hard_gaps = [g["item"] for g in flagged_gaps if g.get("gap_class") == "HARD" and g.get("gap_source") == "degree"]
+            hard_gaps = [
+                g["item"] for g in flagged_gaps
+                if g.get("gap_class") == "HARD" and g.get("gap_source") in ("degree", "domain")
+            ]
             skip_reason = f"Hard gap(s): {'; '.join(hard_gaps[:3])}"
             skip_reason_code = "hard_gap"
         elif use_llm and fit_score is not None and fit_score < 70:

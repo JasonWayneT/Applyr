@@ -998,6 +998,75 @@ def _detect_stage_signal(jd_text: str) -> str:
     return "not stated in JD text -- unknown, not inferred"
 
 
+# ---------------------------------------------------------------------------
+# PO solo-backlog-ownership signal (2026-08-18, Jason-supplied)
+# ---------------------------------------------------------------------------
+# Product Owner postings vary in flavor: some are collaborative-with-engineering
+# (the same shape of work Jason did under the PO title at Cision for 4 years),
+# others expect a solo backlog owner writing detailed requirements/acceptance
+# criteria upfront with little engineering back-and-forth. Only the second
+# flavor is a real fit question. This is a soft, human-in-the-loop signal --
+# it never Skips on its own (see _determine_tier: SOFT gaps route to Tier 2,
+# not Skip), it just surfaces the read for Jason to confirm at triage.
+
+_PO_TITLE_RE = re.compile(r"\bproduct\s+owner\b", re.I)
+
+# Defaults used when prefs doesn't carry these keys (e.g. older prefs files,
+# _PREFS_MINIMAL in tests). candidate_preferences.json carries the live,
+# user-editable list -- see PRESERVE_PIPELINE_PREF_KEYS in jobSearchPrefs.ts.
+_DEFAULT_PO_SOLO_BACKLOG_FLAGS = [
+    "business requirements document",
+    "brd",
+    "functional specification document",
+    "fsd",
+    "waterfall",
+    "author detailed user stories and acceptance criteria independently",
+    "sole owner of the backlog",
+    "requirements gathering and documentation",
+]
+_DEFAULT_PO_SOLO_BACKLOG_MITIGATORS = [
+    "partner with engineering",
+    "work closely with engineering",
+    "pair with developers",
+    "collaborate with engineering on requirements",
+]
+
+
+def _detect_po_solo_backlog_signal(role: str, jd_text: str, prefs: dict | None) -> dict | None:
+    """Return a SOFT flagged_gaps entry when a PO-titled JD reads as solo
+    backlog ownership with no collaborative-with-engineering language, else None.
+    """
+    if not _PO_TITLE_RE.search(role or ""):
+        return None
+
+    prefs = prefs or {}
+    flags = prefs.get("po_solo_backlog_flags") or _DEFAULT_PO_SOLO_BACKLOG_FLAGS
+    mitigators = prefs.get("po_solo_backlog_mitigators") or _DEFAULT_PO_SOLO_BACKLOG_MITIGATORS
+    if not isinstance(flags, list) or not flags:
+        return None
+
+    lower = (jd_text or "").lower()
+    hit_flags = [f for f in flags if isinstance(f, str) and f.strip().lower() in lower]
+    if not hit_flags:
+        return None
+    if any(isinstance(m, str) and m.strip().lower() in lower for m in mitigators or []):
+        return None
+
+    return {
+        "item": (
+            "Stage 0: PO posting reads as solo backlog ownership "
+            f"({', '.join(hit_flags[:3])}) with no collaborative-with-engineering "
+            "language found"
+        ),
+        "gap_class": "SOFT",
+        "bridge": (
+            "po_solo_backlog_signal -- confirm at triage whether this matches the "
+            "collaborative PO work already done at Cision, or the solo-execution "
+            "flavor that's the real fit risk"
+        ),
+    }
+
+
 def _parse_url_and_jd(raw_text: str) -> tuple[str, str]:
     """
     Parse optional `URL: <url>` first line convention.
@@ -1134,6 +1203,45 @@ _HIGHER_DEGREE_MANDATORY_RE = re.compile(
     r"\brequires?\s+an?\s+(?:master'?s?|mba|ph\.?d\.?)\b",
     re.I,
 )
+
+# Required-item advanced-degree HARD gap (2026-08-18, Jason-supplied, real miss):
+# Dassault Systèmes' required "PhD, MS, or equivalent in the natural sciences"
+# landed as Tier 2 SOFT because CR-092 compound-line splitting broke it into
+# "PhD" / "MS" / "or equivalent in the natural sciences" sub-clauses, each of
+# which lost the whole-line context and fell through _classify_single_clause's
+# generic zero-anchor default (always SOFT, never HARD -- see that function).
+# Jason holds a Bachelor's only (workExperience.md Section 7); no claim in
+# master_claims.json can honestly bridge a named advanced-degree requirement,
+# the same unbridgeable-hard-gap class as a named tool with zero anchor. This
+# check runs on the WHOLE required-item line, before compound splitting --
+# mirroring where the hard-blocked-tool check runs -- and is scoped to
+# REQUIRED items only (see _classify_one_item's is_required param): a
+# preferred-bucket "MBA a plus" mention is genuinely optional and must not
+# force a Skip the way CR-092's hard-tool preferred-bucket escalation does
+# for named tools.
+_MANDATORY_ADVANCED_DEGREE_RE = re.compile(
+    r"\b(?:ph\.?d\.?|doctorate|master'?s?|mba|j\.d\.|m\.d\.)\b",
+    re.I,
+)
+_DEGREE_ALTERNATIVE_OR_HEDGE_RE = re.compile(
+    r"\bbachelor|undergraduate|"
+    r"\d+\+?\s*years?\s+(?:of\s+)?(?:\w+\s+){0,4}?experience|"
+    r"equivalent\s+(?:\w+\s+){0,4}?experience|"
+    r"\bpreferred\b|\bnice[\s-]to[\s-]have\b|\bis\s+a\s+plus\b|\ba\s+plus\b|"
+    r"\bbonus\b|\bdesirable\b|\boptional\b",
+    re.I,
+)
+
+
+def _is_unbridgeable_advanced_degree(item_lower: str) -> bool:
+    """True when a required line names an advanced degree (PhD/Doctorate/
+    Master's/MBA/JD/MD) with no Bachelor's-or-equivalent-experience
+    alternative and no preferred/plus/bonus hedge -- an unbridgeable HARD gap."""
+    if not _MANDATORY_ADVANCED_DEGREE_RE.search(item_lower):
+        return False
+    if _DEGREE_ALTERNATIVE_OR_HEDGE_RE.search(item_lower):
+        return False
+    return True
 
 # Soft familiarity hedges on hard-blocked tools → Tier 2 SOFT, not Skip.
 # Intensifiers (deep/strong/hands-on) keep HARD so "Deep familiarity with Snowflake"
@@ -1375,9 +1483,14 @@ def _classify_single_clause(item: str, vocab: set[str]) -> dict:
 def _classify_one_item(
     item: str,
     vocab: set[str],
+    is_required: bool = True,
 ) -> dict:
     """
     Classify a single required/preferred item string.
+
+    is_required: True for items from the JD's required list, False for
+    preferred -- gates the required-only advanced-degree HARD check below
+    (a "preferred" advanced degree stays a soft/no-op signal, not a Skip).
 
     Returns::
         {
@@ -1389,6 +1502,19 @@ def _classify_one_item(
         }
     """
     item_lower = item.lower()
+
+    # Unbridgeable advanced-degree requirement (PhD/Master's/MBA/JD/MD with no
+    # Bachelor's-or-experience alternative) -- required items only, on the
+    # WHOLE line before compound splitting. See _is_unbridgeable_advanced_
+    # degree's module comment for why this must not run on preferred items.
+    if is_required and _is_unbridgeable_advanced_degree(item_lower):
+        return {
+            "item": item,
+            "anchor": "none",
+            "gap": True,
+            "gap_class": "HARD",
+            "domain_soft": False,
+        }
 
     # Check for hard-blocked tools first, on the WHOLE line -- a hard-blocked
     # tool anywhere in a compound line still hard-skips regardless of what
@@ -1483,7 +1609,7 @@ def classify_gaps(
 
     classified_preferred: list[dict] = []
     for item in preferred_items:
-        result = _classify_one_item(item, vocab)
+        result = _classify_one_item(item, vocab, is_required=False)
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
         elif result["gap"]:
@@ -1500,7 +1626,7 @@ def classify_gaps(
         })
 
     flagged_gaps: list[dict] = [
-        {"item": r["item"], "gap_class": r["gap_class"]}
+        {"item": r["item"], "gap_class": r["gap_class"], "anchor": r.get("anchor")}
         for r in classified_required
         if r.get("gap")
     ]
@@ -1806,6 +1932,10 @@ def build_stage0_fit_gate(
             "bridge": "required_thin — re-check JD required-section extraction manually before drafting",
         })
 
+    po_signal = _detect_po_solo_backlog_signal(role, jd_text, prefs)
+    if po_signal:
+        flagged_gaps.append(po_signal)
+
     # --- Step 5: Determine tier ---
     tier, decision = _determine_tier(
         prefs_result,
@@ -1866,6 +1996,63 @@ def build_stage0_fit_gate(
         if skip_reason:
             notes_parts.append(f"Skip: {skip_reason}.")
 
+    # Zero-anchor required items are not auto-escalated to HARD here --
+    # "zero anchor" only means the crude tag/keyword matcher in this module
+    # found nothing; Stage 1's honest-bridge search is semantic/creative and
+    # genuinely does find real bridges for many zero-anchor items (several
+    # of the 6 real drafts this session started zero-anchor at Stage 0).
+    # Auto-Skipping on this signal alone would wrongly kill bridgeable
+    # Tier 2s. What this DOES fix (2026-08-18, confirmed real on Oddball):
+    # a zero-anchor required item currently surfaces identically to a
+    # partial-anchor one in the batch table's "soft gap(s)" note, so the
+    # highest-risk case looks no different from a routine one until Stage 1
+    # burns a full packet-build discovering there was never a bridge.
+    # Surface it distinctly instead, so a reviewer can sanity-check it before
+    # spending that effort, without blocking the cases that DO bridge.
+    zero_anchor_required = [
+        g["item"] for g in flagged_gaps
+        if g.get("gap_class") == "SOFT" and g.get("anchor") == "none"
+    ]
+    if tier == "Tier 2" and zero_anchor_required:
+        preview = "; ".join(item[:70] for item in zero_anchor_required[:2])
+        notes_parts.append(
+            f"HIGH SKIP RISK -- {len(zero_anchor_required)} required item(s) "
+            f"with zero anchor anywhere (no tag/tool match at all, not even "
+            f"partial): {preview}. Verify a real bridge exists in "
+            "workExperience.md before drafting -- do not assume Tier 2 means "
+            "a bridge will be found."
+        )
+
+    # --- Step 6.5: Rubric fit score (CR-053's structured_fit scorer) ---
+    # Everything above this line is a deterministic gap classifier (decision
+    # + tier) -- it never produced a number. The Node server's
+    # reconcileOrphanSubmissionFolders() needs a real jobs.score for the UI
+    # and, lacking one, hardcoded 80 for every folder routed through here
+    # (2026-08-18, Jason-reported bug: every Backlog job in the UI showed
+    # score 80 regardless of actual fit). Compute the real evidence-tiered
+    # rubric score here -- the same scorer batch_pipeline.py's scout path
+    # already uses -- so it lands in stage0_fit_gate.json for that
+    # reconciliation step to read instead of a placeholder. Only computed on
+    # PASS: a Skip doesn't reach the UI as a scoreable job. Gated on the same
+    # STAGE0_SECTION_MODE flag the section-extraction LLM call above already
+    # respects, so tests that force deterministic mode get a network-free,
+    # heuristic-only score too rather than a new env var to track.
+    fit_score: int | None = None
+    if decision == "PASS":
+        try:
+            import pipeline_env
+            from structured_fit import evaluate_structured_fit
+            from utils import get_min_fit_score, load_file, WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE
+            work_exp = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE) or ""
+            use_llm = pipeline_env.stage0_section_mode() != "deterministic"
+            structured = evaluate_structured_fit(
+                jd_text, work_exp, prefs, get_min_fit_score(), use_llm=use_llm,
+            )
+            if structured and isinstance(structured.get("Score"), int):
+                fit_score = structured["Score"]
+        except Exception as exc:
+            print(f"  -> [WARN] Rubric fit-score computation failed: {exc}", file=sys.stderr)
+
     output: dict = {
         "company": company_display,
         "role": role,
@@ -1873,6 +2060,7 @@ def build_stage0_fit_gate(
         "decision": decision,
         "tier": tier,
         "reach_out": False,
+        "fit_score": fit_score,
         "stage_signal": stage_signal,
         "thin_jd": thin_jd,
         "extraction_source": extraction_source,
@@ -1881,6 +2069,7 @@ def build_stage0_fit_gate(
         "responsibilities": responsibilities[:8],
         "culture": culture[:4],
         "flagged_gaps": flagged_gaps,
+        "zero_anchor_required_items": zero_anchor_required,
         "exclusion_zone_check": exclusion_check,
         "notes": " ".join(notes_parts) or tier,
     }

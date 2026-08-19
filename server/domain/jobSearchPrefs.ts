@@ -81,6 +81,8 @@ export const PRESERVE_PIPELINE_PREF_KEYS = [
   'required_anchors',
   'domain_experience',
   'required_domain_min_years',
+  'po_solo_backlog_flags',
+  'po_solo_backlog_mitigators',
 ] as const;
 
 /** Read pass threshold from materialized prefs (FR-039 / CR-003). */

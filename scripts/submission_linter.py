@@ -1428,6 +1428,39 @@ _CROSS_JD_GENERIC_WORDS = {
     "prioritized", "prioritization", "programs", "regulated", "release",
     "sales", "streamline", "support", "supporting", "trade-offs", "validate",
     "validation", "ai-assisted", "go-to-market", "cross-functional",
+    # Expanded 2026-08-18 after a real 6-company batch: LW-021 flagged ~50
+    # findings that session, every single one a false positive on ordinary
+    # PM/business vocabulary the JD happened to repeat, not a genuine
+    # audience/domain word like "teachers" or "patients" (the real Newsela
+    # bug this rule exists for). min_count=2 alone can't tell "generic word
+    # that happens to repeat" from "genuinely distinctive audience term" --
+    # the stopword list is the only lever that can, so it has to be broad
+    # enough to cover ordinary JD prose, not just the words found so far.
+    "about", "through", "value", "values", "valued", "capacity", "first",
+    "second", "third", "agile", "scrum", "system", "systems", "technical",
+    "technology", "technologies", "level", "levels", "understand",
+    "understanding", "environment", "environments", "responsible",
+    "responsibility", "responsibilities", "communicate", "communication",
+    "communications", "collaborate", "collaboration", "collaborative",
+    "leadership", "leader", "leaders", "leading", "drive", "driving",
+    "driven", "define", "defining", "identify", "identifying", "insight",
+    "insights", "action", "actions", "focus", "focused", "knowledge",
+    "familiar", "familiarity", "skill", "skills", "execution", "execute",
+    "executing", "strategy", "strategic", "strategies", "vision",
+  "innovative", "innovation", "dynamic", "passionate", "excellent",
+    "exceptional", "outstanding", "strong", "proven", "demonstrated",
+    "ensure", "ensuring", "review", "reviewing", "reviews", "analysis",
+    "analyze", "analyzing", "analytical", "metrics", "metric",
+    "performance", "outcomes", "outcome", "framework", "frameworks",
+    "approach", "approaches", "initiative", "initiatives", "empower",
+    "empowering", "empowerment", "efficient", "efficiency", "effective",
+    "effectiveness", "scalable", "scalability", "reliable", "reliability",
+    "robust", "seamless", "holistic", "end-to-end", "hands-on",
+    "self-starter", "self-motivated", "motivated", "detail-oriented",
+    "organized", "organization", "organizational", "federal", "regulated",
+    "compliance", "compliant", "define", "defined", "clarity", "clarify",
+    "consistent", "consistently", "reliable", "capable", "capability",
+    "capabilities", "resource", "resources", "resourceful",
 }
 
 _PAST_EMPLOYER_NAMES = ("cision", "sterkly", "zero to sixty")
@@ -1500,7 +1533,15 @@ def check_cross_employer_audience_bleed(
     """
     if not jd_text.strip():
         return []
-    distinctive = _jd_distinctive_words(jd_text, company_name=company_name)
+    # min_count=3 (not the default 2): real audience-bleed vocabulary
+    # ("teachers", "patients", "classroom") is central enough to a JD that
+    # it genuinely repeats; a coincidental generic word crossing the bar at
+    # exactly 2 occurrences is far more often noise. LW-026 (specificity
+    # floor, a different call site sharing this same word-extraction
+    # function) intentionally keeps the lower default -- it's rewarding any
+    # real specificity signal, not warning about a factual-bleed risk, so a
+    # lower bar there is correct and shouldn't move with this one.
+    distinctive = _jd_distinctive_words(jd_text, company_name=company_name, min_count=3)
     if not distinctive:
         return []
     violations = []

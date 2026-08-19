@@ -70,6 +70,78 @@ def select_model(settings=None):
     print(f"    [Model Manager] {reason} Using: {selected}", file=sys.stderr)
     return selected
 
+def ensure_ollama_running(base_url="http://localhost:11434", timeout_sec=30):
+    """Check whether the local Ollama server is reachable; if not, trigger
+    the installed Ollama client to start it and wait for it to come up.
+
+    Added 2026-08-18 -- this was supposed to land alongside the Stage 0
+    "default to a local LLM call" change (2026-08-17, build_stage0_fit_gate.py)
+    but was missed, so every local call silently fell back to the
+    deterministic regex extractor on any machine where Ollama wasn't
+    already running, with no attempt to start it first.
+
+    Any `ollama` CLI subcommand auto-launches the installed background
+    app/server if it isn't already running (confirmed on this machine:
+    `ollama list` printed "starting Ollama" / "starting ollama server" to
+    its own log and the API was reachable within ~3s). Shelling out to a
+    lightweight subcommand and then polling the API is what "standing it
+    up" means here -- there is no separate service to install or manage.
+
+    Returns True once the API responds, False if it never comes up within
+    *timeout_sec*. Callers must treat False exactly like any other local-call
+    failure (fall back to the deterministic/non-local path) -- this never
+    changes the existing safety contract, it only makes the LLM path
+    succeed more often when Ollama is installed but not yet started.
+    """
+    import time
+
+    tags_url = base_url.rstrip("/") + "/api/tags"
+
+    def _reachable():
+        try:
+            return requests.get(tags_url, timeout=2).status_code == 200
+        except Exception:
+            return False
+
+    if _reachable():
+        return True
+
+    print("    [Ollama] Server not reachable -- attempting to start it...", file=sys.stderr)
+    try:
+        # Fire-and-forget: do NOT use capture_output/PIPE + wait() here. The
+        # `ollama list` subcommand triggers the installed client to launch its
+        # own background app process, which inherits stdout/stderr handles
+        # from this call -- if we pipe and wait, Python's cleanup blocks
+        # forever after a timeout because that inherited pipe never closes,
+        # even though the server itself is already reachable within a few
+        # seconds (confirmed 2026-08-18: curl succeeded while the launcher
+        # subprocess was still hung waiting on its own pipe). Redirect to
+        # DEVNULL (real file handles, not pipes) and never wait on it --
+        # readiness is decided by polling the API below, not by this
+        # process's exit.
+        subprocess.Popen(
+            ["ollama", "list"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        print("    [Ollama] 'ollama' CLI not found on PATH -- cannot auto-start.", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"    [Ollama] Auto-start attempt failed: {e}", file=sys.stderr)
+
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        if _reachable():
+            print("    [Ollama] Server is up.", file=sys.stderr)
+            return True
+        time.sleep(1)
+
+    print(f"    [Ollama] Server still unreachable after {timeout_sec}s -- falling back.", file=sys.stderr)
+    return False
+
+
 def unload_all_models(base_url="http://localhost:11434"):
     """
     Instructs Ollama to unload ALL active models by querying tags or using known models,

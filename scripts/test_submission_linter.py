@@ -4,7 +4,13 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 import pytest
-from submission_linter import lint_document, LintResult, check_b2b_saas_positioning
+from submission_linter import (
+    lint_document,
+    LintResult,
+    check_b2b_saas_positioning,
+    check_cross_employer_audience_bleed,
+    check_jd_specificity_floor,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -476,6 +482,76 @@ def test_LR031_ignores_b2b_saas_outside_summary():
     resume += "\n* Owned product across two customer-facing B2B SaaS platform stacks."
     jd = "Product Manager for a healthcare marketplace. No SaaS keyword here."
     assert check_b2b_saas_positioning(resume, jd) == []
+
+
+# ---------------------------------------------------------------------------
+# LW-021 / LW-026 -- added 2026-08-18. No prior test coverage existed for
+# either rule despite both being live in lint_folder(); a same-day change
+# that expanded LW-021's stopword list and raised its min_count (to fix ~50
+# real false positives found in a 6-company batch) had nothing regression-
+# testing it against the actual bug the rule exists to catch.
+# ---------------------------------------------------------------------------
+
+NEWSELA_STYLE_JD = """
+We are looking for a Product Manager to build tools for teachers and students.
+Teachers use our platform daily to assign reading materials, and teachers rely
+on classroom analytics to track student progress. You will work closely with
+teachers to understand classroom needs.
+"""
+
+
+def test_LW021_still_catches_real_cross_employer_bleed():
+    """Regression: the actual Newsela bug this rule exists for (found
+    2026-07-30) -- a Cision bullet wrongly using the target JD's own
+    audience vocabulary ("teachers") must still be caught after the
+    2026-08-18 stopword/min_count tightening."""
+    resume = RESUME_CLEAN.replace(
+        "* Enabled 700 voluntary account migrations using phased tooling built with Customer Experience and Account Management.",
+        "* Enabled 700 voluntary account migrations using phased tooling built with Customer Experience and Account Management.\n"
+        "* Delivered fixes teachers and other users would feel directly in the product, cutting reported issues by half.",
+    )
+    violations = check_cross_employer_audience_bleed(
+        resume, "", NEWSELA_STYLE_JD, company_name="Newsela"
+    )
+    assert any(v.rule_id == "LW-021" for v in violations)
+    assert any("teachers" in v.message for v in violations)
+
+
+def test_LW021_no_longer_flags_generic_pm_vocabulary():
+    """Regression: a Cision bullet using ordinary generic PM/business
+    vocabulary that happens to also appear in the target JD must NOT be
+    flagged. This is the actual false-positive pattern found in a real
+    6-company batch (2026-08-18), not a hypothetical."""
+    jd = (
+        "We need a Product Manager with strong technical skills, agile "
+        "experience, and the ability to drive execution through capacity "
+        "planning and system-level thinking across the organization."
+    )
+    resume = RESUME_CLEAN.replace(
+        "* Enabled 700 voluntary account migrations using phased tooling built with Customer Experience and Account Management.",
+        "* Enabled 700 voluntary account migrations using phased tooling built with Customer Experience and Account Management.\n"
+        "* Drove execution through better capacity planning and system-level thinking across the team.",
+    )
+    violations = check_cross_employer_audience_bleed(resume, "", jd, company_name="Acme")
+    assert violations == []
+
+
+def test_LW026_specificity_floor_still_finds_real_hits():
+    """LW-026 shares _jd_distinctive_words() with LW-021 but intentionally
+    keeps the lower default min_count=2 -- confirm the 2026-08-18 stopword
+    expansion (tuned for LW-021) didn't also gut LW-026's ability to find
+    legitimate specificity signal in a normal JD."""
+    jd = (
+        "Nirvana is modernizing commercial insurance underwriting with "
+        "telematics data and risk models. Underwriting and telematics are "
+        "core to how this role works with brokers."
+    )
+    cover_letter = CL_CLEAN.replace(
+        "HubSpot's shift toward product-led growth",
+        "Nirvana's telematics-driven underwriting approach",
+    )
+    violations = check_jd_specificity_floor(cover_letter, jd, company_name="Nirvana")
+    assert violations == []
 
 
 if __name__ == "__main__":

@@ -126,6 +126,42 @@ def _term_present(term_lower: str, text_lower: str) -> bool:
     return bool(pattern.search(text_lower))
 
 
+# Added 2026-08-18: exact-literal matching produced real false "missing" flags
+# whenever the resume used a different word form of the same term ("Support"
+# vs "Supported", "Reliability" vs "reliable") -- found in a real 6-company
+# batch the same day. A hand-rolled suffix-stripper, not a stemming library:
+# consistent with this repo's deliberate no-NLTK/spaCy local-first posture
+# (confirmed nothing similar exists anywhere in scripts/). Longest suffix
+# first so e.g. "-ations" strips before the shorter "-s" would. The min stem
+# length of 4 guards short/important terms (SQL, AI, API, UX) from ever
+# reaching the strip loop with a false match.
+_STEM_SUFFIXES = ("ations", "ation", "ibility", "ability", "ities",
+                   "ings", "ing", "edly", "ed", "ers", "er", "ably", "ibly",
+                   "able", "ible", "ily", "es", "s")
+_STEM_TOKEN_RE = re.compile(r"[a-z][a-z-]*")
+
+
+def _stem(word: str) -> str:
+    w = word.lower()
+    for suf in _STEM_SUFFIXES:
+        if w.endswith(suf) and len(w) - len(suf) >= 4:
+            return w[: -len(suf)]
+    return w
+
+
+def _term_present_stemmed(term_lower: str, text_lower: str) -> bool:
+    """Single-word terms only (multi-word phrases keep the exact literal
+    match in _term_present -- stemming a phrase's word order/components is a
+    different, riskier problem this fix doesn't attempt). Stems both the
+    term and every word in the text, so "Support" matches "supported" and
+    "Reliability" matches "reliable" without a hand-maintained variant list
+    per term."""
+    if " " in term_lower:
+        return _term_present(term_lower, text_lower)
+    term_stem = _stem(term_lower)
+    return any(_stem(tok) == term_stem for tok in _STEM_TOKEN_RE.findall(text_lower))
+
+
 def find_jd_term_gaps(jd_text: str, resume_text: str, cover_letter_text: str = "") -> dict:
     """Core CR-073 Epic 2 check.
 
@@ -138,18 +174,25 @@ def find_jd_term_gaps(jd_text: str, resume_text: str, cover_letter_text: str = "
     resume_lower = resume_text.lower()
     cover_lower = cover_letter_text.lower()
 
+    # JD-side detection stays exact-literal (_term_present) -- the question there
+    # is only "does the catalog term's own spelling appear in the JD," not a word-
+    # form question. Resume/cover-letter-side detection uses the stemmed matcher
+    # (_term_present_stemmed) so a genuine word-form variant ("Supported" for
+    # "Support", "reliable" for "Reliability") counts as covered instead of
+    # manufacturing a false gap -- confirmed real 2026-08-18 across a 6-company
+    # batch.
     jd_required = sorted(
         {display for term, display in vocab.items() if _term_present(term, jd_lower)}
     )
     missing_from_resume = sorted(
-        term for term in jd_required if not _term_present(term.lower(), resume_lower)
+        term for term in jd_required if not _term_present_stemmed(term.lower(), resume_lower)
     )
     # Of what's missing from the resume, note (informational only) which ones happen
     # to already appear in the cover letter -- doesn't reduce the gap, just useful
     # context for whoever resolves it (e.g. "already gestured at in the letter, still
     # needs to land in the resume itself").
     cover_letter_only_mentions = sorted(
-        term for term in missing_from_resume if _term_present(term.lower(), cover_lower)
+        term for term in missing_from_resume if _term_present_stemmed(term.lower(), cover_lower)
     )
     return {
         "true_vocabulary_size": len(vocab),

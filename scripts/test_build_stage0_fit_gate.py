@@ -34,6 +34,7 @@ from build_stage0_fit_gate import (
     _parse_url_and_jd,
     _detect_thin_jd,
     _detect_stage_signal,
+    _detect_po_solo_backlog_signal,
     _extract_sections,
     classify_gaps,
     build_stage0_fit_gate,
@@ -203,6 +204,47 @@ _SNOWFLAKE_JD = textwrap.dedent("""
     - 3+ years of product management experience
     - Deep familiarity with Snowflake data warehouse and dbt
     - Experience with SQL and analytics tools
+    - Strong agile background
+""").strip()
+
+# A PO JD reading as solo backlog ownership -- BRD/waterfall, no engineering
+# collaboration language.
+_PO_SOLO_JD = textwrap.dedent("""
+    Product Owner
+
+    You will own the backlog and author the business requirements document
+    for each release, following our waterfall delivery process.
+
+    Requirements
+    - 3+ years of product ownership experience
+    - Strong agile and requirements gathering and documentation skills
+    - Experience writing detailed functional specification documents
+""").strip()
+
+# A PO JD that is collaborative with engineering -- should NOT flag.
+_PO_COLLAB_JD = textwrap.dedent("""
+    Product Owner
+
+    You will own the backlog and write the business requirements document
+    for each release, but you'll work closely with engineering throughout
+    to shape and refine every ticket.
+
+    Requirements
+    - 3+ years of product ownership experience
+    - Strong agile background
+    - Comfortable partnering with engineering on requirements
+""").strip()
+
+# A non-PO PM JD with the same BRD/waterfall language -- title gate should
+# keep this from flagging (the signal is scoped to PO postings).
+_PM_WATERFALL_JD = textwrap.dedent("""
+    Senior Product Manager
+
+    You will author the business requirements document for each release,
+    following our waterfall delivery process.
+
+    Requirements
+    - 5+ years of product management experience
     - Strong agile background
 """).strip()
 
@@ -659,6 +701,49 @@ class TestGapClassification(unittest.TestCase):
         reqs = ["FHIR expertise required", "3+ years agile PM experience"]
         _, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
         self.assertTrue(any(g.get("gap_class") == "HARD" for g in flagged))
+
+
+# ---------------------------------------------------------------------------
+# Test: PO solo-backlog-ownership signal (2026-08-18)
+# ---------------------------------------------------------------------------
+
+class TestPoSoloBacklogSignal(unittest.TestCase):
+    def test_solo_po_jd_flagged_soft(self):
+        signal = _detect_po_solo_backlog_signal("Product Owner", _PO_SOLO_JD, _PREFS_MINIMAL)
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal["gap_class"], "SOFT")
+        self.assertIn("po_solo_backlog_signal", signal["bridge"])
+
+    def test_collaborative_po_jd_not_flagged(self):
+        signal = _detect_po_solo_backlog_signal("Product Owner", _PO_COLLAB_JD, _PREFS_MINIMAL)
+        self.assertIsNone(signal)
+
+    def test_non_po_title_not_flagged(self):
+        # Same BRD/waterfall language, but not a PO-titled posting -- scoped to PO only.
+        signal = _detect_po_solo_backlog_signal(
+            "Senior Product Manager", _PM_WATERFALL_JD, _PREFS_MINIMAL
+        )
+        self.assertIsNone(signal)
+
+    def test_falls_back_to_defaults_without_prefs_keys(self):
+        # _PREFS_MINIMAL carries no po_solo_backlog_flags/mitigators keys --
+        # detection must still work off the module defaults.
+        signal = _detect_po_solo_backlog_signal("Product Owner", _PO_SOLO_JD, {})
+        self.assertIsNotNone(signal)
+
+    def test_solo_po_jd_routes_to_tier2_not_skip(self):
+        result = _build(_PO_SOLO_JD)
+        self.assertEqual(result["tier"], "Tier 2")
+        self.assertEqual(result["decision"], "PASS")
+        self.assertTrue(
+            any("po_solo_backlog_signal" in g.get("bridge", "") for g in result["flagged_gaps"])
+        )
+
+    def test_collaborative_po_jd_not_forced_to_tier2_by_signal(self):
+        result = _build(_PO_COLLAB_JD)
+        self.assertFalse(
+            any("po_solo_backlog_signal" in g.get("bridge", "") for g in result["flagged_gaps"])
+        )
 
 
 # ---------------------------------------------------------------------------

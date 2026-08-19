@@ -119,6 +119,39 @@ def _load_packet_claim_ids(folder: str) -> set[str] | None:
     return ids
 
 
+def _load_provenance_claim_ids(folder: str) -> set[str] | None:
+    """Claim IDs actually cited in this submission's claim_provenance.json --
+    the authoring step's own structured record of which claim_ids backed
+    each drafted bullet/proof point. Returns None if the file is
+    missing/unreadable (older, pre-CR-075 submissions correctly have none).
+
+    Added 2026-08-18 after this script repeatedly flagged claims as "still
+    unused" that were genuinely cited, just phrased in fresh prose that
+    didn't retain the literal metric figure or 2+ of the claim's tag words
+    (both false positives confirmed by hand, every time, across a real
+    6-company batch the same day). claim_provenance.json is authoritative
+    for "was this claim actually used" -- it's written by the same pass that
+    chose the evidence, not re-derived after the fact by fuzzy text
+    matching. Checking it first doesn't replace the metric/tag heuristic,
+    it just means a paraphrase away from a metric's exact wording no longer
+    manufactures a false flag for a claim that was really used."""
+    prov_path = os.path.join(folder.rstrip("/\\"), "claim_provenance.json")
+    if not os.path.exists(prov_path):
+        return None
+    try:
+        with open(prov_path, encoding="utf-8") as f:
+            prov = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    ids: set[str] = set()
+    for item in prov.get("resume_claims", []) or []:
+        ids.update(item.get("claim_ids", []) or [])
+    for item in prov.get("cover_letter_claims", []) or []:
+        ids.update(item.get("claim_ids", []) or [])
+    return ids
+
+
 def _metric_variants(metric: str) -> list[str]:
     """A metric like '$40,000,000' should also match '$40M' or '3,500'
     should match '3500' in prose. Generates the literal, a comma-stripped
@@ -169,6 +202,7 @@ def check_folder(folder: str) -> dict:
 
     claims = _load_claims()
     packet_claim_ids = _load_packet_claim_ids(folder)
+    provenance_claim_ids = _load_provenance_claim_ids(folder)
     flagged = []
     unverified_relevant = []
 
@@ -190,7 +224,13 @@ def check_folder(folder: str) -> dict:
             )
             continue
 
-        if bucket["metrics"]:
+        if provenance_claim_ids is not None and claim_key in provenance_claim_ids:
+            # Authoritative: the authoring pass itself recorded citing this
+            # claim. Skip the literal-text heuristic entirely -- a fresh
+            # paraphrase that dropped the metric's exact figure or 2+ tag
+            # words is expected, not a sign the claim went unused.
+            used = True
+        elif bucket["metrics"]:
             used = any(
                 variant in doc_text for m in bucket["metrics"] for variant in _metric_variants(m)
             )

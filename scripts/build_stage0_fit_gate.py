@@ -828,11 +828,9 @@ content out entirely.
 
 Also identify "internal_terms": proper nouns naming THIS employer's OWN \
 products, platforms, or internal systems -- not third-party tools, vendors, \
-or technologies a candidate needs outside experience with. Example: if the \
-JD says "integrations across the Empower and Exchange platforms" and Empower/ \
-Exchange are this company's own platforms (not real external software), list \
-them: ["Empower", "Exchange"]. If nothing like that appears, use an empty list.
-
+or technologies a candidate needs outside experience with. If nothing like \
+that appears, use an empty list.
+{few_shot_block}
 Output ONLY this JSON shape, nothing else:
 {{"required": ["...", "..."], "preferred": ["...", "..."], "responsibilities": ["...", "..."], "culture": ["...", "..."], "internal_terms": ["...", "..."]}}
 
@@ -884,7 +882,27 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     # completeness, where this model won clearly. phi4:14b crashed the
     # underlying llama-server process outright on this machine (unrelated to
     # this code) and is not usable at all here.
-    prompt = _SECTION_SPLIT_USER_TEMPLATE.format(jd_text=jd_text[:12000])
+    # Retrieval-augmented few-shot (2026-08-19 self-healing plan, item 3):
+    # replaces the single hardcoded Empower/Exchange example that used to
+    # live directly in the template with 1-3 examples retrieved from
+    # data/fit_rubric_golden_set.json's confirmed-real internal-terms
+    # cases, ranked by token overlap with this specific JD. Never raises --
+    # an empty bank (or the file missing entirely, e.g. a fresh checkout
+    # without the private data/ dir) means an empty few_shot_block, and the
+    # prompt still works exactly as it did before this existed.
+    few_shot_block = ""
+    try:
+        from fit_rubric_examples import retrieve_examples, format_examples_for_prompt
+        examples = retrieve_examples(jd_text[:4000], "internal_term", k=3)
+        rendered = format_examples_for_prompt(examples)
+        if rendered:
+            few_shot_block = "\n" + rendered + "\n"
+    except Exception:
+        pass
+
+    prompt = _SECTION_SPLIT_USER_TEMPLATE.format(
+        jd_text=jd_text[:12000], few_shot_block=few_shot_block
+    )
     try:
         raw = call_llm(
             _SECTION_SPLIT_SYSTEM_PROMPT,

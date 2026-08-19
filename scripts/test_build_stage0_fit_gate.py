@@ -1953,6 +1953,73 @@ class TestSectionExtractionLLM(unittest.TestCase):
         self.assertGreater(len(result["required"]), 0)
 
 
+class TestUnbridgeableDomainRequirement(unittest.TestCase):
+    """2026-08-19, Jason-supplied, real miss: OneSource Virtual required
+    "5+ years... in a payroll tax... industry" and "5+ years... with Payroll
+    Tax filing... software" -- both scored a bridgeable SOFT domain gap, and
+    the JD landed Tier 1/fit 80, despite Jason having zero real evidence for
+    either (one had an empty claim_ids list in the authoring packet)."""
+
+    def test_payroll_tax_required_with_years_is_hard_skip(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of progressive experience in a payroll tax or other highly regulated industry, performing analysis, requirements gathering, design and development duties in support of enterprise application systems.
+            - 5+ years of experience with Payroll Tax filing and/or Payroll Tax filing software.
+            """
+        )
+        result = _build(jd)
+        self.assertEqual(result["tier"], "Skip")
+        self.assertEqual(result["decision"], "SKIP")
+        hard = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
+        self.assertTrue(any(g.get("gap_source") == "domain" for g in hard), hard)
+
+    def test_domain_with_pm_alternative_stays_bridgeable(self):
+        """Real corpus false positives found running this against all 402
+        archive JDs before shipping: "X years of product management ... in
+        [domain A], [domain B], or [domain C]" lists product management --
+        Jason's real, literal background -- as one of the acceptable
+        alternatives. Must NOT hard-Skip (axos_bank, real case)."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 1-3+ years of experience in product management, consulting, banking, or fintech
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["tier"], "Skip", result.get("skip_reason") or result.get("notes"))
+        hard_domain = [
+            g for g in result["flagged_gaps"]
+            if g.get("gap_class") == "HARD" and g.get("gap_source") == "domain"
+        ]
+        self.assertEqual(hard_domain, [], hard_domain)
+
+    def test_domain_with_ideally_hedge_stays_bridgeable(self):
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience, ideally in fraud, identity, payments, or SaaS product management
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["tier"], "Skip", result.get("skip_reason") or result.get("notes"))
+
+    def test_domain_in_preferred_bucket_stays_soft(self):
+        """Required-only, same gate as the degree check -- a domain mention
+        in Preferred is genuinely optional, must not force a Skip."""
+        jd = textwrap.dedent(
+            """
+            Requirements
+            - 5+ years of product management experience in B2B SaaS
+
+            Preferred
+            - 5+ years of experience in payroll tax or a highly regulated industry
+            """
+        )
+        result = _build(jd)
+        self.assertNotEqual(result["tier"], "Skip", result.get("skip_reason") or result.get("notes"))
+
+
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------

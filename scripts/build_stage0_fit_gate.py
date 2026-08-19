@@ -1228,7 +1228,16 @@ _HIGHER_DEGREE_MANDATORY_RE = re.compile(
 # force a Skip the way CR-092's hard-tool preferred-bucket escalation does
 # for named tools.
 _MANDATORY_ADVANCED_DEGREE_RE = re.compile(
-    r"\b(?:ph\.?d\.?|doctorate|master'?s?|mba|j\.d\.|m\.d\.)\b",
+    # "master" alone is ambiguous -- real degree phrasing is "Master's"/
+    # "Masters" (possessive/plural) or "Master of ___"/"master degree", but
+    # bare "master" is also an ordinary verb ("rapidly master a complex
+    # domain", "master the fundamentals"). Bug found live 2026-08-19: Bamboo
+    # Health's "demonstrated ability to rapidly master a complex, highly
+    # regulated domain" hard-Skipped as an unbridgeable degree requirement
+    # that was never actually there. Require the possessive/plural "'s"/"s",
+    # or "of"/"degree" immediately after, instead of matching bare "master".
+    r"\bph\.?d\.?\b|\bdoctorate\b|\bmaster'?s\b|"
+    r"\bmaster\s+(?:of|degree)\b|\bmba\b|\bj\.d\.\b|\bm\.d\.\b",
     re.I,
 )
 _DEGREE_ALTERNATIVE_OR_HEDGE_RE = re.compile(
@@ -1531,6 +1540,7 @@ def _classify_one_item(
             "anchor": "none",
             "gap": True,
             "gap_class": "HARD",
+            "gap_source": "degree",
             "domain_soft": False,
         }
 
@@ -1563,6 +1573,7 @@ def _classify_one_item(
             "anchor": "none",
             "gap": True,
             "gap_class": "HARD",
+            "gap_source": "tool",
             "domain_soft": False,
         }
 
@@ -1649,7 +1660,19 @@ def classify_gaps(
         })
 
     flagged_gaps: list[dict] = [
-        {"item": r["item"], "gap_class": r["gap_class"], "anchor": r.get("anchor")}
+        {
+            "item": r["item"],
+            "gap_class": r["gap_class"],
+            "anchor": r.get("anchor"),
+            # gap_source ("degree" | "tool") was getting silently dropped
+            # here (2026-08-19 bug, found live testing Bamboo Health): this
+            # comprehension only ever copied item/gap_class/anchor, so
+            # _determine_tier()'s new degree-vs-tool HARD-gap split always
+            # saw gap_source=None downstream and could never distinguish
+            # them from flagged_gaps alone. Only relevant on HARD; harmless
+            # to carry through (None) on SOFT/no-gap rows too.
+            "gap_source": r.get("gap_source"),
+        }
         for r in classified_required
         if r.get("gap")
     ]
@@ -1673,7 +1696,12 @@ def classify_gaps(
             # unbridgeable class, not every preferred-item miss. An ATS
             # keyword filter doesn't care whether a JD labeled something
             # "required" or "preferred" either.
-            flagged_gaps.append({"item": p["item"], "gap_class": "HARD"})
+            # Preferred-bucket HARD only ever comes from the hard-blocked-
+            # tools deny-list (never the degree check, which is required-
+            # only) -- explicit gap_source="tool" so _determine_tier()'s
+            # degree-vs-tool split reads it directly rather than relying on
+            # an implicit "absent means not degree."
+            flagged_gaps.append({"item": p["item"], "gap_class": "HARD", "gap_source": "tool"})
 
     return classified_required, classified_preferred, flagged_gaps
 
@@ -1709,12 +1737,24 @@ def _determine_tier(
     if thin_incomplete:
         return "Skip", "SKIP"
 
-    # Any HARD gap forces Skip
-    if any(g.get("gap_class") == "HARD" for g in flagged_gaps):
+    # A credential-type HARD gap (unbridgeable degree requirement) forces Skip
+    # regardless of everything else -- a factual yes/no no score can override.
+    # A tool-type HARD gap (2026-08-19, Jason-supplied) no longer auto-Skips:
+    # a single missing tool on an otherwise strong JD is bridgeable in a real
+    # conversation the way a missing degree isn't, so it falls through to the
+    # SOFT-gap branch below instead -- "not clean," not "reject outright."
+    # Real case this changed: Bamboo Health skipped on "Tableau" alone,
+    # sight-unseen on everything else in the posting.
+    if any(g.get("gap_class") == "HARD" and g.get("gap_source") == "degree" for g in flagged_gaps):
         return "Skip", "SKIP"
 
-    # DB reapply flag or any SOFT gap → Tier 2
-    if db_action == "reapply_flag" or any(g.get("gap_class") == "SOFT" for g in flagged_gaps):
+    # DB reapply flag, any SOFT gap, or a tool-only HARD gap → Tier 2 (fallback
+    # read when no fit score is available -- see Step 5.5 in the caller, which
+    # overrides this with the real score-driven tier whenever one exists).
+    if (
+        db_action == "reapply_flag"
+        or any(g.get("gap_class") in ("SOFT", "HARD") for g in flagged_gaps)
+    ):
         return "Tier 2", "PASS"
 
     # Preferred-only / no-required extract must not look like a clean Tier 1
@@ -1968,6 +2008,47 @@ def build_stage0_fit_gate(
         required_empty=not required_raw,
     )
 
+    # --- Step 5.5: Rubric fit score decides the final tier (2026-08-19,
+    # Jason-supplied). Moved up from after notes-building so the score can
+    # finalize tier/decision BEFORE skip_reason/notes get built from them.
+    # Only reached when Step 5 didn't already force Skip (DB reject, prefs
+    # reject, thin stub, or a credential HARD gap) -- those stay absolute,
+    # no score undoes them. Past that filter, the deterministic gap read
+    # above (Tier 1 vs Tier 2) is now only a FALLBACK for when no real *LLM*
+    # score is available -- deterministic mode still calls
+    # evaluate_structured_fit(), but with use_llm=False it silently falls
+    # back to _heuristic_judgments() and returns a real number anyway (found
+    # live building this: it does NOT return None the way the old comment
+    # here assumed). A cheap keyword-heuristic score is not reliable enough
+    # to gate a real Skip decision, so the override below only fires when
+    # use_llm is actually True -- deterministic-mode tests keep the old
+    # gap-based tier read unchanged, same as before this change.
+    fit_score: int | None = None
+    use_llm = None
+    if decision == "PASS":
+        try:
+            import pipeline_env
+            from structured_fit import evaluate_structured_fit
+            from utils import get_min_fit_score, load_file, WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE
+            work_exp = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE) or ""
+            use_llm = pipeline_env.stage0_section_mode() != "deterministic"
+            structured = evaluate_structured_fit(
+                jd_text, work_exp, prefs, get_min_fit_score(), use_llm=use_llm,
+            )
+            if structured and isinstance(structured.get("Score"), int):
+                fit_score = structured["Score"]
+        except Exception as exc:
+            print(f"  -> [WARN] Rubric fit-score computation failed: {exc}", file=sys.stderr)
+
+        if use_llm and fit_score is not None:
+            if fit_score >= 80:
+                tier = "Tier 1"
+            elif fit_score >= 70:
+                tier = "Tier 2"
+            else:
+                tier = "Skip"
+                decision = "SKIP"
+
     # --- Step 6: Build skip_reason if needed ---
     skip_reason: str | None = None
     skip_reason_code: str | None = None
@@ -1979,10 +2060,21 @@ def build_stage0_fit_gate(
             first_reject = prefs_result["rejects"][0]
             skip_reason = first_reject["reason"]
             skip_reason_code = first_reject["code"]
-        elif any(g.get("gap_class") == "HARD" for g in flagged_gaps):
-            hard_gaps = [g["item"] for g in flagged_gaps if g.get("gap_class") == "HARD"]
+        elif any(g.get("gap_class") == "HARD" and g.get("gap_source") == "degree" for g in flagged_gaps):
+            # Only a degree-type HARD gap actually causes this branch of
+            # Skip (see _determine_tier) -- checking gap_source, not just
+            # gap_class=="HARD", so a tool-only HARD gap that merely
+            # co-exists alongside a real score-driven Skip below doesn't
+            # produce a misleading "Hard gap(s)" reason when the real cause
+            # was the score (2026-08-19 bug, found live on Bamboo Health:
+            # its Tableau tool gap is HARD but not why it skipped -- its 44
+            # fit score is).
+            hard_gaps = [g["item"] for g in flagged_gaps if g.get("gap_class") == "HARD" and g.get("gap_source") == "degree"]
             skip_reason = f"Hard gap(s): {'; '.join(hard_gaps[:3])}"
             skip_reason_code = "hard_gap"
+        elif use_llm and fit_score is not None and fit_score < 70:
+            skip_reason = f"Fit score {fit_score} is below the 70 floor"
+            skip_reason_code = "fit_score_below_floor"
 
     # --- Build output ---
     exclusion_check = _build_exclusion_zone_summary(prefs_result)
@@ -2046,35 +2138,8 @@ def build_stage0_fit_gate(
             "a bridge will be found."
         )
 
-    # --- Step 6.5: Rubric fit score (CR-053's structured_fit scorer) ---
-    # Everything above this line is a deterministic gap classifier (decision
-    # + tier) -- it never produced a number. The Node server's
-    # reconcileOrphanSubmissionFolders() needs a real jobs.score for the UI
-    # and, lacking one, hardcoded 80 for every folder routed through here
-    # (2026-08-18, Jason-reported bug: every Backlog job in the UI showed
-    # score 80 regardless of actual fit). Compute the real evidence-tiered
-    # rubric score here -- the same scorer batch_pipeline.py's scout path
-    # already uses -- so it lands in stage0_fit_gate.json for that
-    # reconciliation step to read instead of a placeholder. Only computed on
-    # PASS: a Skip doesn't reach the UI as a scoreable job. Gated on the same
-    # STAGE0_SECTION_MODE flag the section-extraction LLM call above already
-    # respects, so tests that force deterministic mode get a network-free,
-    # heuristic-only score too rather than a new env var to track.
-    fit_score: int | None = None
-    if decision == "PASS":
-        try:
-            import pipeline_env
-            from structured_fit import evaluate_structured_fit
-            from utils import get_min_fit_score, load_file, WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE
-            work_exp = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE) or ""
-            use_llm = pipeline_env.stage0_section_mode() != "deterministic"
-            structured = evaluate_structured_fit(
-                jd_text, work_exp, prefs, get_min_fit_score(), use_llm=use_llm,
-            )
-            if structured and isinstance(structured.get("Score"), int):
-                fit_score = structured["Score"]
-        except Exception as exc:
-            print(f"  -> [WARN] Rubric fit-score computation failed: {exc}", file=sys.stderr)
+    # fit_score was already computed in Step 5.5 above, and already decided
+    # tier/decision -- nothing left to do here but include it in the output.
 
     output: dict = {
         "company": company_display,

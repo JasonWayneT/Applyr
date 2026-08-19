@@ -775,10 +775,13 @@ class TestCleanPmJd(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestFhirJd(unittest.TestCase):
-    def test_fhir_produces_skip(self):
+    def test_fhir_produces_tier2_not_skip(self):
+        """2026-08-19: a tool-only HARD gap (FHIR) no longer auto-Skips --
+        only a credential/degree HARD gap does. Falls through to Tier 2 in
+        deterministic test mode (no real LLM score to override it)."""
         result = _build(_FHIR_JD)
-        self.assertEqual(result["tier"], "Skip")
-        self.assertEqual(result["decision"], "SKIP")
+        self.assertEqual(result["tier"], "Tier 2")
+        self.assertEqual(result["decision"], "PASS")
 
     def test_fhir_flagged_as_hard(self):
         result = _build(_FHIR_JD)
@@ -791,9 +794,10 @@ class TestFhirJd(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestSnowflakeJd(unittest.TestCase):
-    def test_snowflake_produces_skip(self):
+    def test_snowflake_produces_tier2_not_skip(self):
+        """2026-08-19: tool-only HARD gap, same as the FHIR case above."""
         result = _build(_SNOWFLAKE_JD)
-        self.assertEqual(result["tier"], "Skip")
+        self.assertEqual(result["tier"], "Tier 2")
 
 
 # ---------------------------------------------------------------------------
@@ -1464,9 +1468,11 @@ class TestFamiliarityHardToolIsSoft(unittest.TestCase):
         self.assertTrue(any("docker" in g["item"].lower() for g in soft))
 
     def test_deep_familiarity_snowflake_still_hard(self):
-        """Intensified familiarity stays HARD — existing Snowflake Skip contract."""
+        """Intensified familiarity still classifies HARD (2026-08-19: a
+        tool-only HARD gap no longer auto-Skips the JD, but it must still be
+        gap_class HARD, not softened to a familiarity hedge)."""
         result = _build(_SNOWFLAKE_JD)
-        self.assertEqual(result["tier"], "Skip")
+        self.assertEqual(result["tier"], "Tier 2")
         self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
     def test_strong_plus_after_familiarity_does_not_harden(self):
@@ -1561,13 +1567,17 @@ class TestCompoundClauseSplitting(unittest.TestCase):
 class TestPreferredHardGapTriggersSkip(unittest.TestCase):
     """CR-092 follow-up (2026-08-15, Jason-supplied, real miss): a hard-
     blocked named tool sitting in the JD's Preferred section, not Required,
-    must still Skip the whole JD -- confirmed real on Mercury Insurance,
-    whose Guidewire requirement was in "Preferred" and reached Tier 2 PASS
-    even after being correctly classified HARD, because classify_gaps()
-    only ever escalated domain_soft SOFT preferred items into flagged_gaps,
-    never HARD ones."""
+    must still be escalated into flagged_gaps -- confirmed real on Mercury
+    Insurance, whose Guidewire requirement was in "Preferred" and reached
+    Tier 2 PASS even after being correctly classified HARD, because
+    classify_gaps() only ever escalated domain_soft SOFT preferred items
+    into flagged_gaps, never HARD ones.
 
-    def test_hard_blocked_tool_in_preferred_section_skips(self):
+    2026-08-19: a tool-only HARD gap no longer forces an outright Skip
+    (only a credential/degree HARD gap does) -- so this now asserts the
+    escalation into flagged_gaps still happens, not that it Skips."""
+
+    def test_hard_blocked_tool_in_preferred_section_is_flagged_not_skipped(self):
         jd = textwrap.dedent(
             """
             Requirements
@@ -1578,8 +1588,13 @@ class TestPreferredHardGapTriggersSkip(unittest.TestCase):
             """
         )
         result = _build(jd)
-        self.assertEqual(result["decision"], "SKIP")
-        self.assertIn("guidewire", (result.get("skip_reason") or "").lower())
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["tier"], "Tier 2")
+        hard_gaps = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
+        self.assertTrue(
+            any("guidewire" in g["item"].lower() for g in hard_gaps),
+            result["flagged_gaps"],
+        )
 
     def test_domain_soft_preferred_gap_still_only_soft_pass(self):
         """Regression guard: an ordinary domain-soft preferred gap (not a
@@ -1765,6 +1780,9 @@ class TestBoilerplateAndGenericAnchorGuards(unittest.TestCase):
 
 class TestSharedBlockedTools(unittest.TestCase):
     def test_amplitude_is_hard_blocked_at_stage0(self):
+        """2026-08-19: still gap_class HARD, but a tool-only HARD gap no
+        longer auto-Skips -- falls through to Tier 2 (deterministic test
+        mode has no real LLM score to override it)."""
         jd = textwrap.dedent(
             """
             Requirements
@@ -1773,7 +1791,7 @@ class TestSharedBlockedTools(unittest.TestCase):
             """
         )
         result = _build(jd)
-        self.assertEqual(result["tier"], "Skip")
+        self.assertEqual(result["tier"], "Tier 2")
         self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
     def test_or_similar_alternative_satisfied_by_anchored_tool(self):
@@ -1794,7 +1812,8 @@ class TestSharedBlockedTools(unittest.TestCase):
 
     def test_amplitude_still_hard_blocked_without_anchored_alternative(self):
         """Same alternatives phrasing, but no anchored tool present -- must
-        still HARD-skip (guards against over-broadening the fix above)."""
+        still classify HARD (guards against over-broadening the fix above).
+        2026-08-19: HARD no longer means auto-Skip on its own -- Tier 2."""
         jd = textwrap.dedent(
             """
             Requirements
@@ -1805,7 +1824,7 @@ class TestSharedBlockedTools(unittest.TestCase):
             """
         )
         result = _build(jd)
-        self.assertEqual(result["tier"], "Skip")
+        self.assertEqual(result["tier"], "Tier 2")
         self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
     def test_linter_and_stage0_share_blocked_source(self):

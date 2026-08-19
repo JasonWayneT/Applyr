@@ -230,6 +230,23 @@ def _call_equivalence_llm(
     from llm_stages import call_llm_stage
     from pipeline_env import fit_llm_timeout_sec, fit_model_override, fit_num_predict
 
+    # criteria must declare each known key with a nested {judgment, justification}
+    # shape explicitly -- Ollama's response_schema is enforced via constrained
+    # decoding, not just a prompt hint (scripts/utils.py's local-call path forwards
+    # it directly to Ollama's `format` field). A bare {"type": "object"} here let a
+    # flat {criterion: "yes"} map satisfy the schema exactly as well as the nested
+    # shape _normalize_judgments() actually expects, so every real judgment got
+    # silently dropped and defaulted to "partial" -- a uniform ~60/Low-confidence
+    # score for every job, not a real per-JD judgment. See the 2026-08-18
+    # "every job score is 80" handoff for the full trace.
+    criterion_schema = {
+        "type": "object",
+        "properties": {
+            "judgment": {"type": "string"},
+            "justification": {"type": "string"},
+        },
+        "required": ["judgment", "justification"],
+    }
     schema = {
         "type": "object",
         "properties": {
@@ -245,7 +262,11 @@ def _call_equivalence_llm(
                     "required": ["text", "judgment", "justification"],
                 },
             },
-            "criteria": {"type": "object"},
+            "criteria": {
+                "type": "object",
+                "properties": {name: criterion_schema for name in CRITERION_WEIGHTS},
+                "required": list(CRITERION_WEIGHTS),
+            },
         },
         "required": ["must_haves", "criteria"],
     }
@@ -315,9 +336,20 @@ def _normalize_judgments(judgments: Any) -> dict[str, Any]:
                 )
     raw_crit = judgments.get("criteria")
     if isinstance(raw_crit, dict):
-        out["criteria"] = {
-            k: v for k, v in raw_crit.items() if isinstance(v, dict)
-        }
+        normalized_crit: dict[str, Any] = {}
+        for k, v in raw_crit.items():
+            if isinstance(v, dict):
+                normalized_crit[k] = v
+            elif isinstance(v, str) and v.strip():
+                # Defensive fallback (not the primary fix): tolerate a flat
+                # {criterion: "yes"} value instead of silently discarding it,
+                # in case a provider/model still doesn't honor the tightened
+                # schema above (e.g. a cloud path without response_schema
+                # support, or a future model regression). justification is
+                # lost in this shape -- the schema fix is what should make
+                # this branch rare, not the primary path.
+                normalized_crit[k] = {"judgment": v.strip(), "justification": ""}
+        out["criteria"] = normalized_crit
     return out
 
 

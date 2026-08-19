@@ -1301,6 +1301,27 @@ def run_until_stage1_complete(
         state = run_until_waiting_for_llm(
             folder, mode=mode, adopt=False, no_hook=no_hook, force=force
         )
+        # Bug found live 2026-08-19: run_until_waiting_for_llm() moves the
+        # folder internally (_place_after_stage0() promotes a Stage 0 PASS to
+        # submissions/, or a SKIP to archive/skipped/) but only returns
+        # `state`, not the new path -- this function's own `folder` local kept
+        # pointing at the now-emptied pending_review location. The next line
+        # used to be `reconcile(folder, state)` against that stale path: it
+        # correctly has real receipt_ids (the promoted folder's), but the
+        # receipt FILES live at the new location, so reconcile always found
+        # them "missing" and marked stage0 STALE, which then made
+        # run_stage0() below raise "Original_JD.txt not found" against the
+        # same stale path -- on every single fresh JD that passed Stage 0,
+        # not an edge case.
+        if state.get("status") == "SKIPPED":
+            return state
+        # Re-resolve by slug (state["slug"] is always the bare folder name,
+        # and _resolve_folder() checks submissions/ before pending_review/)
+        # before doing anything else with `folder` -- lands on the real
+        # current location for a PASS. A SKIPPED state returns above instead
+        # of re-resolving: _resolve_folder() doesn't search archive/skipped/,
+        # same as the STALE-branch a few lines up already handles this.
+        folder = _resolve_folder(state.get("slug") or folder)
         state = reconcile(folder, state)
         s1 = (state.get("stages") or {}).get("stage1") or {}
 

@@ -2104,6 +2104,30 @@ def build_stage0_fit_gate(
         flag_note = f"DB shows an active (non-terminal) application already on file: {active_application[0].get('status')} -- verify this isn't a duplicate before sending."
         output["notes"] = (output.get("notes") or "") + " " + flag_note
 
+    # Free VRAM once Stage 0 is done (2026-08-18, Jason-supplied): Stage 0 is
+    # the only place run_submission.py's canonical pipeline touches a local
+    # LLM (section-splitting, then the fit-score equivalence call). Nothing
+    # downstream (Stage 1 authoring, Stage 2 review) uses a local model, so
+    # there's no reason to keep it resident in VRAM past this point. Trades
+    # a reload cost on the next JD in a tight batch for not silently holding
+    # VRAM after the run that needed it is over -- Jason's call, not a
+    # default.
+    #
+    # Gated on stage0_section_mode(), same flag _extract_sections_llm()
+    # already respects -- deterministic mode means no local call was ever
+    # made this run, and this suite's own docstring promises "no real DB,
+    # no LLM": an earlier unconditional version of this call made a real
+    # network round-trip per test regardless of that flag and stalled the
+    # test suite. Real batches always run in "llm" mode (the default), so
+    # this still fires on every real run; it just correctly skips in tests.
+    import pipeline_env
+    if pipeline_env.stage0_section_mode() != "deterministic":
+        try:
+            from utils import unload_local_models
+            unload_local_models()
+        except Exception:
+            pass
+
     return output
 
 

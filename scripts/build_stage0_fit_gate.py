@@ -914,6 +914,14 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
             continue
         for item in raw_items:
             item = str(item).strip()
+            # Strip a leading bullet marker the model echoed back verbatim
+            # from the JD's own bullet list (e.g. "- Own and lead..." instead
+            # of "Own and lead...") -- same character set _extract_sections()
+            # (the regex path) already strips at every one of its own item
+            # sites. Found 2026-08-18: the LLM path never had this step, so
+            # every item from a dash/bullet-prefixed JD carried the marker
+            # into required/preferred/gap text and everything downstream.
+            item = item.lstrip("-•*◦▪▸→").strip()
             if not item:
                 continue
             # 20-800 chars: same floor as the regex path's minimum, and a
@@ -1400,21 +1408,30 @@ def _split_compound_item(item: str) -> list[str]:
     return restored
 
 
-def _classify_single_clause(item: str, vocab: set[str]) -> dict:
+def _classify_single_clause(item: str, vocab: set[str], company: str = "") -> dict:
     """Anchor/domain/tool classification for ONE clause (either a whole
     non-compound item, or one sub-clause of a compound item after
     _split_compound_item). This is the pre-CR-092 body of _classify_one_item,
     extracted so it can run once per sub-clause instead of once per whole
-    line -- see _classify_one_item's dispatch for why."""
+    line -- see _classify_one_item's dispatch for why.
+
+    company: this JD's own company display name (e.g. "Clerkie"), optional.
+    Excludes the company talking about itself ("Clerkie's platform") from
+    being flagged as an unconfirmed tool -- found 2026-08-18 live-testing
+    real archive JDs, the company name is not a skill/tool candidate."""
     item_lower = item.lower()
 
     anchors = _item_has_anchor(item_lower, vocab)
     unanchored_domains = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
 
+    company_words = {w.lower() for w in (company or "").split() if w}
+
     unconfirmed_tools = []
     for candidate in _looks_like_named_tool(item):
         candidate_lower = candidate.lower()
         if candidate_lower in _SKILLS_CATALOG_TERMS:
+            continue
+        if candidate_lower in company_words:
             continue
         if any(candidate_lower == a.lower() or candidate_lower in a.lower() or a.lower() in candidate_lower
                for a in anchors):
@@ -1484,6 +1501,7 @@ def _classify_one_item(
     item: str,
     vocab: set[str],
     is_required: bool = True,
+    company: str = "",
 ) -> dict:
     """
     Classify a single required/preferred item string.
@@ -1556,9 +1574,9 @@ def _classify_one_item(
     # rule -- see _split_compound_item's module note for the full history.
     clauses = _split_compound_item(item)
     if len(clauses) <= 1:
-        return _classify_single_clause(item, vocab)
+        return _classify_single_clause(item, vocab, company=company)
 
-    clause_results = [_classify_single_clause(c, vocab) for c in clauses]
+    clause_results = [_classify_single_clause(c, vocab, company=company) for c in clauses]
     gapped = [r for r in clause_results if r["gap"]]
 
     if not gapped:
@@ -1592,6 +1610,7 @@ def classify_gaps(
     required_items: list[str],
     preferred_items: list[str],
     vocab: set[str] | None = None,
+    company: str = "",
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Classify required and preferred items for gaps.
@@ -1599,17 +1618,21 @@ def classify_gaps(
     Returns (classified_required, classified_preferred, flagged_gaps).
     flagged_gaps contains required items where gap=True (HARD or SOFT), plus
     preferred items marked domain_soft (Round 4 domain-qualifier soft gaps).
+
+    company: this JD's own company display name, optional -- excludes the
+    company's own name from the unconfirmed-tool check (see
+    _classify_single_clause's docstring).
     """
     if vocab is None:
         vocab = _load_anchor_vocab()
 
     classified_required: list[dict] = []
     for item in required_items:
-        classified_required.append(_classify_one_item(item, vocab))
+        classified_required.append(_classify_one_item(item, vocab, company=company))
 
     classified_preferred: list[dict] = []
     for item in preferred_items:
-        result = _classify_one_item(item, vocab, is_required=False)
+        result = _classify_one_item(item, vocab, is_required=False, company=company)
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
         elif result["gap"]:
@@ -1876,7 +1899,7 @@ def build_stage0_fit_gate(
 
     # --- Step 4: Gap classification ---
     classified_required, classified_preferred, flagged_gaps = classify_gaps(
-        required_raw, preferred_raw, vocab=vocab
+        required_raw, preferred_raw, vocab=vocab, company=company_display
     )
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)

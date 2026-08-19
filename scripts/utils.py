@@ -479,8 +479,11 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
     """
     import requests
     import model_manager
-    
+
     base_url = settings.get('localUrl') or os.getenv('OLLAMA_HOST') or 'http://localhost:11434'
+
+    if not model_manager.ensure_ollama_running(base_url):
+        return None
 
     # If caller explicitly pins a model, honour it directly.
     # Otherwise select dynamically based on available VRAM.

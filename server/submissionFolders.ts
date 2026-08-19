@@ -271,6 +271,23 @@ function titleCaseFromSlug(folderName: string): string {
     .join(' ');
 }
 
+/**
+ * Real rubric fit score for a submission folder, read from stage0_fit_gate.json
+ * (written by scripts/build_stage0_fit_gate.py's CR-053 structured_fit wiring).
+ * Returns null when the folder has no gate file, an older gate file predating
+ * that wiring, or the LLM-backed rubric call failed for this JD -- callers
+ * must treat null as "unscored," never substitute a guessed number for it.
+ */
+function readStage0FitScore(folderPath: string): number | null {
+  try {
+    const raw = fs.readFileSync(path.join(folderPath, 'stage0_fit_gate.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return typeof parsed.fit_score === 'number' ? parsed.fit_score : null;
+  } catch {
+    return null;
+  }
+}
+
 function readJdMeta(folderPath: string): { title: string; url: string; jdText: string } {
   const jdPath = path.join(folderPath, 'Original_JD.txt');
   let jdText = '';
@@ -448,6 +465,12 @@ export function reconcileOrphanSubmissionFolders(): string[] {
     const title = meta.title || 'Product Manager';
     const id = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
     const summary = `Ready to apply — ${company} (assets on disk; linked from submissions/).`;
+    // Real rubric score from Stage 0 (CR-053's structured_fit scorer), not a
+    // guess -- was hardcoded to 80 for every folder here until 2026-08-18
+    // (Jason-reported: every Backlog job in the UI showed the same score).
+    // Folders authored before that wiring landed, or whose LLM-backed rubric
+    // call failed, get null -- the UI should show "unscored," not a fake number.
+    const score = readStage0FitScore(activePath);
 
     // Guard against jobs.url's UNIQUE constraint: a folder can be "orphan" by company-slug match
     // (findJobsForFolder above) while its JD URL already belongs to a differently-named job row --
@@ -470,8 +493,8 @@ export function reconcileOrphanSubmissionFolders(): string[] {
 
     db.prepare(`
       INSERT INTO jobs (id, company, title, url, score, status, summary, jd_text, retry_count)
-      VALUES (?, ?, ?, ?, 80, 'Backlog', ?, ?, 0)
-    `).run(id, company, title, meta.url || null, summary, meta.jdText || null);
+      VALUES (?, ?, ?, ?, ?, 'Backlog', ?, ?, 0)
+    `).run(id, company, title, meta.url || null, score, summary, meta.jdText || null);
 
     created.push(company);
     logActivity(

@@ -116,6 +116,21 @@
 
   ],
 
+  "po_solo_backlog_flags": [
+
+    "business requirements document", "brd", "functional specification document", "fsd",
+    "waterfall", "author detailed user stories and acceptance criteria independently",
+    "sole owner of the backlog", "requirements gathering and documentation"
+
+  ],
+
+  "po_solo_backlog_mitigators": [
+
+    "partner with engineering", "work closely with engineering", "pair with developers",
+    "collaborate with engineering on requirements"
+
+  ],
+
   "experience_range": {
 
     "min": 2,

@@ -14,6 +14,18 @@ from pathlib import Path
 
 from stage0_skip_ledger import lookup_skip
 
+# Added 2026-08-18: this script crashed outright on a real run with
+# UnicodeEncodeError -- the Windows console's default cp1252 codec can't
+# encode a skip-reason string containing a non-ASCII arrow character.
+# PYTHONIOENCODING=utf-8 set by the caller works around it, but only if the
+# caller remembers to set it; reconfiguring stdout/stderr here means the
+# script self-heals regardless of who invokes it or how. errors="replace"
+# (not "strict") so a still-unanticipated character degrades to a visible
+# replacement glyph instead of crashing the whole import mid-batch.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parents[1]
 PENDING_REVIEW = ROOT / "data" / "pending_review"
 SUBMISSIONS = ROOT / "data" / "submissions"

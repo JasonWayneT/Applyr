@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from typing import Any
 
 from workflow.invalidate import sha256_hex_bytes
+from workflow.receipts import _atomic_write_json
 from workflow.state import utc_now
 
 REVIEWS_DIR = "reviews"
@@ -52,26 +52,6 @@ def hm_findings_path(folder: str) -> str:
 
 def dispositions_path(folder: str) -> str:
     return os.path.join(reviews_dir(folder), DISPOSITIONS)
-
-
-def _atomic_write_json(path: str, data: dict[str, Any]) -> None:
-    parent = os.path.dirname(path)
-    if parent:
-        os.makedirs(parent, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".rev_", suffix=".json", dir=parent or None)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, path)
-    except Exception:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
 
 
 def write_truth_findings(folder: str, payload: dict[str, Any]) -> str:

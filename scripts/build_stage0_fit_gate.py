@@ -1176,131 +1176,43 @@ def _strip_ats_chrome(jd_text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Gap classification (Story 2.4)
+# Gap classification (CR-093 — evidence-scale engine, replaces the regex
+# chain that used to live here: _item_has_anchor, _is_unbridgeable_advanced_
+# degree, _unbridgeable_domain_requirement, _get_hard_tool_pattern dispatch,
+# _classify_single_clause, _split_compound_item. Jason, 2026-08-19: "regex
+# wasn't working and we have been bypassing it completely either way" --
+# removed outright rather than kept as a fallback. One LLM judgment call per
+# requirement line (scripts/evidence_scale.py) now decides gate class and
+# 0-4 evidence level; see docs/spec/05-change-requests/CR-093-evidence-
+# scale-fit-engine.md for the full rationale. No local fallback on LLM
+# failure here — evidence_scale.EvidenceClassificationError propagates up
+# uncaught, by design (a silent fallback to weaker logic is the exact
+# failure mode this replaces).
+#
+# _get_hard_tool_pattern / HARD_BLOCKED_TOOLS and _is_administratively_
+# satisfied / _BACHELORS_SATISFIED_RE / _HIGHER_DEGREE_MANDATORY_RE /
+# _YEARS_EXPERIENCE_LEADIN_RE below are DELIBERATELY NOT removed —
+# build_authoring_packet.py imports them directly for a different purpose
+# (excluding claim attachment to a line the candidate can't honestly claim,
+# or that's already resolved by a separate deterministic mechanism),
+# unrelated to Stage 0 gate/tier classification. See CR-093's "Scope
+# boundary" section. No longer used for Stage 0 gap classification itself
+# (evidence_scale.classify_requirement's prompt handles the equivalent
+# "already satisfied elsewhere" reasoning for that purpose instead).
 # ---------------------------------------------------------------------------
 
-# Generic terms that should never count as an "anchor" for a hard-skill requirement.
-# Without this guard, broad tags like "compliance" could mask a gap for e.g. "HIPAA/HL7".
-_GENERIC_TAG_WORDS: frozenset[str] = frozenset({
-    "experience", "management", "work", "ability", "skills",
-    "knowledge", "understanding", "background", "team", "teams", "product",
-    "cross", "functional", "strong", "proven", "excellent",
-    "ability", "deliver", "drive", "build", "lead", "grow",
-    # "teams" alone previously false-anchored soft-skill lines like
-    # "navigate ambiguity … across teams" (LeafLink, 2026-08-11 corpus).
-})
-
-# Domain/industry qualifiers that must themselves be anchored. A capability tag
-# match (e.g. "compliance") does NOT clear a soft gap when the item also names
-# an unanchored domain (e.g. "banking") — Round 4 hard/soft split.
-_DOMAIN_QUALIFIER_RE = re.compile(
-    r"\b("
-    r"banking|bank|insurance|healthcare|health\s*care|fintech|"
-    r"pharma(?:ceutical)?s?|clinical|mortgage|lending|"
-    r"wealth\s+management|payments?|crypto(?:currency)?|"
-    r"biotech|medtech|telehealth|payroll(?:\s+tax)?|tax\s+filing"
-    r")\b",
-    re.I,
-)
-
-
-def _unanchored_domain_qualifiers(
-    item_lower: str, vocab: set[str], anchors: list[str]
-) -> list[str]:
-    """Return domain tokens in the item that have no vocab/anchor hit."""
-    found: list[str] = []
-    for match in _DOMAIN_QUALIFIER_RE.finditer(item_lower):
-        compact = re.sub(r"\s+", " ", match.group(0).lower()).strip()
-        anchored = any(
-            compact in a.lower() or a.lower() in compact for a in anchors
-        ) or any(
-            compact == v or compact in v or v in compact
-            for v in vocab
-            if len(v) >= 4
-        )
-        if not anchored and compact not in found:
-            found.append(compact)
-    return found
-
-
-# Required-item unbridgeable named-domain requirement (2026-08-19, Jason-
-# supplied, real miss): OneSource Virtual required "5+ years... in a payroll
-# tax... industry" and "5+ years... with Payroll Tax filing... software" --
-# both landed as ordinary bridgeable SOFT domain gaps (the generic Round-4
-# domain-qualifier path a few lines up, which is always SOFT by design) even
-# though Jason has zero real evidence for either -- one of the two had an
-# empty claim_ids list in the authoring packet, not even a weak bridge.
-# A named regulated-domain qualifier carrying its own explicit years-of-
-# experience threshold, in a REQUIRED item, is a factual yes/no the same way
-# a degree is -- there's no substitute credential for "5 years in payroll
-# tax" the way generic PM experience substitutes for a bare degree mention.
-# Required-only (same is_required gate the degree check uses): a domain
-# mention in "preferred," or one with no years threshold of its own, stays
-# the ordinary soft/bridgeable Round-4 read -- this only escalates the
-# narrower, stronger-signal case.
-_YEARS_IN_DOMAIN_RE = re.compile(r"\d+\+?\s*(?:to\s+\d+\+?\s*)?years?\b", re.I)
-
-# Real corpus check (2026-08-19, run against all 402 archive JDs before
-# shipping this): a bare years+domain match alone hit 19 required lines, but
-# 18 of those were "X years of product management ... in [domain A], [domain
-# B], or [domain C]" -- an OR-list where "product management" (Jason's real,
-# literal background) is itself one of the acceptable alternatives, not a
-# strict domain-only requirement. Only 1 of 19 (Turquoise: "health care
-# revenue cycle or health tech, with background in managed care contracts
-# and health care reimbursement" -- no PM alternative anywhere in the line)
-# was a genuine match, same shape as OneSource Virtual's payroll tax case.
-# Excluding on the literal "product management/manager/owner" phrase --
-# Jason's actual job titles -- is a strong, precise signal the domain is
-# offered as an alternative background, not demanded outright. Also exclude
-# on ordinary hedge language, same spirit as the degree-alternative check.
-_DOMAIN_PM_ALTERNATIVE_RE = re.compile(r"\bproduct\s+(?:management|manager|owner)\b", re.I)
-_DOMAIN_HEDGE_RE = re.compile(
-    r"\bideally\b|\bpreferred\b|\bnice[\s-]to[\s-]have\b|\bis\s+a\s+plus\b|\ba\s+plus\b|"
-    r"\bbonus\b|\bdesirable\b|\boptional\b|\bsuch\s+as\b|\be\.g\.|\bfor\s+example\b",
-    re.I,
-)
-
-
-def _unbridgeable_domain_requirement(item_lower: str, vocab: set[str]) -> str | None:
-    """Return the matched domain phrase when a required line pairs a named,
-    unanchored regulated-domain qualifier with its own explicit years-of-
-    experience threshold in the same line, with no product-management
-    alternative or hedge language present -- else None."""
-    if not _YEARS_IN_DOMAIN_RE.search(item_lower):
-        return None
-    if _DOMAIN_PM_ALTERNATIVE_RE.search(item_lower) or _DOMAIN_HEDGE_RE.search(item_lower):
-        return None
-    anchors = _item_has_anchor(item_lower, vocab)
-    unanchored = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
-    return unanchored[0] if unanchored else None
-
-
-# CR-090: items that will never anchor against a claim tag (no skill/tool vocabulary
-# to match) but also aren't real transferable-skill gaps -- they're binary eligibility
-# facts already resolved elsewhere or genuinely satisfied by Jason's real profile.
-# Measured 2026-08-10 across 54 real submissions: 106 SOFT gaps total, with years-of-
-# experience and Bachelor's-degree lines the two largest clean-cut categories (~20+
-# combined). Falling through to the generic "no anchor -> soft gap needing a bridge"
-# path for these produces an unbridgeable gap (nothing in master_claims.json is a
-# claim about "having a bachelor's degree"), which then hard-blocks the packet via
-# the fail-closed gate -- even though these aren't real gaps at all.
-#
 # Years-of-experience: already independently parsed and gated by
 # seniority_gate.check_years_gate() against candidate_preferences.json's real
-# threshold. Flagging the same line again here as an unbridgeable soft gap is not
-# just redundant, it's actively wrong -- either it duplicates a signal that already
-# exists correctly elsewhere, or it conflicts with it.
+# threshold. Bachelor's-degree: Jason has one (workExperience.md Section 7).
+# Deliberately does NOT exempt lines that mandate a higher degree as required
+# (Master's/MBA/PhD/JD/MD "required") -- those remain real gaps. A mention of a
+# higher degree as merely *preferred* alongside a Bachelor's requirement is not a
+# gap (the Bachelor's already satisfies the line).
 _YEARS_EXPERIENCE_LEADIN_RE = re.compile(
     r"^(?:minimum\s+(?:of\s+)?|approximately\s+)?"
     r"\d{1,2}\s*[-–+]?\s*(?:to\s+|-\s*)?\d{0,2}\+?\s*years?\b",
     re.I,
 )
-
-# Bachelor's-degree requirements: Jason has one (workExperience.md Section 7).
-# Deliberately does NOT exempt lines that mandate a higher degree as required
-# (Master's/MBA/PhD/JD/MD "required") -- those remain real gaps. A mention of a
-# higher degree as merely *preferred* alongside a Bachelor's requirement is not a
-# gap (the Bachelor's already satisfies the line).
 _BACHELORS_SATISFIED_RE = re.compile(
     r"\b(?:bachelor(?:'s|s)?(?:\s+or\s+master'?s?)?\s+degree|undergraduate\s+degree)\b",
     re.I,
@@ -1311,92 +1223,15 @@ _HIGHER_DEGREE_MANDATORY_RE = re.compile(
     re.I,
 )
 
-# Required-item advanced-degree HARD gap (2026-08-18, Jason-supplied, real miss):
-# Dassault Systèmes' required "PhD, MS, or equivalent in the natural sciences"
-# landed as Tier 2 SOFT because CR-092 compound-line splitting broke it into
-# "PhD" / "MS" / "or equivalent in the natural sciences" sub-clauses, each of
-# which lost the whole-line context and fell through _classify_single_clause's
-# generic zero-anchor default (always SOFT, never HARD -- see that function).
-# Jason holds a Bachelor's only (workExperience.md Section 7); no claim in
-# master_claims.json can honestly bridge a named advanced-degree requirement,
-# the same unbridgeable-hard-gap class as a named tool with zero anchor. This
-# check runs on the WHOLE required-item line, before compound splitting --
-# mirroring where the hard-blocked-tool check runs -- and is scoped to
-# REQUIRED items only (see _classify_one_item's is_required param): a
-# preferred-bucket "MBA a plus" mention is genuinely optional and must not
-# force a Skip the way CR-092's hard-tool preferred-bucket escalation does
-# for named tools.
-_MANDATORY_ADVANCED_DEGREE_RE = re.compile(
-    # "master" alone is ambiguous -- real degree phrasing is "Master's"/
-    # "Masters" (possessive/plural) or "Master of ___"/"master degree", but
-    # bare "master" is also an ordinary verb ("rapidly master a complex
-    # domain", "master the fundamentals"). Bug found live 2026-08-19: Bamboo
-    # Health's "demonstrated ability to rapidly master a complex, highly
-    # regulated domain" hard-Skipped as an unbridgeable degree requirement
-    # that was never actually there. Require the possessive/plural "'s"/"s",
-    # or "of"/"degree" immediately after, instead of matching bare "master".
-    r"\bph\.?d\.?\b|\bdoctorate\b|\bmaster'?s\b|"
-    r"\bmaster\s+(?:of|degree)\b|\bmba\b|\bj\.d\.\b|\bm\.d\.\b",
-    re.I,
-)
-_DEGREE_ALTERNATIVE_OR_HEDGE_RE = re.compile(
-    r"\bbachelor|undergraduate|"
-    r"\d+\+?\s*years?\s+(?:of\s+)?(?:\w+\s+){0,4}?experience|"
-    r"equivalent\s+(?:\w+\s+){0,4}?experience|"
-    r"\bpreferred\b|\bnice[\s-]to[\s-]have\b|\bis\s+a\s+plus\b|\ba\s+plus\b|"
-    r"\bbonus\b|\bdesirable\b|\boptional\b",
-    re.I,
-)
-
-
-def _is_unbridgeable_advanced_degree(item_lower: str) -> bool:
-    """True when a required line names an advanced degree (PhD/Doctorate/
-    Master's/MBA/JD/MD) with no Bachelor's-or-equivalent-experience
-    alternative and no preferred/plus/bonus hedge -- an unbridgeable HARD gap."""
-    if not _MANDATORY_ADVANCED_DEGREE_RE.search(item_lower):
-        return False
-    if _DEGREE_ALTERNATIVE_OR_HEDGE_RE.search(item_lower):
-        return False
-    return True
-
-# Soft familiarity hedges on hard-blocked tools → Tier 2 SOFT, not Skip.
-# Intensifiers (deep/strong/hands-on) keep HARD so "Deep familiarity with Snowflake"
-# still Skips. Plain "Familiarity with Docker/K8s" stays draftable as soft.
-_SOFT_FAMILIARITY_HEDGE_RE = re.compile(
-    r"\b(?:familiarity\s+with|familiar\s+with|exposure\s+to|awareness\s+of|"
-    r"working\s+knowledge\s+of|basic\s+(?:understanding|knowledge)\s+of)\b",
-    re.I,
-)
-_FAMILIARITY_INTENSIFIER_RE = re.compile(
-    r"\b(?:deep|strong|extensive|expert|hands-?on)\b",
-    re.I,
-)
-
-
-def _is_soft_familiarity_hedge(item_lower: str) -> bool:
-    """Plain familiarity/exposure of a blocked tool stays SOFT (Tier 2).
-
-    Intensifiers only count when they modify the hedge itself (appear shortly
-    before it). A trailing \"strong plus\" / earlier \"strong communication\"
-    must not flip Familiarity-with-Amplitude into HARD Skip (Seed Health,
-    2026-08-11 — after Amplitude joined the shared blocked-tool list).
-    """
-    hedge = _SOFT_FAMILIARITY_HEDGE_RE.search(item_lower)
-    if not hedge:
-        return False
-    window_start = max(0, hedge.start() - 40)
-    prefix = item_lower[window_start : hedge.start()]
-    if _FAMILIARITY_INTENSIFIER_RE.search(prefix):
-        return False
-    return True
-
 
 def _is_administratively_satisfied(item_lower: str) -> bool:
-    """True for items that should never enter the generic soft-gap-needs-a-claim-
-    bridge path -- see module comment above for why. Deliberately narrow and
-    conservative: citizenship/work-authorization/security-clearance/travel/
-    supervisory-responsibility statements are NOT covered here (left for a
-    separate, more careful pass -- some are legally sensitive and shouldn't be
+    """True for items that should never be treated as real gaps needing a
+    claim bridge -- consumed by build_authoring_packet.py, not by Stage 0
+    classification (CR-093 moved that reasoning into evidence_scale.py's
+    prompt instead). Deliberately narrow and conservative:
+    citizenship/work-authorization/security-clearance/travel/supervisory-
+    responsibility statements are NOT covered here (left for a separate,
+    more careful pass -- some are legally sensitive and shouldn't be
     silently resolved without confirming Jason's actual status)."""
     if _YEARS_EXPERIENCE_LEADIN_RE.match(item_lower.strip()):
         return True
@@ -1405,384 +1240,84 @@ def _is_administratively_satisfied(item_lower: str) -> bool:
     return False
 
 
-def _item_has_anchor(item_lower: str, vocab: set[str]) -> list[str]:
-    """
-    Return list of matched anchor terms for *item_lower*.
-    Empty list means no anchor found.
-    """
-    matched: list[str] = []
-    for term in vocab:
-        if len(term) < 4:
-            continue
-        if term in _GENERIC_TAG_WORDS:
-            continue
-        # Word-boundary match: term must appear as a complete word sequence
-        pattern = r"\b" + re.escape(term) + r"\b"
-        if re.search(pattern, item_lower, re.I):
-            matched.append(term)
-    return matched
-
-
-# "X, Y, Z, or similar" / "or equivalent" style requirement lines name several
-# alternative tools where any one (or an equivalent) satisfies the line -- not
-# every named tool individually. If a hard-blocked tool (e.g. Amplitude) is
-# listed alongside a tool Jason genuinely has (e.g. Pendo, from
-# skills_catalog.json), the "or similar" framing means the verified tool
-# already satisfies it. Real miss found 2026-08-13: Decisiv's "product
-# analytics tools (Pendo, Amplitude, Mixpanel, or similar)" HARD-skipped pop_up_talent
-# even though Jason has verified Pendo experience + a Pendo certification
-# (workExperience.md ACC-117/ACC-118) -- the hard-block check never looked for
-# an anchored alternative before short-circuiting.
-_ALT_HEDGE_RE = re.compile(r"\bor\s+(?:similar|equivalent|the\s+like)\b", re.I)
-
-
-def _load_skills_catalog_terms() -> set[str]:
-    """Delegates to blocked_tools.load_skills_catalog_terms (CR-092,
-    2026-08-15) -- promoted there so Stage 0 and any future linter check
-    share one source, same reasoning as HARD_BLOCKED_TOOLS itself already
-    being shared. Kept as a thin wrapper (returning set, not frozenset) so
-    existing local callers (_SKILLS_CATALOG_TERMS, _alt_list_anchor) don't
-    need to change."""
-    return set(_load_skills_catalog_terms_shared())
-
-
-_SKILLS_CATALOG_TERMS = _load_skills_catalog_terms()
-
-
-def _alt_list_anchor(item_lower: str) -> str | None:
-    """Return the matched skills_catalog term if *item_lower* is an "or
-    similar"/"or equivalent" alternatives list containing a tool Jason
-    genuinely has, else None. Deliberately narrow: only fires on that explicit
-    hedge phrasing, not on "such as"/"like", so a real single-tool requirement
-    (no alternatives framing) still HARD-skips as before."""
-    if not _ALT_HEDGE_RE.search(item_lower):
-        return None
-    for term in _SKILLS_CATALOG_TERMS:
-        if len(term) < 3:
-            continue
-        if re.search(r"\b" + re.escape(term) + r"\b", item_lower):
-            return term
-    return None
-
-
-# CR-092 (2026-08-15): mechanizes the "compound requirement lines must be
-# split into their sub-concepts before anchor-checking, never evaluated as
-# one unit" rule that .claude/skills/generate-submission/SKILL.md has
-# documented as prose since 2026-07-21 (the "Humana finding": "experience
-# managing product portfolios, intake processes, and prioritization
-# frameworks" is three separate things joined by commas, not one -- two of
-# the three were genuinely anchored, the third had zero anchor and was never
-# flagged because the whole line passed on the other two). That fix was
-# applied by hand each time a human ran Stage 0; it was never mechanized
-# into the classifier itself, so the identical bag-of-words failure recurred
-# in code with a different specific gap (Mercury Insurance / Guidewire).
-# Deliberately conservative: only splits on a real Oxford-style list (2+
-# commas, e.g. "X, Y, and Z") -- a single comma is too ambiguous (could be
-# an appositive, a trailing clause, many things) to safely split, and a bare
-# " and " with no commas at all is left alone too (avoids breaking a real
-# multi-word tool name or a genuinely-unified phrase like "product
-# management and delivery"). Parenthetical content is protected from
-# splitting so "(e.g. X, Y, or Z)" doesn't fragment.
-_PAREN_RE = re.compile(r"\([^)]*\)")
-_LIST_SPLIT_RE = re.compile(r",\s*(?:and\s+)?|\s+and\s+(?=[a-z0-9])")
-
-
-def _split_compound_item(item: str) -> list[str]:
-    """Split a compound requirement line into its sub-concept clauses. Returns
-    [item] unchanged (a single "clause") when the line doesn't look like a
-    real Oxford-style list -- see module note above for why this is
-    deliberately conservative rather than splitting on every comma."""
-    # Mask parenthetical spans so we don't split inside them; restore after.
-    masked = item
-    parens: list[str] = []
-    for m in _PAREN_RE.finditer(item):
-        placeholder = f"\x00PAREN{len(parens)}\x00"
-        parens.append(m.group(0))
-        masked = masked.replace(m.group(0), placeholder, 1)
-
-    if masked.count(",") < 2:
-        return [item]
-
-    parts = [p.strip(" .") for p in _LIST_SPLIT_RE.split(masked)]
-    parts = [p for p in parts if p]
-    if len(parts) < 2:
-        return [item]
-
-    restored = []
-    for p in parts:
-        for i, original in enumerate(parens):
-            p = p.replace(f"\x00PAREN{i}\x00", original)
-        restored.append(p)
-    return restored
-
-
-def _classify_single_clause(
-    item: str,
-    vocab: set[str],
-    company: str = "",
-    internal_terms: list[str] | None = None,
-) -> dict:
-    """Anchor/domain/tool classification for ONE clause (either a whole
-    non-compound item, or one sub-clause of a compound item after
-    _split_compound_item). This is the pre-CR-092 body of _classify_one_item,
-    extracted so it can run once per sub-clause instead of once per whole
-    line -- see _classify_one_item's dispatch for why.
-
-    company: this JD's own company display name (e.g. "Clerkie"), optional.
-    Excludes the company talking about itself ("Clerkie's platform") from
-    being flagged as an unconfirmed tool -- found 2026-08-18 live-testing
-    real archive JDs, the company name is not a skill/tool candidate.
-
-    internal_terms: proper nouns the section-extraction LLM identified as
-    this employer's own product/platform names (2026-08-19), optional --
-    same exclusion as company, for a name that isn't the company's own but
-    still isn't a real external tool. Real case: Dark Matter Technologies'
-    "Empower"/"Exchange" platforms, neither the company's name nor a tool
-    a candidate would need outside experience with."""
-    item_lower = item.lower()
-
-    anchors = _item_has_anchor(item_lower, vocab)
-    unanchored_domains = _unanchored_domain_qualifiers(item_lower, vocab, anchors)
-
-    company_words = {w.lower() for w in (company or "").split() if w}
-    internal_term_words = {t.strip().lower() for t in (internal_terms or []) if t and t.strip()}
-
-    unconfirmed_tools = []
-    for candidate in _looks_like_named_tool(item):
-        candidate_lower = candidate.lower()
-        if candidate_lower in _SKILLS_CATALOG_TERMS:
-            continue
-        if candidate_lower in company_words or candidate_lower in internal_term_words:
-            continue
-        if any(candidate_lower == a.lower() or candidate_lower in a.lower() or a.lower() in candidate_lower
-               for a in anchors):
-            continue
-        unconfirmed_tools.append(candidate)
-
-    if unconfirmed_tools and not unanchored_domains:
-        display = ", ".join(sorted(set(anchors))[:3]) if anchors else "none"
-        tools_display = ", ".join(sorted(set(unconfirmed_tools))[:3])
-        anchor_str = (
-            f"tags: {display}; unconfirmed tool(s): {tools_display}"
-            if anchors
-            else f"none; unconfirmed tool(s): {tools_display}"
-        )
-        return {
-            "item": item,
-            "anchor": anchor_str,
-            "gap": True,
-            "gap_class": "SOFT",
-            "domain_soft": False,
-        }
-
-    if unanchored_domains:
-        display = ", ".join(sorted(set(anchors))[:3]) if anchors else "none"
-        anchor_str = (
-            f"tags: {display}; domain soft-gap: {', '.join(unanchored_domains)}"
-            if anchors
-            else f"none; domain soft-gap: {', '.join(unanchored_domains)}"
-        )
-        return {
-            "item": item,
-            "anchor": anchor_str,
-            "gap": True,
-            "gap_class": "SOFT",
-            "domain_soft": True,
-        }
-
-    if anchors:
-        display = ", ".join(sorted(set(anchors))[:3])
-        return {
-            "item": item,
-            "anchor": f"tags: {display}",
-            "gap": False,
-            "gap_class": None,
-            "domain_soft": False,
-        }
-
-    if _is_administratively_satisfied(item_lower):
-        return {
-            "item": item,
-            "anchor": "satisfied: administrative (years-of-experience / education)",
-            "gap": False,
-            "gap_class": None,
-            "domain_soft": False,
-        }
-
-    return {
-        "item": item,
-        "anchor": "none",
-        "gap": True,
-        "gap_class": "SOFT",
-        "domain_soft": False,
-    }
-
-
 def _classify_one_item(
     item: str,
-    vocab: set[str],
+    work_exp: str,
     is_required: bool = True,
     company: str = "",
     internal_terms: list[str] | None = None,
 ) -> dict:
     """
-    Classify a single required/preferred item string.
+    Classify a single required/preferred item string via the evidence-scale
+    LLM judgment (CR-093). Returns the same dict shape the old regex-based
+    version returned, so classify_gaps()/_determine_tier() and every other
+    downstream consumer need no changes:
 
-    is_required: True for items from the JD's required list, False for
-    preferred -- gates the required-only advanced-degree HARD check below
-    (a "preferred" advanced degree stays a soft/no-op signal, not a Skip).
-
-    Returns::
         {
             "item": str,
-            "anchor": str,    # matched tag names or "none"
+            "anchor": str,             # human-readable reasoning, or "none"
             "gap": bool,
             "gap_class": "HARD" | "SOFT" | None,
+            "gap_source": "degree" | "domain" | "role_exclusion" | "tool" | None,  # only when gap_class == "HARD"
             "domain_soft": bool,
+            "evidence_level": int,     # 0-4, new — feeds compute_fit_score()
+            "confidence": str,         # "high" | "medium" | "low", new
         }
+
+    Raises evidence_scale.EvidenceClassificationError on any LLM failure --
+    callers must not catch this and substitute a weaker heuristic.
     """
-    item_lower = item.lower()
+    from evidence_scale import classify_requirement
 
-    # Unbridgeable advanced-degree requirement (PhD/Master's/MBA/JD/MD with no
-    # Bachelor's-or-experience alternative) -- required items only, on the
-    # WHOLE line before compound splitting. See _is_unbridgeable_advanced_
-    # degree's module comment for why this must not run on preferred items.
-    if is_required and _is_unbridgeable_advanced_degree(item_lower):
-        return {
-            "item": item,
-            "anchor": "none",
-            "gap": True,
-            "gap_class": "HARD",
-            "gap_source": "degree",
-            "domain_soft": False,
-        }
-
-    # Unbridgeable named-domain requirement (2026-08-19, Jason-supplied, real
-    # miss) -- required items only, same reasoning as the degree check above:
-    # see _unbridgeable_domain_requirement's module comment.
-    if is_required:
-        domain_match = _unbridgeable_domain_requirement(item_lower, vocab)
-        if domain_match:
-            return {
-                "item": item,
-                "anchor": "none",
-                "gap": True,
-                "gap_class": "HARD",
-                "gap_source": "domain",
-                "domain_soft": False,
-            }
-
-    # Check for hard-blocked tools first, on the WHOLE line -- a hard-blocked
-    # tool anywhere in a compound line still hard-skips regardless of what
-    # else is in the line. Plain familiarity/exposure hedges stay SOFT
-    # (Tier 2) so an unconfirmed tool mention does not Skip the JD;
-    # intensified phrasing (deep/strong/hands-on) still HARD-Skips.
-    hard_match = _get_hard_tool_pattern().search(item_lower)
-    if hard_match:
-        alt_term = _alt_list_anchor(item_lower)
-        if alt_term:
-            return {
-                "item": item,
-                "anchor": f"tags: {alt_term} (or-similar alternative to listed tool)",
-                "gap": False,
-                "gap_class": None,
-                "domain_soft": False,
-            }
-        if _is_soft_familiarity_hedge(item_lower):
-            return {
-                "item": item,
-                "anchor": "none",
-                "gap": True,
-                "gap_class": "SOFT",
-                "domain_soft": False,
-            }
-        return {
-            "item": item,
-            "anchor": "none",
-            "gap": True,
-            "gap_class": "HARD",
-            "gap_source": "tool",
-            "domain_soft": False,
-        }
-
-    # CR-092 (2026-08-15): compound requirement lines (a real Oxford-style
-    # list -- "X, Y, and Z") are split and each sub-clause classified
-    # independently; a single non-compound item just runs _classify_single_
-    # clause once, on the whole item (identical to pre-CR-092 behavior).
-    # This mechanizes the "split into sub-concepts before anchor-checking"
-    # rule -- see _split_compound_item's module note for the full history.
-    clauses = _split_compound_item(item)
-    if len(clauses) <= 1:
-        return _classify_single_clause(item, vocab, company=company, internal_terms=internal_terms)
-
-    clause_results = [
-        _classify_single_clause(c, vocab, company=company, internal_terms=internal_terms)
-        for c in clauses
-    ]
-    gapped = [r for r in clause_results if r["gap"]]
-
-    if not gapped:
-        anchor_parts = [r["anchor"] for r in clause_results if r["anchor"] != "none"]
-        return {
-            "item": item,
-            "anchor": "per-clause: " + "; ".join(anchor_parts) if anchor_parts else "clear (per-clause)",
-            "gap": False,
-            "gap_class": None,
-            "domain_soft": False,
-        }
-
-    # At least one sub-clause has no real anchor -- the whole compound line
-    # is a flagged gap, citing which specific sub-clause(s) lack it (the
-    # actual fix: previously a generic word matching in ANY sub-clause
-    # cleared the WHOLE line, masking a real gap in a different sub-clause).
-    # Escalate to the most severe gap_class present (HARD outranks SOFT).
-    severity = {"HARD": 0, "SOFT": 1}
-    worst_class = min((r["gap_class"] for r in gapped), key=lambda c: severity.get(c, 1))
-    failing_desc = "; ".join(f'"{r["item"]}" ({r["anchor"]})' for r in gapped)
-    return {
-        "item": item,
-        "anchor": f"compound line, unanchored sub-clause(s): {failing_desc}",
-        "gap": True,
-        "gap_class": worst_class,
-        "domain_soft": any(r["domain_soft"] for r in gapped),
-    }
+    judgment = classify_requirement(
+        item,
+        work_exp,
+        is_required=is_required,
+        company=company,
+        internal_terms=internal_terms,
+    )
+    return judgment.to_legacy_dict()
 
 
 def classify_gaps(
     required_items: list[str],
     preferred_items: list[str],
+    work_exp: str = "",
     vocab: set[str] | None = None,
     company: str = "",
     internal_terms: list[str] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
-    Classify required and preferred items for gaps.
+    Classify required and preferred items for gaps via the evidence-scale
+    engine (CR-093).
 
     Returns (classified_required, classified_preferred, flagged_gaps).
     flagged_gaps contains required items where gap=True (HARD or SOFT), plus
-    preferred items marked domain_soft (Round 4 domain-qualifier soft gaps).
+    preferred items marked domain_soft or a confirmed HARD gap.
 
-    company: this JD's own company display name, optional -- excludes the
-    company's own name from the unconfirmed-tool check (see
-    _classify_single_clause's docstring).
-    internal_terms: proper nouns the section-extraction LLM identified as
-    this employer's own product/platform names (e.g. "Empower", "Exchange"),
-    optional -- same exclusion, for names that aren't the company's own but
-    still aren't a real external tool a candidate needs experience with.
+    work_exp: candidate ground-truth text passed to the LLM judgment call.
+    Required in practice — omitting it starves every judgment of real
+    evidence (found live during CR-093 validation: the wrong evidence-
+    context file alone caused a real scoring miss).
+    vocab: accepted for call-site backward compatibility, no longer used —
+    the anchor-vocabulary tag-matching approach it fed is exactly what this
+    engine replaces.
+    company / internal_terms: same meaning as before — excludes the
+    employer's own name/product names from being misread as an external
+    tool requirement.
     """
-    if vocab is None:
-        vocab = _load_anchor_vocab()
+    del vocab  # deprecated, unused — see docstring
 
     classified_required: list[dict] = []
     for item in required_items:
         classified_required.append(
-            _classify_one_item(item, vocab, company=company, internal_terms=internal_terms)
+            _classify_one_item(item, work_exp, company=company, internal_terms=internal_terms)
         )
 
     classified_preferred: list[dict] = []
     for item in preferred_items:
         result = _classify_one_item(
-            item, vocab, is_required=False, company=company, internal_terms=internal_terms
+            item, work_exp, is_required=False, company=company, internal_terms=internal_terms
         )
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
@@ -1797,6 +1332,8 @@ def classify_gaps(
             "gap_class": result["gap_class"],
             "domain_soft": bool(result.get("domain_soft")),
             "handling": handling,
+            "evidence_level": result.get("evidence_level"),
+            "confidence": result.get("confidence"),
         })
 
     flagged_gaps: list[dict] = [
@@ -1804,13 +1341,6 @@ def classify_gaps(
             "item": r["item"],
             "gap_class": r["gap_class"],
             "anchor": r.get("anchor"),
-            # gap_source ("degree" | "tool") was getting silently dropped
-            # here (2026-08-19 bug, found live testing Bamboo Health): this
-            # comprehension only ever copied item/gap_class/anchor, so
-            # _determine_tier()'s new degree-vs-tool HARD-gap split always
-            # saw gap_source=None downstream and could never distinguish
-            # them from flagged_gaps alone. Only relevant on HARD; harmless
-            # to carry through (None) on SOFT/no-gap rows too.
             "gap_source": r.get("gap_source"),
         }
         for r in classified_required
@@ -1820,28 +1350,13 @@ def classify_gaps(
         if p.get("domain_soft") and p.get("gap_class") == "SOFT":
             flagged_gaps.append({"item": p["item"], "gap_class": "SOFT"})
         elif p.get("gap_class") == "HARD":
-            # CR-092 follow-up (2026-08-15, Jason-supplied, real miss): a
-            # preferred-bucket item was never escalated into flagged_gaps
-            # unless it was a domain_soft SOFT gap -- a genuinely hard-
-            # blocked named tool (Guidewire, HARD_BLOCKED_TOOLS) sitting in
-            # "Preferred" instead of "Required" could clear the whole gate
-            # even after being correctly classified HARD, because the REJECT
-            # decision below only ever scans flagged_gaps. Confirmed real:
-            # Mercury Insurance's Guidewire requirement was in the JD's
-            # Preferred section and reached Tier 2 PASS / drafting despite
-            # being a real, unbridgeable gap. gap_class == "HARD" is only
-            # ever set by the hard-blocked-tools deny-list check (see
-            # _classify_single_clause) -- never by the softer "unconfirmed
-            # tool" WARN tier -- so this only escalates the confirmed-
-            # unbridgeable class, not every preferred-item miss. An ATS
-            # keyword filter doesn't care whether a JD labeled something
-            # "required" or "preferred" either.
-            # Preferred-bucket HARD only ever comes from the hard-blocked-
-            # tools deny-list (never the degree check, which is required-
-            # only) -- explicit gap_source="tool" so _determine_tier()'s
-            # degree-vs-tool split reads it directly rather than relying on
-            # an implicit "absent means not degree."
-            flagged_gaps.append({"item": p["item"], "gap_class": "HARD", "gap_source": "tool"})
+            # A preferred-bucket item can still carry a confirmed HARD gap
+            # (role-exclusion category only, post-CR-093 -- tools never gate
+            # at all now, spec Sec. 9) -- an ATS keyword filter doesn't care
+            # whether a JD labeled something "required" or "preferred" either.
+            flagged_gaps.append({
+                "item": p["item"], "gap_class": "HARD", "gap_source": p.get("gap_source"),
+            })
 
     return classified_required, classified_preferred, flagged_gaps
 
@@ -2088,9 +1603,23 @@ def build_stage0_fit_gate(
     thin_jd = _detect_thin_jd(jd_text, required_raw)
     stage_signal = _detect_stage_signal(jd_text)
 
-    # --- Step 4: Gap classification ---
+    # --- Step 4: Gap classification (CR-093 evidence-scale engine) ---
+    # work_exp loaded here (moved up from the old Step 5.5) -- every item's
+    # LLM judgment needs real candidate ground truth, not just the tier-
+    # deciding fit-score call that used to be the only consumer of this file.
+    # WORK_EXP_SUMMARY_FILE is a meta-description of the document's own
+    # structure, not real accomplishment content -- confirmed useless as
+    # evidence context during CR-093 validation (silently under-scored a
+    # real clean match). Full, untruncated text passed here --
+    # evidence_scale.classify_requirement() retrieves the relevant excerpt
+    # per requirement line internally (build_evidence_context(), CR-093
+    # Epic 2 Story 2.1) rather than this caller blind-truncating up front;
+    # a blind 8000-char prefix was confirmed live to miss real evidence
+    # (Pendo/Amplitude, ~char 27800 of the real document).
+    from utils import load_file, WORK_EXP_FILE
+    work_exp = load_file(WORK_EXP_FILE) or ""
     classified_required, classified_preferred, flagged_gaps = classify_gaps(
-        required_raw, preferred_raw, vocab=vocab, company=company_display,
+        required_raw, preferred_raw, work_exp=work_exp, company=company_display,
         internal_terms=internal_terms,
     )
 
@@ -2160,46 +1689,44 @@ def build_stage0_fit_gate(
         required_empty=not required_raw,
     )
 
-    # --- Step 5.5: Rubric fit score decides the final tier (2026-08-19,
-    # Jason-supplied). Moved up from after notes-building so the score can
-    # finalize tier/decision BEFORE skip_reason/notes get built from them.
-    # Only reached when Step 5 didn't already force Skip (DB reject, prefs
-    # reject, thin stub, or a credential HARD gap) -- those stay absolute,
-    # no score undoes them. Past that filter, the deterministic gap read
-    # above (Tier 1 vs Tier 2) is now only a FALLBACK for when no real *LLM*
-    # score is available -- deterministic mode still calls
-    # evaluate_structured_fit(), but with use_llm=False it silently falls
-    # back to _heuristic_judgments() and returns a real number anyway (found
-    # live building this: it does NOT return None the way the old comment
-    # here assumed). A cheap keyword-heuristic score is not reliable enough
-    # to gate a real Skip decision, so the override below only fires when
-    # use_llm is actually True -- deterministic-mode tests keep the old
-    # gap-based tier read unchanged, same as before this change.
-    fit_score: int | None = None
-    use_llm = None
-    if decision == "PASS":
-        try:
-            import pipeline_env
-            from structured_fit import evaluate_structured_fit
-            from utils import get_min_fit_score, load_file, WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE
-            work_exp = load_file(WORK_EXP_SUMMARY_FILE) or load_file(WORK_EXP_FILE) or ""
-            use_llm = pipeline_env.stage0_section_mode() != "deterministic"
-            structured = evaluate_structured_fit(
-                jd_text, work_exp, prefs, get_min_fit_score(), use_llm=use_llm,
-            )
-            if structured and isinstance(structured.get("Score"), int):
-                fit_score = structured["Score"]
-        except Exception as exc:
-            print(f"  -> [WARN] Rubric fit-score computation failed: {exc}", file=sys.stderr)
+    # --- Step 5.5: Weighted evidence-scale score decides the final tier
+    # (CR-093, replacing structured_fit.evaluate_structured_fit()'s separate
+    # 5-criterion holistic call). Moved up from after notes-building so the
+    # score can finalize tier/decision BEFORE skip_reason/notes get built
+    # from them. Only reached when Step 5 didn't already force Skip (DB
+    # reject, prefs reject, thin stub) -- those stay absolute, no score
+    # undoes them. A credential/domain/role-exclusion HARD gate now shows up
+    # as compute_fit_score()'s own `disqualified` result (it scans
+    # classified_required directly), so it's naturally covered by the same
+    # code path rather than a separate pre-check -- no fallback branch here:
+    # classify_gaps() already ran the LLM judgment for every item at Step 4,
+    # so this is pure arithmetic over results already in hand, nothing that
+    # can itself fail independently of Step 4.
+    from evidence_scale import compute_fit_score, load_score_bands
 
-        if use_llm and fit_score is not None:
-            if fit_score >= 80:
-                tier = "Tier 1"
-            elif fit_score >= 70:
-                tier = "Tier 2"
-            else:
-                tier = "Skip"
-                decision = "SKIP"
+    score_result = compute_fit_score(classified_required, classified_preferred)
+    fit_score: int = score_result["fit_score"]
+    confidence_score: int = score_result["confidence_score"]
+
+    # Tier/Skip floor reads from data/fit_rubric_calibration.json (CR-093
+    # Epic 4), NOT candidate_preferences.json -- this branch previously
+    # hardcoded 80/70 literally, then briefly lived in candidate_preferences
+    # .json before Jason correctly flagged that a scoring-engine calibration
+    # constant isn't a personal job-search preference and belongs somewhere
+    # else. See load_score_bands()'s docstring for the full reasoning.
+    skip_floor, tier1_floor = load_score_bands()
+
+    if score_result["disqualified"]:
+        tier = "Skip"
+        decision = "SKIP"
+    elif decision == "PASS":
+        if fit_score >= tier1_floor:
+            tier = "Tier 1"
+        elif fit_score >= skip_floor:
+            tier = "Tier 2"
+        else:
+            tier = "Skip"
+            decision = "SKIP"
 
     # --- Step 6: Build skip_reason if needed ---
     skip_reason: str | None = None
@@ -2212,26 +1739,19 @@ def build_stage0_fit_gate(
             first_reject = prefs_result["rejects"][0]
             skip_reason = first_reject["reason"]
             skip_reason_code = first_reject["code"]
-        elif any(
-            g.get("gap_class") == "HARD" and g.get("gap_source") in ("degree", "domain")
-            for g in flagged_gaps
-        ):
-            # Only a degree- or domain-type HARD gap actually causes this
-            # branch of Skip (see _determine_tier) -- checking gap_source,
-            # not just gap_class=="HARD", so a tool-only HARD gap that merely
-            # co-exists alongside a real score-driven Skip below doesn't
-            # produce a misleading "Hard gap(s)" reason when the real cause
-            # was the score (2026-08-19 bug, found live on Bamboo Health:
-            # its Tableau tool gap is HARD but not why it skipped -- its 44
-            # fit score is).
-            hard_gaps = [
-                g["item"] for g in flagged_gaps
-                if g.get("gap_class") == "HARD" and g.get("gap_source") in ("degree", "domain")
-            ]
-            skip_reason = f"Hard gap(s): {'; '.join(hard_gaps[:3])}"
+        elif score_result["disqualified"]:
+            # CR-093: compute_fit_score() already found the disqualifying
+            # HARD-gate item (degree/domain/role_exclusion -- tool can no
+            # longer produce gate=="HARD" at all, spec Sec. 9) -- cite it
+            # directly instead of re-deriving from flagged_gaps, so the
+            # message can never drift from what actually disqualified this
+            # JD (2026-08-19 bug this replaces: a tool gap that merely
+            # co-existed alongside a real score-driven Skip used to produce
+            # a misleading "Hard gap(s)" message on Bamboo Health).
+            skip_reason = f"Hard gap: {score_result['disqualifying_item']}"
             skip_reason_code = "hard_gap"
-        elif use_llm and fit_score is not None and fit_score < 70:
-            skip_reason = f"Fit score {fit_score} is below the 70 floor"
+        elif fit_score < skip_floor:
+            skip_reason = f"Fit score {fit_score} is below the {skip_floor} floor"
             skip_reason_code = "fit_score_below_floor"
 
     # --- Build output ---
@@ -2307,6 +1827,7 @@ def build_stage0_fit_gate(
         "tier": tier,
         "reach_out": False,
         "fit_score": fit_score,
+        "confidence_score": confidence_score,
         "stage_signal": stage_signal,
         "thin_jd": thin_jd,
         "extraction_source": extraction_source,

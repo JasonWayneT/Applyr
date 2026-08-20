@@ -33,11 +33,12 @@ influences the REJECT/PASS decision itself.
 Local-only, hard-pinned to Ollama (2026-08-17, Jason-supplied correction):
 this stage runs on every incoming JD, so it must never silently reach a paid
 cloud provider -- the first live test of this feature quietly billed a
-configured Gemini API key before this correction landed. If Ollama isn't
-running, _extract_sections_llm returns None with no cloud attempt at all,
-and the caller falls back to the deterministic regex extractor -- same as
-any other failure (malformed response, empty result). Set
-STAGE0_SECTION_MODE=deterministic to skip the LLM attempt entirely.
+configured Gemini API key before this correction landed. Requirement
+extraction is pinned to qwen2.5:7b-instruct-q4_K_M (STAGE0_EXTRACT_MODEL).
+If that model cannot load or run, Stage 0 raises Stage0ExtractError and
+stops -- no other model, no cloud, no regex extractor. Set
+STAGE0_SECTION_MODE=deterministic to skip the LLM attempt entirely (tests
+and explicit offline runs only).
 """
 from __future__ import annotations
 
@@ -47,6 +48,15 @@ import os
 import re
 import sys
 from pathlib import Path
+
+# Measured 2026-08-17 on the real PracticeTek JD: this tag beat llama3.1:8b
+# and every 14B local model on responsibilities completeness. Do not swap
+# it for Settings.localModel or a VRAM fallback.
+STAGE0_EXTRACT_MODEL = "qwen2.5:7b-instruct-q4_K_M"
+
+
+class Stage0ExtractError(RuntimeError):
+    """Requirement extraction cannot proceed. Do not substitute another path."""
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -838,32 +848,44 @@ Job description:
 {jd_text}"""
 
 
+def _extract_unavailable_message(reason: str) -> str:
+    return (
+        f"Stage 0 requirement extraction needs {STAGE0_EXTRACT_MODEL} "
+        f"({reason}). No fallback model and no regex extractor. "
+        f"Fix the local model and retry."
+    )
+
+
 def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
-    """Attempt LLM-based section extraction. Returns None on ANY failure
-    (no configured provider, malformed/empty response, JSON that doesn't
-    parse) so the caller falls back to the deterministic regex extractor --
-    this function must never be the only path, only the preferred one."""
+    """LLM section extraction pinned to STAGE0_EXTRACT_MODEL.
+
+    Returns None only when STAGE0_SECTION_MODE=deterministic (caller then
+    uses the regex extractor on purpose). Any load/run/parse failure raises
+    Stage0ExtractError -- the regex path is not a silent backup.
+    """
     import pipeline_env
     if pipeline_env.stage0_section_mode() == "deterministic":
         return None
 
     try:
         from utils import call_llm, extract_json_from_text
-    except ImportError:
-        return None
+        from model_manager import LocalModelUnavailable, ensure_local_model_available
+    except ImportError as exc:
+        raise Stage0ExtractError(_extract_unavailable_message(str(exc))) from exc
+
+    try:
+        ensure_local_model_available(STAGE0_EXTRACT_MODEL)
+    except LocalModelUnavailable as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        raise Stage0ExtractError(str(exc)) from exc
 
     # Local-only, hard-pinned (2026-08-17, Jason-supplied correction): this
     # stage runs on every incoming JD in every batch, so a silent cloud
     # fallback here means real per-JD billing outside Jason's Claude
     # subscription -- confirmed real on the first live test, which quietly
     # called the configured Gemini API key. Same "never silently substitute a
-    # different provider" contract as llm_stages.py's "rewrite" stage: if
-    # Ollama isn't running, this returns None (no cloud attempt at all) and
-    # the caller falls back to the deterministic regex extractor, same as any
-    # other failure. That's a real quality tradeoff -- see the module
-    # docstring's live-test results, all gathered against Gemini before this
-    # correction -- but it's Jason's call to make, not a default to assume.
-    # Model pinned to qwen2.5:7b-instruct-q4_K_M (2026-08-17, measured):
+    # different provider" contract as llm_stages.py's "rewrite" stage.
+    # Model pinned to STAGE0_EXTRACT_MODEL (2026-08-17, measured):
     # call_llm's default local model (llama3.1:8b-instruct-q5_K_M, Jason's
     # general-purpose local default) was tested head to head against every
     # other locally-available model on the real PracticeTek JD and was the
@@ -910,13 +932,18 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
             temperature=0.0,
             response_mime_type="application/json",
             provider_override=["local"],
-            model="qwen2.5:7b-instruct-q4_K_M",
+            model=STAGE0_EXTRACT_MODEL,
         )
-    except Exception:
-        return None
+    except Exception as exc:
+        print(f"ERROR: {_extract_unavailable_message(str(exc))}", file=sys.stderr)
+        raise Stage0ExtractError(_extract_unavailable_message(str(exc))) from exc
 
     if not raw:
-        return None
+        raise Stage0ExtractError(
+            _extract_unavailable_message(
+                "empty response — the model did not load or returned nothing"
+            )
+        )
 
     try:
         cleaned = extract_json_from_text(raw)
@@ -924,11 +951,17 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     except Exception:
         try:
             data = json.loads(raw.strip().strip("`").removeprefix("json").strip())
-        except Exception:
-            return None
+        except Exception as exc:
+            raise Stage0ExtractError(
+                f"{STAGE0_EXTRACT_MODEL} returned unparseable output for "
+                "requirement extraction. No fallback extractor."
+            ) from exc
 
     if not isinstance(data, dict):
-        return None
+        raise Stage0ExtractError(
+            f"{STAGE0_EXTRACT_MODEL} returned a non-object JSON payload for "
+            "requirement extraction. No fallback extractor."
+        )
 
     result: dict[str, list[str]] = {
         "required": [], "preferred": [], "responsibilities": [], "culture": [],
@@ -960,7 +993,10 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
             result[bucket].append(item)
 
     if not any(result.values()):
-        return None
+        raise Stage0ExtractError(
+            f"{STAGE0_EXTRACT_MODEL} produced no verbatim requirement lines. "
+            "No regex fallback."
+        )
 
     # internal_terms (2026-08-19, Jason-supplied): the same model already
     # reading the whole JD is well placed to recognize "Empower and Exchange"
@@ -1581,11 +1617,11 @@ def build_stage0_fit_gate(
     prefs_result = run_prefs_gate_safe(company_display, jd_text, prefs)
 
     # --- Step 3: Extract JD buckets ---
-    # LLM extraction is the default (2026-08-17, Jason-supplied) -- see the
-    # module docstring and _extract_sections_llm's own docstring for why.
-    # Falls back to the deterministic regex extractor on any failure (no
-    # configured provider, malformed response, empty result), so this call
-    # never raises and Stage 0 never blocks on it.
+    # LLM extraction is the default (2026-08-17, Jason-supplied), pinned to
+    # STAGE0_EXTRACT_MODEL. Regex is used only when STAGE0_SECTION_MODE is
+    # explicitly deterministic (tests / offline). A load or run failure
+    # raises Stage0ExtractError instead of silently swapping extractors.
+    _release_stage0_vram("before-extract")
     sections = _extract_sections_llm(jd_text)
     extraction_source = "llm"
     if sections is None:
@@ -1604,6 +1640,10 @@ def build_stage0_fit_gate(
     stage_signal = _detect_stage_signal(jd_text)
 
     # --- Step 4: Gap classification (CR-093 evidence-scale engine) ---
+    # Qwen (extract) and Gemma (score) cannot share VRAM. Unload Qwen first.
+    if extraction_source == "llm":
+        _release_stage0_vram("before-score", required=True)
+        _prepare_stage0_score_model()
     # work_exp loaded here (moved up from the old Step 5.5) -- every item's
     # LLM judgment needs real candidate ground truth, not just the tier-
     # deciding fit-score call that used to be the only consumer of this file.
@@ -1871,31 +1911,67 @@ def build_stage0_fit_gate(
         flag_note = f"DB shows an active (non-terminal) application already on file: {active_application[0].get('status')} -- verify this isn't a duplicate before sending."
         output["notes"] = (output.get("notes") or "") + " " + flag_note
 
-    # Free VRAM once Stage 0 is done (2026-08-18, Jason-supplied): Stage 0 is
-    # the only place run_submission.py's canonical pipeline touches a local
-    # LLM (section-splitting, then the fit-score equivalence call). Nothing
-    # downstream (Stage 1 authoring, Stage 2 review) uses a local model, so
-    # there's no reason to keep it resident in VRAM past this point. Trades
-    # a reload cost on the next JD in a tight batch for not silently holding
-    # VRAM after the run that needed it is over -- Jason's call, not a
-    # default.
-    #
-    # Gated on stage0_section_mode(), same flag _extract_sections_llm()
-    # already respects -- deterministic mode means no local call was ever
-    # made this run, and this suite's own docstring promises "no real DB,
-    # no LLM": an earlier unconditional version of this call made a real
-    # network round-trip per test regardless of that flag and stalled the
-    # test suite. Real batches always run in "llm" mode (the default), so
-    # this still fires on every real run; it just correctly skips in tests.
-    import pipeline_env
-    if pipeline_env.stage0_section_mode() != "deterministic":
-        try:
-            from utils import unload_local_models
-            unload_local_models()
-        except Exception:
-            pass
+    # Free VRAM once Stage 0 is done. Targeted /api/ps unload, not a sweep
+    # of every installed tag. Gated on stage0_section_mode() so the offline
+    # test suite does not make a network round-trip per test.
+    _release_stage0_vram("after-stage0")
 
     return output
+
+
+def _release_stage0_vram(reason: str, *, required: bool = False) -> None:
+    """Unload resident local models before the next Stage 0 LLM step.
+
+    Extract uses Qwen 7B; score uses Gemma 2B. Loading both at once OOMs.
+    """
+    import pipeline_env
+    if pipeline_env.stage0_section_mode() == "deterministic":
+        return
+    try:
+        from evidence_scale import STAGE0_SCORE_MODEL
+        from model_manager import (
+            _tag_matches,
+            list_resident_models,
+            unload_resident_models,
+        )
+        print(
+            f"    [Stage 0] Unloading local models ({reason}) so the next "
+            "step has free VRAM.",
+            file=sys.stderr,
+        )
+        unload_resident_models(also=(STAGE0_EXTRACT_MODEL, STAGE0_SCORE_MODEL))
+        if required:
+            still = list_resident_models()
+            if any(_tag_matches(STAGE0_EXTRACT_MODEL, name) for name in still):
+                raise Stage0ExtractError(
+                    f"Could not unload {STAGE0_EXTRACT_MODEL} before scoring "
+                    f"({reason}). Refusing to load {STAGE0_SCORE_MODEL} while "
+                    "Qwen may still be in VRAM."
+                )
+    except Stage0ExtractError:
+        raise
+    except Exception as exc:
+        message = (
+            f"Could not unload local models before the next Stage 0 step "
+            f"({reason}): {exc}."
+        )
+        if required:
+            raise Stage0ExtractError(message) from exc
+        print(f"    [Stage 0] {message}", file=sys.stderr)
+
+
+def _prepare_stage0_score_model() -> None:
+    """Confirm Gemma is installed after Qwen has been unloaded."""
+    import pipeline_env
+    if pipeline_env.stage0_section_mode() == "deterministic":
+        return
+    from evidence_scale import STAGE0_SCORE_MODEL, _ensure_score_model_ready, _score_model
+    model = _score_model()
+    print(
+        f"    [Stage 0] Score model {model} (default {STAGE0_SCORE_MODEL}).",
+        file=sys.stderr,
+    )
+    _ensure_score_model_ready(model)
 
 
 def run_prefs_gate_safe(company: str, jd_text: str, prefs: dict) -> dict:
@@ -1977,6 +2053,9 @@ def batch_report(folders: list[Path], write: bool = True, force: bool = False) -
         except FileNotFoundError as e:
             buckets["Skip"].append(f"| {folder.name} | ERROR: {e} |")
             continue
+        except Stage0ExtractError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            raise
         out_path = folder / "stage0_fit_gate.json"
         protected = (not force) and _has_extraction_override(out_path)
         if write and not protected:
@@ -2056,6 +2135,9 @@ def _main() -> None:
     except FileNotFoundError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(0)
+    except Stage0ExtractError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
     out_path = folder / "stage0_fit_gate.json"
     protected = (not args.force) and _has_extraction_override(out_path)

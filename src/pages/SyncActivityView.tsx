@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { api } from '../lib/api';
+import { useFitThresholds } from '../hooks/useFitThresholds';
 import PipelineTracker, { Stage, StageStatus } from '../components/PipelineTracker';
 
 interface ActivityLog {
@@ -48,14 +49,18 @@ function isPipelineActive(status: PipelineStatus): boolean {
   return status === 'scout_running' || status === 'evaluate_running' || status === 'drafting';
 }
 
-const MIN_FIT_SCORE = 72;
-
-function isActionablePipelineJob(job: JobMatch): boolean {
+/**
+ * skipFloor is the CR-093 evidence-scale engine's real Skip cutoff
+ * (data/fit_rubric_calibration.json, served via GET /api/fit-thresholds) --
+ * replaces the hardcoded MIN_FIT_SCORE = 72 this used to read from the old,
+ * deleted fit-scoring system (found stale 2026-08-20).
+ */
+function isActionablePipelineJob(job: JobMatch, skipFloor: number): boolean {
   if (!['Backlog', 'Drafted', 'Needs Retry'].includes(job.status)) return false;
   if (
     job.status === 'Backlog' &&
     job.score != null &&
-    job.score < MIN_FIT_SCORE &&
+    job.score < skipFloor &&
     !job.has_assets
   ) {
     return false;
@@ -183,6 +188,7 @@ interface SourceEntry {
 }
 
 const SyncActivityView: React.FC = () => {
+  const { skip_floor: skipFloor } = useFitThresholds();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [matchedJobs, setMatchedJobs] = useState<JobMatch[]>([]);
   const [sources, setSources] = useState<SourceEntry[]>([]);
@@ -313,7 +319,7 @@ const SyncActivityView: React.FC = () => {
       const res = await fetch(api('/api/jobs'));
       const data = await res.json();
       if (Array.isArray(data)) {
-        setMatchedJobs(data.filter(isActionablePipelineJob));
+        setMatchedJobs(data.filter((job: JobMatch) => isActionablePipelineJob(job, skipFloor)));
       }
     } catch { /* ignore */ }
   };

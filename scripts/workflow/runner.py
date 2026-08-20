@@ -15,7 +15,7 @@ if _SCRIPT_DIR not in sys.path:
 import contracts  # noqa: E402
 from author_from_packet import build_authoring_prompt, run_verify_only  # noqa: E402
 from build_authoring_packet import build_packet  # noqa: E402
-from build_stage0_fit_gate import build_stage0_fit_gate  # noqa: E402
+from build_stage0_fit_gate import Stage0ExtractError, build_stage0_fit_gate  # noqa: E402
 from stage_gate import StageGateNotReadyError, require_stage_ready  # noqa: E402
 
 from claim_provenance import check_claim_provenance  # noqa: E402
@@ -213,7 +213,10 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
         raise WorkflowError("Original_JD.txt not found")
 
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
-    result = build_stage0_fit_gate(folder, ignore_skip_ledger=force)
+    try:
+        result = build_stage0_fit_gate(folder, ignore_skip_ledger=force)
+    except Stage0ExtractError as exc:
+        raise WorkflowError(str(exc)) from exc
     protected = False
     if os.path.exists(gate_path) and not force:
         try:

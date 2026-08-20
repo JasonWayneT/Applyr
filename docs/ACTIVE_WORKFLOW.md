@@ -23,15 +23,15 @@
 1. **Scout** — `server/scout.ts` → `scripts/scout_local.ts` (API + browser sources)
 2. **Backfill** — missing detail URLs
 3. **Scrape** — full JD text
-4. **Evaluate & draft** — `scripts/batch_pipeline.py`
+4. **Review export** — gate-passed jobs with JD text → `data/pending_review/` (`server/services/exportPendingReview.ts`). No LLM fit-scoring runs here; that happens per-JD at Stage 0 via `scripts/run_submission.py` (see "Fit threshold" above). `batch_pipeline.py` is now a DB/JD helper library only, not a live evaluate/draft step.
 
 **LinkedIn:** Decommissioned (CR-010). Logs show `LinkedIn: Bypassed`. Do not re-enable without a new CR.
 
 ### Fit threshold
 
-- Pass threshold = `candidate_preferences.json` → **`min_fit_score`** (default **72**).
-- Rubric text for LLM: `.agent/rules/job_fit_engine.md` (loaded by Python).
-- Do **not** use legacy **78** from archived WebApp PRD or chat instructions.
+- Pass/skip floor = `data/fit_rubric_calibration.json` → **`score_bands.skip_floor: 40`** / **`tier1_floor: 65`** (CR-093, 2026-08-19; provisional, research-grounded, not yet outcome-calibrated).
+- Engine: `scripts/evidence_scale.py`, wired into `scripts/build_stage0_fit_gate.py` Step 5.5. Spec: `data/fit_rubric_spec.html`.
+- `candidate_preferences.json`'s `min_fit_score` (was default 72) and `.agent/rules/job_fit_engine.md` (archived) no longer exist / apply — do not resurrect either.
 
 ### Data sources of truth
 

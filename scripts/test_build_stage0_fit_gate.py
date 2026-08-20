@@ -31,6 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
 from build_stage0_fit_gate import (
+    STAGE0_EXTRACT_MODEL,
+    Stage0ExtractError,
     _parse_url_and_jd,
     _detect_thin_jd,
     _detect_stage_signal,
@@ -1912,9 +1914,9 @@ class TestEmptyRequiredNotTier1(unittest.TestCase):
 
 class TestSectionExtractionLLM(unittest.TestCase):
     """_extract_sections_llm never makes a real network call in these tests --
-    call_llm is patched directly. Real network behavior is out of scope for
-    this fast/offline suite; what's tested here is the safety contract:
-    verbatim-substring validation, and graceful fallback on any failure."""
+    call_llm and ensure_local_model_available are patched. The safety contract
+    is verbatim-substring validation plus fail-closed when Qwen cannot run
+    (no regex extractor, no other model)."""
 
     def setUp(self):
         from build_stage0_fit_gate import _extract_sections_llm
@@ -1928,6 +1930,13 @@ class TestSectionExtractionLLM(unittest.TestCase):
             Preferred Qualifications
             Experience with Salesforce or similar CRM platforms
             """
+        )
+
+    def _llm_patches(self, **call_llm_kw):
+        return (
+            patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}),
+            patch("model_manager.ensure_local_model_available"),
+            patch("utils.call_llm", **call_llm_kw),
         )
 
     def test_llm_mode_off_returns_none_without_calling_llm(self):
@@ -1944,12 +1953,14 @@ class TestSectionExtractionLLM(unittest.TestCase):
             "responsibilities": [],
             "culture": [],
         })
-        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
-            with patch("utils.call_llm", return_value=payload):
-                result = self._extract_sections_llm(self.jd)
+        env, avail, llm = self._llm_patches(return_value=payload)
+        with env, avail, llm as mock_call:
+            result = self._extract_sections_llm(self.jd)
         self.assertIsNotNone(result)
         self.assertEqual(len(result["required"]), 1)
         self.assertEqual(len(result["preferred"]), 1)
+        mock_call.assert_called_once()
+        self.assertEqual(mock_call.call_args.kwargs.get("model"), STAGE0_EXTRACT_MODEL)
 
     def test_invented_text_is_dropped_not_trusted(self):
         """A model that invents a line not present in the JD must never have
@@ -1964,42 +1975,60 @@ class TestSectionExtractionLLM(unittest.TestCase):
             "responsibilities": [],
             "culture": [],
         })
-        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
-            with patch("utils.call_llm", return_value=payload):
-                result = self._extract_sections_llm(self.jd)
+        env, avail, llm = self._llm_patches(return_value=payload)
+        with env, avail, llm:
+            result = self._extract_sections_llm(self.jd)
         self.assertIsNotNone(result)
         joined = " | ".join(result["required"])
         self.assertIn("5+ years of product management experience in B2B SaaS", joined)
         self.assertNotIn("10+ years of experience leading a team of engineers", joined)
 
-    def test_empty_llm_response_falls_back_to_none(self):
-        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
-            with patch("utils.call_llm", return_value=""):
-                result = self._extract_sections_llm(self.jd)
-        self.assertIsNone(result)
+    def test_empty_llm_response_raises_not_silent_none(self):
+        env, avail, llm = self._llm_patches(return_value="")
+        with env, avail, llm:
+            with self.assertRaises(Stage0ExtractError) as ctx:
+                self._extract_sections_llm(self.jd)
+        self.assertIn(STAGE0_EXTRACT_MODEL, str(ctx.exception))
+        self.assertIn("No fallback", str(ctx.exception))
 
-    def test_malformed_json_falls_back_to_none(self):
-        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
-            with patch("utils.call_llm", return_value="not json at all"):
-                result = self._extract_sections_llm(self.jd)
-        self.assertIsNone(result)
+    def test_malformed_json_raises_not_silent_none(self):
+        env, avail, llm = self._llm_patches(return_value="not json at all")
+        with env, avail, llm:
+            with self.assertRaises(Stage0ExtractError) as ctx:
+                self._extract_sections_llm(self.jd)
+        self.assertIn(STAGE0_EXTRACT_MODEL, str(ctx.exception))
 
-    def test_llm_exception_falls_back_to_none(self):
-        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
-            with patch("utils.call_llm", side_effect=RuntimeError("network down")):
-                result = self._extract_sections_llm(self.jd)
-        self.assertIsNone(result)
+    def test_llm_exception_raises_not_silent_none(self):
+        env, avail, llm = self._llm_patches(side_effect=RuntimeError("network down"))
+        with env, avail, llm:
+            with self.assertRaises(Stage0ExtractError) as ctx:
+                self._extract_sections_llm(self.jd)
+        self.assertIn(STAGE0_EXTRACT_MODEL, str(ctx.exception))
+        self.assertIn("No fallback", str(ctx.exception))
 
-    def test_full_pipeline_falls_back_to_deterministic_when_llm_unavailable(self):
-        """build_stage0_fit_gate() end to end: with STAGE0_SECTION_MODE=llm
-        but no usable LLM response, the full pipeline must still produce a
-        correct result via the deterministic fallback, not fail or return
-        empty buckets."""
+    def test_model_unavailable_raises_without_calling_llm(self):
+        from model_manager import LocalModelUnavailable
         with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
-            with patch("utils.call_llm", return_value=""):
-                result = _build(_CLEAN_PM_JD)
-        self.assertEqual(result["extraction_source"], "deterministic")
-        self.assertGreater(len(result["required"]), 0)
+            with patch(
+                "model_manager.ensure_local_model_available",
+                side_effect=LocalModelUnavailable(
+                    f"{STAGE0_EXTRACT_MODEL} is not installed"
+                ),
+            ):
+                with patch("utils.call_llm") as mock_call:
+                    with self.assertRaises(Stage0ExtractError) as ctx:
+                        self._extract_sections_llm(self.jd)
+        mock_call.assert_not_called()
+        self.assertIn(STAGE0_EXTRACT_MODEL, str(ctx.exception))
+
+    def test_full_pipeline_stops_when_extract_model_unavailable(self):
+        """build_stage0_fit_gate() must not quietly switch to the regex
+        extractor when Qwen cannot run."""
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("model_manager.ensure_local_model_available"):
+                with patch("utils.call_llm", return_value=""):
+                    with self.assertRaises(Stage0ExtractError):
+                        _build(_CLEAN_PM_JD)
 
 
 class TestUnbridgeableDomainRequirement(unittest.TestCase):

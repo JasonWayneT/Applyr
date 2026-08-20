@@ -33,6 +33,31 @@ router.post('/api/system-status', (req, res) => {
   }
 });
 
+/**
+ * Real fit-score bands for the UI (CR-093 evidence-scale engine), read from
+ * data/fit_rubric_calibration.json -- the single source of truth for these numbers
+ * (scripts/evidence_scale.py's load_score_bands() reads the same file). Added
+ * 2026-08-20 to replace hardcoded 72/80/60 literals in SyncActivityView/TodayView/
+ * AllJobsView that referenced the old, deleted fit-scoring system and were never
+ * updated when CR-093 replaced it.
+ */
+router.get('/api/fit-thresholds', (_req, res) => {
+  try {
+    const calibrationPath = path.join(PROJECT_ROOT, 'data/fit_rubric_calibration.json');
+    if (!fs.existsSync(calibrationPath)) {
+      return res.json({ skip_floor: 40, tier1_floor: 65 });
+    }
+    const calibration = JSON.parse(fs.readFileSync(calibrationPath, 'utf-8'));
+    const bands = calibration.score_bands || {};
+    res.json({
+      skip_floor: typeof bands.skip_floor === 'number' ? bands.skip_floor : 40,
+      tier1_floor: typeof bands.tier1_floor === 'number' ? bands.tier1_floor : 65,
+    });
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch fit thresholds' });
+  }
+});
+
 router.get('/api/ats-pipeline', (_req, res) => {
   try {
     const pipelinePath = path.join(PROJECT_ROOT, 'data/ats-pipeline.md');

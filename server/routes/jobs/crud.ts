@@ -5,6 +5,7 @@ import {
   reconcileActiveSubmissionFolders,
   reconcileDraftedJobsWithAssets,
   reconcileOrphanSubmissionFolders,
+  reconcileStage0FitScores,
 } from '../../submissionFolders.js';
 import { isSafeHttpUrl, isValidJobId } from '../../middleware.js';
 import { insertJob, patchJob } from '../../repository/jobRepository.js';
@@ -21,6 +22,7 @@ router.get('/api/jobs', (req, res) => {
   try {
     reconcileDraftedJobsWithAssets();
     reconcileOrphanSubmissionFolders();
+    reconcileStage0FitScores();
     const search = req.query.search as string;
     let jobs: any[];
     if (search) {

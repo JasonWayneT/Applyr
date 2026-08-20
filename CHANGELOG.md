@@ -9,6 +9,22 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 
 ## [Unreleased]
 
+### Changed
+- **Stage 0 requirement extraction (2026-08-20):** pinned to `qwen2.5:7b-instruct-q4_K_M`.
+  If that model is missing, Ollama is down, or the call returns empty/unparseable output,
+  Stage 0 stops and tells you — it no longer silently swaps in the regex extractor or
+  another local model.
+- **Stage 0 score model (2026-08-20):** pinned to `gemma2:2b-instruct-q8_0` (21/21 on the
+  golden set, ~3.7GB extra VRAM vs Qwen 7B's 5.6GB at the same accuracy). Stage 0 unloads
+  resident models after Qwen extraction and before Gemma scoring so they never share VRAM.
+- **Fit-score UI (2026-08-20):** Today / Sync / All Jobs read `skip_floor` / `tier1_floor`
+  from `GET /api/fit-thresholds` (`data/fit_rubric_calibration.json`) instead of leftover
+  72/80/60 literals. `jobs.score` is reconciled from each folder's `stage0_fit_gate.json`.
+
+### Developer
+- **`batch_pipeline.py` (2026-08-20):** removed leftover zero-caller helpers from the deleted
+  evaluate/draft path. File stays a DB/JD helper library.
+
 ### Added
 - **CR-093: Evidence-scale fit engine (2026-08-19).** Replaces every prior fit-scoring mechanism
   with one: a single LLM judgment per JD requirement line (`scripts/evidence_scale.py`), rating a

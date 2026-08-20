@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Job } from '../types/job';
 import StatusChip from '../components/StatusChip';
 import { api } from '../lib/api';
+import { useFitThresholds } from '../hooks/useFitThresholds';
 import type { OpportunitiesFilter } from '../types/opportunities';
 import { OPPORTUNITIES_FILTERS, FILTER_STATUS_MAP } from '../types/opportunities';
 
@@ -23,6 +24,7 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 ];
 
 const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilter, onFilterChange }) => {
+  const { skip_floor: skipFloor, tier1_floor: tier1Floor } = useFitThresholds();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -166,9 +168,9 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                     key={job.id}
                     onClick={() => onJobClick(job)}
                     className={`group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline border-l-4 cursor-pointer ${
-                      job.score && job.score >= 80
+                      job.score && job.score >= tier1Floor
                         ? 'border-l-primary'
-                        : job.score && job.score >= 60
+                        : job.score && job.score >= skipFloor
                         ? 'border-l-secondary'
                         : 'border-l-outline-variant'
                     }`}
@@ -188,7 +190,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
 
                     <div className="flex items-center gap-6 shrink-0">
                       <div className="text-right hidden lg:block">
-                        <span className={`text-sm font-bold ${job.score && job.score >= 80 ? 'text-primary' : 'text-on-surface-variant'}`}>
+                        <span className={`text-sm font-bold ${job.score && job.score >= tier1Floor ? 'text-primary' : 'text-on-surface-variant'}`}>
                           {job.score || '—'}
                         </span>
                       </div>

@@ -273,7 +273,7 @@ function titleCaseFromSlug(folderName: string): string {
 
 /**
  * Real rubric fit score for a submission folder, read from stage0_fit_gate.json
- * (written by scripts/build_stage0_fit_gate.py's CR-053 structured_fit wiring).
+ * (written by scripts/build_stage0_fit_gate.py's CR-093 evidence-scale wiring).
  * Returns null when the folder has no gate file, an older gate file predating
  * that wiring, or the LLM-backed rubric call failed for this JD -- callers
  * must treat null as "unscored," never substitute a guessed number for it.
@@ -286,6 +286,39 @@ function readStage0FitScore(folderPath: string): number | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Sync jobs.score from each active submission folder's stage0_fit_gate.json (CR-093
+ * evidence-scale engine) for jobs rows that already existed before Stage 0 ran --
+ * the common case, since Scout creates the jobs row first and Stage 0 fit-gates a
+ * folder afterward. Added 2026-08-20: readStage0FitScore() already existed and was
+ * wired into reconcileOrphanSubmissionFolders() below, but that only covers the
+ * narrow case of a folder with no matching jobs row yet. Every other job -- the
+ * mainstream case -- kept whatever score (or null) it had from before its writer
+ * (batch_pipeline.py's evaluate_job_fit/process_single/process_batch) was deleted
+ * this session, so the UI's "Fit Score" badges were silently going dark for any job
+ * scouted after CR-093. This closes that gap using the same read path, not a new one.
+ */
+export function reconcileStage0FitScores(): string[] {
+  if (!fs.existsSync(SUBMISSION_DIR)) return [];
+
+  const updated: string[] = [];
+  for (const folderName of fs.readdirSync(SUBMISSION_DIR)) {
+    const activePath = path.join(SUBMISSION_DIR, folderName);
+    if (!fs.statSync(activePath).isDirectory()) continue;
+
+    const freshScore = readStage0FitScore(activePath);
+    if (freshScore === null) continue;
+
+    for (const job of findJobsForFolder(folderName)) {
+      const result = db
+        .prepare('UPDATE jobs SET score = ? WHERE LOWER(company) = LOWER(?) AND (score IS NULL OR score != ?)')
+        .run(freshScore, job.company, freshScore);
+      if (result.changes > 0) updated.push(job.company);
+    }
+  }
+  return updated;
 }
 
 function readJdMeta(folderPath: string): { title: string; url: string; jdText: string } {
@@ -465,7 +498,7 @@ export function reconcileOrphanSubmissionFolders(): string[] {
     const title = meta.title || 'Product Manager';
     const id = crypto.randomUUID().replace(/-/g, '').slice(0, 8);
     const summary = `Ready to apply — ${company} (assets on disk; linked from submissions/).`;
-    // Real rubric score from Stage 0 (CR-053's structured_fit scorer), not a
+    // Real rubric score from Stage 0 (CR-093's evidence-scale scorer), not a
     // guess -- was hardcoded to 80 for every folder here until 2026-08-18
     // (Jason-reported: every Backlog job in the UI showed the same score).
     // Folders authored before that wiring landed, or whose LLM-backed rubric

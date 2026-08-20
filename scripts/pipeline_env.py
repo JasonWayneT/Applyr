@@ -28,9 +28,9 @@ def stage0_section_mode() -> str:
     _extract_sections_llm()/_extract_sections() split uses. Defaults to
     "llm" (2026-08-17, Jason-supplied): the regex header-matcher proved
     unreliable across real JD phrasing (see build_stage0_fit_gate.py's module
-    docstring). Falls back to "deterministic" automatically on any LLM
-    failure regardless of this setting -- this flag only controls whether the
-    LLM path is attempted at all, e.g. for offline/no-API-key runs."""
+    docstring). This flag only controls whether the LLM path is attempted at
+    all (tests / explicit offline runs). A failed LLM extract raises rather
+    than silently using the regex extractor."""
     return _flag("STAGE0_SECTION_MODE", "llm")
 
 

@@ -23,6 +23,7 @@ STAGE_PROVIDERS = {
     # cloud provider on local failure would defeat the point. call_llm_stage below enforces
     # this — it raises rather than substituting a cloud provider for a hard-local stage.
     "rewrite": ["local"],
+    "evidence_scale": ["local"],
 }
 
 STAGE_MODEL_KEYS = {
@@ -35,7 +36,7 @@ STAGE_MODEL_KEYS = {
 
 # Stages in this set must never silently substitute a different provider than the ones
 # listed in STAGE_PROVIDERS, even if none of them are "configured" — see call_llm_stage.
-_HARD_PROVIDER_STAGES = {"rewrite"}
+_HARD_PROVIDER_STAGES = {"rewrite", "evidence_scale"}
 
 
 def local_only_mode() -> bool:
@@ -55,6 +56,7 @@ def stage_model(stage_id: str) -> str | None:
         "fit": settings.get("localModelFit") or "qwen2.5:7b-instruct-q4_K_M",
         "jd_profile": settings.get("localModel") or "llama3.1:8b-instruct-q5_K_M",
         "rewrite": settings.get("localModelRewrite") or "qwen2.5:7b-instruct-q4_K_M",
+        "evidence_scale": "gemma2:2b-instruct-q8_0",
     }
     return defaults.get(stage_id)
 

@@ -3,6 +3,7 @@ import { Job } from '../types/job';
 import { Contact } from '../types/contact';
 import StatusChip from '../components/StatusChip';
 import { api } from '../lib/api';
+import { useFitThresholds } from '../hooks/useFitThresholds';
 import type { OpportunitiesFilter } from '../types/opportunities';
 import { DASHBOARD_FILTER_MAP } from '../types/opportunities';
 
@@ -54,6 +55,7 @@ const getGreeting = () => {
 };
 
 const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpportunities, onStatusChange }) => {
+  const { tier1_floor: tier1Floor } = useFitThresholds();
   const [firstName, setFirstName] = useState('');
   const [pipelineSortBy, setPipelineSortBy] = useState<PipelineSortOption>('newest');
 
@@ -399,7 +401,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
                   {job.score && (
                     <div className="hidden lg:block">
                       <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Fit Score</p>
-                      <p className={`text-sm font-bold ${job.score >= 80 ? 'text-primary' : 'text-on-surface-variant'}`}>{job.score}</p>
+                      <p className={`text-sm font-bold ${job.score >= tier1Floor ? 'text-primary' : 'text-on-surface-variant'}`}>{job.score}</p>
                     </div>
                   )}
                   <div className="min-w-[130px]">
@@ -472,7 +474,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
                   {job.score && (
                     <div className="hidden lg:block">
                       <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">Fit Score</p>
-                      <p className={`text-sm font-bold ${job.score >= 80 ? 'text-primary' : 'text-on-surface-variant'}`}>{job.score}</p>
+                      <p className={`text-sm font-bold ${job.score >= tier1Floor ? 'text-primary' : 'text-on-surface-variant'}`}>{job.score}</p>
                     </div>
                   )}
                   <div className="min-w-[130px]">

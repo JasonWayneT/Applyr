@@ -547,8 +547,38 @@ class TestThinJd(unittest.TestCase):
             _detect_thin_jd(words, required_items=[]),
             "headerless sparse prose under 150 words with 0 requireds must be thin",
         )
-        # Same word count but with extractable requireds is not thin.
-        self.assertFalse(_detect_thin_jd(words, required_items=["a", "b"]))
+        # Same word count but with extractable qualification-shaped requireds is not thin.
+        self.assertFalse(
+            _detect_thin_jd(
+                words,
+                required_items=[
+                    "5+ years of product management experience in B2B SaaS",
+                    "Bachelor's degree in Computer Science or equivalent experience",
+                ],
+            )
+        )
+
+    def test_culture_sentences_in_required_do_not_clear_thin(self):
+        words = (
+            "Clear Capital is hiring a Product Manager to own roadmap work across "
+            "data products and client workflows in real estate valuation. "
+            "You will partner with engineering and stakeholders, ship incremental "
+            "improvements, and use data to prioritize. The role needs someone who "
+            "can write crisp specs, run discovery with customers, and keep delivery "
+            "honest when scope shifts. Experience with SaaS platforms, analytics, "
+            "and cross-functional alignment matters. Apply with a resume that shows "
+            "ownership of ambiguous problems and measurable outcomes over several "
+            "years of product work in enterprise software environments today."
+        )
+        self.assertTrue(
+            _detect_thin_jd(
+                words,
+                required_items=[
+                    "We work to enable developers to have the most productive results of their career",
+                    "In total, we are 700+ ebankers spread across the world",
+                ],
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2086,11 +2116,12 @@ class TestEmptyRequiredNotTier1(unittest.TestCase):
 class TestSectionExtractionLLM(unittest.TestCase):
     """_extract_sections_llm never makes a real network call in these tests --
     call_llm and ensure_local_model_available are patched. The safety contract
-    is verbatim-substring validation plus fail-closed when Qwen cannot run
+    is id-lookup into harvested lines plus fail-closed when Qwen cannot run
     (no regex extractor, no other model)."""
 
     def setUp(self):
         from build_stage0_fit_gate import _extract_sections_llm
+        from stage0_extract import harvest_extract_candidates
         self._extract_sections_llm = _extract_sections_llm
         self.jd = textwrap.dedent(
             """
@@ -2101,6 +2132,11 @@ class TestSectionExtractionLLM(unittest.TestCase):
             Preferred Qualifications
             Experience with Salesforce or similar CRM platforms
             """
+        )
+        cands = harvest_extract_candidates(self.jd)
+        self.req_id = next(c["id"] for c in cands if "5+ years" in c["text"])
+        self.pref_id = next(
+            c["id"] for c in cands if "Salesforce" in c["text"]
         )
 
     def _llm_patches(self, **call_llm_kw):
@@ -2117,10 +2153,10 @@ class TestSectionExtractionLLM(unittest.TestCase):
         mock_call.assert_not_called()
         self.assertIsNone(result)
 
-    def test_valid_verbatim_response_accepted(self):
+    def test_valid_id_response_accepted(self):
         payload = json.dumps({
-            "required": ["5+ years of product management experience in B2B SaaS"],
-            "preferred": ["Experience with Salesforce or similar CRM platforms"],
+            "required": [self.req_id],
+            "preferred": [self.pref_id],
             "responsibilities": [],
             "culture": [],
         })
@@ -2128,19 +2164,25 @@ class TestSectionExtractionLLM(unittest.TestCase):
         with env, avail, llm as mock_call:
             result = self._extract_sections_llm(self.jd)
         self.assertIsNotNone(result)
-        self.assertEqual(len(result["required"]), 1)
-        self.assertEqual(len(result["preferred"]), 1)
+        self.assertIn("5+ years", result["required"][0])
+        self.assertIn("Salesforce", result["preferred"][0])
+        self.assertGreaterEqual(len(result["required"]), 1)
         mock_call.assert_called_once()
         self.assertEqual(mock_call.call_args.kwargs.get("model"), STAGE0_EXTRACT_MODEL)
+        system_prompt = mock_call.call_args.args[0]
+        user_prompt = mock_call.call_args.args[1]
+        self.assertIn("[1]", user_prompt)
+        self.assertIn("integer ids", system_prompt.lower())
+        self.assertIn("Do not copy the line text", user_prompt)
 
-    def test_invented_text_is_dropped_not_trusted(self):
-        """A model that invents a line not present in the JD must never have
-        that line survive into the output -- this is the core safety
-        guarantee that makes the LLM path acceptable at all."""
+    def test_invented_ids_and_copied_wording_are_dropped(self):
+        """Unknown ids and copied JD-style strings must never survive --
+        resolved text is always a lookup into the harvested candidate list."""
         payload = json.dumps({
             "required": [
-                "5+ years of product management experience in B2B SaaS",
-                "10+ years of experience leading a team of engineers",  # invented, not in JD
+                self.req_id,
+                99,
+                "10+ years of experience leading a team of engineers",
             ],
             "preferred": [],
             "responsibilities": [],
@@ -2153,6 +2195,53 @@ class TestSectionExtractionLLM(unittest.TestCase):
         joined = " | ".join(result["required"])
         self.assertIn("5+ years of product management experience in B2B SaaS", joined)
         self.assertNotIn("10+ years of experience leading a team of engineers", joined)
+
+    def test_omitted_requirement_filled_from_header_hint(self):
+        payload = json.dumps({
+            "required": [self.req_id],
+            "preferred": [self.pref_id],
+            "responsibilities": [],
+            "culture": [],
+        })
+        env, avail, llm = self._llm_patches(return_value=payload)
+        with env, avail, llm:
+            result = self._extract_sections_llm(self.jd)
+        joined = " | ".join(result["required"])
+        self.assertIn("5+ years of product management experience in B2B SaaS", joined)
+        self.assertIn("Strong analytical and communication skills", joined)
+        self.assertTrue(any("Salesforce" in p for p in result["preferred"]))
+
+
+    def test_html_entity_jd_resolves_cleaned_harvested_text(self):
+        jd = (
+            "Role: &lt;p&gt;Technical Program Manager&lt;/p&gt;\n"
+            "&lt;p&gt;5+ years of product management experience in B2B SaaS&lt;/p&gt;"
+        )
+        from stage0_extract import harvest_extract_candidates
+        cands = harvest_extract_candidates(jd)
+        req_id = next(c["id"] for c in cands if "5+ years" in c["text"])
+        payload = json.dumps({
+            "required": [req_id],
+            "preferred": [],
+            "responsibilities": [],
+            "culture": [],
+        })
+        env, avail, llm = self._llm_patches(return_value=payload)
+        with env, avail, llm:
+            result = self._extract_sections_llm(jd)
+        self.assertEqual(len(result["required"]), 1)
+        self.assertIn("5+ years of product management experience in B2B SaaS", result["required"][0])
+        self.assertNotIn("&lt;", result["required"][0])
+        self.assertNotIn("<p>", result["required"][0].lower())
+
+    def test_empty_harvest_raises_without_calling_llm(self):
+        env, avail, llm = self._llm_patches(return_value="{}")
+        with env, avail, llm as mock_call:
+            with self.assertRaises(Stage0ExtractError) as ctx:
+                self._extract_sections_llm("Hi")
+        mock_call.assert_not_called()
+        self.assertIn("no candidate lines", str(ctx.exception))
+        self.assertIn("No regex fallback", str(ctx.exception))
 
     def test_empty_llm_response_raises_not_silent_none(self):
         env, avail, llm = self._llm_patches(return_value="")

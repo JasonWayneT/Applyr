@@ -289,11 +289,12 @@ That's a real, useful finding but a different CR's problem (see "Not in scope" b
 real numbers. Unlike `pending_review`, this sample was NOT dominated by the extraction confound —
 worth reading as a real (if small) signal, not dismissed.
 
-**Not in scope for CR-093, flagged for a separate look:** the `pending_review` batch's
-extraction-quality problem (garbled/empty required-item lists on agency-sourced, HTML-messy
-JDs) is real and worth its own investigation — but it predates this CR and sits in
-`_extract_sections_llm`/`_extract_sections`, code this CR never touched. Fixing it is a
-different, focused piece of work, not a CR-093 story.
+**Not in scope for CR-093, flagged for a separate look (follow-on landed 2026-08-20):** the
+`pending_review` batch's extraction-quality problem (garbled/empty required-item lists on
+agency-sourced, HTML-messy JDs) predated this CR and sat in `_extract_sections_llm`. A focused
+id-only extractor is now in `scripts/stage0_extract.py`: Python cleans/harvests candidate lines,
+Qwen returns integer ids only, resolved text is a lookup. Not a CR-093 story. Live Qwen smoke on
+the original ugly JDs is the remaining check.
 
 **Story status**, same discipline the domain-hard-gate rule got 2026-08-19 (402-JD archive corpus
 sweep before shipping — don't trust golden-set pass rate alone for a change this central):

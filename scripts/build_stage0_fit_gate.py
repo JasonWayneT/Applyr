@@ -19,16 +19,15 @@ Prefer ``python scripts/run_submission.py <folder>`` for normal progression
 Every gate below (DB cooldown, prefs/exclusions, anchor-checking, tier
 decision) is still deterministic -- no LLM involved, same as always.
 
-The one exception (2026-08-17, Jason-supplied): splitting the raw JD text
-into required/preferred/responsibilities/culture buckets now tries a small
-structured LLM call first (see _extract_sections_llm), because the
-regex-based header matcher (_extract_sections) proved unreliable across real
-JD phrasing variety -- see the CR-086/089/090 comments throughout this file
-and the 2026-08-17 fixes for the specific failure catalog. The LLM call is
-tightly bounded: it may only select text that appears verbatim in the JD
-(every returned string is checked against the raw JD text and dropped if it
-isn't a real substring -- see _substring_valid), and it never sees or
-influences the REJECT/PASS decision itself.
+The one exception (2026-08-17, Jason-supplied; id-only rewrite 2026-08-20):
+splitting the JD into required/preferred/responsibilities/culture buckets
+tries a small structured LLM call first (see _extract_sections_llm), because
+the regex-based header matcher (_extract_sections) proved unreliable across
+real JD phrasing. Python cleans the JD (HTML entities/tags) and harvests
+candidate lines with stable integer ids. Qwen may return only those ids plus
+bucket labels -- never JD wording. Resolved text is a lookup into the
+harvested list. Copied strings and unknown ids are dropped. The call never
+sees or influences the REJECT/PASS decision itself.
 
 Local-only, hard-pinned to Ollama (2026-08-17, Jason-supplied correction):
 this stage runs on every incoming JD, so it must never silently reach a paid
@@ -370,6 +369,28 @@ _IGNORE_SECTION_HEADERS = re.compile(
 )
 
 _TRACKING_TAG_RE = re.compile(r"^#li-[\w-]*\s*$", re.I)
+
+
+def classify_jd_header(line: str) -> tuple[str | None, bool]:
+    """Return (bucket, is_pure_label) for a JD line.
+
+    bucket is required/preferred/responsibilities/culture/ignore, or None.
+    is_pure_label True means the line is only a header (skip as a candidate).
+    A header match with real trailing content returns is_pure_label False so
+    harvest can keep it as an item instead of treating the sentence as a label.
+    """
+    clean = (line or "").strip()
+    if not clean:
+        return None, False
+    if _TRACKING_TAG_RE.match(clean) or _IGNORE_SECTION_HEADERS.match(clean):
+        return "ignore", True
+    for bucket_name, header_re in _SECTION_HEADERS:
+        m = header_re.match(clean)
+        if not m:
+            continue
+        trailing = clean[m.end():].strip(" \t:?.-")
+        return bucket_name, len(trailing) < 3
+    return None, False
 
 _BOILERPLATE_ITEM_RE = re.compile(
     r"(?i)(?:"
@@ -778,17 +799,15 @@ def _looks_like_qualification(text: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# LLM-based section extraction (2026-08-17, Jason-supplied)
+# LLM-based section extraction (2026-08-17, Jason-supplied; id-only 2026-08-20)
 # ---------------------------------------------------------------------------
 # Replaces _extract_sections as the default bucket-splitter. See the module
 # docstring for why: regex header-matching kept producing new real-world
 # failures (7 distinct root causes found and fixed on 2026-08-17 alone across
 # a handful of real JDs, on top of the CR-086/089/090 patches already in this
-# file). This function is deliberately narrow -- pure text bucketing, nothing
-# that touches the REJECT/PASS decision -- and every returned string is
-# verified as a real, verbatim substring of the JD before it's trusted. A
-# model that invents, paraphrases, or summarizes instead of quoting produces
-# an item that fails validation and gets silently dropped, not accepted.
+# file). Python harvests candidate lines and assigns integer ids. Qwen only
+# labels those ids. Copied wording and unknown ids are dropped. This path
+# never touches the REJECT/PASS decision.
 
 def _normalize_ws_for_substring_check(text: str) -> str:
     return re.sub(r"\s+", " ", text or "").strip().lower()
@@ -797,9 +816,8 @@ def _normalize_ws_for_substring_check(text: str) -> str:
 def _is_verbatim_substring(phrase: str, jd_text: str) -> bool:
     """True iff *phrase* appears in *jd_text*, modulo whitespace collapsing.
 
-    Whitespace-only normalization (not case-insensitive-only, not fuzzy) --
-    deliberately strict. A model that reworded, summarized, or invented a
-    line fails this check and gets dropped; only real, quoted JD text passes.
+    Used for internal_terms (short proper nouns). Requirement lines are not
+    validated this way -- they come from id lookup into harvested candidates.
     """
     phrase = (phrase or "").strip()
     if not phrase:
@@ -808,17 +826,16 @@ def _is_verbatim_substring(phrase: str, jd_text: str) -> bool:
 
 
 _SECTION_SPLIT_SYSTEM_PROMPT = (
-    "You extract structure from job descriptions. You may ONLY copy text "
-    "that appears verbatim in the job description given to you -- never "
-    "paraphrase, summarize, invent, or combine sentences. Output ONLY valid "
-    "JSON, no other text."
+    "You label candidate lines from a job description. "
+    "Return ONLY JSON. Bucket arrays must contain integer ids only -- "
+    "never copy, paraphrase, or invent the line text."
 )
 
-_SECTION_SPLIT_USER_TEMPLATE = """Split this job description into four buckets. For each bucket, copy the \
-individual requirement/duty/statement lines VERBATIM from the text below -- \
-exact substrings, not paraphrases or summaries. Split a bucket's own \
-paragraph into its natural individual bullet-level statements rather than \
-copying a whole paragraph as one string, but never alter the wording itself.
+_SECTION_SPLIT_USER_TEMPLATE = """Each line below is a candidate already extracted from the job description. \
+Assign each id to at most one bucket. Do not copy the line text. Do not invent ids. \
+Omit ids that are boilerplate, section headers, or not a real item. \
+Lines tagged (required) or (preferred) came from those JD sections -- keep them \
+in that bucket unless they clearly belong elsewhere, and do not omit those ids.
 
 Buckets:
 - "required": what a candidate MUST have (labeled Requirements, Qualifications, \
@@ -831,21 +848,20 @@ What You'll Do, duties, success-measurement criteria describing the work, etc.)
 framing, and any other content about the COMPANY rather than the candidate or \
 the role's duties
 
-Do NOT include: EEO/diversity statements, salary/compensation/benefits \
+Do NOT label: EEO/diversity statements, salary/compensation/benefits \
 boilerplate, application-process or interview-process instructions, legal \
-notices, or recruiter/fraud-prevention notices, in ANY bucket -- leave that \
-content out entirely.
+notices, or recruiter/fraud-prevention notices.
 
-Also identify "internal_terms": proper nouns naming THIS employer's OWN \
+Also identify "internal_terms": short proper nouns naming THIS employer's OWN \
 products, platforms, or internal systems -- not third-party tools, vendors, \
-or technologies a candidate needs outside experience with. If nothing like \
-that appears, use an empty list.
+or technologies a candidate needs outside experience with. These may be quoted \
+strings (not ids). If nothing like that appears, use an empty list.
 {few_shot_block}
 Output ONLY this JSON shape, nothing else:
-{{"required": ["...", "..."], "preferred": ["...", "..."], "responsibilities": ["...", "..."], "culture": ["...", "..."], "internal_terms": ["...", "..."]}}
+{{"required": [1, 4], "preferred": [8], "responsibilities": [2, 3], "culture": [10], "internal_terms": ["ProductName"]}}
 
-Job description:
-{jd_text}"""
+Candidate lines:
+{candidate_block}"""
 
 
 def _extract_unavailable_message(reason: str) -> str:
@@ -859,6 +875,7 @@ def _extract_unavailable_message(reason: str) -> str:
 def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     """LLM section extraction pinned to STAGE0_EXTRACT_MODEL.
 
+    Python harvests candidate lines; the model returns integer ids only.
     Returns None only when STAGE0_SECTION_MODE=deterministic (caller then
     uses the regex extractor on purpose). Any load/run/parse failure raises
     Stage0ExtractError -- the regex path is not a silent backup.
@@ -866,6 +883,21 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     import pipeline_env
     if pipeline_env.stage0_section_mode() == "deterministic":
         return None
+
+    from stage0_extract import (
+        clean_jd_text,
+        harvest_extract_candidates,
+        format_candidates_for_prompt,
+        resolve_labeled_buckets,
+    )
+
+    cleaned_jd = clean_jd_text(jd_text)
+    candidates = harvest_extract_candidates(jd_text)
+    if not candidates:
+        raise Stage0ExtractError(
+            f"{STAGE0_EXTRACT_MODEL} cannot extract: no candidate lines after "
+            "cleanup. No regex fallback."
+        )
 
     try:
         from utils import call_llm, extract_json_from_text
@@ -899,9 +931,9 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     # than every 14B model tested (qwen2.5-coder:14b, gemma2:9b, qwen3:14b,
     # ministral-3-14b all took 45-65s) and more complete than the 8B default.
     # Every model tested got "required" fully correct with zero invented
-    # items (the verbatim-substring check holds regardless of model
-    # strength); the real differentiation was responsibilities/culture
-    # completeness, where this model won clearly. phi4:14b crashed the
+    # items (id lookup drops copied wording and unknown ids); the real
+    # differentiation was responsibilities/culture completeness, where this
+    # model won clearly. phi4:14b crashed the
     # underlying llama-server process outright on this machine (unrelated to
     # this code) and is not usable at all here.
     # Retrieval-augmented few-shot (2026-08-19 self-healing plan, item 3):
@@ -915,7 +947,7 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     few_shot_block = ""
     try:
         from fit_rubric_examples import retrieve_examples, format_examples_for_prompt
-        examples = retrieve_examples(jd_text[:4000], "internal_term", k=3)
+        examples = retrieve_examples(cleaned_jd[:4000], "internal_term", k=3)
         rendered = format_examples_for_prompt(examples)
         if rendered:
             few_shot_block = "\n" + rendered + "\n"
@@ -923,7 +955,8 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
         pass
 
     prompt = _SECTION_SPLIT_USER_TEMPLATE.format(
-        jd_text=jd_text[:12000], few_shot_block=few_shot_block
+        candidate_block=format_candidates_for_prompt(candidates),
+        few_shot_block=few_shot_block,
     )
     try:
         raw = call_llm(
@@ -963,51 +996,18 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
             "requirement extraction. No fallback extractor."
         )
 
-    result: dict[str, list[str]] = {
-        "required": [], "preferred": [], "responsibilities": [], "culture": [],
-    }
-    for bucket in result:
-        raw_items = data.get(bucket)
-        if not isinstance(raw_items, list):
-            continue
-        for item in raw_items:
-            item = str(item).strip()
-            # Strip a leading bullet marker the model echoed back verbatim
-            # from the JD's own bullet list (e.g. "- Own and lead..." instead
-            # of "Own and lead...") -- same character set _extract_sections()
-            # (the regex path) already strips at every one of its own item
-            # sites. Found 2026-08-18: the LLM path never had this step, so
-            # every item from a dash/bullet-prefixed JD carried the marker
-            # into required/preferred/gap text and everything downstream.
-            item = item.lstrip("-•*◦▪▸→").strip()
-            if not item:
-                continue
-            # 20-800 chars: same floor as the regex path's minimum, and a
-            # generous ceiling that still excludes an entire paragraph
-            # copied as "one item" (a model ignoring the split-into-bullets
-            # instruction) rather than the real per-line splits requested.
-            if not (20 <= len(item) <= 800):
-                continue
-            if not _is_verbatim_substring(item, jd_text):
-                continue
-            result[bucket].append(item)
+    result = resolve_labeled_buckets(candidates, data)
 
     if not any(result.values()):
         raise Stage0ExtractError(
-            f"{STAGE0_EXTRACT_MODEL} produced no verbatim requirement lines. "
+            f"{STAGE0_EXTRACT_MODEL} produced no labeled requirement lines. "
             "No regex fallback."
         )
 
-    # internal_terms (2026-08-19, Jason-supplied): the same model already
-    # reading the whole JD is well placed to recognize "Empower and Exchange"
-    # as this employer's own platforms, not real external tools -- fed into
-    # the tool-detection check downstream so it stops flagging a company's
-    # own product names as unconfirmed tools (real case: Dark Matter
-    # Technologies' own "Empower"/"Exchange" platforms). Short proper nouns,
-    # not full sentences -- different length bound than the buckets above,
-    # and no bullet-marker stripping needed since these are terms, not lines.
-    # Same verbatim-substring safety net: the model can only point at real
-    # words that actually appear in the JD, never invent a term.
+    # internal_terms (2026-08-19, Jason-supplied): short proper nouns, not
+    # harvested lines. Still checked as a real substring of the *cleaned* JD
+    # so HTML-entity postings cannot invent a product name. Unknown / copied
+    # bucket strings are already dropped by resolve_labeled_buckets.
     internal_terms: list[str] = []
     raw_terms = data.get("internal_terms")
     if isinstance(raw_terms, list):
@@ -1015,7 +1015,7 @@ def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
             term = str(term).strip()
             if not term or not (1 <= len(term) <= 60):
                 continue
-            if not _is_verbatim_substring(term, jd_text):
+            if not _is_verbatim_substring(term, cleaned_jd):
                 continue
             internal_terms.append(term)
     result["internal_terms"] = internal_terms
@@ -1050,22 +1050,38 @@ def _recover_mixed_responsibilities(buckets: dict[str, list[str]]) -> None:
     buckets["responsibilities"] = kept_resp
 
 
+def _required_item_text(item) -> str:
+    if isinstance(item, dict):
+        return str(item.get("item") or "")
+    return str(item or "")
+
+
+def _count_qualification_required(required_items: list) -> int:
+    """Count required lines that look like hire criteria, not culture copy."""
+    return sum(
+        1
+        for item in (required_items or [])
+        if _looks_like_qualification(_required_item_text(item))
+    )
+
+
 def _detect_thin_jd(jd_text: str, required_items: list) -> bool:
     """True when the JD is sparse (very short AND/OR almost no structured requirements).
 
-    A JD with ≥2 extracted required items is never thin regardless of raw word count.
+    A JD with ≥2 qualification-shaped required items is never thin regardless of
+    raw word count. Culture sentences stuffed into required do not count.
     Otherwise:
     - under 80 words → thin (original threshold)
-    - zero extractable requireds and under 150 words → thin (2026-08-08 Cluster C item 10:
-      clear_capital-class headerless prose at ~99 words was missing the old cutoff and
-      produced a false clean Stage 0 shape)
+    - zero qualification-shaped requireds and under 150 words → thin (2026-08-08
+      Cluster C item 10: clear_capital-class headerless prose at ~99 words was
+      missing the old cutoff and produced a false clean Stage 0 shape)
     """
-    if len(required_items) >= 2:
+    if _count_qualification_required(required_items) >= 2:
         return False
     word_count = len(re.findall(r"\w+", jd_text or ""))
     if word_count < 80:
         return True
-    if len(required_items) == 0 and word_count < 150:
+    if _count_qualification_required(required_items) == 0 and word_count < 150:
         return True
     return False
 
@@ -1635,6 +1651,7 @@ def build_stage0_fit_gate(
     # path (_extract_sections) has no model reading the whole JD to notice
     # a company's own product/platform names, so it never populates this.
     internal_terms = sections.get("internal_terms") or []
+    qual_required_n = _count_qualification_required(required_raw)
 
     thin_jd = _detect_thin_jd(jd_text, required_raw)
     stage_signal = _detect_stage_signal(jd_text)
@@ -1690,16 +1707,17 @@ def build_stage0_fit_gate(
             "gap_class": "SOFT",
             "bridge": "extraction_empty — re-check JD section headers before drafting",
         })
-    elif not required_raw and (preferred_raw or responsibilities):
-        # Preferred-only (or duties-only) extract — surface so Tier 1 can't fake clean
+    elif qual_required_n == 0 and (preferred_raw or responsibilities):
+        # Preferred-only (or duties-only) extract — surface so Tier 1 can't fake clean.
+        # Culture sentences stuffed into required do not count as required items.
         flagged_gaps.append({
             "item": "Stage 0: no required items extracted (preferred/responsibilities only)",
             "gap_class": "SOFT",
             "bridge": "required_empty — confirm quals headers before treating as clean pass",
         })
-    elif len(required_raw) <= 1 and word_count >= 200:
+    elif qual_required_n <= 1 and word_count >= 200:
         # Non-empty but suspiciously thin: a JD this long should rarely
-        # produce 0-1 required items. This is a tripwire, not a fix — the
+        # produce 0-1 qualification-shaped required items. This is a tripwire, not a fix — the
         # 2026-08-17 header/item-boundary bugs above cover the specific real
         # cases found so far (PracticeTek: 1 of 5 real required items
         # captured), but this stays in place against whatever real-world JD
@@ -1708,9 +1726,9 @@ def build_stage0_fit_gate(
         # re-checks against the raw JD text before trusting Tier 1/2.
         flagged_gaps.append({
             "item": (
-                f"Stage 0: only {len(required_raw)} required item(s) extracted "
-                f"from a {word_count}-word JD — verify against the raw JD text "
-                "before trusting this as a complete list"
+                f"Stage 0: only {qual_required_n} qualification-shaped required "
+                f"item(s) extracted from a {word_count}-word JD — verify against "
+                "the raw JD text before trusting this as a complete list"
             ),
             "gap_class": "SOFT",
             "bridge": "required_thin — re-check JD required-section extraction manually before drafting",
@@ -1726,7 +1744,7 @@ def build_stage0_fit_gate(
         flagged_gaps,
         db_action,
         thin_incomplete=thin_incomplete,
-        required_empty=not required_raw,
+        required_empty=qual_required_n == 0,
     )
 
     # --- Step 5.5: Weighted evidence-scale score decides the final tier
@@ -1772,7 +1790,7 @@ def build_stage0_fit_gate(
         # Step 5.5 then overwrote it whenever preferred items scored >= 65
         # (confirmed live 2026-08-20: a Jira/Confluence preferred-only
         # fixture landed Tier 1). Empty required stays visible as Tier 2.
-        if (not required_raw) and decision == "PASS" and tier == "Tier 1":
+        if qual_required_n == 0 and decision == "PASS" and tier == "Tier 1":
             tier = "Tier 2"
 
     # --- Step 6: Build skip_reason if needed ---

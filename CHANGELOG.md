@@ -14,6 +14,15 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
   If that model is missing, Ollama is down, or the call returns empty/unparseable output,
   Stage 0 stops and tells you — it no longer silently swaps in the regex extractor or
   another local model.
+- **Stage 0 extract is id-only (2026-08-20):** Python cleans HTML and harvests candidate
+  lines; Qwen returns integer ids, never JD wording. Copied strings and unknown ids drop.
+  This is the extraction-quality fix CR-093 flagged as out of scope (Stripe paragraph-as-item,
+  HTML-entity JDs). Regex extract still only runs when `STAGE0_SECTION_MODE=deterministic`.
+- **Stage 0 header-hint default (2026-08-20):** unlabeled harvested ids under
+  Requirements/Preferred keep that bucket. Qwen's label still wins when present.
+  Header labels such as `Required Qualifications:` are skipped using the mature
+  section-header list. Culture sentences in required no longer count as extracted
+  qualifications for thin-JD / empty-required / Tier-1 cap.
 - **Stage 0 score model (2026-08-20):** pinned to `gemma2:2b-instruct-q8_0` (21/21 on the
   golden set, ~3.7GB extra VRAM vs Qwen 7B's 5.6GB at the same accuracy). Stage 0 unloads
   resident models after Qwen extraction and before Gemma scoring so they never share VRAM.
@@ -28,6 +37,10 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
   Applyr interview outcomes. Do not change them without that data or another explicit call.
 
 ### Developer
+- **Stage 0 id-only extract (2026-08-20):** `scripts/test_stage0_extract.py` plus updated
+  `TestSectionExtractionLLM` cover HTML cleanup, harvest ids, long-paragraph split,
+  header-hint fill, and drop-unknown-ids. Offline suite stays mocked. Live Qwen re-ran
+  on 10 archive JDs after the header-hint default.
 - **CR-093 Story 2.7 (2026-08-20):** `test_build_stage0_fit_gate.py` mocks
   `evidence_scale.classify_requirement` so the suite is fast and offline again (~7s).
   Regex-era HARD-tool assertions were rewritten to the evidence-scale contract. Live

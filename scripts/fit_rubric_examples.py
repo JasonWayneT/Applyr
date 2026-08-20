@@ -114,6 +114,7 @@ def format_examples_for_prompt(examples: list[dict]) -> str:
     """Render retrieved examples as a compact few-shot block, formatted for
     the internal_term judgment specifically (the one live call this wires
     into today -- see build_stage0_fit_gate.py's _SECTION_SPLIT_USER_TEMPLATE).
+    These examples teach product-name spotting, not requirement-line copying.
     Returns "" when there's nothing to show, so callers can splice this in
     unconditionally without an extra empty-check."""
     if not examples:

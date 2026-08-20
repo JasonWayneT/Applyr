@@ -102,6 +102,10 @@ data/*.md
 
 data/*.json
 !data/*.example.json
+# CR-093: scoring-engine calibration constants, not personal candidate data --
+# tracked so a recalibration is a real, reviewable git event, same as any other
+# source-of-truth code change. See the file's own _description field.
+!data/fit_rubric_calibration.json
 
 data/*.txt
 data/*.log

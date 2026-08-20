@@ -1,0 +1,21 @@
+{
+  "_description": "Fit-scoring ENGINE calibration constants -- properties of how the scoring algorithm interprets its own output, not personal job-search preferences. Deliberately separate from data/candidate_preferences.json (gitignored, holds Jason's actual preferences: location, blocked industries, min salary, etc.). This file is tracked in git on purpose: a recalibration is a real, reviewable event, the same way a CR doc tracks a threshold change -- it shouldn't disappear into a gitignored personal-data file where the history is invisible.",
+  "schema_version": 1,
+  "score_bands": {
+    "skip_floor": 40,
+    "tier1_floor": 65,
+    "status": "provisional",
+    "rationale": "Replaces the old hardcoded 80/70, which had no research behind it -- confirmed a round number, not a checked one. Grounded in TalentWorks real-outcome data (6,000+ real applications, 118 industries: interview callback odds climb sharply from ~40% requirement-match and plateau by ~50-60%) plus Applyr's own real score distribution under this engine (5 archive JDs: 40/53/55/56/63). NOT a real Angoff or Contrasting-Groups calibration -- that requires either an expert panel or real interview/no-interview outcome data under this specific engine, neither of which exists yet.",
+    "upgrade_path": "The moment Jason applies to jobs scored under this engine and real interview outcomes come back, compare the score distribution of JDs that converted against those that didn't, and set the floor at the real intersection point (genuine Contrasting-Groups method). Replace these numbers then -- don't treat them as final.",
+    "source": "docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md, Epic 4",
+    "last_updated": "2026-08-19"
+  },
+  "weighting_model": {
+    "required_weight": 3.0,
+    "preferred_weight": 1.0,
+    "confidence_multiplier": {"high": 1.0, "medium": 0.85, "low": 0.65},
+    "status": "design inference, not calibrated",
+    "rationale": "Per data/fit_rubric_spec.html Sec. 10: the research supports the ORDERING (required outweighs preferred, direct evidence outweighs adjacent) but not these exact magnitudes. Repetition (+1, capped) and hedge-language (-1) modifiers from the same spec section are not yet implemented in code at all.",
+    "note": "Still read as Python module constants in scripts/evidence_scale.py (_REQUIRED_WEIGHT, _PREFERRED_WEIGHT, _CONFIDENCE_MULTIPLIER), not yet wired to this file -- flagged here so the next recalibration pass moves them together with score_bands instead of finding them scattered again."
+  }
+}

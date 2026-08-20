@@ -147,23 +147,11 @@ assert_test("REG-17: Hybrid outside SD without Remote rejects",
             _v2 == "REJECT" and _reject2,
             f"Expected REJECT, got verdict={_v2} reject={_reject2} reason={_reason2}")
 
-# REG-18–REG-19: Fit policy (CR-035 / FR-188)
-from fit_policy import apply_anchor_floor, detect_optional_domain_note
-
-_promoted = apply_anchor_floor(
-    {"Decision": "NO", "Score": 68, "Summary": "borderline"},
-    "B2B platform roadmap cross-functional agile",
-    {"required_anchors": ["platform", "roadmap", "cross-functional", "b2b saas"]},
-    72,
-)
-assert_test("REG-18: Anchor floor records hits without score promotion (CR-053 2.6)",
-            _promoted and _promoted["Decision"] == "NO" and _promoted["Score"] == 68
-            and any("anchor_hits" in f for f in _promoted.get("RiskFlags", [])),
-            str(_promoted))
-
-assert_test("REG-19: Optional domain note detected",
-            bool(detect_optional_domain_note("Any experience in healthcare is a nice plus")),
-            "expected optional domain note")
+# REG-18/REG-19 removed (CR-093, 2026-08-19) — tested fit_policy.py's
+# apply_anchor_floor/detect_optional_domain_note, deleted along with the rest
+# of the old fit-scoring system (structured_fit.py, batch_pipeline.py's
+# evaluate_job_fit). See docs/spec/05-change-requests/CR-093-evidence-scale-
+# fit-engine.md.
 
 # REG-20–REG-21: Transferable skills / domain gaps (CR-039 / FR-192)
 from domain_gate import check_domain_gate, get_domain_gaps

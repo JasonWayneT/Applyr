@@ -22,7 +22,6 @@ WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
 WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")
 # Legacy JSON job store â€” superseded by jobagent.sqlite (see docs/ACTIVE_WORKFLOW.md). Used only by scripts/archive/*.
 DB_FILE = os.path.join(DATA_DIR, "job_database.json")
-FIT_ENGINE_FILE = os.path.join(RULES_DIR, "job_fit_engine.md")
 CLAIM_VERIFIER_FILE = os.path.join(RULES_DIR, "claim_verifier.md")
 RESEARCH_CONTRACT_FILE = os.path.join(RULES_DIR, "Research_Packet_Contract.md")
 RESUME_MASTER_FILE = os.path.join(DATA_DIR, "Resume.md")
@@ -54,21 +53,10 @@ def _bootstrap_from_prefs():
             import json as _json
             with open(prefs_path, 'r', encoding='utf-8') as f:
                 p = _json.load(f)
-            return (
-                p.get('jd_required_keywords', _DEFAULT_JD_KEYWORDS),
-                p.get('min_fit_score', 72),
-            )
+            return p.get('jd_required_keywords', _DEFAULT_JD_KEYWORDS)
     except Exception:
         pass
-    return _DEFAULT_JD_KEYWORDS, 72
-
-def get_min_fit_score(default: int = 72) -> int:
-    prefs = load_candidate_preferences()
-    try:
-        return int(prefs.get("min_fit_score", default))
-    except (TypeError, ValueError):
-        return default
-
+    return _DEFAULT_JD_KEYWORDS
 
 def get_scoring_jd_max_chars(default: int = 4000) -> int:
     """Max JD characters sent to fit-scoring LLM (from candidate_preferences.json)."""
@@ -133,15 +121,19 @@ def passes_keyword_gate(jd_text: str, prefs: dict | None = None) -> tuple[bool, 
     return False, "no_signal_keywords"
 
 
-# Module-level compat vars â€” call init_pipeline_prefs() at CLI/smoke entry (CR-ARCH-003).
+# Module-level compat var â€” call init_pipeline_prefs() at CLI/smoke entry (CR-ARCH-003).
 JD_REQUIRED_KEYWORDS: list = list(_DEFAULT_JD_KEYWORDS)
-MIN_FIT_SCORE: int = 72
 
 
 def init_pipeline_prefs() -> None:
-    """Load jd_required_keywords and min_fit_score from candidate_preferences.json."""
-    global JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE
-    JD_REQUIRED_KEYWORDS, MIN_FIT_SCORE = _bootstrap_from_prefs()
+    """Load jd_required_keywords from candidate_preferences.json.
+
+    CR-093 (2026-08-19): no longer also loads min_fit_score -- that was the
+    old fit-scoring floor (get_min_fit_score(), removed same day). The real
+    fit-scoring floor now lives in data/fit_rubric_calibration.json, read by
+    evidence_scale.load_score_bands(), not candidate_preferences.json."""
+    global JD_REQUIRED_KEYWORDS
+    JD_REQUIRED_KEYWORDS = _bootstrap_from_prefs()
 
 
 def load_candidate_preferences():

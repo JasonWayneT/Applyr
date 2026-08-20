@@ -31,7 +31,7 @@ export const ALLOWED_JOB_FIELDS = new Set([
 ]);
 
 export { DATE_POSTED_TO_DAYS, CANDIDATE_PREFS_PATH } from './domain/paths.js';
-export { materializeJobSearchPrefs, readMinFitScore } from './domain/jobSearchPrefs.js';
+export { materializeJobSearchPrefs } from './domain/jobSearchPrefs.js';
 export { ACTIVE_STATUSES, isActivePipelineStatus, submissionBaseDir } from './domain/jobStatus.js';
 
 // Implements FR-095 / CR-015 — spawn flags only; secrets read from SQLite inside each script.

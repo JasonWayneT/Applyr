@@ -10,6 +10,50 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Added
+- **CR-093: Evidence-scale fit engine (2026-08-19).** Replaces every prior fit-scoring mechanism
+  with one: a single LLM judgment per JD requirement line (`scripts/evidence_scale.py`), rating a
+  0-4 behaviorally-anchored evidence scale (no evidence → strong direct evidence) against
+  retrieval-scoped `workExperience.md` excerpts, gated first by research-grounded hard-gate rules
+  (only degree/named-domain-with-years/role-exclusion disqualify — named tools never gate,
+  fixing a real miss where a JD was rejected sight-unseen over one Tableau mention), then combined
+  by a deterministic weighted formula (`compute_fit_score()`, no second LLM call). Wired into
+  `build_stage0_fit_gate.py`'s Step 4/5.5, the sole live Stage 0 gate. Golden-set regression
+  (`data/fit_rubric_golden_set.json` + `scripts/check_fit_rubric_golden_set.py`, rewritten for
+  this engine) at 20/21, with 21/21 correct on the disqualification-critical dimension across
+  every run. Full research, evidence ledger, and pressure-test log:
+  `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md`.
+- **CR-093: Cutoff-score calibration research (2026-08-19).** The old 70/80 Tier/Skip thresholds
+  had no research behind them — confirmed a round number, never checked. Real primary-source
+  research (Cascio/Alexander/Barrett 1988's seminal cutoff-score paper, a 2024 standard-setting
+  methods comparison, OPM's own admission that job-fit-as-screen-out validity research is "still
+  in its infancy," TalentWorks real-outcome data) produced calibrated, explicitly provisional
+  bands now living in `data/fit_rubric_calibration.json` — tracked in git on purpose (a
+  scoring-engine calibration constant, not a personal job-search preference, so it doesn't belong
+  in gitignored `candidate_preferences.json`). `evidence_scale.load_score_bands()` is the sole
+  reader.
+
+### Removed
+- **The entire old fit-scoring system (CR-093, 2026-08-19).** `scripts/structured_fit.py`,
+  `scripts/fit_policy.py`, `scripts/fit_judgment_io.py` deleted outright. `batch_pipeline.py`'s
+  `evaluate_job_fit()`/`_call_fit_llm()`/`_call_fit_scoring_only()`/`process_single()`/
+  `process_batch()` and its `--mode single|batch` CLI entry point removed — the file is now a
+  pure DB/JD helper library, no longer directly executable. The "Find New Jobs" page
+  (`src/pages/FindNewJobsView.tsx`, `src/hooks/usePipeline.ts`, the "Add Job" sidebar tab) and its
+  `POST /api/evaluate` SSE route (`server/routes/pipeline.ts`) removed — confirmed dead; the real
+  authoring flow is `scripts/run_submission.py` from a Claude Code chat session, not this server.
+  `candidate_preferences.json`'s `min_fit_score` field, `utils.get_min_fit_score()`/
+  `MIN_FIT_SCORE`, and the TypeScript-side `readMinFitScore()`/`DEFAULT_MIN_FIT_SCORE` all removed
+  — every remaining consumer was itself part of the deleted system. Associated dead maintenance
+  scripts (`re_score_jobs.py`, `regenerate_backlog.py`, `cleanup_pending_backlog.py`) and their
+  test-only counterparts (`test_structured_fit.py`, `test_structured_fit_claude_native.py`,
+  `test_fit_policy.py`, `test_fit_judgment_io.py`, `test_audit_convergence.py`,
+  `test_batch_gate.py`) also deleted — the real, valuable regression each protected (CR-054
+  non-convergence transparency) has independent coverage in `test_audit_improve_native.py`,
+  unaffected. Verified: `tsc --noEmit` clean, full vitest suite 292/292 passing,
+  `run_all_tests.py --python-only` clean apart from one pre-existing, unrelated claims-catalog
+  data-drift failure this session never touched (`test_audit_claims_coverage.py`).
+
+### Added
 - **Stage 0 numeric fit score (2026-08-18):** `build_stage0_fit_gate.py` now calls the existing CR-053 `structured_fit.evaluate_structured_fit()` scorer on every PASS decision and writes the result into a new `fit_score` field in `stage0_fit_gate.json`, gated on `STAGE0_SECTION_MODE != "deterministic"` so tests stay network-free. `server/submissionFolders.ts`'s `reconcileOrphanSubmissionFolders()` reads that real value via `readStage0FitScore()` instead of hardcoding `score: 80` for every orphan-linked folder — that hardcode is what made every Backlog job in the UI show an identical score. See "structured_fit equivalence schema" fix below for the related scoring-quality bug found while testing this.
 - **Advanced-degree unbridgeable hard gap (2026-08-18, Jason-supplied):** A required line naming an advanced degree (PhD/Doctorate/Master's/MBA/JD/MD) with no Bachelor's-or-equivalent-experience alternative and no preferred/plus/bonus hedge is now a HARD gap (`_is_unbridgeable_advanced_degree()`), checked on the whole required-item line before CR-092's compound-clause splitting can break it into context-losing sub-clauses. Real miss: Dassault Systèmes' "PhD, MS, or equivalent in the natural sciences" previously landed as Tier 2 SOFT.
 - **PO solo-backlog-ownership signal (2026-08-18, Jason-supplied):** Product Owner postings vary between collaborative-with-engineering (Jason's actual 4 years under the PO title at Cision) and solo backlog ownership with upfront requirements-writing. Stage 0 now surfaces a SOFT `flagged_gaps` entry (routes to Tier 2, never Skip) when a PO-titled JD hits a `po_solo_backlog_flags` phrase (BRD, waterfall, "sole owner of the backlog", etc.) with no collaborative mitigator phrase present ("partner with engineering", etc.). Both lists live in `data/candidate_preferences.json` and are user-editable there directly — added to `PRESERVE_PIPELINE_PREF_KEYS` in `server/domain/jobSearchPrefs.ts` so a Settings save never overwrites them (ADR-005's existing pipeline-tuning-key escape hatch, not a new mechanism). Detection: `_detect_po_solo_backlog_signal()` in `scripts/build_stage0_fit_gate.py`. Tests: `TestPoSoloBacklogSignal` in `scripts/test_build_stage0_fit_gate.py`.

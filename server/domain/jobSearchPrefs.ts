@@ -69,8 +69,6 @@ export function resolveMaterializedSearchTerms(
   return deriveSearchTermsFromTargetRole(targetRole);
 }
 
-const DEFAULT_MIN_FIT_SCORE = 72;
-
 /** Keys managed by pipeline/rollout — not overwritten when UI re-materializes prefs (FR-248 / CR-053). */
 export const PRESERVE_PIPELINE_PREF_KEYS = [
   'blocked_role_titles',
@@ -85,19 +83,11 @@ export const PRESERVE_PIPELINE_PREF_KEYS = [
   'po_solo_backlog_mitigators',
 ] as const;
 
-/** Read pass threshold from materialized prefs (FR-039 / CR-003). */
-export function readMinFitScore(defaultScore = DEFAULT_MIN_FIT_SCORE): number {
-  try {
-    if (fs.existsSync(CANDIDATE_PREFS_PATH)) {
-      const prefs = JSON.parse(fs.readFileSync(CANDIDATE_PREFS_PATH, 'utf-8')) as { min_fit_score?: unknown };
-      const score = prefs.min_fit_score;
-      if (typeof score === 'number' && Number.isFinite(score)) return score;
-    }
-  } catch {
-    /* use default */
-  }
-  return defaultScore;
-}
+// readMinFitScore() removed (CR-093, 2026-08-19) — it read the old fit-scoring
+// floor (min_fit_score), which lived only in the now-deleted batch_pipeline.py
+// evaluate_job_fit() path and had zero live callers of its own even before that.
+// The real fit-scoring floor now lives in data/fit_rubric_calibration.json,
+// read by scripts/evidence_scale.py's load_score_bands() — not this file.
 
 const DEFAULT_JD_KEYWORDS = [
   'saas', 'b2b', 'platform', 'integration', 'enterprise', 'api',
@@ -144,7 +134,6 @@ export function buildMaterializedJobSearchPrefs(
     blocked_titles: blockedTitles,
     blocked_industries: blockedIndustries,
     min_salary: (jobSearch.minSalary as number) ?? 0,
-    min_fit_score: (existing.min_fit_score as number) ?? 72,
     jd_required_keywords: (existing.jd_required_keywords as string[]) ?? DEFAULT_JD_KEYWORDS,
     signal_keywords:
       (existing.signal_keywords as string[])

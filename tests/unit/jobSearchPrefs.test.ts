@@ -65,7 +65,6 @@ describe('buildMaterializedJobSearchPrefs (FR-248)', () => {
       blocked_focus_area_words: ['Growth'],
       blocked_companies: ['Unity'],
       min_confidence_score: 55,
-      min_fit_score: 75,
     };
     const result = buildMaterializedJobSearchPrefs(
       { targetRole: 'Product Manager', titleBlocklist: 'Staff, VP' },
@@ -75,7 +74,9 @@ describe('buildMaterializedJobSearchPrefs (FR-248)', () => {
     expect(result.blocked_focus_area_words).toEqual(['Growth']);
     expect(result.blocked_companies).toEqual(['Unity']);
     expect(result.min_confidence_score).toBe(55);
-    expect(result.min_fit_score).toBe(75);
+    // min_fit_score removed (CR-093, 2026-08-19) -- the old fit-scoring floor,
+    // no longer part of candidate_preferences.json at all. The real floor
+    // lives in data/fit_rubric_calibration.json.
     expect(result.blocked_titles).toEqual(['Staff', 'VP']);
   });
 

@@ -231,25 +231,24 @@ The pipeline runs in four sequential stages automatically:
 1. **Scout** — discover new job URLs across all sources
 2. **Backfill** — fill in any missing job detail URLs
 3. **Scrape** — fetch full job description text for new listings
-4. **Evaluate & Draft** — score every new job and generate assets for those that pass
+4. **Review export** — gate-passed JDs with real text export to `data/pending_review/` for later Stage 0 evaluation via `scripts/run_submission.py`; no scoring or drafting happens during Sync itself (silent auto-draft removed 2026-08-04)
 
 Live progress and source metrics (fetched, filtered, and passed counts), along with source health badges, stream to the Scout log console in real time via Server-Sent Events (SSE).
 
 ### Fit scoring
 
-Each job is evaluated in stages before any drafting tokens are spent:
+**CR-093 (2026-08-19): the entire fit-scoring engine was rebuilt and every older mechanism removed** — `scripts/structured_fit.py`, `scripts/fit_policy.py`, `scripts/batch_pipeline.py`'s `evaluate_job_fit()`, and `candidate_preferences.json`'s `min_fit_score` field are all gone. There is exactly one fit-scoring path now, and it only runs via `scripts/run_submission.py`'s Stage 0 (`scripts/build_stage0_fit_gate.py`):
 
-1. **Fast gate (deterministic, zero LLM):** Rejects roles that match title tier blocklists, focus-area blocklists, blocked companies, industry blocklist, solo-PM trap, years-over-max, location (non–San Diego onsite/hybrid, Canada in-person, EST/CST-only remote), keyword gates, or minimum salary.
-2. **Structured fit (default):** Extracts must-have criteria from the JD, asks the LLM for per-criterion equivalence judgments only (`yes` / `partial` / `no` — no holistic score), then computes the 0–100 score in Python (`scripts/structured_fit.py`). Required-domain gaps apply a bounded penalty (max −10), not an instant kill. Set `STRUCTURED_FIT=0` to use the legacy holistic LLM rubric instead.
-3. **Threshold:** Roles at or above **`min_fit_score`** in `candidate_preferences.json` (default **72**) proceed to drafting. Optional **`min_confidence_score`** can route low-confidence structured results to manual review.
+1. **Deterministic gates first (zero LLM):** DB cooldown/reapply history, prefs exclusion zones (people management, 0-to-1, revenue/billing, AI/ML ownership), title/location/years gates.
+2. **Per-requirement evidence judgment (`scripts/evidence_scale.py`):** one LLM call per required/preferred JD line, rating a 0–4 behaviorally-anchored evidence scale (no evidence → strong direct evidence) against retrieval-scoped excerpts of `workExperience.md`. A line only hard-gates (disqualifies outright) for an unbridgeable degree, a named regulated-domain requirement with its own years threshold, or a role-category exclusion — named tools/skills never gate on their own (spec-grounded fix for a real miss: a JD was previously rejected sight-unseen over one tool mention).
+3. **Deterministic weighted formula:** `compute_fit_score()` turns those per-item judgments into a single 0–100 score — no second LLM call.
+4. **Score bands from `data/fit_rubric_calibration.json`** (tracked in git, deliberately not `candidate_preferences.json` — a scoring-algorithm calibration constant isn't a personal job-search preference): `tier1_floor` and `skip_floor` decide Tier 1 / Tier 2 / Skip. Current values (40 / 65) are research-grounded (real applicant-outcome data, not a round number) but explicitly provisional pending real interview-outcome calibration — see that file and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md` for the full evidence ledger.
 
-Anchor keyword hits are recorded as risk flags only — scores are no longer force-promoted at the threshold.
-
-Rubric reference: `.agent/rules/job_fit_engine.md` (v5.0). Formal spec: `docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md`.
+Full spec: `data/fit_rubric_spec.html` (the research this implements) and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md` (the implementation + calibration record). `docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md` is superseded — read CR-093 instead.
 
 ### Drafting assets
 
-**Note (2026-08-04):** Sync no longer auto-drafts. After scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` via `scripts/run_submission.py` — no Ollama, no `batch_pipeline` on Sync. The Sync "Draft Assets" button and `POST /api/jobs/:id/draft` were removed. **Still live (flagged):** Find New Jobs (`POST /api/evaluate` via `usePipeline`) still spawns `batch_pipeline.py --mode single` — not yet retired. Day-to-day authoring remains Claude + ground truth via `.claude/skills/generate-submission/SKILL.md` → `run_submission.py`.
+Sync never auto-drafts — after scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` via `scripts/run_submission.py`. Day-to-day authoring is Claude + ground truth via `.claude/skills/generate-submission/SKILL.md` → `run_submission.py`; there is no other live drafting path (the old "Find New Jobs" page and its `POST /api/evaluate` route were removed 2026-08-19 along with the rest of the old fit-scoring system).
 
 Roles that pass Sync gates are exported for review (not drafted automatically). Authoring still produces:
 
@@ -319,7 +318,7 @@ server/
     interviewDebriefRepository.ts — interview-debrief CRUD
 
   routes/
-    system.ts / pipeline.ts / profile.ts — /api/system-status·/api/logs, /api/evaluate (SSE)·/api/sync, /api/profile·/api/experience
+    system.ts / pipeline.ts / profile.ts — /api/system-status·/api/logs, /api/sync (SSE)·/api/sync/stream, /api/profile·/api/experience
     contacts.ts / sources.ts     — networking-contact CRUD, connector source management
     gmailSync.ts                 — manual "check inbox now" trigger for the CR-072 Gmail intake sync
     jobs/                        — split out from one jobs.ts: index.ts (router mount), crud.ts (CRUD + status transitions), files.ts (ZIP download, PDF assets), debriefs.ts, shared.ts (jobBaseDir helper)
@@ -350,7 +349,7 @@ scripts/
     import_csv_to_submissions.py — CSV → data/pending_review/ (does not write submissions/)
     stage0_db_gate.py / stage0_prefs_gate.py — DB application-history and preferences sub-gates
     domain_gate.py / industry_gate.py / seniority_gate.py / solo_pm_gate.py / anchor_gate.py — individual hard gates
-    fit_policy.py / structured_fit.py — evidence-tiered fit scoring
+    evidence_scale.py — CR-093 evidence-scale fit engine (per-requirement 0-4 judgment, weighted formula, score bands from data/fit_rubric_calibration.json)
     zero_shot_classifier.py — location zero-token gate
 
   CR-074 authoring packet (Stage 1 workers under run_submission):
@@ -391,7 +390,7 @@ scripts/
     drafting_engine.py — entry + research + hard-fact guards, delegates to draft_compiler
 
   Batch orchestration / maintenance:
-    batch_pipeline.py       — fit scoring + asset generation engine (--mode batch | single)
+    batch_pipeline.py       — DB/JD helper library only (CR-093, 2026-08-19: evaluate_job_fit()/process_single()/process_batch() and the whole old fit-scoring + --mode single|batch CLI removed; no longer directly executable)
     local_draft_stages.py   — stage-based local drafting, builds the Core Competencies section (FR-195)
     finalize_submission_job.py / reconcile_submissions.py — job finalization; archive/remove stale submission folders (FR-030)
     audit_all_submissions.py / audit_and_improve.py / audit_improve_native.py — audit/improvement passes
@@ -405,7 +404,7 @@ scripts/
 
 src/
   App.tsx           — Root: 5s job poll, status handler, routing
-  pages/            — TodayView, AllJobsView, FindNewJobsView, SyncActivityView, TuningLogView
+  pages/            — TodayView, AllJobsView, SyncActivityView, TuningLogView
   components/       — JobDetailPanel, DocumentEditor, SettingsView, Sidebar, ...
 
 data/

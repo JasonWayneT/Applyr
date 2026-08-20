@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import TodayView from './pages/TodayView';
 import AllJobsView from './pages/AllJobsView';
-import FindNewJobsView from './pages/FindNewJobsView';
 import SyncActivityView from './pages/SyncActivityView';
 import JobDetailPanel from './components/JobDetailPanel';
 import NotificationPanel from './components/NotificationPanel';
@@ -47,8 +46,6 @@ function App() {
             onFilterChange={setOpportunitiesFilter}
           />
         );
-      case 'Add Job':
-        return <FindNewJobsView />;
       case 'Job Search':
         return <SyncActivityView />;
       case 'Settings':

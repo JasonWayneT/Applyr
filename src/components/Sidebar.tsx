@@ -25,11 +25,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
 
   const newJobsCount = jobs.filter(j => j.status === 'Backlog' && j.has_assets).length;
 
+  // "Add Job" (Find New Jobs) removed (CR-093, 2026-08-19) — the old
+  // single-JD fit-scoring page, confirmed dead by Jason along with the rest
+  // of the old fit-scoring system (batch_pipeline.py's evaluate_job_fit,
+  // structured_fit.py). See docs/spec/05-change-requests/CR-093-evidence-
+  // scale-fit-engine.md.
   const mainNav = [
     { name: 'Dashboard', icon: 'grid_view' },
     { name: 'Opportunities', icon: 'view_kanban' },
     { name: 'Job Search', icon: 'radar' },
-    { name: 'Add Job', icon: 'post_add' },
     { name: 'Tuning Log', icon: 'tune' },
     { name: 'Settings', icon: 'account_circle' },
   ];

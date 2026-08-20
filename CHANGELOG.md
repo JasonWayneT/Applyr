@@ -45,8 +45,10 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
   `evidence_scale.classify_requirement` so the suite is fast and offline again (~7s).
   Regex-era HARD-tool assertions were rewritten to the evidence-scale contract. Live
   accuracy stays on `data/fit_rubric_golden_set.json`.
-- **`batch_pipeline.py` (2026-08-20):** removed leftover zero-caller helpers from the deleted
-  evaluate/draft path. File stays a DB/JD helper library.
+- **`batch_pipeline.py` (2026-08-20):** removed leftover evaluate/draft helpers with no live
+  callers (`_effective_jd_body`, `get_min_jd_chars_evaluate`, `_jd_meets_evaluate_threshold`,
+  `_company_submission_dir`, `_has_required_pdfs`) plus `test_jd_completeness.py`. File keeps
+  the keyword gate and backlog-summary helpers.
 
 ### Added
 - **CR-093: Evidence-scale fit engine (2026-08-19).** Replaces every prior fit-scoring mechanism

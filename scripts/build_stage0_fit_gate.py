@@ -1767,6 +1767,13 @@ def build_stage0_fit_gate(
         else:
             tier = "Skip"
             decision = "SKIP"
+        # Score must not wash out an empty-required extract (Beyond-class,
+        # 2026-08-10). Step 5 already forced Tier 2 for required_empty;
+        # Step 5.5 then overwrote it whenever preferred items scored >= 65
+        # (confirmed live 2026-08-20: a Jira/Confluence preferred-only
+        # fixture landed Tier 1). Empty required stays visible as Tier 2.
+        if (not required_raw) and decision == "PASS" and tier == "Tier 1":
+            tier = "Tier 2"
 
     # --- Step 6: Build skip_reason if needed ---
     skip_reason: str | None = None

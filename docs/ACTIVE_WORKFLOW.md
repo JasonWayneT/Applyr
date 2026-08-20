@@ -29,7 +29,7 @@
 
 ### Fit threshold
 
-- Pass/skip floor = `data/fit_rubric_calibration.json` → **`score_bands.skip_floor: 40`** / **`tier1_floor: 65`** (CR-093, 2026-08-19; provisional, research-grounded, not yet outcome-calibrated).
+- Pass/skip floor = `data/fit_rubric_calibration.json` → **`score_bands.skip_floor: 40`** / **`tier1_floor: 65`** (CR-093 Story 3.3, locked 2026-08-20). Research-grounded working floor, not yet calibrated against Applyr interview outcomes.
 - Engine: `scripts/evidence_scale.py`, wired into `scripts/build_stage0_fit_gate.py` Step 5.5. Spec: `data/fit_rubric_spec.html`.
 - `candidate_preferences.json`'s `min_fit_score` (was default 72) and `.agent/rules/job_fit_engine.md` (archived) no longer exist / apply — do not resurrect either.
 

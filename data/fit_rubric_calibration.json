@@ -4,11 +4,12 @@
   "score_bands": {
     "skip_floor": 40,
     "tier1_floor": 65,
-    "status": "provisional",
-    "rationale": "Replaces the old hardcoded 80/70, which had no research behind it -- confirmed a round number, not a checked one. Grounded in TalentWorks real-outcome data (6,000+ real applications, 118 industries: interview callback odds climb sharply from ~40% requirement-match and plateau by ~50-60%) plus Applyr's own real score distribution under this engine (5 archive JDs: 40/53/55/56/63). NOT a real Angoff or Contrasting-Groups calibration -- that requires either an expert panel or real interview/no-interview outcome data under this specific engine, neither of which exists yet.",
-    "upgrade_path": "The moment Jason applies to jobs scored under this engine and real interview outcomes come back, compare the score distribution of JDs that converted against those that didn't, and set the floor at the real intersection point (genuine Contrasting-Groups method). Replace these numbers then -- don't treat them as final.",
-    "source": "docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md, Epic 4",
-    "last_updated": "2026-08-19"
+    "status": "locked",
+    "locked_by": "Jason, 2026-08-20",
+    "rationale": "Working production floor for Stage 0. Skip below 40, Tier 2 from 40 up to 65, Tier 1 at 65+. Jason locked these numbers on 2026-08-20 (CR-093 Story 3.3). Grounded in TalentWorks real-outcome data (callback odds climb from ~40% requirement-match and plateau by ~50-60%) plus Applyr's own archive scores under this engine (5 JDs: 40/53/55/56/63). Locked means the open decision is closed, not that an Angoff or Contrasting-Groups calibration has been run. That still needs interview/no-interview labels under this engine.",
+    "upgrade_path": "When Jason applies to jobs scored under this engine and real interview outcomes come back, compare the score distribution of JDs that converted against those that didn't, and reset the floors at the real intersection (Contrasting-Groups). Do not quietly drift these numbers without that data or an explicit new decision.",
+    "source": "docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md, Epic 4 + Story 3.3",
+    "last_updated": "2026-08-20"
   },
   "weighting_model": {
     "required_weight": 3.0,

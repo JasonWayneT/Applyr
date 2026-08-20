@@ -16,7 +16,8 @@ export interface FitThresholds {
   tier1_floor: number;
 }
 
-// Matches data/fit_rubric_calibration.json's current provisional bands -- used only until the
+// Matches data/fit_rubric_calibration.json's locked bands -- used only until the
+const DEFAULT_THRESHOLDS: FitThresholds = { skip_floor: 40, tier1_floor: 65 };
 // real fetch resolves, or if it fails, so the UI never silently falls back to the old numbers.
 const DEFAULT_THRESHOLDS: FitThresholds = { skip_floor: 40, tier1_floor: 65 };
 

@@ -20,8 +20,18 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 - **Fit-score UI (2026-08-20):** Today / Sync / All Jobs read `skip_floor` / `tier1_floor`
   from `GET /api/fit-thresholds` (`data/fit_rubric_calibration.json`) instead of leftover
   72/80/60 literals. `jobs.score` is reconciled from each folder's `stage0_fit_gate.json`.
+- **Empty-required Stage 0 cap (2026-08-20):** a preferred-only JD can no longer be promoted
+  to Tier 1 just because preferred items scored at or above 65. Empty required stays Tier 2
+  so under-extraction stays visible.
+- **Fit floors locked (2026-08-20):** Skip below 40, Tier 1 at 65+. Jason closed CR-093
+  Story 3.3. These are the production Stage 0 bands. They are not yet calibrated against
+  Applyr interview outcomes. Do not change them without that data or another explicit call.
 
 ### Developer
+- **CR-093 Story 2.7 (2026-08-20):** `test_build_stage0_fit_gate.py` mocks
+  `evidence_scale.classify_requirement` so the suite is fast and offline again (~7s).
+  Regex-era HARD-tool assertions were rewritten to the evidence-scale contract. Live
+  accuracy stays on `data/fit_rubric_golden_set.json`.
 - **`batch_pipeline.py` (2026-08-20):** removed leftover zero-caller helpers from the deleted
   evaluate/draft path. File stays a DB/JD helper library.
 

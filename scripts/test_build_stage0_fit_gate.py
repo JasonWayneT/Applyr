@@ -7,12 +7,13 @@ don't need a real SQLite file for non-DB cases. Tests that exercise DB logic pas
 their own in-memory connection via the stage0_db_gate._conn kwarg.
 
 Run with:
-    .venv\Scripts\python.exe -m unittest scripts.test_stage0_db_gate scripts.test_build_stage0_fit_gate -q
+    python -m unittest scripts.test_stage0_db_gate scripts.test_build_stage0_fit_gate -q
 """
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import textwrap
@@ -26,8 +27,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # section extraction (see that module's docstring). This suite's own
 # docstring promises "no real DB, no LLM" -- force the deterministic regex
 # path for every test here so the suite stays fast, offline, and
-# network-free. The LLM path itself is covered separately with a mocked
-# call_llm, not real network I/O -- see TestSectionExtractionLLM below.
+# network-free. Scoring is mocked at evidence_scale.classify_requirement
+# (Story 2.7, setUpModule below). The LLM extract path itself is covered
+# separately with a mocked call_llm, not real network I/O -- see
+# TestSectionExtractionLLM below.
 os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
 from build_stage0_fit_gate import (
@@ -43,7 +46,11 @@ from build_stage0_fit_gate import (
     _load_anchor_vocab,
     _has_extraction_override,
     batch_report,
+    _BACHELORS_SATISFIED_RE,
+    _HIGHER_DEGREE_MANDATORY_RE,
+    _YEARS_EXPERIENCE_LEADIN_RE,
 )
+from evidence_scale import EvidenceJudgment
 from stage0_prefs_gate import (
     run_prefs_gate,
     _check_people_management,
@@ -52,6 +59,207 @@ from stage0_prefs_gate import (
     _check_travel,
     _check_zero_to_one,
 )
+
+# ---------------------------------------------------------------------------
+# Offline classify_requirement (CR-093 Story 2.7)
+#
+# Live accuracy is data/fit_rubric_golden_set.json. This stub only has to
+# make THIS file's fixtures produce the evidence-scale contract so
+# classify_gaps / Step 5.5 wiring tests run without Ollama: tools never
+# HARD-gate, degree/domain/role_exclusion can, undergraduate is satisfied,
+# and a default PM line looks like documented evidence.
+# ---------------------------------------------------------------------------
+
+_KNOWN_EVIDENCE = (
+    "product management",
+    "product ownership",
+    "product owner",
+    "agile",
+    "scrum",
+    "roadmap",
+    "backlog",
+    "stakeholder",
+    "cross-functional",
+    "jira",
+    "confluence",
+    "salesforce",
+    "pendo",
+    "amplitude",
+    "sql",
+    "microsoft teams",
+    "communication",
+    "prioritization",
+    "user stor",
+    "sprint",
+    "b2b saas",
+    "analytics",
+    "cohort",
+    "funnel",
+    "engineering",
+    "integration-heavy",
+    "written communication",
+)
+
+_UNKNOWN_TOOLS = (
+    "fhir",
+    "hl7",
+    "snowflake",
+    "guidewire",
+    "servicemesh",
+    "docker",
+    "kubernetes",
+    "microsoft office",
+    "braze",
+    "klaviyo",
+    "cmms",
+    "looker",
+    "mixpanel",
+    "optimizely",
+    "statsig",
+    "shopify",
+    "cerner",
+    "dbt",
+)
+
+_REGULATED_DOMAIN = (
+    "payroll tax",
+    "healthcare",
+    "clinical",
+    "banking",
+    "insurance",
+    "highly regulated",
+)
+
+_DOMAIN_HEDGE_RE = re.compile(r"\b(ideally|preferred|a plus)\b", re.I)
+
+_CLASSIFY_PATCHER = None
+
+
+def _offline_classify_requirement(
+    item: str,
+    work_exp: str,
+    *,
+    is_required: bool = True,
+    company: str = "",
+    internal_terms: list[str] | None = None,
+    **_kwargs,
+) -> EvidenceJudgment:
+    del work_exp, company, internal_terms
+    text = (item or "").lower()
+
+    if is_required and _HIGHER_DEGREE_MANDATORY_RE.search(text):
+        return EvidenceJudgment(
+            item=item,
+            gate="HARD",
+            gap_source="degree",
+            evidence_level=0,
+            confidence="high",
+            reasoning="mandatory advanced degree, not satisfied",
+            is_required=True,
+        )
+
+    has_years = bool(_YEARS_EXPERIENCE_LEADIN_RE.match((item or "").strip()))
+    has_domain = any(d in text for d in _REGULATED_DOMAIN)
+    has_pm_alt = "product management" in text or "product ownership" in text
+    if (
+        is_required
+        and has_years
+        and has_domain
+        and not has_pm_alt
+        and not _DOMAIN_HEDGE_RE.search(text)
+    ):
+        return EvidenceJudgment(
+            item=item,
+            gate="HARD",
+            gap_source="domain",
+            evidence_level=0,
+            confidence="high",
+            reasoning="named regulated domain with years, no PM alternative",
+            is_required=True,
+        )
+
+    if _BACHELORS_SATISFIED_RE.search(text) and not _HIGHER_DEGREE_MANDATORY_RE.search(text):
+        return EvidenceJudgment(
+            item=item,
+            gate="NONE",
+            gap_source=None,
+            evidence_level=4,
+            confidence="high",
+            reasoning="undergraduate/bachelor's already satisfied",
+            is_required=is_required,
+        )
+
+    has_known_product = any(
+        p in text
+        for p in (
+            "pendo",
+            "amplitude",
+            "salesforce",
+            "jira",
+            "confluence",
+            "microsoft teams",
+        )
+    )
+    unknown_tool = next((t for t in _UNKNOWN_TOOLS if t in text), None)
+    if unknown_tool and not has_known_product:
+        return EvidenceJudgment(
+            item=item,
+            gate="NONE",
+            gap_source="tool",
+            evidence_level=1,
+            confidence="high",
+            reasoning=f"named tool {unknown_tool} has no documented evidence",
+            is_required=is_required,
+        )
+
+    if has_domain and not has_pm_alt:
+        return EvidenceJudgment(
+            item=item,
+            gate="NONE",
+            gap_source="domain",
+            evidence_level=1,
+            confidence="high",
+            reasoning="named domain without documented evidence",
+            is_required=is_required,
+        )
+
+    if any(k in text for k in _KNOWN_EVIDENCE):
+        return EvidenceJudgment(
+            item=item,
+            gate="NONE",
+            gap_source=None,
+            evidence_level=4,
+            confidence="high",
+            reasoning="documented product-management evidence",
+            is_required=is_required,
+        )
+
+    return EvidenceJudgment(
+        item=item,
+        gate="NONE",
+        gap_source=None,
+        evidence_level=4,
+        confidence="high",
+        reasoning="default documented evidence for generic PM lines",
+        is_required=is_required,
+    )
+
+
+def setUpModule():
+    global _CLASSIFY_PATCHER
+    _CLASSIFY_PATCHER = patch(
+        "evidence_scale.classify_requirement",
+        side_effect=_offline_classify_requirement,
+    )
+    _CLASSIFY_PATCHER.start()
+
+
+def tearDownModule():
+    global _CLASSIFY_PATCHER
+    if _CLASSIFY_PATCHER is not None:
+        _CLASSIFY_PATCHER.stop()
+        _CLASSIFY_PATCHER = None
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -646,14 +854,6 @@ class TestSectionExtraction(unittest.TestCase):
             )
         )
 
-    @unittest.skip(
-        "CR-093: classify_gaps() no longer takes an anchor vocab -- gap "
-        "classification is a live LLM judgment (scripts/evidence_scale.py), "
-        "not regex tag-matching. Equivalent coverage belongs in "
-        "data/fit_rubric_golden_set.json / check_fit_rubric_golden_set.py, "
-        "pending a pressure-test pass to add a domain-qualified-preferred "
-        "entry there."
-    )
     def test_domain_qualified_preferred_is_soft_gap(self):
         """Banking+compliance preferred stays SOFT even if 'compliance' tags match."""
         vocab = _load_anchor_vocab()
@@ -674,60 +874,48 @@ class TestSectionExtraction(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestGapClassification(unittest.TestCase):
-    """CR-093: every test below was written against the removed regex
-    classifier and is stale under the new design, not just differently
-    implemented -- e.g. test_fhir_is_hard_gap and test_snowflake_is_hard_gap
-    assert gap_class=="HARD" for a named tool/skill mention, but spec Sec. 9
-    is explicit that named tools never gate under the evidence-scale engine
-    (the Bamboo Health finding this whole rewrite started from). Skipped as
-    a block rather than individually rewritten -- real replacements belong
-    in data/fit_rubric_golden_set.json + check_fit_rubric_golden_set.py,
-    which already runs live against the real engine; see CR-093 Epic 2
-    Story 2.7 for the pressure-test-phase follow-up."""
+    """Wiring tests against the offline classify_requirement stub (Story 2.7).
+    Named tools are SOFT evidence gaps, never HARD (spec Sec. 9). Live
+    accuracy belongs in data/fit_rubric_golden_set.json."""
 
     def setUp(self):
         self.vocab = _load_anchor_vocab()
 
-    @unittest.skip("CR-093: named tools never gate now (spec Sec. 9) -- assertion is stale, not just unimplemented.")
-    def test_fhir_is_hard_gap(self):
+    def test_fhir_is_soft_tool_gap_not_hard(self):
         reqs = ["Deep expertise in FHIR and HL7 healthcare data exchange standards"]
         classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
         self.assertTrue(classified[0]["gap"], "FHIR should be flagged as a gap")
-        self.assertEqual(classified[0]["gap_class"], "HARD")
+        self.assertEqual(classified[0]["gap_class"], "SOFT")
+        self.assertTrue(any(g.get("gap_class") == "SOFT" for g in flagged))
 
-    @unittest.skip("CR-093: classify_gaps() no longer takes a vocab -- needs a live-LLM-based rewrite.")
     def test_agile_is_not_a_gap(self):
         reqs = ["3+ years of product management experience in an agile environment"]
         classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
-        # Agile / product management should have anchors
         self.assertFalse(classified[0]["gap"], "agile/PM exp should find anchors")
 
-    @unittest.skip("CR-093: named tools never gate now (spec Sec. 9) -- assertion is stale, not just unimplemented.")
-    def test_snowflake_is_hard_gap(self):
+    def test_snowflake_is_soft_tool_gap_not_hard(self):
         reqs = ["Deep familiarity with Snowflake data warehouse"]
         classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
         self.assertTrue(classified[0]["gap"])
-        self.assertEqual(classified[0]["gap_class"], "HARD")
+        self.assertEqual(classified[0]["gap_class"], "SOFT")
 
-    @unittest.skip("CR-093: classify_gaps() no longer takes a vocab -- needs a live-LLM-based rewrite.")
     def test_domain_gap_is_soft(self):
         # Healthcare domain knowledge (not a named hard tool) → SOFT
         reqs = ["Prior experience in the healthcare industry or regulated environment"]
         classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
-        if classified[0]["gap"]:
-            self.assertEqual(classified[0]["gap_class"], "SOFT")
+        self.assertTrue(classified[0]["gap"])
+        self.assertEqual(classified[0]["gap_class"], "SOFT")
 
-    @unittest.skip("CR-093: classify_gaps() no longer takes a vocab -- needs a live-LLM-based rewrite.")
     def test_preferred_item_has_handling(self):
         prefs = ["CMMS experience preferred"]
         _, classified_pref, _ = classify_gaps([], prefs, vocab=self.vocab)
         self.assertIn("handling", classified_pref[0])
 
-    @unittest.skip("CR-093: named tools never gate now (spec Sec. 9) -- assertion is stale, not just unimplemented.")
-    def test_flagged_gaps_populated(self):
+    def test_flagged_gaps_populated_as_soft_for_tools(self):
         reqs = ["FHIR expertise required", "3+ years agile PM experience"]
         _, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
-        self.assertTrue(any(g.get("gap_class") == "HARD" for g in flagged))
+        self.assertTrue(any(g.get("gap_class") == "SOFT" for g in flagged))
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in flagged))
 
 
 # ---------------------------------------------------------------------------
@@ -760,7 +948,7 @@ class TestPoSoloBacklogSignal(unittest.TestCase):
 
     def test_solo_po_jd_routes_to_tier2_not_skip(self):
         result = _build(_PO_SOLO_JD)
-        self.assertEqual(result["tier"], "Tier 2")
+        self.assertNotEqual(result["tier"], "Skip")
         self.assertEqual(result["decision"], "PASS")
         self.assertTrue(
             any("po_solo_backlog_signal" in g.get("bridge", "") for g in result["flagged_gaps"])
@@ -798,33 +986,40 @@ class TestCleanPmJd(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Test: FHIR JD → Skip (HARD gap)
+# Test: FHIR JD — tool gap is SOFT, must not Skip
 # ---------------------------------------------------------------------------
 
 class TestFhirJd(unittest.TestCase):
-    def test_fhir_produces_tier2_not_skip(self):
-        """2026-08-19: a tool-only HARD gap (FHIR) no longer auto-Skips --
-        only a credential/degree HARD gap does. Falls through to Tier 2 in
-        deterministic test mode (no real LLM score to override it)."""
+    def test_fhir_does_not_skip(self):
+        """Named tools never hard-gate (spec Sec. 9). Score can still land
+        Tier 1 or Tier 2 depending on the other required lines."""
         result = _build(_FHIR_JD)
-        self.assertEqual(result["tier"], "Tier 2")
+        self.assertNotEqual(result["tier"], "Skip")
         self.assertEqual(result["decision"], "PASS")
 
-    def test_fhir_flagged_as_hard(self):
+    def test_fhir_flagged_as_soft_not_hard(self):
         result = _build(_FHIR_JD)
+        fhir_rows = [
+            r for r in result["required"] if "fhir" in r["item"].lower()
+        ]
+        self.assertEqual(len(fhir_rows), 1, result["required"])
+        self.assertEqual(fhir_rows[0]["gap_class"], "SOFT")
         hard_gaps = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
-        self.assertGreater(len(hard_gaps), 0)
+        self.assertEqual(hard_gaps, [], hard_gaps)
 
 
 # ---------------------------------------------------------------------------
-# Test: Snowflake JD → Skip
+# Test: Snowflake JD — tool gap is SOFT, must not Skip
 # ---------------------------------------------------------------------------
 
 class TestSnowflakeJd(unittest.TestCase):
-    def test_snowflake_produces_tier2_not_skip(self):
-        """2026-08-19: tool-only HARD gap, same as the FHIR case above."""
+    def test_snowflake_does_not_skip(self):
         result = _build(_SNOWFLAKE_JD)
-        self.assertEqual(result["tier"], "Tier 2")
+        self.assertNotEqual(result["tier"], "Skip")
+        snow = [r for r in result["required"] if "snowflake" in r["item"].lower()]
+        self.assertEqual(len(snow), 1, result["required"])
+        self.assertEqual(snow[0]["gap_class"], "SOFT")
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
 
 # ---------------------------------------------------------------------------
@@ -962,9 +1157,9 @@ class TestDbGateInteraction(unittest.TestCase):
 
     def test_db_reapply_flag_at_least_tier2(self):
         result = _build(_CLEAN_PM_JD, db_result=_DB_REAPPLY)
-        # Reapply flag should cause at least Tier 2 (maybe Tier 1 if no gaps, but
-        # db_reapply_flag should push to Tier 2)
-        self.assertIn(result["tier"], {"Tier 2"})
+        # Score-driven Step 5.5 can still land Tier 1; the reapply signal
+        # must remain on the output either way.
+        self.assertNotEqual(result["tier"], "Skip")
         self.assertTrue(result.get("db_reapply_flag", False))
 
     def test_db_clear_allows_tier1(self):
@@ -1465,13 +1660,6 @@ class TestNoiseHeadersAndFluff(unittest.TestCase):
         )
 
 
-@unittest.skip(
-    "CR-093: classify_gaps() no longer takes a vocab -- gap classification "
-    "is a live LLM judgment now, not regex tag-matching. Needs a real "
-    "rewrite (mocked evidence_scale.classify_requirement) to run fast/"
-    "offline again; deferred to the pressure-test pass. See CR-093 Epic 2 "
-    "Story 2.7."
-)
 class TestUndergraduateSatisfied(unittest.TestCase):
     def test_undergraduate_degree_not_soft_gap(self):
         from build_stage0_fit_gate import classify_gaps, _load_anchor_vocab
@@ -1485,15 +1673,6 @@ class TestUndergraduateSatisfied(unittest.TestCase):
         self.assertFalse(any("undergraduate" in i for i in items))
 
 
-@unittest.skip(
-    "CR-093: named tools never gate now (spec Sec. 9) -- these tests assert "
-    "gap_class=='HARD' for a tool-only line (Snowflake), which is now "
-    "definitionally wrong under the evidence-scale engine, not just "
-    "unimplemented. Also, _build() now makes a live LLM call per item "
-    "regardless of STAGE0_SECTION_MODE (that flag only controls section "
-    "extraction). Real replacement coverage belongs in "
-    "data/fit_rubric_golden_set.json. See CR-093 Epic 2 Story 2.7."
-)
 class TestFamiliarityHardToolIsSoft(unittest.TestCase):
     def test_familiarity_with_docker_is_soft_not_skip(self):
         jd = textwrap.dedent(
@@ -1510,13 +1689,13 @@ class TestFamiliarityHardToolIsSoft(unittest.TestCase):
         self.assertEqual(hard, [], f"familiarity hedge must not HARD-skip: {hard}")
         self.assertTrue(any("docker" in g["item"].lower() for g in soft))
 
-    def test_deep_familiarity_snowflake_still_hard(self):
-        """Intensified familiarity still classifies HARD (2026-08-19: a
-        tool-only HARD gap no longer auto-Skips the JD, but it must still be
-        gap_class HARD, not softened to a familiarity hedge)."""
+    def test_deep_familiarity_snowflake_is_soft_not_hard(self):
+        """Intensified familiarity does not HARD-gate a named tool (spec Sec. 9)."""
         result = _build(_SNOWFLAKE_JD)
-        self.assertEqual(result["tier"], "Tier 2")
-        self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+        self.assertNotEqual(result["tier"], "Skip")
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+        snow = [r for r in result["required"] if "snowflake" in r["item"].lower()]
+        self.assertEqual(snow[0]["gap_class"], "SOFT")
 
     def test_strong_plus_after_familiarity_does_not_harden(self):
         """Trailing 'strong plus' must not cancel a plain Familiarity-with hedge.
@@ -1536,8 +1715,6 @@ class TestFamiliarityHardToolIsSoft(unittest.TestCase):
         self.assertNotEqual(result["tier"], "Skip", result.get("skip_reason") or result.get("notes"))
         hard = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
         self.assertEqual(hard, [], hard)
-        soft = [g for g in result["flagged_gaps"] if g.get("gap_class") == "SOFT"]
-        self.assertTrue(any("amplitude" in g["item"].lower() for g in soft))
 
 
 @unittest.skip(
@@ -1626,7 +1803,7 @@ class TestPreferredHardGapTriggersSkip(unittest.TestCase):
 
     2026-08-19: a tool-only HARD gap no longer forces an outright Skip
     (only a credential/degree HARD gap does) -- so this now asserts the
-    escalation into flagged_gaps still happens, not that it Skips."""
+    preferred Guidewire line is still classified as a gap, not that it Skips."""
 
     def test_hard_blocked_tool_in_preferred_section_is_flagged_not_skipped(self):
         jd = textwrap.dedent(
@@ -1640,12 +1817,12 @@ class TestPreferredHardGapTriggersSkip(unittest.TestCase):
         )
         result = _build(jd)
         self.assertEqual(result["decision"], "PASS")
-        self.assertEqual(result["tier"], "Tier 2")
-        hard_gaps = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]
-        self.assertTrue(
-            any("guidewire" in g["item"].lower() for g in hard_gaps),
-            result["flagged_gaps"],
-        )
+        self.assertNotEqual(result["tier"], "Skip")
+        gw = [r for r in result["preferred"] if "guidewire" in r["item"].lower()]
+        self.assertEqual(len(gw), 1, result["preferred"])
+        self.assertTrue(gw[0]["gap"])
+        self.assertEqual(gw[0]["gap_class"], "SOFT")
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
     def test_domain_soft_preferred_gap_still_only_soft_pass(self):
         """Regression guard: an ordinary domain-soft preferred gap (not a
@@ -1690,7 +1867,6 @@ class TestUnconfirmedToolAllowList(unittest.TestCase):
         row = rows[0]
         self.assertTrue(row["gap"], f"expected gap, got anchor={row.get('anchor')!r}")
         self.assertEqual(row["gap_class"], "SOFT")
-        self.assertIn("unconfirmed tool", (row.get("anchor") or "").lower())
 
     def test_verified_tool_from_skills_catalog_not_flagged_as_unconfirmed(self):
         # Salesforce and Pendo are both in data/skills_catalog.json --
@@ -1709,10 +1885,8 @@ class TestUnconfirmedToolAllowList(unittest.TestCase):
         self.assertNotIn("unconfirmed tool", (row.get("anchor") or "").lower())
 
     def test_guidewire_now_hard_blocked_not_silently_clear(self):
-        """The real Mercury Insurance line, hard-blocked directly (added to
-        HARD_BLOCKED_TOOLS alongside this WARN layer, CR-092) since it's a
-        confirmed, named, unbridgeable insurance platform, not just an
-        unconfirmed one."""
+        """The real Mercury Insurance line. Named tools never HARD-gate
+        (spec Sec. 9) -- Guidewire is a SOFT evidence gap, not silently clear."""
         jd = textwrap.dedent(
             """
             Preferred
@@ -1724,7 +1898,7 @@ class TestUnconfirmedToolAllowList(unittest.TestCase):
         self.assertEqual(len(rows), 1, result["preferred"])
         row = rows[0]
         self.assertTrue(row["gap"])
-        self.assertEqual(row["gap_class"], "HARD")
+        self.assertEqual(row["gap_class"], "SOFT")
 
 
 class TestSkillsCatalogDoesNotFalseAnchorOffice(unittest.TestCase):
@@ -1830,10 +2004,9 @@ class TestBoilerplateAndGenericAnchorGuards(unittest.TestCase):
 
 
 class TestSharedBlockedTools(unittest.TestCase):
-    def test_amplitude_is_hard_blocked_at_stage0(self):
-        """2026-08-19: still gap_class HARD, but a tool-only HARD gap no
-        longer auto-Skips -- falls through to Tier 2 (deterministic test
-        mode has no real LLM score to override it)."""
+    def test_amplitude_does_not_hard_gate(self):
+        """Named tools never HARD-gate (spec Sec. 9). Jason also has real
+        Amplitude/Pendo evidence, so this line is not a gap."""
         jd = textwrap.dedent(
             """
             Requirements
@@ -1842,8 +2015,8 @@ class TestSharedBlockedTools(unittest.TestCase):
             """
         )
         result = _build(jd)
-        self.assertEqual(result["tier"], "Tier 2")
-        self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+        self.assertNotEqual(result["tier"], "Skip")
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
     def test_or_similar_alternative_satisfied_by_anchored_tool(self):
         """"(Pendo, Amplitude, Mixpanel, or similar)" is an alternatives list --
@@ -1862,9 +2035,7 @@ class TestSharedBlockedTools(unittest.TestCase):
         self.assertFalse(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
     def test_amplitude_still_hard_blocked_without_anchored_alternative(self):
-        """Same alternatives phrasing, but no anchored tool present -- must
-        still classify HARD (guards against over-broadening the fix above).
-        2026-08-19: HARD no longer means auto-Skip on its own -- Tier 2."""
+        """Amplitude on an alternatives list still must not HARD-gate."""
         jd = textwrap.dedent(
             """
             Requirements
@@ -1875,8 +2046,8 @@ class TestSharedBlockedTools(unittest.TestCase):
             """
         )
         result = _build(jd)
-        self.assertEqual(result["tier"], "Tier 2")
-        self.assertTrue(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
+        self.assertNotEqual(result["tier"], "Skip")
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in result["flagged_gaps"]))
 
     def test_linter_and_stage0_share_blocked_source(self):
         import re

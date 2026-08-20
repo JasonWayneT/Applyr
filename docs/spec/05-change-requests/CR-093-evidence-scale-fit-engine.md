@@ -121,9 +121,9 @@ via a single LLM call — spec §7-9 implemented as code for the first time.
 Built end-to-end and smoke-tested against real archive JDs (Story 2.3's note). Jason's explicit
 instruction after Epic 1: **"build everything, we will pressure test after"** — so this epic
 was completed as a build pass, not validated against the golden set or archive corpus the way
-Epic 3 calls for. Two known, deliberately-deferred gaps going into pressure-testing: the
-evidence-context truncation placeholder (Story 2.1) and the unrewritten `test_build_stage0_fit_gate.py`
-coverage (Story 2.7) — both explicitly flagged in their stories below, not silently skipped.
+Epic 3 calls for. One known, deliberately-deferred gap going into pressure-testing: the
+evidence-context truncation placeholder (Story 2.1). Story 2.7's offline test rewrite landed
+2026-08-20.
 
 **Goal:** replace `structured_fit.compute_fit_report()`'s 5-criterion math with the spec
 §10-11 weighted formula over real per-requirement evidence judgments, and replace
@@ -194,20 +194,17 @@ coverage (Story 2.7) — both explicitly flagged in their stories below, not sil
       within +-1 rather than requiring an exact match (a judgment call, not a bit-exact fact).
       Syntax/import-checked; the full 21-entry live sweep itself is pressure-test-phase work
       (each run is real LLM calls), not run to completion in this build pass.
-- [x] **Story 2.7 — `test_build_stage0_fit_gate.py`'s regex-specific unit tests — partial.**
-      Skipped (not deleted, not rewritten) every test block that either imports a removed
-      function directly or asserts an invariant the new design makes definitionally false (e.g.
-      `gap_class=="HARD"` for a bare tool mention — tools never gate now, spec Sec. 9):
-      `TestGapClassification` (whole class), `test_domain_qualified_preferred_is_soft_gap`,
-      `TestUndergraduateSatisfied` (whole class), `TestFamiliarityHardToolIsSoft` (whole class),
-      `TestCompoundClauseSplitting` (whole class) — each skip cites CR-093 and this story.
-      **Not done**: a real rewrite (mocking `evidence_scale.classify_requirement` so these run
-      fast/offline again) — that's genuine pressure-test-phase work, explicitly deferred per
-      Jason's "build everything, we will pressure test after." Confirmed via `unittest`
-      collection that the file loads and non-skipped tests still run; did not run the full suite
-      to completion (many remaining tests call `build_stage0_fit_gate()` end-to-end, which now
-      makes real per-item LLM calls regardless of `STAGE0_SECTION_MODE` — that flag only ever
-      controlled section *extraction*, not gap classification).
+- [x] **Story 2.7 — `test_build_stage0_fit_gate.py`'s regex-specific unit tests.**
+      Classification is mocked at `evidence_scale.classify_requirement` for this file
+      (`_offline_classify_requirement` + `setUpModule`), so the suite is fast/offline
+      again: extraction stays on `STAGE0_SECTION_MODE=deterministic`, scoring never
+      reaches Ollama. Regex-era HARD-tool assertions were rewritten to the evidence-scale
+      contract (tools are SOFT, never HARD). `TestCompoundClauseSplitting` stays skipped
+      because it imports the deleted `_split_compound_item`. Live accuracy stays in
+      `data/fit_rubric_golden_set.json`. Empty-required cap (preferred-only must not
+      promote to Tier 1) remains a live wiring regression in this file. Confirmed
+      2026-08-20: `python -m unittest scripts.test_build_stage0_fit_gate
+      scripts.test_stage0_model_handoff -q` — 123 tests, 5 skipped, ~7s, OK.
 
 ---
 
@@ -319,14 +316,15 @@ sweep before shipping — don't trust golden-set pass rate alone for a change th
       post-fixes), both 11/11 Skip. **Not a clean "still 0/N" repeat of the finding** — see the
       extraction-quality writeup above for why most of these Skips trace to a different, unfixed
       system, not this one.
-- [ ] **Story 3.3 — Decide the floor** (Tier 1/2/Skip score bands). Not started, still needs
-      Jason's explicit call per the spec's own framing (a judgment call, not inferable from data
-      alone) — but there's now a real, if small, first data point: Story 3.1's 5 cleanly-scored
-      archive JDs landed at 40/53/55/56/63, all below the 70 floor, none wildly off it. That's
-      consistent with the spec's own citation (TalentWorks: real callback rates plateau around
-      40-60% match, not 70-90%) suggesting the floor may be stricter than real outcomes justify —
-      but 5 JDs is nowhere near enough to recalibrate on. Worth a real look once a larger sample
-      exists (Story 3.1's full run, or real outcome data — did Jason apply, did he hear back).
+- [x] **Story 3.3 — Decide the floor** (Tier 1/2/Skip score bands). **Locked 2026-08-20,
+      Jason explicit:** Skip below 40, Tier 2 from 40 to 65, Tier 1 at 65+. These were already
+      the working numbers in `data/fit_rubric_calibration.json` (Epic 4 recommendation). Story 3.3
+      was the open "is this the floor or still a guess?" decision. Jason closed it: use them.
+      Status in that file is now `locked`, not `provisional`. Locked means production Stage 0
+      treats 40/65 as the floor, not that a Contrasting-Groups calibration has been run. The
+      `upgrade_path` still says to replace the numbers when real interview/no-interview labels
+      exist under this engine. Do not quietly change them without that data or another explicit
+      call.
 
 ---
 
@@ -369,12 +367,12 @@ a settled number:
 **This replaces 80/70 with 65/40** as the concrete recommendation, a meaningfully lower and wider
 Tier 2 band than before — not a small nudge.
 
-**What would upgrade this from provisional to real**: the moment Jason applies to jobs scored
-under this engine and real interview/no-interview outcomes start coming back, that's a genuine
-Contrasting-Groups-method opportunity — compare the score distribution of JDs that converted to
-interviews against those that didn't, and set the floor at the real intersection point, the way
-the PMC comparison study's methods actually work. Don't treat 65/40 as final; treat it as the
-first defensible number, replaceable by real outcome data the moment it exists.
+**What would upgrade this from a working floor to a calibrated floor**: Jason locked 40/65 as
+the production Stage 0 bands on 2026-08-20 (Story 3.3). That closed the open decision. It did
+not run a Contrasting-Groups calibration. The moment he applies to jobs scored under this engine
+and real interview/no-interview outcomes start coming back, compare the score distribution of
+JDs that converted against those that didn't, and reset the floors at the real intersection.
+Do not quietly drift 40/65 without that data or another explicit call.
 
 ### Implementation
 
@@ -450,9 +448,8 @@ through the deleted `process_single()`.
 passing, 32/32 files. `python scripts/run_all_tests.py --python-only` — clean except one
 pre-existing, unrelated failure (`test_audit_claims_coverage.py`, a `master_claims.json`
 project_id data-drift issue this session never touched — confirmed via the file's own imports,
-not assumed) and one already-known, already-logged slow-suite timeout
-(`test_build_stage0_fit_gate.py`, Epic 2 Story 2.7's still-open "needs a real mocked rewrite"
-item, unaffected by today's deletions).
+not assumed). `test_build_stage0_fit_gate.py`'s slow live-LLM timeout is closed (Story 2.7,
+2026-08-20: classify_requirement is mocked; suite is ~7s offline).
 
 **Docs updated in the same pass** (per this repo's own doc-change checklist): `README.md`'s Fit
 Scoring section, Drafting Assets section, project-structure map (3 lines), and server-routes line;

@@ -65,9 +65,11 @@ _RULE_DIGEST_VERSION_PATH = _REPO_ROOT / "data" / "authoring_rule_digest.version
 _PREAMBLE = """\
 You are authoring a Resume.md and a CoverLetter.md for a job application.
 
-CLOSED-WORLD RULE: use ONLY the claim_ids and excerpts in the packet below.
+CLOSED-WORLD RULE: use ONLY the claim_ids, excerpts, and claim_constraints in the packet below.
+Excerpts are retrieved workExperience.md (or aiProjects.md) spans, not catalog text.
 Do not invent any metric, tool, company, team name, or date not present in the packet.
 Do not load any external file. Do not call any tool (tools are not needed for v1).
+Obey claim_constraints: never round CONTRIBUTED into OWNED; never use a Prohibited line as a story.
 
 The packet field `packet_status` MUST be "ready" before you proceed.
 If it is not "ready", stop and print the incomplete_reasons — do not draft.

@@ -50,10 +50,12 @@ or the full claims catalog.
 
 ## 1. Closed-World Rule (hardest constraint)
 
-Use ONLY claim_ids and excerpts from the authoring packet. Write fresh prose from
-those facts. Never invent a metric, tool, company name, team name, or date not present
-in the packet. If the packet has no evidence for a JD item, note the gap in soft_gaps —
-do not fabricate a claim to fill it.
+Use ONLY claim_ids, excerpts, and claim_constraints from the authoring packet.
+Excerpts are retrieved workExperience.md (or aiProjects.md) spans, not catalog text.
+Write fresh prose from those facts. Obey each card's Attribution and Prohibited
+fields. Never round CONTRIBUTED into OWNED. Never invent a metric, tool, company
+name, team name, or date not present in the packet. If the packet has no evidence
+for a JD item, note the gap in soft_gaps — do not fabricate a claim to fill it.
 
 ---
 
@@ -172,6 +174,7 @@ Apply the correct tier to every ACC code used:
 
 **ACC-120 (AI content-generation system):** CONTRIBUTED at most — joint prompt-engineering research only.
 Jason did NOT build or design the AI system. Never write "I built" or "I designed" about it.
+When `claim_constraints` lists a tier for a claim_id, that card wins over this table.
 
 ---
 
@@ -208,7 +211,7 @@ Never claim any of the following, regardless of JD language:
 - Titles above Senior IC PM (no Director, Head of, Principal, VP, Staff, Group PM)
 - AI/ML model training, ownership, or engineering
 - Revenue, billing, or payment system ownership
-- Tools not in his history (no Snowflake, Tableau, FHIR, Docker, TensorFlow, etc.
+- Tools not in his history (no Snowflake, Tableau, FHIR, Kubernetes, TensorFlow, etc.
   unless explicitly present in the packet excerpt)
 - "Familiar with," "awareness of," or "literacy in" any tool (if not a hard skill in packet, it doesn't exist)
 

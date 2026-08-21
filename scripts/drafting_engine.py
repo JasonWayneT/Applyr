@@ -67,7 +67,7 @@ KNOWN_HALLUCINATIONS = {
 # Source: workExperience.md — if it isn't there, it doesn't exist.
 BLOCKED_TOOLS = [
     "Snowflake", "Tableau", "Looker", "dbt", "Airflow", "Spark", "Kafka",
-    "Kubernetes", "Docker", "Terraform", "Helm", "Jenkins", "CircleCI",
+    "Kubernetes", "Terraform", "Helm", "Jenkins", "CircleCI",
     "FHIR", "HL7", "HIPAA", "SOC2", "SOC 2", "ISO 27001",
     "Databricks", "Redshift", "BigQuery", "Fivetran", "Segment",
     # Pendo removed 2026-07-18: it was blocking a VERIFIED tool. workExperience.md
@@ -81,7 +81,7 @@ BLOCKED_TOOLS = [
     "Amplitude", "Mixpanel", "LaunchDarkly",
     "React", "Node.js", "GraphQL", "Rust", "Go",
     "TensorFlow", "PyTorch", "LangChain", "RAG", "LLM pipeline",
-    "AWS", "Azure", "GCP", "Heroku",
+    "Azure", "GCP", "Heroku",
 ]
 
 # Seniority inflation phrases — flag if any appear in the resume

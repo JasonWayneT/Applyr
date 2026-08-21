@@ -353,7 +353,7 @@ scripts/
     zero_shot_classifier.py — location zero-token gate
 
   CR-074 authoring packet (Stage 1 workers under run_submission):
-    build_authoring_packet.py         — builds the lean authoring_packet.json (JD buckets + evidence map + bounded workExperience excerpts)
+    build_authoring_packet.py         — builds the lean authoring_packet.json (JD evidence map + workExperience excerpts + claim_constraints)
     generate_authoring_rule_digest.py — builds authoring_rule_digest.md (~1.6k-token rule digest)
     author_from_packet.py             — prompt emit + Stage 1 exit gate (--verify-only); debug CLI warns to prefer run_submission
 

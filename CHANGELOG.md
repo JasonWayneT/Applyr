@@ -10,6 +10,11 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Changed
+- **CR-094: WE-primary authoring (2026-08-20).** Packet excerpts come from
+  `workExperience.md` (or `aiProjects.md` for ACC-401), not catalog `text`.
+  `claim_constraints` carries OWNED / CONTRIBUTED / DO NOT CLAIM per claim.
+  Attribution and DO NOT CLAIM ACC ids are not treated as accomplishments.
+  Context pack strips contact/references sections.
 - **Stage 0 requirement extraction (2026-08-20):** pinned to `qwen2.5:7b-instruct-q4_K_M`.
   If that model is missing, Ollama is down, or the call returns empty/unparseable output,
   Stage 0 stops and tells you — it no longer silently swaps in the regex extractor or
@@ -37,6 +42,9 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
   Applyr interview outcomes. Do not change them without that data or another explicit call.
 
 ### Developer
+- **CR-094 (2026-08-20):** `scripts/we_acc_index.py` classifies WE ACC ids; packet tests
+  assert WE spans over catalog `text`; audit ignores Attribution/DNC brackets;
+  context pack strips contact/references headings.
 - **Stage 0 id-only extract (2026-08-20):** `scripts/test_stage0_extract.py` plus updated
   `TestSectionExtractionLLM` cover HTML cleanup, harvest ids, long-paragraph split,
   header-hint fill, and drop-unknown-ids. Offline suite stays mocked. Live Qwen re-ran

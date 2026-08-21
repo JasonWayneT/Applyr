@@ -35,6 +35,7 @@ from build_authoring_packet import (
     _synthetic_excerpt,
     _MAX_SLOTS_PER_PROJECT,
     assemble_packet,
+    build_claim_constraints,
     build_evidence_map,
     build_excerpts,
     build_packet,
@@ -119,6 +120,10 @@ _WE_TEXT_FIXTURE = textwrap.dedent("""
     *   **[ACC-101] Platform Stabilization**: Mitigated recurring indexing server crashes
         by implementing proactive storage capacity monitoring and alerting thresholds.
         Reduced overall service outages and prevented data loss events.
+
+    *   **[ACC-191] Attribution:** **OWNED** — Jason owned the monitoring work.
+
+    *   **[ACC-192] DO NOT CLAIM:** sole causation of a company-wide reliability program.
 
     *   **[ACC-102] Data Remediation**: Conceived and drove a centralized platform data
         remediation initiative. Eliminated a 40% data drop-off rate. Reduced stale-data
@@ -848,27 +853,32 @@ class TestStage0CliGate(unittest.TestCase):
 
 class TestExcerptForClaim(unittest.TestCase):
 
-    def test_prefers_claim_text_over_we_extraction(self):
-        rec = {"project_id": "ACC-101", "text": "Clean lens-specific claim text."}
+    def test_uses_we_span_even_when_claim_text_present(self):
+        rec = {
+            "project_id": "ACC-101",
+            "lens": "tech",
+            "text": "Clean lens-specific claim text that must not be authored from.",
+        }
         excerpt = _excerpt_for_claim("ACC-101-TECH", rec, _WE_TEXT_FIXTURE, "")
-        self.assertEqual(excerpt, "Clean lens-specific claim text.")
+        self.assertIn("stabilization", excerpt.lower())
+        self.assertNotIn("must not be authored from", excerpt)
 
     def test_falls_back_to_we_extraction_when_text_missing(self):
-        rec = {"project_id": "ACC-101"}  # no 'text' field, matches tags-only fixtures
+        rec = {"project_id": "ACC-101", "lens": "tech"}
         excerpt = _excerpt_for_claim("ACC-101-TECH", rec, _WE_TEXT_FIXTURE, "")
         self.assertIn("stabilization", excerpt.lower())
 
-    def test_claim_text_truncated_to_max_chars(self):
-        rec = {"project_id": "ACC-101", "text": "X" * 600}
+    def test_we_span_truncated_to_max_chars(self):
+        rec = {"project_id": "ACC-101", "lens": "tech", "text": "X" * 600}
         excerpt = _excerpt_for_claim("ACC-101-TECH", rec, _WE_TEXT_FIXTURE, "", max_chars=50)
-        self.assertEqual(len(excerpt), 50)
+        self.assertLessEqual(len(excerpt), 50)
 
-    def test_distinct_lens_text_no_longer_collapses_to_same_string(self):
-        """Two lenses of the same project, each with its own text, must not produce
-        byte-identical excerpts (the pre-CR-085 duplicate-excerpt bug)."""
+    def test_second_lens_is_pointer_not_duplicate_we_dump(self):
+        """CR-094: two lenses share one WE story. First card carries the span;
+        the second is a lens pointer so CR-085's byte-identical dump does not return."""
         claims = {
-            "ACC-102-TECH": {"project_id": "ACC-102", "text": "Technical lens text."},
-            "ACC-102-BUS": {"project_id": "ACC-102", "text": "Business lens text."},
+            "ACC-102-TECH": {"project_id": "ACC-102", "lens": "tech", "text": "Technical lens text."},
+            "ACC-102-BUS": {"project_id": "ACC-102", "lens": "bus", "text": "Business lens text."},
         }
         em = [
             {"jd_item": "A", "bucket": "required", "claim_ids": ["ACC-102-TECH"], "bridge": None},
@@ -876,6 +886,89 @@ class TestExcerptForClaim(unittest.TestCase):
         ]
         excerpts = build_excerpts(em, claims, _WE_TEXT_FIXTURE, _AI_TEXT_FIXTURE)
         self.assertNotEqual(excerpts["ACC-102-TECH"], excerpts["ACC-102-BUS"])
+        self.assertIn("remediation", excerpts["ACC-102-TECH"].lower())
+        self.assertNotIn("Technical lens text.", excerpts["ACC-102-TECH"])
+        self.assertIn("ACC-102", excerpts["ACC-102-BUS"])
+        self.assertIn("bus", excerpts["ACC-102-BUS"].lower())
+        self.assertNotIn("eliminated a 40%", excerpts["ACC-102-BUS"].lower())
+
+    def test_tags_only_claim_without_text_is_selectable_from_we(self):
+        claims = {
+            "ACC-101-STORY": {
+                "project_id": "ACC-101",
+                "lens": "story",
+                "tags": ["storage", "monitoring"],
+                "metrics": [],
+                "employer": "cision",
+            },
+        }
+        em = [
+            {"jd_item": "storage monitoring", "bucket": "required",
+             "claim_ids": ["ACC-101-STORY"], "bridge": None},
+        ]
+        excerpts = build_excerpts(em, claims, _WE_TEXT_FIXTURE, "")
+        self.assertIn("ACC-101-STORY", excerpts)
+        self.assertIn("stabilization", excerpts["ACC-101-STORY"].lower())
+
+    def test_parent_excerpt_includes_substory_not_next_story(self):
+        we = textwrap.dedent("""
+            * **[ACC-101] Platform Stabilization**: storage monitoring.
+
+            * **[ACC-122] What Jason drove:** alerting thresholds in the danger band.
+
+            * **[ACC-102] Data Remediation**: etl bypass of failing pipelines.
+        """)
+        rec = {"project_id": "ACC-101", "lens": "tech"}
+        excerpt = _excerpt_for_claim("ACC-101-TECH", rec, we, "")
+        self.assertIn("alerting", excerpt.lower())
+        self.assertNotIn("etl bypass", excerpt.lower())
+
+
+class TestClaimConstraints(unittest.TestCase):
+
+    def test_packet_constraints_carry_we_attribution_and_dnc(self):
+        claims = {
+            "ACC-101-TECH": {
+                "project_id": "ACC-101",
+                "lens": "tech",
+                "tags": ["Monitoring"],
+                "employer": "cision",
+            },
+        }
+        em = [
+            {"jd_item": "monitoring", "bucket": "required",
+             "claim_ids": ["ACC-101-TECH"], "bridge": None},
+        ]
+        excerpts = build_excerpts(em, claims, _WE_TEXT_FIXTURE, "")
+        constraints = build_claim_constraints(excerpts, claims, _WE_TEXT_FIXTURE)
+        rec = constraints["ACC-101-TECH"]
+        self.assertEqual(rec["project_id"], "ACC-101")
+        self.assertEqual(rec["attribution"], "OWNED")
+        self.assertTrue(
+            any("sole causation" in p.lower() for p in rec["prohibited_claims"])
+        )
+
+    def test_assembled_packet_includes_claim_constraints(self):
+        packet = assemble_packet(
+            stage0=_STAGE0_TIER1,
+            evidence_map=[],
+            excerpts={"ACC-101-TECH": "span"},
+            disabled=set(),
+            hook_fact=None,
+            company="TestCorp",
+            role_title="Product Manager",
+            slug="testcorp",
+            url=None,
+            claim_constraints={
+                "ACC-101-TECH": {
+                    "project_id": "ACC-101",
+                    "lens": "tech",
+                    "attribution": "OWNED",
+                    "prohibited_claims": ["sole causation"],
+                }
+            },
+        )
+        self.assertEqual(packet["claim_constraints"]["ACC-101-TECH"]["attribution"], "OWNED")
 
 
 class TestBoilerplateFilter(unittest.TestCase):

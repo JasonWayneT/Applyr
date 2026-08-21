@@ -49,10 +49,21 @@ resolves the historical duplicate-excerpt problem across a project's lenses (e.g
 `ACC-102-TECH` vs `ACC-102-BUS`) — each lens now has genuinely distinct text instead of
 falling back to the same single `[ACC-NNN]` bracket-marker slice.
 
+**Superseded for excerpt source by CR-094:** excerpts now come from WE spans; lens
+distinctiveness is a pointer + lens instruction, not catalog `text`.
+
 `evidence_map` claim selection is capped at `_MAX_SLOTS_PER_PROJECT` (3) rows per
 underlying project, applied globally across the whole map — a capped-out claim is replaced
 by that requirement's own next-best-scoring match, never dropped silently (a required item
 with no viable fallback still trips Rule 1 above, same as before this CR).
+
+## CR-094 (2026-08-20): WE-primary excerpts
+
+Excerpts are retrieved `workExperience.md` spans (or `aiProjects.md` for ACC-401), never
+catalog `text`. `claim_constraints` carries attribution and prohibited fields per claim_id.
+A later lens of the same `project_id` is a pointer plus lens instruction, not a second
+biography. Attribution / DO NOT CLAIM ACC ids in WE are metadata on the preceding story,
+not accomplishments.
 
 ## Intentionally omitted fields (Cluster C item 11, 2026-08-08)
 

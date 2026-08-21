@@ -205,9 +205,10 @@ def _load_rule_digest_version() -> str:
 # packet) for content the author already has. Only the verbatim-copy rule and the geo note
 # are genuinely packet-specific / not already in the digest.
 _HARD_CONSTRAINTS: list[str] = [
-    "Do not copy excerpt sentences verbatim — author fresh prose from the facts. This applies "
-    "even when an excerpt is a short, clean claim description (master_claims.json's `text` "
-    "field) — it is grounding evidence, not draftable prose.",
+    "Do not copy excerpt sentences verbatim — author fresh prose from the WE facts. "
+    "Packet excerpts are retrieved workExperience.md (or aiProjects.md) spans plus "
+    "hedge headers, not catalog `text`. Obey claim_constraints attribution and "
+    "prohibited_claims. Never round CONTRIBUTED into OWNED.",
     _GEO_COLLAB_CONSTRAINT,
 ]
 
@@ -228,13 +229,9 @@ def load_claims(
 ) -> tuple[dict[str, dict], set[str]]:
     """Load claims from master_claims_tags_only.json; identify disabled IDs from master_claims.json.
 
-    CR-085: also merges each claim's lens-specific `text` field from the full catalog into
-    the returned record (e.g. ACC-101-TECH's own text, distinct from ACC-101-PM's). This lets
-    excerpt retrieval use the claim's own clean, bounded description instead of regex-slicing
-    workExperience.md by project_id — which is also what was producing byte-identical excerpts
-    across a project's different lenses (only one [ACC-NNN] marker per project in WE, so every
-    lens fell back to the same slice). `text` is grounding evidence for the closed-world author,
-    not draftable prose — the "do not copy verbatim" hard constraint already covers that.
+    CR-094: merge hedge fields (attribution, prohibited_claims, allowed_claims, lens)
+    from the full catalog. Do **not** merge `text` / `cover_story` — those are a second
+    biography. Packet excerpts are WE spans (CR-085's lens-`text` path is reversed).
 
     Returns (claims_by_id, disabled_ids_set).
     """
@@ -262,12 +259,16 @@ def load_claims(
         if isinstance(rec, dict) and rec.get("disabled"):
             disabled.add(cid)
 
+    _HEDGE_KEYS = ("attribution", "prohibited_claims", "allowed_claims", "lens")
     for cid, rec in claims.items():
         full_rec = full.get(cid)
-        if isinstance(full_rec, dict):
-            text = full_rec.get("text")
-            if isinstance(text, str) and text.strip():
-                rec["text"] = text.strip()
+        if not isinstance(full_rec, dict):
+            continue
+        for key in _HEDGE_KEYS:
+            if rec.get(key) in (None, "", []):
+                val = full_rec.get(key)
+                if val:
+                    rec[key] = val
 
     return claims, disabled
 
@@ -801,20 +802,48 @@ def _extract_excerpt_for_project(
     line_start = we_text.rfind("\n", 0, idx)
     line_start = (line_start + 1) if line_start >= 0 else 0
 
-    raw_chunk = we_text[line_start: line_start + max_chars + 200]
+    # CR-095: include substory / hedge lines until the next indexable story.
+    from we_acc_index import story_span_end
 
-    # Clip at next [ACC-NNN] marker (skip current tag which is at position 0)
-    next_m = re.search(r"\[ACC-\d+\]", raw_chunk[len(bracket_pat):])
-    if next_m:
-        raw_chunk = raw_chunk[: len(bracket_pat) + next_m.start()]
-
-    # Clip at blank line (end of bullet block)
-    blank_m = re.search(r"\n\s*\n", raw_chunk)
-    if blank_m:
-        raw_chunk = raw_chunk[: blank_m.start()]
+    span_end = story_span_end(we_text, str(project_id), idx)
+    raw_chunk = we_text[line_start:span_end]
 
     clean = _strip_markdown_decoration(raw_chunk)
     return clean[:max_chars]
+
+
+def _format_excerpt_card(
+    cid: str,
+    rec: dict,
+    span: str,
+    we_text: str,
+    *,
+    pointer_to: str | None = None,
+    max_chars: int = _EXCERPT_MAX_CHARS,
+) -> str:
+    """WE span plus hedge header, or a lens pointer for a later lens of the same story.
+
+    Implements CR-094: author sees retrieved WE, not catalog `text`.
+    """
+    from we_acc_index import hedges_for_project
+
+    project_id = str(rec.get("project_id") or cid)
+    lens = str(rec.get("lens") or "").strip() or "story"
+    hedges = hedges_for_project(we_text, project_id)
+    attr = str(rec.get("attribution") or hedges.get("attribution") or "").strip()
+    prohibited = rec.get("prohibited_claims") or hedges.get("prohibited_claims") or []
+    if isinstance(prohibited, str):
+        prohibited = [prohibited]
+    attr_s = attr.upper() if attr else "unspecified"
+    dnc = "; ".join(str(p) for p in prohibited) if prohibited else "none listed"
+    header = f"Lens {lens} of {project_id}. Attribution: {attr_s}. Prohibited: {dnc}."
+    if pointer_to:
+        body = (
+            f"{header} Same WE story as {pointer_to}. Write this JD item through the "
+            f"{lens} lens. Do not copy excerpt sentences."
+        )
+        return body[:max_chars]
+    return f"{header}\n{span}"[:max_chars]
 
 
 def _excerpt_for_claim(
@@ -823,19 +852,21 @@ def _excerpt_for_claim(
     we_text: str,
     ai_text: str,
     max_chars: int = _EXCERPT_MAX_CHARS,
+    pointer_to: str | None = None,
 ) -> str:
-    """CR-085: prefer the claim's own lens-specific `text` (merged in by load_claims from
-    master_claims.json) over regex-slicing workExperience.md by project_id. Falls back to
-    the existing project-level extraction when a claim has no `text` — legacy/test fixtures,
-    or any future claim added without one. This is what actually fixes the duplicate-excerpt
-    problem for real data: each lens gets genuinely distinct text instead of every lens of a
-    project collapsing to the same WE bracket-marker slice.
+    """CR-094: always slice WE / aiProjects. Never use claim `text`.
+
+    pointer_to: claim_id that already holds this project's WE span. Later lenses
+    of the same project get a short lens instruction instead of a duplicate dump
+    (CR-085's byte-identical waste, without a second biography).
     """
-    text = (rec.get("text") or "").strip()
-    if text:
-        return text[:max_chars]
     project_id = rec.get("project_id") or cid
-    return _extract_excerpt_for_project(project_id, we_text, ai_text, rec, max_chars=max_chars)
+    span = _extract_excerpt_for_project(
+        project_id, we_text, ai_text, rec, max_chars=max_chars
+    )
+    return _format_excerpt_card(
+        cid, rec, span, we_text, pointer_to=pointer_to, max_chars=max_chars
+    )
 
 
 def _synthetic_excerpt(project_id: str, claim_rec: dict) -> str:
@@ -870,12 +901,34 @@ def _employers_covered(excerpts: dict[str, str], claims: dict[str, dict]) -> set
     return set(_employer_excerpt_counts(excerpts, claims))
 
 
+def _add_excerpt(
+    excerpts: dict[str, str],
+    span_holders: dict[str, str],
+    cid: str,
+    rec: dict,
+    we_text: str,
+    ai_text: str,
+) -> str:
+    """Insert a WE card for cid, reusing a prior span for the same project_id."""
+    if cid in excerpts:
+        return excerpts[cid]
+    project_id = str(rec.get("project_id") or cid)
+    pointer_to = span_holders.get(project_id)
+    excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text, pointer_to=pointer_to)
+    if excerpt:
+        excerpts[cid] = excerpt
+        if pointer_to is None and not _is_thin_synthetic_excerpt(excerpt):
+            span_holders[project_id] = cid
+    return excerpt
+
+
 def _ensure_canonical_role_excerpts(
     excerpts: dict[str, str],
     claims: dict[str, dict],
     we_text: str,
     ai_text: str,
     disabled: set[str] | None = None,
+    span_holders: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Guarantee enough excerpts per canonical career-history employer.
 
@@ -885,6 +938,7 @@ def _ensure_canonical_role_excerpts(
     so earlier roles can support the required 2–3 bullets.
     """
     disabled = disabled or set()
+    span_holders = span_holders if span_holders is not None else {}
     counts = _employer_excerpt_counts(excerpts, claims)
     for employer, preferred_ids in _CANONICAL_ROLE_CLAIMS.items():
         while counts.get(employer, 0) < _MIN_EXCERPTS_PER_CANONICAL_EMPLOYER:
@@ -893,9 +947,8 @@ def _ensure_canonical_role_excerpts(
                 if cid in disabled or cid not in claims or cid in excerpts:
                     continue
                 rec = claims[cid]
-                excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text)
+                excerpt = _add_excerpt(excerpts, span_holders, cid, rec, we_text, ai_text)
                 if excerpt:
-                    excerpts[cid] = excerpt
                     counts[employer] = counts.get(employer, 0) + 1
                     added = True
                     break
@@ -911,11 +964,13 @@ def _ensure_jd_skill_anchor_excerpts(
     ai_text: str,
     jd_text: str,
     disabled: set[str] | None = None,
+    span_holders: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Pull claim excerpts for JD-named skills so literal terms stay closed-world."""
     if not jd_text:
         return excerpts
     disabled = disabled or set()
+    span_holders = span_holders if span_holders is not None else {}
     for pattern, preferred_ids in _JD_SKILL_ANCHORS:
         if not pattern.search(jd_text):
             continue
@@ -925,9 +980,8 @@ def _ensure_jd_skill_anchor_excerpts(
             if cid in disabled or cid not in claims:
                 continue
             rec = claims[cid]
-            excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text)
+            excerpt = _add_excerpt(excerpts, span_holders, cid, rec, we_text, ai_text)
             if excerpt:
-                excerpts[cid] = excerpt
                 break
     return excerpts
 
@@ -940,21 +994,18 @@ def build_excerpts(
     disabled: set[str] | None = None,
     jd_text: str = "",
 ) -> dict[str, str]:
-    """Story 3.2 — Pull bounded excerpts for evidence_map + role/skill floors."""
+    """Story 3.2 — Pull bounded WE excerpts for evidence_map + role/skill floors."""
     excerpts: dict[str, str] = {}
+    span_holders: dict[str, str] = {}
     for row in evidence_map:
         for cid in row.get("claim_ids") or []:
-            if cid in excerpts:
-                continue
             rec = claims.get(cid, {})
-            excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text)
-            if excerpt and not _is_thin_synthetic_excerpt(excerpt):
-                excerpts[cid] = excerpt
-            elif excerpt and cid not in excerpts:
+            excerpt = _add_excerpt(excerpts, span_holders, cid, rec, we_text, ai_text)
+            if excerpt and _is_thin_synthetic_excerpt(excerpt) and cid not in excerpts:
                 excerpts[cid] = excerpt
 
     excerpts = _ensure_canonical_role_excerpts(
-        excerpts, claims, we_text, ai_text, disabled=disabled
+        excerpts, claims, we_text, ai_text, disabled=disabled, span_holders=span_holders
     )
 
     # Prefer narrative excerpts over tag-pipe synthetic fallbacks.
@@ -976,8 +1027,39 @@ def build_excerpts(
                 row["claim_ids"] = [x for x in ids if x != cid]
 
     return _ensure_jd_skill_anchor_excerpts(
-        excerpts, claims, we_text, ai_text, jd_text, disabled=disabled
+        excerpts, claims, we_text, ai_text, jd_text, disabled=disabled,
+        span_holders=span_holders,
     )
+
+
+def build_claim_constraints(
+    excerpts: dict[str, str],
+    claims: dict[str, dict],
+    we_text: str,
+) -> dict[str, dict]:
+    """Per-claim hedge fields the closed-world author must obey (CR-094)."""
+    from we_acc_index import hedges_for_project
+
+    out: dict[str, dict] = {}
+    for cid in excerpts:
+        rec = claims.get(cid) or {}
+        project_id = str(rec.get("project_id") or cid)
+        hedges = hedges_for_project(we_text, project_id)
+        attr = str(rec.get("attribution") or hedges.get("attribution") or "").strip()
+        prohibited = rec.get("prohibited_claims") or hedges.get("prohibited_claims") or []
+        if isinstance(prohibited, str):
+            prohibited = [prohibited]
+        allowed = rec.get("allowed_claims") or []
+        if isinstance(allowed, str):
+            allowed = [allowed]
+        out[cid] = {
+            "project_id": project_id,
+            "lens": str(rec.get("lens") or "").strip() or "story",
+            "attribution": attr.upper() if attr else "",
+            "prohibited_claims": [str(p) for p in prohibited],
+            "allowed_claims": [str(a) for a in allowed],
+        }
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1194,6 +1276,7 @@ def assemble_packet(
     role_title: str,
     slug: str,
     url: str | None,
+    claim_constraints: dict | None = None,
 ) -> dict:
     """Story 3.3 — Assemble the full authoring_packet dict matching schema v1.0."""
     tier = stage0.get("tier", "Tier 1")
@@ -1217,6 +1300,7 @@ def assemble_packet(
         "jd_buckets": jd_buckets,
         "evidence_map": evidence_map,
         "excerpts": excerpts,
+        "claim_constraints": claim_constraints or {},
         "soft_gaps": soft_gaps,
         "hard_constraints": _HARD_CONSTRAINTS,
         "hook_fact": hook_fact,
@@ -1376,6 +1460,7 @@ def build_packet(
     excerpts = build_excerpts(
         evidence_map, claims, we_text, ai_text, disabled=disabled, jd_text=jd_text
     )
+    claim_constraints = build_claim_constraints(excerpts, claims, we_text)
 
     # Story 3.4 — Hook fact
     if hook_fact_override is not _SENTINEL:
@@ -1396,6 +1481,7 @@ def build_packet(
         role_title=role_title,
         slug=slug,
         url=url,
+        claim_constraints=claim_constraints,
     )
 
     return packet

@@ -30,6 +30,26 @@ class TestSectionSplitting(unittest.TestCase):
         self.assertNotIn("Drop Me", out)
 
 
+class TestWePiiStrip(unittest.TestCase):
+    def test_strips_contact_and_references_keeps_accomplishments(self):
+        we = (
+            "# Work Experience\n\n"
+            "## 1.0 Contact Information\n"
+            "Name: Example Person\n"
+            "email@example.com\n\n"
+            "### 1.0a Professional References\n"
+            "Ref One — 555-0100\n\n"
+            "## 5 Accomplishments\n"
+            "* [ACC-101] Platform stabilization\n"
+        )
+        out = gcp.strip_we_pii_sections(we)
+        self.assertNotIn("email@example.com", out)
+        self.assertNotIn("555-0100", out)
+        self.assertNotIn("Contact Information", out)
+        self.assertIn("ACC-101", out)
+        self.assertIn("Platform stabilization", out)
+
+
 class TestRealAgentsMdExtraction(unittest.TestCase):
     """Golden-content tests against the REAL current AGENTS.md (the canonical
     rules file -- CLAUDE.md is now a thin @AGENTS.md import stub for Claude

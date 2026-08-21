@@ -31,10 +31,9 @@ exactly the kind of edit that can silently drop an operative rule):
   actively fixing a process bug, not during normal Stage 0-3 execution.
   Everything else (Stage 0/1/2/3, Cross-Harness Operating Rules) is copied
   verbatim.
-- workExperience.md, conversion_rubric.md: copied verbatim, no trimming.
-  Ground-truth facts and rubric criteria are almost entirely operative
-  already; the risk of silently dropping a real nuance outweighs the small
-  token savings available here.
+- workExperience.md: copied with §1.0 / 1.0a (contact / references) stripped
+  (CR-094). Remaining stories, metrics, VOC, and DO NOT CLAIM hedges stay.
+- conversion_rubric.md: copied verbatim, no trimming.
 - master_claims.json: NOT bundled into the markdown pack (different format,
   consumed differently). See generate_claims_tags_only() below -- writes a
   sibling data/master_claims_tags_only.json with `text`/`cover_story`
@@ -89,6 +88,10 @@ SKILL_MD_EXCLUDE_SECTIONS = frozenset(
     }
 )
 
+# Same PII headings Stage 0 already excludes from evidence_scale retrieval (CR-094).
+_WE_PII_HEADING_SUBSTRINGS = ("contact information", "professional references")
+_WE_HEADING_SPLIT_RE = re.compile(r"(?m)^(#{1,4}\s+.*)$")
+
 
 def _sha256(path: str) -> str:
     with open(path, "rb") as f:
@@ -124,6 +127,28 @@ def filter_sections(markdown_text: str, exclude_headings: frozenset) -> str:
         if heading not in exclude_headings
     ]
     return "".join(kept)
+
+
+def strip_we_pii_sections(we_text: str) -> str:
+    """Drop WE sections whose headings name contact or professional references.
+
+    Implements CR-094. Stage 1 still must not load the pack; this is defense if a
+    process/cloud session does. Does not log the dropped body.
+    """
+    if not we_text:
+        return we_text
+    parts = _WE_HEADING_SPLIT_RE.split(we_text)
+    out: list[str] = []
+    if parts and parts[0]:
+        out.append(parts[0])
+    for i in range(1, len(parts), 2):
+        heading = parts[i]
+        body = parts[i + 1] if i + 1 < len(parts) else ""
+        if any(s in heading.lower() for s in _WE_PII_HEADING_SUBSTRINGS):
+            continue
+        out.append(heading)
+        out.append(body)
+    return "".join(out)
 
 
 def generate_claims_tags_only() -> dict:
@@ -188,7 +213,7 @@ def generate_pack() -> tuple[str, dict]:
     with open(SKILL_MD, encoding="utf-8") as f:
         skill_trimmed = filter_sections(f.read(), SKILL_MD_EXCLUDE_SECTIONS)
     with open(WORK_EXPERIENCE_MD, encoding="utf-8") as f:
-        work_experience = f.read()
+        work_experience = strip_we_pii_sections(f.read())
     with open(CONVERSION_RUBRIC_MD, encoding="utf-8") as f:
         conversion_rubric = f.read()
 
@@ -217,8 +242,8 @@ def generate_pack() -> tuple[str, dict]:
         "-- it is intentionally excluded from this pack as drafting-irrelevant.**",
         "",
         "**Claim retrieval**: read `data/master_claims_tags_only.json` for claim tags "
-        "(never `text`/`cover_story` -- this sidecar file has already had those fields "
-        "stripped, matching Stage 1's own rule by construction).",
+        "(an index into workExperience.md). Packet excerpts are WE spans, not catalog "
+        "`text`/`cover_story`. Stage 1 still must not load this pack.",
         "",
         "---",
         "",

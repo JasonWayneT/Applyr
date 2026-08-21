@@ -24,7 +24,8 @@ HARD_BLOCKED_TOOLS: frozenset[str] = frozenset({
     "tableau", "looker", "power bi", "powerbi", "qlik", "sisense",
     "amplitude", "mixpanel",
     # Infrastructure / cloud infra
-    "docker", "kubernetes", "k8s", "terraform", "helm",
+    # Docker is verified (WE ACC-172 / skills_catalog hands-on environments).
+    "kubernetes", "k8s", "terraform", "helm",
     "ansible", "puppet", "chef",
     # ML / AI frameworks (engineering, not tooling)
     "tensorflow", "pytorch", "keras", "scikit-learn", "huggingface",

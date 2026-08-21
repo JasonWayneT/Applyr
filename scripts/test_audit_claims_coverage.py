@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import re
 import sys
 import unittest
 
@@ -21,6 +22,11 @@ def _load_mod():
     return mod
 
 
+def _acc_from_unclaimed_detail(detail: str) -> str:
+    m = re.search(r"(ACC-\d+)", detail or "")
+    return m.group(1) if m else ""
+
+
 class AuditClaimsCoverageTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -29,18 +35,91 @@ class AuditClaimsCoverageTests(unittest.TestCase):
     def test_live_catalog_error_tier_clean(self):
         import json
 
+        import we_acc_index as wai
+
         claims_path = os.path.join(_REPO_ROOT, "data", "master_claims.json")
+        we_path = os.path.join(_REPO_ROOT, "data", "workExperience.md")
         with open(claims_path, encoding="utf-8") as f:
             claims = json.load(f)
-        we_acc = self.mod._load_we_acc_ids(
-            os.path.join(_REPO_ROOT, "data", "workExperience.md")
+        with open(we_path, encoding="utf-8") as f:
+            we_text = f.read()
+        we_acc = self.mod._load_we_acc_ids(we_path)
+        result = self.mod.audit(claims, we_acc, we_text=we_text)
+        classes = wai.classify_we_acc_ids(we_text)
+        non_story_unclaimed = [
+            e
+            for e in result["errors"]
+            if e["code"] == "we_unclaimed"
+            and classes.get(_acc_from_unclaimed_detail(e["detail"]), "") != wai.CLASS_STORY
+        ]
+        self.assertEqual(
+            non_story_unclaimed,
+            [],
+            msg=f"Attribution/DNC/tools flagged as we_unclaimed: {non_story_unclaimed}",
         )
-        result = self.mod.audit(claims, we_acc)
+        story_unclaimed = [
+            e for e in result["errors"] if e["code"] == "we_unclaimed"
+        ]
+        self.assertEqual(
+            story_unclaimed,
+            [],
+            msg=f"Indexable WE stories still missing claim rows: {story_unclaimed}",
+        )
         self.assertEqual(
             result["errors"],
             [],
-            msg=f"ERROR-tier findings: {result['errors']}",
+            msg=f"Live catalog ERROR-tier must be clean: {result['errors']}",
         )
+
+    def test_attrib_and_dnc_ids_are_not_we_unclaimed(self):
+        we_text = (
+            "* **[ACC-101] Story**: did the work.\n"
+            "* **[ACC-191] Attribution:** **OWNED** — owned it.\n"
+            "* **[ACC-192] DO NOT CLAIM:** sole causation.\n"
+        )
+        claims = {
+            "ACC-101-TECH": {
+                "project_id": "ACC-101",
+                "tags": ["x"],
+                "attribution": "OWNED",
+                "prohibited_claims": ["sole causation"],
+            }
+        }
+        we_acc = self.mod._BRACKET_ACC_RE.findall(we_text)
+        result = self.mod.audit(claims, set(we_acc), we_text=we_text)
+        self.assertEqual(result["errors"], [])
+
+    def test_story_without_claim_still_we_unclaimed(self):
+        we_text = "* **[ACC-122] Storage monitoring**: watched disk.\n"
+        claims = {
+            "ACC-101-TECH": {"project_id": "ACC-101", "tags": ["x"]}
+        }
+        result = self.mod.audit(
+            claims, {"ACC-122", "ACC-101"}, we_text=we_text
+        )
+        codes = {e["code"] for e in result["errors"]}
+        self.assertIn("we_unclaimed", codes)
+        self.assertTrue(any("ACC-122" in e["detail"] for e in result["errors"]))
+
+    def test_substory_and_nonclaimable_are_not_we_unclaimed(self):
+        we_text = (
+            "* **[ACC-101] Story**: did the work.\n"
+            "* **[ACC-122] What Jason drove:** monitoring.\n"
+            "* **[ACC-154] Not owned:** next-gen import.\n"
+            "* **[ACC-173] Glacier — Considered, Not Implemented**: talk only.\n"
+        )
+        claims = {
+            "ACC-101-TECH": {
+                "project_id": "ACC-101",
+                "tags": ["x"],
+                "attribution": "OWNED",
+                "prohibited_claims": ["no"],
+            }
+        }
+        result = self.mod.audit(
+            claims, {"ACC-101", "ACC-122", "ACC-154", "ACC-173"}, we_text=we_text
+        )
+        self.assertEqual(result["errors"], [])
 
     def test_miskey_detected(self):
         claims = {

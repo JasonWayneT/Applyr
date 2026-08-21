@@ -1,10 +1,12 @@
 """
 CR-088: mechanical WE <-> master_claims coverage audit.
+CR-094: only story-class ACC ids must have a claims project_id. Attribution
+and DO NOT CLAIM brackets are fields on the preceding story, not accomplishments.
 
 ERROR tier (fails --strict / unit test):
   - claim id ACC prefix != project_id
   - project_id not in workExperience.md ACC inventory and not in SIDE_CORPUS
-  - WE ACC missing from claims (except ALLOW_NO_CLAIM)
+  - story-class WE ACC missing from claims (except ALLOW_NO_CLAIM)
 
 WARN tier (printed; does not fail default exit):
   - high-risk project missing attribution or prohibited_claims on a lens
@@ -22,6 +24,8 @@ import re
 import sys
 from typing import Any
 
+import we_acc_index as wai
+
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 
@@ -33,7 +37,19 @@ ALLOW_NO_CLAIM = frozenset({"ACC-119"})
 
 # Claude R16 / CR-088 P4 priority set (plus siblings often needing hedges).
 HIGH_RISK_PROJECT_IDS = frozenset(
-    {"ACC-111", "ACC-113", "ACC-114", "ACC-115", "ACC-120", "ACC-121", "ACC-204", "ACC-401"}
+    {
+        "ACC-111",
+        "ACC-113",
+        "ACC-114",
+        "ACC-115",
+        "ACC-120",
+        "ACC-121",
+        "ACC-169",
+        "ACC-172",
+        "ACC-204",
+        "ACC-211",
+        "ACC-401",
+    }
 )
 
 _ACC_RE = re.compile(r"ACC-\d+")
@@ -55,6 +71,7 @@ def audit(
     claims: dict[str, Any],
     we_acc: set[str],
     *,
+    we_text: str = "",
     side_corpus: frozenset[str] = SIDE_CORPUS_PROJECT_IDS,
     allow_no_claim: frozenset[str] = ALLOW_NO_CLAIM,
     high_risk: frozenset[str] = HIGH_RISK_PROJECT_IDS,
@@ -112,7 +129,8 @@ def audit(
                     }
                 )
 
-    for acc in sorted(we_acc):
+    story_ids = wai.indexable_project_ids(we_text) if we_text else set(we_acc)
+    for acc in sorted(story_ids):
         if acc in allow_no_claim:
             continue
         if acc not in claimed_projects:
@@ -140,8 +158,10 @@ def main(argv: list[str] | None = None) -> int:
     we_path = os.path.join(_REPO_ROOT, "data", "workExperience.md")
     with open(claims_path, encoding="utf-8") as f:
         claims = json.load(f)
+    with open(we_path, encoding="utf-8") as f:
+        we_text = f.read()
     we_acc = _load_we_acc_ids(we_path)
-    result = audit(claims, we_acc)
+    result = audit(claims, we_acc, we_text=we_text)
 
     for e in result["errors"]:
         print(f"ERROR {e['code']}: {e.get('claim_id') or '-'} — {e['detail']}")

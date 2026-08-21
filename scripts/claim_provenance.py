@@ -61,30 +61,60 @@ _WORK_EXPERIENCE_PATH = os.path.join(_REPO_ROOT, "data", "workExperience.md")
 _ID_PATTERN = re.compile(r"\b((?:ACC|MET|VOC)-[0-9A-Za-z-]+)\b")
 
 
+def _read_master_claims() -> dict:
+    """Load master_claims.json or {} if missing."""
+    if not os.path.exists(_MASTER_CLAIMS_PATH):
+        return {}
+    with open(_MASTER_CLAIMS_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+    return data if isinstance(data, dict) else {}
+
+
+def _read_work_experience() -> str:
+    """Load workExperience.md or empty string if missing. Caller must not log PII."""
+    if not os.path.exists(_WORK_EXPERIENCE_PATH):
+        return ""
+    with open(_WORK_EXPERIENCE_PATH, encoding="utf-8") as f:
+        return f.read()
+
+
 def load_valid_claim_ids() -> tuple[set, set]:
     """Returns (valid_ids, disabled_ids). valid_ids is the union of master_claims.json's own
     keys, their project_id base forms, and every ACC-xxx/MET-xxx/VOC-xxx token found anywhere
-    in workExperience.md -- both ID granularities real ground truth actually uses."""
+    in workExperience.md -- both ID granularities real ground truth actually uses.
+
+    CR-094: Attribution / DO NOT CLAIM / tools ACC tokens in WE are not citable
+    accomplishments. Subtract them so a draft cannot "cover" a DNC line by citing it.
+    """
+    import we_acc_index as wai
+
     valid: set = set()
     disabled: set = set()
 
-    if os.path.exists(_MASTER_CLAIMS_PATH):
-        with open(_MASTER_CLAIMS_PATH, encoding="utf-8") as f:
-            claims = json.load(f)
-        for key, entry in claims.items():
-            valid.add(key)
-            project_id = entry.get("project_id")
+    claims = _read_master_claims()
+    enabled_projects: set = set()
+    disabled_only_projects: set = set()
+    for key, entry in claims.items():
+        if not isinstance(entry, dict):
+            continue
+        valid.add(key)
+        project_id = entry.get("project_id")
+        if project_id:
+            valid.add(project_id)
+        if entry.get("disabled"):
+            disabled.add(key)
             if project_id:
-                valid.add(project_id)
-            if entry.get("disabled"):
-                disabled.add(key)
-                if project_id:
-                    disabled.add(project_id)
+                disabled_only_projects.add(project_id)
+        elif project_id:
+            enabled_projects.add(project_id)
+    for pid in disabled_only_projects:
+        if pid not in enabled_projects:
+            disabled.add(pid)
 
-    if os.path.exists(_WORK_EXPERIENCE_PATH):
-        with open(_WORK_EXPERIENCE_PATH, encoding="utf-8") as f:
-            text = f.read()
-        valid |= set(_ID_PATTERN.findall(text))
+    we_text = _read_work_experience()
+    if we_text:
+        valid |= set(_ID_PATTERN.findall(we_text))
+        valid -= wai.non_story_acc_ids(we_text)
 
     return valid, disabled
 

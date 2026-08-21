@@ -82,8 +82,28 @@
     },
     "excerpts": {
       "type": "object",
-      "description": "claim_id → bounded ground-truth excerpt only. No full workExperience dump.",
+      "description": "claim_id → bounded WE (or aiProjects) excerpt with hedge header. Not catalog text.",
       "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "claim_constraints": {
+      "type": "object",
+      "description": "CR-094: per-claim attribution and prohibited fields. Optional for pre-CR-094 packets.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "project_id": { "type": "string" },
+          "lens": { "type": "string" },
+          "attribution": { "type": "string" },
+          "prohibited_claims": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "allowed_claims": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
     },
     "soft_gaps": {
       "type": "array",

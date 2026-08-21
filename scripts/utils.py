@@ -496,7 +496,7 @@ def _call_local(settings, system_prompt, user_prompt, model, temperature, respon
         "STRICT RULES YOU MUST FOLLOW WITHOUT EXCEPTION:\n"
         "1. ONLY use facts, company names, job titles, tools, and metrics explicitly provided in the user prompt.\n"
         "2. NEVER invent, assume, or extrapolate any information not directly stated.\n"
-        "3. NEVER mention tools such as Snowflake, Tableau, Docker, Kubernetes, AWS, GCP, Azure, FHIR, HL7, "
+        "3. NEVER mention tools such as Snowflake, Tableau, Kubernetes, GCP, Azure, FHIR, HL7, "
         "TensorFlow, or any technology not explicitly listed in the provided ground truth.\n"
         "4. NEVER inflate seniority. Do not write 'Led a team', 'Managed a team', 'Director', 'VP', or 'Head of'.\n"
         "5. NEVER invent percentage or dollar metrics. Only use numbers explicitly given to you.\n"

@@ -2,6 +2,18 @@
 
 > **Purpose**: Learning-focused technical analysis of the Applyr codebase. Every claim is anchored to a specific file, function, or line number. This document is honest about anti-patterns, accidental decisions, and technical debt.
 
+> **Staleness notice (2026-08-20, CR-093 resurrection audit):** this doc's job-fit-scoring
+> sections (`evaluate_job_fit()`, `batch_pipeline.py`'s old scoring path, the keyword-gate +
+> single-LLM-call design described below) describe a system that has since been deleted
+> and replaced. `batch_pipeline.py` no longer contains `evaluate_job_fit()` at all — the file
+> is ~100 lines now. Current fit-evaluation is the evidence-scale engine
+> (`scripts/evidence_scale.py`, wired into `scripts/build_stage0_fit_gate.py`), spec at
+> `data/fit_rubric_spec.html`, calibration at `data/fit_rubric_calibration.json`. See
+> `docs/ACTIVE_WORKFLOW.md` for current guidance and
+> `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md` for the full design.
+> The rest of this document was not re-verified as part of that audit; treat any other
+> line-number/behavior claim here as similarly liable to have drifted, not just this section.
+
 ---
 
 ## PART 0: PROJECT COMPLEXITY SNAPSHOT

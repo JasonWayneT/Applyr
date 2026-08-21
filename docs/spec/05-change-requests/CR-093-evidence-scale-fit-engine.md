@@ -460,6 +460,119 @@ pass, not left to go stale like the Fit Scoring section had.
 
 ---
 
+## Epic 6 — Resurrection Audit Deliverable (2026-08-20)
+
+Jason supplied a formal external audit prompt (Persona / Phases 1-11 / Required Deliverables /
+Post-Implementation Verification / Final Architecture Test) after Epic 5 landed, worried the
+migration might still be incomplete. It was not, Epic 5's own verification already covered most
+of Phases 1-6 and 9, but the prompt's own **deliverable artifacts** (the audit table, the Final
+Architecture Test answers, a single Post-Implementation Verification writeup) had never actually
+been produced. This epic is that paperwork, backed by two independent passes: Epic 5's original
+deletion work, and a fresh 2026-08-20 resurrection sweep (Phase 7 + Phase 10) that found and fixed
+two real misses the first pass didn't catch.
+
+### Audit table
+
+| Component | Location | Current Consumer | Classification | Action |
+|---|---|---|---|---|
+| Evidence-scale engine | `scripts/evidence_scale.py` | `build_stage0_fit_gate.py` (sole caller) | CURRENT — KEEP | none |
+| Calibration constants | `data/fit_rubric_calibration.json` | `evidence_scale.load_score_bands()` | CURRENT — KEEP | tracked in git on purpose, unlike other `data/*.json` |
+| Stage 0 gate | `scripts/build_stage0_fit_gate.py` `classify_gaps()` | `run_submission.py` (sole entry point) | CURRENT — KEEP | none |
+| `structured_fit.py`, `fit_policy.py`, `fit_judgment_io.py` | (deleted) | none | LEGACY — DELETE | done, Epic 5 |
+| `batch_pipeline.evaluate_job_fit()` + `--mode single\|batch` CLI | (deleted) | none | LEGACY — DELETE | done, Epic 5 |
+| `FindNewJobsView.tsx`, `usePipeline.ts`, "Add Job" tab, `POST /api/evaluate` | (deleted) | none | LEGACY — DELETE | done, Epic 5, confirmed dead with Jason directly first |
+| `min_fit_score` (config + `get_min_fit_score()` + TS mirrors) | (deleted) | none | LEGACY — DELETE | done, Epic 5 |
+| `batch_pipeline.py` DB/JD helpers (`_mark_job_needs_retry`, `save_pre_score`, `ensure_jobs_schema`, etc.) | (deleted) | none | C → MIGRATE THEN DELETE, resolved as D | flagged 2026-08-19 as "zero external callers, not yet traced internally"; traced 2026-08-20, zero refs anywhere including inside the file, deleted same day (`5e26f46`) |
+| `re_score_jobs.py`, `regenerate_backlog.py`, `cleanup_pending_backlog.py` | (deleted) | none | LEGACY — DELETE | done, Epic 5 |
+| `scripts/archive/*.py` (11 scripts importing `evaluate_job_fit`/`get_min_fit_score`/`process_single`) | `scripts/archive/` | none (would ImportError if run) | CURRENT — HARDEN | kept per repo's own 2026-08-04 archive convention (historical reference, nothing in that folder is deleted); `scripts/archive/README.md` corrected 2026-08-20, it had gone stale claiming the UI still shelled out to `batch_pipeline.py` |
+| `docs/PROJECT_DEEP_DIVE.md` fit-scoring section | `docs/` | humans/agents reading it as current | AMBIGUOUS → HARDEN | described deleted `evaluate_job_fit()` with real line numbers as current; not rewritten (out of scope, doc covers far more than fit), given a dated staleness banner instead, 2026-08-20 |
+| Tombstone comments (`pipeline.ts`, `Sidebar.tsx`, `jobSearchPrefs.ts`, `submissionFolders.ts`, `utils.py`, `batch_pipeline.py`) | scattered | n/a | CURRENT — KEEP (minor Failure-Mode-5 debt) | each is a short, dated, accurate pointer to where the real logic now lives, not a resurrection risk; not worth churning further |
+| `.claude/worktrees/elated-rubin-3e0823`, `wonderful-austin-c97165` | `.claude/worktrees/` | none (not registered git worktrees, no `.git/worktrees` entry) | LEGACY — DELETE | deleted 2026-08-20 (6.3MB + 9KB), held pre-deletion copies of `FindNewJobsView.tsx`/`batch_pipeline.py` that could have misled a future grep-based agent |
+
+### 1. Current architecture
+
+`run_submission.py` → Stage 0 → `build_stage0_fit_gate.classify_gaps()` → per-requirement
+`evidence_scale.classify_requirement()` (one LLM judgment per JD line against retrieval-scoped
+WE excerpts) → `evidence_scale.compute_fit_score()` (deterministic weighted formula, no second LLM
+call) → tier decision against `data/fit_rubric_calibration.json`'s `score_bands` (40/65) → written
+into Stage 0's output artifact, consumed by the rest of the submission workflow.
+
+### 2. Legacy surface area
+
+Everything in Epic 5's "Deleted outright" list above, plus the two 2026-08-20 doc fixes and the
+two abandoned worktree directories. Nothing else found in this session's Phase 7/10 pass across
+`scripts/`, `server/`, `src/`, `.claude/skills/`, `.claude/agents/`, `AGENTS.md`, `CLAUDE.md`.
+
+### 3. Hidden couplings
+
+Two found and resolved, both in Epic 5: the keyword gate (`passes_jd_keyword_gate`) was inside the
+same file as the deleted scorer and genuinely still needed, kept. `test_audit_convergence.py` had
+one real regression (CR-054 non-convergence transparency) riding inside an otherwise-obsolete test
+file, confirmed independently covered by `test_audit_improve_native.py` before the file was
+deleted.
+
+### 4. Migration plan (executed, not prospective, this is the record)
+
+Epic 1-2 (build + wire the new engine) → Epic 3 (corpus pressure test, 5 real bugs found and
+fixed) → Epic 4 (replace the unfounded 70-point floor with researched calibration) → Epic 5
+(delete the old system outright, trace every consumer first) → Epic 6, this section (formal
+resurrection verification, a second independent pass, not a rubber stamp of Epic 5's own
+self-report).
+
+### 5. Risk assessment
+
+The one destructive action with real ambiguity was the `batch_pipeline.py` DB/JD helper deletion
+(`5e26f46`), what could break: silent removal of a still-used persistence path. How we know it was
+safe: traced every function name for references anywhere in `scripts/` and `server/`, including
+inside `batch_pipeline.py` itself, zero hits. What proves it: `python scripts/run_all_tests.py
+--python-only` clean after, plus the file's remaining 3 functions all confirmed to have real
+callers (`refresh_backlog_summaries.py`, `test_blocked_companies.py`).
+
+### Post-implementation verification
+
+**Files deleted** (Epic 5, full list in that section above) plus `.claude/worktrees/
+elated-rubin-3e0823` and `wonderful-austin-c97165` (2026-08-20).
+**Files modified this epic**: `scripts/archive/README.md` (stale wiring claim corrected, plus
+unrelated pre-existing byte corruption fixed), `docs/PROJECT_DEEP_DIVE.md` (staleness banner
+added).
+**Configuration removed**: `candidate_preferences.json`'s `min_fit_score`, confirmed absent from
+`data/candidate_preferences.example.json` too.
+**Callers migrated**: none needed migration, every real consumer of the old scorer was already
+either the new engine's own caller or confirmed dead.
+**Tests**: `test_structured_fit*.py`, `test_fit_policy.py`, `test_fit_judgment_io.py`,
+`test_audit_convergence.py`, `test_batch_gate.py`, `test_jd_completeness.py` deleted (Epic 5 +
+`5e26f46`). `test_build_stage0_fit_gate.py` fixed to run offline (~7s, was ~18min) rather than
+deleted, it protects real Stage 0 contract behavior, not the old scorer.
+**Legacy search results**: see audit table above, every hit explained, nothing unexplained
+remains.
+**Supported fit execution paths**:
+
+```text
+run_submission.py
+    -> Stage 0 (build_stage0_fit_gate.classify_gaps)
+    -> evidence_scale.classify_requirement (per requirement line)
+    -> evidence_scale.compute_fit_score
+    -> data/fit_rubric_calibration.json score_bands (40/65)
+    -> Stage 0 fit result
+```
+
+No second path exists. No UI/API route independently invokes fit scoring.
+
+### Final Architecture Test
+
+1. One fit-scoring implementation. 2. `scripts/evidence_scale.py`, single caller
+`build_stage0_fit_gate.classify_gaps()`. 3. No, `run_submission.py` -> Stage 0 is the only path.
+4. No. 5. No. 6. No. 7. No. 8. No, after this epic's two doc fixes. 9. The keyword gate and one
+test regression, both traced and kept/migrated before deletion. 10. `npx tsc`/`vitest` clean at
+Epic 5's own deletion time, `audit_claims_coverage.py --strict` clean now, and this epic's live
+caller trace confirming one path, not a severed one.
+
+**Definition of done, per the original prompt's own bar**: met. One authoritative fit-evaluation
+system, every legitimate workflow reaches it, required capabilities preserved before deletion,
+no misleading documentation or dead entry points remain that a fresh Phase 10 sweep could find.
+
+---
+
 ## Rollout note
 
 Epic 1 is net-new code (a new module, nothing wired in yet) — safe to build and validate in

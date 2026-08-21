@@ -161,11 +161,19 @@ def build_evidence_context(item: str, full_work_exp: str, k: int = 6, max_chars:
 Gate = Literal["HARD", "NONE"]
 Confidence = Literal["high", "medium", "low"]
 
-# Spec Sec. 9: only these three categories may hard-gate. Named tools, bare
+# Spec Sec. 9: only these categories may hard-gate. Named tools, bare
 # years-of-experience, and anything in the Preferred bucket never gate --
 # 2026-08-19 finding (Bamboo Health auto-Skipped sight-unseen on one Tableau
 # mention) plus the spec's own EEOC-grounded reasoning.
-_GATE_SOURCES = {"degree", "domain", "role_exclusion"}
+#
+# "certification" added 2026-08-21 (Stage 1-3 audit, Fix 1): a required
+# professional certification/license had NO valid gate category at all --
+# confirmed real on Nuaxis Innovations, "...and Certified Project Management
+# Professional (PMP) or equivalent certification," which structurally could
+# not hard-gate under the original 3 categories, so it silently reached
+# Stage 1 as a normal scored item instead of disqualifying a role Jason has
+# no credential for.
+_GATE_SOURCES = {"degree", "domain", "role_exclusion", "certification"}
 
 
 class EvidenceClassificationError(Exception):
@@ -238,7 +246,7 @@ _SCHEMA = {
         # under this module's no-fallback design but shouldn't have been
         # reachable in the first place for a case the model clearly meant to
         # flag as role_exclusion (see the system prompt's explicit example).
-        "gap_source": {"type": "string", "enum": ["degree", "domain", "role_exclusion", ""]},
+        "gap_source": {"type": "string", "enum": ["degree", "domain", "role_exclusion", "certification", ""]},
         "evidence_level": {"type": "integer"},
         "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
         "reasoning": {"type": "string"},
@@ -285,7 +293,7 @@ low score). A line from the PREFERRED bucket NEVER gates, full stop, regardless 
 names -- by definition it is optional, so a "Master's preferred" or "healthcare domain a \
 plus" line in the Preferred bucket always gets gate="NONE", never HARD, even though the same \
 wording in the Required bucket might gate. Gating is possible ONLY for a REQUIRED-bucket line, \
-and even then only in these three categories:
+and even then only in these four categories:
 - degree: a required line names an advanced degree (Master's/MBA/PhD/JD/MD) with NO \
 Bachelor's-or-equivalent-experience alternative offered in the same line and no hedge \
 language ("preferred", "a plus", "nice to have", "bonus").
@@ -297,13 +305,22 @@ candidate's real background (see candidate profile) -- e.g. people management/di
 reports (including "mentor/guide/lead other product managers or product owners" -- managing \
 or mentoring PEERS in the same discipline is people management even without the word \
 "manager" in the title), AI/ML model ownership, revenue/billing ownership, a title above \
-Senior IC.
+Senior IC, or building a product area from nothing -- solo/founding 0-to-1 ownership with no \
+existing foundation, roadmap, or process to build on (e.g. "own the zero to one build of...", \
+"shaping or maturing an early-stage product area... where none previously existed").
+- certification: a required line names a specific professional certification or license \
+(e.g. PMP, CPA, PE, an active nursing/RN license, Series 7) as a mandatory credential, with \
+no hedge language ("preferred", "a plus", "nice to have", "bonus"). An "or equivalent \
+certification"/"or equivalent credential" phrase does NOT count as an escape from this gate \
+-- it still requires holding some certification, just not that exact one. Only a line that \
+explicitly lets plain work experience substitute for holding any certification at all (e.g. \
+"PMP or equivalent practical experience") fails to gate.
 
-IMPORTANT: whenever gate="HARD", gap_source MUST be exactly one of "degree", "domain", or \
-"role_exclusion" -- never empty, never any other value. If a line clearly deserves gate="HARD" \
-but doesn't cleanly fit one of the three categories above, that means it does NOT actually \
-qualify as a hard gate under these rules -- set gate="NONE" instead rather than forcing a HARD \
-verdict with no valid category.
+IMPORTANT: whenever gate="HARD", gap_source MUST be exactly one of "degree", "domain", \
+"role_exclusion", or "certification" -- never empty, never any other value. If a line clearly \
+deserves gate="HARD" but doesn't cleanly fit one of the four categories above, that means it \
+does NOT actually qualify as a hard gate under these rules -- set gate="NONE" instead rather \
+than forcing a HARD verdict with no valid category.
 
 Everything else NEVER gates, regardless of "required"/"must have"/"proficiency in" phrasing: \
 named tools or skills (however phrased -- tools are learnable and substitutable), bare \
@@ -326,7 +343,8 @@ interpretation/inference was needed to connect them; "low" when the JD line itse
 or evidence is thin enough that a different rater could reasonably land elsewhere. Never let \
 uncertainty silently lower evidence_level -- report it via confidence instead.
 
-Return strict JSON: {"gate": "HARD"|"NONE", "gap_source": "degree"|"domain"|"role_exclusion"|"", \
+Return strict JSON: {"gate": "HARD"|"NONE", "gap_source": \
+"degree"|"domain"|"role_exclusion"|"certification"|"", \
 "evidence_level": 0-4, "confidence": "high"|"medium"|"low", "reasoning": "one sentence"}"""
 
 
@@ -385,30 +403,59 @@ def _ensure_score_model_ready(model: str) -> None:
     _score_model_ready_for = model
 
 
-def classify_requirement(
-    item: str,
-    work_exp: str,
-    *,
-    is_required: bool = True,
-    company: str = "",
-    internal_terms: list[str] | None = None,
-    k_examples: int = 4,
-) -> EvidenceJudgment:
-    """The sole classification entry point (CR-093). One LLM call, spec
-    Sections 7-9 in a single judgment. Raises EvidenceClassificationError on
-    any failure -- callers must not catch this and substitute a weaker
-    heuristic (see module docstring)."""
+# Generic JD/reasoning filler that would falsely count as "topic overlap"
+# between two completely unrelated lines -- both real requirement lines and
+# generic reasoning prose use these constantly regardless of subject.
+# Scoped to _reasoning_grounded_in_item only; deliberately not merged into
+# the module-level _STOPWORDS, which build_evidence_context()'s retrieval
+# ranking also relies on and which this check has no reason to change.
+_GROUNDING_CHECK_FILLER = frozenset({
+    "work", "experience", "role", "candidate", "requirement", "requirements",
+    "position", "job", "team", "years", "skills",
+})
+
+
+def _reasoning_grounded_in_item(item: str, reasoning: str) -> bool:
+    """Fix 2 (2026-08-21 Stage 1-3 audit): a cheap, deterministic sanity check
+    that the model's stated reasoning is actually about the requirement line
+    it claims to classify, not a different line entirely.
+
+    Confirmed real on Inspyr Solutions: gate="HARD", gap_source="domain" on
+    the line "Work Requirements: US Citizen, GC Holders or Authorized to Work
+    in the U.S." (Jason IS a US citizen -- this should never have gated), but
+    the model's own reasoning text was entirely about an unrelated "highly
+    regulated industry" line elsewhere in the same JD. `_is_administratively_
+    satisfied()`'s docstring already flags citizenship/work-authorization as
+    deliberately unhandled, "left for a separate, more careful pass" -- this
+    is that pass, scoped narrowly: real vocabulary overlap between the
+    requirement line and the model's reasoning, not a semantic check.
+
+    _STOPWORDS alone isn't enough -- the real Inspyr case shares the word
+    "work" between the two unrelated lines ("authorized to Work in the U.S."
+    / "work experience is in Cision..."), which is generic filler, not real
+    topic overlap; _GROUNDING_CHECK_FILLER excludes it and words like it.
+    This is still a lexical floor, not semantics -- a reasoning that
+    correctly addresses the item but paraphrases every one of its words can
+    still false-positive here. That's an acceptable failure mode given what
+    happens next: a flagged HARD verdict gets demoted to NONE with an
+    explicit human-review marker, never silently trusted either way. Only
+    meaningful for gate="HARD" -- a wrong low-stakes NONE verdict doesn't
+    silently throw away a real opportunity the way a wrong HARD rejection
+    does.
+    """
+    item_tokens = _tokenize(item) - _GROUNDING_CHECK_FILLER
+    reasoning_tokens = _tokenize(reasoning) - _GROUNDING_CHECK_FILLER
+    if not item_tokens or not reasoning_tokens:
+        return True  # nothing real to compare -- don't flag on empty input
+    return bool(item_tokens & reasoning_tokens)
+
+
+def _call_once(prompt: str, model: str) -> dict:
+    """One evidence_scale LLM call, parsed to a raw dict. Raises
+    EvidenceClassificationError on any failure -- see module docstring."""
     from llm_stages import call_llm_stage
     from pipeline_env import fit_llm_timeout_sec, fit_num_predict
-    from fit_rubric_examples import retrieve_examples, format_evidence_examples_for_prompt
 
-    examples = retrieve_examples(item, None, k=k_examples)
-    few_shot_block = format_evidence_examples_for_prompt(examples)
-    evidence_context = build_evidence_context(item, work_exp)
-    prompt = _build_prompt(item, evidence_context, is_required, company, internal_terms, few_shot_block)
-
-    model = _score_model()
-    _ensure_score_model_ready(model)
     raw = call_llm_stage(
         "evidence_scale",
         _SYSTEM_PROMPT,
@@ -421,16 +468,63 @@ def classify_requirement(
         request_timeout=fit_llm_timeout_sec(),
     )
     if not raw:
-        raise EvidenceClassificationError(f"no LLM response for item: {item!r}")
+        raise EvidenceClassificationError("no LLM response")
 
     try:
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         data = json.loads(m.group(0) if m else raw)
     except json.JSONDecodeError as exc:
-        raise EvidenceClassificationError(f"bad JSON from LLM for item {item!r}: {exc}") from exc
+        raise EvidenceClassificationError(f"bad JSON from LLM: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise EvidenceClassificationError(f"non-object LLM response for item {item!r}: {data!r}")
+        raise EvidenceClassificationError(f"non-object LLM response: {data!r}")
+    return data
+
+
+def classify_requirement(
+    item: str,
+    work_exp: str,
+    *,
+    is_required: bool = True,
+    company: str = "",
+    internal_terms: list[str] | None = None,
+    k_examples: int = 4,
+) -> EvidenceJudgment:
+    """The sole classification entry point (CR-093). One LLM call, spec
+    Sections 7-9 in a single judgment (a HARD verdict with reasoning that
+    doesn't match the item gets one retry -- see _reasoning_grounded_in_item).
+    Raises EvidenceClassificationError on any failure -- callers must not
+    catch this and substitute a weaker heuristic (see module docstring)."""
+    from fit_rubric_examples import retrieve_examples, format_evidence_examples_for_prompt
+
+    examples = retrieve_examples(item, None, k=k_examples)
+    few_shot_block = format_evidence_examples_for_prompt(examples)
+    evidence_context = build_evidence_context(item, work_exp)
+    prompt = _build_prompt(item, evidence_context, is_required, company, internal_terms, few_shot_block)
+
+    model = _score_model()
+    _ensure_score_model_ready(model)
+
+    data = _call_once(prompt, model)
+    reasoning_mismatch = False
+    if str(data.get("gate", "")).strip().upper() == "HARD" and not _reasoning_grounded_in_item(
+        item, str(data.get("reasoning", ""))
+    ):
+        # Retry once -- a single-call attention slip shouldn't finalize a
+        # disqualifying rejection on its first, ungrounded answer.
+        retry_data = _call_once(prompt, model)
+        if str(retry_data.get("gate", "")).strip().upper() == "HARD" and not _reasoning_grounded_in_item(
+            item, str(retry_data.get("reasoning", ""))
+        ):
+            # Still ungrounded after a retry: don't silently finalize the
+            # rejection. Demote to NONE (never auto-Skip a real opportunity
+            # on reasoning that can't be trusted) and flag it plainly so a
+            # human catches it in the Stage 0 triage table rather than the
+            # job vanishing without a trace.
+            reasoning_mismatch = True
+            data = retry_data
+        else:
+            data = retry_data
 
     gate = str(data.get("gate", "")).strip().upper()
     if gate not in ("HARD", "NONE"):
@@ -467,6 +561,20 @@ def classify_requirement(
         )
     if gate == "NONE":
         gap_source = ""
+
+    if reasoning_mismatch and gate == "HARD":
+        # See _reasoning_grounded_in_item: two consecutive HARD verdicts with
+        # reasoning that doesn't mention this item's own vocabulary. Demote
+        # rather than trust it -- confidence="low" plus an explicit prefix so
+        # this surfaces in the Stage 0 triage table instead of silently
+        # Skip-ing a real opportunity on an unverifiable rejection.
+        gate = "NONE"
+        gap_source = ""
+        data["confidence"] = "low"
+        data["reasoning"] = (
+            "[REASONING/ITEM MISMATCH -- verify this line manually, the model's "
+            f"stated reasoning didn't reference it] {data.get('reasoning', '')}"
+        )
 
     try:
         level = int(data.get("evidence_level"))

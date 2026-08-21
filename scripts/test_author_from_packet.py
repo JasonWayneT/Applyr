@@ -16,6 +16,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -72,6 +73,8 @@ _READY_PACKET: dict = {
     "estimated_tokens": 500,
     "stage_signal": None,
     "thin_jd": False,
+    "learned_examples": [],
+    "example_bank_version": "",
 }
 
 
@@ -414,6 +417,181 @@ class TestOptimizationBarSoftGapHonesty(unittest.TestCase):
             ok, lines = _check_optimization_bar_provenance(folder)
             self.assertFalse(ok)
             self.assertTrue(any("soft_gap has no claim_ids" in ln for ln in lines))
+
+
+class TestAuthoringDefectCategories(unittest.TestCase):
+    """CR-097 Story 1.1 — frozen rule_id → category map, no I/O."""
+
+    def test_known_rules_map_to_locked_categories(self):
+        from authoring_defect_categories import (
+            CATEGORIES,
+            category_for_rule,
+            rule_ids_for_category,
+        )
+
+        self.assertEqual(category_for_rule("LR-016"), "gap_confession")
+        self.assertEqual(category_for_rule("LR-006"), "forbidden_punctuation")
+        self.assertEqual(category_for_rule("LR-014"), "forbidden_punctuation")
+        self.assertEqual(category_for_rule("LR-015"), "forbidden_punctuation")
+        self.assertIsNone(category_for_rule("LW-011"))
+        self.assertIn("wrong_job_bleed", CATEGORIES)
+        self.assertEqual(
+            set(rule_ids_for_category("forbidden_punctuation")),
+            {"LR-006", "LR-014", "LR-015"},
+        )
+        self.assertEqual(rule_ids_for_category("wrong_job_bleed"), ["LW-032"])
+
+
+class TestStage1VerifyHistory(unittest.TestCase):
+    """CR-097 Stories 1.2 / 1.4 / 1.5 — persist verify results + write-once snapshot."""
+
+    def _seed_folder(self, folder: Path, resume: str, letter: str) -> None:
+        (folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+
+    def _history(self, folder: Path) -> list:
+        path = folder / "stage1_first_draft" / "verify_history.json"
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def test_semicolon_draft_records_punctuation_violation_and_snapshot(self):
+        from author_from_packet import run_verify_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            resume = "Led the platform; split the work across engineering.\n"
+            letter = "Dear Hiring Manager,\n\nI am applying because the role fits.\n"
+            self._seed_folder(folder, resume, letter)
+
+            passed = run_verify_only(folder, record_to=folder)
+            self.assertFalse(passed)
+
+            history = self._history(folder)
+            self.assertEqual(len(history), 1)
+            entry = history[0]
+            self.assertEqual(entry["attempt"], 1)
+            self.assertFalse(entry["passed"])
+            self.assertIn("resume_sha256", entry)
+            self.assertIn("cover_sha256", entry)
+            punct = [
+                v
+                for v in entry["violations"]
+                if v.get("category") == "forbidden_punctuation"
+            ]
+            self.assertEqual(len(punct), 1)
+            self.assertEqual(punct[0]["rule_id"], "LR-014")
+            self.assertEqual(punct[0]["doc"], "resume")
+            self.assertEqual(punct[0]["severity"], "HARD_BLOCK")
+
+            snap_dir = folder / "stage1_first_draft"
+            self.assertEqual(
+                (snap_dir / "Resume.md").read_text(encoding="utf-8"),
+                (folder / "Resume.md").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                (snap_dir / "CoverLetter.md").read_text(encoding="utf-8"),
+                (folder / "CoverLetter.md").read_text(encoding="utf-8"),
+            )
+
+    def test_rerun_on_identical_bytes_does_not_mint_second_attempt(self):
+        from author_from_packet import run_verify_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self._seed_folder(
+                folder,
+                "Led the platform; split the work.\n",
+                "Dear Hiring Manager,\n\nBody.\n",
+            )
+            run_verify_only(folder, record_to=folder)
+            run_verify_only(folder, record_to=folder)
+            self.assertEqual(len(self._history(folder)), 1)
+
+    def test_rerun_after_edit_adds_attempt_two_and_leaves_snapshot(self):
+        from author_from_packet import run_verify_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            original = "Led the platform; split the work.\n"
+            self._seed_folder(folder, original, "Dear Hiring Manager,\n\nBody.\n")
+            run_verify_only(folder, record_to=folder)
+            first_snap = (
+                (folder / "stage1_first_draft" / "Resume.md").read_text(encoding="utf-8")
+            )
+
+            (folder / "Resume.md").write_text(
+                "Led the platform and split the work.\n", encoding="utf-8"
+            )
+            run_verify_only(folder, record_to=folder)
+
+            history = self._history(folder)
+            self.assertEqual(len(history), 2)
+            self.assertEqual(history[1]["attempt"], 2)
+            self.assertEqual(
+                (folder / "stage1_first_draft" / "Resume.md").read_text(encoding="utf-8"),
+                first_snap,
+            )
+
+    def test_record_to_none_writes_nothing(self):
+        from author_from_packet import run_verify_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self._seed_folder(
+                folder,
+                "Led the platform; split the work.\n",
+                "Dear Hiring Manager,\n\nBody.\n",
+            )
+            run_verify_only(folder)
+            self.assertFalse((folder / "stage1_first_draft").exists())
+
+
+class TestLearnedExamplesPrompt(unittest.TestCase):
+    """CR-097 Stories 3.5 / 3.6 — prompt rendering and stale-bank WARN."""
+
+    def test_empty_examples_do_not_add_before_after_block(self):
+        prompt_md, meta = TestBuildAuthoringPrompt()._run()
+        self.assertNotIn("BEFORE:", prompt_md)
+        self.assertNotIn("real corrected drafts", prompt_md)
+        self.assertEqual(meta.get("example_bank_version"), "")
+
+    def test_fixture_examples_render_after_packet_json(self):
+        packet = {
+            **_READY_PACKET,
+            "learned_examples": [
+                {
+                    "category": "forbidden_punctuation",
+                    "before": "compelling: building",
+                    "after": "The compelling work was building the export.",
+                    "why": "LR-015 already forbids colon-as-elaboration.",
+                }
+            ],
+            "example_bank_version": "",
+        }
+        prompt_md, meta = TestBuildAuthoringPrompt()._run(packet)
+        json_end = prompt_md.rfind("```")
+        self.assertIn("BEFORE:", prompt_md)
+        self.assertIn("AFTER:", prompt_md)
+        self.assertGreater(prompt_md.find("BEFORE:"), json_end)
+        self.assertEqual(meta.get("example_bank_version"), "")
+
+    def test_stale_bank_version_warns_instead_of_raising(self):
+        import contextlib
+        import io
+
+        packet = {**_READY_PACKET, "example_bank_version": "deadbeefdeadbeef"}
+        stderr_buf = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _, version_path = _make_temp_digest(Path(tmpdir))
+            with contextlib.redirect_stderr(stderr_buf):
+                with mock.patch(
+                    "author_from_packet._example_bank_version",
+                    return_value="cafebabecafebabe",
+                ):
+                    _check_packet_ready(
+                        packet, force=False, digest_version_path=version_path
+                    )
+        self.assertIn("example_bank_version mismatch", stderr_buf.getvalue())
+        self.assertIn("WARNING", stderr_buf.getvalue())
 
 
 if __name__ == "__main__":

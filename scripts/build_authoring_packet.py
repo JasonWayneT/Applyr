@@ -36,6 +36,7 @@ from typing import Any
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
+from authoring_examples import bank_version, select_examples  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
     _BACHELORS_SATISFIED_RE,
     _HIGHER_DEGREE_MANDATORY_RE,
@@ -52,7 +53,23 @@ _WE_PATH = _REPO_ROOT / "data" / "workExperience.md"
 _AI_PROJECTS_PATH = _REPO_ROOT / "data" / "aiProjects.md"
 
 _TOKEN_BUDGET = 8000
-_EXCERPT_MAX_CHARS = 500
+# Fix 5 (2026-08-21 Stage 1-3 audit): 500 was below even the low end of
+# researched RAG chunk-size floors for fact-retrieval use (~1,000 chars /
+# ~250 tokens cited as a sensible floor) and confirmed real, repeatedly, as
+# excerpts ending mid-word across several packets. Raised toward that floor;
+# see _truncate_at_sentence for the other half of the fix (cut at a sentence
+# boundary, not a fixed character count). Real tradeoff, not hidden: this
+# eats into the same _TOKEN_BUDGET that blocked Schellman's packet entirely
+# this round -- see the Schellman diagnosis for the boilerplate-item fix
+# that offsets most of that cost, and _shrink_excerpts_to_budget() below for
+# the adaptive fix that replaced a second, smaller hardcoded constant.
+_EXCERPT_MAX_CHARS = 900
+
+# Emergency floor for _shrink_excerpts_to_budget() -- below this an excerpt
+# is too thin to trust regardless of budget pressure. Always sentence-bounded
+# (never mid-word), so this is a much better failure mode than the pre-Fix-5
+# bug even at the floor.
+_EXCERPT_MIN_CHARS = 400
 
 # Preferred claim_ids per canonical employer so closed-world authoring can always
 # satisfy the three-role resume rule (Cision, Sterkly, Zero To Sixty) even when
@@ -758,6 +775,32 @@ def _strip_markdown_decoration(text: str) -> str:
     return text.strip()
 
 
+_SENTENCE_END_RE = re.compile(r"[.!?][\"')\]]*(?:\s|$)")
+
+
+def _truncate_at_sentence(text: str, max_chars: int) -> str:
+    """Truncate *text* to at most max_chars, preferring the nearest sentence
+    boundary at or before the limit over a hard mid-word/mid-sentence cut.
+
+    Fix 5 (2026-08-21 Stage 1-3 audit): the plain `[:max_chars]` slice this
+    replaced produced excerpts ending mid-word, confirmed real across
+    several packets this round -- true accomplishment facts sitting unused
+    because the retrieved excerpt cut off before finishing the sentence that
+    stated them. Falls back to the hard cut only when no sentence boundary
+    exists anywhere inside the budget (e.g. one long run-on clause), so this
+    never returns more text than max_chars allows.
+    """
+    if len(text) <= max_chars:
+        return text
+    window = text[:max_chars]
+    best_end = -1
+    for m in _SENTENCE_END_RE.finditer(window):
+        best_end = m.end()
+    if best_end > 0:
+        return window[:best_end].rstrip()
+    return window
+
+
 def _is_thin_synthetic_excerpt(excerpt: str) -> bool:
     """True for tag-pipe fallbacks like 'ACC-113 (cision) | Product Adoption · ...'."""
     return bool(re.match(r"^ACC-\d+\s*\([^)]+\)\s*\|", (excerpt or "").strip()))
@@ -783,7 +826,7 @@ def _extract_excerpt_for_project(
             m = re.search(r"^## ", ai_text, re.MULTILINE)
             start = m.start() if m else 0
             raw = ai_text[start: start + max_chars]
-            return _strip_markdown_decoration(raw)[:max_chars]
+            return _truncate_at_sentence(_strip_markdown_decoration(raw), max_chars)
         return _synthetic_excerpt(project_id, claim_rec)
 
     # Try [ACC-NNN] bracket pattern first
@@ -809,7 +852,7 @@ def _extract_excerpt_for_project(
     raw_chunk = we_text[line_start:span_end]
 
     clean = _strip_markdown_decoration(raw_chunk)
-    return clean[:max_chars]
+    return _truncate_at_sentence(clean, max_chars)
 
 
 def _format_excerpt_card(
@@ -842,8 +885,8 @@ def _format_excerpt_card(
             f"{header} Same WE story as {pointer_to}. Write this JD item through the "
             f"{lens} lens. Do not copy excerpt sentences."
         )
-        return body[:max_chars]
-    return f"{header}\n{span}"[:max_chars]
+        return _truncate_at_sentence(body, max_chars)
+    return _truncate_at_sentence(f"{header}\n{span}", max_chars)
 
 
 def _excerpt_for_claim(
@@ -1266,6 +1309,42 @@ def _build_jd_buckets(stage0: dict) -> dict:
     }
 
 
+def _shrink_excerpts_to_budget(excerpts: dict[str, str], overage_tokens: int) -> dict[str, str]:
+    """Adaptive post-hoc shrink pass (2026-08-21, Schellman fix).
+
+    Real measured tradeoff, not hidden: raising _EXCERPT_MAX_CHARS to 900
+    (Fix 5) re-blocks one real, unusually evidence-heavy JD's token budget --
+    17 required items (typical is 7-12), so a per-item cap applied uniformly
+    costs proportionally more the more items a JD has. Rather than hand-
+    picking one smaller global cap that shortchanges every normal-sized JD to
+    accommodate the rare outlier, every excerpt is still built at the full
+    researched cap first; only if the assembled packet actually comes in over
+    budget does this shrink proportionally across every excerpt (largest
+    excerpts give up the most, in proportion to their own size) until it
+    fits, down to _EXCERPT_MIN_CHARS. A typical JD never hits this path at
+    all. Same "score-weighted truncation, adapt to the retrieval set's real
+    size instead of one fixed constant" pattern RAG token-budgeting research
+    recommends over a single hardcoded per-item limit.
+
+    Never truncates mid-word/mid-sentence: re-runs _truncate_at_sentence on
+    the already-built excerpt text, so a shrink only ever removes whole
+    trailing sentences, same as the original build.
+    """
+    if not excerpts or overage_tokens <= 0:
+        return excerpts
+    # utf-8 bytes / 4 approximation, matching assemble_packet()'s own estimator.
+    overage_chars = overage_tokens * 4
+    total_chars = sum(len(v) for v in excerpts.values())
+    if total_chars <= 0:
+        return excerpts
+    shrunk: dict[str, str] = {}
+    for cid, text in excerpts.items():
+        share = len(text) / total_chars
+        target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
+        shrunk[cid] = _truncate_at_sentence(text, target) if target < len(text) else text
+    return shrunk
+
+
 def assemble_packet(
     stage0: dict,
     evidence_map: list[dict],
@@ -1310,9 +1389,38 @@ def assemble_packet(
         "estimated_tokens": 0,
         "stage_signal": stage_signal,
         "thin_jd": thin_jd,
+        # Recency: render last in dumped JSON, same reason Fix 6 put the
+        # self-check last in the digest (CR-097 Story 3.3).
+        "learned_examples": select_examples(
+            {"jd_buckets": jd_buckets, "soft_gaps": soft_gaps}
+        ),
+        "example_bank_version": bank_version(),
     }
     # estimated_tokens from utf-8 bytes / 4
     estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+
+    # CR-097 Story 3.4 budget ordering — do not get this backwards.
+    # learned_examples is counted inside estimated_tokens before the
+    # _TOKEN_BUDGET check. If the packet is over budget, drop examples
+    # first, one at a time, and only call _shrink_excerpts_to_budget()
+    # if it is still over after the examples are gone. Evidence never
+    # gets truncated to make room for a teaching example.
+    if estimated_tokens > _TOKEN_BUDGET and draft["learned_examples"]:
+        while estimated_tokens > _TOKEN_BUDGET and draft["learned_examples"]:
+            draft["learned_examples"].pop()
+            estimated_tokens = (
+                len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+            )
+
+    # Adaptive shrink (2026-08-21, Schellman fix): only reached when the
+    # packet built at the full excerpt cap actually comes in over budget --
+    # see _shrink_excerpts_to_budget()'s own docstring.
+    if estimated_tokens > _TOKEN_BUDGET:
+        shrunk_excerpts = _shrink_excerpts_to_budget(excerpts, estimated_tokens - _TOKEN_BUDGET)
+        if shrunk_excerpts != excerpts:
+            excerpts = shrunk_excerpts
+            draft["excerpts"] = excerpts
+            estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
 
     # Run fail-closed checks
     status, reasons = _check_fail_closed(stage0, evidence_map, excerpts, disabled, estimated_tokens)

@@ -510,7 +510,29 @@ _BOILERPLATE_ITEM_RE = re.compile(
     # block never closed before this text), then fail-closed the packet build as an
     # unmapped required item since it isn't real hire criteria to begin with.
     r"to\s+apply\s+for\s+(?:quick\s+)?consideration|"
-    r"^apply\s+(?:now|here|today|via)\b"
+    r"^apply\s+(?:now|here|today|via)\b|"
+    # Fix 3 (2026-08-21 Stage 1-3 audit): defense-in-depth twin of the
+    # patterns added to stage0_extract._BOILERPLATE_RE, the real default
+    # extraction path (this regex only runs when STAGE0_SECTION_MODE=
+    # deterministic, or in tests that force it). Confirmed real on Point C,
+    # Tm2 Group, and Alfa Laval -- see stage0_extract.py's comment for the
+    # exact failing lines this covers.
+    r"compensation\s+range\s*:|"
+    r"\$[\d,]+(?:\.\d+)?\s*[kKmM]?\s*[-–—]\s*\$?[\d,]+(?:\.\d+)?\s*[kKmM]?|"
+    r"[\w.+-]+@[\w-]+\.\w{2,}|"
+    r"for more information,?\s+please\s+contact|"
+    r"no\s+later\s+than|apply\s+by\s+\w|application\s+deadline|"
+    r"general\s+data\s+protection\s+regulation|"
+    r"do\s+not\s+accept\s+applications\s+via\s+email|"
+    r"continuous\s+review\s+of\s+received\s+applications|"
+    r"we\s+look\s+forward\s+to\s+hearing\s+from\s+you|"
+    r"background\s+investigation|consent\s+to\s+.{0,30}background\s+check|"
+    r"commensurate\s+with\s+the\s+candidate.s\s+experience|"
+    r"eligible\s+for\s+additional\s+compensation,?\s+including\s+bonuses|"
+    r"sales\s+commission\s+plan|"
+    r"offer\s+a\s+competitive\s+salary\s+and\s+comprehensive\s+benefits|"
+    r"flexible\s+and\s+balanced\s+environment|"
+    r"opportunity\s+to\s+work\s+remotely"
     r")"
 )
 
@@ -1310,7 +1332,7 @@ def _classify_one_item(
             "anchor": str,             # human-readable reasoning, or "none"
             "gap": bool,
             "gap_class": "HARD" | "SOFT" | None,
-            "gap_source": "degree" | "domain" | "role_exclusion" | "tool" | None,  # only when gap_class == "HARD"
+            "gap_source": "degree" | "domain" | "role_exclusion" | "certification" | "tool" | None,  # only when gap_class == "HARD"
             "domain_soft": bool,
             "evidence_level": int,     # 0-4, new — feeds compute_fit_score()
             "confidence": str,         # "high" | "medium" | "low", new
@@ -1414,6 +1436,109 @@ def classify_gaps(
 
 
 # ---------------------------------------------------------------------------
+# Responsibilities-bucket exclusion-zone screening (2026-08-21 follow-up to
+# CR-096 Fix 1). classify_gaps() above only ever judges required/preferred
+# items -- a JD's own role-framing prose in `responsibilities` (e.g. Harbor
+# Compliance's "...to own the zero to one build of our Client Communications
+# Service...") never reaches evidence_scale.classify_requirement() at all,
+# so a real Exclusion Zone hit sitting in that prose is structurally
+# invisible to Stage 0, confirmed live: Fix 1's prompt improvement alone did
+# not flip Harbor Compliance's real Tier 2 verdict, because the disqualifying
+# sentence was never a classified item in the first place.
+#
+# Running full LLM judgment on every responsibilities line (often 5-10+ per
+# JD) to catch this would be a real, ongoing per-JD cost increase. Research
+# on cost-effective LLM triage (routing an easy majority to a cheap filter,
+# escalating only the rare ambiguous/hit case to the real classifier) is the
+# standard mitigation -- applied here as a recall-oriented regex pre-filter
+# that only escalates a line to the real evidence_scale judgment when it
+# already looks like it might name one of the categories role_exclusion
+# covers. A false positive here costs one extra cheap local-model call; a
+# false negative is the exact pre-fix gap.
+# Tier A: unambiguous enough to gate deterministically, no LLM judgment
+# needed. Narrowly anchored to "own/lead/drive THE [zero-to-one/0-to-1]
+# build" phrasing describing the role itself, matching the real Harbor
+# Compliance wording exactly ("...to own the zero to one build of our
+# Client Communications Service..."). Deliberately NOT resolved through
+# evidence_scale.classify_requirement(): tested live and found that Jason's
+# own real employer name "Zero To Sixty" (workExperience.md) collides
+# lexically with "zero to one" often enough to confuse the small local
+# score model (gemma2:2b) into reading it as a match instead of the
+# disqualifier it actually is -- a coincidental collision a regex doesn't
+# have, so the unambiguous subset is decided without one.
+_DETERMINISTIC_0TO1_BUILD_RE = re.compile(
+    r"(?:own|lead|drive|responsible\s+for)\w*\s+(?:the\s+|a\s+|this\s+)?"
+    r"(?:zero.to.one|0.to.1)\s+(?:build|launch|creation)|"
+    r"(?:zero.to.one|0.to.1)\s+(?:build|launch)\s+of",
+    re.I,
+)
+
+# Tier B: needs real judgment (a hedge or a soft phrasing can make these
+# non-disqualifying), so these escalate to the real classifier rather than
+# gating deterministically -- see screen_responsibilities_for_exclusion().
+_RESPONSIBILITY_EXCLUSION_SIGNAL_RE = re.compile(
+    r"(?:"
+    r"from\s+scratch|from\s+the\s+ground\s+up|greenfield|"
+    r"where\s+none\s+(?:previously\s+)?exist|build\w*\s+.{0,20}from\s+nothing|"
+    r"own(?:ing)?\s+the\s+(?:full\s+)?p\s?&\s?l|revenue\s+targets?|"
+    r"billing\s+(?:system|operations)|"
+    r"train(?:ing)?\s+(?:and\s+fine.tun\w+\s+)?(?:the\s+|our\s+)?(?:ml\s+|ai\s+)?models?|"
+    r"(?:own|architect)(?:ing)?\s+(?:the\s+|our\s+)?(?:ml|ai)\s+(?:model|pipeline|training)|"
+    r"(?:manage|lead|hire|grow|mentor|develop)\s+(?:and\s+\w+\s+)?(?:a\s+)?team\s+of|"
+    r"direct\s+reports?|"
+    r"hiring\s+and\s+(?:firing|managing)|"
+    r"manage\s+(?:other\s+)?(?:product\s+managers?|product\s+owners?|pms\b)"
+    r")",
+    re.I,
+)
+
+
+def screen_responsibilities_for_exclusion(
+    responsibilities: list[str],
+    work_exp: str,
+    company: str = "",
+    internal_terms: list[str] | None = None,
+) -> list[dict]:
+    """Two-tier responsibilities-bucket exclusion screen (see the regexes'
+    own comments for why each line is decided the way it is). Returns
+    classify-shaped dicts (same shape _classify_one_item() returns for a
+    HARD gap) for confirmed hits only, so a caller can extend
+    classified_required with them and get correct disqualification through
+    the existing compute_fit_score() path -- no separate tier-logic needed.
+
+    Fails open per-line on a classification error: this is a bonus
+    screening pass on top of the required/preferred judgments classify_gaps()
+    already did, not a fail-closed gate -- one line's LLM error should never
+    abort a Stage 0 run that would otherwise have completed correctly.
+    """
+    from evidence_scale import classify_requirement, EvidenceClassificationError
+
+    hits: list[dict] = []
+    for line in responsibilities or []:
+        if _DETERMINISTIC_0TO1_BUILD_RE.search(line):
+            hits.append({
+                "item": line,
+                "anchor": "Deterministic: role framed as owning a zero-to-one/0-to-1 build (0-to-1 Exclusion Zone).",
+                "gap": True,
+                "gap_class": "HARD",
+                "domain_soft": False,
+                "gap_source": "role_exclusion",
+            })
+            continue
+        if not _RESPONSIBILITY_EXCLUSION_SIGNAL_RE.search(line):
+            continue
+        try:
+            judgment = classify_requirement(
+                line, work_exp, is_required=True, company=company, internal_terms=internal_terms,
+            )
+        except EvidenceClassificationError:
+            continue
+        if judgment.gate == "HARD":
+            hits.append(judgment.to_legacy_dict())
+    return hits
+
+
+# ---------------------------------------------------------------------------
 # Tier determination
 # ---------------------------------------------------------------------------
 
@@ -1457,7 +1582,7 @@ def _determine_tier(
     # payroll tax" scored Tier 1 despite zero real evidence for it (fixed by
     # adding "domain" to this absolute-Skip set, same as "degree").
     if any(
-        g.get("gap_class") == "HARD" and g.get("gap_source") in ("degree", "domain")
+        g.get("gap_class") == "HARD" and g.get("gap_source") in ("degree", "domain", "certification")
         for g in flagged_gaps
     ):
         return "Skip", "SKIP"
@@ -1679,6 +1804,24 @@ def build_stage0_fit_gate(
         required_raw, preferred_raw, work_exp=work_exp, company=company_display,
         internal_terms=internal_terms,
     )
+
+    # 2026-08-21 follow-up to Fix 1: the JD's own role-framing prose lives in
+    # `responsibilities`, which classify_gaps() never sees. Cheap pre-filter,
+    # real classifier only on a hit -- see screen_responsibilities_for_exclusion().
+    resp_exclusion_hits = screen_responsibilities_for_exclusion(
+        responsibilities, work_exp, company=company_display, internal_terms=internal_terms,
+    )
+    if resp_exclusion_hits:
+        classified_required.extend(resp_exclusion_hits)
+        flagged_gaps.extend(
+            {
+                "item": h["item"],
+                "gap_class": h["gap_class"],
+                "anchor": h.get("anchor"),
+                "gap_source": h.get("gap_source"),
+            }
+            for h in resp_exclusion_hits
+        )
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)
     word_count = len(re.findall(r"\w+", jd_text or ""))

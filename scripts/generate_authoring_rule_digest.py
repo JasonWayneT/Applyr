@@ -226,6 +226,17 @@ Jason works through influence and alignment, not authority. Use:
 Never: forced, made, imposed, or drove other teams "into" a decision.
 
 ---
+
+## 11. Before You Finish — Self-Check (rules 1/5/7 cover this; re-check anyway)
+
+- Every claim_id, excerpt, metric, and company name belongs to THIS job's packet —
+  never carried over from a different draft in the same session.
+- Zero gap-confession language ("is new territory for me," "I have not yet," "are
+  new to me"). Thin evidence gets the strongest honest bridge, not a named gap.
+- Zero em dashes, semicolons, double-hyphens, or colon-as-elaboration (`word: word`).
+  Scan once more before you stop.
+
+---
 """
 
 

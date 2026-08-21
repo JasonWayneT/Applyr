@@ -1717,6 +1717,56 @@ def _attribution_metric_variants(metric: str) -> list:
     return [v.lower() for v in variants]
 
 
+# Metricless-claim anchor path only (see _METRICLESS_CLAIM_ANCHORS): how close
+# a verb occurrence must sit to an actual anchor-phrase occurrence in the same
+# unit to count as describing that claim, rather than an unrelated claim that
+# happens to share a long, comma-spliced sentence with it.
+_ANCHOR_PROXIMITY_CHARS = 100
+
+
+def _has_unattributed_verb(unit_lower: str, verb: str, near_positions: List[int] | None = None) -> bool:
+    """True iff at least one occurrence of *verb* in *unit_lower* both (a) is
+    NOT introduced by a relative pronoun ("who"/"that"/"which") within 3
+    tokens before it, and (b), when *near_positions* is given, falls within
+    _ANCHOR_PROXIMITY_CHARS of one of them.
+
+    Fix 4 (2026-08-21 Stage 1-3 audit). Two distinct false-positive shapes
+    confirmed real this round, both from one bullet/sentence pairing a verb
+    with a claim it doesn't actually describe:
+
+    (a) Relative-pronoun handoff -- the plain `re.search` this replaced
+    flagged an ownership verb anywhere near a claim's metric/anchor with no
+    check for whose action it actually describes. Confirmed on Lightcast:
+    "...with the engineer who built it" -- "who" hands the verb to a
+    different subject. A verb occurrence immediately preceded by one of
+    these pronouns describes someone else's action, not Jason's.
+
+    (b) Same long, comma-spliced sentence, different claim -- confirmed on
+    Gravitee: "...with the engineer who built it, and separately designed
+    and built my own AI tooling..." Even after (a) excludes "who built it",
+    the same sentence's *second* "built" (and "designed") describes a real,
+    separately-owned accomplishment (ACC-401, Jason's own side project) that
+    has nothing to do with the ACC-120 anchor phrase earlier in the same
+    run-on sentence -- only relevant on the anchor path, where a metricless
+    claim's collision risk with an unrelated claim is already a known,
+    documented problem (see _METRICLESS_CLAIM_ANCHORS).
+
+    A sentence can still have a real overclaim earlier or later in the same
+    unit -- this checks each occurrence of the verb independently, not the
+    unit as a whole.
+    """
+    for m in re.finditer(rf"\b{re.escape(verb)}\b", unit_lower):
+        preceding_tokens = re.findall(r"[a-z']+", unit_lower[: m.start()])[-3:]
+        if any(t in ("who", "that", "which") for t in preceding_tokens):
+            continue
+        if near_positions is not None and not any(
+            abs(m.start() - pos) <= _ANCHOR_PROXIMITY_CHARS for pos in near_positions
+        ):
+            continue
+        return True
+    return False
+
+
 def _split_resume_bullets(resume_text: str) -> List[str]:
     return [
         line.strip()[2:].strip()
@@ -1768,11 +1818,16 @@ def check_attribution_verb_strength(resume_text: str, cover_letter_text: str) ->
         for unit in units:
             unit_lower = unit.lower()
             if anchors is not None:
-                if not any(a in unit_lower for a in anchors):
+                anchor_positions = [
+                    m.start()
+                    for a in anchors
+                    for m in re.finditer(re.escape(a), unit_lower)
+                ]
+                if not anchor_positions:
                     continue
                 verb_hits = [
                     v for v in _OWNERSHIP_VERBS_ANCHOR
-                    if re.search(rf"\b{re.escape(v)}\b", unit_lower)
+                    if _has_unattributed_verb(unit_lower, v, near_positions=anchor_positions)
                 ]
             else:
                 if not bucket["metrics"]:
@@ -1791,7 +1846,7 @@ def check_attribution_verb_strength(resume_text: str, cover_letter_text: str) ->
                     continue
                 verb_hits = [
                     v for v in _OWNERSHIP_VERBS_METRIC
-                    if re.search(rf"\b{re.escape(v)}\b", unit_lower)
+                    if _has_unattributed_verb(unit_lower, v)
                 ]
 
             if not verb_hits or (pid, unit) in seen:
@@ -1824,6 +1879,105 @@ _LINT_FOLDER_SKIP = frozenset({
     "authoring_prompt.md",
     "authoring_rule_digest.md",
 })
+
+# CR-097 Story 5.1/5.2: Jason's own employers appear on every resume. They must
+# never count as wrong-job bleed even if they also exist as a jobs.company row.
+_OWN_EMPLOYERS = frozenset({"cision", "sterkly", "sterkly services", "zero to sixty"})
+_MIN_COMPANY_NAME_CHARS = 4
+
+
+def known_company_names(
+    db_path: str | None = None,
+    submissions_root: str | None = None,
+) -> Set[str]:
+    """Return company names Applyr knows about (CR-097 Story 5.1).
+
+    Reads jobs.company plus each folder's stage0_fit_gate.json `company`.
+    Names only — never opens another submission's Resume.md or CoverLetter.md.
+    A missing DB is skipped without raising.
+    """
+    names: Set[str] = set()
+    db = db_path or os.path.join(_REPO_ROOT, "data", "jobagent.sqlite")
+    try:
+        import sqlite3
+
+        if os.path.isfile(db):
+            conn = sqlite3.connect(db)
+            try:
+                for (company,) in conn.execute(
+                    "SELECT DISTINCT company FROM jobs "
+                    "WHERE company IS NOT NULL AND TRIM(company) != ''"
+                ):
+                    if isinstance(company, str) and company.strip():
+                        names.add(company.strip())
+            finally:
+                conn.close()
+    except Exception:
+        pass
+
+    root = submissions_root or os.path.join(_REPO_ROOT, "data", "submissions")
+    try:
+        for entry in os.listdir(root):
+            gate = os.path.join(root, entry, "stage0_fit_gate.json")
+            if not os.path.isfile(gate):
+                continue
+            try:
+                with open(gate, encoding="utf-8") as fh:
+                    payload = json.load(fh)
+            except (OSError, json.JSONDecodeError):
+                continue
+            company = str(payload.get("company") or "").strip()
+            if company:
+                names.add(company)
+    except OSError:
+        pass
+    return names
+
+
+def check_wrong_job_company_bleed(
+    resume: str,
+    cover_letter: str,
+    jd_text: str,
+    own_company: str,
+    known_names: Set[str] | None = None,
+) -> List[LintViolation]:
+    """WARN when a different known company name appears in this folder's docs.
+
+    Precision first: match the known-name index only, never guess at proper nouns.
+    """
+    names = known_names if known_names is not None else known_company_names()
+    own = (own_company or "").strip().lower()
+    jd_lower = (jd_text or "").lower()
+    combined = f"{resume or ''}\n{cover_letter or ''}"
+    hits: List[LintViolation] = []
+    seen: Set[str] = set()
+    for name in sorted(names, key=len, reverse=True):
+        trimmed = name.strip()
+        if len(trimmed) < _MIN_COMPANY_NAME_CHARS:
+            continue
+        lower = trimmed.lower()
+        if lower in seen or lower in _OWN_EMPLOYERS or lower == own:
+            continue
+        if lower in jd_lower:
+            continue
+        if not re.search(r"\b" + re.escape(trimmed) + r"\b", combined, re.IGNORECASE):
+            continue
+        seen.add(lower)
+        hits.append(
+            LintViolation(
+                rule_id="LW-032",
+                severity="WARN",
+                message=(
+                    f"Wrong-job content bleed: documents name {trimmed!r}, "
+                    "a different company Applyr knows about"
+                ),
+                suggestion=(
+                    "Remove the other company's name. This folder is judged only "
+                    "against its own JD."
+                ),
+            )
+        )
+    return hits
 
 
 def lint_folder(folder: str) -> List[dict]:
@@ -1989,6 +2143,47 @@ def lint_folder(folder: str) -> List[dict]:
                 "warns": len(attribution_warns),
                 "infos": 0,
                 "result": LintResult(passed=True, warns=attribution_warns, document_type="attribution"),
+            })
+
+    # LW-032: wrong-job company-name bleed (CR-097 Epic 5). WARN, not HARD_BLOCK.
+    # Only on real submission folders so unit-test tempdirs are not scored
+    # against the live company index.
+    submissions_root = os.path.abspath(os.path.join(_REPO_ROOT, "data", "submissions"))
+    folder_abs = os.path.abspath(folder)
+    if folder_abs.startswith(submissions_root):
+        jd_for_bleed = ""
+        if os.path.exists(jd_path):
+            try:
+                with open(jd_path, encoding="utf-8") as f:
+                    jd_for_bleed = f.read()
+            except OSError:
+                jd_for_bleed = ""
+        own_company = os.path.basename(folder)
+        gate_path = os.path.join(folder, "stage0_fit_gate.json")
+        if os.path.isfile(gate_path):
+            try:
+                with open(gate_path, encoding="utf-8") as f:
+                    own_company = str(json.load(f).get("company") or own_company)
+            except (OSError, json.JSONDecodeError):
+                pass
+        company_bleed = check_wrong_job_company_bleed(
+            texts_by_doc_type.get("resume", ""),
+            texts_by_doc_type.get("cover_letter", ""),
+            jd_for_bleed,
+            own_company,
+        )
+        if company_bleed:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "wrong-job company bleed",
+                "doc_type": "wrong_job_bleed",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(company_bleed),
+                "infos": 0,
+                "result": LintResult(
+                    passed=True, warns=company_bleed, document_type="wrong_job_bleed"
+                ),
             })
 
     return results

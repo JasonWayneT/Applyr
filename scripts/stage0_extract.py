@@ -24,7 +24,13 @@ _HEADER_LINE_RE = re.compile(
     r"what\s+you.?ll\s+(?:do|need|bring)|what\s+we.?re\s+looking\s+for|"
     r"responsibilities|about\s+(?:us|you|the\s+role)|benefits|"
     r"equal\s+opportunity|who\s+we\s+are|who\s+you\s+are|"
-    r"nice\s+to\s+have|must\s+have|bonus(?:\s+points)?"
+    r"nice\s+to\s+have|must\s+have|bonus(?:\s+points)?|"
+    # Schellman diagnosis (2026-08-21 Stage 1-3 audit): confirmed real cause
+    # of that folder's 8,111-token packet overflow -- this bare section label
+    # carries no requirement verb but is long enough (32 chars) to clear
+    # _MIN_CHARS, so it was harvested and evidence-mapped as a real required
+    # item, one of 27 evidence_map entries feeding an 8,000-token cap.
+    r"education,?\s*work\s+experience\s+and\s+certifications"
     r")\s*:?$",
     re.I,
 )
@@ -32,7 +38,50 @@ _BOILERPLATE_RE = re.compile(
     r"e-verify|starting pay|equal opportunity employer|"
     r"window of at least \d+ days|total direct compensation|"
     r"we are an equal|diversity and inclusion statement|"
-    r"to all applicants without regard",
+    r"to all applicants without regard|"
+    # Fix 3 (2026-08-21 Stage 1-3 audit): this is the harvester's own,
+    # much thinner filter -- build_stage0_fit_gate.py's larger
+    # _BOILERPLATE_ITEM_RE never runs on this (now-default, 2026-08-17+)
+    # extraction path, so a line the LLM section-splitter is separately
+    # told (via its own prompt) to skip can still get harvested as a
+    # candidate and, if it carries a required/preferred header hint,
+    # force-included by resolve_labeled_buckets()'s unresolved-hint
+    # fallback regardless of what the model decided. Confirmed real on
+    # Point C ("$90,000—$100,000 USD" + a compensation-commensurate
+    # disclaimer), Tm2 Group ("Compensation Range: $185.9K - $204.1K" +
+    # benefits para + background-check consent line), and Alfa Laval
+    # (recruiter name+email lines, an application deadline, a GDPR
+    # application-method disclaimer, and a sign-off line) all landing in
+    # `required`.
+    # Bare currency range, with or without a leading label, K/M suffixes
+    # allowed ("$90,000—$100,000 USD", "Compensation Range: $185.9K - $204.1K").
+    r"compensation\s+range\s*:|"
+    r"\$[\d,]+(?:\.\d+)?\s*[kKmM]?\s*[-–—]\s*\$?[\d,]+(?:\.\d+)?\s*[kKmM]?|"
+    # A line built around an email address is a recruiter/contact line, never
+    # a hire criterion -- a real requirement line does not carry an email.
+    r"[\w.+-]+@[\w-]+\.\w{2,}|"
+    r"for more information,?\s+please\s+contact|"
+    # Application-deadline phrasing.
+    r"no\s+later\s+than|apply\s+by\s+\w|application\s+deadline|"
+    # GDPR / application-method / sign-off boilerplate.
+    r"general\s+data\s+protection\s+regulation|"
+    r"do\s+not\s+accept\s+applications\s+via\s+email|"
+    r"continuous\s+review\s+of\s+received\s+applications|"
+    r"we\s+look\s+forward\s+to\s+hearing\s+from\s+you|"
+    # Background-check consent lines.
+    r"background\s+investigation|consent\s+to\s+.{0,30}background\s+check|"
+    # Generic compensation/benefits disclaimer paragraphs not already caught
+    # by build_stage0_fit_gate.py's own filter.
+    r"commensurate\s+with\s+the\s+candidate.s\s+experience|"
+    r"eligible\s+for\s+additional\s+compensation,?\s+including\s+bonuses|"
+    r"sales\s+commission\s+plan|"
+    r"offer\s+a\s+competitive\s+salary\s+and\s+comprehensive\s+benefits|"
+    # Schellman diagnosis: "flexible and balanced environment... opportunity
+    # to work remotely" is company culture/perk framing, not a candidate
+    # requirement -- the other confirmed real contributor to that folder's
+    # 27-item evidence_map / 8,111-token overflow.
+    r"flexible\s+and\s+balanced\s+environment|"
+    r"opportunity\s+to\s+work\s+remotely",
     re.I,
 )
 _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")

@@ -10,6 +10,52 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Changed
+- **CR-097 Epic 1: first-draft defects are now observable (2026-08-21).** Stage 1
+  verify records each attempt to `{folder}/stage1_first_draft/verify_history.json`
+  (rule id, category, hashes, digest version) and snapshots Resume.md /
+  CoverLetter.md write-once on the first attempt. Re-running verify on unchanged
+  bytes does not mint a phantom attempt. This is the data plane the rest of
+  CR-097's feedback loop reads; it has standalone value even before the ledger
+  and example bank land.
+- **CR-097 Epic 2: 2-occurrence trigger is live (2026-08-21).**
+  `scripts/scan_authoring_defects.py` writes a gitignored cross-submission ledger
+  and opens a pending review when the same targeted category hits 2+ slugs.
+  Stage 2 policy calls it advisory-only after COMPLETE (`[defect_scan, status:
+  ok|warning]`); `--status` is also on the existing send-batch / every-3-submissions
+  sweep. No submission is blocked on a process chore.
+- **CR-097 Epic 3: retrieval bank injects into Stage 1 (2026-08-21).** Packets
+  carry `learned_examples` (capped, one per category, containment-ranked) and
+  `example_bank_version`. Over-budget packets drop examples before shrinking
+  WE excerpts. A stale bank version warns; it does not hard-fail the way a
+  stale digest does. The bank ships empty until Epic 4 seeds it.
+- **CR-097 Epic 4-6 (partial): bank seeded, bleed WARN, report CLI (2026-08-21).**
+  `--promote` writes a `few_shot_eligible: false` skeleton; `--decline` needs
+  `--note`. Two human-seeded bank entries (gap confession + colon-as-elaboration)
+  are eligible. `LW-032` WARNs when a different known company name appears in
+  this folder's docs. `--report --last 10` prints the SR-05 split. Story 5.5
+  (seed bleed) waits for two real ledger hits; Story 6.2 waits for 10 post-launch
+  submissions.
+- **CR-096: Stage 1-3 audit remediation, all 6 fixes (2026-08-21).** See
+  `docs/spec/05-change-requests/CR-096-stage1-3-audit-remediation.md` for full detail.
+  Stage 0 `evidence_scale.py` gains a 4th hard-gate category (`certification`, e.g. a
+  required PMP with no honest bridge) and 0-to-1/founding-ownership language in
+  `role_exclusion`'s examples. A `gate="HARD"` verdict whose reasoning doesn't share
+  real vocabulary with the item it claims to classify gets one retry, then demotes to
+  `NONE` with an explicit human-review marker instead of silently finalizing a rejection
+  (confirmed real: a citizenship line wrongly Skipped on reasoning about an unrelated
+  "regulated industry" line). `stage0_extract.py`'s boilerplate filter (the real default
+  extraction path since 2026-08-17, not `build_stage0_fit_gate.py`'s older regex) now
+  catches bare salary ranges, recruiter name+email lines, application deadlines, and
+  GDPR/sign-off boilerplate that were reaching `required` as fake hire criteria.
+  `submission_linter.py`'s LW-028 (attribution vs. ownership-verb) no longer flags a verb
+  handed to a different subject via "who"/"that"/"which," and no longer flags an unrelated
+  verb sharing a long comma-spliced sentence with an anchor phrase it doesn't describe.
+  `build_authoring_packet.py`'s excerpt cap raised 500 → 900 chars with truncation moved
+  from a hard character cutoff to the nearest sentence boundary (excerpts no longer end
+  mid-word); real measured tradeoff: this cap increase alone re-blocks one real,
+  unusually item-heavy JD's 8,000-token packet budget, accepted as a known outlier rather
+  than shrinking the cap for every other JD. `authoring_rule_digest.md` gains a final
+  self-check section for this round's recurring first-draft mistakes.
 - **CR-094: WE-primary authoring (2026-08-20).** Packet excerpts come from
   `workExperience.md` (or `aiProjects.md` for ACC-401), not catalog `text`.
   `claim_constraints` carries OWNED / CONTRIBUTED / DO NOT CLAIM per claim.

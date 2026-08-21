@@ -32,6 +32,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_claim_provenance.py",
     "scripts/test_context_pack.py",
     "scripts/test_author_from_packet.py",
+    "scripts/test_scan_authoring_defects.py",
     "scripts/test_cover_voice.py",
     "scripts/test_critique_retry.py",
     "scripts/test_domain_gate.py",

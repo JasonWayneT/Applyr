@@ -583,7 +583,7 @@ class TestBuildPacketIntegration(unittest.TestCase):
             "schema_version", "company", "role_title", "tier", "jd_buckets",
             "evidence_map", "excerpts", "soft_gaps", "hard_constraints",
             "hook_fact", "rule_digest_version", "packet_status",
-            "estimated_tokens",
+            "estimated_tokens", "learned_examples", "example_bank_version",
         ]
         for f in required_fields:
             self.assertIn(f, packet, f"Missing field: {f}")
@@ -1435,6 +1435,101 @@ class TestLiveCatalogQuarantine(unittest.TestCase):
         )
         scored_ids = [cid for cid, _ in scored]
         self.assertNotIn("ACC-114-COST", scored_ids)
+
+
+class TestLearnedExamplesPacket(unittest.TestCase):
+    """CR-097 Epic 3 — retrieval bank injection and budget ordering."""
+
+    def _assemble(self, excerpts: dict | None = None, **kwargs):
+        return assemble_packet(
+            stage0=_STAGE0_TIER1,
+            evidence_map=[],
+            excerpts=excerpts or {"ACC-105-AGILE": "Led quarterly planning."},
+            disabled=set(),
+            hook_fact=None,
+            company="TestCorp",
+            role_title="Product Manager",
+            slug="testcorp",
+            url=None,
+            **kwargs,
+        )
+
+    def test_empty_bank_yields_empty_learned_examples(self):
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            with patch("build_authoring_packet.bank_version", return_value=""):
+                packet = self._assemble()
+        self.assertEqual(packet["learned_examples"], [])
+        self.assertEqual(packet["example_bank_version"], "")
+
+    def test_select_examples_caps_one_per_category(self):
+        from authoring_examples import select_examples
+
+        entries = [
+            {
+                "id": "punct-old",
+                "category": "forbidden_punctuation",
+                "status": "active",
+                "few_shot_eligible": True,
+                "applies_when": {"mode": "always"},
+                "match_text": "colon elaboration",
+                "added_date": "2026-01-01",
+                "before": "old before",
+                "after": "old after",
+                "why": "old",
+            },
+            {
+                "id": "punct-new",
+                "category": "forbidden_punctuation",
+                "status": "active",
+                "few_shot_eligible": True,
+                "applies_when": {"mode": "always"},
+                "match_text": "colon elaboration",
+                "added_date": "2026-08-01",
+                "before": "new before",
+                "after": "new after",
+                "why": "new",
+            },
+            {
+                "id": "gap-1",
+                "category": "gap_confession",
+                "status": "active",
+                "few_shot_eligible": True,
+                "applies_when": {"mode": "packet_condition", "condition": "soft_gaps_present"},
+                "match_text": "new territory",
+                "added_date": "2026-08-01",
+                "before": "gap before",
+                "after": "gap after",
+                "why": "gap",
+            },
+        ]
+        picked = select_examples({"jd_buckets": {}, "soft_gaps": []}, entries=entries)
+        ids = [e["id"] for e in picked]
+        self.assertEqual(ids, ["punct-new"])
+        picked_with_gaps = select_examples(
+            {"jd_buckets": {}, "soft_gaps": [{"item": "SQL"}]},
+            entries=entries,
+        )
+        self.assertEqual(
+            {e["id"] for e in picked_with_gaps},
+            {"punct-new", "gap-1"},
+        )
+
+    def test_over_budget_drops_examples_before_shrinking_excerpts(self):
+        original = {"ACC-105-AGILE": "Led quarterly planning. Delivered the release."}
+        base = self._assemble(excerpts=original)
+        budget = base["estimated_tokens"]
+        example = {
+            "id": "ex-1",
+            "category": "forbidden_punctuation",
+            "before": "x" * 400,
+            "after": "y" * 400,
+            "why": "colon-as-elaboration",
+        }
+        with patch("build_authoring_packet.select_examples", return_value=[example]):
+            with patch("build_authoring_packet._TOKEN_BUDGET", budget):
+                packet = self._assemble(excerpts=original)
+        self.assertEqual(packet["learned_examples"], [])
+        self.assertEqual(packet["excerpts"], original)
 
 
 if __name__ == "__main__":

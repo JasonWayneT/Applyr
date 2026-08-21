@@ -410,7 +410,9 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     else:
         prior_id = r0.get("receipt_id")
 
-    verify_ok = run_verify_only(Path(folder))
+    verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+    # CR-097 Story 1.3: record inside run_verify_only so a failing attempt is
+    # persisted before this runner raises WorkflowError.
     if not verify_ok:
         raise WorkflowError(
             "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
@@ -1096,7 +1098,22 @@ def run_stage2_policy(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     state["status"] = "IN_PROGRESS"
     state["active_stage"] = "stage3"
     write_state(folder, state)
+    _run_advisory_defect_scan()
     return state
+
+
+def _run_advisory_defect_scan() -> None:
+    """CR-097 Story 2.5: best-effort ledger scan after Stage 2 COMPLETE.
+
+    Prints only. Never writes workflow_state / receipts / subphase status,
+    and never changes the command's exit code.
+    """
+    try:
+        from scan_authoring_defects import run_advisory_scan
+
+        run_advisory_scan()
+    except Exception as exc:
+        print(f"[defect_scan, status: warning] {exc}")
 
 
 def _integrity_any_overridden(state: dict[str, Any]) -> bool:

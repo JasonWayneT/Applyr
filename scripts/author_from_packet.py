@@ -41,10 +41,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 _SCRIPT_DIR = Path(__file__).parent
@@ -53,6 +56,8 @@ _REPO_ROOT = _SCRIPT_DIR.parent
 sys.path.insert(0, str(_SCRIPT_DIR))
 import contracts  # noqa: E402
 import stage_gate  # noqa: E402
+from authoring_defect_categories import category_for_rule  # noqa: E402
+from authoring_examples import format_learned_examples  # noqa: E402
 from stage_gate import StageGateForceError  # noqa: E402
 
 _RULE_DIGEST_PATH = _REPO_ROOT / "data" / "authoring_rule_digest.md"
@@ -182,6 +187,19 @@ def _check_packet_ready(
             file=sys.stderr,
         )
 
+    current_bank = _example_bank_version()
+    packet_bank = packet.get("example_bank_version") or ""
+    if current_bank and packet_bank and packet_bank != current_bank:
+        # CR-097 Story 3.6: the bank is advisory few-shot content. A packet
+        # built one bank version ago is still correct — warn, never raise,
+        # and do not extend the digest's hard-fail to cover it.
+        print(
+            f"WARNING: example_bank_version mismatch (packet={packet_bank}, "
+            f"current={current_bank}). Authoring anyway; rebuild the packet "
+            "to pick up the latest examples.",
+            file=sys.stderr,
+        )
+
 
 def build_authoring_prompt(
     folder: Path,
@@ -202,7 +220,10 @@ def build_authoring_prompt(
     # Token estimates (chars / 4 approximation, consistent with packet builder)
     system_tokens = len(digest_text.encode("utf-8")) // 4
     packet_json = json.dumps(packet, indent=2, ensure_ascii=False)
+    examples_block = format_learned_examples(packet.get("learned_examples") or [])
     user_body = f"{_PREAMBLE}\n\n```json\n{packet_json}\n```"
+    if examples_block:
+        user_body = f"{user_body}\n\n{examples_block}"
     user_tokens = len(user_body.encode("utf-8")) // 4
     total_tokens = system_tokens + user_tokens
 
@@ -231,6 +252,7 @@ def build_authoring_prompt(
         "system_tokens": system_tokens,
         "user_tokens": user_tokens,
         "total_estimated_tokens": total_tokens,
+        "example_bank_version": packet.get("example_bank_version") or "",
     }
 
     return prompt_md, meta
@@ -299,7 +321,95 @@ def _run_subprocess_check(script: str, folder: Path) -> tuple[bool, str]:
     return True, f"PASS [{script}]" + (f": {stdout[:120]}" if stdout else "")
 
 
-def run_verify_only(folder: Path) -> bool:
+def _sha256_file(path: Path) -> str:
+    """Return sha256 hex of *path*'s bytes, or '' if the file is missing."""
+    if not path.exists():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _example_bank_version() -> str:
+    """Current authoring-example bank version, or '' until Epic 3 ships the module."""
+    try:
+        from authoring_examples import bank_version  # type: ignore
+    except ImportError:
+        return ""
+    try:
+        return bank_version() or ""
+    except Exception:
+        return ""
+
+
+def _violation_row(violation: object, doc: str) -> dict:
+    """Project a lint violation into the verify_history schema (CR-097 Story 1.2)."""
+    rule_id = str(getattr(violation, "rule_id", "") or "")
+    return {
+        "rule_id": rule_id,
+        "severity": str(getattr(violation, "severity", "") or ""),
+        "doc": doc,
+        "line": getattr(violation, "line", None),
+        "category": category_for_rule(rule_id),
+    }
+
+
+def _record_verify_attempt(
+    folder: Path,
+    *,
+    passed: bool,
+    violations: list[dict],
+) -> None:
+    """Append one verify_history.json entry and snapshot the first draft (CR-097 1.2/1.4)."""
+    dest_dir = folder / "stage1_first_draft"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    history_path = dest_dir / "verify_history.json"
+
+    resume = folder / "Resume.md"
+    letter = folder / "CoverLetter.md"
+    resume_sha = _sha256_file(resume)
+    cover_sha = _sha256_file(letter)
+
+    existing: list = []
+    if history_path.exists():
+        try:
+            loaded = json.loads(history_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                existing = loaded
+        except (OSError, json.JSONDecodeError):
+            existing = []
+
+    for entry in existing:
+        if (
+            entry.get("resume_sha256") == resume_sha
+            and entry.get("cover_sha256") == cover_sha
+        ):
+            return
+
+    snap_resume = dest_dir / "Resume.md"
+    snap_letter = dest_dir / "CoverLetter.md"
+    if resume.exists() and not snap_resume.exists():
+        shutil.copy2(resume, snap_resume)
+    if letter.exists() and not snap_letter.exists():
+        shutil.copy2(letter, snap_letter)
+
+    existing.append(
+        {
+            "attempt": len(existing) + 1,
+            "observed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "passed": passed,
+            "resume_sha256": resume_sha,
+            "cover_sha256": cover_sha,
+            "rule_digest_version": _load_current_digest_version(),
+            "example_bank_version": _example_bank_version(),
+            "violations": violations,
+        }
+    )
+    history_path.write_text(
+        json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
     """
     Post-author mechanical gate (Story 5.3).
 
@@ -310,7 +420,13 @@ def run_verify_only(folder: Path) -> bool:
       4. jd_term_extractor.py — ATTENTION is reported as WARN (judgment).
 
     Returns True if no hard failures, False otherwise.
-    Prints a PASS/FAIL summary and exits with 0 (pass) or 1 (fail).
+    Prints a PASS/FAIL summary.
+
+    When *record_to* is set (CR-097 Story 1.2), append a structured entry to
+    ``{record_to}/stage1_first_draft/verify_history.json``. Existing callers
+    keep today's signature and bool return. Append is idempotent on the
+    (resume_sha256, cover_sha256) pair. On the first recorded attempt only,
+    copy Resume.md and CoverLetter.md into that directory (write-once).
 
     Fix-loop protocol: if FAIL, re-edit Resume.md / CoverLetter.md using
     the authoring_prompt.md (packet + digest) only — no additional context files.
@@ -318,83 +434,94 @@ def run_verify_only(folder: Path) -> bool:
     """
     passed = True
     lines: list[str] = []
+    violations: list[dict] = []
 
-    # 1. File existence
-    resume = folder / "Resume.md"
-    letter = folder / "CoverLetter.md"
-    missing = [f for f in [resume, letter] if not f.exists()]
-    if missing:
-        for m in missing:
-            lines.append(f"FAIL: {m.name} not found in {folder}")
-        passed = False
-
-    if not passed:
-        print("\n".join(lines))
-        print("\nVERIFY RESULT: FAIL")
-        return False
-
-    # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
-    lines.append(_apply_resume_header_if_available(folder))
-
-    # 2. Lint Resume.md + CoverLetter.md only (never authoring_prompt.md —
-    # that file lists forbidden phrases as negative examples and would false-fail).
     try:
-        sys.path.insert(0, str(_SCRIPT_DIR))
-        from submission_linter import (  # type: ignore
-            check_cross_document_repetition,
-            lint_document,
-        )
+        # 1. File existence
+        resume = folder / "Resume.md"
+        letter = folder / "CoverLetter.md"
+        missing = [f for f in [resume, letter] if not f.exists()]
+        if missing:
+            for m in missing:
+                lines.append(f"FAIL: {m.name} not found in {folder}")
+            passed = False
 
-        texts: dict[str, str] = {}
-        for path, doc_type in ((resume, "resume"), (letter, "cover_letter")):
-            text = path.read_text(encoding="utf-8")
-            texts[doc_type] = text
-            result = lint_document(text, doc_type, filename=path.name)
-            if result.passed:
-                lines.append(f"PASS [lint/{path.name}]: {len(result.warns)} warn(s)")
+        if not passed:
+            print("\n".join(lines))
+            print("\nVERIFY RESULT: FAIL")
+            return False
+
+        # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
+        lines.append(_apply_resume_header_if_available(folder))
+
+        # 2. Lint Resume.md + CoverLetter.md only (never authoring_prompt.md —
+        # that file lists forbidden phrases as negative examples and would false-fail).
+        try:
+            sys.path.insert(0, str(_SCRIPT_DIR))
+            from submission_linter import (  # type: ignore
+                check_cross_document_repetition,
+                lint_document,
+            )
+
+            texts: dict[str, str] = {}
+            for path, doc_type in ((resume, "resume"), (letter, "cover_letter")):
+                text = path.read_text(encoding="utf-8")
+                texts[doc_type] = text
+                result = lint_document(text, doc_type, filename=path.name)
+                for item in (*result.blocks, *result.warns):
+                    violations.append(_violation_row(item, doc_type))
+                if result.passed:
+                    lines.append(f"PASS [lint/{path.name}]: {len(result.warns)} warn(s)")
+                else:
+                    passed = False
+                    lines.append(
+                        f"FAIL [lint/{path.name}]: {len(result.blocks)} hard block(s), "
+                        f"{len(result.warns)} warn(s)"
+                    )
+                    for b in result.blocks[:5]:
+                        lines.append(f"  [{b.rule_id}] {b.message}")
+
+            if "resume" in texts and "cover_letter" in texts:
+                pair_warns = check_cross_document_repetition(
+                    texts["resume"], texts["cover_letter"]
+                )
+                for item in pair_warns:
+                    violations.append(_violation_row(item, "resume+cover_letter"))
+                lines.append(
+                    f"PASS [lint/resume+cover_letter (pair)]: {len(pair_warns)} warn(s)"
+                )
+        except ImportError:
+            lines.append("SKIP [lint] — submission_linter not importable; run manually")
+        except Exception as exc:
+            lines.append(f"SKIP [lint] — unexpected error: {exc}")
+
+        # 3–4. Coverage / term scripts: ATTENTION exits 1 by design (judgment required),
+        # so treat ATTENTION as WARN and only fail on true script errors.
+        for script in ("check_ground_truth_coverage.py", "jd_term_extractor.py"):
+            ok, summary = _run_subprocess_check(script, folder)
+            if ok or summary.startswith("WARN"):
+                lines.append(summary)
             else:
                 passed = False
-                lines.append(
-                    f"FAIL [lint/{path.name}]: {len(result.blocks)} hard block(s), "
-                    f"{len(result.warns)} warn(s)"
-                )
-                for b in result.blocks[:5]:
-                    lines.append(f"  [{b.rule_id}] {b.message}")
+                lines.append(summary)
 
-        if "resume" in texts and "cover_letter" in texts:
-            pair_warns = check_cross_document_repetition(
-                texts["resume"], texts["cover_letter"]
-            )
-            lines.append(
-                f"PASS [lint/resume+cover_letter (pair)]: {len(pair_warns)} warn(s)"
-            )
-    except ImportError:
-        lines.append("SKIP [lint] — submission_linter not importable; run manually")
-    except Exception as exc:
-        lines.append(f"SKIP [lint] — unexpected error: {exc}")
-
-    # 3–4. Coverage / term scripts: ATTENTION exits 1 by design (judgment required),
-    # so treat ATTENTION as WARN and only fail on true script errors.
-    for script in ("check_ground_truth_coverage.py", "jd_term_extractor.py"):
-        ok, summary = _run_subprocess_check(script, folder)
-        if ok or summary.startswith("WARN"):
-            lines.append(summary)
-        else:
+        # 5. Round 4 optimization bar — soft_gap + required evidence_map claim_ids
+        # must appear in claim_provenance.json (fail-closed; coverage ATTENTION stays WARN).
+        opt_ok, opt_lines = _check_optimization_bar_provenance(folder)
+        lines.extend(opt_lines)
+        if not opt_ok:
             passed = False
-            lines.append(summary)
 
-    # 5. Round 4 optimization bar — soft_gap + required evidence_map claim_ids
-    # must appear in claim_provenance.json (fail-closed; coverage ATTENTION stays WARN).
-    opt_ok, opt_lines = _check_optimization_bar_provenance(folder)
-    lines.extend(opt_lines)
-    if not opt_ok:
-        passed = False
-
-    # Summary
-    print("\n".join(lines))
-    verdict = "PASS" if passed else "FAIL"
-    print(f"\nVERIFY RESULT: {verdict} — {folder.name}")
-    return passed
+        # Summary
+        print("\n".join(lines))
+        verdict = "PASS" if passed else "FAIL"
+        print(f"\nVERIFY RESULT: {verdict} — {folder.name}")
+        return passed
+    finally:
+        if record_to is not None:
+            _record_verify_attempt(
+                record_to, passed=passed, violations=violations
+            )
 
 
 def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:

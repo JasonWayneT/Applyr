@@ -357,8 +357,13 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
         # Stage 1 gate too -- see test_stage1_complete_chains_and_unlocks_
         # stage2's equivalent fixture, above, for the full reasoning.
         _write(self.folder, "claim_provenance.json", {"claims": []})
-        with mock.patch("workflow.runner.run_verify_only", return_value=True):
+        with mock.patch("workflow.runner.run_verify_only", return_value=True) as mocked:
             state = run_stage1_validate(str(self.folder), load_state(str(self.folder)))
+        mocked.assert_called_once()
+        self.assertEqual(
+            mocked.call_args.kwargs.get("record_to"),
+            Path(self.folder),
+        )
         self.assertEqual(state["stages"]["stage1"]["status"], "COMPLETE")
         self.assertEqual(state["stages"]["stage2"]["status"], "READY")
 
@@ -983,13 +988,30 @@ class Stage2PolicyTests(unittest.TestCase):
         with mock.patch(
             "workflow.runner.contracts.check_stage2_ready", return_value=(True, [])
         ):
-            state = run_stage2_policy(str(self.folder), load_state(str(self.folder)))
+            with mock.patch("workflow.runner._run_advisory_defect_scan") as scan:
+                state = run_stage2_policy(str(self.folder), load_state(str(self.folder)))
+        scan.assert_called_once()
         self.assertEqual(state["stages"]["stage2"]["status"], "COMPLETE")
         self.assertEqual(state["stages"]["stage3"]["status"], "READY")
         self.assertTrue((self.folder / "stage_receipts" / "stage2.json").exists())
         r2 = load_receipt(str(self.folder), "stage2")
         self.assertEqual(r2["status"], "COMPLETE")
         self.assertEqual(r2["issued_by"], ISSUED_BY)
+
+    def test_advisory_defect_scan_warning_does_not_raise(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        from workflow.runner import _run_advisory_defect_scan
+
+        buf = StringIO()
+        with mock.patch(
+            "scan_authoring_defects.run_advisory_scan",
+            side_effect=RuntimeError("boom"),
+        ):
+            with redirect_stdout(buf):
+                _run_advisory_defect_scan()
+        self.assertIn("[defect_scan, status: warning] boom", buf.getvalue())
 
 
 class Stage3FinalizeTests(unittest.TestCase):

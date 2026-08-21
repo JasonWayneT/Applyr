@@ -356,6 +356,9 @@ scripts/
     build_authoring_packet.py         — builds the lean authoring_packet.json (JD evidence map + workExperience excerpts + claim_constraints)
     generate_authoring_rule_digest.py — builds authoring_rule_digest.md (~1.6k-token rule digest)
     author_from_packet.py             — prompt emit + Stage 1 exit gate (--verify-only); debug CLI warns to prefer run_submission
+    authoring_defect_categories.py    — CR-097 rule_id → category map
+    authoring_examples.py             — CR-097 retrieval-scoped example selection for Stage 1 packets
+    scan_authoring_defects.py         — CR-097 cross-submission ledger, 2-occurrence reviews, --status/--promote/--report
 
   Full-pack path (optional, non-default — see CLAUDE.md):
     generate_context_pack.py / check_context_pack_freshness.py — agent_context_pack.md generation + freshness check

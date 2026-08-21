@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "description": "CR-097 Stage 1 retrieval bank. Contextual before/after examples for rules that already exist but are not reliably applied. Append-only: never edit a shipped entry in place; supersede it (status=superseded) and add a new one. An entry needs 2+ distinct source_slugs, a real before/after from real drafted text, a why naming which digest rule already covered it, and a confirmed_by. Flipping few_shot_eligible to true is a human edit — nothing in the codebase may do it.",
+  "categories": [
+    "gap_confession",
+    "forbidden_punctuation",
+    "wrong_job_bleed"
+  ],
+  "entries": [
+    {
+      "id": "gap-confession-2026-07-21",
+      "category": "gap_confession",
+      "rule_ids": ["LR-016"],
+      "added_date": "2026-08-21",
+      "source_slugs": ["freedompay", "relativity"],
+      "confirmed_by": "CR-097 Story 4.2 seed from LR-016's 2026-07-21 recurrence (5 of 11 letters)",
+      "status": "active",
+      "few_shot_eligible": true,
+      "applies_when": {
+        "mode": "packet_condition",
+        "condition": "soft_gaps_present"
+      },
+      "match_text": "is new territory for me I have not yet applied that thinking are new to me",
+      "before": "Healthcare is new territory for me, but the work of turning messy operational data into a sequenced product plan is what I already do.",
+      "after": "The work of turning messy operational data into a sequenced product plan is what I already do, and it is the same shape of problem this role is hiring for.",
+      "why": "Digest rule 5 / LR-016 already forbids naming the gap. Cut the confession clause and keep only the transferable-skill claim."
+    },
+    {
+      "id": "forbidden-punctuation-lr015-2026-07-21",
+      "category": "forbidden_punctuation",
+      "rule_ids": ["LR-015"],
+      "added_date": "2026-08-21",
+      "source_slugs": ["stripe", "humana"],
+      "confirmed_by": "CR-097 Story 4.3 seed from LR-015's 2026-07-21 Stripe/Humana reviews",
+      "status": "active",
+      "few_shot_eligible": true,
+      "applies_when": {
+        "mode": "always"
+      },
+      "match_text": "compelling: building context: how unplanned work: I built",
+      "before": "The compelling part: building the export path the upgrades team could actually run.",
+      "after": "The compelling part was building the export path the upgrades team could actually run.",
+      "why": "Digest rule 7 / LR-015 already forbids colon-as-elaboration. The model reaches for this shape while trying to obey the em-dash rule. Restructure into a sentence instead of substituting a colon."
+    }
+  ]
+}

@@ -154,7 +154,16 @@
       "description": "Builder-estimated tokens (chars/4 or tokenizer); must be ≤ budget when ready."
     },
     "stage_signal": { "type": ["string", "null"] },
-    "thin_jd": { "type": "boolean" }
+    "thin_jd": { "type": "boolean" },
+    "learned_examples": {
+      "type": "array",
+      "description": "CR-097: retrieval-scoped corrected-draft examples. Dropped before excerpts when over budget.",
+      "items": { "type": "object" }
+    },
+    "example_bank_version": {
+      "type": "string",
+      "description": "sha256[:16] of data/authoring_example_bank.json at packet-build time. Stale-bank is WARN, not hard fail."
+    }
   },
   "allOf": [
     {

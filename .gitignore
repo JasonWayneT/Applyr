@@ -106,6 +106,9 @@ data/*.json
 # tracked so a recalibration is a real, reviewable git event, same as any other
 # source-of-truth code change. See the file's own _description field.
 !data/fit_rubric_calibration.json
+# CR-097: curated Stage 1 example bank (empty until Epic 4 seeds it). Not
+# candidate PII — tracked so a promotion is a reviewable git event.
+!data/authoring_example_bank.json
 
 data/*.txt
 data/*.log

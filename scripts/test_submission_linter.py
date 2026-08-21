@@ -10,6 +10,8 @@ from submission_linter import (
     check_b2b_saas_positioning,
     check_cross_employer_audience_bleed,
     check_jd_specificity_floor,
+    check_wrong_job_company_bleed,
+    known_company_names,
 )
 
 # ---------------------------------------------------------------------------
@@ -552,6 +554,46 @@ def test_LW026_specificity_floor_still_finds_real_hits():
     )
     violations = check_jd_specificity_floor(cover_letter, jd, company_name="Nirvana")
     assert violations == []
+
+
+def test_LW032_flags_other_known_company():
+    hits = check_wrong_job_company_bleed(
+        resume="Worked at Cision on the platform.",
+        cover_letter="This is the same problem I solved for Lightcast last month.",
+        jd_text="Product Manager at Gravitee",
+        own_company="Gravitee",
+        known_names={"Lightcast", "Gravitee", "Cision"},
+    )
+    assert any(v.rule_id == "LW-032" and "Lightcast" in v.message for v in hits)
+    assert not any("Gravitee" in v.message for v in hits)
+    assert not any("Cision" in v.message for v in hits)
+
+
+def test_LW032_own_company_does_not_warn():
+    hits = check_wrong_job_company_bleed(
+        resume="",
+        cover_letter="I want to join Lightcast because the platform work matches.",
+        jd_text="Product Manager",
+        own_company="Lightcast",
+        known_names={"Lightcast", "Gravitee"},
+    )
+    assert hits == []
+
+
+def test_LW032_jd_mention_does_not_warn():
+    hits = check_wrong_job_company_bleed(
+        resume="",
+        cover_letter="Partnering the way Lightcast is named in this posting.",
+        jd_text="We compete with Lightcast in this market.",
+        own_company="Gravitee",
+        known_names={"Lightcast", "Gravitee"},
+    )
+    assert hits == []
+
+
+def test_LW032_missing_db_does_not_raise():
+    names = known_company_names(db_path="/nonexistent/jobagent.sqlite", submissions_root="/nonexistent")
+    assert names == set()
 
 
 if __name__ == "__main__":

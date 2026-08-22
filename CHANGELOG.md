@@ -10,6 +10,7 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Changed
+- **CR-093 fit-rubric spec is now tracked (`data/fit_rubric_spec.html`, 2026-08-21).** Local leftover `data/*.docx` and `scripts/_bakeoff*.py` are gitignored.
 - **`closed-lost` and design-team claims are now WARNs (`LW-036`/`LW-037`, 2026-08-21).** Salesforce Closed Lost is Cision CRM jargon: say lost subscriptions / lost subscription opportunities. Design is not a verified partner. "I designed a formula" still passes.
 - **CR-098: no-ai-slop is harness-agnostic (2026-08-21).** First draft is constrained by `author_from_packet.py`'s COVER LETTER VOICE preamble plus two `cover_voice_kicker` bank examples. Check is `LW-033`/`LW-034`/`LW-035` in `submission_linter.py`. Judgment-only Detect lives at `.agents/skills/submission-no-ai-slop/SKILL.md` (Cursor and Antigravity); Claude Code keeps a pointer. Digest budget unchanged.
 - **Cover-letter slop: `lives or dies on` is now a WARN (`LW-033`, 2026-08-21).**

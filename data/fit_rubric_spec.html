@@ -1,0 +1,544 @@
+<title>Fit Rubric Specification</title>
+<style>
+  :root{
+    --paper:#EFEEE8; --paper-raised:#F7F6F1; --ink:#211F1A; --ink-soft:#5B584E;
+    --ink-faint:#8B8778; --rule:#D8D4C7; --rule-strong:#C2BDAC;
+    --accent:#1F6F64; --accent-soft:#DCE9E5; --accent-ink:#12433C;
+    --good:#1F6F64; --good-bg:#DCE9E5;
+    --warn:#8A5A16; --warn-bg:#EEE1C9;
+    --bad:#9A3B2C; --bad-bg:#EFDAD3;
+    --code-bg:#E7E4D8;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#171813; --paper-raised:#1E2019; --ink:#E9E6DA; --ink-soft:#B3AF9F;
+      --ink-faint:#79765F; --rule:#33362B; --rule-strong:#484B3B;
+      --accent:#5FBBA9; --accent-soft:#1E332E; --accent-ink:#9BDCCC;
+      --good:#5FBBA9; --good-bg:#1E332E;
+      --warn:#D8A85B; --warn-bg:#3A2E15;
+      --bad:#E08A76; --bad-bg:#3A2019;
+      --code-bg:#22241B;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#171813; --paper-raised:#1E2019; --ink:#E9E6DA; --ink-soft:#B3AF9F;
+    --ink-faint:#79765F; --rule:#33362B; --rule-strong:#484B3B;
+    --accent:#5FBBA9; --accent-soft:#1E332E; --accent-ink:#9BDCCC;
+    --good:#5FBBA9; --good-bg:#1E332E;
+    --warn:#D8A85B; --warn-bg:#3A2E15;
+    --bad:#E08A76; --bad-bg:#3A2019;
+    --code-bg:#22241B;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Source Serif 4","Iowan Old Style",Georgia,serif;
+    font-size:17px; line-height:1.62;
+  }
+  .label, nav, .eyebrow, th, .meta, .tag{
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+  }
+  code, .num, .formula, td.num, th.num{
+    font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  h1,h2,h3,h4{ text-wrap:balance; font-weight:600; }
+
+  .shell{ display:grid; grid-template-columns: 260px minmax(0,860px); gap:56px;
+    max-width:1200px; margin:0 auto; padding:64px 32px 120px; }
+  @media (max-width: 980px){ .shell{ grid-template-columns: 1fr; } .toc{ position:static !important; } }
+
+  /* Cover */
+  .cover{ grid-column:1 / -1; margin-bottom:8px; padding-bottom:40px; border-bottom:1px solid var(--rule-strong); }
+  .eyebrow{ font-size:12.5px; letter-spacing:.11em; text-transform:uppercase; color:var(--accent-ink);
+    background:var(--accent-soft); display:inline-block; padding:4px 10px; border-radius:3px; margin-bottom:22px; }
+  .cover h1{ font-size:44px; line-height:1.08; margin:0 0 14px; max-width:14ch; }
+  .cover .sub{ font-size:19px; color:var(--ink-soft); max-width:56ch; margin:0 0 28px; font-weight:400; }
+  .meta{ display:flex; flex-wrap:wrap; gap:28px; font-size:13px; color:var(--ink-faint); }
+  .meta strong{ color:var(--ink-soft); font-weight:600; display:block; font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px;}
+
+  /* TOC */
+  .toc{ position:sticky; top:40px; align-self:start; font-size:13.5px; }
+  .toc-head{ font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:14px; }
+  .toc ol{ list-style:none; margin:0; padding:0; counter-reset:toc; }
+  .toc li{ counter-increment:toc; margin-bottom:2px; }
+  .toc a{ display:block; padding:5px 0 5px 26px; position:relative; color:var(--ink-soft); text-decoration:none; border-radius:3px; }
+  .toc a::before{ content:counter(toc); position:absolute; left:0; top:5px; width:18px; color:var(--ink-faint);
+    font-family:"IBM Plex Mono",monospace; font-size:11.5px; }
+  .toc a:hover{ color:var(--ink); background:var(--paper-raised); }
+
+  main{ min-width:0; }
+  section{ margin-bottom:64px; scroll-margin-top:32px; }
+  section > .kicker{ font-size:12px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:6px; }
+  h2{ font-size:27px; margin:0 0 20px; padding-bottom:14px; border-bottom:1px solid var(--rule); }
+  h3{ font-size:19px; margin:34px 0 12px; color:var(--ink); }
+  h4{ font-size:15.5px; margin:22px 0 8px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; font-family:"IBM Plex Sans",sans-serif; font-weight:600;}
+  p{ margin:0 0 15px; max-width:70ch; }
+  ul,ol{ margin:0 0 15px; padding-left:22px; }
+  li{ margin-bottom:6px; max-width:66ch; }
+  strong{ color:var(--ink); font-weight:650; }
+  a{ color:var(--accent-ink); }
+  .note{ background:var(--paper-raised); border-left:3px solid var(--rule-strong); padding:12px 18px; margin:16px 0 22px;
+    font-size:15px; color:var(--ink-soft); border-radius:0 4px 4px 0; }
+  .note strong{ color:var(--ink); }
+
+  /* tables */
+  .table-wrap{ overflow-x:auto; margin:18px 0 26px; border:1px solid var(--rule); border-radius:6px; }
+  table{ border-collapse:collapse; width:100%; font-size:14px; min-width:560px; }
+  th{ text-align:left; font-weight:600; font-size:11.5px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--ink-faint); background:var(--paper-raised); padding:10px 14px; border-bottom:1px solid var(--rule-strong); white-space:nowrap; }
+  td{ padding:11px 14px; border-bottom:1px solid var(--rule); vertical-align:top; color:var(--ink-soft); }
+  tr:last-child td{ border-bottom:none; }
+  td strong{ color:var(--ink); }
+  .table-wrap.compact td, .table-wrap.compact th{ padding:8px 12px; }
+
+  .pill{ display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:600;
+    font-family:"IBM Plex Sans",sans-serif; letter-spacing:.02em; white-space:nowrap;}
+  .pill.good{ background:var(--good-bg); color:var(--good); }
+  .pill.warn{ background:var(--warn-bg); color:var(--warn); }
+  .pill.bad{ background:var(--bad-bg); color:var(--bad); }
+  .pill.tierA{ background:var(--accent-soft); color:var(--accent-ink); }
+
+  .formula-block{ background:var(--code-bg); border:1px solid var(--rule-strong); border-radius:6px; padding:22px 24px;
+    margin:18px 0 24px; overflow-x:auto; }
+  .formula-block .formula{ font-size:14.5px; line-height:2; color:var(--ink); white-space:pre; }
+  .formula-block .formula .k{ color:var(--accent-ink); font-weight:600; }
+
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:18px 0 26px; }
+  @media (max-width:700px){ .grid2{ grid-template-columns:1fr; } }
+  .card{ border:1px solid var(--rule); border-radius:6px; padding:16px 18px; background:var(--paper-raised); }
+  .card h4{ margin-top:0; }
+
+  .case{ border:1px solid var(--rule); border-radius:8px; padding:18px 22px; margin-bottom:16px; background:var(--paper-raised); }
+  .case-head{ display:flex; align-items:baseline; gap:12px; margin-bottom:8px; flex-wrap:wrap; }
+  .case-head .letter{ font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:15px; color:var(--accent-ink);
+    background:var(--accent-soft); width:26px; height:26px; border-radius:5px; display:flex; align-items:center; justify-content:center; }
+  .case-head h4{ margin:0; text-transform:none; letter-spacing:0; font-size:16px; color:var(--ink); }
+  .case p{ margin-bottom:8px; font-size:15px; }
+  .case .verdict{ font-size:13.5px; color:var(--ink-faint); border-top:1px dashed var(--rule-strong); padding-top:8px; margin-top:10px; }
+
+  .divider{ border:none; border-top:1px solid var(--rule); margin:40px 0; }
+  .cite{ font-size:13px; color:var(--ink-faint); }
+  footer.doc-end{ margin-top:80px; padding-top:24px; border-top:1px solid var(--rule-strong); color:var(--ink-faint); font-size:13px; }
+
+  .keep{ color:var(--good); } .mod{ color:var(--warn); } .rep{ color:var(--bad); }
+</style>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<div class="shell">
+
+  <div class="cover">
+    <span class="eyebrow">Rubric Design Specification &middot; v1</span>
+    <h1>Measuring Job&ndash;Experience Fit</h1>
+    <p class="sub">An evidence-based scoring methodology for evaluating how strongly a candidate's documented work history satisfies a specific employer's stated requirements &mdash; built from personnel-selection research, not intuition, and pressure-tested against ten adversarial cases before being proposed as Applyr's Stage&nbsp;0 scoring engine.</p>
+    <div class="meta">
+      <div><strong>Prepared for</strong>Applyr &middot; Stage 0 fit-scoring redesign</div>
+      <div><strong>Role assumed</strong>I-O psychology researcher &amp; selection methodologist</div>
+      <div><strong>Status</strong>Proposed &mdash; pending calibration &amp; sign-off</div>
+      <div><strong>Scope</strong>Qualification &amp; substantive fit only, not hire-probability</div>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-head">Contents</div>
+    <ol>
+      <li><a href="#s1">Executive recommendation</a></li>
+      <li><a href="#s2">What "fit" means</a></li>
+      <li><a href="#s3">Research foundation</a></li>
+      <li><a href="#s4">Source quality</a></li>
+      <li><a href="#s5">JD requirement taxonomy</a></li>
+      <li><a href="#s6">Importance model</a></li>
+      <li><a href="#s7">Evidence scale</a></li>
+      <li><a href="#s8">Transferability rules</a></li>
+      <li><a href="#s9">Hard-gate rules</a></li>
+      <li><a href="#s10">Weighting model</a></li>
+      <li><a href="#s11">The formula</a></li>
+      <li><a href="#s12">Confidence model</a></li>
+      <li><a href="#s13">Double-counting rules</a></li>
+      <li><a href="#s14">Score bands</a></li>
+      <li><a href="#s15">Decision table</a></li>
+      <li><a href="#s16">Worked examples</a></li>
+      <li><a href="#s17">Pressure test A&ndash;J</a></li>
+      <li><a href="#s18">Failure modes</a></li>
+      <li><a href="#s19">Keep / modify / replace</a></li>
+      <li><a href="#s20">Rubric v1, consolidated</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="s1">
+      <div class="kicker">01</div>
+      <h2>Executive recommendation</h2>
+      <p>Applyr's current Stage&nbsp;0 has two scoring mechanisms that don't talk to each other: a deterministic gap classifier (does a JD line have a matching tag?) that decides Tier&nbsp;1/Tier&nbsp;2/Skip, and a separate five-criterion weighted score that decides a 0&ndash;100 number nobody downstream was reading until this week. Both were built by intuition and iteration against real misses, which is a defensible way to patch bugs and a bad way to build a measurement instrument.</p>
+      <p>The recommendation: <strong>replace the tag-matching gap classifier with a single behaviorally-anchored evidence scale, apply it per-requirement with importance weights derived from each JD's own emphasis signals (not a fixed global split), and let that one computation drive both the gate decisions and the published score.</strong> Hard, factual disqualifiers (a missing license, a named regulated-domain requirement with zero evidence, a role-category exclusion) stay outside the weighted sum entirely &mdash; they gate before scoring runs, the way <a href="https://www.eskill.com/resources/blog/how-to-use-structured-interviews" target="_blank" rel="noopener">must-have requirements function as gates in structured hiring practice</a>. Everything else &mdash; including named tools and years-of-experience thresholds, both weaker signals than commonly assumed &mdash; contributes to the weighted score instead of vetoing it outright.</p>
+      <p>The floor itself (currently 70) is very likely miscalibrated. Real applicant-outcome data puts the plateau for interview callbacks around 50&ndash;60% requirement match, not 70&ndash;90%. Section&nbsp;14 proposes revised bands and is explicit about which numbers are research-grounded and which are design inference awaiting real calibration data.</p>
+    </section>
+
+    <section id="s2">
+      <div class="kicker">02</div>
+      <h2>What "fit" means here</h2>
+      <p><strong>Definition.</strong> Fit is the degree to which Jason's <em>documented</em> work history &mdash; workExperience.md and the claims built from it &mdash; provides direct or genuinely transferable evidence of the knowledge, skills, abilities, and experience a specific employer has stated it needs for a specific role. It is a measurement of demonstrated capability against stated requirements. It is not a prediction, a popularity score, or a writing-quality score.</p>
+      <div class="grid2">
+        <div class="card">
+          <h4>In scope</h4>
+          <ul>
+            <li>Demonstrated ability to perform the core work (behavioral evidence, not title or tenure)</li>
+            <li>Required skills, knowledge, and named tools</li>
+            <li>Scope, complexity, and ownership relative to what the role implies is needed</li>
+            <li>Named domain/industry knowledge, bounded (Section&nbsp;9)</li>
+            <li>Recency, only as a confidence modifier on old evidence, not a separate scored dimension</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Explicitly out of scope</h4>
+          <ul>
+            <li>Resume/cover-letter writing quality &mdash; that's <code>conversion_rubric.md</code>'s job (R1&ndash;R8/C1&ndash;C5), a document-quality instrument, not a fit instrument. Keep them separate; don't let this rubric grade prose.</li>
+            <li>Likelihood of being hired, or of clearing an ATS keyword filter</li>
+            <li>Seniority/title labels, except as one input into scope evidence</li>
+            <li>Anything not written in the JD or documented in the candidate's ground truth</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note"><strong>Eligibility, qualification, and competitive fit are three different questions</strong> and this rubric answers only the second and third. Eligibility (can Jason legally/logistically take the job) is handled upstream by the prefs/exclusion-zone gate and stays there. This document does not touch it.</p>
+    </section>
+
+    <section id="s3">
+      <div class="kicker">03</div>
+      <h2>Research foundation &mdash; evidence ledger</h2>
+      <p>Every principle below is labeled by evidence type, not asserted as settled fact by default. Research-supported claims cite the actual finding; design inferences are marked as such and still need empirical calibration once Applyr has real outcome data (callbacks, interviews) to check against.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Principle</th><th>Implication for the rubric</th><th>Source</th><th>Type</th><th>Strength</th></tr>
+          <tr><td>Structured, criteria-based evaluation substantially outpredicts unstructured/holistic judgment</td><td>Replace the current single 0&ndash;100 "vibe" LLM judgment per criterion with itemized, anchored scoring</td><td><a href="https://www.siop.org/tip-article/is-cognitive-ability-the-best-predictor-of-job-performance-new-research-says-its-time-to-think-again/" target="_blank" rel="noopener">Sackett et al. 2022/2023 meta-analysis</a>; Schmidt &amp; Hunter 1998 (validity .51 vs .38)</td><td>Peer-reviewed meta-analysis</td><td><span class="pill good">Strong</span></td></tr>
+          <tr><td>Content validity requires the instrument to sample the job's actual important KSAOs, established via job analysis</td><td>Requirement taxonomy (Sec.&nbsp;5) must be derived from what the JD says the work is, not a generic checklist</td><td><a href="https://www.apa.org/ed/accreditation/personnel-selection-procedures.pdf" target="_blank" rel="noopener">SIOP Principles for Validation, 5th ed. (2018)</a></td><td>Primary/authoritative</td><td><span class="pill good">Strong</span></td></tr>
+          <tr><td>A selection procedure must be job-related; minimum qualifications need a defensible link to job content</td><td>Hard gates require a stated, specific reason tied to the JD's own language, never a blanket "required = gate"</td><td><a href="https://www.govinfo.gov/content/pkg/CFR-2017-title29-vol4/xml/CFR-2017-title29-vol4-part1607.xml" target="_blank" rel="noopener">EEOC Uniform Guidelines, 29 CFR &sect;1607</a></td><td>Primary/authoritative (federal regulation)</td><td><span class="pill good">Strong</span></td></tr>
+          <tr><td>Jobs are best decomposed into Knowledge / Skill / Ability / Other-characteristic units tied to actual tasks</td><td>Taxonomy (Sec.&nbsp;5) uses KSAO categories, not ad hoc buckets</td><td>DOL O*NET job-analysis methodology</td><td>Primary/authoritative</td><td><span class="pill good">Strong</span></td></tr>
+          <tr><td>Behaviorally anchored scales (BARS) produce materially higher inter-rater agreement than "weak/medium/strong" style scales</td><td>Evidence scale (Sec.&nbsp;7) must define each level by an observable condition, not a felt intensity</td><td>BARS literature; critical-incident/retranslation methodology</td><td>Peer-reviewed / applied methodology</td><td><span class="pill good">Strong</span></td></tr>
+          <tr><td>The Accomplishment Record / Behavioral Consistency method (rate documented past accomplishments against job dimensions) shows real content and criterion validity, and outranks generic Training &amp; Experience checklists</td><td>This is structurally the closest validated method to what Applyr already does (claims &harr; JD items) &mdash; formalize it, don't replace it with something novel</td><td>Hough (1984), <em>J. Applied Psychology</em>; OPM Accomplishment Records guidance</td><td>Peer-reviewed + federal practitioner guidance</td><td><span class="pill good">Strong</span></td></tr>
+          <tr><td>Candidates matching ~40&ndash;50% of listed requirements get callback rates on par with candidates matching 90%+; returns plateau near 50&ndash;60%</td><td>Current 70-point floor is almost certainly too strict; bands should sit lower</td><td><a href="https://www.cnbc.com/2018/12/12/matching-half-of-a-jobs-requirements-might-still-get-you-an-interview.html" target="_blank" rel="noopener">TalentWorks analysis of 6,000+ applications, 118 industries (via CNBC)</a></td><td>Large-sample applied analysis (not peer-reviewed academic)</td><td><span class="pill warn">Moderate</span> &mdash; real outcome data, not a controlled study; measures a different construct (raw % of items) than this rubric's weighted score</td></tr>
+          <tr><td>Years-of-experience is one of the weakest validated predictors of job performance; one review of 81 studies found no correlation with performance or retention</td><td>Years must not function as a standalone hard gate; treat as a weak proxy/confidence signal only</td><td>Sackett et al. ranking; <a href="https://phys.org/news/2019-05-poor-predictor-future-job.html" target="_blank" rel="noopener">meta-analysis covered by phys.org, 2019</a></td><td>Peer-reviewed meta-analysis</td><td><span class="pill good">Strong</span></td></tr>
+          <tr><td>Lawshe's Content Validity Ratio: item importance should be established by rating agreement among evaluators, not asserted by one author</td><td>Applyr has one evaluator (the model), so true CVR isn't available &mdash; the closest analog is deriving importance from the JD's own internal signals (label, repetition, prominence) instead of a human panel</td><td>Lawshe (1975), <em>Personnel Psychology</em></td><td>Peer-reviewed, foundational</td><td><span class="pill warn">Adapted</span> &mdash; method doesn't transfer directly to a single-evaluator system</td></tr>
+          <tr><td>Fixed global category weights (e.g. "skills 40%, culture 20%") are not supported as a general practice; weighting should reflect each role's actual emphasis</td><td>Replace the current fixed five-criterion percentage split with per-JD dynamic weighting (Sec.&nbsp;10)</td><td>O*NET dual importance+frequency rating tradition; SIOP job-analysis guidance</td><td>Primary/authoritative + design inference on the mechanism</td><td><span class="pill warn">Design inference, research-motivated</span></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="s4">
+      <div class="kicker">04</div>
+      <h2>Source quality assessment</h2>
+      <div class="grid2">
+        <div class="card">
+          <h4>Primary / authoritative</h4>
+          <ul>
+            <li>SIOP <em>Principles for the Validation and Use of Personnel Selection Procedures</em> (2018, APA-approved)</li>
+            <li>EEOC Uniform Guidelines on Employee Selection Procedures, 29 CFR &sect;1607</li>
+            <li>DOL O*NET job-analysis/KSAO framework</li>
+            <li>OPM Accomplishment Record &amp; Training &amp; Experience guidance</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Peer-reviewed academic</h4>
+          <ul>
+            <li>Schmidt &amp; Hunter (1998), 85-year meta-analysis of selection-method validity</li>
+            <li>Sackett, Zhang et al. (2022/2023), revised validity meta-analysis</li>
+            <li>Hough (1984), <em>Journal of Applied Psychology</em>, Accomplishment Record method</li>
+            <li>Lawshe (1975), <em>Personnel Psychology</em>, Content Validity Ratio</li>
+            <li>81-study meta-analysis on experience &harr; performance/retention (phys.org, 2019 coverage of the underlying study)</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>High-quality professional / practitioner</h4>
+          <ul>
+            <li>Google re:Work structured-interviewing guide (internal research, published methodology)</li>
+            <li>SHRM assessment-methods research</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h4>Used cautiously, not as foundation</h4>
+          <ul>
+            <li>TalentWorks/CNBC applicant-outcome analysis &mdash; real data, large sample, but not peer-reviewed and measures literal requirement-count, not weighted evidence. Used only to sanity-check where bands should sit, never to set a specific number.</li>
+            <li>ATS-vendor blogs on keyword weighting &mdash; used only to describe how ATS systems behave in practice (a real constraint Jason is navigating), never as evidence for what a valid fit measure should do.</li>
+          </ul>
+        </div>
+      </div>
+      <p class="note">No SEO career-advice content, unsourced percentages, or vendor marketing claims were used as justification for any weight, threshold, or scale level in this document.</p>
+    </section>
+
+    <section id="s5">
+      <div class="kicker">05</div>
+      <h2>JD requirement taxonomy</h2>
+      <p>Applyr's current four buckets (required / preferred / responsibilities / culture) are a reasonable first split but too coarse to score against &mdash; "required" mixes a missing professional license with a nice-to-have tool. Decompose every extracted line into one of these types, derived from O*NET's KSAO framework and adapted to what actually recurs in real product-management JDs (empirically, from the 402-JD archive corpus reviewed this session):</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Type</th><th>What it captures</th><th>Scored how</th></tr>
+          <tr><td><strong>Core Duty</strong></td><td>What the role actually does day to day (O*NET "tasks")</td><td>Weighted, evidence-scored &mdash; the largest share of the Core Work Match sub-score</td></tr>
+          <tr><td><strong>Credential/Legal</strong></td><td>Degree, license, clearance, work authorization &mdash; binary facts</td><td>Hard gate only, never weighted (Sec.&nbsp;9)</td></tr>
+          <tr><td><strong>Named Domain</strong></td><td>A specific regulated or specialized industry, paired with its own explicit tenure framing ("5+ years in payroll tax")</td><td>Hard gate <em>if</em> unbridged and un-hedged (Sec.&nbsp;9); otherwise weighted like a Core Duty</td></tr>
+          <tr><td><strong>Named Tool/Skill</strong></td><td>A specific software product, technique, or methodology</td><td>Weighted, never a standalone gate (Sec.&nbsp;9 &mdash; today's Bamboo Health fix)</td></tr>
+          <tr><td><strong>General Knowledge</strong></td><td>Conceptual understanding without a named tool ("understands SQL," "familiar with Agile")</td><td>Weighted, lower ceiling on evidence strength than a Core Duty</td></tr>
+          <tr><td><strong>Scope/Ownership Signal</strong></td><td>Team size, budget, user count, org level implied by the role</td><td>Feeds the Scope/Complexity sub-score, not scored as an independent requirement</td></tr>
+          <tr><td><strong>Preferred/Bonus</strong></td><td>Anything in a Preferred section or explicitly hedged ("a plus," "ideally")</td><td>Weighted at a fixed low base weight (Sec.&nbsp;10); never gates</td></tr>
+          <tr><td><strong>Culture/Values</strong></td><td>Company mission, "why work here," team-culture framing</td><td>Not scored against candidate evidence at all &mdash; there is no valid way to have "evidence" of fitting a value statement</td></tr>
+        </table>
+      </div>
+      <h3>Importance signal, separated from wording</h3>
+      <p>Per Phase 4's own instruction, wording alone (must/required/minimum vs. preferred/ideally/bonus) is a real signal but not sufficient. Combine it with: <strong>bucket placement</strong> (required section vs. preferred section), <strong>repetition</strong> (the same underlying competency named in both Responsibilities and Required &mdash; see Sec.&nbsp;13 on deduplication before this counts), and <strong>prominence</strong> (first few bullets of a section, weakly, since JDs are not reliably ordered by importance &mdash; this is the lowest-confidence signal of the three and should never act alone).</p>
+    </section>
+
+    <section id="s6">
+      <div class="kicker">06</div>
+      <h2>Requirement importance model</h2>
+      <p>Lawshe's Content Validity Ratio is the right instinct &mdash; item importance should be established by evidence of agreement, not asserted &mdash; but it requires a panel of independent expert raters, which a single automated evaluator doesn't have. The adapted version: <strong>derive importance from the JD's own internal signals</strong> rather than from panel agreement, and treat the derivation as a bounded proxy for criticality, not a claim of true CVR validity.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Signal</th><th>What it indicates</th><th>Weight it contributes</th></tr>
+          <tr><td>Required-bucket placement</td><td>Employer marked this as necessary, not optional</td><td>Base weight tier (Sec.&nbsp;10)</td></tr>
+          <tr><td>Cross-section repetition (after dedup)</td><td>The employer keeps returning to this competency &mdash; centrality signal</td><td>+1 weight step, capped once</td></tr>
+          <tr><td>Explicit hedge language present ("ideally," "a plus," "nice to have")</td><td>Employer is signaling flexibility even inside a nominally required line</td><td>Downgrades one weight step and blocks hard-gate eligibility (Sec.&nbsp;9)</td></tr>
+          <tr><td>Section prominence (early vs. late in a list)</td><td>Very weak ordering signal, JD authorship is inconsistent</td><td>Tie-breaker only, never changes weight on its own</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="s7">
+      <div class="kicker">07</div>
+      <h2>Candidate evidence scale</h2>
+      <p>This replaces the current binary "does a tag from the anchor vocabulary appear near this phrase" check, which is keyword matching wearing a qualification-matching costume. Every level below is defined by a condition an evaluator can point to, not a felt strength.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th class="num">Level</th><th>Name</th><th>Behavioral definition</th></tr>
+          <tr><td class="num">0</td><td><strong>No documented evidence</strong></td><td>Nothing in workExperience.md or the claim catalog addresses this requirement, directly or adjacently. Recorded as <code>NO DOCUMENTED EVIDENCE</code>, never silently treated as a low score &mdash; it's a distinct, explicit state.</td></tr>
+          <tr><td class="num">1</td><td><strong>Adjacent evidence</strong></td><td>Candidate has performed work sharing the underlying capability (per the 5-part transfer test, Sec.&nbsp;8) but not the requested work itself.</td></tr>
+          <tr><td class="num">2</td><td><strong>Partial direct evidence</strong></td><td>Candidate has performed meaningful parts of the requirement but differs materially in scope, tooling, context, or level of ownership.</td></tr>
+          <tr><td class="num">3</td><td><strong>Direct evidence</strong></td><td>Candidate has clearly performed substantially equivalent work, at comparable scope.</td></tr>
+          <tr><td class="num">4</td><td><strong>Strong direct evidence</strong></td><td>Substantially equivalent work with comparable-or-greater ownership, scope, complexity, or measurable outcome than the JD implies is needed.</td></tr>
+        </table>
+      </div>
+      <p>A 5-point (0&ndash;4) scale was chosen over Jason's illustrative example unchanged: it's wide enough to separate "nothing," "adjacent," "partial," "direct," and "direct-plus-outcome" &mdash; the five states that actually recur across real claim &harr; requirement pairs in Applyr's own evidence maps &mdash; without adding levels fine enough that two raters would disagree about which one applies (the BARS literature's core failure mode). Collapsing to 4 levels loses the adjacent/partial distinction, which is exactly the distinction Applyr's transferability rules (Sec.&nbsp;8) depend on.</p>
+    </section>
+
+    <section id="s8">
+      <div class="kicker">08</div>
+      <h2>Transferability rules</h2>
+      <p>This formalizes the free-text <code>bridge</code> field already present in <code>authoring_packet.json</code>'s evidence map into a required structure. Every claim of transfer (evidence level 1 or 2) must record all five parts below, or it isn't a valid transfer &mdash; it's an assertion.</p>
+      <div class="formula-block"><div class="formula"><span class="k">1. JD requirement</span> &mdash; the employer's line, verbatim
+<span class="k">2. Candidate evidence</span> &mdash; the specific claim_id and excerpt
+<span class="k">3. Shared capability</span> &mdash; the underlying skill both share, stated plainly
+<span class="k">4. Material difference</span> &mdash; what's genuinely not the same (scope, tooling, domain, level)
+<span class="k">5. Why transfer is justified</span> &mdash; the reasoning connecting 3 despite 4
+<span class="k">6. Confidence reduction</span> &mdash; how much interpretation this required (feeds Sec. 12)</div></div>
+      <h4>Forbidden inferences</h4>
+      <p>None of the following, alone, is evidence &mdash; per Jason's brief, restated as the hard rule it already is: a title ("was a PM"), an employer name ("worked at a SaaS company"), a company's size, an adjacent industry, a probable department interaction, a commonly-used tool the candidate likely touched, an implied capability from seniority, or trainability ("could probably learn it"). <strong>Potential is not evidence of demonstrated experience.</strong> Any of these appearing as the sole justification for a transfer invalidates the claim; it must be re-scored as level&nbsp;0.</p>
+    </section>
+
+    <section id="s9">
+      <div class="kicker">09</div>
+      <h2>Hard-gate rules</h2>
+      <p>A gate ends scoring for that requirement outright &mdash; it is not "worth zero points," it disqualifies the whole application regardless of how the rest scores. The research (EEOC job-relatedness requirement; must-haves function as gates in practice) supports gates existing. It does not support gating on everything an employer labels "required," and the years-of-experience findings (Sec.&nbsp;3) argue specifically against gating on a bare number.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Category</th><th>Gates?</th><th>Why</th></tr>
+          <tr><td>Credential/Legal (degree, license, clearance, authorization)</td><td><span class="pill bad">Hard gate</span></td><td>Binary fact, no substitute exists, direct EEOC job-relatedness precedent for licensure/credential minimums</td></tr>
+          <tr><td>Named Domain, unbridged and un-hedged, paired with explicit tenure framing</td><td><span class="pill bad">Hard gate</span></td><td>Functions as a credential in practice for regulated/specialized domains (payroll tax, healthcare revenue cycle) &mdash; the years framing is a <em>bindingness</em> signal, not a literal threshold check against the candidate's own tenure</td></tr>
+          <tr><td>Role-category exclusion (people management, AI/ML ownership, revenue/billing ownership, etc.)</td><td><span class="pill bad">Hard gate</span></td><td>Not a fit question at all &mdash; a factual mismatch in role type, orthogonal to how well-documented the candidate's evidence is</td></tr>
+          <tr><td>Named Tool/Skill, however phrased ("required," "must have")</td><td><span class="pill good">Never gates</span></td><td>2026-08-19 finding: real posting (Bamboo Health) was rejected sight-unseen on one Tableau mention. Tools are learnable and substitutable; a conversation bridges this the way it can't bridge a missing degree.</td></tr>
+          <tr><td>Bare years-of-experience minimum (no named domain attached)</td><td><span class="pill good">Never gates</span></td><td>Sackett ranking: years is one of the weakest validated predictors available; gating on it discards real opportunities the research says are worth pursuing</td></tr>
+          <tr><td>Anything in the Preferred bucket</td><td><span class="pill good">Never gates</span></td><td>By definition optional; hedge language present is itself evidence against bindingness</td></tr>
+        </table>
+      </div>
+      <p>Distinguishing a <strong>true hard requirement</strong> from a <strong>strong preference written as a requirement</strong>: a named domain/credential line only gates when it has (a) no product-management-experience alternative offered in the same line, and (b) no hedge language ("ideally," "preferred," "such as," "a plus"). Present either signal, and it demotes to a normal weighted Core Duty or Domain item &mdash; this is the exact rule that, tested live against the full 402-JD archive, correctly excluded 18 of 19 raw domain+years matches (axos_bank's "product management, consulting, banking, or fintech" is a strong preference dressed as a requirement; OneSource Virtual's "payroll tax filing" with zero alternative offered anywhere in the line is a true hard requirement).</p>
+    </section>
+
+    <section id="s10">
+      <div class="kicker">10</div>
+      <h2>Weighting model</h2>
+      <p><strong>Recommendation: hybrid.</strong> A small, fixed set of structural rules (research-grounded: required always outweighs preferred, hard-gated categories are removed from the weighted sum entirely) combined with per-JD dynamic weight derived from that JD's own emphasis signals (Sec.&nbsp;6) &mdash; not a global fixed percentage split like the current five-criterion scheme. A purely fixed split can't distinguish a JD that spends six bullets on data-pipeline ownership from one that mentions it once in passing; a purely dynamic scheme has no way to guarantee required items always outrank preferred ones. Neither alone satisfies the brief's requirement that missing one essential item can't be bought back with volume on minor ones.</p>
+      <div class="table-wrap compact">
+        <table>
+          <tr><th>Requirement type</th><th class="num">Base weight</th><th>Notes</th></tr>
+          <tr><td>Required &mdash; Core Duty or Named Domain (non-gated)</td><td class="num">3</td><td></td></tr>
+          <tr><td>Required &mdash; Named Tool/Skill or General Knowledge</td><td class="num">3</td><td></td></tr>
+          <tr><td>Preferred &mdash; any type</td><td class="num">1</td><td></td></tr>
+          <tr><td>Repetition modifier (same competency, 2+ distinct sections, after dedup)</td><td class="num">+1</td><td>Capped at one step; magnitude is design inference, needs calibration</td></tr>
+          <tr><td>Hedge-language modifier</td><td class="num">&minus;1</td><td>Applies inside an otherwise-required line carrying "ideally"/"a plus" language</td></tr>
+        </table>
+      </div>
+      <p class="note">The specific integers (3, 1, +1, &minus;1) are <strong>design inference, not research-derived</strong> &mdash; the research supports the ordering (required &gt; preferred, repeated &gt; single-mention) but not these exact magnitudes. Flagged here explicitly per the brief's constraint against presenting invented numbers as established. They are a reasonable starting ratio and should be the first thing recalibrated once real outcome data exists.</p>
+    </section>
+
+    <section id="s11">
+      <div class="kicker">11</div>
+      <h2>The formula</h2>
+      <p>Hard gates run first and are entirely outside this computation &mdash; if any fires, the result is <strong>DISQUALIFIED</strong> and the formula below never executes. Culture-bucket items are excluded from <var>i</var> entirely; they are never scored against evidence.</p>
+      <div class="formula-block"><div class="formula">For each scored requirement <span class="k">i</span> (not hard-gated, not culture):
+
+  w<sub>i</sub>  = importance weight            (Sec. 10)
+  e<sub>i</sub>  = evidence level, 0-4          (Sec. 7)
+  c<sub>i</sub>  = confidence multiplier        (Sec. 12: 1.00 high / 0.85 medium / 0.65 low)
+
+  s<sub>i</sub>  = e<sub>i</sub> / 4                        <span class="k">// normalize evidence to 0-1</span>
+
+<span class="k">RawFit</span> = 100 &times; ( &Sigma;(w<sub>i</sub> &times; s<sub>i</sub> &times; c<sub>i</sub>) / &Sigma;(w<sub>i</sub>) )
+
+Sub-scores use the same formula restricted to each category's items:
+  Core Work Match          = RawFit over Core Duty items only
+  Required Qualification   = RawFit over required-bucket Skill/Knowledge/Domain items
+  Preferred Match          = RawFit over preferred-bucket items only</div></div>
+      <p>This is implementation-ready: every quantity is either read directly off a classified requirement (<var>w<sub>i</sub></var>, from Sec.&nbsp;10's table), assigned by the evidence rater (<var>e<sub>i</sub></var>, from Sec.&nbsp;7's five behavioral definitions), or assigned by the confidence rule (<var>c<sub>i</sub></var>, from Sec.&nbsp;12). No step requires an evaluator to interpret free-standing prose.</p>
+    </section>
+
+    <section id="s12">
+      <div class="kicker">12</div>
+      <h2>Confidence model</h2>
+      <p>The brief is explicit that uncertainty must never silently become a negative score. A confident, unambiguous zero (JD is clear, evidence is genuinely absent) and an uncertain read (JD is vague, or the transfer required real interpretation) are different findings and must be visible as different findings.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Level</th><th class="num">Multiplier</th><th>Applies when</th></tr>
+          <tr><td><strong>High</strong></td><td class="num">1.00</td><td>JD wording is unambiguous, and either the excerpt states the same activity nearly verbatim (evidence 3&ndash;4) <em>or</em> there is a clean, complete absence with nothing adjacent (evidence 0). Both a clear yes and a clear no are high confidence.</td></tr>
+          <tr><td><strong>Medium</strong></td><td class="num">0.85</td><td>Evidence exists and a transfer judgment (Sec.&nbsp;8) connects it, but the shared capability and material difference are both clearly articulable.</td></tr>
+          <tr><td><strong>Low</strong></td><td class="num">0.65</td><td>Either the JD phrasing itself is genuinely ambiguous (a vague or compound clause admitting multiple readings), or the transfer bridge is a stretch that's hard to state cleanly.</td></tr>
+        </table>
+      </div>
+      <p>Confidence is surfaced per-item in the output, not just folded into the number &mdash; a Tier&nbsp;2 result built from five medium-confidence bridges should read differently to Jason than one built from five high-confidence direct matches, even at an identical RawFit.</p>
+    </section>
+
+    <section id="s13">
+      <div class="kicker">13</div>
+      <h2>Double-counting rules</h2>
+      <p>Before weighting runs, cluster requirement items whose underlying competency is the same, even when the JD's own wording varies &mdash; "partner with engineering," "collaborate with technical stakeholders," and "work cross-functionally with engineering teams" are one competency wearing three sentences, not three independent scoring opportunities.</p>
+      <ul>
+        <li><strong>Clustering rule:</strong> two items cluster when they name the same skill/relationship/duty using different phrasing and neither adds a genuinely distinct scope, tool, or context. This is a judgment call the extraction pass makes once, up front &mdash; not something each evidence rating re-derives.</li>
+        <li><strong>Scoring a cluster:</strong> the cluster is scored once, using its <em>strongest</em> instance's wording for classification (required beats preferred if either phrasing appeared in a required section) and the repetition modifier from Sec.&nbsp;10 applied exactly once, regardless of how many times the JD repeated it.</li>
+        <li><strong>Evidence reuse is fine, evidence inflation is not:</strong> the same claim_id may legitimately back multiple distinct clustered competencies (a single accomplishment can be evidence of both delivery execution and cross-functional collaboration). What's disallowed is treating five different phrasings of one requirement as five separate wins for the same claim.</li>
+      </ul>
+    </section>
+
+    <section id="s14">
+      <div class="kicker">14</div>
+      <h2>Score bands</h2>
+      <p>Bands are defined by evidence conditions first, RawFit ranges second &mdash; a number alone doesn't tell Jason what's actually true about the match.</p>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Band</th><th class="num">RawFit</th><th>Evidence condition</th></tr>
+          <tr><td><span class="pill good">Tier 1 &mdash; Strong Fit</span></td><td class="num">&ge; 75</td><td>No hard gate; Core Work Match &ge; 70; direct or strong-direct evidence (level 3&ndash;4) across most required items</td></tr>
+          <tr><td><span class="pill tierA">Tier 2 &mdash; Competitive Fit</span></td><td class="num">&ge; 50</td><td>No hard gate; core requirements covered at partial-or-better evidence, gaps concentrated in preferred items or bridgeable adjacent evidence</td></tr>
+          <tr><td><span class="pill warn">Stretch &mdash; visible, not queued</span></td><td class="num">35&ndash;49</td><td>No hard gate; real gaps in required items, worth a look but not worth Stage&nbsp;1 effort by default</td></tr>
+          <tr><td><span class="pill bad">Skip</span></td><td class="num">&lt; 35 or hard-gated</td><td>Hard gate fires regardless of RawFit; or RawFit below floor</td></tr>
+        </table>
+      </div>
+      <p class="note"><strong>These thresholds are the clearest example in this document of research-motivated design inference, not settled numbers.</strong> The TalentWorks data supports moving the floor down substantially from 70 &mdash; real applicants get real interviews around 40&ndash;60% requirement match &mdash; but that study measured raw requirement-count match, not this rubric's weighted evidence-and-confidence score, so the specific values 75/50/35 are a reasoned starting point, not a transplanted statistic. <strong>Calibrate these against real outcomes (which JDs scored where, and what actually happened) as soon as that data exists</strong>, the same way the current 70/72 number should have been checked and never was.</p>
+    </section>
+
+    <section id="s15">
+      <div class="kicker">15</div>
+      <h2>Decision table</h2>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Situation</th><th>Rule</th></tr>
+          <tr><td>Any Credential/Legal, Domain (unbridged+unhedged), or role-exclusion gate fires</td><td>DISQUALIFIED. Stop. Do not compute RawFit.</td></tr>
+          <tr><td>Named Domain item has a PM-alternative or hedge phrase in the same line</td><td>Demote to weighted Core Duty item, not a gate</td></tr>
+          <tr><td>Evidence level 0 on a required Core Duty, everything else strong</td><td>Scored normally &mdash; a single weak required item lowers Core Work Match but does not by itself disqualify unless it's also gate-eligible</td></tr>
+          <tr><td>Two candidate claims could both back one requirement</td><td>Use the stronger evidence level of the two; do not sum them</td><td></td></tr>
+          <tr><td>Transfer bridge cannot state a specific shared capability (Sec. 8, part 3)</td><td>Evidence level 0, not level 1 &mdash; an unstated bridge is not a bridge</td></tr>
+          <tr><td>JD line is a compound of multiple distinct asks ("X, Y, and Z")</td><td>Split before scoring; the line's overall evidence is the minimum across its parts, following the same logic already built into Applyr's compound-clause splitting</td></tr>
+          <tr><td>Fewer than 3 scoreable required items after extraction (thin JD)</td><td>Confidence caps at Medium regardless of individual item confidence &mdash; too little content to trust a Tier 1 read</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="s16">
+      <div class="kicker">16</div>
+      <h2>Worked examples</h2>
+      <div class="case">
+        <div class="case-head"><span class="letter">1</span><h4>"5+ years of experience with Payroll Tax filing and/or Payroll Tax filing software."</h4></div>
+        <p><strong>Classification:</strong> Named Domain, required bucket, explicit tenure framing, no PM-alternative or hedge anywhere in the line.</p>
+        <p><strong>Evidence:</strong> claim search returns nothing addressing payroll, tax, or filing software &mdash; <code>NO DOCUMENTED EVIDENCE</code>.</p>
+        <p class="verdict"><strong>Result:</strong> Hard gate fires (Sec.&nbsp;9). DISQUALIFIED regardless of every other item's score.</p>
+      </div>
+      <div class="case">
+        <div class="case-head"><span class="letter">2</span><h4>"Hands-on experience with Amplitude for product analytics"</h4></div>
+        <p><strong>Classification:</strong> Named Tool, required bucket.</p>
+        <p><strong>Evidence:</strong> candidate has direct, documented experience with a different analytics platform (Pendo) at comparable scope, no Amplitude specifically.</p>
+        <p class="verdict"><strong>Result:</strong> Does not gate (Sec.&nbsp;9). Evidence level 1&ndash;2 (adjacent tool, same underlying capability), medium confidence. Contributes a below-average but nonzero term to RawFit &mdash; visible as a real gap, not a disqualifier.</p>
+      </div>
+      <div class="case">
+        <div class="case-head"><span class="letter">3</span><h4>"Own and lead product initiatives across the platform, from discovery through release"</h4></div>
+        <p><strong>Classification:</strong> Core Duty, required bucket.</p>
+        <p><strong>Evidence:</strong> a claim documents owning product for a specific stack end to end, including discovery-through-delivery framing, at comparable or larger scale.</p>
+        <p class="verdict"><strong>Result:</strong> Evidence level 4, high confidence. Full weight contribution.</p>
+      </div>
+    </section>
+
+    <section id="s17">
+      <div class="kicker">17</div>
+      <h2>Pressure test &mdash; candidates A&ndash;J</h2>
+      <p>Generic, candidate-agnostic scenarios. Each tests one failure mode the rubric must resist or handle correctly.</p>
+      <div class="grid2">
+        <div class="case"><div class="case-head"><span class="letter">A</span><h4>Keyword match, weak substance</h4></div><p>JD asks for "product strategy ownership." Candidate's document contains the words "strategy" and "roadmap" attached to thin, administrative-sounding activity.</p><p class="verdict">Evidence rating is behaviorally anchored, not keyword-triggered &mdash; scores level 1, not level 3. Resisted.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">B</span><h4>Different vocabulary, strong substance</h4></div><p>Same JD ask. Candidate's real accomplishment describes driving multi-quarter prioritization and roadmap decisions without ever using the word "strategy."</p><p class="verdict">Semantic evidence-matching (Sec.&nbsp;7&ndash;8) still credits level 3&ndash;4. Not penalized for vocabulary mismatch.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">C</span><h4>Adjacent domain, strong capability</h4></div><p>JD wants healthcare-industry PM experience. Candidate has strong B2B SaaS PM experience with transferable regulated-data handling.</p><p class="verdict">Domain item is soft (PM-alternative present in the JD line), not gated. Evidence level 1&ndash;2, medium confidence, partial credit.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">D</span><h4>Exact domain, weak capability</h4></div><p>Candidate worked in the exact named industry, but documented evidence shows only administrative/support-level involvement, not the PM-level work asked for.</p><p class="verdict">Evidence is scored on documented activity, not employer/industry label &mdash; stays at level 1 despite the domain match. Forbidden-inference rule (Sec.&nbsp;8) holds.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">E</span><h4>Senior title, weak evidence</h4></div><p>Candidate's title matches or exceeds the JD's seniority ask; documented accomplishments are thin and vague.</p><p class="verdict">Evidence is scored on the documented accomplishment, never on title. Score stays modest. Resisted.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">F</span><h4>Lower title, strong evidence</h4></div><p>Candidate's title reads junior; documented work shows ownership of a large-scale platform with cross-org influence.</p><p class="verdict">Scope/ownership evidence (Sec.&nbsp;7 level 4) is unaffected by title label. Credited fully.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">G</span><h4>Missing one genuine hard requirement</h4></div><p>Excellent overall profile; zero evidence for a required professional license.</p><p class="verdict">Hard gate (Sec.&nbsp;9) fires. DISQUALIFIED regardless of RawFit &mdash; no amount of other strength buys this back.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">H</span><h4>Missing several preferred requirements</h4></div><p>Strong core match; multiple preferred items at evidence level 0.</p><p class="verdict">Preferred items carry base weight 1 vs. required's 3 (Sec.&nbsp;10); RawFit stays high. Not disqualified.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">I</span><h4>High years, low relevance</h4></div><p>12 years of experience, but in a substantially different function than the role's core work.</p><p class="verdict">Years is not itself a scored dimension (Sec.&nbsp;9); evidence is scored on documented activity, which is thin. Score reflects the real gap, unaffected by tenure.</p></div>
+        <div class="case"><div class="case-head"><span class="letter">J</span><h4>Lower years, high depth</h4></div><p>Only 3 years, but unusually large documented scope and ownership.</p><p class="verdict">Scope/complexity evidence scores 3&ndash;4 on its own merits. Rewarded despite fewer nominal years &mdash; consistent with the Sackett findings on years' weak validity.</p></div>
+      </div>
+    </section>
+
+    <section id="s18">
+      <div class="kicker">18</div>
+      <h2>Failure modes</h2>
+      <ul>
+        <li><strong>Single evaluator, no true inter-rater check.</strong> BARS' real reliability gains come partly from calibration sessions across multiple raters; Applyr has one (the model). Mitigation: the behavioral anchors themselves (Sec.&nbsp;7) are the substitute for calibration &mdash; but this rubric's actual inter-rater reliability is unverified until it's run twice, independently, on the same JD and compared.</li>
+        <li><strong>Thin JDs starve the model of real signal</strong> regardless of how good the rubric is &mdash; a JD with three vague bullets can't produce a trustworthy Tier&nbsp;1 no matter how well the scoring runs. The decision table's thin-JD confidence cap (Sec.&nbsp;15) mitigates but doesn't solve this.</li>
+        <li><strong>The dynamic weighting model can be gamed by JD authorship style</strong>, not just role content &mdash; a verbose employer who repeats every requirement three times inflates weights that a terse-but-equally-serious employer wouldn't trigger. The dedup/clustering rule (Sec.&nbsp;13) limits this but doesn't eliminate it.</li>
+        <li><strong>Bands are not yet empirically calibrated</strong> (Sec.&nbsp;14) &mdash; they're a reasoned starting point from real research, not a validated instrument. Treat early Tier&nbsp;1 calls with some skepticism until enough real outcomes accumulate to check against.</li>
+        <li><strong>The formula assumes classification quality</strong> &mdash; if the taxonomy step (Sec.&nbsp;5) misclassifies a Core Duty as a Preferred item, the downstream math is correct but the input was wrong. Classification errors are a bigger risk to a correct final score than weighting-magnitude errors.</li>
+      </ul>
+    </section>
+
+    <section id="s19">
+      <div class="kicker">19</div>
+      <h2>Comparison with the current system</h2>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Current mechanism</th><th>Verdict</th><th>Why</th></tr>
+          <tr><td>Closed-world rule (never claim a fact not in the packet)</td><td class="keep">KEEP</td><td>Directly matches Sec.&nbsp;6/8's evidence-integrity rules; already correctly enforced via claim_provenance at Stage&nbsp;1</td></tr>
+          <tr><td>Required / Preferred / Responsibilities / Culture bucket split</td><td class="keep">KEEP</td><td>Correct first-level split, becomes the entry point into the finer taxonomy in Sec.&nbsp;5</td></tr>
+          <tr><td>Hard-gate concept itself (absolute disqualifiers outside the score)</td><td class="keep">KEEP</td><td>Validated by must-have-as-gate practice and by this week's own degree/domain/exclusion-zone work</td></tr>
+          <tr><td>Attribution tiers (OWNED/CONTRIBUTED/INFLUENCED) in master_claims.json</td><td class="keep">KEEP</td><td>Already a genuinely well-designed evidence-integrity control; nothing in this research argues against it</td></tr>
+          <tr><td><code>_item_has_anchor</code> tag-matching as the primary gap classifier</td><td class="mod">MODIFY</td><td>This <em>is</em> the "keyword matching masquerading as qualification matching" the brief warns against. Replace as the primary mechanism with the 0&ndash;4 evidence scale (Sec.&nbsp;7); keep it only as the deterministic fallback when the LLM path is unavailable, same pattern already used for section extraction</td></tr>
+          <tr><td>Five fixed-percentage criteria in <code>structured_fit.py</code> (title_seniority_fit .20 / pm_craft_overlap .35 / team_structure_fit .20 / execution_depth .15 / transition_potential .10)</td><td class="mod">MODIFY</td><td>A fixed global split is exactly what Phase 7 of the brief warns against inventing. Keep the five concepts as reporting categories; replace the fixed weighting mechanism with the dynamic per-item model in Sec.&nbsp;10</td></tr>
+          <tr><td>Years-of-experience as a preference-ceiling filter (candidate_preferences.json max years)</td><td class="keep">KEEP, relabel</td><td>This is a legitimate policy choice about which roles Jason wants to see, not a fit-measurement claim &mdash; keep it, but stop treating it as part of "how good a fit is this," since the research says years doesn't measure that well</td></tr>
+          <tr><td>New domain-hard-gate check (2026-08-19, this session)</td><td class="keep">KEEP, as specified</td><td>Already matches Sec.&nbsp;9's true-hard-requirement test almost exactly &mdash; unbridged, un-hedged, tenure-paired named domain. No change needed beyond folding it into the unified evidence scale's gate layer</td></tr>
+          <tr><td><code>_DOMAIN_QUALIFIER_RE</code> fixed keyword list as the sole domain-detection mechanism</td><td class="rep">REPLACE</td><td>A hardcoded word list is permanently incomplete by construction &mdash; "payroll" was missing until a real miss surfaced it. The extraction LLM already reads full JD context; have it classify domain requirements directly (same mechanism as the internal-terms detection built this session) instead of a maintained regex list</td></tr>
+          <tr><td>70-point fit-score floor</td><td class="rep">REPLACE</td><td>No research support found for this specific number; real applicant-outcome data argues for a substantially lower floor (Sec.&nbsp;14)</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <section id="s20">
+      <div class="kicker">20</div>
+      <h2>Rubric v1, consolidated</h2>
+      <ol>
+        <li>Extract JD into the 8-type taxonomy (Sec.&nbsp;5), via the section-extraction LLM call, not a keyword list.</li>
+        <li>Cluster duplicate-competency items (Sec.&nbsp;13) before anything else runs.</li>
+        <li>Run hard-gate check (Sec.&nbsp;9): Credential/Legal, unbridged+unhedged Named Domain, role-category exclusion. Any hit &rarr; DISQUALIFIED, stop.</li>
+        <li>For every remaining scoreable item: assign evidence level 0&ndash;4 (Sec.&nbsp;7) using only documented, non-inferred evidence (Sec.&nbsp;8), and a confidence multiplier (Sec.&nbsp;12).</li>
+        <li>Assign importance weight per Sec.&nbsp;10's table, including the repetition/hedge modifiers.</li>
+        <li>Compute RawFit and the three sub-scores via the formula in Sec.&nbsp;11.</li>
+        <li>Map to a band via Sec.&nbsp;14, flagged as provisional pending empirical calibration.</li>
+        <li>Report: band, RawFit, sub-scores, every hard gate checked (fired or not, with reason), and every scored item's evidence level + confidence + one-line justification &mdash; never just the final number.</li>
+      </ol>
+      <p class="note">Two independent evaluators given the same JD, the same work-experience document, and this rubric should land within the same band and be able to point to specific evidence for every major score &mdash; that was the standing bar this document was written against. It hasn't been tested with a second independent evaluator yet; that's the honest next step before treating it as validated rather than well-reasoned.</p>
+    </section>
+
+    <footer class="doc-end">Fit Rubric Specification v1 &middot; Applyr &middot; built from primary and peer-reviewed personnel-selection research, pressure-tested against ten adversarial cases, and cross-checked against the existing Stage&nbsp;0 implementation before being proposed as a replacement.</footer>
+
+  </main>
+</div>

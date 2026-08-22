@@ -14,6 +14,7 @@ CATEGORIES: tuple[str, ...] = (
     "gap_confession",
     "forbidden_punctuation",
     "wrong_job_bleed",
+    "cover_voice_kicker",
 )
 
 RULE_CATEGORY: dict[str, str] = {
@@ -22,6 +23,9 @@ RULE_CATEGORY: dict[str, str] = {
     "LR-014": "forbidden_punctuation",
     "LR-015": "forbidden_punctuation",
     "LW-032": "wrong_job_bleed",
+    "LW-033": "cover_voice_kicker",
+    "LW-034": "cover_voice_kicker",
+    "LW-035": "cover_voice_kicker",
 }
 
 

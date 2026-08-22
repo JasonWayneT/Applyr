@@ -24,8 +24,9 @@ HARD_BLOCKED_TOOLS: frozenset[str] = frozenset({
     "tableau", "looker", "power bi", "powerbi", "qlik", "sisense",
     "amplitude", "mixpanel",
     # Infrastructure / cloud infra
-    # Docker is verified (WE ACC-172 / skills_catalog hands-on environments).
-    "kubernetes", "k8s", "terraform", "helm",
+    # Docker is personal-only (WE ACC-172, corrected 2026-08-21). Not a
+    # professional Cision skill. Block it the same as other unverified infra.
+    "docker", "kubernetes", "k8s", "terraform", "helm",
     "ansible", "puppet", "chef",
     # ML / AI frameworks (engineering, not tooling)
     "tensorflow", "pytorch", "keras", "scikit-learn", "huggingface",

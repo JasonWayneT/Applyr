@@ -503,7 +503,7 @@ WARN_RULES: List[LintRule] = [
         pattern=(
             r"\b(delve|pivotal|cutting-edge|game-changer|future-ready|elevate your"
             r"|drive impact|orchestrated|groundbreaking|harness|unlock the (potential|value)"
-            r"|paramount|foster(?:ed)?|showcas(?:e|es|ing))\b"
+            r"|paramount|foster(?:ed)?|showcas(?:e|es|ing)|multifaceted)\b"
         ),
         # "spearheaded" deliberately excluded from this list (was here until 2026-08-05) --
         # it's used as a trusted high-confidence ownership-verb signal in the attribution-fidelity
@@ -674,6 +674,64 @@ WARN_RULES: List[LintRule] = [
         message="'Sits/lives at the intersection of X and Y' cliche opener detected -- not Jason's voice.",
         suggestion="State the actual specific tension in plain language instead of the intersection metaphor.",
         doc_types=["cover_letter"],
+    ),
+    LintRule(
+        rule_id="LW-033",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-08-21 (Jason-supplied, no-ai-slop catalog): "lives or dies on" as a
+        # fake-profound kicker/cliche opener. Hit Point C, Nuaxis, Gravitee, Advantage Tech
+        # in one week. Same class as LW-022 (intersection metaphor): not a banned word, not
+        # Jason's voice, repeats across letters until mechanized.
+        pattern=r"\blives or dies on\b",
+        message="'Lives or dies on' cliche detected -- not Jason's voice.",
+        suggestion="Say the actual condition in plain language (only works if, fails unless, holds together only if).",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-034",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-08-21 (CR-098): recap-kicker labels that restated the paragraph
+        # after the last fact. Hit AMN/TM2 in one batch. WARN, not HARD_BLOCK.
+        pattern=r"\bThat'?s (genuine|how I treated|not a slogan)\b|\bas a habit, not as a slogan\b",
+        message="Recap-kicker label detected -- stop after the last concrete fact.",
+        suggestion="Cut the labeling sentence. End on the last fact or the ask.",
+        doc_types=["cover_letter"],
+    ),
+    LintRule(
+        rule_id="LW-035",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-08-21 (CR-098): paragraph-start negative listing ("Not a SaaS specialist").
+        # Per-line match. Broader "Not X. Not Y. A Z." stays judgment-only in the skill.
+        pattern=r"^Not a \w+",
+        message="Paragraph-start negative listing detected ('Not a ...').",
+        suggestion="State the positive claim. Do not open a paragraph by naming what Jason is not.",
+        doc_types=["cover_letter"],
+    ),
+    LintRule(
+        rule_id="LW-036",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-08-21 (Jason-supplied): Salesforce "Closed Lost" is Cision CRM jargon.
+        # Customer-facing docs should name what was lost: a subscription / a deal that did
+        # not close. Packet excerpts still say closed-lost because WE does.
+        pattern=r"\bclosed[- ]lost\b",
+        message="Cision CRM jargon 'closed-lost' detected. Name the lost subscription or deal.",
+        suggestion="Use 'lost subscriptions' or 'lost subscription opportunities'.",
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
+        rule_id="LW-037",
+        severity="WARN",
+        check_type="regex",
+        # Added 2026-08-21 (Jason-supplied): he has not worked with a design team.
+        # "I designed a formula" / "I designed and built Applyr" are verbs and should not match.
+        pattern=r"\b(design team|with design\b|designers\b|design and (?:engineering|marketing|product))\b",
+        message="Design-team partner claim detected. Design is not a verified cross-functional partner.",
+        suggestion="Name engineering, CX, or another verified partner. Do not imply a design team.",
+        doc_types=["cover_letter", "resume"],
     ),
     LintRule(
         rule_id="LW-023",

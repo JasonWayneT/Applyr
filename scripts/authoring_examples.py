@@ -130,7 +130,7 @@ def format_learned_examples(examples: list[dict]) -> str:
 def select_examples(
     context: dict,
     k: int = 3,
-    max_chars: int = 1200,
+    max_chars: int = 1800,
     entries: list[dict] | None = None,
 ) -> list[dict]:
     """Pick at most one active, eligible example per category, capped by k/chars.

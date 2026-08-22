@@ -33,6 +33,10 @@ data/jobs.db
 # it from tracking; it's the single authoritative authoring-process definition, not local config.
 .agent/
 
+# Tracked portable skills live in `.agents/skills/` (Cursor + Antigravity).
+# Do not gitignore `.agents/`. Claude Code still needs a force-added pointer under
+# `.claude/skills/submission-no-ai-slop/`, same as generate-submission.
+
 # Build artifacts
 *.zip
 *.log

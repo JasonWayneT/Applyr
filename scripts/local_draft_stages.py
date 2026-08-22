@@ -17,7 +17,7 @@ from verify_claims import _verify_bullet_local, extract_numeric_tokens
 # Mirrors drafting_engine guards — kept here to avoid import cycles.
 BLOCKED_TOOLS = [
     "Snowflake", "Tableau", "Looker", "dbt", "Airflow", "Spark", "Kafka",
-    "Kubernetes", "Terraform", "Helm", "Jenkins", "CircleCI",
+    "Kubernetes", "Docker", "Terraform", "Helm", "Jenkins", "CircleCI",
     "FHIR", "HL7", "HIPAA", "SOC2", "SOC 2", "ISO 27001",
     "Databricks", "Redshift", "BigQuery", "Fivetran", "Segment",
     # Pendo removed 2026-07-20 to match drafting_engine.py's already-fixed list (2026-07-18):

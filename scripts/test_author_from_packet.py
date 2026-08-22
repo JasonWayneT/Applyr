@@ -440,6 +440,14 @@ class TestAuthoringDefectCategories(unittest.TestCase):
             {"LR-006", "LR-014", "LR-015"},
         )
         self.assertEqual(rule_ids_for_category("wrong_job_bleed"), ["LW-032"])
+        self.assertIn("cover_voice_kicker", CATEGORIES)
+        self.assertEqual(category_for_rule("LW-033"), "cover_voice_kicker")
+        self.assertEqual(category_for_rule("LW-034"), "cover_voice_kicker")
+        self.assertEqual(category_for_rule("LW-035"), "cover_voice_kicker")
+        self.assertEqual(
+            set(rule_ids_for_category("cover_voice_kicker")),
+            {"LW-033", "LW-034", "LW-035"},
+        )
 
 
 class TestStage1VerifyHistory(unittest.TestCase):
@@ -593,6 +601,60 @@ class TestLearnedExamplesPrompt(unittest.TestCase):
         self.assertIn("example_bank_version mismatch", stderr_buf.getvalue())
         self.assertIn("WARNING", stderr_buf.getvalue())
 
+class TestCoverVoiceKickerLint(unittest.TestCase):
+    """CR-098: LW-034 / LW-035 catch recap kickers and negative listing."""
+
+    def _letter(self, extra):
+        return (
+            "# JASON TAYLOR\n"
+            "candidate@example.com\n\n"
+            "Dear Hiring Manager,\n\n"
+            "HubSpot shifted toward product-led growth.\n\n"
+            f"{extra}\n\n"
+            "Best regards,\n\n"
+            "Jason Taylor\n"
+        )
+
+    def test_lw034_warns_on_thats_genuine(self):
+        from submission_linter import lint_document
+        text = self._letter("That's genuine, current, hands-on practice with the tools.")
+        r = lint_document(text, "cover_letter")
+        self.assertTrue(any(v.rule_id == "LW-034" for v in r.warns), r.warns)
+
+    def test_lw034_warns_on_how_i_treated(self):
+        from submission_linter import lint_document
+        text = self._letter("That's how I treated Jira as the system of record.")
+        r = lint_document(text, "cover_letter")
+        self.assertTrue(any(v.rule_id == "LW-034" for v in r.warns), r.warns)
+
+    def test_lw035_warns_on_not_a_opener(self):
+        from submission_linter import lint_document
+        text = self._letter("Not a SaaS specialist. I have shipped on a live data platform.")
+        r = lint_document(text, "cover_letter")
+        self.assertTrue(any(v.rule_id == "LW-035" for v in r.warns), r.warns)
+
+    def test_preamble_names_cover_letter_voice(self):
+        from author_from_packet import _PREAMBLE
+        self.assertIn("COVER LETTER VOICE", _PREAMBLE)
+        self.assertIn("lives or dies", _PREAMBLE)
+
+    def test_lw036_warns_on_closed_lost(self):
+        from submission_linter import lint_document
+        text = self._letter("I prioritized the work from Salesforce closed-lost notes.")
+        r = lint_document(text, "cover_letter")
+        self.assertTrue(any(v.rule_id == "LW-036" for v in r.warns), r.warns)
+
+    def test_lw037_warns_on_design_partner(self):
+        from submission_linter import lint_document
+        text = self._letter("I partner most closely with engineering, with design and marketing in the conversation.")
+        r = lint_document(text, "resume")
+        self.assertTrue(any(v.rule_id == "LW-037" for v in r.warns), r.warns)
+
+    def test_lw037_allows_designed_a_formula(self):
+        from submission_linter import lint_document
+        text = self._letter("I designed a weighted formula over inbound issues.")
+        r = lint_document(text, "cover_letter")
+        self.assertFalse(any(v.rule_id == "LW-037" for v in r.warns), r.warns)
 
 if __name__ == "__main__":
     unittest.main()

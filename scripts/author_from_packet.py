@@ -83,6 +83,12 @@ If it is not "ready", stop and print the incomplete_reasons — do not draft.
 Required, preferred, and responsibility JD items appear in `evidence_map` together with
 their claim_ids — there is no separate list of them elsewhere in this packet.
 
+COVER LETTER VOICE: end the letter on the last concrete fact. Do not add a recap
+kicker that labels the paragraph ("That's genuine...", "That's how I treated...",
+"lives or dies on"). Do not use negative listing ("Not X. A Y.").
+Never print "closed-lost". Say lost subscriptions or lost subscription opportunities.
+Never claim a design team. Jason has not worked with design.
+
 Output exactly three fenced code blocks in this order:
   1. A block labeled "Resume.md" containing the full resume Markdown.
   2. A block labeled "CoverLetter.md" containing the full cover letter Markdown.

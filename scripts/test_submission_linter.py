@@ -377,6 +377,12 @@ def test_LW007_no_warn_on_ultimately_mid_sentence():
     assert not any(v.rule_id == "LW-007" for v in r.warns)
 
 
+def test_LW033_warns_on_lives_or_dies():
+    text = CL_CLEAN + "\nA federal program lives or dies on whether the workstreams stay aligned."
+    r = lint_document(text, "cover_letter")
+    assert any(v.rule_id == "LW-033" for v in r.warns)
+
+
 def test_no_ai_slop_rules_clean_on_baseline_fixtures():
     r = lint_document(CL_CLEAN, "cover_letter")
     new_rule_ids = {"LW-015", "LW-016", "LW-017", "LW-018", "LW-019", "LW-020"}

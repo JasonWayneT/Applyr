@@ -69,7 +69,11 @@ export function resolveMaterializedSearchTerms(
   return deriveSearchTermsFromTargetRole(targetRole);
 }
 
-/** Keys managed by pipeline/rollout — not overwritten when UI re-materializes prefs (FR-248 / CR-053). */
+/** Keys managed by pipeline/rollout — not overwritten when UI re-materializes prefs (FR-248 / CR-053).
+ *  local_area_terms is NOT here (2026-08-26): it used to be a UI-invisible field that needed
+ *  preserving across saves, but the Location field now actively derives it every save (see
+ *  resolveLocation below) — preserving the old value here would just re-overwrite that with
+ *  whatever was set before, silently ignoring what the user just typed. */
 export const PRESERVE_PIPELINE_PREF_KEYS = [
   'blocked_role_titles',
   'blocked_focus_area_words',
@@ -81,8 +85,82 @@ export const PRESERVE_PIPELINE_PREF_KEYS = [
   'required_domain_min_years',
   'po_solo_backlog_flags',
   'po_solo_backlog_mitigators',
-  'local_area_terms',
 ] as const;
+
+/** Must stay in sync with COUNTRY_LOCATIONS in src/pages/SyncActivityView.tsx — the one
+ *  Location dropdown's value is a country/region preset if it matches one of these,
+ *  otherwise (a CITY_LOCATIONS entry) it's treated as a "City, State" value (2026-08-26,
+ *  Jason-supplied: one field like real job boards use, not a separate city control — made a
+ *  dropdown rather than free text so a typo can't silently produce an unmatchable term). */
+const KNOWN_LOCATION_PRESETS = new Set([
+  'united states', 'canada', 'united kingdom', 'australia', 'worldwide / remote only',
+]);
+
+/** Must stay in sync with CITY_LOCATIONS in src/pages/SyncActivityView.tsx — maps each
+ *  dropdown city to the country its location_preference should resolve to, so a UK or
+ *  Canadian or Australian city doesn't get silently mislabeled "United States." A city
+ *  missing here defaults to United States (see resolveLocation) rather than failing closed,
+ *  since that covers the common case if the two lists ever briefly drift after an edit. */
+const CITY_COUNTRY: Record<string, string> = {
+  'new york, ny': 'United States', 'los angeles, ca': 'United States',
+  'san diego, ca': 'United States', 'san francisco, ca': 'United States',
+  'san jose, ca': 'United States', 'chicago, il': 'United States',
+  'seattle, wa': 'United States', 'austin, tx': 'United States',
+  'dallas, tx': 'United States', 'houston, tx': 'United States',
+  'boston, ma': 'United States', 'denver, co': 'United States',
+  'atlanta, ga': 'United States', 'phoenix, az': 'United States',
+  'philadelphia, pa': 'United States', 'washington, dc': 'United States',
+  'miami, fl': 'United States', 'portland, or': 'United States',
+  'minneapolis, mn': 'United States', 'charlotte, nc': 'United States',
+  'raleigh, nc': 'United States', 'nashville, tn': 'United States',
+  'salt lake city, ut': 'United States',
+  'toronto, on': 'Canada', 'vancouver, bc': 'Canada', 'montreal, qc': 'Canada',
+  'calgary, ab': 'Canada', 'ottawa, on': 'Canada',
+  'london, uk': 'United Kingdom', 'manchester, uk': 'United Kingdom',
+  'birmingham, uk': 'United Kingdom', 'edinburgh, uk': 'United Kingdom',
+  'sydney, nsw': 'Australia', 'melbourne, vic': 'Australia',
+  'brisbane, qld': 'Australia', 'perth, wa': 'Australia',
+};
+
+/** Metro-area expansions so a city keeps matching neighboring cities real postings often
+ *  name instead of the metro itself (a Carlsbad or La Jolla listing rarely says "San Diego").
+ *  Only San Diego has one today — add an entry when there's a real reason to (a city
+ *  without one still works, just without the neighboring-city broadening). */
+const METRO_EXPANSIONS: Record<string, string[]> = {
+  'san diego': [
+    'san diego', 'sd, ca', 'carlsbad', 'la jolla', 'del mar', 'encinitas',
+    'chula vista', 'oceanside', 'escondido', 'poway', 'san marcos, ca',
+  ],
+};
+
+/** Splits the single Location field into location_preference (broad country/region) and
+ *  local_area_terms (specific city, for the "remote OR local" geographic gate) — see
+ *  shared/domain/gates.ts's passesGeographicGate. */
+export function resolveLocation(rawLocation: unknown): {
+  location_preference: string;
+  local_area_terms: string[];
+} {
+  const value = String(rawLocation ?? '').trim();
+  if (!value) {
+    return { location_preference: 'United States', local_area_terms: [] };
+  }
+  if (KNOWN_LOCATION_PRESETS.has(value.toLowerCase())) {
+    return { location_preference: value, local_area_terms: [] };
+  }
+
+  // A CITY_LOCATIONS entry — resolve its real country rather than assuming US, and drop a
+  // trailing ", ST"/", XYZ" region code (2 or 3 letters) for the METRO_EXPANSIONS lookup only;
+  // local_area_terms itself keeps the full label so "Toronto, ON" doesn't collide with a
+  // same-named city in another region.
+  const cityKey = value.toLowerCase();
+  const country = CITY_COUNTRY[cityKey] ?? 'United States';
+  const strippedKey = cityKey.replace(/,\s*[a-z]{2,3}$/i, '').trim();
+  const expansion = METRO_EXPANSIONS[strippedKey];
+  return {
+    location_preference: country,
+    local_area_terms: expansion ?? [cityKey],
+  };
+}
 
 // readMinFitScore() removed (CR-093, 2026-08-19) — it read the old fit-scoring
 // floor (min_fit_score), which lived only in the now-deleted batch_pipeline.py
@@ -124,10 +202,13 @@ export function buildMaterializedJobSearchPrefs(
   const minYears = (jobSearch.minYearsPreferred as number) ?? expRange.min ?? 2;
   const totalYears = expRange.total_years_observed ?? 6;
 
+  const { location_preference, local_area_terms } = resolveLocation(jobSearch.location);
+
   const materialized: Record<string, unknown> = {
     target_role: targetRole,
     search_terms: searchTerms,
-    location_preference: (jobSearch.location as string) || 'United States',
+    location_preference,
+    local_area_terms,
     work_setting: (jobSearch.workSetting as string) || 'Remote',
     experience_levels: jobSearch.experienceLevels || [],
     date_posted: (jobSearch.datePosted as string) || 'Past week',

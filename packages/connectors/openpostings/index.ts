@@ -20,6 +20,11 @@ interface OpenPostingsConfig {
   openPostingsDir?: string;
   port?: number;
   searchTerms?: string[];
+  /** "Remote OR local area" (2026-08-26): OpenPostings' own server supports a `counties`
+   *  filter, but this connector only ever queried `remote=remote` — a San Diego-based
+   *  (non-remote) posting could never surface even after the app's own geographic gate
+   *  learned to accept one. Same bug class as the TheirStack connector had. */
+  localAreaTerms?: string[];
 }
 
 function startServer(dir: string, port: number): Promise<ChildProcess> {
@@ -67,6 +72,8 @@ export function createOpenPostingsConnector(config?: OpenPostingsConfig): JobCon
   const openPostingsDir = config?.openPostingsDir ?? DEFAULT_DIR;
   const port = config?.port ?? DEFAULT_PORT;
   const searchTerms = config?.searchTerms ?? DEFAULT_SEARCH_TERMS;
+  const localAreaTerms = config?.localAreaTerms ?? [];
+  const countiesParam = localAreaTerms.join(',');
 
   return {
     sourceId: 'openpostings',
@@ -101,30 +108,40 @@ export function createOpenPostingsConnector(config?: OpenPostingsConfig): JobCon
           }
         }
 
+        const seenUrls = new Set<string>();
+        const passes: string[] = ['&remote=remote'];
+        if (countiesParam) {
+          passes.push(`&counties=${encodeURIComponent(countiesParam)}`);
+        }
+
         for (const term of searchTerms) {
-          if (results.length >= JOB_CAP) break;
-          try {
-            const url = `http://localhost:${port}/postings?search=${encodeURIComponent(term)}&remote=remote`;
-            const res = await fetch(url);
-            const data = (await res.json()) as { items?: unknown[] };
-            if (!Array.isArray(data.items)) continue;
+          for (const passQuery of passes) {
+            if (results.length >= JOB_CAP) break;
+            try {
+              const url = `http://localhost:${port}/postings?search=${encodeURIComponent(term)}${passQuery}`;
+              const res = await fetch(url);
+              const data = (await res.json()) as { items?: unknown[] };
+              if (!Array.isArray(data.items)) continue;
 
-            for (const p of data.items as Record<string, unknown>[]) {
-              if (results.length >= JOB_CAP) break;
-              const jobUrl = String(p['job_posting_url'] ?? '');
-              const company = String(p['company_name'] ?? '').trim();
-              const title = String(p['position_name'] ?? '').trim();
-              if (!company || !title) continue;
+              for (const p of data.items as Record<string, unknown>[]) {
+                if (results.length >= JOB_CAP) break;
+                const jobUrl = String(p['job_posting_url'] ?? '');
+                const company = String(p['company_name'] ?? '').trim();
+                const title = String(p['position_name'] ?? '').trim();
+                if (!company || !title) continue;
+                if (jobUrl && seenUrls.has(jobUrl)) continue;
+                if (jobUrl) seenUrls.add(jobUrl);
 
-              results.push({
-                external_job_id: jobUrl || `openpostings:${company}:${title}`,
-                url: jobUrl,
-                source_id: 'openpostings',
-                raw_data: p,
-              });
+                results.push({
+                  external_job_id: jobUrl || `openpostings:${company}:${title}`,
+                  url: jobUrl,
+                  source_id: 'openpostings',
+                  raw_data: p,
+                });
+              }
+            } catch {
+              /* skip failed term/pass */
             }
-          } catch {
-            /* skip failed term */
           }
         }
       } catch {

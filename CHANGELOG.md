@@ -24,6 +24,47 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Changed
+- **Job Search's Location field now takes a country/region preset OR a specific city, in the
+  same field (2026-08-26, Jason-supplied — matches how real job boards do it, not two separate
+  controls).** Was a fixed `<select>` limited to 5 country-level presets with no way to express
+  a specific city at all. First pass made it free text; Jason correctly pushed back — a typo
+  ("San Deigo") would silently produce an unmatchable term with no feedback, so it's a `<select>`
+  with two `<optgroup>`s instead (`COUNTRY_LOCATIONS`, `CITY_LOCATIONS` — currently just "San
+  Diego, CA") in `src/pages/SyncActivityView.tsx`, guaranteeing only known-good values reach the
+  server. `resolveLocation()` (`server/domain/jobSearchPrefs.ts`) splits whichever's selected: a
+  country preset sets `location_preference` and clears `local_area_terms`; a city sets
+  `location_preference: "United States"` (the only case this tool needs today) plus
+  `local_area_terms`, expanded via a small `METRO_EXPANSIONS` map so "San Diego, CA" also matches
+  Carlsbad/La Jolla/Encinitas/etc. postings that don't literally say "San Diego." Adding a new
+  city later means adding it to both `CITY_LOCATIONS` and (optionally) `METRO_EXPANSIONS` — a
+  dropdown means that's the only way to change it, by design.
+  Removed `local_area_terms` from `PRESERVE_PIPELINE_PREF_KEYS`: it's actively derived from the
+  Location field on every save now, so preserving the old value would have silently overwritten
+  whatever was just selected. Also had to fix the stored `job_search` profile row directly (DB,
+  not code) — it still said "United States" from the old dropdown, which would have made the
+  very first Settings save after this shipped wipe San Diego back out. Verified end-to-end
+  against the running dev server: selected a value, watched `candidate_preferences.json` update
+  correctly, restored the real value after.
+  **Broadened to 36 major cities across all 4 supported countries (2026-08-26, Jason-supplied:
+  "in case I ship this for public use").** Added a `CITY_COUNTRY` lookup
+  (`server/domain/jobSearchPrefs.ts`) so `resolveLocation()` resolves each city's real country
+  instead of assuming United States — a UK/Canadian/Australian city would otherwise have been
+  silently mislabeled. Verified live: selected "Toronto, ON," confirmed
+  `candidate_preferences.json` set `location_preference: "Canada"` (not the old hardcoded US
+  default), restored San Diego after. A curated list, not a claim of exhaustive/global
+  coverage — extend `CITY_LOCATIONS` and `CITY_COUNTRY` together any time.
+- **OpenPostings connector had the same remote-only bug as TheirStack, now fixed
+  (2026-08-26).** It hardcoded `&remote=remote` on every query to its own local server,
+  so a San Diego-based (non-remote) posting could never surface even after the
+  geographic gate learned to accept one. OpenPostings' server already supports a
+  `counties` filter; the connector just never used it. Now runs a second pass per
+  search term with `counties=<local_area_terms>` when `localAreaTerms` is configured,
+  deduped against the remote pass by URL. Wired from `prefs.localAreaTerms` in
+  `scoutOrchestrator.ts`, same as the TheirStack fix above. Found while checking
+  whether Settings' Job Search options actually reach every connector — worth noting
+  the Job Search page (`src/pages/SyncActivityView.tsx`) still has no UI field for a
+  local area at all (location is a country-level dropdown only), so this only works
+  today because `local_area_terms` was set by a direct data-file edit.
 - **CR-102 Stage 1 first-draft quality contract (2026-08-26).** Stage 1 now
   fails on substantive resume/letter repetition, insufficient JD specificity,
   deterministic resume/cover quality failures, defensive disclaimers, and

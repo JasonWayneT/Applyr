@@ -119,12 +119,34 @@ const DEFAULT_SETTINGS: JobSearchSettings = {
   minYearsPreferred: 2,
 };
 
-const LOCATIONS = [
+const COUNTRY_LOCATIONS = [
   'United States',
   'Canada',
   'United Kingdom',
   'Australia',
   'Worldwide / Remote Only',
+];
+
+/** Curated cities only (2026-08-26, Jason-supplied: free text invites typos that would
+ *  silently fail to match — e.g. "San Deigo" wouldn't hit METRO_EXPANSIONS server-side and
+ *  would just become an unmatchable single term). Broadened from just San Diego to major
+ *  metros across the four supported countries (2026-08-26, Jason-supplied: "in case I ship
+ *  this for public use") — a defensible-sized curated list, not a claim of global coverage;
+ *  add more here (and to CITY_COUNTRY in server/domain/jobSearchPrefs.ts, so it resolves to
+ *  the right country) any time. */
+const CITY_LOCATIONS = [
+  // United States
+  'New York, NY', 'Los Angeles, CA', 'San Diego, CA', 'San Francisco, CA', 'San Jose, CA',
+  'Chicago, IL', 'Seattle, WA', 'Austin, TX', 'Dallas, TX', 'Houston, TX', 'Boston, MA',
+  'Denver, CO', 'Atlanta, GA', 'Phoenix, AZ', 'Philadelphia, PA', 'Washington, DC',
+  'Miami, FL', 'Portland, OR', 'Minneapolis, MN', 'Charlotte, NC', 'Raleigh, NC',
+  'Nashville, TN', 'Salt Lake City, UT',
+  // Canada
+  'Toronto, ON', 'Vancouver, BC', 'Montreal, QC', 'Calgary, AB', 'Ottawa, ON',
+  // United Kingdom
+  'London, UK', 'Manchester, UK', 'Birmingham, UK', 'Edinburgh, UK',
+  // Australia
+  'Sydney, NSW', 'Melbourne, VIC', 'Brisbane, QLD', 'Perth, WA',
 ];
 
 const DATE_OPTIONS = ['Past 24 hours', 'Past 3 days', 'Past week', 'Past month'];
@@ -713,10 +735,20 @@ const SyncActivityView: React.FC = () => {
               onChange={e => update('location', e.target.value)}
               className="input-applyr w-full rounded-xl text-xs py-2.5 bg-surface-container-low cursor-pointer"
             >
-              {LOCATIONS.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
+              <optgroup label="Country / Region">
+                {COUNTRY_LOCATIONS.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </optgroup>
+              <optgroup label="City">
+                {CITY_LOCATIONS.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </optgroup>
             </select>
+            <p className="text-[10px] text-on-surface-variant mt-1.5 italic">
+              A city is matched alongside remote roles, not instead of them.
+            </p>
           </div>
 
           {/* Date Posted */}

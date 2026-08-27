@@ -56,7 +56,7 @@ def stage_model(stage_id: str) -> str | None:
         "fit": settings.get("localModelFit") or "qwen2.5:7b-instruct-q4_K_M",
         "jd_profile": settings.get("localModel") or "llama3.1:8b-instruct-q5_K_M",
         "rewrite": settings.get("localModelRewrite") or "qwen2.5:7b-instruct-q4_K_M",
-        "evidence_scale": "gemma2:2b-instruct-q8_0",
+        "evidence_scale": "qwen2.5:7b-instruct-q4_K_M",
     }
     return defaults.get(stage_id)
 

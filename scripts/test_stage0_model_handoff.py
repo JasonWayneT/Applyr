@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage 0 extract/score model pin and VRAM handoff — no live LLM."""
+"""Stage 0 extract/score model pin, VRAM handoff, and anchor cleanup — no live LLM."""
 from __future__ import annotations
 
 import json
@@ -31,7 +31,7 @@ class TestScoreModelPin(unittest.TestCase):
         import evidence_scale
         evidence_scale._score_model_ready_for = None
 
-    def test_classify_requirement_pins_gemma(self):
+    def test_classify_requirement_pins_score_model(self):
         payload = json.dumps({
             "gate": "NONE",
             "gap_source": "",
@@ -158,7 +158,10 @@ class TestUnloadResident(unittest.TestCase):
 
 
 class TestExtractToScoreHandoff(unittest.TestCase):
-    def test_unloads_between_qwen_extract_and_gemma_score(self):
+    def test_same_model_skips_before_score_unload(self):
+        """When extract and score use the same model (default since
+        2026-08-22), the before-score VRAM unload is skipped — no point
+        unloading and reloading the same tag."""
         sections = {
             "required": ["Define and own the product roadmap for our core platform"],
             "preferred": [],
@@ -190,11 +193,107 @@ class TestExtractToScoreHandoff(unittest.TestCase):
                                 db_gate_result=_DB_CLEAR,
                                 prefs=_PREFS_MINIMAL,
                             )
+        # Same model: no unload:before-score
+        self.assertEqual(
+            order[:3],
+            ["unload:before-extract", "extract", "score"],
+        )
+        self.assertNotIn("unload:before-score", order)
+        self.assertIn("unload:after-stage0", order)
+
+    def test_different_model_still_unloads_before_score(self):
+        """When FIT_MODEL overrides the score model to a different tag,
+        the before-score VRAM unload fires as before."""
+        sections = {
+            "required": ["Define and own the product roadmap for our core platform"],
+            "preferred": [],
+            "responsibilities": ["Partner with engineering to deliver features end-to-end"],
+            "culture": [],
+            "internal_terms": [],
+        }
+        order: list[str] = []
+
+        def extract(_jd):
+            order.append("extract")
+            return sections
+
+        def release(reason, required=False):
+            order.append(f"unload:{reason}")
+
+        def classify(*_a, **_k):
+            order.append("score")
+            return [], [], []
+
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        with patch.dict(os.environ, {
+            "STAGE0_SECTION_MODE": "llm",
+            "FIT_MODEL": "gemma2:2b-instruct-q8_0",
+        }):
+            with patch("build_stage0_fit_gate._extract_sections_llm", side_effect=extract):
+                with patch("build_stage0_fit_gate._release_stage0_vram", side_effect=release):
+                    with patch("build_stage0_fit_gate._prepare_stage0_score_model"):
+                        with patch("build_stage0_fit_gate.classify_gaps", side_effect=classify):
+                            build_stage0_fit_gate(
+                                folder,
+                                db_gate_result=_DB_CLEAR,
+                                prefs=_PREFS_MINIMAL,
+                            )
+        # Different model: unload:before-score is present
         self.assertEqual(
             order[:4],
             ["unload:before-extract", "extract", "unload:before-score", "score"],
         )
         self.assertIn("unload:after-stage0", order)
+
+
+class TestCleanAnchor(unittest.TestCase):
+    """Tests for _clean_anchor post-processing (2026-08-22 anchor quality fix)."""
+
+    def setUp(self):
+        from evidence_scale import _clean_anchor
+        self._clean = _clean_anchor
+
+    def test_strips_candidate_filler(self):
+        raw = "The candidate has experience with Jira and Productboard at Cision. This aligns with the requirement."
+        result = self._clean(raw)
+        self.assertNotIn("The candidate has", result)
+        self.assertIn("Jira", result)
+
+    def test_strips_aligns_filler(self):
+        raw = "This aligns with the candidate's product roadmap experience. ACC-109 quarterly roadmap at Cision."
+        result = self._clean(raw)
+        self.assertNotIn("This aligns", result)
+        self.assertIn("ACC-109", result)
+
+    def test_strips_requirement_filler(self):
+        raw = "The requirement states 5+ years PM experience. Candidate has 7 years at Cision with $40M ARR platform."
+        result = self._clean(raw)
+        self.assertNotIn("The requirement states", result)
+        self.assertIn("$40M ARR", result)
+
+    def test_truncates_at_sentence_boundary(self):
+        raw = (
+            "Jira, Productboard, Pendo at Cision. ACC-109 quarterly roadmap. "
+            "ACC-102 lifecycle delivery. $40M ARR platform ownership. "
+            "Cross-functional alignment with Engineering and DBA teams. "
+            "Stakeholder management across Sales and Customer Support."
+        )
+        result = self._clean(raw)
+        self.assertLessEqual(len(result), 200)
+        # Should end at a sentence boundary, not mid-word
+        self.assertTrue(result.endswith("."), f"Expected sentence boundary, got: ...{result[-20:]}")
+
+    def test_preserves_concise_evidence(self):
+        raw = "Jira, Productboard, Pendo at Cision; ACC-109 quarterly roadmap; $40M ARR platform"
+        result = self._clean(raw)
+        self.assertEqual(raw, result)
+
+    def test_empty_returns_none(self):
+        self.assertEqual(self._clean(""), "none")
+        self.assertEqual(self._clean(None), "none")
+
+    def test_strips_whitespace_only(self):
+        self.assertEqual(self._clean("   "), "none")
 
 
 if __name__ == "__main__":

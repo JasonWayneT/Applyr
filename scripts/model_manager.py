@@ -280,8 +280,9 @@ def unload_resident_models(
     """Unload models in GPU RAM, plus any explicit names.
 
     Uses /api/ps (currently loaded), not /api/tags (everything installed).
-    Stage 0 needs this between Qwen extraction and Gemma scoring so both
-    are never resident at once.
+    Stage 0 needs this between extraction and scoring steps so both
+    are never resident at once (same model since 2026-08-22, but the
+    unload is still needed before-extract and after-stage0).
     """
     log_file = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),

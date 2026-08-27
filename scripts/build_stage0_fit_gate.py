@@ -1462,8 +1462,8 @@ def classify_gaps(
 # Client Communications Service..."). Deliberately NOT resolved through
 # evidence_scale.classify_requirement(): tested live and found that Jason's
 # own real employer name "Zero To Sixty" (workExperience.md) collides
-# lexically with "zero to one" often enough to confuse the small local
-# score model (gemma2:2b) into reading it as a match instead of the
+# lexically with "zero to one" often enough to confuse the local
+# score model into reading it as a match instead of the
 # disqualifier it actually is -- a coincidental collision a regex doesn't
 # have, so the unambiguous subset is decided without one.
 _DETERMINISTIC_0TO1_BUILD_RE = re.compile(
@@ -1810,9 +1810,15 @@ def build_stage0_fit_gate(
     stage_signal = _detect_stage_signal(jd_text)
 
     # --- Step 4: Gap classification (CR-093 evidence-scale engine) ---
-    # Qwen (extract) and Gemma (score) cannot share VRAM. Unload Qwen first.
+    # Extract and score now use the same model (qwen2.5:7b-instruct-q4_K_M).
+    # No VRAM handoff needed -- the model stays loaded from extraction.
+    # The unload/prepare path is retained for the case where FIT_MODEL
+    # overrides the score model to something different.
     if extraction_source == "llm":
-        _release_stage0_vram("before-score", required=True)
+        from evidence_scale import _score_model
+        actual_score_model = _score_model()
+        if STAGE0_EXTRACT_MODEL != actual_score_model:
+            _release_stage0_vram("before-score", required=True)
         _prepare_stage0_score_model()
     # work_exp loaded here (moved up from the old Step 5.5) -- every item's
     # LLM judgment needs real candidate ground truth, not just the tier-
@@ -2124,7 +2130,11 @@ def build_stage0_fit_gate(
 def _release_stage0_vram(reason: str, *, required: bool = False) -> None:
     """Unload resident local models before the next Stage 0 LLM step.
 
-    Extract uses Qwen 7B; score uses Gemma 2B. Loading both at once OOMs.
+    Extract and score both use Qwen 7B (2026-08-22), so the before-score
+    unload is skipped when the models match. The unload is still needed
+    before-extract (clear any prior batch's models) and after-stage0
+    (free VRAM for Stage 1). When FIT_MODEL overrides the score model to
+    a different tag, the before-score unload fires as before.
     """
     import pipeline_env
     if pipeline_env.stage0_section_mode() == "deterministic":
@@ -2163,7 +2173,7 @@ def _release_stage0_vram(reason: str, *, required: bool = False) -> None:
 
 
 def _prepare_stage0_score_model() -> None:
-    """Confirm Gemma is installed after Qwen has been unloaded."""
+    """Confirm the score model is installed and ready."""
     import pipeline_env
     if pipeline_env.stage0_section_mode() == "deterministic":
         return

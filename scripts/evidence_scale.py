@@ -39,9 +39,17 @@ _DEFAULT_TIER1_FLOOR = 65
 
 # 2026-08-20 bake-off (golden set, VRAM sampled while loaded):
 # gemma2:2b-instruct-q8_0 and qwen2.5:7b-instruct-q4_K_M both scored 21/21.
-# Gemma used ~3.7GB extra VRAM vs Qwen 7B's ~5.6GB. FIT_MODEL still overrides
-# for bake-offs. Do not let Settings.localModel or the VRAM selector swap this.
-STAGE0_SCORE_MODEL = "gemma2:2b-instruct-q8_0"
+# 2026-08-22: switched from gemma2:2b-instruct-q8_0 (2B) to qwen2.5:7b-instruct-q4_K_M
+# (7B, same model as STAGE0_EXTRACT_MODEL in build_stage0_fit_gate.py). The 2B
+# model scored correctly on the golden set but produced generic, narrative,
+# sometimes mismatched reasoning text that became the "anchor" in fit gates --
+# the "gibberish" pattern found pressure-testing archived JDs. The 7B model
+# produces more concise, evidence-specific reasoning. Since the 7B is already
+# loaded for section extraction, this also saves VRAM (one model instead of two)
+# and eliminates the model-swap stall between extract and score. FIT_MODEL
+# still overrides for bake-offs. Do not let Settings.localModel or the VRAM
+# selector swap this.
+STAGE0_SCORE_MODEL = "qwen2.5:7b-instruct-q4_K_M"
 
 _score_model_ready_for: str | None = None
 
@@ -217,6 +225,62 @@ class EvidenceClassificationError(Exception):
     silently substitute a guess."""
 
 
+# ---------------------------------------------------------------------------
+# Anchor post-processing (2026-08-22: fix for "gibberish" anchors).
+#
+# The 2B gemma model produced generic narrative reasoning ("The candidate has
+# experience with... This aligns with...") that became the `anchor` field in
+# fit gates, often mismatched with the actual requirement and truncated
+# mid-sentence at 200 chars. The 7B model produces better reasoning, but we
+# still post-process to strip any residual narrative filler and truncate at
+# a sentence boundary rather than mid-word.
+# ---------------------------------------------------------------------------
+
+# Prefix filler: strip just the filler words, keep the evidence that follows.
+# e.g. "The candidate has experience with Jira" -> "Jira"
+_ANCHOR_PREFIX_RE = re.compile(
+    r"^(?:The candidate (?:has |demonstrably |explicitly )"
+    r"(?:experience (?:with |in )?|demonstrated |documented |'s profile (?:explicitly )?(?:states?|indicates?)? ))",
+    re.I,
+)
+
+# Sentence filler: remove entire sentences that are pure narrative connective
+# tissue with no evidence value.
+# e.g. "This aligns with the requirement." -> removed
+_ANCHOR_SENTENCE_FILLER_RE = re.compile(
+    r"(?:This (?:directly )?aligns (?:directly )?with\s+[^.]*\.\s*"
+    r"|The (?:requirement|provided text|candidate's profile)\s+[^.]*\.\s*)",
+    re.I,
+)
+
+
+def _clean_anchor(reasoning: str) -> str:
+    """Strip generic narrative filler from the model's reasoning to produce
+    a concise, evidence-specific anchor. Truncate at sentence boundary
+    within 200 chars rather than mid-word."""
+    if not reasoning:
+        return "none"
+    text = reasoning.strip()
+    # Remove pure-filler sentences (This aligns with... / The requirement states...)
+    text = _ANCHOR_SENTENCE_FILLER_RE.sub("", text)
+    # Strip leading filler prefix (The candidate has experience with...)
+    text = _ANCHOR_PREFIX_RE.sub("", text, count=1)
+    # Truncate at 200 chars, at sentence boundary
+    if len(text) > 200:
+        truncated = text[:200]
+        last_period = truncated.rfind(". ")
+        if last_period > 50:
+            text = truncated[: last_period + 1]
+        else:
+            # No sentence boundary -- try comma, then hard truncate
+            last_comma = truncated.rfind(", ")
+            if last_comma > 80:
+                text = truncated[: last_comma]
+            else:
+                text = truncated.rstrip()
+    return text.strip() or "none"
+
+
 @dataclass
 class EvidenceJudgment:
     item: str
@@ -251,7 +315,7 @@ class EvidenceJudgment:
         return self.gap_source == "domain" and self.gate == "NONE" and self.evidence_level <= 2
 
     def to_legacy_dict(self) -> dict:
-        anchor = self.reasoning[:200] if self.reasoning else "none"
+        anchor = _clean_anchor(self.reasoning) if self.reasoning else "none"
         out: dict = {
             "item": self.item,
             "anchor": anchor,
@@ -377,7 +441,11 @@ uncertainty silently lower evidence_level -- report it via confidence instead.
 
 Return strict JSON: {"gate": "HARD"|"NONE", "gap_source": \
 "degree"|"domain"|"role_exclusion"|"certification"|"", \
-"evidence_level": 0-4, "confidence": "high"|"medium"|"low", "reasoning": "one sentence"}"""
+"evidence_level": 0-4, "confidence": "high"|"medium"|"low", \
+"reasoning": "evidence note (max 25 words): cite the specific tools, metrics, or project \
+names from the candidate profile that support your rating -- not a narrative sentence \
+about the candidate. Example: 'Jira, Productboard, Pendo at Cision; ACC-109 quarterly \
+roadmap; $40M ARR platform'"}"""
 
 
 def _build_prompt(

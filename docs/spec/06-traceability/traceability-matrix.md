@@ -269,6 +269,9 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-265` | CR-102 | Stage 1 first-draft quality contract | `scripts/author_from_packet.py`, `scripts/build_authoring_packet.py`, `scripts/submission_linter.py`, `scripts/authoring_examples.py` | implemented |
 | `AC-332`–`AC-338` | CR-102 | Stage 1 quality/provenance gates and linter precision | `scripts/test_author_from_packet.py`, `scripts/test_build_authoring_packet.py`, `scripts/test_submission_linter.py` | implemented |
 | `IMP-CR-102` | CR-102 | Stage 1 quality implementation record | `docs/spec/08-implementation/IMP-CR-102-stage1-first-draft-quality-contract.md` | implemented |
+| `FR-266` | CR-103 | ATS retrieval evidence | `scripts/verify_submission.py`, `scripts/jd_term_extractor.py` | implemented |
+| `FR-267` | CR-103 | PDF parser QA | `scripts/verify_submission.py` | implemented |
+| `AC-339`–`AC-342` | CR-103 | ATS contract and parser QA receipt fields | `scripts/test_verify_submission.py` | implemented |
 | `FR-257` | CR-076 | Workflow authority foundation | `scripts/run_submission.py`, `scripts/workflow/`, `scripts/contracts.py` `check_workflow_complete`, `scripts/test_workflow_authority.py` | in_progress |
 | `AC-289`–`AC-293` | CR-076 | Orchestrator slice + sole receipt writer + adopt + mid-state DONE oracle | same | in_progress |
 | `FR-258` | CR-077 | Receipt chaining + hash invalidation | `scripts/workflow/invalidate.py`, `runner.run_stage1_validate`, `run_submission --resume` | in_progress |

@@ -57,6 +57,7 @@
 | CR-080 | ATS / AI review (Stage 2B) — jd_term findings + dispositions; hm READY; no Stage 2 receipt | **In progress** (2026-08-09) — `FR-261`, `AC-312`–`AC-315` — [spec](CR-080-ats-ai-review.md) |
 | CR-081 | HM + final mech + Stage 2 policy receipt — critical_read, compile+verify_one, stage2.json COMPLETE, stage3 READY | **In progress** (2026-08-09) — `FR-262`, `AC-316`–`AC-320` — [spec](CR-081-hm-mech-stage2-receipt.md) |
 | CR-084 | Stage 3 finalize under orchestrator — `--finalize` wraps finalize_submission_job; stage3 receipt; COMPLETE / COMPLETE_WITH_OVERRIDE / PRACTICE_COMPLETE | **In progress** (2026-08-09) — `FR-263`, `AC-321`–`AC-325` — [spec](CR-084-stage3-finalize-orchestrator.md) |
+| CR-103 | ATS retrieval evidence & PDF parser QA | **Implemented** (2026-08-27) — `FR-266`–`FR-267`, `AC-339`–`AC-342` — [spec](CR-103-ats-retrieval-and-parser-qa.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

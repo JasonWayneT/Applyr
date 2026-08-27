@@ -660,6 +660,16 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-337` | acceptance | P0 | implemented | Corrected Sony/Solace examples can enter the packet example budget by global relevance | `FR-265` | CR-102 |
 | `AC-338` | acceptance | P0 | implemented | Confirmed `LW-021`, `LW-028`, and `LW-032` false-positive classes are regression-tested | `FR-265` | CR-102 |
 
+### CR-103 ATS retrieval evidence & PDF parser QA (FR-266–FR-267)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-266` | functional | P1 | implemented | Verification reports packet-supported ATS term coverage separately from global vocabulary gaps | `AC-339` | CR-103 |
+| `FR-267` | functional | P1 | implemented | Verification reports whether required resume and cover-letter fields survive PDF text extraction | `AC-340`–`AC-341` | CR-103 |
+| `AC-339` | acceptance | P1 | implemented | Receipt records each packet ATS term, claim IDs/JD items, and resume presence | `FR-266` | CR-103 |
+| `AC-340` | acceptance | P1 | implemented | Missing extracted identity, contact, role, employer, date, section, greeting, or sign-off fields are reported | `FR-267` | CR-103 |
+| `AC-341` | acceptance | P1 | implemented | Clean fixture reports all checked fields present | `FR-267` | CR-103 |
+| `AC-342` | acceptance | P1 | implemented | ATS and parser reports remain WARN-only and do not alter mechanical verification | `NFR-008` | CR-103 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |
@@ -671,6 +681,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `NFR-005` | cost | P0 | implemented | No LLM provider is called unless `_is_configured()` returns True — zero silent token waste from misconfigured providers |
 | `NFR-006` | infrastructure | P1 | implemented | Zero-Trust Remote Binding — Vite client and Express server bind to `0.0.0.0` to permit authorized access across overlay networks (Tailscale) |
 | `NFR-007` | cost | P0 | implemented | Cloud authoring input context per company must use a lean packet + rule digest; default path must not reload full `agent_context_pack.md` + full skill into a second independent cloud review agent per company (CR-074) |
+| `NFR-008` | reliability | P1 | implemented | ATS retrieval and PDF parser checks are local, deterministic, and WARN-only |
 
 ## Security Requirements
 

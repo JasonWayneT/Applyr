@@ -137,6 +137,129 @@ def _check_reading_order(pdf_path: str, md_text: str) -> dict:
     }
 
 
+def _extract_pdf_text(pdf_path: str) -> tuple[str | None, str | None]:
+    """Extract PDF text locally and return text plus an error, if any."""
+    if not os.path.exists(pdf_path):
+        return None, "pdf not found"
+    try:
+        out = subprocess.run(
+            ["pdftotext", "-layout", pdf_path, "-"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return None, f"pdftotext error: {exc}"
+    if out.returncode != 0:
+        return None, (out.stderr or "pdftotext failed").strip()
+    return out.stdout, None
+
+
+def _normalise_extracted_field(value: str) -> str:
+    """Normalize Markdown field text for conservative PDF substring checks."""
+    value = re.sub(r"\*\*|__", "", value)
+    value = re.sub(r"`", "", value)
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def _check_pdf_parseability(pdf_path: str, md_text: str, doc_type: str) -> dict:
+    """Check required identity, structure, and role fields in extracted PDF text."""
+    extracted, error = _extract_pdf_text(pdf_path)
+    if error:
+        return {"checked": False, "reason": error, "fields": {}, "missing": []}
+
+    extracted_normalized = _normalise_extracted_field(extracted or "")
+    fields: dict[str, bool] = {}
+
+    h1 = re.search(r"(?m)^#\s+([^#].*?)\s*$", md_text)
+    if h1:
+        fields["name"] = _normalise_extracted_field(h1.group(1)) in extracted_normalized
+        lines = md_text.splitlines()
+        h1_index = next((i for i, line in enumerate(lines) if line == h1.group(0)), -1)
+        contact = next(
+            (line.strip() for line in lines[h1_index + 1 :] if line.strip()),
+            "",
+        )
+        if contact and not contact.startswith("#"):
+            fields["contact"] = _normalise_extracted_field(contact) in extracted_normalized
+
+    for heading in re.findall(r"(?m)^##\s+(.+?)\s*$", md_text):
+        fields[f"section:{heading.strip()}"] = (
+            _normalise_extracted_field(heading) in extracted_normalized
+        )
+
+    if doc_type == "resume":
+        for index, match in enumerate(
+            re.finditer(r"(?m)^###\s+(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*$", md_text)
+        ):
+            title, company, dates = match.groups()
+            for label, value in (
+                ("title", title),
+                ("company", company),
+                ("dates", dates),
+            ):
+                fields[f"experience[{index}].{label}"] = (
+                    _normalise_extracted_field(value) in extracted_normalized
+                )
+    else:
+        greeting = re.search(r"(?mi)^(dear\s+.+?,?)\s*$", md_text)
+        if greeting:
+            fields["greeting"] = (
+                _normalise_extracted_field(greeting.group(1)) in extracted_normalized
+            )
+        signoff = re.search(
+            r"(?mi)^((?:best|kind|sincerely|respectfully)\s+regards?,?)\s*$",
+            md_text,
+        )
+        if signoff:
+            fields["signoff"] = (
+                _normalise_extracted_field(signoff.group(1)) in extracted_normalized
+            )
+
+    missing = [name for name, present in fields.items() if not present]
+    return {
+        "checked": True,
+        "fields": fields,
+        "missing": missing,
+        "ok": not missing,
+        "extracted_characters": len(extracted or ""),
+    }
+
+
+def _check_packet_ats_contract(folder: str, resume_text: str) -> dict:
+    """Report packet-supported ATS terms and whether each appears in the resume."""
+    packet_path = os.path.join(folder.rstrip("/\\"), "authoring_packet.json")
+    if not os.path.exists(packet_path):
+        return {"checked": False, "reason": "authoring_packet.json not found", "terms": []}
+    try:
+        with open(packet_path, encoding="utf-8") as f:
+            packet = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"checked": False, "reason": f"packet unreadable: {exc}", "terms": []}
+
+    terms = []
+    for entry in packet.get("ats_term_contract") or []:
+        if not isinstance(entry, dict) or not entry.get("term"):
+            continue
+        term = str(entry["term"])
+        present = jd_term_extractor._term_present_stemmed(term.lower(), resume_text.lower())
+        terms.append(
+            {
+                "term": term,
+                "claim_ids": list(entry.get("claim_ids") or []),
+                "jd_items": list(entry.get("jd_items") or []),
+                "present_in_resume": present,
+            }
+        )
+    return {
+        "checked": True,
+        "terms": terms,
+        "missing_supported_terms": [
+            entry["term"] for entry in terms if not entry["present_in_resume"]
+        ],
+    }
+
+
 def _sha256_hex(path: str) -> str | None:
     """sha256 of a file's raw bytes, or None if the file doesn't exist. Hex digest,
     not base64, to match the conventional git/sha256sum representation."""
@@ -213,8 +336,26 @@ def verify_one(folder: str) -> dict:
         receipt["reading_order"] = _check_reading_order(
             os.path.join(folder, "Resume.pdf"), open(resume_md, encoding="utf-8").read()
         )
+        resume_text = open(resume_md, encoding="utf-8").read()
+        receipt["pdf_parseability"] = {
+            "Resume.pdf": _check_pdf_parseability(
+                os.path.join(folder, "Resume.pdf"), resume_text, "resume"
+            ),
+            "CoverLetter.pdf": _check_pdf_parseability(
+                os.path.join(folder, "CoverLetter.pdf"),
+                open(cover_md, encoding="utf-8").read() if os.path.exists(cover_md) else "",
+                "cover_letter",
+            ),
+        }
+        receipt["ats_retrieval"] = _check_packet_ats_contract(folder, resume_text)
     else:
         receipt["reading_order"] = {"checked": False, "reason": "Resume.md not found"}
+        receipt["pdf_parseability"] = {}
+        receipt["ats_retrieval"] = {
+            "checked": False,
+            "reason": "Resume.md not found",
+            "terms": [],
+        }
 
     # CR-075 Epic 5 Story 5.2 -- WARN-tier: does every drafted claim trace to a real Fact ID?
     # Deliberately NOT folded into mechanically_verified's conjunction below (AC9) -- a

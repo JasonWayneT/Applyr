@@ -20,6 +20,7 @@ AI tends to "hallucinate" or inflate metrics to match JDs. This creates a trust 
 - `GOAL-003`: Detect invented numeric claims in generated bullets without any LLM call. *(CR-007)*
 - `GOAL-004`: Enforce style structure at the file level — strip forbidden sections, normalize headers, remove placeholders. *(CR-007)*
 - `GOAL-005`: Suppress irrelevant validation checks based on document type (resume vs. cover letter). *(CR-007)*
+- `GOAL-006`: Prove actionable ATS coverage and required PDF fields survive extraction. *(CR-103)*
 
 ## Requirements covered
 
@@ -30,6 +31,8 @@ AI tends to "hallucinate" or inflate metrics to match JDs. This creates a trust 
 | `FR-073` | Deterministic Numeric Fact Preservation | `preserves_core_facts()` in `verify_claims.py`; called per-bullet in two-phase local generation |
 | `FR-074` | Style Guard Forbidden Section & Header Normalization | `strip_forbidden_sections()`, `strip_placeholders()`, `normalize_resume_headers()` in `style_compliance_guard.py` |
 | `FR-075` | `validate_hard_facts()` Document-Type Awareness | `doc_type` param; education check gated; Cision title auto-corrected; placeholder tokens stripped |
+| `FR-266` | ATS Retrieval Evidence | Receipt surfaces packet-supported terms, claim IDs, JD items, and resume presence |
+| `FR-267` | PDF Parser QA | Receipt checks identity, contact, structure, role fields, and letter boundaries in extracted PDF text |
 
 ## Design notes (CR-007 additions)
 
@@ -52,3 +55,4 @@ Scans the resume line by line. When a `##` or `###` header matches `_FORBIDDEN_S
 | `TEST-073` | `FR-073`, `AC-075` | unit | `preserves_core_facts("3,500 accounts", "5,000 accounts")` returns `(False, ["5,000"])` | verified |
 | `TEST-074` | `FR-074`, `AC-076` | integration | Guard run on resume with `## Core Competencies` section strips it; `# CANDIDATE NAME` header restored from `## CANDIDATE NAME` variant | verified |
 | `TEST-075` | `FR-075`, `AC-077` | integration | `validate_hard_facts(cl_text, master, doc_type='cover_letter')` produces zero "MISSING FACT: Education" warnings | verified |
+| `TEST-103` | `FR-266`, `FR-267`, `AC-339`–`AC-342` | unit/integration | Clean and missing-field fixtures produce WARN-only receipt details without changing `mechanically_verified` | implemented |

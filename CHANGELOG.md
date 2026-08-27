@@ -24,6 +24,11 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Changed
+- **CR-103 ATS retrieval evidence and PDF parser QA (2026-08-27).** Verification now
+  separates packet-supported ATS terms from global vocabulary and checks that identity,
+  contact, role, employer, date, section, greeting, and sign-off fields survive PDF
+  text extraction. Findings remain WARN-only so false positives do not block a real
+  submission.
 - **Job Search's Location field now takes a country/region preset OR a specific city, in the
   same field (2026-08-26, Jason-supplied — matches how real job boards do it, not two separate
   controls).** Was a fixed `<select>` limited to 5 country-level presets with no way to express

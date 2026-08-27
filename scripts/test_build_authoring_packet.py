@@ -584,9 +584,11 @@ class TestBuildPacketIntegration(unittest.TestCase):
             "evidence_map", "excerpts", "soft_gaps", "hard_constraints",
             "hook_fact", "rule_digest_version", "packet_status",
             "estimated_tokens", "learned_examples", "example_bank_version",
+            "provenance_contract",
         ]
         for f in required_fields:
             self.assertIn(f, packet, f"Missing field: {f}")
+        self.assertEqual(packet["provenance_contract"]["version"], 2)
 
     def test_rule_digest_version_present(self):
         # Story 4.3: packet now stamps the real version from authoring_rule_digest.version
@@ -1516,7 +1518,11 @@ class TestLearnedExamplesPacket(unittest.TestCase):
 
     def test_over_budget_drops_examples_before_shrinking_excerpts(self):
         original = {"ACC-105-AGILE": "Led quarterly planning. Delivered the release."}
-        base = self._assemble(excerpts=original)
+        # Keep the baseline independent of the live bank. This test measures
+        # the budget delta of one injected example, not whichever examples
+        # happen to be curated in data/authoring_example_bank.json.
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            base = self._assemble(excerpts=original)
         budget = base["estimated_tokens"]
         example = {
             "id": "ex-1",

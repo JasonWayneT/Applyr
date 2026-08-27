@@ -266,6 +266,9 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-287` | CR-075 | Stage 2 force-reason policy + override log | `scripts/stage_gate.py`, `data/.force_override_log.json` | implemented |
 | `AC-288` | CR-075 | Compose emits claim_provenance.json | `scripts/author_from_packet.py` | implemented |
 | `IMP-CR-075` | CR-075 | Stage completion gates epics | `docs/spec/08-implementation/CR-075-stage-completion-gates-epics.md` | implemented |
+| `FR-265` | CR-102 | Stage 1 first-draft quality contract | `scripts/author_from_packet.py`, `scripts/build_authoring_packet.py`, `scripts/submission_linter.py`, `scripts/authoring_examples.py` | implemented |
+| `AC-332`–`AC-338` | CR-102 | Stage 1 quality/provenance gates and linter precision | `scripts/test_author_from_packet.py`, `scripts/test_build_authoring_packet.py`, `scripts/test_submission_linter.py` | implemented |
+| `IMP-CR-102` | CR-102 | Stage 1 quality implementation record | `docs/spec/08-implementation/IMP-CR-102-stage1-first-draft-quality-contract.md` | implemented |
 | `FR-257` | CR-076 | Workflow authority foundation | `scripts/run_submission.py`, `scripts/workflow/`, `scripts/contracts.py` `check_workflow_complete`, `scripts/test_workflow_authority.py` | in_progress |
 | `AC-289`–`AC-293` | CR-076 | Orchestrator slice + sole receipt writer + adopt + mid-state DONE oracle | same | in_progress |
 | `FR-258` | CR-077 | Receipt chaining + hash invalidation | `scripts/workflow/invalidate.py`, `runner.run_stage1_validate`, `run_submission --resume` | in_progress |
@@ -279,6 +282,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-263` | CR-084 | Stage 3 finalize under orchestrator | `runner.run_stage3_finalize`, `run_submission --finalize` | in_progress |
 | `FR-264` | CR-091 | Stage 0 skip ledger + folder placement | `scripts/stage0_skip_ledger.py`, `scripts/stage0_placement.py`, `server/stage0SkipLedger.ts`, `server/submissionFolders.ts`, `server/migrations/016_add_stage0_skips.sql`, `docs/spec/08-implementation/IMP-CR-091-stage0-skip-ledger.md` | implemented |
 | `AC-321`–`AC-325` | CR-084 | finalize wrap, COMPLETE, practice, override, explicit flag | same | in_progress |
+| `DATA-001` | CR-095 | Complete story-class claim index and derived tags-only sidecar | `data/master_claims.json`, `data/master_claims_tags_only.json`, `scripts/audit_claims_coverage.py` | implemented |
+| `CR-100` | CR-100 | Model-independent Stage 0 preference exclusions | `scripts/build_stage0_fit_gate.py`, `scripts/test_build_stage0_fit_gate.py` | implemented |
 
 
 ## Coverage checklist

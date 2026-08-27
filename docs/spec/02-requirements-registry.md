@@ -182,7 +182,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 ### Data Traceability (DATA-001 to DATA-001)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
 |---|---|---|---|---|---|---|
-| `DATA-001` | data | P0 | implemented | Fact ID Traceability System | `AC-039` | CR-020 |
+| `DATA-001` | data | P0 | implemented | Fact ID Traceability System, including complete story-class claim indexing | `AC-039` | CR-020, CR-095 |
 
 ## Acceptance criteria
 
@@ -646,6 +646,19 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-329` | acceptance | P0 | implemented | Production Skip → archive/skipped + ledger; PASS from pending_review → submissions | `FR-264` | CR-091 |
 | `AC-330` | acceptance | P0 | implemented | `--force` PASS deletes the ledger row | `FR-264` | CR-091 |
 | `AC-331` | acceptance | P0 | implemented | Reconcile sweeps SKIP fit-gate folders out of submissions | `FR-264` | CR-091 |
+
+### CR-102 Stage 1 first-draft quality contract (FR-265)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-265` | functional | P0 | implemented | Stage 1 fails closed on deterministic first-draft quality defects, requires exact unit-level provenance for rebuilt packets, and retains Stage 2 as an independent audit | `AC-332`–`AC-338` | CR-102 |
+| `AC-332` | acceptance | P0 | implemented | Substantive `LW-009-PAIR` findings block Stage 1 | `FR-265` | CR-102 |
+| `AC-333` | acceptance | P0 | implemented | `LW-026` JD-specificity findings block Stage 1 | `FR-265` | CR-102 |
+| `AC-334` | acceptance | P0 | implemented | Provenance-contract v2 packets require every resume bullet and factual cover-letter sentence to cite packet claim IDs | `FR-265` | CR-102 |
+| `AC-335` | acceptance | P0 | implemented | Stage 1 runs resume and cover quality checks, including bullet length and professional close | `FR-265` | CR-102 |
+| `AC-336` | acceptance | P0 | implemented | Narrow defensive ownership disclaimers hard-block under `LR-032` | `FR-265` | CR-102 |
+| `AC-337` | acceptance | P0 | implemented | Corrected Sony/Solace examples can enter the packet example budget by global relevance | `FR-265` | CR-102 |
+| `AC-338` | acceptance | P0 | implemented | Confirmed `LW-021`, `LW-028`, and `LW-032` false-positive classes are regression-tested | `FR-265` | CR-102 |
 
 ## Non-Functional Requirements
 

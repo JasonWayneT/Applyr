@@ -44,6 +44,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -58,6 +59,7 @@ import contracts  # noqa: E402
 import stage_gate  # noqa: E402
 from authoring_defect_categories import category_for_rule  # noqa: E402
 from authoring_examples import format_learned_examples  # noqa: E402
+from packet_evidence_utilization import rank_packet_evidence  # noqa: E402
 from stage_gate import StageGateForceError  # noqa: E402
 
 _RULE_DIGEST_PATH = _REPO_ROOT / "data" / "authoring_rule_digest.md"
@@ -93,23 +95,25 @@ Output exactly three fenced code blocks in this order:
   1. A block labeled "Resume.md" containing the full resume Markdown.
   2. A block labeled "CoverLetter.md" containing the full cover letter Markdown.
   3. A block labeled "claim_provenance.json" containing a JSON object that records, for every
-     bullet and proof point you just drafted, which packet claim_ids you used to back it. You
+     resume bullet and factual cover-letter sentence you just drafted, which packet claim_ids
+     you used to back it. You
      are already choosing this evidence from the packet's evidence_map as you write each
      bullet — this block just records the choice you already made, it is not new work. Exact
      schema:
        {
          "company": "<packet's company>",
          "resume_claims": [
-           {"bullet": "<first several words or full text of the bullet>", "claim_ids": ["ACC-104", "MET-10"]},
+          {"bullet": "<full exact bullet text>", "claim_ids": ["ACC-104", "MET-10"]},
            ...
          ],
          "cover_letter_claims": [
-           {"proof_point": "<first several words or full text of the proof point>", "claim_ids": ["ACC-117"]},
+          {"sentence": "<full exact factual sentence>", "claim_ids": ["ACC-117"]},
            ...
          ]
        }
      Use only claim_ids present in the packet below. Every resume bullet and every cover
-     letter proof point needs at least one claim_id.
+     factual letter sentence needs at least one claim_id. Company/JD observations and the
+     professional closing do not need claim_ids. Do not combine several sentences into one row.
 
 Write each block to its own file in this submission folder, named exactly after the block's
 label: Resume.md, CoverLetter.md, and claim_provenance.json.
@@ -227,7 +231,34 @@ def build_authoring_prompt(
     system_tokens = len(digest_text.encode("utf-8")) // 4
     packet_json = json.dumps(packet, indent=2, ensure_ascii=False)
     examples_block = format_learned_examples(packet.get("learned_examples") or [])
-    user_body = f"{_PREAMBLE}\n\n```json\n{packet_json}\n```"
+    utilization = rank_packet_evidence(packet)
+    priority_claims = [
+        row["claim_id"]
+        for row in utilization["claims"]
+        if row["high_priority"]
+    ]
+    priority_instruction = ""
+    if priority_claims:
+        priority_instruction = (
+            "\n\nEVIDENCE PRIORITY: The following packet claims each support multiple "
+            "important JD items. Use every one in a resume bullet or cover-letter proof "
+            "point, and cite it in claim_provenance.json: "
+            + ", ".join(priority_claims)
+            + ". Do not add unsupported content simply to make room."
+        )
+    ats_terms = [
+        row["term"]
+        for row in packet.get("ats_term_contract") or []
+        if isinstance(row, dict) and isinstance(row.get("term"), str) and row["term"].strip()
+    ]
+    ats_instruction = ""
+    if ats_terms:
+        ats_instruction = (
+            "\n\nATS TERM CONTRACT: Use each of these exact, packet-supported JD terms "
+            "naturally in Resume.md and keep the supporting claim in "
+            "claim_provenance.json: " + ", ".join(ats_terms) + "."
+        )
+    user_body = f"{_PREAMBLE}{priority_instruction}{ats_instruction}\n\n```json\n{packet_json}\n```"
     if examples_block:
         user_body = f"{user_body}\n\n{examples_block}"
     user_tokens = len(user_body.encode("utf-8")) // 4
@@ -460,12 +491,38 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
         # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
         lines.append(_apply_resume_header_if_available(folder))
 
+        # Implements FR-265: Stage 1 owns deterministic document quality.
+        # These checks used to
+        # run only in Stage 2, which let overlong bullets and missing professional
+        # closing transitions survive the first draft.
+        try:
+            sys.path.insert(0, str(_SCRIPT_DIR))
+            from quality_checker import (  # type: ignore
+                check_and_repair_cover_letter,
+                check_resume,
+            )
+
+            resume_ok, resume_message = check_resume(str(resume))
+            letter_ok, letter_message = check_and_repair_cover_letter(str(letter))
+            if resume_ok and letter_ok:
+                lines.append("PASS [stage1_quality]: resume and cover-letter structure")
+            else:
+                passed = False
+                lines.append(
+                    "FAIL [stage1_quality]: "
+                    f"resume={resume_message}; cover_letter={letter_message}"
+                )
+        except Exception as exc:
+            passed = False
+            lines.append(f"FAIL [stage1_quality]: {exc}")
+
         # 2. Lint Resume.md + CoverLetter.md only (never authoring_prompt.md —
         # that file lists forbidden phrases as negative examples and would false-fail).
         try:
             sys.path.insert(0, str(_SCRIPT_DIR))
             from submission_linter import (  # type: ignore
                 check_cross_document_repetition,
+                check_jd_specificity_floor,
                 lint_document,
             )
 
@@ -493,9 +550,40 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                 )
                 for item in pair_warns:
                     violations.append(_violation_row(item, "resume+cover_letter"))
-                lines.append(
-                    f"PASS [lint/resume+cover_letter (pair)]: {len(pair_warns)} warn(s)"
+                if pair_warns:
+                    passed = False
+                    lines.append(
+                        "FAIL [lint/resume+cover_letter (pair)]: "
+                        f"{len(pair_warns)} substantive repeated phrase(s)"
+                    )
+                else:
+                    lines.append("PASS [lint/resume+cover_letter (pair)]: 0 warn(s)")
+
+                jd_path = folder / "Original_JD.txt"
+                jd_text = jd_path.read_text(encoding="utf-8") if jd_path.exists() else ""
+                company_name = folder.name
+                gate_path = folder / "stage0_fit_gate.json"
+                if gate_path.exists():
+                    try:
+                        company_name = str(
+                            json.loads(gate_path.read_text(encoding="utf-8")).get("company")
+                            or company_name
+                        )
+                    except (OSError, json.JSONDecodeError):
+                        pass
+                specificity_warns = check_jd_specificity_floor(
+                    texts["cover_letter"], jd_text, company_name=company_name
                 )
+                for item in specificity_warns:
+                    violations.append(_violation_row(item, "cover_letter"))
+                if specificity_warns:
+                    passed = False
+                    lines.append(
+                        "FAIL [lint/LW-026 specificity]: cover letter does not meet "
+                        "the packet-specific JD detail floor"
+                    )
+                else:
+                    lines.append("PASS [lint/LW-026 specificity]")
         except ImportError:
             lines.append("SKIP [lint] — submission_linter not importable; run manually")
         except Exception as exc:
@@ -518,6 +606,21 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
         if not opt_ok:
             passed = False
 
+        utilization_ok, utilization_lines = _check_packet_evidence_utilization(folder)
+        lines.extend(utilization_lines)
+        if not utilization_ok:
+            passed = False
+
+        ats_ok, ats_lines = _check_packet_ats_term_contract(folder)
+        lines.extend(ats_lines)
+        if not ats_ok:
+            passed = False
+
+        sentence_ok, sentence_lines = _check_sentence_level_provenance(folder)
+        lines.extend(sentence_lines)
+        if not sentence_ok:
+            passed = False
+
         # Summary
         print("\n".join(lines))
         verdict = "PASS" if passed else "FAIL"
@@ -528,6 +631,112 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             _record_verify_attempt(
                 record_to, passed=passed, violations=violations
             )
+
+
+def _normalize_provenance_unit(text: str) -> str:
+    text = re.sub(r"^\s*[*-]\s+", "", text or "")
+    return re.sub(r"\s+", " ", text).strip().rstrip(".!?").lower()
+
+
+def _cover_factual_sentences(text: str) -> list[str]:
+    """Return candidate-fact sentences, excluding JD framing and the close."""
+    body = (text or "").split("Dear Hiring Manager,", 1)[-1]
+    body = re.split(r"\n\s*(?:Best regards|Regards|Sincerely),", body, maxsplit=1)[0]
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", re.sub(r"\n+", " ", body))
+        if sentence.strip()
+    ]
+    factual: list[str] = []
+    for sentence in sentences:
+        lower = sentence.lower()
+        first_person = re.search(r"\bi\b", lower) and not re.search(
+            r"\bi would\b|\bi am (?:drawn|interested|applying|glad)\b",
+            lower,
+        )
+        named_history = re.search(r"\b(?:cision|sterkly|zero to sixty)\b", lower)
+        experience_claim = re.search(
+            r"\bmy (?:experience|background|work|role|record|contribution)\b", lower
+        )
+        anaphoric_result = re.match(
+            r"^(?:that|this|the) (?:work|result(?:ing)?|program|project|analysis|plan)\b",
+            lower,
+        )
+        attributed_outcome = re.match(
+            r"^(?:account managers|customers|the (?:platform|product|initiative|"
+            r"project|program|result))\b",
+            lower,
+        )
+        if (
+            first_person
+            or named_history
+            or experience_claim
+            or anaphoric_result
+            or attributed_outcome
+        ):
+            factual.append(sentence)
+    return factual
+
+
+def _check_sentence_level_provenance(folder: Path) -> tuple[bool, list[str]]:
+    """Require FR-265 exact unit-level provenance for packets rebuilt under v2."""
+    packet_path = folder / "authoring_packet.json"
+    prov_path = folder / "claim_provenance.json"
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return True, ["SKIP [sentence_provenance]: packet unavailable"]
+
+    contract = packet.get("provenance_contract") or {}
+    version = contract.get("version") if isinstance(contract, dict) else None
+    if not isinstance(version, int) or version < 2:
+        return True, ["SKIP [sentence_provenance]: legacy packet"]
+    try:
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+        resume_text = (folder / "Resume.md").read_text(encoding="utf-8")
+        letter_text = (folder / "CoverLetter.md").read_text(encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"FAIL [sentence_provenance]: could not parse inputs: {exc}"]
+
+    def _covered(section: str, field: str) -> set[str]:
+        covered: set[str] = set()
+        for row in provenance.get(section) or []:
+            if not isinstance(row, dict) or not row.get("claim_ids"):
+                continue
+            value = row.get(field)
+            if isinstance(value, str) and value.strip():
+                covered.add(_normalize_provenance_unit(value))
+        return covered
+
+    resume_units = [
+        line.strip()[2:].strip()
+        for line in resume_text.splitlines()
+        if line.strip().startswith(("* ", "- "))
+    ]
+    cover_units = _cover_factual_sentences(letter_text)
+    covered_resume = _covered("resume_claims", "bullet")
+    covered_cover = _covered("cover_letter_claims", "sentence")
+
+    missing_resume = [
+        unit for unit in resume_units
+        if _normalize_provenance_unit(unit) not in covered_resume
+    ]
+    missing_cover = [
+        unit for unit in cover_units
+        if _normalize_provenance_unit(unit) not in covered_cover
+    ]
+    if not missing_resume and not missing_cover:
+        return True, [
+            "PASS [sentence_provenance]: every resume bullet and factual "
+            "cover-letter sentence has exact claim coverage"
+        ]
+
+    lines = []
+    for unit in missing_resume[:5]:
+        lines.append(f'FAIL [sentence_provenance/resume]: uncited bullet "{unit}"')
+    for unit in missing_cover[:5]:
+        lines.append(f'FAIL [sentence_provenance/cover_letter]: uncited factual sentence "{unit}"')
+    return False, lines
 
 
 def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
@@ -637,6 +846,101 @@ def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
     if ok:
         lines.append("PASS [optimization_bar]: soft_gap/required claim_ids cited in provenance")
     return ok, lines
+
+
+def _check_packet_evidence_utilization(folder: Path) -> tuple[bool, list[str]]:
+    """Fail closed when a repeatedly mapped, high-priority packet claim is unused."""
+    packet_path = folder / "authoring_packet.json"
+    prov_path = folder / "claim_provenance.json"
+    if not packet_path.exists() or not prov_path.exists():
+        return True, ["SKIP [evidence_utilization]: packet or provenance missing"]
+    try:
+        report = rank_packet_evidence(
+            json.loads(packet_path.read_text(encoding="utf-8")),
+            json.loads(prov_path.read_text(encoding="utf-8")),
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"FAIL [evidence_utilization]: could not parse input: {exc}"]
+
+    unused = report["high_priority_unused"]
+    if unused:
+        return False, [
+            "FAIL [evidence_utilization]: high-priority packet evidence unused "
+            f"(score >= {report['high_priority_score']}): {', '.join(unused)}"
+        ]
+    return True, [
+        "PASS [evidence_utilization]: all high-priority packet claims are cited"
+    ]
+
+
+def _check_packet_ats_term_contract(folder: Path) -> tuple[bool, list[str]]:
+    """Fail closed when a packet-supported ATS term is absent from Resume.md."""
+    packet_path = folder / "authoring_packet.json"
+    resume_path = folder / "Resume.md"
+    provenance_path = folder / "claim_provenance.json"
+    if not packet_path.exists() or not resume_path.exists():
+        return True, ["SKIP [ats_term_contract]: packet or resume missing"]
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"FAIL [ats_term_contract]: could not parse packet: {exc}"]
+
+    contract = packet.get("ats_term_contract")
+    if contract is None:
+        return True, ["SKIP [ats_term_contract]: legacy packet has no contract"]
+    if contract and not provenance_path.exists():
+        return False, ["FAIL [ats_term_contract]: claim_provenance.json missing"]
+    try:
+        from jd_term_extractor import _term_present_stemmed  # type: ignore
+        resume_text = resume_path.read_text(encoding="utf-8").lower()
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8")) if contract else {}
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, [f"FAIL [ats_term_contract]: could not read inputs: {exc}"]
+
+    missing = [
+        row["term"] for row in contract
+        if isinstance(row, dict)
+        and isinstance(row.get("term"), str)
+        and row["term"].strip()
+        and not _term_present_stemmed(row["term"].lower(), resume_text)
+    ]
+    if missing:
+        return False, [
+            "FAIL [ats_term_contract]: packet-supported JD terms missing from Resume.md: "
+            + ", ".join(missing)
+        ]
+    cited_resume_ids = {
+        claim_id
+        for row in provenance.get("resume_claims") or []
+        if isinstance(row, dict)
+        for claim_id in row.get("claim_ids") or []
+        if isinstance(claim_id, str) and claim_id.strip()
+    }
+    unsupported: list[str] = []
+    for row in contract:
+        if not isinstance(row, dict) or not isinstance(row.get("term"), str):
+            continue
+        support_ids = [
+            claim_id for claim_id in row.get("claim_ids") or []
+            if isinstance(claim_id, str) and claim_id.strip()
+        ]
+        if support_ids and not any(
+            any(
+                cited == support
+                or cited.startswith(support)
+                or support.startswith(cited)
+                or "-".join(cited.split("-")[:2]) == "-".join(support.split("-")[:2])
+                for cited in cited_resume_ids
+            )
+            for support in support_ids
+        ):
+            unsupported.append(row["term"])
+    if unsupported:
+        return False, [
+            "FAIL [ats_term_contract]: terms lack a supporting resume provenance claim: "
+            + ", ".join(unsupported)
+        ]
+    return True, ["PASS [ats_term_contract]: all packet-supported JD terms are in Resume.md"]
 
 
 # ---------------------------------------------------------------------------

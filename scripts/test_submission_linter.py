@@ -1,13 +1,14 @@
 """Tests for submission_linter.py — Epic 1, Story 1.8."""
 import sys
 import os
+import unittest
 sys.path.insert(0, os.path.dirname(__file__))
 
-import pytest
 from submission_linter import (
     lint_document,
     LintResult,
     check_b2b_saas_positioning,
+    check_attribution_verb_strength,
     check_cross_employer_audience_bleed,
     check_jd_specificity_floor,
     check_wrong_job_company_bleed,
@@ -586,6 +587,81 @@ def test_LW032_own_company_does_not_warn():
     assert hits == []
 
 
+def test_LR032_blocks_defensive_ownership_disclaimer():
+    result = lint_document(
+        CL_CLEAN.replace(
+            "I partnered with engineering",
+            "Most of the time the fix was mine to make. I partnered with engineering",
+        ),
+        "cover_letter",
+    )
+    assert any(v.rule_id == "LR-032" for v in result.blocks)
+
+
+def test_LW021_does_not_match_cision_inside_decisions_or_generic_operations():
+    jd = (
+        "Patients and advocates make healthcare decisions through internal operations. "
+        "These operations help patients make better decisions. Patients use the service "
+        "while advocates support healthcare decisions and operations."
+    )
+    letter = (
+        "Solace helps patients and advocates make decisions inside healthcare operations. "
+        "That makes the user funnel part of the same product problem."
+    )
+    assert check_cross_employer_audience_bleed(
+        "", letter, jd, company_name="Solace"
+    ) == []
+
+
+def test_LW021_allows_target_framing_before_past_employer_bridge():
+    jd = (
+        "PlayStation membership supports gaming subscriptions. PlayStation "
+        "membership gives subscribers gaming benefits and PlayStation access."
+    )
+    letter = (
+        "PlayStation membership is the part of this role that stands out to me. "
+        "At Cision, I worked on a paid-content initiative with separate ingestion routes."
+    )
+    assert check_cross_employer_audience_bleed(
+        "", letter, jd, company_name="Sony Interactive Entertainment"
+    ) == []
+
+
+def test_LW028_allows_acc303_separate_subject_attribution():
+    letter = (
+        "I built the company's first professional landing page, after which engineering "
+        "built the automated Salesforce onboarding funnel around it, together lifting "
+        "conversion by roughly 40 percentage points."
+    )
+    assert not any(
+        v.rule_id == "LW-028"
+        for v in check_attribution_verb_strength("", letter)
+    )
+    alternate = (
+        "A landing page I built became the entry point for an engineering-built "
+        "Salesforce onboarding flow, together lifting conversion by roughly "
+        "40 percentage points."
+    )
+    assert not any(
+        v.rule_id == "LW-028"
+        for v in check_attribution_verb_strength("", alternate)
+    )
+
+
+def test_LW032_ignores_contact_header_and_ambiguous_common_names():
+    hits = check_wrong_job_company_bleed(
+        resume="# Jason\nlinkedin.com/in/jason\n\n## PROFESSIONAL SUMMARY\nProduct Manager.",
+        cover_letter=(
+            "# Jason\nlinkedin.com/in/jason\n\nDear Hiring Manager,\n\n"
+            "I use a weighted point system and name the tradeoffs."
+        ),
+        jd_text="Product Manager at Solace",
+        own_company="Solace",
+        known_names={"LinkedIn", "Point", "Name", "Solace"},
+    )
+    assert hits == []
+
+
 def test_LW032_jd_mention_does_not_warn():
     hits = check_wrong_job_company_bleed(
         resume="",
@@ -602,5 +678,13 @@ def test_LW032_missing_db_does_not_raise():
     assert names == set()
 
 
+def load_tests(loader, tests, pattern):
+    suite = unittest.TestSuite()
+    for name, value in sorted(globals().items()):
+        if name.startswith("test_") and callable(value):
+            suite.addTest(unittest.FunctionTestCase(value, description=name))
+    return suite
+
+
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    unittest.main()

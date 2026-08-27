@@ -1,3 +1,17 @@
+- **CR-099: safe historical defect baseline (2026-08-24).** Added an opt-in,
+  provenance-preserving importer for structured archived first-draft verification
+  records. Historical candidates require human confirmation and remain excluded
+  from the live CR-097 ledger, example-bank promotion, and post-launch metrics.
+
+- **CR-100: model-independent Stage 0 hard gates (2026-08-25).** Deterministic
+  preference exclusions now finish before model-dependent extraction and evidence
+  scoring. Obvious no-go roles can be classified even when the local models are
+  unavailable, while non-excluded roles remain fail-closed.
+- **Stage 0 batch VRAM lifecycle optimization (2026-08-25).** Batch runs can set
+  `STAGE0_BATCH_KEEP_ALIVE=1` to retain the final score model until the next
+  role's mandatory pre-extraction purge. This removes the redundant end-of-role
+  unload while preserving the Qwen/Gemma handoff and single-role default.
+
 # Changelog — Applyr
 
 All notable changes are documented here at the major milestone level.
@@ -10,6 +24,104 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Changed
+- **CR-102 Stage 1 first-draft quality contract (2026-08-26).** Stage 1 now
+  fails on substantive resume/letter repetition, insufficient JD specificity,
+  deterministic resume/cover quality failures, defensive disclaimers, and
+  missing exact bullet/factual-sentence provenance for rebuilt packets. Added
+  corrected Sony/Solace retrieval examples and fixed confirmed false positives
+  in audience bleed, ACC-303 attribution, and wrong-company detection. Stage 2
+  remains an independent audit.
+- **TheirStack connector now runs a remote pass + a local-area pass instead of one unfiltered
+  US-wide query (2026-08-26).** Previously `job_title_or` + `job_country_code_or: ['US']` pulled
+  every matching US job regardless of work setting, most of which the app's own geographic gate
+  discarded after already being billed (TheirStack charges 1 credit per job *returned*). Now
+  splits the per-run credit budget across a `workplace_types_or: ['remote']` pass and a
+  `job_location_pattern_or` pass using `local_area_terms` (San Diego terms, see below), deduping
+  before credits are attributed. Still on the free tier (200 credits/month) — declined the paid
+  upgrade (2026-08-26 discussion); this just stops spending free credits on jobs that were never
+  going to survive the gate anyway. `createTheirstackConnector` now takes `localAreaTerms`,
+  wired from `prefs.localAreaTerms` in `scoutOrchestrator.ts`.
+- **New `scripts/expand_openpostings_companies.py` (2026-08-26).** Replaces hand-guessing company
+  names from memory (the previous session's approach) with a systematic source: the ~15,800
+  Greenhouse/Lever/Ashby board-token lists from
+  [Feashliaa/job-board-aggregator](https://github.com/Feashliaa/job-board-aggregator)'s `data/`
+  folder (Common-Crawl-harvested, free, no TheirStack credits spent), downloaded to
+  `data/archive/ats_company_seed_lists/` (gitignored). For each candidate not already tracked,
+  hits the real public board API and only inserts the company if it currently has a live
+  posting in the product-manager title family that survives Jason's own
+  `blocked_titles`/`blocked_role_titles`/`blocked_focus_area_words`/`blocked_industries` from
+  `data/candidate_preferences.json` — a live-relevance filter, not a bulk import, since
+  OpenPostings' own sync already can't finish a full pass over ~7,800 companies in one run
+  (README.md) and padding that list with irrelevant companies would only dilute it further.
+  Also filters obvious non-companies (all-digit tokens — auto-generated trial ATS accounts) and
+  boards with under 3 total postings (likely abandoned/demo accounts). Known limitation: the
+  industry blocklist catches named categories (crypto, gambling, etc.) but not geography or
+  domain fit generally — a foreign or off-domain company with a qualifying title can still get
+  added; Applyr's own per-job gates catch that at sync time, so the cost is a diluted company
+  list, not a wrong job reaching Jason. Progress is checkpointed
+  (`data/archive/ats_company_seed_lists/scan_progress.json`) so runs resume rather than re-scan.
+  Re-download the seed lists periodically (see script docstring) to catch newly-added companies.
+  **First real batch (2026-08-26): checked 900 candidates (300/ATS), added 80.** Manually
+  re-verified all 80 and pruned 32: 22 whose only qualifying hit was bare "program manager"
+  (aerospace/defense contractors, nonprofit/government programs, manufacturing NPI, HR/events
+  program managers — a generic title collision, not a product role) and 10 the industry/geo
+  filter missed by keyword alone (Brazil/Germany/UK-only postings, a Vietnamese mobile-games
+  studio, an Avalanche-blockchain company, a staffing agency reposting other employers' jobs).
+  Net 48 kept. Removed "program manager" as a standalone qualifying signal in the script
+  itself so future runs don't reproduce that 22-company class of noise; the 10 foreign/brand-name
+  misses are the documented keyword-matching limitation above and still need a human pass.
+- **`local_area_terms` now survives Settings saves (2026-08-26).** The geographic
+  gate (`passesGeographicGate`) already supported "remote OR local-area match"
+  scoring via `local_area_terms`, but the field wasn't in
+  `PRESERVE_PIPELINE_PREF_KEYS`, so a value set outside the (nonexistent) Settings
+  UI field would be silently dropped on the next Settings save. Added it to the
+  preserve list; `data/candidate_preferences.json` (gitignored, local data) now
+  carries a San Diego-area term list so Remote-or-San-Diego roles pass the gate.
+  No UI field yet — still requires a direct edit to add/change terms.
+- **OpenPostings company-list gap: Greenhouse coverage was 6 companies (2026-08-26).**
+  Diagnosed low scout-connector yield for PM/PO roles: OpenPostings' bundled
+  `companies` table (~7,748 rows, gitignored local data) skews toward
+  Workday/iCIMS/Taleo/UltiPro-style enterprise ATS platforms and had only 6
+  Greenhouse-hosted companies tracked, none of them recognizable B2B SaaS names.
+  `fetchGreenhouseJobBoard`/`fetchLeverJobBoard` (OpenPostings server) already
+  support running a company list against the real public Greenhouse/Lever board
+  APIs — no per-search company targeting needed, since OpenPostings searches by
+  title across every row in its own list. Verified 44 real, live Greenhouse/Lever
+  board tokens for well-known B2B SaaS companies (451 PM/PO/Program Manager
+  postings found pre-filter, 265 surviving Jason's title blocklist) and inserted
+  them into the local `companies` table. Not tracked in git (`data/archive/` is
+  gitignored); a future contributor regenerating that OpenPostings checkout from
+  scratch won't inherit this seed and would need to re-add it.
+- **Data-infrastructure/data-pipeline company coverage (2026-08-26).** Confirmed
+  title-scope matching already treats "Data Product Manager" / "Platform Product
+  Manager" / "Infrastructure Product Manager" as in-family via
+  `PRODUCT_MANAGER_FAMILY_TITLE` (`shared/domain/gates.ts`) — no search-term
+  change needed. The gap was company coverage again: verified and added 11 more
+  real, live Greenhouse/Ashby boards for data-infra companies (Fivetran,
+  ClickHouse, Hightouch, Cribl, Sigma Computing, Collibra, Cockroach Labs,
+  Starburst, Honeycomb, Airbyte, Materialize) — 48 PM/PO/Program Manager
+  postings survive the title blocklist across just these, several literally
+  "Reverse ETL"/"Data Federation"/"Streaming Platform" titled. Snowflake,
+  Confluent, Astronomer, Monte Carlo, Atlan, and Prefect were already present
+  (lowercased company_name) but not yet crawled for postings — no insert needed,
+  just needs a sync to reach them.
+- **Stage 1 packet evidence utilization guard (2026-08-26).** `author_from_packet.py`
+  now ranks only claims already selected in an authoring packet by their mapped
+  JD importance and soft-gap relevance. Repeatedly mapped high-priority evidence
+  must be cited in `claim_provenance.json` before Stage 1 can pass. The guard
+  never selects new claims, writes resume content, or changes Stage 0 fit
+  decisions.
+- **CR-101: pre-draft ATS term contract (2026-08-26).** Authoring packets now
+  identify verified JD terms that the packet can support, including deterministic
+  skill-anchor excerpts when Stage 0 omitted the relevant line. The Stage 1
+  prompt requires those exact terms in `Resume.md`, and verification fails unless
+  the resume contains each term and cites a supporting packet claim. ATS review
+  remains a backstop rather than the first place predictable term gaps appear.
+- **CR-095: completed the WorkExperience story-class claim index (2026-08-24).**
+  Added tags-only catalog metadata for the remaining indexable stories, kept
+  personal Docker use nonclaimable, regenerated the derived claim sidecar, and
+  fixed the packet-budget regression test so it is independent of live bank
+  contents. The strict claims audit and full test suite are clean.
 - **CR-093 fit-rubric spec is now tracked (`data/fit_rubric_spec.html`, 2026-08-21).** Local leftover `data/*.docx` and `scripts/_bakeoff*.py` are gitignored.
 - **`closed-lost` and design-team claims are now WARNs (`LW-036`/`LW-037`, 2026-08-21).** Salesforce Closed Lost is Cision CRM jargon: say lost subscriptions / lost subscription opportunities. Design is not a verified partner. "I designed a formula" still passes.
 - **CR-098: no-ai-slop is harness-agnostic (2026-08-21).** First draft is constrained by `author_from_packet.py`'s COVER LETTER VOICE preamble plus two `cover_voice_kicker` bank examples. Check is `LW-033`/`LW-034`/`LW-035` in `submission_linter.py`. Judgment-only Detect lives at `.agents/skills/submission-no-ai-slop/SKILL.md` (Cursor and Antigravity); Claude Code keeps a pointer. Digest budget unchanged.

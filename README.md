@@ -44,7 +44,7 @@ This works for anyone with real experience to draw from: corporate roles, freela
 |---|---|
 | **Phase** | Dogfood |
 | **Stability** | Active development — breaking changes possible between versions |
-| **Last updated** | June 2026 (CR-053/054/055 fit & gate overhaul) |
+| **Last updated** | August 2026 (CR-093 fit engine, CR-094 truth architecture, CR-097 authoring feedback loop) |
 
 ---
 
@@ -241,6 +241,9 @@ Live progress and source metrics (fetched, filtered, and passed counts), along w
 
 1. **Deterministic gates first (zero LLM):** DB cooldown/reapply history, prefs exclusion zones (people management, 0-to-1, revenue/billing, AI/ML ownership), title/location/years gates.
 2. **Per-requirement evidence judgment (`scripts/evidence_scale.py`):** one LLM call per required/preferred JD line, rating a 0–4 behaviorally-anchored evidence scale (no evidence → strong direct evidence) against retrieval-scoped excerpts of `workExperience.md`. A line only hard-gates (disqualifies outright) for an unbridgeable degree, a named regulated-domain requirement with its own years threshold, or a role-category exclusion — named tools/skills never gate on their own (spec-grounded fix for a real miss: a JD was previously rejected sight-unseen over one tool mention).
+   For multi-role local runs, set `STAGE0_BATCH_KEEP_ALIVE=1` to avoid the
+   redundant post-role model purge. The next role still purges before loading
+   Qwen, so the VRAM-safe Qwen/Gemma handoff is unchanged.
 3. **Deterministic weighted formula:** `compute_fit_score()` turns those per-item judgments into a single 0–100 score — no second LLM call.
 4. **Score bands from `data/fit_rubric_calibration.json`** (tracked in git, deliberately not `candidate_preferences.json` — a scoring-algorithm calibration constant isn't a personal job-search preference): `skip_floor` 40 and `tier1_floor` 65 decide Skip / Tier 2 / Tier 1. Jason locked those numbers 2026-08-20 (CR-093 Story 3.3). They are research-grounded, not yet calibrated against Applyr interview outcomes — see that file and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md`.
 
@@ -353,12 +356,14 @@ scripts/
     zero_shot_classifier.py — location zero-token gate
 
   CR-074 authoring packet (Stage 1 workers under run_submission):
-    build_authoring_packet.py         — builds the lean authoring_packet.json (JD evidence map + workExperience excerpts + claim_constraints)
+    build_authoring_packet.py         — builds the lean authoring_packet.json (JD evidence map + workExperience excerpts + claim constraints + packet-supported ATS term contract)
     generate_authoring_rule_digest.py — builds authoring_rule_digest.md (~1.6k-token rule digest)
-    author_from_packet.py             — prompt emit + Stage 1 exit gate (--verify-only); debug CLI warns to prefer run_submission
+    author_from_packet.py             — prompt emit + Stage 1 exit gate (--verify-only), including evidence/ATS utilization, pair repetition, JD specificity, document quality, and rebuilt-packet sentence provenance
+    packet_evidence_utilization.py    — deterministic ranking of packet-selected evidence to prevent high-priority retrieved claims being omitted
     authoring_defect_categories.py    — CR-097 rule_id → category map
     authoring_examples.py             — CR-097 retrieval-scoped example selection for Stage 1 packets
     scan_authoring_defects.py         — CR-097 cross-submission ledger, 2-occurrence reviews, --status/--promote/--report
+    import_historical_defects.py      — CR-099 structured historical baseline, isolated from live metrics
 
   Full-pack path (optional, non-default — see CLAUDE.md):
     generate_context_pack.py / check_context_pack_freshness.py — agent_context_pack.md generation + freshness check
@@ -472,7 +477,9 @@ Run Python/TS scripts directly with `python scripts/<name>.py` or `npx tsx scrip
 | [docs/spec/00-project-constitution.md](./docs/spec/00-project-constitution.md) | Project scope, operating mode, technical defaults, constraints |
 | [docs/spec/02-requirements-registry.md](./docs/spec/02-requirements-registry.md) | Canonical requirement IDs — source of truth for all FR/NFR/SEC/DATA/INT requirements |
 | [docs/spec/06-traceability/traceability-matrix.md](./docs/spec/06-traceability/traceability-matrix.md) | Requirement → spec → code → status mapping |
-| [docs/ACTIVE_WORKFLOW.md](./docs/ACTIVE_WORKFLOW.md) | Runtime workflow for operators — scout, evaluate, draft, verify |
+| [docs/ACTIVE_WORKFLOW.md](./docs/ACTIVE_WORKFLOW.md) | Runtime workflow for operators — scout, triage, author, verify, finalize |
+| [docs/system-invariants.md](./docs/system-invariants.md) | Non-negotiable truth, workflow, privacy, and derived-artifact rules |
+| [docs/interview-prep-ux-discovery.md](./docs/interview-prep-ux-discovery.md) | Discovery brief for the future interview-prep module |
 | [docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md](./docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md) | CR-053/054/055 implementation tracker — structured fit, gates, rollout |
 | [docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md](./docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md) | Structured evidence-tiered fit scoring spec |
 ---

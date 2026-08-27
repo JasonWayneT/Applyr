@@ -5,7 +5,9 @@
     "gap_confession",
     "forbidden_punctuation",
     "wrong_job_bleed",
-    "cover_voice_kicker"
+    "cover_voice_kicker",
+    "resume_letter_repetition",
+    "jd_specificity"
   ],
   "entries": [
     {
@@ -96,6 +98,50 @@
       "before": "A Product Owner in healthcare cost containment only works if the backlog matches what operations and compliance can actually run, and the program lives or dies on that match.",
       "after": "A Product Owner in healthcare cost containment only works if the backlog matches what operations and compliance can actually run.",
       "why": "LW-033 already flags 'lives or dies on'. Cut the metaphor. State the condition in plain language."
+    },
+    {
+      "id": "sony-resume-letter-repetition-2026-08-22",
+      "category": "resume_letter_repetition",
+      "rule_ids": [
+        "LW-009-PAIR"
+      ],
+      "added_date": "2026-08-22",
+      "source_slugs": [
+        "sony_interactive_entertainment",
+        "solace_solace_health"
+      ],
+      "confirmed_by": "Stage 2 system test on both Tier 1 submissions",
+      "status": "active",
+      "few_shot_eligible": true,
+      "applies_when": {
+        "mode": "always"
+      },
+      "match_text": "subscription members engagement retention paid content ingestion access subscribers roadmap",
+      "before": "At Cision I owned product for two customer-facing platforms generating approximately $40M ARR and serving roughly 25,000 active users. News content landed in customer databases and flowed into a content indexing and enrichment engine across roughly 10 index servers.",
+      "after": "At Cision, I worked on a paid-content initiative spanning five to six major publications. Each source needed its own ingestion route, and access rules had to keep licensed material available only to subscribers.",
+      "why": "LW-009-PAIR requires the letter to make its argument rather than replay resume bullets. Keep the strongest fact, but change the sentence structure, level of detail, and mechanism framing."
+    },
+    {
+      "id": "solace-jd-specificity-2026-08-22",
+      "category": "jd_specificity",
+      "rule_ids": [
+        "LW-026"
+      ],
+      "added_date": "2026-08-22",
+      "source_slugs": [
+        "solace_solace_health",
+        "sony_interactive_entertainment"
+      ],
+      "confirmed_by": "Stage 2 system test on both Tier 1 submissions",
+      "status": "active",
+      "few_shot_eligible": true,
+      "applies_when": {
+        "mode": "always"
+      },
+      "match_text": "healthcare patients advocates user funnel internal operations sql conversion migration incident response",
+      "before": "The hardest part of operational data work is not running the query. It is figuring out which question is worth asking, then translating the answer into something an engineering team can build against.",
+      "after": "Solace is building systems that help patients and advocates make decisions inside a complicated healthcare process. That makes the quality of the user funnel and the internal operations behind it part of the same product problem.",
+      "why": "LW-026 requires concrete details from this JD. Replace a portable PM observation with the target audience, workflow, or operating problem named in the posting, without claiming prior experience in that domain."
     }
   ]
 }

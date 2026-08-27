@@ -165,6 +165,18 @@ def select_examples(
         )
         best.append(group[0])
 
+    # Implements FR-265: rank category winners globally. Previously category
+    # insertion order meant
+    # the first three historical categories permanently occupied the k=3 budget,
+    # so later Sony/Solace corrections could never be retrieved.
+    best.sort(
+        key=lambda e: (
+            _containment(query_tokens, e),
+            str(e.get("added_date") or ""),
+        ),
+        reverse=True,
+    )
+
     selected: list[dict] = []
     for entry in best:
         if len(selected) >= k:

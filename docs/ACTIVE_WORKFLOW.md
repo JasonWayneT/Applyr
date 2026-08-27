@@ -13,14 +13,15 @@
 | 2 | **Job Search** — criteria + **Run Scout** | `data/candidate_preferences.json` |
 | 3 | Scout pipeline (automatic) | New rows in `jobagent.sqlite`; activity logs |
 | 4 | Review **Sync / Opportunities** | Scores, gate rejects, backlog |
-| 5 | Optional **Evaluate** (paste JD) | SSE stages → submission folder |
-| 6 | **Edit** assets → save | Verify + PDF recompile |
-| 7 | **Status** transitions | `data/submissions/` or `data/archive/submissions/` |
+| 5 | **Stage 0 triage** — run `python scripts/run_submission.py data/pending_review/{slug}` | Skip, or a ready authoring packet |
+| 6 | **Stage 1 authoring** — paste `authoring_prompt.md` into a fresh agent; verification blocks deterministic quality, evidence, specificity, repetition, and provenance-contract defects | `Resume.md`, `CoverLetter.md`, `claim_provenance.json` |
+| 7 | **Stage 2 review + Stage 3 finalize** — resume with `--resume`, finalize explicitly with `--finalize` | Verified PDFs and workflow completion |
+| 8 | **Status** transitions | `data/submissions/` or `data/archive/submissions/` |
 | 7b | **Stage 0 triage** | Incoming JDs: `data/pending_review/`. Skip: `data/archive/skipped/` + `stage0_skips` ledger. PASS: `data/submissions/`. |
 
 ### Scout pipeline (code order)
 
-1. **Scout** — `server/scout.ts` → `scripts/scout_local.ts` (API + browser sources)
+1. **Scout** — `server/scout.ts` → connector orchestration (API and approved ATS sources)
 2. **Backfill** — missing detail URLs
 3. **Scrape** — full JD text
 4. **Review export** — gate-passed jobs with JD text → `data/pending_review/` (`server/services/exportPendingReview.ts`). No LLM fit-scoring runs here; that happens per-JD at Stage 0 via `scripts/run_submission.py` (see "Fit threshold" above). `batch_pipeline.py` is now a DB/JD helper library only, not a live evaluate/draft step.
@@ -31,6 +32,7 @@
 
 - Pass/skip floor = `data/fit_rubric_calibration.json` → **`score_bands.skip_floor: 40`** / **`tier1_floor: 65`** (CR-093 Story 3.3, locked 2026-08-20). Research-grounded working floor, not yet calibrated against Applyr interview outcomes.
 - Engine: `scripts/evidence_scale.py`, wired into `scripts/build_stage0_fit_gate.py` Step 5.5. Spec: `data/fit_rubric_spec.html`.
+- Deterministic exclusion hard gates run before model-dependent extraction and evidence scoring (CR-100). Obvious no-go roles can be skipped when local models are unavailable; non-excluded roles remain fail-closed.
 - `candidate_preferences.json`'s `min_fit_score` (was default 72) and `.agent/rules/job_fit_engine.md` (archived) no longer exist / apply — do not resurrect either.
 
 ### Data sources of truth
@@ -88,6 +90,6 @@ Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spe
 
 **Material changes:** `CR-*` → registry → FEAT → traceability → code (cite `FR-*`) → verification → `CHANGELOG.md` + `PRODUCT_CAPABILITIES.md`.
 
-**Do not use for active work:** `.agent/archive/**`, `docs/history/JobAgent_WebApp_PRD 5.0.md` (archived UX), chat `/scout` / `/evaluate` workflows.
+**Do not use for active work:** `.agent/archive/**`, `docs/history/JobAgent_WebApp_PRD 5.0.md` (archived UX), chat `/scout` / `/evaluate` workflows. The old WebApp evaluate route was removed under CR-093.
 
 **Change-request index:** [docs/spec/05-change-requests/README.md](spec/05-change-requests/README.md)

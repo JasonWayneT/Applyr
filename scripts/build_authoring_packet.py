@@ -173,6 +173,10 @@ _JD_SKILL_ANCHORS: list[tuple[re.Pattern[str], list[str]]] = [
         re.compile(r"\bAI Tools?\b|\bChatGPT\b|\bClaude\b|\bGemini\b", re.I),
         ["ACC-401-AITOOLS", "ACC-120-AIRESEARCH"],
     ),
+    (
+        re.compile(r"\bCross[\s-]?Functional Planning\b", re.I),
+        ["ACC-178-SCOPING"],
+    ),
 ]
 
 # Compact geo note injected into hard_constraints (from workExperience.md §2.1).
@@ -1356,6 +1360,8 @@ def assemble_packet(
     slug: str,
     url: str | None,
     claim_constraints: dict | None = None,
+    jd_text: str = "",
+    ats_term_contract: list[dict] | None = None,
 ) -> dict:
     """Story 3.3 — Assemble the full authoring_packet dict matching schema v1.0."""
     tier = stage0.get("tier", "Tier 1")
@@ -1365,6 +1371,9 @@ def assemble_packet(
 
     jd_buckets = _build_jd_buckets(stage0)
     soft_gaps = _build_soft_gaps(stage0, evidence_map)
+    from jd_term_extractor import build_packet_ats_term_contract
+    if ats_term_contract is None:
+        ats_term_contract = build_packet_ats_term_contract(jd_text, evidence_map)
 
     # Compute estimated_tokens before status check
     # Build a draft packet without status for size estimation
@@ -1381,6 +1390,15 @@ def assemble_packet(
         "excerpts": excerpts,
         "claim_constraints": claim_constraints or {},
         "soft_gaps": soft_gaps,
+        "ats_term_contract": ats_term_contract,
+        # Implements FR-265: rebuilt packets require claims to map to the exact resume
+        # bullet or factual cover-letter sentence they support. Legacy packets
+        # without this contract retain their existing provenance behavior.
+        "provenance_contract": {
+            "version": 2,
+            "resume_unit": "bullet",
+            "cover_letter_unit": "factual_sentence",
+        },
         "hard_constraints": _HARD_CONSTRAINTS,
         "hook_fact": hook_fact,
         "rule_digest_version": _load_rule_digest_version(),  # Story 4.3
@@ -1569,6 +1587,13 @@ def build_packet(
         evidence_map, claims, we_text, ai_text, disabled=disabled, jd_text=jd_text
     )
     claim_constraints = build_claim_constraints(excerpts, claims, we_text)
+    from jd_term_extractor import build_packet_ats_term_contract
+    ats_term_contract = build_packet_ats_term_contract(
+        jd_text,
+        evidence_map,
+        claims=claims,
+        excerpt_claim_ids=set(excerpts),
+    )
 
     # Story 3.4 — Hook fact
     if hook_fact_override is not _SENTINEL:
@@ -1590,6 +1615,8 @@ def build_packet(
         slug=slug,
         url=url,
         claim_constraints=claim_constraints,
+        jd_text=jd_text,
+        ats_term_contract=ats_term_contract,
     )
 
     return packet

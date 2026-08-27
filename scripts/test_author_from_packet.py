@@ -419,6 +419,133 @@ class TestOptimizationBarSoftGapHonesty(unittest.TestCase):
             self.assertTrue(any("soft_gap has no claim_ids" in ln for ln in lines))
 
 
+class TestPacketEvidenceUtilization(unittest.TestCase):
+    """Repeated high-value packet evidence must be used, not merely retrieved."""
+
+    def test_repeated_responsibility_claim_fails_when_unused(self):
+        from author_from_packet import _check_packet_evidence_utilization
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "evidence_map": [
+                    {"jd_item": "Analyze outcomes", "bucket": "responsibilities", "claim_ids": ["ACC-106-DATA"]},
+                    {"jd_item": "Partner commercially", "bucket": "responsibilities", "claim_ids": ["ACC-106-DATA"]},
+                ],
+            }
+            (folder / "authoring_packet.json").write_text(json.dumps(packet), encoding="utf-8")
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_evidence_utilization(folder)
+            self.assertFalse(ok)
+            self.assertIn("ACC-106-DATA", lines[0])
+
+    def test_base_claim_variant_counts_as_used(self):
+        from author_from_packet import _check_packet_evidence_utilization
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "evidence_map": [
+                    {"jd_item": "Analyze outcomes", "bucket": "responsibilities", "claim_ids": ["ACC-106-DATA"]},
+                    {"jd_item": "Partner commercially", "bucket": "responsibilities", "claim_ids": ["ACC-106-DATA"]},
+                ],
+            }
+            (folder / "authoring_packet.json").write_text(json.dumps(packet), encoding="utf-8")
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "resume_claims": [
+                            {"bullet": "Mobile audience metrics", "claim_ids": ["ACC-106-EVIDENCE"]}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_evidence_utilization(folder)
+            self.assertTrue(ok, lines)
+
+
+class TestPacketAtsTermContract(unittest.TestCase):
+    """Packet-supported ATS terms must land in Resume.md before Stage 1 exits."""
+
+    def test_missing_packet_term_fails(self):
+        from author_from_packet import _check_packet_ats_term_contract
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps({**_READY_PACKET, "ats_term_contract": [{"term": "Engagement"}]}),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text("Customer adoption work.", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_ats_term_contract(folder)
+            self.assertFalse(ok)
+            self.assertIn("Engagement", lines[0])
+
+    def test_inflected_packet_term_passes(self):
+        from author_from_packet import _check_packet_ats_term_contract
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps({**_READY_PACKET, "ats_term_contract": [{"term": "Support"}]}),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text("Supported customers through migration.", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "resume_claims": [
+                            {"bullet": "Supported customers", "claim_ids": ["ACC-105-AGILE"]}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_ats_term_contract(folder)
+            self.assertTrue(ok, lines)
+
+    def test_term_without_supporting_resume_claim_fails(self):
+        from author_from_packet import _check_packet_ats_term_contract
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(
+                    {
+                        **_READY_PACKET,
+                        "ats_term_contract": [
+                            {"term": "Engagement", "claim_ids": ["ACC-117-PENDO"]}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text("Customer engagement work.", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "resume_claims": [
+                            {"bullet": "Other work", "claim_ids": ["ACC-105-AGILE"]}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_ats_term_contract(folder)
+            self.assertFalse(ok)
+            self.assertIn("Engagement", lines[0])
+
+
 class TestAuthoringDefectCategories(unittest.TestCase):
     """CR-097 Story 1.1 — frozen rule_id → category map, no I/O."""
 
@@ -655,6 +782,125 @@ class TestCoverVoiceKickerLint(unittest.TestCase):
         text = self._letter("I designed a weighted formula over inbound issues.")
         r = lint_document(text, "cover_letter")
         self.assertFalse(any(v.rule_id == "LW-037" for v in r.warns), r.warns)
+
+
+class TestSentenceLevelProvenance(unittest.TestCase):
+    def _write_inputs(self, folder: Path, provenance: dict, *, version: int = 2) -> None:
+        (folder / "authoring_packet.json").write_text(
+            json.dumps({
+                **_READY_PACKET,
+                "provenance_contract": {"version": version},
+            }),
+            encoding="utf-8",
+        )
+        (folder / "Resume.md").write_text(
+            "## PROFESSIONAL EXPERIENCE\n"
+            "* Built a verified workflow with engineering.\n",
+            encoding="utf-8",
+        )
+        (folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\n"
+            "This company serves patients.\n\n"
+            "At Cision, I built a verified workflow with engineering. "
+            "I would welcome a conversation.\n\n"
+            "Best regards,\n\nJason\n",
+            encoding="utf-8",
+        )
+        (folder / "claim_provenance.json").write_text(
+            json.dumps(provenance),
+            encoding="utf-8",
+        )
+
+    def test_exact_bullet_and_factual_sentence_pass(self):
+        from author_from_packet import _check_sentence_level_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self._write_inputs(folder, {
+                "resume_claims": [{
+                    "bullet": "Built a verified workflow with engineering.",
+                    "claim_ids": ["ACC-101"],
+                }],
+                "cover_letter_claims": [{
+                    "sentence": "At Cision, I built a verified workflow with engineering.",
+                    "claim_ids": ["ACC-101"],
+                }],
+            })
+            ok, lines = _check_sentence_level_provenance(folder)
+            self.assertTrue(ok, lines)
+
+    def test_proof_point_summary_does_not_cover_sentence(self):
+        from author_from_packet import _check_sentence_level_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self._write_inputs(folder, {
+                "resume_claims": [{
+                    "bullet": "Built a verified workflow with engineering.",
+                    "claim_ids": ["ACC-101"],
+                }],
+                "cover_letter_claims": [{
+                    "proof_point": "built workflow",
+                    "claim_ids": ["ACC-101"],
+                }],
+            })
+            ok, lines = _check_sentence_level_provenance(folder)
+            self.assertFalse(ok)
+            self.assertTrue(any("cover_letter" in line for line in lines), lines)
+
+    def test_legacy_packet_skips(self):
+        from author_from_packet import _check_sentence_level_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self._write_inputs(folder, {}, version=1)
+            ok, lines = _check_sentence_level_provenance(folder)
+            self.assertTrue(ok, lines)
+            self.assertIn("legacy packet", lines[0])
+
+
+class TestAuthoringExamplePriority(unittest.TestCase):
+    def test_later_relevant_category_can_enter_three_example_budget(self):
+        from authoring_examples import select_examples
+
+        entries = []
+        for index in range(3):
+            entries.append({
+                "id": f"old-{index}",
+                "category": f"old-{index}",
+                "status": "active",
+                "few_shot_eligible": True,
+                "added_date": "2026-01-01",
+                "applies_when": {"mode": "always"},
+                "match_text": "unrelated punctuation phrase",
+                "before": "Before.",
+                "after": "After.",
+                "why": "Old.",
+            })
+        entries.append({
+            "id": "solace-specificity",
+            "category": "jd_specificity",
+            "status": "active",
+            "few_shot_eligible": True,
+            "added_date": "2026-08-22",
+            "applies_when": {"mode": "always"},
+            "match_text": "patients advocates healthcare operations",
+            "before": "Generic.",
+            "after": "Specific.",
+            "why": "Relevant.",
+        })
+        selected = select_examples(
+            {
+                "jd_buckets": {
+                    "responsibilities": [
+                        "Support patients and advocates through healthcare operations"
+                    ]
+                }
+            },
+            entries=entries,
+        )
+        self.assertIn("solace-specificity", [entry["id"] for entry in selected])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -662,6 +662,29 @@ WARN_RULES: List[LintRule] = [
         doc_types=["cover_letter", "resume"],
     ),
     LintRule(
+        rule_id="LR-032",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        # Implements FR-265: block defensive qualification that explains
+        # what Jason or another person did not do instead of stating the verified
+        # contribution positively. Kept narrow to avoid matching ordinary
+        # product negatives such as "did not interrupt customer access."
+        pattern=(
+            r"\bmost of the time\b[^.!?\n]{0,100}\b(?:my|mine|me)\b"
+            r"|\b(?:not my|outside my|beyond my)\b[^.!?\n]{0,60}"
+            r"\b(?:role|scope|responsibilit)"
+            r"|\b(?:I|Jason|the (?:engineer|team|designer|analyst))\s+"
+            r"(?:did not|didn't|was not|wasn't|never)\b[^.!?\n]{0,80}"
+            r"\b(?:diagnos|own|build|decid|lead|manage|responsib)"
+        ),
+        message="Defensive disclaimer weakens or negates the supported contribution",
+        suggestion=(
+            "State only the verified action, collaboration, or outcome positively. "
+            "Do not explain what you or someone else did not do."
+        ),
+        doc_types=["cover_letter", "resume"],
+    ),
+    LintRule(
         rule_id="LW-022",
         severity="WARN",
         check_type="regex",
@@ -1482,7 +1505,7 @@ _CROSS_JD_GENERIC_WORDS = {
     "clients", "committed", "complex", "customer-facing", "decisions", "deploy",
     "deployment", "development", "enterprise", "feasibility", "government",
     "integration", "integrations", "issues", "maintain", "monitoring",
-    "operational", "organization", "owner", "owners", "planning", "prioritize",
+    "operational", "operations", "organization", "owner", "owners", "planning", "prioritize",
     "prioritized", "prioritization", "programs", "regulated", "release",
     "sales", "streamline", "support", "supporting", "trade-offs", "validate",
     "validation", "ai-assisted", "go-to-market", "cross-functional",
@@ -1519,9 +1542,24 @@ _CROSS_JD_GENERIC_WORDS = {
     "compliance", "compliant", "define", "defined", "clarity", "clarify",
     "consistent", "consistently", "reliable", "capable", "capability",
     "capabilities", "resource", "resources", "resourceful",
+    # Grammatical and employment-boilerplate words are not JD specificity.
+    # Counting these let generic Sony/Solace first drafts satisfy LW-026 via
+    # words such as "which", "clear", and "without".
+    "which", "without", "clear", "diverse", "include", "information",
+    "eligible", "employees", "employment", "equal", "factors", "gender",
+    "personal", "place", "please", "range", "status", "based", "details",
 }
 
 _PAST_EMPLOYER_NAMES = ("cision", "sterkly", "zero to sixty")
+
+
+def _names_past_employer(text: str) -> bool:
+    """Use FR-265 whole-name boundaries so 'decisions' does not match 'Cision'."""
+    lower = (text or "").lower()
+    return any(
+        re.search(rf"(?<![a-z0-9]){re.escape(employer)}(?![a-z0-9])", lower)
+        for employer in _PAST_EMPLOYER_NAMES
+    )
 
 # Section-header employer name is authoritative for resume bullets -- a bullet almost
 # never repeats "Cision" inline, it's implied by the "### Title | Employer | dates"
@@ -1627,9 +1665,20 @@ def check_cross_employer_audience_bleed(
     if cover_letter_text.strip():
         for para in re.split(r"\n\s*\n", cover_letter_text):
             para = para.strip()
-            if not para or not any(emp in para.lower() for emp in _PAST_EMPLOYER_NAMES):
+            if not para or not _names_past_employer(para):
                 continue
-            hit_words = _find_hits(para, distinctive)
+            # Implements FR-265: target-company framing may legitimately open
+            # the same paragraph before the past-employer bridge. Score from
+            # the first sentence that names the past employer onward, retaining
+            # later anaphoric sentences while excluding an earlier target-only
+            # sentence such as "PlayStation Plus ... At Cision, ...".
+            sentences = _split_sentences(para)
+            employer_index = next(
+                (index for index, sentence in enumerate(sentences) if _names_past_employer(sentence)),
+                0,
+            )
+            historical_span = " ".join(sentences[employer_index:])
+            hit_words = _find_hits(historical_span, distinctive)
             if hit_words:
                 violations.append(LintViolation(
                     rule_id="LW-021",
@@ -1906,6 +1955,24 @@ def check_attribution_verb_strength(resume_text: str, cover_letter_text: str) ->
                     v for v in _OWNERSHIP_VERBS_METRIC
                     if _has_unattributed_verb(unit_lower, v)
                 ]
+                # ACC-303's verified constraint separates two subjects: Jason
+                # built the landing page, while engineering built the product
+                # funnel. The combined conversion outcome remains influenced.
+                # Do not treat Jason's explicitly allowed landing-page object
+                # as ownership of engineering's funnel.
+                if pid == "ACC-303" and "built" in verb_hits:
+                    owns_landing_page = re.search(
+                        r"\b(?:i\s+)?built\b[^.!?]{0,80}\blanding page\b"
+                        r"|\blanding page\b[^.!?]{0,40}\bi built\b",
+                        unit_lower,
+                    )
+                    engineering_owns_funnel = re.search(
+                        r"\bengineering(?:\s*-\s*|\s+)[^.!?]{0,40}\bbuilt\b"
+                        r"[^.!?]{0,60}\b(?:funnel|flow)\b",
+                        unit_lower,
+                    )
+                    if owns_landing_page and engineering_owns_funnel:
+                        verb_hits = [v for v in verb_hits if v != "built"]
 
             if not verb_hits or (pid, unit) in seen:
                 continue
@@ -1942,6 +2009,28 @@ _LINT_FOLDER_SKIP = frozenset({
 # never count as wrong-job bleed even if they also exist as a jobs.company row.
 _OWN_EMPLOYERS = frozenset({"cision", "sterkly", "sterkly services", "zero to sixty"})
 _MIN_COMPANY_NAME_CHARS = 4
+_AMBIGUOUS_COMPANY_NAMES = frozenset({
+    "name", "point",
+})
+
+
+def _application_body(resume: str, cover_letter: str) -> str:
+    """Exclude contact headers from FR-265 company-bleed matching.
+
+    Contact lines legitimately contain LinkedIn and can contain common proper
+    nouns unrelated to the target job. Wrong-job bleed is meaningful only in
+    authored resume/letter content.
+    """
+    resume_body = resume or ""
+    summary = re.search(r"^##\s+PROFESSIONAL SUMMARY\b", resume_body, re.MULTILINE | re.IGNORECASE)
+    if summary:
+        resume_body = resume_body[summary.start():]
+
+    letter_body = cover_letter or ""
+    greeting = re.search(r"^Dear Hiring Manager,\s*$", letter_body, re.MULTILINE | re.IGNORECASE)
+    if greeting:
+        letter_body = letter_body[greeting.end():]
+    return f"{resume_body}\n{letter_body}"
 
 
 def known_company_names(
@@ -2006,7 +2095,7 @@ def check_wrong_job_company_bleed(
     names = known_names if known_names is not None else known_company_names()
     own = (own_company or "").strip().lower()
     jd_lower = (jd_text or "").lower()
-    combined = f"{resume or ''}\n{cover_letter or ''}"
+    combined = _application_body(resume, cover_letter)
     hits: List[LintViolation] = []
     seen: Set[str] = set()
     for name in sorted(names, key=len, reverse=True):
@@ -2014,7 +2103,12 @@ def check_wrong_job_company_bleed(
         if len(trimmed) < _MIN_COMPANY_NAME_CHARS:
             continue
         lower = trimmed.lower()
-        if lower in seen or lower in _OWN_EMPLOYERS or lower == own:
+        if (
+            lower in seen
+            or lower in _OWN_EMPLOYERS
+            or lower in _AMBIGUOUS_COMPANY_NAMES
+            or lower == own
+        ):
             continue
         if lower in jd_lower:
             continue

@@ -60,6 +60,7 @@ _NONCLAIMABLE_RE = re.compile(
     r"|unconfirmed"
     r"|Not Completed"
     r"|Considered,\s*Not Implemented"
+    r"|personal only,\s*not professional"
     r"|Role context,\s*not a resume (?:bullet|story)"
     r")",
     re.IGNORECASE,

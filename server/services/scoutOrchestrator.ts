@@ -87,7 +87,7 @@ export function buildDefaultConnectors(): JobConnector[] {
     createJobscolliderConnector({ titleScopePrefs }),
     createAdzunaConnector({ appId: adzuna.appId, appKey: adzuna.appKey, searchTerms: prefs.searchTerms }),
     createOpenPostingsConnector({ searchTerms: prefs.searchTerms }),
-    createTheirstackConnector({ searchTerms: prefs.searchTerms }),
+    createTheirstackConnector({ searchTerms: prefs.searchTerms, localAreaTerms: prefs.localAreaTerms }),
   ];
 }
 

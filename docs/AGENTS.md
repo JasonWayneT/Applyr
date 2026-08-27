@@ -18,7 +18,7 @@ This repository uses BMAD-informed Spec Driven Development. All AI agents must f
 
 ## Required reading order
 
-1. `docs/ACTIVE_WORKFLOW.md` — runtime truth (scout, evaluate, draft, verify)
+1. `docs/ACTIVE_WORKFLOW.md` — runtime truth (scout, triage, author, verify, finalize)
 2. `docs/spec/00-project-constitution.md`
 3. `docs/spec/02-requirements-registry.md`
 4. Relevant files under `docs/spec/03-feature-specs/`

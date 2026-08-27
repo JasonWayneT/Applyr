@@ -81,6 +81,7 @@ export const PRESERVE_PIPELINE_PREF_KEYS = [
   'required_domain_min_years',
   'po_solo_backlog_flags',
   'po_solo_backlog_mitigators',
+  'local_area_terms',
 ] as const;
 
 // readMinFitScore() removed (CR-093, 2026-08-19) — it read the old fit-scoring

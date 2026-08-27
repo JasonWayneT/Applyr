@@ -499,6 +499,49 @@ class TestUrlParsing(unittest.TestCase):
         self.assertEqual(url, "https://example.com/jobs/pm-role")
         self.assertIn("Senior Product Manager", body)
 
+
+class TestPreferenceRejectShortCircuit(unittest.TestCase):
+    """Deterministic exclusions must not depend on any model being available."""
+
+    def test_prefs_reject_skips_before_extraction(self):
+        from unittest.mock import patch
+
+        rejected = {
+            "passed": False,
+            "rejects": [{
+                "code": "exclusion_zone_zero_to_one",
+                "reason": "Role requires zero-to-one ownership.",
+            }],
+            "flags": [],
+        }
+        with patch("build_stage0_fit_gate.run_prefs_gate_safe", return_value=rejected):
+            with patch("build_stage0_fit_gate._extract_sections_llm") as extractor:
+                result = _build(_CLEAN_PM_JD)
+        self.assertEqual(result["decision"], "SKIP")
+        self.assertEqual(result["tier"], "Skip")
+        self.assertEqual(result["skip_reason_code"], "exclusion_zone_zero_to_one")
+        self.assertEqual(result["extraction_source"], "not_run")
+        extractor.assert_not_called()
+
+    def test_batch_mode_keeps_final_model_until_next_role_boundary(self):
+        with patch.dict(os.environ, {"STAGE0_BATCH_KEEP_ALIVE": "1"}):
+            with patch("build_stage0_fit_gate._release_stage0_vram") as release:
+                _build(_CLEAN_PM_JD)
+        self.assertEqual(
+            [call.args[0] for call in release.call_args_list],
+            ["before-extract"],
+        )
+
+    def test_single_role_mode_still_releases_models(self):
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("STAGE0_BATCH_KEEP_ALIVE", None)
+            with patch("build_stage0_fit_gate._release_stage0_vram") as release:
+                _build(_CLEAN_PM_JD)
+        self.assertEqual(
+            [call.args[0] for call in release.call_args_list],
+            ["before-extract", "after-stage0"],
+        )
+
     def test_no_url(self):
         url, body = _parse_url_and_jd(_CLEAN_PM_JD)
         self.assertEqual(url, "")

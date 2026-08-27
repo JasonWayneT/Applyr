@@ -22,5 +22,5 @@
 
 **Follow-on (started 2026-08-20, not finished):** see
 [SESSION-HANDOFF-2026-08-20-we-truth-and-story-index.md](./SESSION-HANDOFF-2026-08-20-we-truth-and-story-index.md).
-Classifier substory/nonclaimable + Docker allowlist landed partially; catalog rows for
-the remaining `we_unclaimed` stories were not added.
+Classifier substory/nonclaimable handling landed partially; the remaining
+story-class catalog rows are tracked in CR-095 and IMP-CR-095.

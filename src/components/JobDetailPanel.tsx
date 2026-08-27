@@ -1070,7 +1070,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                     <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Outcome</label>
                     <div className="flex flex-wrap gap-1.5">
                       {[
-                        { value: 'Rejected', label: 'Archived', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' },
+                        { value: 'Rejected', label: 'Closed', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' },
                         { value: 'Ghosted', label: 'Ghosted', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' },
                         { value: 'Self-Rejected', label: 'Self-Reject (Not a Fit)', color: 'bg-warning-container text-on-warning-container border border-warning/30' },
                         { value: 'No Longer Available', label: 'No Longer Available', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' }

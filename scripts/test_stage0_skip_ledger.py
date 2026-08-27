@@ -197,6 +197,30 @@ class PlacementTests(unittest.TestCase):
         self.assertTrue((dest / "Original_JD.txt").exists())
         self.assertFalse(folder.exists())
 
+    def test_pass_from_archive_recovers_to_submissions(self):
+        folder = self._write_folder(self.skipped, "skyflow")
+        record_skip(
+            url=_PASS_GATE["url"],
+            company="Skyflow",
+            title="Product Manager",
+            skip_reason="old decision",
+            slug="skyflow",
+            archive_path=str(folder),
+            db_path=self.db,
+        )
+        dest = apply_stage0_placement(folder, _PASS_GATE, db_path=self.db)
+        self.assertEqual(dest, self.subs / "skyflow")
+        self.assertTrue((dest / "Original_JD.txt").exists())
+        self.assertFalse(folder.exists())
+        self.assertIsNone(
+            lookup_skip(
+                url=_PASS_GATE["url"],
+                company="Skyflow",
+                title="Product Manager",
+                db_path=self.db,
+            )
+        )
+
     def test_unmanaged_temp_folder_is_not_moved(self):
         stray = Path(self._tmpdir.name) / "stray"
         stray.mkdir()

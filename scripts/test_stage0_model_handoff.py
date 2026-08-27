@@ -80,6 +80,55 @@ class TestScoreModelPin(unittest.TestCase):
         )
 
 
+class TestDegreeHardGateNormalization(unittest.TestCase):
+    def setUp(self):
+        import evidence_scale
+        evidence_scale._score_model_ready_for = None
+
+    def _classify(self, item: str, *, is_required: bool = True):
+        payload = json.dumps({
+            "gate": "HARD",
+            "gap_source": "degree",
+            "evidence_level": 0,
+            "confidence": "high",
+            "reasoning": "The posting names a master's degree education requirement.",
+        })
+        with patch("model_manager.ensure_local_model_available"):
+            with patch("llm_stages.call_llm_stage", return_value=payload):
+                with patch("fit_rubric_examples.retrieve_examples", return_value=[]):
+                    with patch(
+                        "evidence_scale.build_evidence_context",
+                        return_value="Bachelor of Business Administration",
+                    ):
+                        return classify_requirement(
+                            item,
+                            "Bachelor of Business Administration",
+                            is_required=is_required,
+                        )
+
+    def test_bachelor_requirement_cannot_hard_gate(self):
+        judgment = self._classify(
+            "A bachelor's degree in Business Analytics, Information Technology, "
+            "Project Management, or a related field."
+        )
+        self.assertEqual(judgment.gate, "NONE")
+        self.assertEqual(judgment.evidence_level, 3)
+        self.assertEqual(judgment.confidence, "high")
+
+    def test_preferred_bachelor_requirement_cannot_hard_gate(self):
+        judgment = self._classify(
+            "Education: A High School Diploma or GED is required. A Bachelor's "
+            "degree is preferred."
+        )
+        self.assertEqual(judgment.gate, "NONE")
+        self.assertEqual(judgment.evidence_level, 3)
+
+    def test_unhedged_masters_requirement_remains_hard_gate(self):
+        judgment = self._classify("Master's degree in computer science required.")
+        self.assertEqual(judgment.gate, "HARD")
+        self.assertEqual(judgment.gap_source, "degree")
+
+
 class TestUnloadResident(unittest.TestCase):
     def test_tag_matches_exact_and_latest(self):
         self.assertTrue(_tag_matches("gemma2:2b-instruct-q8_0", "gemma2:2b-instruct-q8_0"))

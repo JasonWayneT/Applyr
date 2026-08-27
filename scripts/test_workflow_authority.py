@@ -186,6 +186,25 @@ class WorkflowAuthorityTests(unittest.TestCase):
         self.assertEqual(out["status"], "SKIPPED")
         self.assertEqual(load_receipt(str(self.folder), "stage0")["status"], "SKIPPED")
 
+    def test_force_reruns_previously_skipped_stage0(self):
+        _write(self.folder, "Original_JD.txt", "Whatever\n")
+        state = init_state(str(self.folder))
+        state["status"] = "SKIPPED"
+        state["stages"]["stage0"]["status"] = "SKIPPED"
+        write_state(str(self.folder), state)
+        rebuilt = new_state("production")
+        rebuilt["status"] = "SKIPPED"
+        rebuilt["stages"]["stage0"]["status"] = "SKIPPED"
+        with mock.patch("workflow.runner.run_stage0", return_value=rebuilt) as run:
+            with mock.patch(
+                "workflow.runner._place_after_stage0", return_value=str(self.folder)
+            ):
+                out = run_until_waiting_for_llm(
+                    str(self.folder), mode="production", adopt=False, force=True
+                )
+        run.assert_called_once()
+        self.assertEqual(out["status"], "SKIPPED")
+
     def test_crash_resume_receipt_without_state_pointer(self):
         """If receipt exists but state lags, adopt path / load_receipt still see receipt."""
         state = init_state(str(self.folder))

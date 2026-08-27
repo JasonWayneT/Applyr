@@ -9,10 +9,17 @@ from __future__ import annotations
 
 import os
 import sys
+import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from jd_term_extractor import _stem, _term_present_stemmed, find_jd_term_gaps  # noqa: E402
+from jd_term_extractor import (  # noqa: E402
+    _stem,
+    _term_present_stemmed,
+    build_packet_ats_term_contract,
+    find_jd_term_gaps,
+)
 
 
 def test_stem_reduces_known_word_form_pairs_to_same_root():
@@ -61,3 +68,67 @@ def test_find_jd_term_gaps_still_flags_genuinely_absent_term(monkeypatch):
         resume_text="* Shipped a roadmap feature on time.",
     )
     assert result["missing_from_resume"] == ["Support"]
+
+
+class TestPacketAtsTermContract(unittest.TestCase):
+    def test_requires_only_mapped_jd_terms(self):
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j,
+            "_load_true_vocabulary",
+            return_value={
+                "support": "Support",
+                "engagement": "Engagement",
+                "analytics": "Analytics",
+            },
+        ):
+            contract = build_packet_ats_term_contract(
+                "Support and engagement matter. Analytics is also valuable.",
+                [
+                    {
+                        "jd_item": "Support ongoing member engagement.",
+                        "claim_ids": ["ACC-112-PIPELINE"],
+                    },
+                    {
+                        "jd_item": "Analytics is valuable.",
+                        "claim_ids": [],
+                    },
+                ],
+            )
+        self.assertEqual(
+            contract,
+            [
+                {
+                    "term": "Engagement",
+                    "claim_ids": ["ACC-112-PIPELINE"],
+                    "jd_items": ["Support ongoing member engagement."],
+                },
+                {
+                    "term": "Support",
+                    "claim_ids": ["ACC-112-PIPELINE"],
+                    "jd_items": ["Support ongoing member engagement."],
+                },
+            ],
+        )
+
+    def test_packet_excerpt_tag_covers_stage0_omission(self):
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j,
+            "_load_true_vocabulary",
+            return_value={"cross-functional planning": "Cross-Functional Planning"},
+        ):
+            contract = build_packet_ats_term_contract(
+                "Lead cross-functional planning cycles.",
+                evidence_map=[],
+                claims={
+                    "ACC-178-SCOPING": {
+                        "tags": ["Product Scoping", "Cross-Functional Planning"]
+                    }
+                },
+                excerpt_claim_ids={"ACC-178-SCOPING"},
+            )
+        self.assertEqual(contract[0]["term"], "Cross-Functional Planning")
+        self.assertEqual(contract[0]["claim_ids"], ["ACC-178-SCOPING"])

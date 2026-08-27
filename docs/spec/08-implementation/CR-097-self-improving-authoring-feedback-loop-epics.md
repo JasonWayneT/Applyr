@@ -393,3 +393,11 @@ narrow the match, not to promote it to `HARD_BLOCK`.
 No separate quiet baseline window is needed before Epic 3 lands: every occurrence carries the bank
 version it was authored against, so Epic 6's before/after split is computable from one continuous
 stream. The SR-05 window is the 10 real submissions following Epic 3.
+
+Historical data is handled separately by CR-099. It may populate an informational baseline from
+structured archived verification receipts, but it cannot create live occurrences, satisfy Story 5.5,
+or count toward Story 6.2.
+
+Stage 0 availability hardening is handled separately by CR-100. Deterministic
+preference exclusions can complete without invoking model-dependent extraction
+or evidence scoring, while non-excluded roles remain fail-closed.

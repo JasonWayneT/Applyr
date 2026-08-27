@@ -1511,11 +1511,14 @@ def run_until_waiting_for_llm(
             if ok:
                 return state
 
-    if state.get("status") == "SKIPPED":
+    # --force is the explicit recovery path for a prior Stage 0 decision,
+    # such as a corrected gate rule. Do not let the terminal status return
+    # before run_stage0 has a chance to rebuild the gate.
+    if state.get("status") == "SKIPPED" and not force:
         return state
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
-    if s0.get("status") == "STALE" or s0.get("status") not in ("COMPLETE", "SKIPPED"):
+    if force or s0.get("status") == "STALE" or s0.get("status") not in ("COMPLETE", "SKIPPED"):
         state = run_stage0(folder, state, force=force)
         folder = _place_after_stage0(folder, state)
         state = load_state(folder) or state

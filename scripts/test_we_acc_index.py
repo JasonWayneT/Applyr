@@ -18,6 +18,8 @@ _WE = textwrap.dedent("""
 
     * **[ACC-173] Cold-Storage Tiering Discussion — Considered, Not Implemented**: talk only.
 
+    * **[ACC-172] Docker — personal only, not professional**: personal use.
+
     * **[ACC-101] Platform Stabilization**: Mitigated indexing crashes with storage monitoring.
 
     * **[ACC-122] What Jason drove:** Proactive storage monitoring and alerting.
@@ -47,6 +49,7 @@ class ClassifyWeAccTests(unittest.TestCase):
         self.assertEqual(classes["ACC-122"], wai.CLASS_SUBSTORY)
         self.assertEqual(classes["ACC-154"], wai.CLASS_NONCLAIMABLE)
         self.assertEqual(classes["ACC-173"], wai.CLASS_NONCLAIMABLE)
+        self.assertEqual(classes["ACC-172"], wai.CLASS_NONCLAIMABLE)
         self.assertEqual(classes["ACC-123"], wai.CLASS_ATTRIBUTION)
         self.assertEqual(classes["ACC-125"], wai.CLASS_ATTRIBUTION)
         self.assertEqual(classes["ACC-124"], wai.CLASS_DO_NOT_CLAIM)

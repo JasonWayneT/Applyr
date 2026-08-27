@@ -40,7 +40,8 @@ router.get('/api/sync/stream', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Sync — triggers full scout → backfill → scrape → evaluate pipeline
+// Sync — triggers scout → backfill → scrape → pending-review export.
+// Stage 0 fit evaluation and authoring run through scripts/run_submission.py.
 // ---------------------------------------------------------------------------
 
 router.post('/api/sync', (_req, res) => {

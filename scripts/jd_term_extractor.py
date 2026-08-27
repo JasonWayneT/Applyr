@@ -202,6 +202,65 @@ def find_jd_term_gaps(jd_text: str, resume_text: str, cover_letter_text: str = "
     }
 
 
+def build_packet_ats_term_contract(
+    jd_text: str,
+    evidence_map: list[dict],
+    claims: dict[str, dict] | None = None,
+    excerpt_claim_ids: set[str] | None = None,
+) -> list[dict]:
+    """Return JD terms that the current packet can support in a resume.
+
+    A term enters the contract only when it is verified candidate vocabulary,
+    appears in the raw JD, and appears in a mapped JD item with at least one
+    packet claim. This keeps the pre-draft author instruction grounded in the
+    packet rather than turning every globally true keyword into a requirement.
+    """
+    vocab = _load_true_vocabulary()
+    jd_lower = jd_text.lower()
+    contract: dict[str, dict] = {}
+    for term_lower, display in vocab.items():
+        if not _term_present(term_lower, jd_lower):
+            continue
+        for row in evidence_map:
+            if not isinstance(row, dict):
+                continue
+            item = str(row.get("jd_item") or "")
+            claim_ids = [
+                claim_id for claim_id in (row.get("claim_ids") or [])
+                if isinstance(claim_id, str) and claim_id.strip()
+            ]
+            if not claim_ids or not _term_present(term_lower, item.lower()):
+                continue
+            entry = contract.setdefault(
+                display,
+                {"term": display, "claim_ids": [], "jd_items": []},
+            )
+            for claim_id in claim_ids:
+                if claim_id not in entry["claim_ids"]:
+                    entry["claim_ids"].append(claim_id)
+            if item not in entry["jd_items"]:
+                entry["jd_items"].append(item)
+    # Stage 0 may omit a JD line even though the packet builder pulled a
+    # verified skill-anchor excerpt for it. Include such terms when the exact
+    # packet claim's tags support them.
+    claims = claims or {}
+    for claim_id in excerpt_claim_ids or set():
+        claim = claims.get(claim_id) or {}
+        tags = [str(tag) for tag in claim.get("tags") or []]
+        for term_lower, display in vocab.items():
+            if not _term_present(term_lower, jd_lower):
+                continue
+            if not any(_term_present(term_lower, tag.lower()) for tag in tags):
+                continue
+            entry = contract.setdefault(
+                display,
+                {"term": display, "claim_ids": [], "jd_items": []},
+            )
+            if claim_id not in entry["claim_ids"]:
+                entry["claim_ids"].append(claim_id)
+    return sorted(contract.values(), key=lambda entry: entry["term"].lower())
+
+
 def check_folder(folder: str) -> dict:
     folder = folder.rstrip("/\\")
     company = os.path.basename(folder)

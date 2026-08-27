@@ -175,6 +175,38 @@ Confidence = Literal["high", "medium", "low"]
 # no credential for.
 _GATE_SOURCES = {"degree", "domain", "role_exclusion", "certification"}
 
+# Degree hard gates are structurally narrower than a model's general
+# "education requirement" interpretation. Jason has a bachelor's degree, and
+# the fit-rubric contract permits a degree hard gate only for an unhedged,
+# required advanced degree with no bachelor's alternative. This is a
+# deterministic correction of an invalid HARD verdict, analogous to the
+# existing preferred/tool corrections below, not a replacement fit heuristic.
+_ADVANCED_DEGREE_RE = re.compile(r"\b(?:master'?s|mba|ph\.?d\.?|j\.?d\.?|m\.?d\.?)\b", re.I)
+_BACHELOR_OR_UNDERGRAD_RE = re.compile(
+    r"\b(?:bachelor(?:'s|s)?|undergraduate)\b", re.I
+)
+_EDUCATION_HEDGE_RE = re.compile(
+    r"\b(?:preferred|ideally|nice\s+to\s+have|bonus|a\s+plus)\b", re.I
+)
+
+
+def _degree_hard_gate_allowed(item: str, is_required: bool) -> bool:
+    """Whether this line can legally remain a degree HARD gate.
+
+    This implements the settled rubric boundary, not a guess about whether a
+    particular field of study is transferable. A bachelor-level requirement,
+    a preferred education line, and a bachelor-or-advanced alternative cannot
+    disqualify this candidate at Stage 0.
+    """
+    text = item or ""
+    if not is_required or _EDUCATION_HEDGE_RE.search(text):
+        return False
+    if not _ADVANCED_DEGREE_RE.search(text):
+        return False
+    if _BACHELOR_OR_UNDERGRAD_RE.search(text) and re.search(r"\bor\b|/", text, re.I):
+        return False
+    return True
+
 
 class EvidenceClassificationError(Exception):
     """Raised when the evidence-scale LLM call fails or returns unusable
@@ -555,6 +587,23 @@ def classify_requirement(
         # below still raises loud.
         gate = "NONE"
         gap_source = ""
+    if gate == "HARD" and gap_source == "degree" and not _degree_hard_gate_allowed(
+        item, is_required
+    ):
+        # Do not let bachelor-level, hedged, or bachelor-alternative education
+        # wording discard a viable role. The candidate's verified bachelor's
+        # degree directly satisfies a non-advanced education floor, so retain
+        # a conservative direct-evidence score rather than turning a known
+        # credential into an artificial soft gap.
+        gate = "NONE"
+        gap_source = ""
+        if not _ADVANCED_DEGREE_RE.search(item or "") or _BACHELOR_OR_UNDERGRAD_RE.search(item or ""):
+            data["evidence_level"] = max(int(data.get("evidence_level", 0) or 0), 3)
+            data["confidence"] = "high"
+        data["reasoning"] = (
+            "[DEGREE HARD-GATE CORRECTION -- verify education wording] "
+            f"{data.get('reasoning', '')}"
+        )
     if gate == "HARD" and gap_source not in _GATE_SOURCES:
         raise EvidenceClassificationError(
             f"gate=HARD but gap_source {gap_source!r} not a valid gate category for item {item!r}"

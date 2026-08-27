@@ -1756,6 +1756,34 @@ def build_stage0_fit_gate(
 
     # --- Step 2: Prefs / exclusion gate ---
     prefs_result = run_prefs_gate_safe(company_display, jd_text, prefs)
+    # Deterministic hard exclusions must short-circuit all model-dependent
+    # work. A batch should still be able to classify obvious no-go roles when
+    # the local extraction or evidence model is unavailable. This is not a
+    # fit fallback: the preference gate has already made the factual decision.
+    if not prefs_result.get("passed", True):
+        first_reject = (prefs_result.get("rejects") or [{}])[0]
+        reason = first_reject.get("reason") or "Stage 0 preference exclusion"
+        code = first_reject.get("code") or "prefs_gate_reject"
+        return {
+            "company": company_display,
+            "role": role,
+            "url": url or None,
+            "decision": "SKIP",
+            "tier": "Skip",
+            "reach_out": False,
+            "skip_reason": reason,
+            "skip_reason_code": code,
+            "stage_signal": _detect_stage_signal(jd_text),
+            "thin_jd": _detect_thin_jd(jd_text, []),
+            "required": [],
+            "preferred": [],
+            "responsibilities": [],
+            "culture": [],
+            "flagged_gaps": [],
+            "exclusion_zone_check": _build_exclusion_zone_summary(prefs_result),
+            "notes": reason,
+            "extraction_source": "not_run",
+        }
 
     # --- Step 3: Extract JD buckets ---
     # LLM extraction is the default (2026-08-17, Jason-supplied), pinned to
@@ -2080,9 +2108,15 @@ def build_stage0_fit_gate(
         output["notes"] = (output.get("notes") or "") + " " + flag_note
 
     # Free VRAM once Stage 0 is done. Targeted /api/ps unload, not a sweep
-    # of every installed tag. Gated on stage0_section_mode() so the offline
-    # test suite does not make a network round-trip per test.
-    _release_stage0_vram("after-stage0")
+    # of every installed tag. In a batch, the next role's before-extract
+    # boundary performs the required purge before loading Qwen, so purging
+    # here would create a redundant unload/reload cycle between roles.
+    # STAGE0_BATCH_KEEP_ALIVE is an explicit batch-only optimization; the
+    # default remains the original single-role safety behavior.
+    if os.environ.get("STAGE0_BATCH_KEEP_ALIVE", "").strip().lower() not in {
+        "1", "true", "yes", "on"
+    }:
+        _release_stage0_vram("after-stage0")
 
     return output
 

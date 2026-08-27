@@ -32,7 +32,7 @@ def _is_under(folder: Path, root: Path) -> bool:
 
 
 def managed_folder(folder: Path) -> bool:
-    """True when this folder lives in pending_review or submissions (not tmp tests)."""
+    """True when this folder lives in a Stage 0-managed active location."""
     folder = Path(folder)
     return _is_under(folder, PENDING_DIR) or _is_under(folder, SUBMISSIONS_DIR)
 
@@ -78,10 +78,17 @@ def apply_stage0_placement(
     url = result.get("url")
     reason = result.get("skip_reason") or result.get("notes") or "Stage 0 Skip"
 
-    if mode == "practice" or not managed_folder(folder):
+    is_archived_skip = _is_under(folder, SKIPPED_DIR)
+    # A force-rerun starts from archive/skipped. Permit only the recovery
+    # direction (SKIP → PASS) from there; ordinary archived SKIPs stay put.
+    if mode == "practice" or (
+        not managed_folder(folder) and not (is_archived_skip and decision == "PASS")
+    ):
         return folder
 
     if decision == "SKIP":
+        if is_archived_skip:
+            return folder
         SKIPPED_DIR.mkdir(parents=True, exist_ok=True)
         dest = _unique_dest(SKIPPED_DIR, folder.name)
         moved = move_folder(folder, dest)
@@ -98,7 +105,7 @@ def apply_stage0_placement(
 
     if decision == "PASS":
         clear_skip(url=url, company=company, title=title, db_path=db_path)
-        if _is_under(folder, PENDING_DIR):
+        if _is_under(folder, PENDING_DIR) or is_archived_skip:
             SUBMISSIONS_DIR.mkdir(parents=True, exist_ok=True)
             dest = _unique_dest(SUBMISSIONS_DIR, folder.name)
             return move_folder(folder, dest)

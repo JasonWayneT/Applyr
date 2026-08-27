@@ -58,6 +58,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
   const { tier1_floor: tier1Floor } = useFitThresholds();
   const [firstName, setFirstName] = useState('');
   const [pipelineSortBy, setPipelineSortBy] = useState<PipelineSortOption>('newest');
+  const [activeSearchTerm, setActiveSearchTerm] = useState('');
 
   const [markingAppliedId, setMarkingAppliedId] = useState<string | null>(null);
   const [applyToast, setApplyToast] = useState<{ company: string } | null>(null);
@@ -174,6 +175,13 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
   const backlogs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
   const applied = jobs.filter(j => j.status === 'Applied');
   const activeJobs = jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status));
+  const activeSearchMatches = activeSearchTerm.trim() === ''
+    ? activeJobs
+    : activeJobs.filter(j => {
+        const term = activeSearchTerm.trim().toLowerCase();
+        return j.company.toLowerCase().includes(term) || j.title.toLowerCase().includes(term);
+      });
+  const displayedActiveJobs = activeSearchTerm.trim() === '' ? activeSearchMatches.slice(0, 20) : activeSearchMatches;
   const pipelineJobs = jobs
     .filter(j => j.status === 'Backlog' && j.has_assets)
     .sort((a, b) => {
@@ -453,9 +461,31 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
 
         {/* Active Opportunities List */}
         <div className="lg:col-span-12 mt-8">
-          <h3 className="text-2xl font-headline font-bold text-on-surface mb-6">Active Opportunities</h3>
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-3">
+            <h3 className="text-2xl font-headline font-bold text-on-surface">Active Opportunities</h3>
+            <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">search</span>
+              <input
+                type="text"
+                placeholder="Search company or role..."
+                value={activeSearchTerm}
+                onChange={(e) => setActiveSearchTerm(e.target.value)}
+                className="input-applyr rounded-full pl-10 pr-9 py-2 w-full sm:w-64 text-sm"
+              />
+              {activeSearchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setActiveSearchTerm('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                  title="Clear search"
+                >
+                  <span className="material-symbols-outlined text-base">close</span>
+                </button>
+              )}
+            </div>
+          </div>
           <div className="space-y-4">
-            {activeJobs.slice(0, 20).map(job => (
+            {displayedActiveJobs.map(job => (
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
@@ -508,6 +538,12 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               <div className="bg-surface-container-lowest rounded-3xl p-12 text-center editorial-shadow">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 mb-3">work_outline</span>
                 <p className="text-on-surface-variant">No active applications yet. Start your journey.</p>
+              </div>
+            )}
+            {activeJobs.length > 0 && displayedActiveJobs.length === 0 && (
+              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center editorial-shadow">
+                <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 mb-3">search_off</span>
+                <p className="text-on-surface-variant">No active applications match &quot;{activeSearchTerm}&quot;.</p>
               </div>
             )}
           </div>

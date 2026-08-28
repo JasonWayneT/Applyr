@@ -112,7 +112,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
             >
               {item.icon}
             </span>
-            <span className="font-headline tracking-tight">{item.name}</span>
+            <span className="tracking-tight">{item.name}</span>
             {item.name === 'Dashboard' && newJobsCount > 0 && (
               <span className="ml-auto bg-secondary text-on-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
                 {newJobsCount}

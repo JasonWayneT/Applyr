@@ -13,6 +13,9 @@ export interface Job {
   /** When the application was submitted (null until Applied+). Separate from created_at (discovered). */
   applied_at?: string | null;
   summary: string | null;
+  /** From a connector's own API field when it supplies one, otherwise best-effort
+   * captured from the raw JD text at Stage 0 (2026-08-28) -- never guaranteed present. */
+  salary_range?: string | null;
   created_at: string;
   has_assets?: boolean;
   sources?: string[];

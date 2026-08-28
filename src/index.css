@@ -334,20 +334,35 @@
 
 /* --- Component Classes --- */
 @layer components {
-  /* Editorial Shadow — the shared card-separation treatment used across every
-     view (Dashboard, Opportunities, Job Search, etc). A shadow alone at this
-     opacity was measured at ~1.05:1 contrast against the page background —
-     effectively invisible. Border is the real separator; shadow just adds lift. */
+  /* Editorial Shadow — MD3 "Elevated" surface (DESIGN.md §7.2, 2026-08-28 pass).
+     Was a single 6%-alpha shadow measured at ~1.05:1 contrast — effectively
+     invisible — so a border was added to actually separate the card, combining
+     border+shadow on one element (against MD3's own Elevated/Outlined split).
+     Fix here is the shadow itself, not a border: a real two-layer elevation
+     shadow (tight "contact" layer + soft "ambient" layer, same construction as
+     MD3's reference elevation shadows) reads on its own with zero border.
+     Elevated = floating/liftable content only (Dashboard bento cards, modals,
+     dropdowns, the pipeline log console) — see .outlined-surface below for
+     structural/list content, which keeps the border and drops the shadow instead. */
   .editorial-shadow {
-    @apply border border-outline-variant;
-    box-shadow: 0px 12px 32px rgba(15, 23, 42, 0.06);
+    box-shadow: 0px 1px 2px 0px rgba(15, 23, 42, 0.08), 0px 8px 24px 0px rgba(15, 23, 42, 0.10);
   }
 
   .dark .editorial-shadow {
-    /* A dark shadow on a near-black canvas does nothing — the border (already
-       solid, see --color-outline-variant above) does the real separating work
-       here; the shadow is just a slightly stronger black to keep some lift. */
-    box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.4);
+    /* Dark canvas is near-black, so shadow alone still needs real opacity to
+       register — bumped in lockstep with the light-mode fix above, same
+       two-layer construction, darker/higher-alpha to read against #0B0D11. */
+    box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.5), 0px 8px 24px 0px rgba(0, 0, 0, 0.45);
+  }
+
+  /* Outlined surface — MD3 "Outlined" counterpart to .editorial-shadow above:
+     border only, zero elevation. Used for dense/structural containers that sit
+     flush with their surroundings — list/table rows, Settings-style form panels,
+     the top header bar. Many call sites already declare their own border utility
+     (e.g. `border border-outline-variant hover:border-outline`) for a custom
+     hover treatment; this class exists so sites that don't still get one. */
+  .outlined-surface {
+    @apply border border-outline-variant;
   }
 
   /* Glass Nav */
@@ -383,18 +398,19 @@
     @apply hover:scale-105 active:scale-95 transition-all;
   }
 
-  /* Applyr Cards (bordered, white-on-neutral for real separation) */
+  /* Applyr Cards — MD3 Elevated surface, same construction as .editorial-shadow
+     above (2026-08-28 pass). No border; shadow alone is the separator. */
   .card-applyr {
-    @apply bg-surface-container-lowest border border-outline-variant rounded-2xl p-6;
-    box-shadow: 0px 12px 32px rgba(15, 23, 42, 0.06);
+    @apply bg-surface-container-lowest rounded-2xl p-6;
+    box-shadow: 0px 1px 2px 0px rgba(15, 23, 42, 0.08), 0px 8px 24px 0px rgba(15, 23, 42, 0.10);
   }
 
   .dark .card-applyr {
-    box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.5), 0px 8px 24px 0px rgba(0, 0, 0, 0.45);
   }
 
   .card-applyr:hover {
-    @apply shadow-lg border-outline;
+    @apply shadow-lg;
   }
 
   /* Status Chips */

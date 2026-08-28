@@ -672,7 +672,7 @@ const SyncActivityView: React.FC = () => {
       )}
 
       {/* PRIMARY: Search Targeting Card */}
-      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl editorial-shadow space-y-6">
+      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl outlined-surface space-y-6">
         <div>
           <span className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-1">Search Targeting</span>
           <h2 className="text-lg font-headline font-bold text-on-surface">Active Search Criteria</h2>
@@ -821,7 +821,7 @@ const SyncActivityView: React.FC = () => {
       </div>
 
       {/* SECONDARY: Gate Filters Card */}
-      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl editorial-shadow space-y-4">
+      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl outlined-surface space-y-4">
         <div>
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-1">Gate Filters</span>
           <h2 className="text-base font-headline font-bold text-on-surface">Blocklists & Minimum Salary</h2>
@@ -879,7 +879,7 @@ const SyncActivityView: React.FC = () => {
       </div>
 
       {/* Activity — source health, live pipeline status, log console, and in-flight roles */}
-      <div className="bg-surface-container-lowest border border-outline/10 rounded-2xl editorial-shadow overflow-hidden">
+      <div className="bg-surface-container-lowest border border-outline/10 rounded-2xl outlined-surface overflow-hidden">
         <button
           type="button"
           onClick={() => setIsActivityOpen(prev => !prev)}
@@ -900,7 +900,7 @@ const SyncActivityView: React.FC = () => {
           <div className="px-6 pb-6 space-y-6">
 
       {/* Source Health Registry Section */}
-      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl editorial-shadow space-y-4">
+      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl outlined-surface space-y-4">
         <div>
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-1">Source Registries</span>
           <h2 className="text-base font-headline font-bold text-on-surface">Integrated Job Sources & Health Status</h2>
@@ -943,7 +943,7 @@ const SyncActivityView: React.FC = () => {
       </div>
 
       {/* Pipeline Process Stepper */}
-      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl editorial-shadow space-y-6">
+      <div className="bg-surface-container-lowest border border-outline/10 p-6 rounded-2xl outlined-surface space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <span className="text-[10px] font-bold text-primary uppercase tracking-widest block mb-1">Process Status</span>
@@ -1097,7 +1097,7 @@ const SyncActivityView: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-surface-container-lowest rounded-2xl overflow-hidden flex flex-col h-[450px] border border-outline/10 editorial-shadow p-6">
+        <div className="bg-surface-container-lowest rounded-2xl overflow-hidden flex flex-col h-[450px] border border-outline/10 outlined-surface p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-headline font-extrabold text-on-surface tracking-tight">Pipeline Roles</h2>

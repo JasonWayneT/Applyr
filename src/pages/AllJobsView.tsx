@@ -90,7 +90,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                className="absolute right-0 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
                 title="Clear search"
               >
                 <span className="material-symbols-outlined text-base">close</span>
@@ -112,7 +112,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
               <button 
                 key={f} 
                 onClick={() => onFilterChange(f)}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors whitespace-nowrap ${f === activeFilter ? 'bg-surface-container-lowest text-on-surface editorial-shadow' : 'text-on-surface-variant hover:text-on-surface'}`}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors whitespace-nowrap ${f === activeFilter ? 'bg-surface-container-lowest text-on-surface outlined-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
               >
                 {f}
               </button>
@@ -131,7 +131,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
           <button
             type="button"
             onClick={() => setBannerDismissed(true)}
-            className="text-status-drafted-text/60 hover:text-status-drafted-text shrink-0"
+            className="text-status-drafted-text/60 hover:text-status-drafted-text hover:bg-status-drafted-text/10 rounded-full w-9 h-9 flex items-center justify-center shrink-0 -my-1.5 -mr-1.5"
             title="Dismiss"
           >
             <span className="material-symbols-outlined text-lg">close</span>
@@ -167,7 +167,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                   <div
                     key={job.id}
                     onClick={() => onJobClick(job)}
-                    className={`group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline border-l-4 cursor-pointer ${
+                    className={`group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between outlined-surface hover:shadow-lg transition-all border border-outline-variant hover:border-outline border-l-4 cursor-pointer ${
                       job.score && job.score >= tier1Floor
                         ? 'border-l-primary'
                         : job.score && job.score >= skipFloor
@@ -200,7 +200,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                             href={api(`/api/jobs/${job.id}/download-all`)}
                             download={`${job.company.toLowerCase()}_assets.zip`}
                             onClick={(e) => e.stopPropagation()}
-                            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-primary/10 text-primary transition-colors"
+                            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-primary/10 text-primary transition-colors shrink-0"
                             title="Download all PDF assets (ZIP)"
                           >
                             <span className="material-symbols-outlined text-[18px]">download</span>
@@ -212,7 +212,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-secondary/10 text-on-surface-variant hover:text-secondary transition-colors"
+                            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-secondary/10 text-on-surface-variant hover:text-secondary transition-colors shrink-0"
                             title="Open original job posting"
                           >
                             <span className="material-symbols-outlined text-[18px]">link</span>
@@ -230,7 +230,7 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                   </div>
                 ))}
                 {group.title === 'Closed' && filteredJobs.length === 0 && (
-                  <div className="p-8 text-center text-sm text-on-surface-variant bg-surface-container-lowest rounded-2xl editorial-shadow">
+                  <div className="p-8 text-center text-sm text-on-surface-variant bg-surface-container-lowest rounded-2xl outlined-surface">
                     No closed applications yet.
                   </div>
                 )}

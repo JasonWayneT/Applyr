@@ -43,6 +43,9 @@ from build_stage0_fit_gate import (
     _extract_sections,
     classify_gaps,
     build_stage0_fit_gate,
+    screen_responsibilities_for_exclusion,
+    _cap_requirement_bucket,
+    extract_salary_range,
     _load_anchor_vocab,
     _has_extraction_override,
     batch_report,
@@ -500,6 +503,33 @@ class TestUrlParsing(unittest.TestCase):
         self.assertIn("Senior Product Manager", body)
 
 
+class TestSalaryRangeExtraction(unittest.TestCase):
+    """2026-08-28, Jason-supplied: best-effort salary capture for jobs.salary_range."""
+
+    def test_dollar_range_with_commas_extracted(self):
+        jd = "The base salary range for this role is $120,000 - $150,000 annually."
+        self.assertEqual(extract_salary_range(jd), "$120,000 - $150,000 annually")
+
+    def test_k_shorthand_range_extracted(self):
+        jd = "Compensation: $120K-$150K depending on experience."
+        self.assertEqual(extract_salary_range(jd), "$120K-$150K")
+
+    def test_em_dash_and_en_dash_ranges_extracted(self):
+        self.assertEqual(extract_salary_range("Pay: $90,000—$110,000."), "$90,000—$110,000")
+        self.assertEqual(extract_salary_range("Pay: $90,000–$110,000."), "$90,000–$110,000")
+
+    def test_no_dollar_sign_returns_none(self):
+        # Deliberately not handled -- see the function's own docstring.
+        self.assertIsNone(extract_salary_range("Salary: 120000 to 150000 USD."))
+
+    def test_no_salary_mention_returns_none(self):
+        self.assertIsNone(extract_salary_range(_CLEAN_PM_JD))
+
+    def test_empty_jd_returns_none(self):
+        self.assertIsNone(extract_salary_range(""))
+        self.assertIsNone(extract_salary_range(None))
+
+
 class TestPreferenceRejectShortCircuit(unittest.TestCase):
     """Deterministic exclusions must not depend on any model being available."""
 
@@ -943,6 +973,44 @@ class TestSectionExtraction(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Test: requirement-bucket cap (2026-08-28, Jason-supplied -- the
+# Schellman-class outlier, 17 real required items vs. 7-12 typical)
+# ---------------------------------------------------------------------------
+
+class TestRequirementBucketCap(unittest.TestCase):
+    def test_bucket_at_or_under_limit_is_untouched(self):
+        items = [f"Requirement number {i} with 5 years of something." for i in range(12)]
+        kept, dropped = _cap_requirement_bucket(items)
+        self.assertEqual(kept, items)
+        self.assertEqual(dropped, 0)
+
+    def test_over_limit_bucket_is_capped_and_reports_dropped_count(self):
+        items = [f"Requirement number {i} with 5 years of something specific." for i in range(17)]
+        kept, dropped = _cap_requirement_bucket(items)
+        self.assertEqual(len(kept), 12)
+        self.assertEqual(dropped, 5)
+
+    def test_generic_soft_skill_lines_are_dropped_before_specific_ones(self):
+        specific = [f"Own the {i} roadmap with 5+ years of B2B SaaS product experience." for i in range(12)]
+        generic = ["Strong communication skills.", "Excellent interpersonal skills."]
+        kept, dropped = _cap_requirement_bucket(specific + generic)
+        self.assertEqual(dropped, 2)
+        self.assertTrue(all(g not in kept for g in generic))
+
+    def test_kept_items_preserve_original_jd_order(self):
+        items = [f"Item {i} with a concrete number like {i}." for i in range(15)]
+        kept, _ = _cap_requirement_bucket(items)
+        # Whatever survives must appear in the same relative order it was extracted in.
+        self.assertEqual(kept, [item for item in items if item in kept])
+
+    def test_custom_limit_is_respected(self):
+        items = [f"Item {i} with 3 years experience." for i in range(10)]
+        kept, dropped = _cap_requirement_bucket(items, limit=5)
+        self.assertEqual(len(kept), 5)
+        self.assertEqual(dropped, 5)
+
+
+# ---------------------------------------------------------------------------
 # Test: Gap classification
 # ---------------------------------------------------------------------------
 
@@ -1216,6 +1284,68 @@ class TestSoloPmTrap(unittest.TestCase):
             "solo_pm_trap" in codes or "exclusion_zone_zero_to_one" in codes,
             f"Expected solo/zero-to-one code, got: {codes}",
         )
+
+
+# ---------------------------------------------------------------------------
+# Test: responsibilities-bucket exclusion screen escalates every line
+# (2026-08-28, Jason-supplied -- CR-096's "still not caught automatically"
+# Harbor Compliance finding, resolved by removing the signal-word pre-filter
+# rather than growing its word list).
+# ---------------------------------------------------------------------------
+
+class TestResponsibilitiesFullJudgmentEscalation(unittest.TestCase):
+    def test_line_with_no_old_signal_words_still_gets_classified(self):
+        """A responsibilities line matching none of the old
+        _RESPONSIBILITY_EXCLUSION_SIGNAL_RE categories (no "from scratch",
+        no P&L, no team-of-N, ...) must still reach classify_requirement --
+        that pre-filter no longer gates whether a line gets real judgment.
+        """
+        line = "Own the outcomes for a brand-new product area end to end."
+        with patch("evidence_scale.classify_requirement") as mock_classify:
+            mock_classify.return_value = EvidenceJudgment(
+                item=line,
+                gate="NONE",
+                gap_source=None,
+                evidence_level=4,
+                confidence="high",
+                reasoning="documented product-management evidence",
+                is_required=True,
+            )
+            screen_responsibilities_for_exclusion(
+                [line], work_exp="some work experience", company="Test Co",
+            )
+        mock_classify.assert_called_once()
+        self.assertEqual(mock_classify.call_args[0][0], line)
+
+    def test_deterministic_0to1_line_never_pays_for_a_classify_call(self):
+        """The free zero-cost regex fast path still short-circuits before
+        any LLM call for the one unambiguous, high-confidence phrasing."""
+        line = "You will own the zero to one build of our new platform."
+        with patch("evidence_scale.classify_requirement") as mock_classify:
+            hits = screen_responsibilities_for_exclusion(
+                [line], work_exp="some work experience", company="Test Co",
+            )
+        mock_classify.assert_not_called()
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["gap_source"], "role_exclusion")
+
+    def test_hard_gate_from_full_judgment_is_returned_as_a_hit(self):
+        line = "Manage a direct team of engineers and own their growth plans."
+        with patch("evidence_scale.classify_requirement") as mock_classify:
+            mock_classify.return_value = EvidenceJudgment(
+                item=line,
+                gate="HARD",
+                gap_source="role_exclusion",
+                evidence_level=0,
+                confidence="high",
+                reasoning="people-management ownership, not in scope",
+                is_required=True,
+            )
+            hits = screen_responsibilities_for_exclusion(
+                [line], work_exp="some work experience", company="Test Co",
+            )
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["gap_class"], "HARD")
 
 
 # ---------------------------------------------------------------------------

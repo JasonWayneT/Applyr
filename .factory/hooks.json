@@ -1,0 +1,13 @@
+{
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "\"C:/Users/Jason/Desktop/Jason/Resource/CodeProjects/Applyr/.venv/Scripts/python.exe\" \"C:/Users/Jason/Desktop/Jason/Resource/CodeProjects/Applyr/scripts/hooks/verify_submission_claims.py\"",
+          "timeout": 30
+        }
+      ]
+    }
+  ]
+}

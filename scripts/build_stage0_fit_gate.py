@@ -614,6 +614,34 @@ def _is_boilerplate_item(text: str) -> bool:
     return False
 
 
+# 2026-08-28 (Jason-supplied): best-effort salary-range capture from the raw JD
+# text, for jobs.salary_range. Independent of _BOILERPLATE_ITEM_RE / bucket
+# extraction above -- that pipeline exists to DROP salary-shaped lines from the
+# requirements buckets so they don't pollute gap classification; this exists to
+# KEEP the matched text so it can be shown in the app. A connector's own API
+# field (when the source supplies one) always wins over this -- see the
+# null-only backfill in server/submissionFolders.ts.
+_SALARY_RANGE_CAPTURE_RE = re.compile(
+    r"\$\s?\d[\d,]*(?:\.\d+)?\s*[kK]?"
+    r"\s*(?:-|–|—|to)\s*"
+    r"\$\s?\d[\d,]*(?:\.\d+)?\s*[kK]?"
+    r"(?:\s*(?:/|per)?\s*(?:year|yr|hour|hr|annum|annually))?",
+)
+
+
+def extract_salary_range(jd_text: str) -> str | None:
+    """First plausible "$X - $Y" range found anywhere in the raw JD text, or
+    None. Deliberately a single regex, not a parser: JDs phrase a range many
+    ways ("$120K-$150K", "$120,000 - $150,000 / year", "120000 to 150000"
+    with no dollar sign at all). This only needs to catch the common,
+    unambiguous dollar-sign case well enough to be worth showing in the app
+    -- a miss just means no badge, never a wrong one."""
+    match = _SALARY_RANGE_CAPTURE_RE.search(jd_text or "")
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group(0)).strip()
+
+
 # Found 2026-08-07 (envision_technology_solutions): sub-list lead-in lines like
 # "Experience working on one or more of:" / "Hands-on experience with:" pass the
 # item-length filter and get captured as standalone required items even though
@@ -758,6 +786,71 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
     _recover_mixed_responsibilities(buckets)
 
     return buckets
+
+
+# ---------------------------------------------------------------------------
+# Requirement-bucket cap (2026-08-28, Jason-supplied): a JD with an unusually
+# long requirements list (Schellman-class outlier -- 17 real required items
+# vs. the typical 7-12) pushes real per-line evidence work and Stage 1
+# packet budget further than a normal JD needs. Keep the highest-value
+# subset instead of classifying and carrying every line at full cost.
+# ---------------------------------------------------------------------------
+
+MAX_REQUIREMENT_ITEMS_PER_BUCKET = 12
+
+_SPECIFICITY_NUMBER_RE = re.compile(r"\d")
+_SPECIFICITY_GENERIC_SOFT_SKILL_RE = re.compile(
+    r"^(?:strong|excellent|good|great|solid|proven|demonstrated|effective)\s+"
+    r"(?:communication|interpersonal|analytical|problem.solving|organizational|"
+    r"written|verbal|leadership|collaboration|time.management)\s+skills?\.?$",
+    re.I,
+)
+
+
+def _requirement_specificity_score(item: str) -> float:
+    """Deterministic proxy for how much one requirement line is worth
+    keeping when a bucket exceeds MAX_REQUIREMENT_ITEMS_PER_BUCKET. Not a
+    judgment of truth, fit, or gate-worthiness -- classify_requirement()
+    still makes that call for every line that survives the cap. This only
+    decides which lines are the most concrete and decision-bearing ones to
+    spend a real classification call and packet-excerpt budget on, versus
+    boilerplate-adjacent filler that a JD's requirements section tends to
+    accumulate once it runs long.
+
+    Higher score keeps: a digit (years, %, a count -- "5+ years experience",
+    "manage a team of 10-15") is the strongest concreteness signal available
+    without another LLM call. A pure generic soft-skill line ("Strong
+    communication skills.") is the weakest -- it says nothing a JD-specific
+    read couldn't already assume. Everything else (the common case) scores
+    on length alone, as a mild, cheap proxy for "says something specific"
+    over "a stray short fragment."
+    """
+    text = (item or "").strip()
+    if _SPECIFICITY_GENERIC_SOFT_SKILL_RE.match(text):
+        return -2.0
+    score = 2.0 if _SPECIFICITY_NUMBER_RE.search(text) else 0.0
+    words = text.split()
+    if len(words) < 4:
+        score -= 1.0
+    score += min(len(words), 30) * 0.01
+    return score
+
+
+def _cap_requirement_bucket(
+    items: list[str], limit: int = MAX_REQUIREMENT_ITEMS_PER_BUCKET,
+) -> tuple[list[str], int]:
+    """Keep the `limit` highest-scoring items (_requirement_specificity_score),
+    in their original JD order. Returns (kept_items, dropped_count) --
+    dropped_count is 0 for any bucket at or under the limit, which is the
+    typical case (7-12 real required items) and leaves it untouched."""
+    if len(items) <= limit:
+        return list(items), 0
+    ranked_indices = sorted(
+        range(len(items)), key=lambda i: _requirement_specificity_score(items[i]), reverse=True,
+    )
+    keep = set(ranked_indices[:limit])
+    kept = [item for i, item in enumerate(items) if i in keep]
+    return kept, len(items) - len(kept)
 
 
 # Duty-imperative lead-ins for mixed-bucket recovery. Anchored at start so a
@@ -1473,38 +1566,27 @@ _DETERMINISTIC_0TO1_BUILD_RE = re.compile(
     re.I,
 )
 
-# Tier B: needs real judgment (a hedge or a soft phrasing can make these
-# non-disqualifying), so these escalate to the real classifier rather than
-# gating deterministically -- see screen_responsibilities_for_exclusion().
-_RESPONSIBILITY_EXCLUSION_SIGNAL_RE = re.compile(
-    r"(?:"
-    r"from\s+scratch|from\s+the\s+ground\s+up|greenfield|"
-    r"where\s+none\s+(?:previously\s+)?exist|build\w*\s+.{0,20}from\s+nothing|"
-    r"own(?:ing)?\s+the\s+(?:full\s+)?p\s?&\s?l|revenue\s+targets?|"
-    r"billing\s+(?:system|operations)|"
-    r"train(?:ing)?\s+(?:and\s+fine.tun\w+\s+)?(?:the\s+|our\s+)?(?:ml\s+|ai\s+)?models?|"
-    r"(?:own|architect)(?:ing)?\s+(?:the\s+|our\s+)?(?:ml|ai)\s+(?:model|pipeline|training)|"
-    r"(?:manage|lead|hire|grow|mentor|develop)\s+(?:and\s+\w+\s+)?(?:a\s+)?team\s+of|"
-    r"direct\s+reports?|"
-    r"hiring\s+and\s+(?:firing|managing)|"
-    r"manage\s+(?:other\s+)?(?:product\s+managers?|product\s+owners?|pms\b)"
-    r")",
-    re.I,
-)
-
-
 def screen_responsibilities_for_exclusion(
     responsibilities: list[str],
     work_exp: str,
     company: str = "",
     internal_terms: list[str] | None = None,
 ) -> list[dict]:
-    """Two-tier responsibilities-bucket exclusion screen (see the regexes'
-    own comments for why each line is decided the way it is). Returns
-    classify-shaped dicts (same shape _classify_one_item() returns for a
-    HARD gap) for confirmed hits only, so a caller can extend
-    classified_required with them and get correct disqualification through
-    the existing compute_fit_score() path -- no separate tier-logic needed.
+    """Responsibilities-bucket exclusion screen. Returns classify-shaped dicts
+    (same shape _classify_one_item() returns for a HARD gap) for confirmed
+    hits only, so a caller can extend classified_required with them and get
+    correct disqualification through the existing compute_fit_score() path
+    -- no separate tier-logic needed.
+
+    2026-08-28 (Jason-supplied, after CR-096's "still not caught automatically"
+    finding on Harbor Compliance): every responsibilities line now gets the
+    real classifier's judgment, not just lines matching
+    _RESPONSIBILITY_EXCLUSION_SIGNAL_RE first. That regex was a cost-saving
+    pre-filter -- real, ongoing per-line LLM cost across every future job's
+    full responsibilities bucket is the accepted tradeoff for not depending on
+    a signal-word list ever staying complete against novel exclusion phrasing.
+    The free deterministic 0-to-1 regex stays as a zero-cost fast path ahead
+    of it; only lines it doesn't already resolve pay for a real judgment call.
 
     Fails open per-line on a classification error: this is a bonus
     screening pass on top of the required/preferred judgments classify_gaps()
@@ -1524,8 +1606,6 @@ def screen_responsibilities_for_exclusion(
                 "domain_soft": False,
                 "gap_source": "role_exclusion",
             })
-            continue
-        if not _RESPONSIBILITY_EXCLUSION_SIGNAL_RE.search(line):
             continue
         try:
             judgment = classify_requirement(
@@ -1809,6 +1889,12 @@ def build_stage0_fit_gate(
     thin_jd = _detect_thin_jd(jd_text, required_raw)
     stage_signal = _detect_stage_signal(jd_text)
 
+    # Cap after thin-JD/qual-count detection (which must see the real,
+    # uncapped extraction) and before classification (the expensive step
+    # this cap exists to bound) -- see _cap_requirement_bucket() above.
+    required_raw, required_dropped_n = _cap_requirement_bucket(required_raw)
+    preferred_raw, preferred_dropped_n = _cap_requirement_bucket(preferred_raw)
+
     # --- Step 4: Gap classification (CR-093 evidence-scale engine) ---
     # Extract and score now use the same model (qwen2.5:7b-instruct-q4_K_M).
     # No VRAM handoff needed -- the model stays loaded from extraction.
@@ -2073,6 +2159,12 @@ def build_stage0_fit_gate(
         "stage_signal": stage_signal,
         "thin_jd": thin_jd,
         "extraction_source": extraction_source,
+        "salary_range": extract_salary_range(jd_text),
+        "requirements_capped": {
+            "limit": MAX_REQUIREMENT_ITEMS_PER_BUCKET,
+            "required_dropped": required_dropped_n,
+            "preferred_dropped": preferred_dropped_n,
+        },
         "required": classified_required,
         "preferred": classified_preferred,
         "responsibilities": responsibilities[:8],

@@ -79,6 +79,8 @@ data/candidate_preferences.json
 docs/PROJECT_DEEP_DIVE.md
 docs/reports/
 docs/legacy/
+# Confidential employer internal architecture detail (Cision C3/Visible pipeline) — never commit.
+docs/cision-c3-visible-pipeline-architecture.md
 PRODUCT_CAPABILITIES.md
 # UX audit screenshots — Profile screen capture shows real email/phone in plain text
 docs/spec/04-design-specs/ui-redesign-material3/ux-audit/screenshots/

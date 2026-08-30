@@ -562,17 +562,17 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                 jd_path = folder / "Original_JD.txt"
                 jd_text = jd_path.read_text(encoding="utf-8") if jd_path.exists() else ""
                 company_name = folder.name
+                thin_jd = False
                 gate_path = folder / "stage0_fit_gate.json"
                 if gate_path.exists():
                     try:
-                        company_name = str(
-                            json.loads(gate_path.read_text(encoding="utf-8")).get("company")
-                            or company_name
-                        )
+                        gate_data = json.loads(gate_path.read_text(encoding="utf-8"))
+                        company_name = str(gate_data.get("company") or company_name)
+                        thin_jd = bool(gate_data.get("thin_jd", False))
                     except (OSError, json.JSONDecodeError):
                         pass
                 specificity_warns = check_jd_specificity_floor(
-                    texts["cover_letter"], jd_text, company_name=company_name
+                    texts["cover_letter"], jd_text, company_name=company_name, thin_jd=thin_jd
                 )
                 for item in specificity_warns:
                     violations.append(_violation_row(item, "cover_letter"))

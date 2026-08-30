@@ -1698,7 +1698,9 @@ def check_cross_employer_audience_bleed(
     return violations
 
 
-def check_jd_specificity_floor(cover_letter_text: str, jd_text: str, company_name: str = "") -> List[LintViolation]:
+def check_jd_specificity_floor(
+    cover_letter_text: str, jd_text: str, company_name: str = "", thin_jd: bool = False
+) -> List[LintViolation]:
     """LW-026: flag a cover letter that could plausibly have been sent to any employer.
 
     Added 2026-07-30 (Perplexity-sourced cliché audit, Jason-supplied): "require the letter to
@@ -1710,7 +1712,7 @@ def check_jd_specificity_floor(cover_letter_text: str, jd_text: str, company_nam
     something the JD itself said, not that the engagement is any good. WARN, not HARD_BLOCK -- a
     short or generic-sounding JD can legitimately have very few distinctive words to draw from.
     """
-    if not cover_letter_text.strip() or not jd_text.strip():
+    if thin_jd or not cover_letter_text.strip() or not jd_text.strip():
         return []
     distinctive = _jd_distinctive_words(jd_text, company_name=company_name)
     if not distinctive:

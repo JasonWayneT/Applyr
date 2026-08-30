@@ -14,6 +14,22 @@ import claim_provenance as cp
 
 
 class ProvenanceAccClassTests(unittest.TestCase):
+    def test_sentence_level_cover_letter_entries_are_valid(self):
+        with patch.object(cp, "load_valid_claim_ids", return_value=({"ACC-101"}, set())):
+            folder = os.path.join(_SCRIPT_DIR, "_does_not_exist")
+            with patch.object(cp.os.path, "exists", return_value=True), \
+                 patch.object(cp, "open", unittest.mock.mock_open(read_data='{"company":"Acme","resume_claims":[{"bullet":"x","claim_ids":["ACC-101"]}],"cover_letter_claims":[{"sentence":"y","claim_ids":["ACC-101"]}]}')):
+                ok, errors = cp.check_claim_provenance(folder)
+        self.assertTrue(ok, errors)
+
+    def test_legacy_proof_point_cover_letter_entries_remain_valid(self):
+        with patch.object(cp, "load_valid_claim_ids", return_value=({"ACC-101"}, set())):
+            folder = os.path.join(_SCRIPT_DIR, "_does_not_exist")
+            with patch.object(cp.os.path, "exists", return_value=True), \
+                 patch.object(cp, "open", unittest.mock.mock_open(read_data='{"company":"Acme","resume_claims":[{"bullet":"x","claim_ids":["ACC-101"]}],"cover_letter_claims":[{"proof_point":"y","claim_ids":["ACC-101"]}]}')):
+                ok, errors = cp.check_claim_provenance(folder)
+        self.assertTrue(ok, errors)
+
     def test_attrib_and_dnc_tokens_are_not_valid_fact_ids(self):
         we = (
             "* **[ACC-101] Story**: did the work.\n"

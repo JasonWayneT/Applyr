@@ -1,5 +1,15 @@
 # Design System Document: Applyr
 
+> **Staleness notice (2026-08-28):** Section 2's palette description ("sage greens,
+> muted terracotta, warm stone neutrals") and its hex values, and the matching hex
+> values quoted in Sections 4 and 5, describe a palette that was replaced on
+> 2026-08-02 (see `src/index.css`'s own dated comments — light mode moved to an
+> indigo/cyan system, dark mode to coral/teal). `src/index.css` is the real source
+> of truth for every color/radius/spacing token; treat any hex value in this
+> document as illustrative of the *philosophy*, not a literal current value,
+> until those sections get a full pass. Section 7 (added the same day) is
+> already written against the real tokens.
+
 ## 1. Overview & Creative North Star
 **Creative North Star: "Applyr — The Strategic Pipeline"**
 
@@ -13,9 +23,20 @@ To achieve this, we move beyond the "template" look by embracing **Intentional A
 
 The palette is rooted in nature—sage greens (`primary`), muted terracotta (`secondary`), and warm stone neutrals (`surface`). 
 
-### The "No-Line" Rule
-**Explicit Instruction:** Traditional 1px solid borders are prohibited for sectioning or defining layout boundaries. 
-Structure is created through **Background Color Shifts**. For example, a `surface-container-low` sidebar should sit directly against a `surface` main content area. The eye perceives the edge through the shift in tone, creating a sophisticated, "borderless" interface.
+### The "No-Line" Rule — superseded 2026-08-28, see §7.2
+**Original instruction (kept for history, no longer the live rule):** traditional 1px solid
+borders were prohibited for sectioning or defining layout boundaries; structure was meant to
+come from background-color shifts alone. That was never fully true in practice — the shared
+`.editorial-shadow` class (`src/index.css`) carried a border from 2026-08-02 until this pass,
+because a shadow alone at the time measured ~1.05:1 contrast against the page background
+(effectively invisible). §7.2 below is the live rule now: Material Design 3's Elevated/Outlined
+split (shadow OR border, never both on the same element) — implemented app-wide as of this
+pass, with a real two-layer elevation shadow replacing the old single faint one so Elevated
+surfaces no longer need a border to read.
+
+Background-color shifts are still the *preferred* way to imply structure where a shadow isn't
+otherwise needed (e.g. a `surface-container-low` sidebar sitting against a `surface` main
+content area) — that part of the original instruction stands.
 
 ### Surface Hierarchy & Nesting
 Treat the UI as a series of stacked sheets of fine paper. 
@@ -99,7 +120,175 @@ The dashboard enforces a strict separation between pipeline jobs and active appl
 - **Do** use the `secondary` terracotta palette sparingly for "Life-affirming" actions (e.g., getting an offer, saving a dream job).
 
 ### Don't
-- **Don't** use pure black (#000000). Use `on_surface` (#303330).
+- **Don't** use pure black (#000000). Use `on_surface`.
 - **Don't** use standard 4px "Material" corners. Use the `md` (12px) or `lg` (16px) tokens to keep the experience feeling "soft" and approachable.
 - **Don't** use hard dividers. If you feel the need to separate two pieces of content, use a 32px or 48px gap instead.
-- **Don't** use "Alert Red" for errors unless critical. Use `error` (#a73b21) which is a muted, sophisticated clay-red that conveys urgency without causing panic.
+- **Don't** use "Alert Red" for errors unless critical. Use `error` which is a muted, sophisticated red that conveys urgency without causing panic.
+
+---
+
+## 7. Material Design 3 Consistency Rules (added 2026-08-28)
+
+Applyr's tokens (`src/index.css`) were already named after Material Design 3's real role
+system (`surface-container-lowest/low/high/highest`, `on-primary-container`, `outline-variant`
+— these are MD3's actual token names, not a loose analogy). Sections 1-6 above then diverged
+from MD3's own structural conventions in specific, sometimes undocumented ways. As we build
+out a wider suite of screens/components, this section is the enforced standard for keeping
+new work consistent with itself and with the Material Design 3 system these tokens came from.
+**Where this section conflicts with Sections 2-6 above, this section wins.**
+
+### 7.1 Elevation — five real surface tiers, not three
+
+Applyr already implements MD3's actual 5-tier elevation model (most apps that borrow MD3
+naming simplify to 2-3 tiers; this one didn't). Keep using it as-is — this is the strongest
+existing point of MD3 alignment in the codebase, not something to "fix":
+
+| Tier | Token | Used for |
+|---|---|---|
+| Canvas | `surface` | Page background only |
+| 1 | `surface-container-lowest` | Resting cards, the sidebar's brand row |
+| 2 | `surface-container-low` | Secondary grouping (inputs, nested sections) |
+| 3 | `surface-container` | Default component fill |
+| 4 | `surface-container-high` | High-focus / hover states |
+| 5 | `surface-container-highest` | Rare — reserved for the most emphasized nested element on a screen |
+| Inverse | `inverse-surface` | Tooltips, the Job Search pipeline log console (dark-on-light UI, deliberately inverted) |
+
+**Rule:** two persistent elements at the same conceptual level share the same tier token. Don't
+hand-pick an adjacent shade because it "looks right" — if the sidebar and a docked bar are both
+top-level chrome, they use the same tier.
+
+### 7.2 Borders vs. shadows — Elevated or Outlined, never both
+
+**Rule going forward:** an **Elevated** surface uses shadow only, zero border. An **Outlined**
+surface uses border only, zero shadow. This is Material Design 3's actual Card taxonomy
+(Elevated Card vs. Outlined Card), not a stricter house invention.
+
+- **Elevated** — floating/liftable content: the Dashboard's bento cards, the Next Interview
+  card, modals (`DocumentEditor`), dropdowns.
+- **Outlined** — dense/structural containers that sit flush with their surroundings: table
+  rows, list rows (Opportunities groups), Settings cards, the sidebar's border.
+
+**Implemented 2026-08-28.** `.editorial-shadow` and `.card-applyr` (`src/index.css`) combined
+both from 2026-08-02 through this pass — not an oversight, the original CSS comment documented
+why: the shadow alone measured ~1.05:1 contrast against the canvas (i.e. imperceptible), so a
+border was added to actually create separation. The fix was the shadow itself, not a
+compromise: `.editorial-shadow`/`.card-applyr` now use a real two-layer MD3-style elevation
+shadow (a tight "contact" layer + a soft "ambient" layer, both meaningfully higher-alpha than
+the original single 6%-opacity shadow) that reads on its own with zero border. Every call site
+across the app was individually reclassified as Elevated (`.editorial-shadow`) or Outlined
+(new `.outlined-surface` class, border only) per the table above — see the code for the
+per-component call:
+
+- **Elevated** (shadow, no border): Dashboard bento cards, the Next Interview / Needs
+  Attention / Stats Grid tiles, `JobDetailPanel`'s slide-out panel, `NotificationPanel`'s
+  dropdown, the Job Search pipeline log console.
+- **Outlined** (border, no shadow): the top header bar (`border-b` only, not a full
+  `.outlined-surface` border — a docked bar only needs the one edge), Opportunities'
+  job-row list and filter pills, Tuning Log's feedback-record rows, Job Search's form/settings
+  panels, the Dashboard's own "Ready to Apply" / "Active Opportunities" / "Upcoming Interviews"
+  repeated list items (kept consistent with Opportunities' list-row treatment rather than the
+  bento cards on the same page, since they're the same repeated-item pattern).
+
+Verified live against the running dev server (computed `box-shadow`/`border-width`, both
+themes) — Elevated elements show `border-width: 0px` with the new two-layer shadow, Outlined
+elements show `box-shadow: none` with a real 1px border. Don't copy the border+shadow combo
+into new components — pick Elevated or Outlined per §7.2's table above.
+
+### 7.3 8pt spatial grid
+
+Tailwind's spacing scale is 4px-stepped; treat 4/8 as Applyr's real grid (stricter than a
+multiples-of-8-only rule). Half-steps (2px via `-0.5`, 6px via `-1.5`, 10px via `-2.5`, 14px
+via `-3.5`) already appear throughout — badge dots, compact icon buttons, tight chip padding —
+and are fine for small decorative elements. New **layout-level** padding/margin/gap (section
+spacing, card padding, gaps between siblings) should land on 4/8/12/16/24/32/48/64, matching
+what's already standard: `space-y-8`, `gap-8`, `p-8`, `rounded-[2rem]` bento cards.
+
+### 7.4 Touch targets — 40px interactive, 36px icon-only floor
+
+Matches MD3's own accessibility guidance. Applyr's real icon buttons mostly clear this:
+`w-10 h-10` (40px) is the standard for primary actions (download, mark-applied, external
+link — see `TodayView.tsx`). `w-9 h-9` (36px) is used for the avatar and notification bell —
+right at the floor, don't shrink further.
+
+**Known violation:** [`JobDetailPanel.tsx:476`](../src/components/JobDetailPanel.tsx#L476) —
+the "Edit applied date" icon button is `w-8 h-8` (32px), below the 36px icon-only floor. It's
+a real click target (opens a date picker), not decorative, so it doesn't qualify for the
+decorative-icon exemption below. Small fix, flagged for the cleanup backlog rather than done
+here.
+
+**Exemption:** purely decorative icon containers with no `onClick` (toast icons, section
+badge circles) may go below 36px — the floor only applies to actual interactive elements.
+
+### 7.5 Typography zones — two typefaces, already correctly split
+
+Manrope (`--font-headline`, applied via `.font-headline` and bare `h1`/`h2`/`h3`) for section
+titles, page headers, and card headlines. Inter (`--font-body`) for everything else — body
+copy, labels, buttons, inputs, badges, chips. This already matches MD3/editorial practice
+(a distinct display face reserved for headings, a workhorse UI face for everything else).
+**Rule:** new components' headings get `.font-headline`; don't introduce a third typeface, and
+don't apply Manrope to interactive/control text (buttons, inputs, nav) even if it "looks nice"
+on a specific screen — that zone is reserved for Inter across the whole app.
+
+### 7.6 Color-role budget — one accent, three uses
+
+Primary (`#3B5FE0` indigo / `#D97757` coral in dark mode) is the one true accent. Its three
+sanctioned uses:
+1. Primary CTA fill (`.btn-primary`'s gradient)
+2. Active nav state (`Sidebar.tsx`'s `bg-sidebar-active`, which resolves to `--color-primary`)
+3. One emphasized metric per screen (e.g. a fit score above threshold, `TodayView.tsx`'s
+   `job.score >= tier1Floor` check)
+
+Secondary (cyan/teal) is reserved for a small number of genuinely secondary actions — today
+that's the "Check Gmail Now" button and count badges. Keep it that scarce. A new screen
+reaching for secondary as a second general-purpose brand color, rather than for one of these
+specific roles, is a violation even if it "matches" — grep the primary/secondary hex counts
+before adding a new use.
+
+**Reviewed, not retrofitted (2026-08-28):** the shipped app already uses primary well beyond
+these three roles (download/link icon buttons, score highlights, hover states throughout).
+This rule is guidance for new work going forward, not a cleanup target — re-coloring every
+existing icon button to hit a strict 3-use budget would touch dozens of already-fine
+components for a largely aspirational rule. Don't treat existing primary-colored icon buttons
+as violations; do hold new components to the budget above.
+
+### 7.7 Semantic colors are status, not style
+
+Success (green) / warning (amber) / error (red) map to a real system state the user needs to
+notice, never to decoration. Applyr already gets this mostly right, with one rule worth
+calling out explicitly because it's easy to get backwards: **job-pipeline outcomes are not
+system errors.** `Rejected`/`Closed` jobs deliberately render in the same neutral slate as
+`Backlog` (see `--color-status-closed-*` in `src/index.css` and `StatusChip.tsx`) — a closed
+application is a status, not a failure, so it never gets error-red. Error red is reserved for
+actual system/API failures (a failed sync, a broken connector). If a new feature needs to show
+"this didn't work out," reach for the neutral/warning slate the job pipeline already uses, not
+red — red is a scarcer signal here than the generic MD3 default would suggest.
+
+### 7.8 Audit checklist
+
+Before merging a new component, or when reviewing an existing screen for consistency:
+
+1. **Elevation** — does every persistent-chrome element at the same conceptual level share
+   one surface tier? (§7.1)
+2. **Border vs. shadow** — is this Elevated (shadow only) or Outlined (border only)? If it's
+   neither and combines both, is it `.editorial-shadow`/`.card-applyr` (the one approved
+   exception) or a new violation? (§7.2)
+3. **Grid** — do new layout-level spacing values land on 4/8/12/16/24/32/48/64? (§7.3)
+4. **Touch targets** — is every real interactive element ≥40px (≥36px if icon-only)? (§7.4)
+5. **Typography** — is Manrope reserved for headings only, Inter for everything else? (§7.5)
+6. **Accent budget** — does primary appear only as CTA fill / active nav / one emphasized
+   metric? Is secondary still scarce? (§7.6)
+7. **Semantic color** — does every success/warning/error use map to a real system state, and
+   does a job-pipeline outcome correctly avoid error-red? (§7.7)
+
+### 7.9 Known violations (cleanup backlog)
+
+- ~~`.editorial-shadow` / `.card-applyr` combine border + shadow~~ — **fixed 2026-08-28**,
+  see §7.2.
+- ~~`JobDetailPanel.tsx:476` — "Edit applied date" icon button below the 36px touch-target
+  floor~~ — **fixed 2026-08-28**, along with every other icon-only control below 36px found
+  in the same sweep (§7.4).
+
+Nothing currently outstanding from this pass. §7.6 (accent color budget) was reviewed but
+deliberately not retrofitted — see §7.6's own note; it's guidance for new work, not a backlog
+item, since enforcing it retroactively would mean re-coloring dozens of already-fine icon
+buttons across the app for a largely aspirational rule.

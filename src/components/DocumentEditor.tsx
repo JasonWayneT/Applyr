@@ -230,7 +230,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
 
           <button
             onClick={onClose}
-            className="text-on-surface-variant hover:text-on-surface p-1 rounded-full hover:bg-surface-container transition-all"
+            className="text-on-surface-variant hover:text-on-surface w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container transition-all shrink-0"
           >
             <span className="material-symbols-outlined text-lg leading-none">close</span>
           </button>
@@ -317,7 +317,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               <button
                 onClick={handleAiRewrite}
                 disabled={aiStatus === 'running' || !aiInstruction.trim()}
-                className={`w-full py-2.5 rounded-xl text-xs font-headline font-extrabold flex items-center justify-center gap-2 transition-all ${
+                className={`w-full py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all ${
                   aiStatus === 'running'
                     ? 'bg-surface-container text-on-surface-variant animate-pulse cursor-not-allowed'
                     : 'bg-primary text-on-primary hover:bg-primary-dim shadow-sm active:translate-y-0.5'

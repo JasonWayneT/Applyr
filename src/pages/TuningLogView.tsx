@@ -70,7 +70,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
 
       {/* Stats Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/10 editorial-shadow">
+        <div className="bg-surface-container-lowest p-5 rounded-2xl editorial-shadow">
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-1">
             Total Critiques
           </span>
@@ -82,7 +82,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
           </div>
         </div>
 
-        <div className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/10 editorial-shadow">
+        <div className="bg-surface-container-lowest p-5 rounded-2xl editorial-shadow">
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-1">
             Avg Mismatched Score
           </span>
@@ -99,7 +99,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
           </div>
         </div>
 
-        <div className="bg-surface-container-lowest p-5 rounded-2xl border border-outline-variant/10 editorial-shadow">
+        <div className="bg-surface-container-lowest p-5 rounded-2xl editorial-shadow">
           <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest block mb-1">
             Target Mismatch Stage
           </span>
@@ -165,7 +165,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
         </h3>
 
         {selfRejectedJobs.length === 0 ? (
-          <div className="p-12 text-center text-sm text-on-surface-variant bg-surface-container-lowest rounded-2xl border border-dashed border-outline-variant/20 editorial-shadow">
+          <div className="p-12 text-center text-sm text-on-surface-variant bg-surface-container-lowest rounded-2xl border border-dashed border-outline-variant/20">
             <span className="material-symbols-outlined text-4xl text-on-surface-variant/30 mb-2 block">
               checklist
             </span>
@@ -177,7 +177,7 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="group bg-surface-container-lowest p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-outline-variant hover:border-outline hover:shadow-lg transition-all cursor-pointer editorial-shadow"
+                className="group bg-surface-container-lowest p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-outline-variant hover:border-outline hover:shadow-lg transition-all cursor-pointer outlined-surface"
               >
                 {/* Job Metadata Column */}
                 <div className="flex items-start gap-4 flex-1 min-w-0">

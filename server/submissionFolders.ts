@@ -114,6 +114,44 @@ function hasResumeAndCoverPdfs(folder: string): boolean {
   }
 }
 
+const TERMINAL_COMPLETE_STATUSES = new Set(['COMPLETE', 'COMPLETE_WITH_OVERRIDE']);
+
+/**
+ * True when this folder's workflow_state.json (sole writer: scripts/workflow/receipts.py,
+ * CR-076) says the Stage 0-3 review chain actually reached a terminal complete state.
+ *
+ * 2026-08-28 (Jason-prompted, after a reported repeating incident of a coding tool telling
+ * him a stage was done when it wasn't): reconcileOrphanSubmissionFolders() and
+ * reconcileDraftedJobsWithAssets() below used to promote a folder to a live Backlog/Drafted
+ * job on file presence alone (two PDFs named right) -- regardless of which tool wrote them,
+ * or whether Truth/ATS/HM/Mech ever actually ran. This closes that gap by requiring the
+ * orchestrator's own terminal status too.
+ *
+ * Deliberately a top-level status read, not a port of contracts.check_workflow_complete()'s
+ * full receipt hash-chain / anti-forgery verification -- that check is Python-only, and
+ * porting it here would mean either duplicating non-trivial trust logic in a second language
+ * (real drift risk) or shelling out to Python synchronously on a hot path (this function's
+ * callers run on every /api/jobs request, per crud.ts). The `status` field is written
+ * exclusively by receipts.py, so this still closes the real observed failure mode (an agent
+ * skips the gates and just writes PDFs, leaving no workflow_state.json or one stuck at
+ * WAITING_FOR_LLM/IN_PROGRESS) without claiming full parity with the Python-side deep check.
+ *
+ * No workflow_state.json at all (every folder authored before CR-076) reads as complete --
+ * legacy folders predate this signal entirely; do not retroactively un-promote them.
+ */
+function isWorkflowComplete(folder: string): boolean {
+  const statePath = path.join(folder, 'workflow_state.json');
+  if (!fs.existsSync(statePath)) return true;
+  try {
+    const raw = fs.readFileSync(statePath, 'utf8');
+    const state = JSON.parse(raw) as { status?: unknown };
+    return typeof state.status === 'string' && TERMINAL_COMPLETE_STATUSES.has(state.status);
+  } catch {
+    // Present but unreadable/corrupt -- do not treat a state we can't parse as done.
+    return false;
+  }
+}
+
 /**
  * True when a folder holds Stage 0 fit-gate output from generate-submission/SKILL.md but hasn't
  * reached Stage 1 drafting yet (2026-08-03, Jason-prompted after a real data loss). Stage 0's own
@@ -233,7 +271,7 @@ export function reconcileDraftedJobsWithAssets(): string[] {
   const promoted: string[] = [];
   for (const row of rows) {
     const folder = resolveCompanyFolder(row.company, SUBMISSION_DIR);
-    if (!hasResumeAndCoverPdfs(folder)) continue;
+    if (!hasResumeAndCoverPdfs(folder) || !isWorkflowComplete(folder)) continue;
 
     const scoreRow = db.prepare(
       'SELECT score_total FROM job_scores WHERE job_id = ? AND is_latest = 1',
@@ -315,6 +353,55 @@ export function reconcileStage0FitScores(): string[] {
       const result = db
         .prepare('UPDATE jobs SET score = ? WHERE LOWER(company) = LOWER(?) AND (score IS NULL OR score != ?)')
         .run(freshScore, job.company, freshScore);
+      if (result.changes > 0) updated.push(job.company);
+    }
+  }
+  return updated;
+}
+
+/**
+ * Best-effort salary range read from stage0_fit_gate.json's `salary_range` field
+ * (scripts/build_stage0_fit_gate.py's extract_salary_range(), 2026-08-28) --
+ * regex-captured from the raw JD text, so treat a null/missing value as "not
+ * found," never a hard absence.
+ */
+function readStage0SalaryRange(folderPath: string): string | null {
+  try {
+    const raw = fs.readFileSync(path.join(folderPath, 'stage0_fit_gate.json'), 'utf8');
+    const parsed = JSON.parse(raw);
+    return typeof parsed.salary_range === 'string' && parsed.salary_range.trim()
+      ? parsed.salary_range
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sync jobs.salary_range from each active submission folder's stage0_fit_gate.json
+ * (2026-08-28, Jason-supplied) -- only ever fills a currently-empty value. A
+ * connector's own API-supplied salary_range (Remotive/RemoteOK/Jobicy/Himalayas/
+ * Adzuna, when the source provides one -- see shared/types/connectors.ts) is real
+ * structured data from the posting; this is a best-effort regex read of raw JD
+ * text and must never overwrite that with a guess.
+ */
+export function reconcileStage0SalaryRanges(): string[] {
+  if (!fs.existsSync(SUBMISSION_DIR)) return [];
+
+  const updated: string[] = [];
+  for (const folderName of fs.readdirSync(SUBMISSION_DIR)) {
+    const activePath = path.join(SUBMISSION_DIR, folderName);
+    if (!fs.statSync(activePath).isDirectory()) continue;
+
+    const salaryRange = readStage0SalaryRange(activePath);
+    if (salaryRange === null) continue;
+
+    for (const job of findJobsForFolder(folderName)) {
+      const result = db
+        .prepare(
+          "UPDATE jobs SET salary_range = ? WHERE LOWER(company) = LOWER(?) AND (salary_range IS NULL OR salary_range = '')",
+        )
+        .run(salaryRange, job.company);
       if (result.changes > 0) updated.push(job.company);
     }
   }
@@ -490,7 +577,7 @@ export function reconcileOrphanSubmissionFolders(): string[] {
   for (const folderName of fs.readdirSync(SUBMISSION_DIR)) {
     const activePath = path.join(SUBMISSION_DIR, folderName);
     if (!fs.statSync(activePath).isDirectory()) continue;
-    if (!hasResumeAndCoverPdfs(activePath)) continue;
+    if (!hasResumeAndCoverPdfs(activePath) || !isWorkflowComplete(activePath)) continue;
     if (findJobsForFolder(folderName).length > 0) continue;
 
     const company = titleCaseFromSlug(folderName);
@@ -504,6 +591,7 @@ export function reconcileOrphanSubmissionFolders(): string[] {
     // Folders authored before that wiring landed, or whose LLM-backed rubric
     // call failed, get null -- the UI should show "unscored," not a fake number.
     const score = readStage0FitScore(activePath);
+    const salaryRange = readStage0SalaryRange(activePath);
 
     // Guard against jobs.url's UNIQUE constraint: a folder can be "orphan" by company-slug match
     // (findJobsForFolder above) while its JD URL already belongs to a differently-named job row --
@@ -525,9 +613,9 @@ export function reconcileOrphanSubmissionFolders(): string[] {
     }
 
     db.prepare(`
-      INSERT INTO jobs (id, company, title, url, score, status, summary, jd_text, retry_count)
-      VALUES (?, ?, ?, ?, ?, 'Backlog', ?, ?, 0)
-    `).run(id, company, title, meta.url || null, score, summary, meta.jdText || null);
+      INSERT INTO jobs (id, company, title, url, score, status, summary, jd_text, retry_count, salary_range)
+      VALUES (?, ?, ?, ?, ?, 'Backlog', ?, ?, 0, ?)
+    `).run(id, company, title, meta.url || null, score, summary, meta.jdText || null, salaryRange);
 
     created.push(company);
     logActivity(

@@ -432,6 +432,12 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                   <span className="material-symbols-outlined text-base">domain</span>
                   {job.company}
                 </span>
+                {job.salary_range && (
+                  <span className="flex items-center gap-1 text-[10px] bg-surface-container-high px-2 py-0.5 rounded-md text-on-surface-variant font-mono">
+                    <span className="material-symbols-outlined text-[11px]">payments</span>
+                    {job.salary_range}
+                  </span>
+                )}
                 {job.sources && job.sources.length > 0 && (
                   <span className="flex items-center gap-1 text-[10px] bg-surface-container-high px-2 py-0.5 rounded-md text-on-surface-variant font-mono">
                     <span className="material-symbols-outlined text-[11px]">travel_explore</span>
@@ -473,7 +479,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                         {formatGlanceDate(appliedAtDate) || '—'}
                       </p>
                       <label
-                        className="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary cursor-pointer transition-colors"
+                        className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary cursor-pointer transition-colors"
                         title="Edit applied date"
                       >
                         <span className="material-symbols-outlined text-[18px]">calendar_month</span>
@@ -966,7 +972,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                             <button
                               onClick={() => handleStartEdit(mdFilename)}
                               title={`Edit ${file.name.replace('.pdf', '')}`}
-                              className="p-1.5 hover:bg-surface-container-high rounded-lg text-on-surface-variant hover:text-secondary transition-all flex items-center justify-center"
+                              className="w-9 h-9 hover:bg-surface-container-high rounded-lg text-on-surface-variant hover:text-secondary transition-all flex items-center justify-center shrink-0"
                             >
                               <span className="material-symbols-outlined text-lg">edit</span>
                             </button>
@@ -975,7 +981,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
                             href={api(`/api/jobs/${job.id}/files/${encodeURIComponent(file.name)}`)}
                             download={file.name}
                             title={`Download ${file.name}`}
-                            className="p-1.5 hover:bg-surface-container-high rounded-lg text-on-surface-variant hover:text-primary transition-all flex items-center justify-center"
+                            className="w-9 h-9 hover:bg-surface-container-high rounded-lg text-on-surface-variant hover:text-primary transition-all flex items-center justify-center shrink-0"
                           >
                             <span className="material-symbols-outlined text-lg">download</span>
                           </a>

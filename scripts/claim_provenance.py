@@ -25,10 +25,13 @@ Expected artifact shape -- claim_provenance.json in the submission folder:
         {"bullet": "first several words or full text of the bullet", "claim_ids": ["ACC-104", "MET-10"]},
         ...
       ],
-      "cover_letter_claims": [
-        {"proof_point": "...", "claim_ids": ["ACC-117"]}
-      ]
+        "cover_letter_claims": [
+            {"sentence": "...", "claim_ids": ["ACC-117"]}
+        ]
     }
+    Older artifacts may use ``proof_point`` instead of ``sentence``.  Both
+    labels are accepted so Truth review remains compatible with the newer
+    sentence-level contract.
 Claim IDs may be either master_claims.json's own keys (e.g. "ACC-101-TECH") or the coarser
 base IDs used in workExperience.md's bracket notation and CLAUDE.md's MET table (e.g. "ACC-101",
 "MET-05") -- both forms are valid, matching how the two ground-truth docs actually cite things.
@@ -137,7 +140,7 @@ def check_claim_provenance(folder: str) -> tuple[bool, list[str]]:
 
     valid_ids, disabled_ids = load_valid_claim_ids()
 
-    for section, item_label in (("resume_claims", "bullet"), ("cover_letter_claims", "proof_point")):
+    for section, item_label in (("resume_claims", "bullet"), ("cover_letter_claims", "sentence")):
         entries = data.get(section)
         if not isinstance(entries, list):
             errors.append(f"claim_provenance.json: '{section}' must be a list")
@@ -149,10 +152,17 @@ def check_claim_provenance(folder: str) -> tuple[bool, list[str]]:
             if not isinstance(entry, dict):
                 errors.append(f"claim_provenance.json: {section}[{i}] is not an object")
                 continue
+            # CR-103/CR-075 compatibility: Stage 1 now records the complete
+            # factual sentence, while older provenance artifacts called the
+            # same field ``proof_point``.  Prefer the current contract but
+            # accept the legacy label during Truth validation.
             label = entry.get(item_label)
+            if section == "cover_letter_claims" and not label:
+                label = entry.get("proof_point")
             claim_ids = entry.get("claim_ids")
             if not label:
-                errors.append(f"claim_provenance.json: {section}[{i}] missing '{item_label}'")
+                expected = "'sentence' (or legacy 'proof_point')" if section == "cover_letter_claims" else f"'{item_label}'"
+                errors.append(f"claim_provenance.json: {section}[{i}] missing {expected}")
             if not isinstance(claim_ids, list) or not claim_ids:
                 errors.append(f"claim_provenance.json: {section}[{i}] ('{label}') has no claim_ids -- every claim needs at least one real Fact ID")
                 continue

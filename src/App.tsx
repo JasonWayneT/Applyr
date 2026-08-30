@@ -68,7 +68,7 @@ function App() {
 
       {/* Top Header */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 glass-nav flex items-center justify-between px-8 z-40 editorial-shadow shrink-0">
+        <header className="h-16 glass-nav flex items-center justify-between px-8 z-40 border-b border-outline-variant shrink-0">
           <div className="flex items-center gap-4 flex-1">
             {/* Future global search or action bar can go here */}
           </div>

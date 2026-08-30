@@ -183,7 +183,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
       <div className="fixed inset-0 z-50" onClick={onClose} />
 
       {/* Panel */}
-      <div className="absolute right-8 top-14 z-50 w-96 bg-surface-container-lowest rounded-2xl editorial-shadow border border-outline-variant/10 animate-slide-up overflow-hidden">
+      <div className="absolute right-8 top-14 z-50 w-96 bg-surface-container-lowest rounded-2xl editorial-shadow animate-slide-up overflow-hidden">
         <div className="px-5 py-4 border-b border-outline-variant/10 flex items-center justify-between">
           <h3 className="text-sm font-headline font-bold text-on-surface">Notifications</h3>
           <div className="flex items-center gap-3">
@@ -229,7 +229,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); dismiss(n.id); }}
-                  className="text-on-surface-variant/50 hover:text-on-surface-variant shrink-0"
+                  className="text-on-surface-variant/50 hover:text-on-surface-variant hover:bg-surface-container-high rounded-full w-9 h-9 flex items-center justify-center shrink-0 -my-2 -mr-2"
                   title="Dismiss"
                 >
                   <span className="material-symbols-outlined text-base">close</span>

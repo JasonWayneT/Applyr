@@ -24,6 +24,47 @@ System capabilities reference (what the app can do today) is in [PRODUCT_CAPABIL
 ## [Unreleased]
 
 ### Changed
+- **Stage 0-3 self-report hardening + Stage 0 quality passes (2026-08-28, Jason-supplied — from
+  the Applyr Findings & Fixes report's Issues 7-8, plus follow-up items).**
+  - `server/submissionFolders.ts`: `reconcileOrphanSubmissionFolders()` and
+    `reconcileDraftedJobsWithAssets()` now require `workflow_state.json`'s terminal `status`
+    (`COMPLETE`/`COMPLETE_WITH_OVERRIDE`), not just Resume.pdf/CoverLetter.pdf file presence,
+    before promoting a folder to a live job. Closes the gap where any tool could get a job marked
+    ready by writing two plausible PDFs without the real Truth/ATS/HM/Mech review ever running.
+    Legacy folders with no `workflow_state.json` at all keep today's behavior.
+  - New shared `Stop` hook (`scripts/hooks/verify_submission_claims.py`) blocks a turn from
+    ending on an unverified completion claim about a recently-touched `data/submissions/` folder
+    — runs `check_submission_status.py` for real and feeds the actual result back instead of
+    trusting the assistant's own words. Wired for both Claude Code (`.claude/settings.json`) and
+    Factory.ai's droid (`.factory/hooks.json`, added after Jason confirmed Factory was the tool
+    behind a real repeating incident) — the two platforms' Stop events differ (Factory doesn't put
+    the assistant's last message in the hook payload; it has to be read from the JSONL
+    `transcript_path` instead), so the script auto-detects which shape it's given. Includes its
+    own debounce (`data/.stop_hook_debounce.json`, 5 min) as defense-in-depth against a blocking
+    loop, independent of whichever anti-loop guard each platform provides. Confirmed live end to
+    end in a real Factory droid session, not just tested in isolation: a droid ending its turn on
+    a false completion claim against an intentionally-incomplete test folder was blocked, fed the
+    real itemized status, and corrected its own report accordingly.
+    **Same-day follow-up, found live, not guessed at:** the claim regex originally matched bare
+    words ("complete", "finished", "clean") anywhere in the message, and fired repeatedly during a
+    real 23-company Stage 0-only triage batch — ordinary "Stage 0 triage complete" / "batch gate
+    finished" progress narration kept getting misread as a claim that a specific submission was
+    ready, even though nobody claimed that. Tightened to require the claim to actually be about a
+    submission/resume/cover letter/application being ready, or an explicit Stage 1-3
+    completion/finalize claim — Stage 0 passing is a cheap, frequent, low-stakes event this hook
+    was never meant to gate on.
+  - `scripts/build_stage0_fit_gate.py`: `screen_responsibilities_for_exclusion()` now runs the
+    real classifier on every responsibilities-bucket line (previously pre-filtered by a signal-word
+    regex before escalating) — accepted per-JD compute-cost tradeoff for not depending on a
+    signal-word list staying complete against novel exclusion phrasing.
+  - New requirement-bucket cap (`_cap_requirement_bucket`, `MAX_REQUIREMENT_ITEMS_PER_BUCKET = 12`):
+    an outlier JD with an unusually long requirements list now keeps only the highest-scoring
+    (most concrete/specific) items per bucket, recorded in `stage0_fit_gate.json`'s new
+    `requirements_capped` field.
+  - New best-effort `salary_range` capture (`extract_salary_range()`) from raw JD text at Stage 0,
+    surfaced in the job detail panel and synced to `jobs.salary_range` (new
+    `reconcileStage0SalaryRanges()`) only when a connector's own API-supplied value isn't already
+    present.
 - **CR-103 ATS retrieval evidence and PDF parser QA (2026-08-27).** Verification now
   separates packet-supported ATS terms from global vocabulary and checks that identity,
   contact, role, employer, date, section, greeting, and sign-off fields survive PDF

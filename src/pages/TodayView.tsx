@@ -387,7 +387,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
+                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 outlined-surface hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
               >
                 <div className="flex items-center gap-4 flex-1">
                   <div className="w-14 h-14 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary text-lg">
@@ -451,7 +451,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               </div>
             ))}
             {pipelineJobs.length === 0 && (
-              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center editorial-shadow">
+              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center outlined-surface">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 mb-3">check_circle</span>
                 <p className="text-on-surface-variant">All caught up — no jobs waiting to be applied to.</p>
               </div>
@@ -476,7 +476,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
                 <button
                   type="button"
                   onClick={() => setActiveSearchTerm('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
                   title="Clear search"
                 >
                   <span className="material-symbols-outlined text-base">close</span>
@@ -489,7 +489,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               <div
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 editorial-shadow hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
+                className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 outlined-surface hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
               >
                 <div className="flex items-center gap-4 flex-1">
                   <div className="w-14 h-14 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary text-lg">
@@ -535,13 +535,13 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               </div>
             ))}
             {activeJobs.length === 0 && (
-              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center editorial-shadow">
+              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center outlined-surface">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 mb-3">work_outline</span>
                 <p className="text-on-surface-variant">No active applications yet. Start your journey.</p>
               </div>
             )}
             {activeJobs.length > 0 && displayedActiveJobs.length === 0 && (
-              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center editorial-shadow">
+              <div className="bg-surface-container-lowest rounded-3xl p-12 text-center outlined-surface">
                 <span className="material-symbols-outlined text-5xl text-on-surface-variant/30 mb-3">search_off</span>
                 <p className="text-on-surface-variant">No active applications match &quot;{activeSearchTerm}&quot;.</p>
               </div>
@@ -563,7 +563,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
               <div 
                 key={job.id}
                 onClick={() => onJobClick(job)}
-                className="bg-surface-container-lowest p-6 rounded-3xl editorial-shadow border border-outline-variant hover:border-primary transition-all cursor-pointer group"
+                className="bg-surface-container-lowest p-6 rounded-3xl outlined-surface border border-outline-variant hover:border-primary transition-all cursor-pointer group"
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-12 h-12 bg-surface-container rounded-2xl flex items-center justify-center font-headline font-bold text-primary">
@@ -772,7 +772,7 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
             } : undefined}
             className={`bg-surface-container-lowest rounded-2xl p-6 editorial-shadow ${
               stat.navigable && onNavigateToOpportunities
-                ? 'cursor-pointer hover:border-primary border border-outline-variant transition-all hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
+                ? 'cursor-pointer hover:border hover:border-primary transition-all hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50'
                 : ''
             }`}
             title={stat.navigable && onNavigateToOpportunities ? `View ${stat.label} in Opportunities` : undefined}

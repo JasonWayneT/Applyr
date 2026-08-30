@@ -17,6 +17,13 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# CR-105: this file calls the real build_stage0_fit_gate() (see TestImportPipeline below)
+# without mocking call_llm. Must force the regex extractor -- otherwise (as of the NLP path
+# becoming Stage 0's default) a real test run makes a real Groq/Gemini network call with
+# whatever key is configured and writes real rows to data/training_data_feedback.csv. Matches
+# the same guard test_build_stage0_fit_gate.py and test_stage0_model_handoff.py already set.
+os.environ["STAGE0_SECTION_MODE"] = "deterministic"
+
 from stage0_skip_ledger import (  # noqa: E402
     clear_skip,
     connect,

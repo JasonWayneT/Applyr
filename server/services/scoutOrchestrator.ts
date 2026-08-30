@@ -3,12 +3,10 @@ import { insertJob } from '../repository/jobRepository.js';
 import type { JobConnector } from '../../shared/types/connectors.js';
 import { createRemotiveConnector } from '../../packages/connectors/remotive/index.js';
 import { createRemoteokConnector } from '../../packages/connectors/remoteok/index.js';
-import { createWeworkremotelyConnector } from '../../packages/connectors/weworkremotely/index.js';
 import { createHimalayasConnector } from '../../packages/connectors/himalayas/index.js';
 import { createThemuseConnector } from '../../packages/connectors/themuse/index.js';
 import { createJobicyConnector } from '../../packages/connectors/jobicy/index.js';
 import { createWorkingnomadsConnector } from '../../packages/connectors/workingnomads/index.js';
-import { createJobscolliderConnector } from '../../packages/connectors/jobscollider/index.js';
 import { createAdzunaConnector } from '../../packages/connectors/adzuna/index.js';
 import { createOpenPostingsConnector } from '../../packages/connectors/openpostings/index.js';
 import { createTheirstackConnector } from '../../packages/connectors/theirstack/index.js';
@@ -79,12 +77,10 @@ export function buildDefaultConnectors(): JobConnector[] {
   return [
     createRemotiveConnector({ searchTerms: prefs.searchTerms }),
     createRemoteokConnector({ searchTerms: prefs.searchTerms }),
-    createWeworkremotelyConnector({ titleScopePrefs }),
     createHimalayasConnector({ searchTerms: prefs.searchTerms, titleScopePrefs }),
     createThemuseConnector(),
     createJobicyConnector({ searchTerms: prefs.searchTerms }),
     createWorkingnomadsConnector({ searchTerms: prefs.searchTerms }),
-    createJobscolliderConnector({ titleScopePrefs }),
     createAdzunaConnector({ appId: adzuna.appId, appKey: adzuna.appKey, searchTerms: prefs.searchTerms }),
     createOpenPostingsConnector({ searchTerms: prefs.searchTerms, localAreaTerms: prefs.localAreaTerms }),
     createTheirstackConnector({ searchTerms: prefs.searchTerms, localAreaTerms: prefs.localAreaTerms }),

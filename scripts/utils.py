@@ -149,43 +149,115 @@ def load_candidate_preferences():
 
 
 # --- Rate Limit & Validation Helpers ---
+# provider -> (daily cap to warn+disable at, real daily limit for the log line,
+#              per-minute cap to sleep at, real per-minute limit for the log line).
+# Gemini's free tier: 1,500 RPD / 15 RPM. Groq's free tier: 14,400 RPD / 30 RPM (see
+# CR-105's provider research). Both self-counted via activity_log -- neither provider's
+# response exposes a documented live remaining-quota header the way Groq's request/token
+# headers technically do per-call; counting our own calls against the documented cap is
+# the same estimate-not-authoritative approach for both until a real per-response tracker
+# replaces this (see docs/ROADMAP_BEST_PRACTICES.md's free-tier cascade item).
+_RATE_LIMIT_THRESHOLDS = {
+    'gemini': (1400, 1500, 14, 15),
+    'groq': (14000, 14400, 28, 30),
+}
+
+
+def _log_provider_notification(provider: str, message: str, reason: str, dedupe: bool = False, extra: dict | None = None) -> None:
+    """CR-106: writes a real, user-visible notification (not just a stderr print) whenever the
+    LLM layer makes a cascade/exhaustion decision on the caller's behalf, so Jason can actually see
+    why a task went quiet or switched providers rather than only finding out from a log he isn't
+    watching. Reuses the existing logActivity() -> Notifications-panel pipeline (see
+    server/routes/llmUsage.ts) the way gmail_sync_interview already does on the Node side.
+
+    dedupe=True skips the insert if a notification with the same provider+reason already landed
+    in the last 24h -- the self-counted daily-cap breaker below fires on every subsequent call
+    once tripped, and that must not mean one notification per call. Matched against `meta`
+    (json.dumps' default `", "` separator is stable since this function is the only writer of
+    this shape), not the free-text `message`, which varies call to call (call counts, dates).
+    """
+    import sqlite3
+    import json
+    try:
+        if not os.path.exists(DB_PATH):
+            return
+        conn = sqlite3.connect(DB_PATH, timeout=10.0)
+        cursor = conn.cursor()
+        if dedupe:
+            cursor.execute(
+                "SELECT 1 FROM activity_log WHERE source = 'LLM_Call' AND meta LIKE ? AND meta LIKE ? "
+                "AND timestamp >= datetime('now', '-24 hours') LIMIT 1",
+                (f'%"provider": "{provider}"%', f'%"reason": "{reason}"%'),
+            )
+            if cursor.fetchone():
+                conn.close()
+                return
+        meta = {"event": "llm_provider_cascade", "provider": provider, "reason": reason, **(extra or {})}
+        cursor.execute(
+            "INSERT INTO activity_log (level, source, message, meta) VALUES ('WARN', 'LLM_Call', ?, ?)",
+            (message, json.dumps(meta)),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"    [Notification Error] {e}", file=sys.stderr)
+
+
 def check_rate_limits(provider: str) -> bool:
     """
     Checks rate limits for a provider via activity_log.
     Returns True if allowed to proceed, False if provider should be skipped/disabled.
     Sleeps if approaching RPM limit.
     """
-    if provider != 'gemini':
+    thresholds = _RATE_LIMIT_THRESHOLDS.get(provider)
+    if thresholds is None:
         return True
-        
+    daily_warn, daily_real, minute_warn, minute_real = thresholds
+
     import sqlite3
     db_path = DB_PATH
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path, timeout=10.0)
             cursor = conn.cursor()
-            
-            cursor.execute("SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE '%[gemini]%' AND timestamp >= datetime('now', '-24 hours')")
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE ? AND timestamp >= datetime('now', '-24 hours')",
+                (f'%[{provider}]%',),
+            )
             daily_calls = cursor.fetchone()[0]
-            if daily_calls >= 1400:
-                print(f"    [Circuit Breaker] Gemini daily quota exceeded ({daily_calls}/1500). Disabling Gemini for 24h.", file=sys.stderr)
+            if daily_calls >= daily_warn:
+                print(f"    [Circuit Breaker] {provider.capitalize()} daily quota exceeded ({daily_calls}/{daily_real}). Disabling {provider.capitalize()} for 24h.", file=sys.stderr)
                 conn.close()
+                _log_provider_notification(
+                    provider,
+                    f"{provider.capitalize()} hit its free-tier daily cap ({daily_calls}/{daily_real} calls) — disabled for 24h, tasks will fall back to their next configured provider.",
+                    reason="daily_cap_exhausted",
+                    dedupe=True,
+                    extra={"daily_calls": daily_calls, "daily_real": daily_real},
+                )
                 return False
-                
-            cursor.execute("SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE '%[gemini]%' AND timestamp >= datetime('now', '-1 minute')")
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE ? AND timestamp >= datetime('now', '-1 minute')",
+                (f'%[{provider}]%',),
+            )
             minute_calls = cursor.fetchone()[0]
-            
-            cursor.execute("INSERT INTO activity_log (level, source, message) VALUES ('INFO', 'LLM_Call', '[gemini] API request initiated')")
+
+            cursor.execute(
+                "INSERT INTO activity_log (level, source, message) VALUES ('INFO', 'LLM_Call', ?)",
+                (f'[{provider}] API request initiated',),
+            )
             conn.commit()
             conn.close()
-            
-            if minute_calls >= 14:
-                print(f"    [Circuit Breaker] Gemini RPM approaching limit ({minute_calls}/15). Sleeping 60s...", file=sys.stderr)
+
+            if minute_calls >= minute_warn:
+                print(f"    [Circuit Breaker] {provider.capitalize()} RPM approaching limit ({minute_calls}/{minute_real}). Sleeping 60s...", file=sys.stderr)
                 time.sleep(60)
-                
+
     except Exception as e:
         print(f"    [Circuit Breaker Error] {e}", file=sys.stderr)
-        
+
     return True
 
 
@@ -380,6 +452,11 @@ def _is_configured(provider: str, settings: dict) -> bool:
         return bool(settings.get('localUrl') or os.getenv('OLLAMA_HOST'))
     if provider == 'perplexity':
         return bool(settings.get('perplexityApiKey') or os.getenv('PERPLEXITY_API_KEY'))
+    # CR-105: deliberately NOT added to _get_configured_providers' fixed_order below --
+    # Groq is scoped to specific tasks that explicitly request it via provider_override
+    # (Stage 0 fallback, email classification), never an implicit primaryProvider choice.
+    if provider == 'groq':
+        return bool(settings.get('groqApiKey') or os.getenv('GROQ_API_KEY'))
     return False
 
 
@@ -390,6 +467,37 @@ def _get_configured_providers(settings: dict) -> list:
     fixed_order = ['gemini', 'claude', 'local', 'perplexity']
     ordered = [primary] + [p for p in fixed_order if p != primary]
     return [p for p in ordered if _is_configured(p, settings)]
+
+
+# CR-105: minimal per-task provider override -- lets a specific task (Stage 0's ambiguous-
+# bullet fallback, the Gmail sync email classifier's low-confidence fallback, ...) be
+# pinned to a different first-choice provider than its own hardcoded default, via
+# Settings > API or Connections > "AI Usage" (llm_settings.taskProviderOverrides).
+# Deliberately just "promote one provider to the front" rather than a full reorderable
+# chain -- real, useful today ("I want Gemini first for this one task" is one dropdown),
+# without building a drag-and-drop UI for a need that hasn't shown up yet. A full
+# per-task fallback-chain editor is the natural next step if that need does show up
+# (see docs/ROADMAP_BEST_PRACTICES.md's provider-vault item).
+def resolve_task_providers(task_id: str, default_chain: list) -> list:
+    """Returns the provider chain to try for `task_id`: the user's override (if set)
+    promoted to the front of default_chain, else default_chain unchanged."""
+    settings = load_llm_settings()
+    overrides = settings.get('taskProviderOverrides') or {}
+    override = overrides.get(task_id)
+    if not override:
+        return default_chain
+    return [override] + [p for p in default_chain if p != override]
+
+
+def resolve_default_task_providers(task_id: str) -> list:
+    """CR-106: same as resolve_task_providers, but for a task that previously had no explicit
+    default_chain of its own -- it just used call_llm's normal primaryProvider rotation
+    (_get_configured_providers). Lets a task opt into taskProviderOverrides without having to
+    invent an artificial default chain first. Keeps the full configured fallback chain either
+    way (unlike passing a single-provider override list straight to call_llm, which would drop
+    fallback entirely)."""
+    settings = load_llm_settings()
+    return resolve_task_providers(task_id, _get_configured_providers(settings))
 
 
 def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
@@ -421,11 +529,26 @@ def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
             err = str(e).lower()
             if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
                 print(f"    [LLM Notice] Gemini is busy/rate-limited ({err[:100]}). Falling back to local model tier...", file=sys.stderr)
+                _log_provider_notification(
+                    "gemini",
+                    "Gemini is rate-limited/unavailable — cascading to the next configured provider for this call.",
+                    reason="rate_limited_cascade",
+                )
                 return None
             else:
                 print(f"    [LLM Error] Gemini: {e}", file=sys.stderr)
                 return None
     return None
+
+
+# CR-106: Claude and Perplexity below now mirror _call_groq's pattern (real Retry-After header,
+# "long wait means cascade now instead of blocking" threshold) instead of the blind
+# 60s-times-attempt sleep loop both used before -- that loop could block a single call for
+# minutes across max_retries with no way to tell the difference between a momentary throttle and
+# a real quota exhaustion. See CR-105's free-tier research: Anthropic exposes the same live
+# rate-limit header shape as Groq; Perplexity only exposes Retry-After on the 429 itself, no
+# proactive headers, but that's still enough to make the same cascade-vs-wait call.
+_CASCADE_WAIT_THRESHOLD_SECONDS = 30
 
 
 def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries):
@@ -452,8 +575,17 @@ def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_r
             if res.status_code == 200:
                 return res.json()["content"][0]["text"].strip()
             elif res.status_code == 429:
-                wait = 60 * (attempt + 1)
-                print(f"  -> Claude rate limit. Waiting {wait}s...", file=sys.stderr)
+                retry_after = res.headers.get("retry-after")
+                wait = float(retry_after) if retry_after else 60 * (attempt + 1)
+                if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
+                    print(f"    [LLM] Claude rate limit needs {wait:.0f}s -- cascading to next provider.", file=sys.stderr)
+                    _log_provider_notification(
+                        "claude",
+                        f"Claude rate limit needs {wait:.0f}s — cascading to the next configured provider for this call.",
+                        reason="rate_limited_cascade",
+                    )
+                    return None
+                print(f"  -> Claude rate limit. Waiting {wait:.0f}s...", file=sys.stderr)
                 time.sleep(wait)
             else:
                 print(f"    [LLM Error] Claude status {res.status_code}: {res.text}", file=sys.stderr)
@@ -618,14 +750,77 @@ def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retr
             if res.status_code == 200:
                 return res.json()["choices"][0]["message"]["content"].strip()
             elif res.status_code == 429:
-                wait = 60 * (attempt + 1)
-                print(f"  -> Perplexity rate limit. Waiting {wait}s...", file=sys.stderr)
+                retry_after = res.headers.get("retry-after")
+                wait = float(retry_after) if retry_after else 60 * (attempt + 1)
+                if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
+                    print(f"    [LLM] Perplexity rate limit needs {wait:.0f}s -- cascading to next provider.", file=sys.stderr)
+                    _log_provider_notification(
+                        "perplexity",
+                        f"Perplexity rate limit needs {wait:.0f}s — cascading to the next configured provider for this call.",
+                        reason="rate_limited_cascade",
+                    )
+                    return None
+                print(f"  -> Perplexity rate limit. Waiting {wait:.0f}s...", file=sys.stderr)
                 time.sleep(wait)
             else:
                 print(f"    [LLM Error] Perplexity status {res.status_code}: {res.text}", file=sys.stderr)
                 return None
         except Exception as e:
             print(f"    [LLM Error] Perplexity: {e}", file=sys.stderr)
+            return None
+    return None
+
+
+def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_retries):
+    """Returns result string on success, None to signal try-next-provider.
+
+    This was the original real `retry-after`-aware cascade decision (CR-105) — CR-106 gave
+    _call_claude/_call_perplexity above the same pattern instead of their prior blind
+    exponential-sleep loop, so all three now behave the same way here.
+    """
+    import requests
+    api_key = settings.get('groqApiKey') or os.getenv('GROQ_API_KEY')
+    target_model = model or 'llama-3.3-70b-versatile'
+    print(f"    [LLM] Calling Groq: {target_model}...", file=sys.stderr)
+    for attempt in range(max_retries):
+        try:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": target_model,
+                "temperature": temperature,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            }
+            res = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload
+            )
+            if res.status_code == 200:
+                return res.json()["choices"][0]["message"]["content"].strip()
+            elif res.status_code == 429:
+                retry_after = res.headers.get("retry-after")
+                wait = float(retry_after) if retry_after else 5 * (attempt + 1)
+                if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
+                    # A multi-minute-or-longer wait means the daily cap is exhausted, not a
+                    # momentary throttle -- cascade to the next provider now rather than block.
+                    print(f"    [LLM] Groq rate limit needs {wait:.0f}s -- cascading to next provider.", file=sys.stderr)
+                    _log_provider_notification(
+                        "groq",
+                        f"Groq rate limit needs {wait:.0f}s — cascading to the next configured provider for this call.",
+                        reason="rate_limited_cascade",
+                    )
+                    return None
+                print(f"  -> Groq rate limit. Waiting {wait:.0f}s...", file=sys.stderr)
+                time.sleep(wait)
+            else:
+                print(f"    [LLM Error] Groq status {res.status_code}: {res.text}", file=sys.stderr)
+                return None
+        except Exception as e:
+            print(f"    [LLM Error] Groq: {e}", file=sys.stderr)
             return None
     return None
 
@@ -660,8 +855,13 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
 
     if provider_override:
         requested = [provider_override] if isinstance(provider_override, str) else provider_override
-        # Filter list to only configured providers that match request
-        providers = [p for p in requested if p in all_providers]
+        # Filter list to only configured providers that match request. Checks
+        # _is_configured directly (not membership in all_providers) so an explicitly
+        # requested provider outside the implicit primaryProvider rotation -- e.g. 'groq',
+        # deliberately excluded from _get_configured_providers' fixed_order because it's
+        # meant to be task-scoped, never an implicit default -- still works when a caller
+        # asks for it by name and it's actually configured.
+        providers = [p for p in requested if _is_configured(p, settings)]
     else:
         providers = all_providers
 
@@ -697,6 +897,8 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             )
         elif provider == 'perplexity':
             result = _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retries)
+        elif provider == 'groq':
+            result = _call_groq(settings, system_prompt, user_prompt, model, temperature, max_retries)
 
         if result is not None:
             return result

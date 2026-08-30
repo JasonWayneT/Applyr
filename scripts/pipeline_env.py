@@ -24,14 +24,18 @@ def local_only_mode() -> bool:
 
 
 def stage0_section_mode() -> str:
-    """llm | deterministic -- which extractor build_stage0_fit_gate.py's
-    _extract_sections_llm()/_extract_sections() split uses. Defaults to
-    "llm" (2026-08-17, Jason-supplied): the regex header-matcher proved
-    unreliable across real JD phrasing (see build_stage0_fit_gate.py's module
-    docstring). This flag only controls whether the LLM path is attempted at
-    all (tests / explicit offline runs). A failed LLM extract raises rather
-    than silently using the regex extractor."""
-    return _flag("STAGE0_SECTION_MODE", "llm")
+    """nlp | llm | deterministic -- which extractor build_stage0_fit_gate.py's
+    _extract_sections_nlp()/_extract_sections_llm()/_extract_sections() split uses.
+
+    Defaults to "nlp" (2026-08-30, CR-105, Jason-supplied): the TF-IDF/LogReg
+    classifier plus a Groq/Gemini confidence fallback replaces the local-model-pinned
+    "llm" path as the default -- faster, and the fallback only needs to run on the
+    genuinely ambiguous bullets instead of the whole JD. "llm" (the previous default,
+    2026-08-17) is still available for direct comparison/rollback. "deterministic" is
+    for tests / explicit offline runs, unchanged -- neither the nlp nor the llm path is
+    attempted at all, and _extract_sections() (regex) is used instead. A failed nlp or
+    llm extract raises rather than silently using the regex extractor."""
+    return _flag("STAGE0_SECTION_MODE", "nlp")
 
 
 # DRAFT_MODE values that keep the compose-path deterministic defaults (JD profile,

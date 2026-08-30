@@ -5,7 +5,7 @@ Uses the configured LLM provider (with fallback chain) — no manual maintenance
 """
 import os
 import sys
-from utils import load_file, call_llm, WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE
+from utils import load_file, call_llm, resolve_task_providers, WORK_EXP_FILE, WORK_EXP_SUMMARY_FILE
 
 _SYSTEM_PROMPT = """You are generating a concise scoring brief from a candidate's full work experience document.
 This brief is used by an automated job fit scoring engine to evaluate role matches efficiently.
@@ -50,11 +50,16 @@ def generate_summary():
 
     print("[Summary] Generating workExperience_summary.md from workExperience.md...", file=sys.stderr)
 
+    # CR-106: was hardcoded provider_override='gemini' -- now overridable via Settings > API or
+    # Connections > AI Usage (taskProviderOverrides.we_scoring_summary), but the default_chain
+    # passed in is still ['gemini'], so behavior is unchanged unless the task is explicitly
+    # overridden. No capability lock-in here (plain text summarization, no search grounding),
+    # unlike research-engine.py's Gemini calls.
     result = call_llm(
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=f"Generate the scoring brief from this work experience document:\n\n{full_experience}",
         temperature=0.1,
-        provider_override='gemini'
+        provider_override=resolve_task_providers('we_scoring_summary', ['gemini']),
     )
 
     if not result:

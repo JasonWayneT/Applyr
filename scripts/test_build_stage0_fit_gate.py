@@ -2464,6 +2464,61 @@ class TestSectionExtractionLLM(unittest.TestCase):
                         _build(_CLEAN_PM_JD)
 
 
+class TestSectionExtractionNLP(unittest.TestCase):
+    """_extract_sections_nlp (CR-105, 2026-08-30) -- real trained classifier
+    (data/stage0_classifier.pkl), call_llm mocked so no real network call happens.
+    Covers the two real bugs found in the initial (unwired, unverified) version:
+    the JD's own `URL:` line getting fed to the classifier and landing in the
+    active-learning training set, and STAGE0_SECTION_MODE=deterministic not
+    actually being honored."""
+
+    def setUp(self):
+        from build_stage0_fit_gate import _extract_sections_nlp
+        self._extract_sections_nlp = _extract_sections_nlp
+
+    def test_deterministic_mode_returns_none_without_touching_classifier(self):
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "deterministic"}):
+            with patch("utils.call_llm") as mock_call:
+                result = self._extract_sections_nlp("Requirements\n5+ years of experience")
+        mock_call.assert_not_called()
+        self.assertIsNone(result)
+
+    def test_url_line_never_reaches_classifier_or_llm_fallback(self):
+        """Real miss (2026-08-30): a direct call with the raw `URL: <url>` first line
+        (the shape real callers strip via _parse_url_and_jd first, but the original
+        Limble demo that produced training_data_feedback.csv did not) sent the URL
+        itself to the classifier, which routed it to the LLM fallback and got it
+        labeled "preferred" -- a URL is not a JD bullet. Must never happen again,
+        whether or not the caller stripped it first."""
+        jd = (
+            "URL: https://jobs.ashbyhq.com/limble/\n"
+            "Requirements\n"
+            "5+ years of product management experience in B2B SaaS\n"
+            "Strong analytical and communication skills\n"
+        )
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "nlp"}):
+            with patch("utils.call_llm", return_value=None) as mock_call:
+                result = self._extract_sections_nlp(jd)
+        self.assertIsNotNone(result)
+        all_text = " | ".join(v for vals in result.values() for v in vals)
+        self.assertNotIn("jobs.ashbyhq.com", all_text)
+        self.assertNotIn("URL:", all_text)
+        for call in mock_call.call_args_list:
+            prompt = call.kwargs.get("user_prompt", "")
+            self.assertNotIn("jobs.ashbyhq.com", prompt)
+
+    def test_ambiguous_bullet_fallback_uses_groq_then_gemini(self):
+        """The fallback call must request Groq first, Gemini second -- not a bare
+        single-provider string (the original version hardcoded "gemini" only)."""
+        jd = "Requirements\nXk8j Qzpr Vwmn synergistic paradigm bullet with no clear signal\n"
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "nlp"}):
+            with patch("utils.call_llm", return_value=None) as mock_call:
+                self._extract_sections_nlp(jd)
+        if mock_call.call_args_list:
+            override = mock_call.call_args_list[0].kwargs.get("provider_override")
+            self.assertEqual(override, ["groq", "gemini"])
+
+
 class TestUnbridgeableDomainRequirement(unittest.TestCase):
     """2026-08-19, Jason-supplied, real miss: OneSource Virtual required
     "5+ years... in a payroll tax... industry" and "5+ years... with Payroll

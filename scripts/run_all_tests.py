@@ -50,6 +50,8 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_solo_pm_gate.py",
     "scripts/test_verify_chain.py",
     "scripts/verify_master_claims.py",
+    "scripts/test_llm_provider_cascade.py",
+    "scripts/test_resolve_task_providers.py",
 ]
 
 

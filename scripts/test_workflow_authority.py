@@ -1212,17 +1212,23 @@ class Stage3FinalizeTests(unittest.TestCase):
         state = init_state(str(self.folder), mode="production")
         write_state(str(self.folder), state)
         # Force rewrite, then stop early — Original_JD may be missing so Stage 0
-        # can fail; we only assert mode was rewritten before that.
-        try:
-            run_until_waiting_for_llm(
-                str(self.folder),
-                mode="practice",
-                adopt=False,
-                force=True,
-                no_hook=True,
-            )
-        except WorkflowError:
-            pass
+        # can fail; we only assert mode was rewritten before that. This test doesn't
+        # mock build_stage0_fit_gate (unlike the rest of this file) and doesn't care what
+        # Stage 0 actually extracts, only that `mode` got rewritten first — so it must
+        # force the regex extractor rather than let it reach the real NLP path, which
+        # would make a real Groq/Gemini call and write real rows to
+        # data/training_data_feedback.csv (CR-105 -- found via a real polluted test run).
+        with mock.patch.dict(os.environ, {"STAGE0_SECTION_MODE": "deterministic"}):
+            try:
+                run_until_waiting_for_llm(
+                    str(self.folder),
+                    mode="practice",
+                    adopt=False,
+                    force=True,
+                    no_hook=True,
+                )
+            except WorkflowError:
+                pass
         reloaded = load_state(str(self.folder))
         self.assertEqual(reloaded.get("mode"), "practice")
 

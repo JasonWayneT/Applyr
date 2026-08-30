@@ -988,36 +988,55 @@ def _extract_unavailable_message(reason: str) -> str:
 
 
 
-def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]]:
+def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
+    """NLP (TF-IDF + LogReg) section extraction with a Groq/Gemini fallback for anything
+    the classifier isn't confident about. Returns None only when STAGE0_SECTION_MODE=
+    deterministic (caller then uses the regex extractor on purpose, same contract as
+    _extract_sections_llm) or when data/stage0_classifier.pkl doesn't exist yet -- both
+    are "use regex instead" signals, not real failures, so neither raises.
+    """
+    import pipeline_env
+    if pipeline_env.stage0_section_mode() == "deterministic":
+        return None
+
     import joblib
     import csv
-    from utils import call_llm, extract_json_from_text
-    
+    from utils import call_llm, extract_json_from_text, resolve_task_providers
+
     model_path = _REPO_ROOT / "data" / "stage0_classifier.pkl"
     if not model_path.exists():
         print("NLP Model not found, falling back to deterministic extraction.", file=sys.stderr)
-        return _extract_sections(jd_text)
-        
+        return None
+
     pipeline = joblib.load(model_path)
     classes = list(pipeline.classes_)
-    
+
     lines = _normalize_jd_punctuation(jd_text).splitlines()
-    
+
     buckets = {
         "required": [],
         "preferred": [],
         "responsibilities": [],
         "culture": [],
     }
-    
+
     current_header = ""
     fallback_queue = []
-    
+
     for line in lines:
         clean = line.strip()
         if not clean:
             continue
-            
+
+        # CR-105 fix: the `URL: <url>` first-line convention (see _parse_url_and_jd) is
+        # metadata, not a JD bullet. Real callers already strip it before this function
+        # ever sees jd_text, but a standalone/direct call (how the original Limble demo
+        # was run) can hand this function raw text -- guard here too rather than rely on
+        # every caller remembering to strip it first. A real miss: the URL line got sent
+        # to the LLM fallback and landed in training_data_feedback.csv labeled "preferred".
+        if re.match(r"^url:\s*https?://", clean, re.I):
+            continue
+
         bucket, is_label = classify_jd_header(line)
         if bucket is not None:
             current_header = clean
@@ -1061,7 +1080,11 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]]:
         result = call_llm(
             system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
             user_prompt=prompt,
-            provider_override="gemini"
+            # CR-105 (Jason-supplied, 2026-08-30): Groq first (generous free tier, no
+            # training on submitted data), Gemini as the fallback if Groq is unavailable
+            # or rate-limited. User-overridable per Settings > API or Connections > AI
+            # Usage > "Stage 0 fallback" (llm_settings.taskProviderOverrides.stage0_extraction).
+            provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
         )
         
         if result:
@@ -1981,13 +2004,20 @@ def build_stage0_fit_gate(
         }
 
     # --- Step 3: Extract JD buckets ---
-    # LLM extraction is the default (2026-08-17, Jason-supplied), pinned to
-    # STAGE0_EXTRACT_MODEL. Regex is used only when STAGE0_SECTION_MODE is
-    # explicitly deterministic (tests / offline). A load or run failure
-    # raises Stage0ExtractError instead of silently swapping extractors.
+    # NLP extraction is the default (2026-08-30, CR-105, Jason-supplied): TF-IDF/LogReg
+    # classifier with a Groq/Gemini fallback for low-confidence bullets only, replacing
+    # the local-model-pinned "llm" path as the default. "llm" stays available (rollback /
+    # comparison) via STAGE0_SECTION_MODE=llm. Regex is used only when STAGE0_SECTION_MODE
+    # is explicitly deterministic (tests / offline). A load or run failure raises
+    # Stage0ExtractError instead of silently swapping extractors.
     _release_stage0_vram("before-extract")
-    sections = _extract_sections_llm(jd_text)
-    extraction_source = "llm"
+    import pipeline_env
+    if pipeline_env.stage0_section_mode() == "llm":
+        sections = _extract_sections_llm(jd_text)
+        extraction_source = "llm"
+    else:
+        sections = _extract_sections_nlp(jd_text)
+        extraction_source = "nlp"
     if sections is None:
         sections = _extract_sections(jd_text)
         extraction_source = "deterministic"

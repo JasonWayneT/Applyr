@@ -670,6 +670,32 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-341` | acceptance | P1 | implemented | Clean fixture reports all checked fields present | `FR-267` | CR-103 |
 | `AC-342` | acceptance | P1 | implemented | ATS and parser reports remain WARN-only and do not alter mechanical verification | `NFR-008` | CR-103 |
 
+### CR-105 Email classifier / Groq / task overrides (FR-268–FR-272)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-268` | functional | P0 | implemented | Email classifier recognizes rejection, interview, and confirmation via synonym-vocabulary matching | CR-105 | CR-105 |
+| `FR-269` | functional | P0 | implemented | Email classification LLM fallback defaults to Groq only; Gemini second attempt is opt-in and never supersedes Groq | CR-105 | CR-105 |
+| `FR-270` | functional | P0 | implemented | Groq is a first-class provider in both Python and Node LLM layers, with free-tier rate-limit tracking | CR-105 | CR-105 |
+| `FR-271` | functional | P0 | implemented | Task-scoped provider override (`taskProviderOverrides`) for Stage 0 extraction and email classification | CR-105 | CR-105 |
+| `FR-272` | functional | P0 | implemented | Stage 0 NLP section extractor is the default pipeline path, with rollback to LLM-only | CR-105 | CR-105 |
+
+### CR-106 Interview auto-status, cascade notifications, AI Usage table (FR-273–FR-275)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-273` | functional | P0 | implemented | Detected interview email with extracted date/time auto-advances eligible job status; dry-run previews | `AC-343`–`AC-345` | CR-106 |
+| `FR-274` | functional | P1 | implemented | Provider cascade and daily-cap events write `llm_provider_cascade` notifications; Claude/Perplexity cascade on retry-after > 30s | `AC-346`–`AC-348` | CR-106 |
+| `FR-275` | functional | P1 | implemented | AI Usage lists we_scoring_summary and ai_rewrite; research-engine Gemini-search and STAGE_PROVIDERS stay documented exclusions | `AC-349`–`AC-352` | CR-106 |
+| `AC-343` | acceptance | P0 | implemented | Regex + Groq-first LLM extraction; Gemini opt-in via interview_date_extraction | `FR-273` | CR-106 |
+| `AC-344` | acceptance | P0 | implemented | Date.parse connector-before-time shapes are normalized and retried | `FR-273` | CR-106 |
+| `AC-345` | acceptance | P0 | implemented | Auto-write only when extraction succeeded and status is eligible; dry-run does not write | `FR-273` | CR-106 |
+| `AC-346` | acceptance | P1 | implemented | Cascade/cap events write activity_log rows readable from either language | `FR-274` | CR-106 |
+| `AC-347` | acceptance | P1 | implemented | GET /api/llm-usage/notifications feeds NotificationPanel | `FR-274` | CR-106 |
+| `AC-348` | acceptance | P1 | implemented | Claude/Perplexity cascade past 30s retry-after instead of sleeping | `FR-274` | CR-106 |
+| `AC-349` | acceptance | P1 | implemented | we_scoring_summary default remains Gemini unless overridden | `FR-275` | CR-106 |
+| `AC-350` | acceptance | P1 | implemented | ai_rewrite unset override equals prior primaryProvider rotation | `FR-275` | CR-106 |
+| `AC-351` | acceptance | P1 | implemented | Settings AI Usage exposes both new task ids; WE row flags workExperience.md | `FR-275` | CR-106 |
+| `AC-352` | acceptance | P1 | implemented | research-engine.py and STAGE_PROVIDERS carry comments explaining the exclusion | `FR-275` | CR-106 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

@@ -13,6 +13,11 @@ import os
 
 from utils import call_llm, load_llm_settings, _get_configured_providers
 
+# CR-106: intentionally not unified onto taskProviderOverrides. This is a separate, older
+# per-stage override used only by the legacy/opt-in UI Draft path (batch_pipeline →
+# drafting_engine) and CR-062 local_rewrite — not the default generate-submission Stage 1
+# authoring flow. Unifying it would risk regressing a working mechanism for a path that
+# isn't used day to day. Scope cut, not an oversight.
 STAGE_PROVIDERS = {
     "jd_profile": ["local", "gemini"],
     "claim_select": ["local", "gemini"],

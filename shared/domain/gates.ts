@@ -46,12 +46,9 @@ export interface TargetRolePrefs {
 const REMOTE_ONLY_SOURCES = new Set([
   'remotive',
   'remoteok',
-  'weworkremotely',
-  'wwr',
   'himalayas',
   'jobicy',
   'workingnomads',
-  'jobscollider',
 ]);
 
 function isRemoteOnlySource(source: string): boolean {

@@ -12,6 +12,7 @@ import pipelineRouter from './routes/pipeline.js';
 import sourcesRouter  from './routes/sources.js';
 import contactsRouter from './routes/contacts.js';
 import gmailSyncRouter from './routes/gmailSync.js';
+import llmUsageRouter from './routes/llmUsage.js';
 import { startGmailSyncScheduler } from './services/gmailSyncScheduler.js';
 import { resetTheirstackCreditsIfNewMonth } from './services/theirstackCreditLedger.js';
 
@@ -52,6 +53,7 @@ app.use('/', pipelineRouter);
 app.use('/', sourcesRouter);
 app.use('/', contactsRouter);
 app.use('/', gmailSyncRouter);
+app.use('/', llmUsageRouter);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n${'='.repeat(48)}`);

@@ -15,10 +15,19 @@ interface Notification {
 interface GmailSyncNotification {
   id: number;
   timestamp: string;
-  category: 'confirmation' | 'rejection';
+  category: 'confirmation' | 'rejection' | 'interview';
   job_id: string | null;
   company: string | null;
   subject: string | null;
+  message: string;
+}
+
+// CR-106
+interface LlmUsageNotification {
+  id: number;
+  timestamp: string;
+  provider: string | null;
+  reason: string | null;
   message: string;
 }
 
@@ -52,6 +61,7 @@ const GMAIL_POLL_MS = 10000;
 const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onClose, onJobClick, onNavigate }) => {
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [gmailNotifs, setGmailNotifs] = useState<GmailSyncNotification[]>([]);
+  const [llmNotifs, setLlmNotifs] = useState<LlmUsageNotification[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -65,8 +75,24 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
         // silent — notification panel shouldn't surface its own fetch errors
       }
     };
+    // CR-106: independent poll, same interval — a provider cascade/exhaustion event is exactly
+    // as "found out from a log Jason isn't watching" as a missed Gmail sync finding otherwise.
+    const fetchLlmNotifs = async () => {
+      try {
+        const res = await fetch(api('/api/llm-usage/notifications'));
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data)) setLlmNotifs(data);
+      } catch {
+        // silent — same as above
+      }
+    };
     fetchGmailNotifs();
-    const interval = setInterval(fetchGmailNotifs, GMAIL_POLL_MS);
+    fetchLlmNotifs();
+    const interval = setInterval(() => {
+      fetchGmailNotifs();
+      fetchLlmNotifs();
+    }, GMAIL_POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -82,20 +108,49 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
   // write to the same activity_log source, so this one list covers both without extra plumbing).
   for (const g of gmailNotifs) {
     const job = g.job_id ? jobs.find(j => j.id === g.job_id) : undefined;
+    const icon =
+      g.category === 'rejection' ? 'mail' : g.category === 'interview' ? 'event_available' : 'mark_email_read';
+    const iconClass =
+      g.category === 'rejection'
+        ? 'bg-error-container text-on-error-container'
+        : g.category === 'interview'
+          ? 'bg-success-container text-on-success-container'
+          : 'bg-secondary-container text-on-secondary-container';
+    const title =
+      g.category === 'rejection'
+        ? `Rejected: ${g.company ?? 'Unknown company'}`
+        : g.category === 'interview'
+          ? `Interview detected: ${g.company ?? 'Unknown company'}`
+          : `Application confirmed: ${g.company ?? 'Unknown company'}`;
+    const detail =
+      g.category === 'rejection'
+        ? `Job closed automatically — "${g.subject ?? ''}"`
+        : g.category === 'interview'
+          ? g.message // CR-106: orchestrator's own message already says whether status changed
+          : `${g.subject ?? ''}`;
     notifications.push({
       id: `gmail-${g.id}`,
-      icon: g.category === 'rejection' ? 'mail' : 'mark_email_read',
-      iconClass: g.category === 'rejection'
-        ? 'bg-error-container text-on-error-container'
-        : 'bg-secondary-container text-on-secondary-container',
-      title: g.category === 'rejection'
-        ? `Rejected: ${g.company ?? 'Unknown company'}`
-        : `Application confirmed: ${g.company ?? 'Unknown company'}`,
-      detail: g.category === 'rejection'
-        ? `Job closed automatically — "${g.subject ?? ''}"`
-        : `${g.subject ?? ''}`,
+      icon,
+      iconClass,
+      title,
+      detail,
       time: timeAgo(g.timestamp),
       action: job ? () => { onJobClick(job); onClose(); } : () => { onNavigate('Job Search'); onClose(); },
+    });
+  }
+
+  // 0.5 LLM provider cascade/exhaustion events (CR-106) — a task's default provider hit a real
+  // rate limit or daily cap and either cascaded to the next configured provider or got disabled
+  // for 24h. Routes to Settings rather than a job, since there's no single job this concerns.
+  for (const l of llmNotifs) {
+    notifications.push({
+      id: `llm-${l.id}`,
+      icon: 'bolt',
+      iconClass: 'bg-tertiary-container text-on-tertiary-container',
+      title: `${l.provider ? l.provider.charAt(0).toUpperCase() + l.provider.slice(1) : 'A provider'} rate-limited`,
+      detail: l.message,
+      time: timeAgo(l.timestamp),
+      action: () => { onNavigate('Settings'); onClose(); },
     });
   }
 

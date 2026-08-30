@@ -1,3 +1,38 @@
+- **CR-106: interview auto-status, cascade notifications, AI Usage table (2026-08-30).**
+  Interview invites now extract a date/time (regex first, Groq LLM fallback, Gemini opt-in) and
+  auto-advance the matched job when the current status is eligible — same no-confirm shape as
+  rejection auto-close. Free-tier exhaustion writes a real Notifications row instead of a stderr
+  print, from either Python or Node, via `GET /api/llm-usage/notifications`. Claude and Perplexity
+  now cascade past a 30s `retry-after` the way Groq already did. Settings → AI Usage gained rows
+  for the work-experience scoring summary and the document-editor AI rewrite; company research
+  stays Gemini-only (it needs live search grounding) and the legacy UI Draft path keeps its own
+  per-stage picker. Defaults are unchanged unless you set an override.
+
+- **CR-105: opt-in Gemini fallback for Gmail sync email classification (2026-08-30, Jason-directed).**
+  `classifyEmailWithLLM` (`server/services/emailClassifier.ts`) always tries Groq first, unchanged.
+  Setting `taskProviderOverrides.email_classification` to `gemini` (Settings → API or Connections →
+  AI Usage) now actually works — it adds Gemini as a second attempt only when Groq comes back empty,
+  never ahead of it — via a new `server/services/geminiClient.ts` (REST `generateContent`, mirrors
+  `scripts/utils.py`'s `_call_gemini` model default). Off by default: this task sees real email
+  content and Gemini's free tier trains on submitted data, unlike Groq's, so the fallback stays
+  opt-in rather than automatic. Settings UI: the Groq key moved out of its own "Gmail sync" card
+  into the main AI providers key table (it's still just an API key, no reason for a separate pill),
+  and the AI Usage card's email-classification row now has a real dropdown instead of static text.
+  `README.md`'s "Add your LLM provider" and Project-structure sections updated to match (the latter
+  was already stale, describing the classifier as "keyword-only, no LLM call" from before Groq was
+  added).
+
+- **Removed JobsCollider and We Work Remotely connectors (2026-08-30, Jason-directed).**
+  Neither is a source Jason actually uses. Removed from `scoutOrchestrator.ts`'s
+  `buildDefaultConnectors()`, deleted `packages/connectors/{jobscollider,weworkremotely}/`,
+  and dropped their rows from the `sources` table via migration 017. Also fixed a
+  separate, unrelated truncation bug in `scripts/bookmarklet/applyr-job-grabber.js`:
+  the LinkedIn/BuiltIn "show more" click was followed by a flat 300ms/200ms
+  `setTimeout` before reading the DOM, which could read a still-collapsed JD on a
+  slow render with no error — replaced with polling the JD element's text length
+  until it stabilizes (same technique the Welcome to the Jungle extractor already
+  used), matching the CR-076 workflow's own "no stop in the middle" 8/30 finding.
+
 - **CR-099: safe historical defect baseline (2026-08-24).** Added an opt-in,
   provenance-preserving importer for structured archived first-draft verification
   records. Historical candidates require human confirmation and remain excluded

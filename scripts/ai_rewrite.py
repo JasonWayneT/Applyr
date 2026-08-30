@@ -1,7 +1,7 @@
 import sys
 import os
 import re
-from utils import call_llm
+from utils import call_llm, resolve_default_task_providers
 
 def main():
     if len(sys.argv) < 3:
@@ -38,7 +38,12 @@ def main():
             f"```"
         )
 
-        rewritten_text = call_llm(system_prompt, user_prompt)
+        # CR-106: previously had no provider override at all -- just whatever call_llm's normal
+        # primaryProvider rotation resolved to. Now overridable per-task via Settings > API or
+        # Connections > AI Usage (taskProviderOverrides.ai_rewrite) without changing that default
+        # behavior when no override is set (resolve_default_task_providers falls back to the same
+        # rotation call_llm would have used on its own).
+        rewritten_text = call_llm(system_prompt, user_prompt, provider_override=resolve_default_task_providers('ai_rewrite'))
         if rewritten_text:
             rewritten_text = rewritten_text.strip()
             if rewritten_text.startswith("```"):

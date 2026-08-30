@@ -212,6 +212,17 @@ error-boundary gaps). This section only lists things specific to that one screen
 
 ---
 
+## 4. Product follow-ups (parked, not from this research pass)
+
+Items Jason has asked to keep here so they don't get lost. Not scored against the frontend
+hygiene table above. Do not treat a row here as a build order.
+
+| Item | Status | Notes |
+|---|---|---|
+| In-app review-queue UI for `WAITING_FOR_HUMAN` gates | Consider later (2026-08-30, Jason-directed) | Originated as item 4 of the 2026-08-30 email-classifier audit, then left out of CR-105/CR-106 on purpose. Today a Stage 2 WARN with no disposition parks the subphase at `WAITING_FOR_HUMAN` and the agent is supposed to dispose it in-session (`AGENTS.md`: that gate is the agent's stop, not Jason's). A UI that lists those parked findings inside Applyr is still worth considering later — visibility for Jason, not a new mid-pipeline decision he has to make before the agent can continue. Scope against CR-079/080/081 (`reviews/dispositions.json`, Truth/ATS/HM/Policy) if/when picked up. Do not build it as a blocking inbox. |
+
+---
+
 ## Sources
 
 - [React Query vs useEffect: 2026 Data Fetching Best Practices](https://weblogtrips.com/programming-languages/web-development/react-query-vs-useeffect-best-practices-2026/)

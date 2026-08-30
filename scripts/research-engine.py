@@ -44,6 +44,10 @@ def fetch_company_intel_gemini(company, role, prompt):
     # Implements BUG-009
     print(f"Fetching intelligence for {company} - {role} using Gemini Search...")
 
+    # CR-106: deliberately NOT on taskProviderOverrides. tools=[{"google_search": {}}] is a
+    # Gemini-only capability (live search grounding), not a privacy/preference choice. Putting
+    # this on the generic override would let someone pick Claude/Groq/local and silently lose
+    # grounding. Do not "fix" this by adding an override.
     result = call_llm(
         system_prompt="You are a corporate intelligence agent. Return output in VALID JSON format ONLY. Do not include markdown code blocks like ```json in your response. Ensure the output is strictly valid JSON.",
         user_prompt=prompt,
@@ -98,6 +102,9 @@ def fetch_cover_letter_hook_fact(company, role):
     any category is genuinely recent and verifiable, say so explicitly -- do not substitute an
     old or generic fact.
     """
+    # CR-106: same capability lock as fetch_company_intel_gemini — google_search is Gemini-only.
+    # provider_override="gemini" is a capability pin, not a preference. Do not migrate onto
+    # taskProviderOverrides.
     result = call_llm(
         system_prompt=system_prompt,
         user_prompt=user_prompt,

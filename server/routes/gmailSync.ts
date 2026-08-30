@@ -40,11 +40,23 @@ router.get('/api/gmail-sync/notifications', (_req, res) => {
         } catch {
           meta = {};
         }
-        if (meta.event !== 'gmail_sync_confirmation' && meta.event !== 'gmail_sync_rejection') return null;
+        if (
+          meta.event !== 'gmail_sync_confirmation' &&
+          meta.event !== 'gmail_sync_rejection' &&
+          meta.event !== 'gmail_sync_interview'
+        ) {
+          return null;
+        }
+        const category =
+          meta.event === 'gmail_sync_rejection'
+            ? 'rejection'
+            : meta.event === 'gmail_sync_interview'
+              ? 'interview'
+              : 'confirmation';
         return {
           id: row.id,
           timestamp: row.timestamp,
-          category: meta.event === 'gmail_sync_rejection' ? 'rejection' : 'confirmation',
+          category,
           job_id: meta.job_id ?? null,
           company: meta.company ?? null,
           subject: meta.subject ?? null,

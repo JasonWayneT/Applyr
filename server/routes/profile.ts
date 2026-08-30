@@ -171,6 +171,10 @@ router.get('/api/env_status', (req, res) => {
     gemini: !!process.env.GEMINI_API_KEY,
     claude: !!process.env.ANTHROPIC_API_KEY,
     perplexity: !!process.env.PERPLEXITY_API_KEY,
+    // CR-105: Groq key for the Gmail sync classifier's fallback. SQLite (Settings UI, llm_settings.
+    // groqApiKey) is the primary path per CR-015; Doppler/env is the same optional secondary channel
+    // already offered for the other providers above, not required.
+    groq: !!process.env.GROQ_API_KEY,
     adzuna: !!process.env.ADZUNA_APP_ID && !!process.env.ADZUNA_APP_KEY,
     localUrl: !!process.env.OLLAMA_HOST
   });

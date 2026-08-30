@@ -4,3 +4,7 @@ Markdown
 requests
 types-requests
 pypdf
+# CR-105: Stage 0's TF-IDF + LogisticRegression classifier (stage0_classifier.pkl) and
+# scripts/retrain_stage0.py's active-learning retraining loop.
+scikit-learn
+joblib

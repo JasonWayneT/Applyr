@@ -19,6 +19,14 @@ interface LlmSettings {
   localUrl: string;
   localModel: string;
   perplexityApiKey: string;
+  // CR-105/CR-106: not a primaryProvider option — default for Gmail classification and
+  // interview date extraction; also offered as an optional first-choice on the scoring-summary
+  // and AI-rewrite rows. Never an implicit primary for fit scoring or drafting.
+  groqApiKey: string;
+  // CR-105: task id -> provider promoted to the front of that task's own default chain. See
+  // scripts/utils.py's resolve_task_providers() / server/services/llmSettings.ts's
+  // resolveTaskProviders() — same field, read by both languages.
+  taskProviderOverrides?: Record<string, string>;
 }
 
 // Implements FR-054, SEC-002
@@ -36,9 +44,22 @@ interface EnvStatus {
   gemini: boolean;
   claude: boolean;
   perplexity: boolean;
+  groq: boolean;
   adzuna: boolean;
   localUrl: boolean;
 }
+
+// CR-106: general-purpose text tasks (WE scoring summary, AI rewrite) offer every first-class
+// provider, not a single privacy-tradeoff alternate the way email/interview rows do. Groq is
+// included even though it isn't a primaryProvider option — it's the privacy-safer choice for
+// workExperience.md (Gemini's free tier trains on submitted data; Groq's does not).
+const GENERAL_TASK_PROVIDERS: { value: string; label: string }[] = [
+  { value: 'gemini', label: 'Prefer Gemini first' },
+  { value: 'claude', label: 'Prefer Claude first' },
+  { value: 'groq', label: 'Prefer Groq first' },
+  { value: 'perplexity', label: 'Prefer Perplexity first' },
+  { value: 'local', label: 'Prefer local first' },
+];
 
 interface OutcomesStats {
   everApplied: number;
@@ -128,6 +149,8 @@ const SettingsView: React.FC = () => {
     localUrl: 'http://localhost:11434',
     localModel: 'llama3',
     perplexityApiKey: '',
+    groqApiKey: '',
+    taskProviderOverrides: {},
   });
   const [apiConnections, setApiConnections] = useState<ApiConnections>({ adzunaAppId: '', adzunaAppKey: '', theirstackApiKey: '' });
   const [theirstackSettings, setTheirstackSettings] = useState<TheirStackSettings>({ fetchLimitPerRun: 10 });
@@ -135,7 +158,7 @@ const SettingsView: React.FC = () => {
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
-  const [envStatus, setEnvStatus] = useState<EnvStatus>({ gemini: false, claude: false, perplexity: false, adzuna: false, localUrl: false });
+  const [envStatus, setEnvStatus] = useState<EnvStatus>({ gemini: false, claude: false, perplexity: false, groq: false, adzuna: false, localUrl: false });
 
   // Debounce Refs — keyed per settings key so unrelated fields don't cancel each other's pending saves
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -227,6 +250,17 @@ const SettingsView: React.FC = () => {
       }
     }, 1000);
   }, []);
+
+  // Implements FR-275: one writer for every AI Usage dropdown. Promote-to-front only —
+  // empty value deletes the override so the task's own default chain is used.
+  const setTaskProviderOverride = (taskId: string, value: string) => {
+    const nextOverrides = { ...(llmSettings.taskProviderOverrides ?? {}) };
+    if (value) nextOverrides[taskId] = value;
+    else delete nextOverrides[taskId];
+    const next = { ...llmSettings, taskProviderOverrides: nextOverrides };
+    setLlmSettings(next);
+    debouncedSave('llm_settings', next);
+  };
 
   const saveExperience = async () => {
     setSaveStatus('saving');
@@ -783,8 +817,164 @@ const SettingsView: React.FC = () => {
                         )}
                       </td>
                     </tr>
+
+                    {/* Groq — CR-105. Not a primaryProvider option (no "Set primary" button): scoped
+                        only to the Gmail sync classifier's low-confidence fallback
+                        (server/services/emailClassifier.ts), never the main fit-scoring/drafting
+                        pipeline the rows above serve. Kept in this same table per Jason's 2026-08-30
+                        UI feedback — it's still an API key, so it belongs in the one pill with the
+                        rest rather than its own separate card. */}
+                    <tr className="align-top">
+                      <td className="py-4 pr-4 w-40">
+                        <p className="text-sm font-semibold text-on-surface">Groq</p>
+                      </td>
+                      <td className="py-4 pr-4">
+                        <span className="text-[10px] font-semibold text-on-surface-variant">Gmail sync fallback</span>
+                      </td>
+                      <td className="py-4 pr-4">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${(llmSettings.groqApiKey || envStatus.groq) ? 'bg-success-container text-on-success-container' : 'bg-surface-container text-on-surface-variant'}`}>
+                          {(llmSettings.groqApiKey || envStatus.groq) ? 'Connected' : 'Not set'}
+                        </span>
+                      </td>
+                      <td className="py-4">
+                        {envStatus.groq ? (
+                          <div className={`${providerConfigWrapClass} text-xs px-3 py-2.5 rounded-xl bg-primary/10 border border-primary/15 text-primary font-medium flex items-center gap-2`}>
+                            <span className="material-symbols-outlined text-sm">lock</span>
+                            Doppler / env
+                          </div>
+                        ) : (
+                          <input
+                            type="password"
+                            value={llmSettings.groqApiKey ?? ''}
+                            onChange={(e) => { const next = { ...llmSettings, groqApiKey: e.target.value }; setLlmSettings(next); debouncedSave('llm_settings', next); }}
+                            className={providerConfigClass}
+                            placeholder="gsk_..."
+                            autoComplete="off"
+                          />
+                        )}
+                      </td>
+                    </tr>
                   </tbody>
                 </table>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-3">
+                Groq isn't a pipeline primary and has no "Set Primary" option. It's the default for
+                Gmail sync classification and interview date extraction because its free tier doesn't
+                train on submitted data and those calls see real email. It's also offered as an
+                optional first-choice on the scoring-summary and AI-rewrite rows in <strong>AI Usage</strong>
+                below. Gemini can be turned on as a secondary fallback for the two email tasks from
+                that same card — opt-in, and even then Groq is always tried first.
+              </p>
+            </SettingsCard>
+
+            {/* AI Usage — CR-105/CR-106. Real, verified tasks only (see docs/ROADMAP_BEST_PRACTICES.md's
+                audit). Company research stays off this list: its calls need Gemini's live search
+                grounding, which no other provider has. The legacy UI Draft path keeps its own
+                STAGE_PROVIDERS map in scripts/llm_stages.py and is also not listed. Each row
+                promotes one provider to the front of that task's own built-in default; it does not
+                build a full reorderable chain (see the comment above resolve_task_providers in
+                scripts/utils.py for why that's a deliberate v1 scope call). */}
+            <SettingsCard
+              label="AI Usage"
+              title="Where AI actually runs"
+              description="Every real task whose provider is configurable today, and what it falls back to when its default is unavailable. Company research stays Gemini-only (it needs live search grounding). The legacy UI Draft path has its own per-stage picker and is not listed here."
+            >
+              <div className="space-y-5 max-w-xl">
+                <div>
+                  <div className="flex items-center justify-between gap-4 mb-1.5">
+                    <p className="text-sm font-semibold text-on-surface">Stage 0 ambiguous-bullet fallback</p>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mb-2">Classifies job-description bullets the local model isn't confident about.</p>
+                  <select
+                    value={llmSettings.taskProviderOverrides?.stage0_extraction ?? ''}
+                    onChange={(e) => setTaskProviderOverride('stage0_extraction', e.target.value)}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface cursor-pointer"
+                  >
+                    <option value="">Use default (Groq, then Gemini)</option>
+                    <option value="gemini">Prefer Gemini first (Groq still tried second)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-4 mb-1.5">
+                    <p className="text-sm font-semibold text-on-surface">Email classification fallback</p>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mb-2">
+                    Groq is always tried first here. Off by default: Gemini's free tier trains on submitted
+                    data, and real email content passes through this call, so turning this on is a deliberate
+                    choice, not something that happens silently. Enabling it only adds Gemini as a second
+                    attempt after Groq comes back empty — it never replaces Groq as the first try.
+                  </p>
+                  <select
+                    value={llmSettings.taskProviderOverrides?.email_classification ?? ''}
+                    onChange={(e) => setTaskProviderOverride('email_classification', e.target.value)}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface cursor-pointer"
+                  >
+                    <option value="">Use default (Groq only)</option>
+                    <option value="gemini">Enable Gemini as a fallback after Groq</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-4 mb-1.5">
+                    <p className="text-sm font-semibold text-on-surface">Interview date/time extraction</p>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mb-2">
+                    Reads the date and time out of a detected interview email so the job's status can
+                    advance automatically. Same real-email-content reasoning as classification above:
+                    Groq is always tried first, Gemini is an opt-in second attempt only.
+                  </p>
+                  <select
+                    value={llmSettings.taskProviderOverrides?.interview_date_extraction ?? ''}
+                    onChange={(e) => setTaskProviderOverride('interview_date_extraction', e.target.value)}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface cursor-pointer"
+                  >
+                    <option value="">Use default (Groq only)</option>
+                    <option value="gemini">Enable Gemini as a fallback after Groq</option>
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-4 mb-1.5">
+                    <p className="text-sm font-semibold text-on-surface">Work-experience scoring summary</p>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mb-2">
+                    Rebuilds the condensed scoring brief from workExperience.md after you save
+                    Experience. Default is Gemini. This file is real personal and career data, and
+                    Gemini's free tier trains on submitted data; Groq's does not. Switching only
+                    changes which provider is tried first — Gemini stays in the chain as fallback.
+                  </p>
+                  <select
+                    value={llmSettings.taskProviderOverrides?.we_scoring_summary ?? ''}
+                    onChange={(e) => setTaskProviderOverride('we_scoring_summary', e.target.value)}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface cursor-pointer"
+                  >
+                    <option value="">Use default (Gemini)</option>
+                    {GENERAL_TASK_PROVIDERS.filter((p) => p.value !== 'gemini').map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-4 mb-1.5">
+                    <p className="text-sm font-semibold text-on-surface">AI rewrite</p>
+                  </div>
+                  <p className="text-xs text-on-surface-variant mb-2">
+                    The document editor's rewrite pass. Uses your primary provider and its normal
+                    fallback chain unless you pin a different first-choice here.
+                  </p>
+                  <select
+                    value={llmSettings.taskProviderOverrides?.ai_rewrite ?? ''}
+                    onChange={(e) => setTaskProviderOverride('ai_rewrite', e.target.value)}
+                    className="input-applyr w-full text-sm rounded-xl py-2.5 px-4 bg-surface cursor-pointer"
+                  >
+                    <option value="">Use default (primary provider rotation)</option>
+                    {GENERAL_TASK_PROVIDERS.map((p) => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </SettingsCard>
 

@@ -4,10 +4,12 @@
 import { db, logActivity } from '../db.js';
 import { createGmailClient } from './gmailClient.js';
 import { createEmailSyncCursor } from './emailSyncCursor.js';
-import { classifyEmailText, extractSubjectAndBody } from './emailClassifier.js';
+import { classifyEmailText, classifyEmailWithLLM, extractSubjectAndBody } from './emailClassifier.js';
 import { matchJobForEmail, type MatchableJob } from './jobMatcher.js';
 import { applyJobStatusUpdate } from './jobStatusService.js';
 import { isDryRunEnabled } from './gmailSyncConfig.js';
+import { extractInterviewDateTime, type ExtractedInterviewDateTime } from './interviewDateExtractor.js';
+import { deriveStatusForInterviewDateChange } from '../../shared/domain/jobPipeline.js';
 
 const INCOMING_LABEL = 'Applyr/Incoming';
 const REJECTED_LABEL = 'Applyr/Rejected';
@@ -20,6 +22,10 @@ export interface GmailSyncSummary {
   written: number;
   unmatched: number;
   dryRun: boolean;
+  /** CR-105: how many of `classified` came from the pattern layer missing and the Groq/LLM
+   *  fallback catching it — a high ratio here is a real signal the free pattern layer needs
+   *  more coverage, the same way the original classifier audit found real gaps. */
+  llmFallbackUsed: number;
 }
 
 function formatReceivedDate(internalDate: string | null | undefined): string {
@@ -49,13 +55,23 @@ export async function runGmailSync(): Promise<GmailSyncSummary> {
     written: 0,
     unmatched: 0,
     dryRun,
+    llmFallbackUsed: 0,
   };
 
   for (const messageId of newIds) {
     try {
       const message = await gmail.getMessage(messageId);
       const { subject, bodyText } = extractSubjectAndBody(message);
-      const category = classifyEmailText(subject, bodyText);
+      let category = classifyEmailText(subject, bodyText);
+      let usedLlmFallback = false;
+      if (!category) {
+        // CR-105: the free pattern layer wasn't confident — try the low-confidence fallback
+        // before giving up. Still a real cost (an API call), so only reached for the minority
+        // of mail the pattern layer can't already handle for free.
+        category = await classifyEmailWithLLM(subject, bodyText);
+        usedLlmFallback = category !== null;
+        if (usedLlmFallback) summary.llmFallbackUsed++;
+      }
 
       if (!category) {
         cursor.markProcessed(INCOMING_LABEL, messageId);
@@ -99,9 +115,23 @@ export async function runGmailSync(): Promise<GmailSyncSummary> {
         gmail_interview_label: interviewLabelId ? labelIds.includes(interviewLabelId) : null,
       };
 
+      // CR-106: computed once, ahead of the dry-run branch below, so both the dry-run preview
+      // message and the real write use the same result — extraction itself has no side effects
+      // (no DB write), so running it during a dry run is safe and gives an honest preview.
+      let interviewExtraction: ExtractedInterviewDateTime | null = null;
+      if (category === 'interview') {
+        interviewExtraction = await extractInterviewDateTime(subject, bodyText);
+      }
+
       if (dryRun) {
         const intendedAction =
-          category === 'rejection' ? `close job as Rejected` : `log confirmation, no status change`;
+          category === 'rejection'
+            ? `close job as Rejected`
+            : category === 'interview'
+              ? interviewExtraction
+                ? `advance status and set interview_date to ${interviewExtraction.isoDateTime} (via ${interviewExtraction.method})`
+                : `log interview detected, no date/time found — no status change`
+              : `log confirmation, no status change`;
         logActivity(
           'INFO',
           'GmailSyncDryRun',
@@ -115,6 +145,7 @@ export async function runGmailSync(): Promise<GmailSyncSummary> {
             match_method: match.method,
             subject,
             received_at: receivedAt,
+            classified_via: usedLlmFallback ? 'llm_fallback' : 'pattern',
             ...gmailAgreement,
           },
         );
@@ -137,6 +168,50 @@ export async function runGmailSync(): Promise<GmailSyncSummary> {
             company: job.company,
             subject,
             received_at: receivedAt,
+            // CR-105: this action auto-closes a job — worth knowing whether a deterministic
+            // pattern made this call or the LLM fallback's judgment did, while that fallback is new.
+            classified_via: usedLlmFallback ? 'llm_fallback' : 'pattern',
+          },
+        );
+        summary.written++;
+      } else if (category === 'interview') {
+        // CR-106: auto-advances status the same way the rejection branch above auto-closes —
+        // only when a date/time was actually extracted AND deriveStatusForInterviewDateChange
+        // says this status is eligible to move forward (it returns null for a job already past
+        // 'Core Interviews', or in a terminal status — same forward-only rule the manual
+        // PATCH /api/jobs/:id route already applies). Anything else stays log-only, exactly the
+        // prior CR-105 behavior — a missed/ambiguous date should never block on
+        // applyJobStatusUpdate's missing_interview_date gate, it should just not attempt the write.
+        let statusWritten: string | null = null;
+        if (interviewExtraction) {
+          const current = db.prepare('SELECT status FROM jobs WHERE id = ?').get(job.id) as
+            | { status: string }
+            | undefined;
+          const derivedStatus = current ? deriveStatusForInterviewDateChange(current.status) : null;
+          if (derivedStatus) {
+            const result = applyJobStatusUpdate(job.id, {
+              status: derivedStatus,
+              interview_date: interviewExtraction.isoDateTime,
+            });
+            if (result.kind === 'updated') statusWritten = derivedStatus;
+          }
+        }
+        logActivity(
+          'INFO',
+          'GmailSync',
+          statusWritten
+            ? `Interview detected for "${job.company}" — advanced to ${statusWritten}, interview_date set to ${interviewExtraction!.isoDateTime}: "${subject}"`
+            : `Interview detected for "${job.company}" — no status change: "${subject}"`,
+          {
+            event: 'gmail_sync_interview',
+            job_id: job.id,
+            company: job.company,
+            subject,
+            received_at: receivedAt,
+            classified_via: usedLlmFallback ? 'llm_fallback' : 'pattern',
+            status_written: statusWritten,
+            interview_date: interviewExtraction?.isoDateTime ?? null,
+            date_extraction_method: interviewExtraction?.method ?? null,
           },
         );
         summary.written++;
@@ -151,6 +226,7 @@ export async function runGmailSync(): Promise<GmailSyncSummary> {
             company: job.company,
             subject,
             received_at: receivedAt,
+            classified_via: usedLlmFallback ? 'llm_fallback' : 'pattern',
           },
         );
         summary.written++;

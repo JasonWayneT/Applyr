@@ -287,6 +287,11 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-321`–`AC-325` | CR-084 | finalize wrap, COMPLETE, practice, override, explicit flag | same | in_progress |
 | `DATA-001` | CR-095 | Complete story-class claim index and derived tags-only sidecar | `data/master_claims.json`, `data/master_claims_tags_only.json`, `scripts/audit_claims_coverage.py` | implemented |
 | `CR-100` | CR-100 | Model-independent Stage 0 preference exclusions | `scripts/build_stage0_fit_gate.py`, `scripts/test_build_stage0_fit_gate.py` | implemented |
+| `FR-268`–`FR-272` | CR-105 | Email classifier rewrite, Groq provider, taskProviderOverrides, Stage 0 NLP default | `server/services/emailClassifier.ts`, `server/services/groqClient.ts`, `scripts/utils.py`, `src/components/SettingsView.tsx` | implemented |
+| `FR-273` | CR-106 | Interview date extraction + auto-status-write | `server/services/interviewDateExtractor.ts`, `server/services/gmailSyncOrchestrator.ts` | implemented |
+| `FR-274` | CR-106 | Provider cascade notifications | `scripts/utils.py`, `server/services/groqClient.ts`, `server/services/geminiClient.ts`, `server/routes/llmUsage.ts`, `src/components/NotificationPanel.tsx` | implemented |
+| `FR-275` | CR-106 | AI Usage we_scoring_summary + ai_rewrite; documented exclusions | `scripts/generate_experience_summary.py`, `scripts/ai_rewrite.py`, `scripts/utils.py`, `src/components/SettingsView.tsx`, `scripts/research-engine.py`, `scripts/llm_stages.py` | implemented |
+| `AC-343`–`AC-352` | CR-106 | Interview parse, cascade notify, task-override defaults | `tests/unit/interviewDateExtractor.test.ts`, `scripts/test_llm_provider_cascade.py`, `scripts/test_resolve_task_providers.py` | implemented |
 
 
 ## Coverage checklist

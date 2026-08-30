@@ -170,6 +170,8 @@ Go to **Settings → API or Connections**. Under **LLM Providers**, enter a key 
 
 Click **Set Primary** on your preferred provider. If you configure multiple providers, the pipeline automatically falls back to the next one on error — you never lose a run to a single provider outage.
 
+> **Groq (separate, optional, not a pipeline primary):** the same Settings → API or Connections table also has a **Groq** row with no "Set Primary" option. It is the default for Gmail sync classification and interview date extraction, because Groq's free tier doesn't train on submitted data and those calls see real email. Gemini can be turned on as a secondary fallback for those two tasks from **Settings → AI Usage** — opt-in, and even then Groq is always tried first. The same card also lets you pin a first-choice provider for the work-experience scoring summary and the document-editor AI rewrite (company research stays Gemini-only; it needs live search grounding).
+
 ### 2. Set your profile
 
 Go to **Settings → Profile**. Fill in your name, email, phone, LinkedIn, and portfolio links. These populate the headers of every generated document.
@@ -180,7 +182,7 @@ Go to **Settings → Experience**. Paste your raw work history in any format —
 
 The system structures it into five sections and assigns stable proof codes (`ACC-NNN`, `VOC-XX`, `MET-XX`) to every claim. These codes are the anti-hallucination contract: the AI cannot claim anything in a generated document that doesn't trace back to a code in this file.
 
-After saving, the system automatically generates a condensed scoring brief (`data/workExperience_summary.md`) in the background using your configured LLM. This is used during fit scoring to keep token usage low — the full experience document is only loaded for roles that pass the score threshold. You never need to touch the summary file directly.
+After saving, the system automatically generates a condensed scoring brief (`data/workExperience_summary.md`) in the background. Default provider is Gemini; pin a different first-choice from **Settings → AI Usage** if you want. This brief is used during fit scoring to keep token usage low — the full experience document is only loaded for roles that pass the score threshold. You never need to touch the summary file directly.
 
 ### 4. Set your job search criteria
 
@@ -217,12 +219,12 @@ Go to **Job Search** and click **Run Scout**. The backend launches a parallel sc
 | Greenhouse / Lever / Ashby / Workable (per-company) | **Removed** (CR-056 — required hand-curating a company watchlist; superseded by OpenPostings, which covers these same ATS platforms plus Workday, iCIMS, and others across 7,700+ companies with no watchlist) |
 | RemoteOK | Public API |
 | Remotive | Public API |
-| We Work Remotely | Public API |
+| We Work Remotely | **Removed** (2026-08-30, Jason-directed — not a source he uses) |
 | Himalayas | Public API |
 | The Muse | Public API (role-aware category routing) |
 | Jobicy | Public API |
 | Working Nomads | Public API (title-matched; not category-filtered — see CR-056) |
-| JobsCollider | Public API |
+| JobsCollider | **Removed** (2026-08-30, Jason-directed — sourced from remotefirstjobs.com, not a source he uses) |
 | Adzuna | Aggregator API (optional, key required) |
 | OpenPostings | Local ATS aggregator across 7,700+ companies (Greenhouse, Lever, Ashby, Workday, iCIMS, and more) — see setup below |
 | TheirStack | Lane 2 API (optional, key required, 200 credit guard) |
@@ -268,7 +270,7 @@ Click any asset in the detail panel to open the visual editor:
 - **Left pane:** Live PDF preview that reloads on save
 - **Right pane:** Rich-text WYSIWYG editor (Toast UI)
 
-Saving auto-runs the style compliance guard and recompiles the PDF. Use the **AI Rewrite** field to issue natural-language instructions to your configured LLM for targeted document edits.
+Saving auto-runs the style compliance guard and recompiles the PDF. Use the **AI Rewrite** field to issue natural-language instructions for targeted document edits — it follows your primary provider unless you pin a different first-choice from **Settings → AI Usage**.
 
 ### Application lifecycle
 
@@ -323,14 +325,14 @@ server/
   routes/
     system.ts / pipeline.ts / profile.ts — /api/system-status·/api/logs, /api/sync (SSE)·/api/sync/stream, /api/profile·/api/experience
     contacts.ts / sources.ts     — networking-contact CRUD, connector source management
-    gmailSync.ts                 — manual "check inbox now" trigger for the CR-072 Gmail intake sync
+    gmailSync.ts / llmUsage.ts   — manual "check inbox now" trigger for the CR-072 Gmail intake sync; GET /api/llm-usage/notifications for provider-cascade events (CR-106)
     jobs/                        — split out from one jobs.ts: index.ts (router mount), crud.ts (CRUD + status transitions), files.ts (ZIP download, PDF assets), debriefs.ts, shared.ts (jobBaseDir helper)
 
   services/
     scoutOrchestrator.ts   — connector wiring; buildDefaultConnectors() is the single source of truth for which connectors run
     jobMatcher.ts           — CR-072 layered job-matching for inbound Gmail signals (highest-confidence signal first, ambiguous ⇒ skip rather than guess)
     jobStaging.ts / jobStatusService.ts — staging-dir helpers; shared status-transition path used by both the UI route and Gmail sync (CR-072)
-    emailClassifier.ts / emailSyncCursor.ts / gmailSyncConfig.ts / gmailClient.ts / gmailSyncOrchestrator.ts / gmailSyncScheduler.ts — CR-072 Gmail intake sync: keyword-only classifier (no LLM call), per-label processed-message cursor, dry-run-by-default config, client, orchestrator, background scheduler
+    emailClassifier.ts / emailSyncCursor.ts / gmailSyncConfig.ts / gmailClient.ts / gmailSyncOrchestrator.ts / gmailSyncScheduler.ts / interviewDateExtractor.ts / groqClient.ts / geminiClient.ts / llmSettings.ts — CR-072/CR-105/CR-106 Gmail intake sync: free pattern-match classifier first, low-confidence emails fall through to a Groq call (Gemini opt-in as a secondary fallback — see Groq note under "Add your LLM provider"), interview date/time extraction with auto-status-write when eligible, per-label processed-message cursor, dry-run-by-default config, client, orchestrator, background scheduler
     clusterDedup.ts / ingestDedup.ts — job de-duplication on ingest
     exportPendingReview.ts  — exports scraped, gate-passed jobs to data/pending_review/ for Stage 0 (skips ledger hits)
     theirstackCreditLedger.ts / ollamaLifecycle.ts — TheirStack API credit tracking; local Ollama process lifecycle
@@ -404,7 +406,7 @@ scripts/
     audit_all_submissions.py / audit_and_improve.py / audit_improve_native.py — audit/improvement passes
     regenerate_all_resumes.py / regenerate_all_cover_letters.py / regenerate_all_submissions.py — bulk regeneration utilities
     prefs_rollout.py / apply_gate_rollout.py — one-time gate-prefs migration (see Manual utilities below)
-    research-engine.py / generate_experience_summary.py / ai_rewrite.py / utils.py — company intelligence lookups, auto-generated scoring brief, LLM-powered manual editing, shared LLM-call/path/file-I/O helpers
+    research-engine.py / generate_experience_summary.py / ai_rewrite.py / utils.py / llm_stages.py — company intelligence lookups (Gemini-search, not on taskProviderOverrides), auto-generated scoring brief (overridable via Settings → AI Usage), LLM-powered manual editing (same), shared LLM-call/path/file-I/O helpers, legacy UI Draft per-stage provider map
 
   test_*.py (~55 files) — one test module per script above; run the full suite via `npm test` / `run_all_tests.py`
 

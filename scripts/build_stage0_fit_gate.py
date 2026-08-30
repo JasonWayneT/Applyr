@@ -987,6 +987,121 @@ def _extract_unavailable_message(reason: str) -> str:
     )
 
 
+
+def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]]:
+    import joblib
+    import csv
+    from utils import call_llm, extract_json_from_text
+    
+    model_path = _REPO_ROOT / "data" / "stage0_classifier.pkl"
+    if not model_path.exists():
+        print("NLP Model not found, falling back to deterministic extraction.", file=sys.stderr)
+        return _extract_sections(jd_text)
+        
+    pipeline = joblib.load(model_path)
+    classes = list(pipeline.classes_)
+    
+    lines = _normalize_jd_punctuation(jd_text).splitlines()
+    
+    buckets = {
+        "required": [],
+        "preferred": [],
+        "responsibilities": [],
+        "culture": [],
+    }
+    
+    current_header = ""
+    fallback_queue = []
+    
+    for line in lines:
+        clean = line.strip()
+        if not clean:
+            continue
+            
+        bucket, is_label = classify_jd_header(line)
+        if bucket is not None:
+            current_header = clean
+            if is_label:
+                continue
+                
+        if _IGNORE_SECTION_HEADERS.match(clean) or _TRACKING_TAG_RE.match(clean):
+            current_header = "IGNORE"
+            continue
+            
+        if current_header == "IGNORE":
+            continue
+            
+        bullet_clean = clean.lstrip("-•*◦▪▸→").strip()
+        if 15 <= len(bullet_clean) <= 300 and (bullet_clean[0].isalnum() or bullet_clean[0] in '"\'\''):
+            if _is_list_leadin(bullet_clean):
+                continue
+            if not _is_boilerplate_item(bullet_clean):
+                combo_text = f"[HEADER] {current_header}: {bullet_clean}" if current_header else bullet_clean
+                
+                if current_header == "required" and _INLINE_PREFERRED_RE.search(bullet_clean):
+                    buckets["preferred"].append(bullet_clean)
+                    continue
+                    
+                pred = pipeline.predict([combo_text])[0]
+                proba = pipeline.predict_proba([combo_text])[0]
+                conf = proba[classes.index(pred)]
+                
+                if conf < 0.65:
+                    fallback_queue.append((combo_text, bullet_clean, current_header))
+                else:
+                    buckets[pred].append(bullet_clean)
+                    
+    # Active Learning Fallback Loop
+    if fallback_queue:
+        print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
+        prompt = "Classify these job description bullet points into one of four buckets: 'required', 'preferred', 'responsibilities', or 'culture'. Return ONLY valid JSON as a mapping from the index to the bucket string.\n\n"
+        for i, (combo_text, _, _) in enumerate(fallback_queue):
+            prompt += f"[{i}] {combo_text}\n"
+            
+        result = call_llm(
+            system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
+            user_prompt=prompt,
+            provider_override="gemini"
+        )
+        
+        if result:
+            json_str = extract_json_from_text(result)
+            try:
+                import json
+                mapping = json.loads(json_str)
+                feedback_csv = _REPO_ROOT / "data" / "training_data_feedback.csv"
+                write_header = not feedback_csv.exists()
+                
+                with open(feedback_csv, "a", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=["text", "label", "company", "source_file"])
+                    if write_header:
+                        writer.writeheader()
+                        
+                    for i_str, bucket in mapping.items():
+                        idx = int(i_str)
+                        if bucket not in buckets:
+                            continue
+                        combo_text, bullet_clean, _ = fallback_queue[idx]
+                        buckets[bucket].append(bullet_clean)
+                        
+                        writer.writerow({
+                            "text": bullet_clean,
+                            "label": bucket,
+                            "company": "FeedbackLoop",
+                            "source_file": "fallback_api"
+                        })
+            except Exception as e:
+                print(f"    [NLP Error] Failed to parse LLM fallback: {e}", file=sys.stderr)
+                # default to responsibilities
+                for _, bullet_clean, _ in fallback_queue:
+                    buckets["responsibilities"].append(bullet_clean)
+        else:
+            for _, bullet_clean, _ in fallback_queue:
+                buckets["responsibilities"].append(bullet_clean)
+    
+    _recover_mixed_responsibilities(buckets)
+    return buckets
+
 def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     """LLM section extraction pinned to STAGE0_EXTRACT_MODEL.
 

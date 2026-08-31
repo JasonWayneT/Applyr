@@ -42,6 +42,7 @@ and explicit offline runs only).
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -1884,6 +1885,25 @@ def build_stage0_fit_gate(
 
     raw_text = jd_file.read_text(encoding="utf-8", errors="replace")
     url, jd_text = _parse_url_and_jd(raw_text)
+    # Found 2026-08-31 during the Stage 0-3 replay: a JD scraped by the now-removed
+    # remotefirstjobs.com/JobsCollider connector saved raw, doubly HTML-entity-encoded markup
+    # ("&lt;h3&gt;", "&amp;rsquo;" -- the &amp; itself needs unescaping before &rsquo; becomes
+    # visible as its own entity -- "&#xA;" for newlines) instead of plain decoded text. Every
+    # downstream check here works on real words -- undecoded entities and raw <h3>/<p>/<li> tags
+    # both read as noise, so extraction found no real content (fit_score 0, couldn't even
+    # resolve the company name) on a JD a human reads fine. Two independent, safe-on-clean-text
+    # passes: unescape entities (looped, bounded, since double-encoding needs two passes -- a
+    # no-op once text is already clean), then strip whatever tags that unescaping exposed
+    # (utils.py's clean_jd_text() does the same tag-strip for the same reason elsewhere, but
+    # isn't imported here to avoid pulling that module's heavier dependency surface into Stage
+    # 0's core parse path for a two-line regex).
+    for _ in range(3):
+        unescaped = html.unescape(jd_text)
+        if unescaped == jd_text:
+            break
+        jd_text = unescaped
+    jd_text = re.sub(r"<[^>]+>", " ", jd_text)
+    jd_text = re.sub(r"[ \t]{2,}", " ", jd_text)
     jd_text = _strip_ats_chrome(jd_text)
 
     # Company slug → display name

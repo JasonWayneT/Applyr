@@ -14,7 +14,11 @@ export interface GroqCallResult {
 }
 
 const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+// Found 2026-08-31 during the Stage 0-3 replay: 'llama-3.3-70b-versatile' (this default since
+// CR-105/106) returns a real 404 "model not found" from Groq's own API — fully deprecated from
+// their catalog, not a config issue. Verified openai/gpt-oss-120b against the live API (GET
+// /openai/v1/models + a real chat completion) before using it here — mirrors scripts/utils.py.
+const DEFAULT_MODEL = 'openai/gpt-oss-120b';
 
 /** Mirrors scripts/utils.py's _call_groq: reads the real `retry-after` header instead of a
  *  blind backoff, and treats anything over 30s as "cascade now" rather than blocking. */

@@ -1,3 +1,59 @@
+- **Workflow authority audit fixes (2026-08-30).** End-to-end functional audit of
+  the submission generation workflow found and fixed 5 defects in the receipt-chain
+  system. (1) `run_stage1_validate` was writing the Stage 1 COMPLETE receipt's
+  `prior_receipt_id` to the Stage 1 WAITING receipt's ID instead of Stage 0's
+  receipt ID, breaking the chain that `check_workflow_complete` verifies — fixed
+  to always cite `r0.receipt_id`. (2) `reconcile_state_against_receipts` only
+  checked hash freshness, not chain integrity — added a `prior_receipt_id` chain
+  check that marks a stage STALE and cascades when its `prior_receipt_id` doesn't
+  match the previous stage's current `receipt_id`. (3) Added `--stop-after-mech`
+  CLI flag to `run_submission.py` (the parameter existed in the runner but had no
+  CLI surface). (4) `--resume --stop-at-waiting` was silently ignored in the
+  `else` branch (hardcoded `False`) — now passes `args.stop_at_waiting` through.
+  (5) No test verified `check_workflow_complete` returns True on a workflow
+  produced by the actual `run_stage1_validate` code path (Stage 3 tests used a
+  manual `_seed_stage2_complete` helper that bypassed it) — added
+  `EndToEndChainIntegrityTests` class with two tests covering the real code path
+  and broken-chain detection after a Stage 0 rerun. Updated the existing
+  `test_stage1_complete_chains_and_unlocks_stage2` assertion that validated the
+  old broken behavior. 129 Python tests pass.
+
+- **Application hardening audit fixes (2026-08-30).** Comprehensive security and
+  reliability audit across all server routes, middleware, services, database
+  schema, migrations, and CI/CD. Fixed 6 confirmed defects. (1) `systemRouter`
+  had no `requireApiToken` middleware — POST routes (`/api/system-status`,
+  `/api/stream/local-model`, log endpoints) were unauthenticated; added
+  `router.use(requireApiToken)`. (2) `POST /api/stream/local-model` fetched an
+  attacker-controllable URL from DB-stored settings with no protocol
+  validation (SSRF) — added `isSafeHttpUrl(baseUrl)` check before fetch. (3)
+  Server bound to `0.0.0.0` by default, exposing it to the entire network —
+  changed to `127.0.0.1` with `APPLYR_HOST` env var override for Tailscale access.
+  (4) FTS5 search endpoint interpolated raw user input into a MATCH query
+  string — added double-quote escaping (`"` to `""`) per FTS5 spec. (5)
+  `POST /api/jobs/:id/ai-rewrite` accepted unsanitized `:id` (path traversal
+  risk) — added `isValidJobId(id)` validation. (6) Migration runner executed
+  `db.exec(sql)` and the migration-record insert as separate statements with
+  no transaction — a mid-migration failure left the DB in a partial state with
+  the migration marked as applied — wrapped both in `db.transaction()`. Added
+  13 new tests: `tests/unit/routerAuth.test.ts` (12 tests covering
+  `requireApiToken`, `isSafeHttpUrl`, `isValidJobId`) and a migration rollback
+  regression test. 336 Vitest tests pass, 129 Python tests pass, `tsc --noEmit`
+  clean.
+
+- **CR-107: renamed WAITING_FOR_HUMAN to NEEDS_DISPOSITION (2026-08-30, Jason-directed).** The
+  Stage 2 "a WARN finding needs a decision recorded" workflow state was named after the exact
+  behavior it should never trigger — an agent reading "WAITING_FOR_HUMAN" has a defensible literal
+  reading that it should stop and wait, which directly caused a real incident (a batch left 2 of
+  15 submissions stuck there for Jason to find, one with its disposition already written and just
+  never re-run). Renamed everywhere it's live code or an enforced test (`scripts/workflow/{runner,
+  policy}.py`, `run_submission.py`, `contracts.py`, `stabilization_orchestrator_corpus.py`,
+  `test_workflow_authority.py`); `WAITING_FOR_LLM` (a genuinely different, correctly-named state —
+  a human really does need to paste an LLM's output back in there) is untouched. `AGENTS.md`'s
+  governing rule reframed around "resolve and retry immediately," not "the agent's stop." No
+  on-disk `workflow_state.json` held the old value, so this is a pure code/doc rename with no data
+  migration. Historical CR docs (CR-079/080/081/096) keep the old name as an accurate record of
+  what was true when written. See `docs/spec/05-change-requests/CR-107-needs-disposition-rename.md`.
+
 - **CR-106: interview auto-status, cascade notifications, AI Usage table (2026-08-30).**
   Interview invites now extract a date/time (regex first, Groq LLM fallback, Gemini opt-in) and
   auto-advance the matched job when the current status is eligible — same no-confirm shape as

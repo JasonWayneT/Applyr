@@ -57,7 +57,7 @@ def _print_status(folder: str) -> int:
         print(f"  - {e}")
     terminal = (
         "WAITING_FOR_LLM",
-        "WAITING_FOR_HUMAN",
+        "NEEDS_DISPOSITION",
         "SKIPPED",
         "COMPLETE",
         "COMPLETE_WITH_OVERRIDE",
@@ -120,6 +120,11 @@ def main() -> None:
         "--stop-after-hm",
         action="store_true",
         help="Stop after HM (2C).",
+    )
+    parser.add_argument(
+        "--stop-after-mech",
+        action="store_true",
+        help="Stop after Mech (2D).",
     )
     parser.add_argument(
         "--no-compile",
@@ -230,11 +235,12 @@ def main() -> None:
                 adopt=True,
                 no_hook=no_hook,
                 force=args.force,
-                stop_at_waiting=False,
+                stop_at_waiting=args.stop_at_waiting,
                 stop_after_stage1=False,
                 stop_after_truth=args.stop_after_truth,
                 stop_after_ats=args.stop_after_ats,
                 stop_after_hm=args.stop_after_hm,
+                stop_after_mech=args.stop_after_mech,
                 compile_pdfs=not args.no_compile,
                 do_finalize=args.finalize,
                 finalize_company=args.finalize_company,
@@ -254,10 +260,12 @@ def main() -> None:
                 "(SYSTEM=digest, USER=packet). Do not load agent_context_pack.md."
             )
             sys.exit(0)
-        if status == "WAITING_FOR_HUMAN":
+        if status == "NEEDS_DISPOSITION":
+            # CR-107: renamed from WAITING_FOR_HUMAN — a WARN finding here is the agent's own
+            # call to make and retry in the same session (see AGENTS.md), never an actual stop.
             print(
-                "WAITING_FOR_HUMAN — review findings need dispositions in "
-                "reviews/dispositions.json, then re-run with --resume."
+                "NEEDS_DISPOSITION — findings need dispositions recorded in "
+                "reviews/dispositions.json, then re-run with --resume immediately."
             )
             sys.exit(4)
         if status == "STALE":

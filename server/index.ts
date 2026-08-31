@@ -29,6 +29,7 @@ if (startupReconcile.archived.length || startupReconcile.removed.length) {
 
 const app  = express();
 const PORT = 3000;
+const HOST = process.env.APPLYR_HOST || '127.0.0.1';
 
 const corsOrigins = [
   /^http:\/\/localhost:\d+$/,
@@ -55,9 +56,12 @@ app.use('/', contactsRouter);
 app.use('/', gmailSyncRouter);
 app.use('/', llmUsageRouter);
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, HOST, () => {
   console.log(`\n${'='.repeat(48)}`);
-  console.log(`  JobAgent Server  🚀  Listening on all interfaces (0.0.0.0:${PORT})`);
+  console.log(`  JobAgent Server  🚀  Listening on ${HOST}:${PORT}`);
+  if (HOST === '127.0.0.1') {
+    console.log(`  (Set APPLYR_HOST=0.0.0.0 for Tailscale/network access)`);
+  }
   console.log(`${'='.repeat(48)}\n`);
   resetTheirstackCreditsIfNewMonth();
   logActivity('INFO', 'Server', 'System initialized. Ready for local and Tailscale syncing.');

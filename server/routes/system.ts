@@ -3,8 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import { db } from '../db.js';
 import { PROJECT_ROOT } from '../shared.js';
+import { requireApiToken, isSafeHttpUrl } from '../middleware.js';
 
 const router = Router();
+
+// Apply token auth to mutating routes only (GET routes remain open, same as
+// every other router — requireApiToken is a no-op for GET/HEAD/OPTIONS).
+router.use(requireApiToken);
 
 router.get('/api/system-status', (_req, res) => {
   try {
@@ -109,6 +114,11 @@ router.post('/api/stream/local-model', (req, res) => {
   const settingsRow = db.prepare("SELECT value FROM profiles WHERE key = 'llm_settings'").get() as { value: string } | undefined;
   const settings = settingsRow ? JSON.parse(settingsRow.value) : {};
   const baseUrl = settings.localUrl || 'http://localhost:11434';
+  
+  if (!isSafeHttpUrl(baseUrl)) {
+    res.write(`event: error\ndata: ${JSON.stringify({ error: 'Configured local model URL must be http or https' })}\n\n`);
+    return res.end();
+  }
   
   fetch(`${baseUrl}/api/generate`, {
     method: 'POST',

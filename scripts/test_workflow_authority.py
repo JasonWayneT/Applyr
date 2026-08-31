@@ -362,11 +362,15 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
         self.assertEqual(state["stages"]["stage2"]["status"], "READY")
         r1 = load_receipt(str(self.folder), "stage1")
         self.assertEqual(r1["status"], "COMPLETE")
-        self.assertEqual(r1["prior_receipt_id"], waiting_receipt["receipt_id"])
+        # Stage 1 COMPLETE must cite Stage 0's receipt_id (cross-stage chain),
+        # not the Stage 1 WAITING receipt (same-stage intermediate).
+        # check_workflow_complete expects stage N → stage N-1 chaining.
+        r0 = load_receipt(str(self.folder), "stage0")
+        self.assertEqual(r1["prior_receipt_id"], r0["receipt_id"])
         self.assertIn("Resume.md", r1["output_hashes"])
         self.assertIn("CoverLetter.md", r1["output_hashes"])
         ok, _ = contracts.check_workflow_complete(str(self.folder))
-        self.assertFalse(ok)
+        self.assertFalse(ok)  # Stage 2+ not yet complete
 
     def test_edit_resume_marks_stage1_stale_locks_stage2(self):
         self._reach_waiting()
@@ -516,11 +520,11 @@ class TruthReviewTests(unittest.TestCase):
             },
         }
         waiting_state = {
-            "status": "WAITING_FOR_HUMAN",
+            "status": "NEEDS_DISPOSITION",
             "stages": {
                 "stage1": {"status": "COMPLETE"},
                 "stage2": {
-                    "subphases": {"truth": {"status": "WAITING_FOR_HUMAN"}},
+                    "subphases": {"truth": {"status": "NEEDS_DISPOSITION"}},
                 },
             },
         }
@@ -583,9 +587,9 @@ class TruthReviewTests(unittest.TestCase):
                 },
             ):
                 state = run_stage2_truth(str(self.folder), load_state(str(self.folder)))
-        self.assertEqual(state["status"], "WAITING_FOR_HUMAN")
+        self.assertEqual(state["status"], "NEEDS_DISPOSITION")
         self.assertEqual(
-            state["stages"]["stage2"]["subphases"]["truth"]["status"], "WAITING_FOR_HUMAN"
+            state["stages"]["stage2"]["subphases"]["truth"]["status"], "NEEDS_DISPOSITION"
         )
         disp = json.loads((self.folder / "reviews" / "dispositions.json").read_text(encoding="utf-8"))
         self.assertIn("truth.coverage.unused.ACC-102", disp["by_finding_id"])
@@ -622,7 +626,7 @@ class TruthReviewTests(unittest.TestCase):
     def test_stale_disposition_cleared_when_finding_content_changes(self):
         """Invariant: disposition binds to findings content, not just stable finding id.
 
-        Same finding id with different message/payload must re-open WAITING_FOR_HUMAN
+        Same finding id with different message/payload must re-open NEEDS_DISPOSITION
         rather than letting a prior FALSE_POSITIVE complete Truth against new content.
         """
         from workflow.runner import run_stage2_truth
@@ -678,10 +682,10 @@ class TruthReviewTests(unittest.TestCase):
             ):
                 # Finding id unchanged, payload changed — disposition must invalidate
                 state = run_stage2_truth(str(self.folder), load_state(str(self.folder)))
-        self.assertEqual(state["status"], "WAITING_FOR_HUMAN")
+        self.assertEqual(state["status"], "NEEDS_DISPOSITION")
         self.assertEqual(
             state["stages"]["stage2"]["subphases"]["truth"]["status"],
-            "WAITING_FOR_HUMAN",
+            "NEEDS_DISPOSITION",
         )
         disp = json.loads(
             (self.folder / "reviews" / "dispositions.json").read_text(encoding="utf-8")
@@ -825,9 +829,9 @@ class AtsReviewTests(unittest.TestCase):
             },
         ):
             state = run_stage2_ats(str(self.folder), load_state(str(self.folder)))
-        self.assertEqual(state["status"], "WAITING_FOR_HUMAN")
+        self.assertEqual(state["status"], "NEEDS_DISPOSITION")
         self.assertEqual(
-            state["stages"]["stage2"]["subphases"]["ats"]["status"], "WAITING_FOR_HUMAN"
+            state["stages"]["stage2"]["subphases"]["ats"]["status"], "NEEDS_DISPOSITION"
         )
 
 
@@ -923,8 +927,8 @@ class Stage2PolicyTests(unittest.TestCase):
             return_value=[{"document": "Resume.md", "result": FakeLint()}],
         ):
             state = run_stage2_hm(str(self.folder), load_state(str(self.folder)))
-        self.assertEqual(state["status"], "WAITING_FOR_HUMAN")
-        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "WAITING_FOR_HUMAN")
+        self.assertEqual(state["status"], "NEEDS_DISPOSITION")
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
 
     def test_stage2_receipt_after_policy(self):
         from workflow.runner import run_stage2_hm, run_stage2_mech, run_stage2_policy
@@ -978,7 +982,7 @@ class Stage2PolicyTests(unittest.TestCase):
                     str(self.folder), load_state(str(self.folder)), compile_pdfs=True
                 )
         # rubric finding may still wait
-        if state["status"] == "WAITING_FOR_HUMAN":
+        if state["status"] == "NEEDS_DISPOSITION":
             disp = json.loads(
                 (self.folder / "reviews" / "dispositions.json").read_text(encoding="utf-8")
             )
@@ -1231,6 +1235,161 @@ class Stage3FinalizeTests(unittest.TestCase):
                 pass
         reloaded = load_state(str(self.folder))
         self.assertEqual(reloaded.get("mode"), "practice")
+
+
+class EndToEndChainIntegrityTests(unittest.TestCase):
+    """Verify check_workflow_complete returns True for a workflow produced
+    by the actual run_stage1_validate code path (not the manual _seed helper).
+
+    Found 2026-08-30: 6 of 12 real COMPLETE submissions failed
+    check_workflow_complete because run_stage1_validate set Stage 1's
+    prior_receipt_id to the WAITING receipt's ID instead of Stage 0's.
+    The existing Stage 3 tests used _seed_stage2_complete which manually
+    built the correct chain, bypassing run_stage1_validate entirely.
+    """
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.folder = Path(self._tmpdir.name) / "acme"
+        self.folder.mkdir()
+        _write(self.folder, "Original_JD.txt", "Product Manager\n\n## Requirements\n- Own roadmap\n")
+        self.gate = _valid_stage0()
+        self.packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {"required": [], "preferred": [], "responsibilities": [], "culture": []},
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+    def _reach_waiting(self):
+        def fake_build_packet(folder, no_hook=True):
+            return self.packet
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=self.gate):
+            with mock.patch("workflow.runner.build_packet", side_effect=fake_build_packet):
+                with mock.patch("workflow.runner.build_authoring_prompt", side_effect=fake_prompt):
+                    with mock.patch("workflow.runner.require_stage_ready"):
+                        return run_until_waiting_for_llm(
+                            str(self.folder),
+                            mode="production",
+                            adopt=False,
+                            no_hook=True,
+                        )
+
+    def test_check_workflow_complete_passes_after_actual_stage1_validate(self):
+        """The full Stage 0 → Stage 1 validate path must produce a receipt
+        chain that check_workflow_complete accepts (Stage 1 prior = Stage 0)."""
+        from workflow.invalidate import sha256_file
+        from workflow.receipts import file_hash_map
+        from workflow.runner import run_stage1_validate, run_stage3_finalize
+        from workflow.reviews import default_stage2_subphases
+
+        self._reach_waiting()
+        _write(self.folder, "Resume.md", "# Name\n\n## PROFESSIONAL SUMMARY\nOne. Two. Three.\n")
+        _write(self.folder, "CoverLetter.md", "# Name\n\nDear Hiring Manager,\n\nBody.\n\nBest regards,\n\nName\n")
+        _write(self.folder, "claim_provenance.json", {"claims": []})
+
+        with mock.patch("workflow.runner.run_verify_only", return_value=True):
+            state = run_stage1_validate(str(self.folder), load_state(str(self.folder)))
+
+        # Stage 1 should be COMPLETE with prior = Stage 0
+        r1 = load_receipt(str(self.folder), "stage1")
+        r0 = load_receipt(str(self.folder), "stage0")
+        self.assertEqual(r1["prior_receipt_id"], r0["receipt_id"])
+
+        # Seed Stage 2 COMPLETE using the actual Stage 1 receipt (not manual)
+        out = file_hash_map(
+            str(self.folder),
+            ["Resume.md", "CoverLetter.md", "verification_receipt.json"],
+        )
+        r2 = build_receipt(
+            stage="stage2",
+            status="COMPLETE",
+            mode="production",
+            input_hashes={},
+            output_hashes=out,
+            result={},
+            checks={"contracts.check_stage2_ready": True},
+            prior_receipt_id=r1["receipt_id"],
+        )
+        state = commit_stage(
+            str(self.folder),
+            load_state(str(self.folder)),
+            r2,
+            workflow_status="IN_PROGRESS",
+            active_stage="stage3",
+        )
+        state["stages"]["stage2"]["subphases"] = default_stage2_subphases()
+        for sub in state["stages"]["stage2"]["subphases"].values():
+            if isinstance(sub, dict):
+                sub["status"] = "COMPLETE"
+        state["stages"]["stage3"]["status"] = "READY"
+        write_state(str(self.folder), state)
+
+        # Finalize
+        with mock.patch(
+            "workflow.runner.finalize_job", return_value="inserted: Acme (id=abcd)"
+        ):
+            run_stage3_finalize(str(self.folder), load_state(str(self.folder)))
+
+        # The authoritative DONE oracle must pass
+        ok, errors = contracts.check_workflow_complete(str(self.folder))
+        self.assertTrue(ok, f"check_workflow_complete failed: {errors}")
+
+    def test_reconcile_detects_broken_chain_after_stage0_rerun(self):
+        """reconcile should mark Stage 1 STALE when Stage 0 is re-run
+        (new receipt_id) after Stage 1 was already COMPLETE — the chain
+        is broken even if file hashes still match."""
+        from workflow.invalidate import sha256_file
+
+        self._reach_waiting()
+        _write(self.folder, "Resume.md", "# Name\nv1\n")
+        _write(self.folder, "CoverLetter.md", "# Name\nletter\n")
+        _write(self.folder, "claim_provenance.json", {"claims": []})
+        with mock.patch("workflow.runner.run_verify_only", return_value=True):
+            run_stage1_validate(str(self.folder), load_state(str(self.folder)))
+
+        r0_old = load_receipt(str(self.folder), "stage0")
+        r1 = load_receipt(str(self.folder), "stage1")
+        self.assertEqual(r1["prior_receipt_id"], r0_old["receipt_id"])
+
+        # Simulate a Stage 0 re-run: write a new Stage 0 receipt with a
+        # different receipt_id but same output_hashes (file content unchanged).
+        new_r0 = build_receipt(
+            stage="stage0",
+            status="COMPLETE",
+            mode="production",
+            input_hashes=file_hash_map(str(self.folder), ["Original_JD.txt"]) if False else {},
+            output_hashes={"stage0_fit_gate.json": sha256_file(str(self.folder / "stage0_fit_gate.json"))},
+            result={"tier": "Tier 1", "decision": "PASS", "reasons": []},
+            checks={"contracts.check_stage0_fit_gate": True, "policy.evaluate_stage0": "PASS"},
+        )
+        write_receipt(str(self.folder), new_r0)
+        state = load_state(str(self.folder))
+        state["stages"]["stage0"]["receipt_id"] = new_r0["receipt_id"]
+        write_state(str(self.folder), state)
+
+        # Reconcile should detect the broken chain (Stage 1's prior != new Stage 0)
+        new_state, reasons = reconcile_state_against_receipts(
+            str(self.folder), state, load_receipt
+        )
+        self.assertTrue(reasons, f"Expected chain-break reasons, got: {reasons}")
+        self.assertEqual(new_state["stages"]["stage1"]["status"], "STALE")
+        self.assertEqual(new_state["status"], "STALE")
 
 
 if __name__ == "__main__":

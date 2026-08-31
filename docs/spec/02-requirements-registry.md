@@ -696,6 +696,17 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-351` | acceptance | P1 | implemented | Settings AI Usage exposes both new task ids; WE row flags workExperience.md | `FR-275` | CR-106 |
 | `AC-352` | acceptance | P1 | implemented | research-engine.py and STAGE_PROVIDERS carry comments explaining the exclusion | `FR-275` | CR-106 |
 
+### CR-107 Rename WAITING_FOR_HUMAN to NEEDS_DISPOSITION (FR-276–FR-277)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-276` | functional | P2 | implemented | Stage 2's WARN-finding-needs-a-decision state is named `NEEDS_DISPOSITION` in all executable code and tests; `WAITING_FOR_LLM` is unaffected | `AC-353`–`AC-355` | CR-107 |
+| `FR-277` | functional | P2 | implemented | `AGENTS.md`'s governing rule describes the state as retry behavior performed immediately, not a stop condition | `AC-356`–`AC-357` | CR-107 |
+| `AC-353` | acceptance | P2 | implemented | `grep -r WAITING_FOR_HUMAN scripts/` returns only an explanatory comment, no live logic or test literal | `FR-276` | CR-107 |
+| `AC-354` | acceptance | P2 | implemented | `test_workflow_authority.py` (37 tests) passes unchanged in substance with the renamed literal | `FR-276` | CR-107 |
+| `AC-355` | acceptance | P2 | implemented | `WAITING_FOR_LLM` confirmed distinct and untouched in every file it appears | `FR-276` | CR-107 |
+| `AC-356` | acceptance | P2 | implemented | `AGENTS.md`'s rule section renamed and reframed around "resolve and retry immediately" | `FR-277` | CR-107 |
+| `AC-357` | acceptance | P2 | implemented | Full Python suite, full JS/TS suite, and `tsc --noEmit` pass after the rename | `FR-277` | CR-107 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

@@ -4,16 +4,17 @@
 **Status:** Ready for implementation — partially in progress (uncommitted; see Related Work below)  
 **Context:** This document was produced after a manual audit revealed that the pipeline's generated cover letters and resumes systematically failed on forbidden language, generic hooks, weak proof density, and missing B2B SaaS legibility signals. These epics harden the pipeline to produce application-ready output deterministically.
 
-**Supersedes:** `CODE_FIXES.md` (repo root, dated 2026-06-25) — that file is the earlier, less-structured
-audit this doc's epics were built from. Fix 1–7 there map roughly to Epics 1, 7, 3, 6, 5, (completion
-verification — not yet its own epic here), 7 respectively. Treat `CODE_FIXES.md` as historical context
-only; this doc is the working plan.
+**Supersedes:** `CODE_FIXES.md` (repo root, dated 2026-06-25, since removed from the repo —
+content available in git history) — that file is the earlier, less-structured audit this doc's epics
+were built from. Fix 1–7 there map roughly to Epics 1, 7, 3, 6, 5, (completion verification — not yet
+its own epic here), 7 respectively. This doc is the working plan.
 
 **Related work — different scope, same session family, do not treat as redundant:**
 [docs/spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md](spec/08-implementation/CR-053-fit-rubric-overhaul-epics.md)
 covers CR-053 (job-fit scoring accuracy), CR-054 (pipeline silently reporting success on a failed
 draft — note Fix 6 in `CODE_FIXES.md` above, the incomplete `napster_corp_` folder, is the same failure
-class found independently in that doc's diagnosis), and CR-055 (jobs killed before they ever reach
+class found independently in that doc's diagnosis; the original `CODE_FIXES.md` audit has been
+removed from the repo but is available in git history), and CR-055 (jobs killed before they ever reach
 scoring). This doc is about the quality of the *document* once a job has already passed the fit gate
 and is being drafted; CR-053/054/055 is about whether the *right job* reached drafting in the first
 place, and whether the pipeline tells the truth about whether drafting actually succeeded. Both are

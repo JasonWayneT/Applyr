@@ -26,8 +26,12 @@ export function runMigrations(db: Database.Database, migrationsDir: string): voi
     if (already) continue;
 
     const sql = readFileSync(path.join(migrationsDir, file), 'utf-8');
-    db.exec(sql);
-    db.prepare(`INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)`)
-      .run(file, new Date().toISOString());
+    // Wrap in a transaction so a mid-migration failure rolls back all changes,
+    // leaving the migration unmarked and cleanly retriable on next startup.
+    db.transaction(() => {
+      db.exec(sql);
+      db.prepare(`INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)`)
+        .run(file, new Date().toISOString());
+    })();
   }
 }

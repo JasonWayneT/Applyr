@@ -127,7 +127,8 @@ semantics as `resolve_task_providers`, but the default chain is `_get_configured
   after seeing it in practice).
 - Unifying `STAGE_PROVIDERS` onto `taskProviderOverrides`.
 - Migrating `research-engine.py`'s Gemini-search calls onto `taskProviderOverrides`.
-- A review-queue UI inside Applyr for `WAITING_FOR_HUMAN` gates. Parked on the roadmap for
-  later consideration (`docs/ROADMAP_BEST_PRACTICES.md` §4), not dropped.
+- A review-queue UI inside Applyr for `NEEDS_DISPOSITION` gates (renamed from `WAITING_FOR_HUMAN`
+  under CR-107 — see that doc). Parked on the roadmap for later consideration
+  (`docs/ROADMAP_BEST_PRACTICES.md` §4), not dropped.
 - A full reorderable per-task fallback-chain editor (still the natural next step if that
   need shows up; see `docs/ROADMAP_BEST_PRACTICES.md`).

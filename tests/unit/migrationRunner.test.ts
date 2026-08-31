@@ -121,4 +121,28 @@ describe('runMigrations', () => {
     expect(applied[0]).toBe('001_first.sql');
     expect(applied[1]).toBe('002_second.sql');
   });
+
+  it('rolls back on mid-migration failure and leaves migration unmarked', () => {
+    // A migration with a valid statement followed by an invalid one — the
+    // transaction must roll back the first statement so the migration can
+    // be retried cleanly after the SQL is fixed.
+    writeFileSync(
+      path.join(migrationsDir, '001_partial.sql'),
+      `CREATE TABLE partial (id TEXT PRIMARY KEY);\nINSERT INTO partial VALUES (1, 2);`,
+    );
+
+    expect(() => runMigrations(db, migrationsDir)).toThrow();
+
+    // Table should NOT exist (rolled back)
+    const table = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='partial'`)
+      .get();
+    expect(table).toBeUndefined();
+
+    // Migration should NOT be marked as applied
+    const row = db
+      .prepare(`SELECT id FROM schema_migrations WHERE id = ?`)
+      .get('001_partial.sql');
+    expect(row).toBeUndefined();
+  });
 });

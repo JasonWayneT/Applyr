@@ -64,7 +64,7 @@ def evaluate_truth_findings(
     """Map Truth findings + human dispositions to a subphase verdict.
 
     Returns:
-      verdict: PASS | WAITING_FOR_HUMAN | FAIL
+      verdict: PASS | NEEDS_DISPOSITION | FAIL
       integrity: CLEAN | OVERRIDDEN
       open_finding_ids: list
       reasons: list
@@ -145,7 +145,7 @@ def evaluate_truth_findings(
 
     if open_ids:
         return {
-            "verdict": "WAITING_FOR_HUMAN",
+            "verdict": "NEEDS_DISPOSITION",
             "integrity": "CLEAN",
             "open_finding_ids": open_ids,
             "reasons": [f"{len(open_ids)} finding(s) need disposition"],

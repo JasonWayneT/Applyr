@@ -219,7 +219,7 @@ hygiene table above. Do not treat a row here as a build order.
 
 | Item | Status | Notes |
 |---|---|---|
-| In-app review-queue UI for `WAITING_FOR_HUMAN` gates | Consider later (2026-08-30, Jason-directed) | Originated as item 4 of the 2026-08-30 email-classifier audit, then left out of CR-105/CR-106 on purpose. Today a Stage 2 WARN with no disposition parks the subphase at `WAITING_FOR_HUMAN` and the agent is supposed to dispose it in-session (`AGENTS.md`: that gate is the agent's stop, not Jason's). A UI that lists those parked findings inside Applyr is still worth considering later — visibility for Jason, not a new mid-pipeline decision he has to make before the agent can continue. Scope against CR-079/080/081 (`reviews/dispositions.json`, Truth/ATS/HM/Policy) if/when picked up. Do not build it as a blocking inbox. |
+| In-app review-queue UI for `NEEDS_DISPOSITION` gates | Decided against (2026-08-30, Jason-directed, CR-107) | Originated as item 4 of the 2026-08-30 email-classifier audit, then left out of CR-105/CR-106 on purpose. Revisited the same day: the state was renamed from `WAITING_FOR_HUMAN` to `NEEDS_DISPOSITION` because the old name itself was judged to be a real cause of agents stopping there instead of resolving it (a real incident: 2 of 15 submissions left stuck). Jason's call — this is retry behavior the agent performs immediately, not human-review behavior, so a review-queue UI is the wrong shape for it entirely, not just a "later" item. No notification or queue was built. If the rename doesn't hold up in practice (a submission is found genuinely abandoned mid-run), treat that as an incomplete/errored run, not a queue to build UI for. See `docs/spec/05-change-requests/CR-107-needs-disposition-rename.md`. |
 
 ---
 

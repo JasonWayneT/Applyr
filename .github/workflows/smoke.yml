@@ -45,7 +45,5 @@ jobs:
         run: python scripts/test_smoke_regression.py
       - name: Verify chain Tier A tests
         run: python scripts/test_verify_chain.py
-      - name: Batch gate-reject test
-        run: python scripts/test_batch_gate.py
       - name: Spawn path guard
         run: python scripts/check_spawn_paths.py

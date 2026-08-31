@@ -402,13 +402,11 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     if not ok:
         raise WorkflowError("Stage 0 outputs stale:\n  - " + "\n  - ".join(errs))
 
-    # Optional: waiting receipt for prior_receipt_id chain preference
-    r1_waiting = load_receipt(folder, "stage1")
-    prior_id = None
-    if r1_waiting and r1_waiting.get("status") == "WAITING_FOR_LLM":
-        prior_id = r1_waiting.get("receipt_id")
-    else:
-        prior_id = r0.get("receipt_id")
+    # Chain: Stage 1 COMPLETE cites Stage 0's receipt_id (the previous stage),
+    # not the Stage 1 WAITING_FOR_LLM receipt (a same-stage intermediate).
+    # check_workflow_complete expects a cross-stage chain (stage N → stage N-1),
+    # so the WAITING receipt is never part of the final chain.
+    prior_id = r0.get("receipt_id")
 
     verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
     # CR-097 Story 1.3: record inside run_verify_only so a failing attempt is
@@ -573,12 +571,12 @@ def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             "Truth policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
 
-    if verdict["verdict"] == "WAITING_FOR_HUMAN":
-        truth["status"] = "WAITING_FOR_HUMAN"
+    if verdict["verdict"] == "NEEDS_DISPOSITION":
+        truth["status"] = "NEEDS_DISPOSITION"
         truth["findings_hash"] = fhash
-        s2["status"] = "WAITING_FOR_HUMAN"
+        s2["status"] = "NEEDS_DISPOSITION"
         # Carry integrity only when we later PASS; keep CLEAN while waiting
-        state["status"] = "WAITING_FOR_HUMAN"
+        state["status"] = "NEEDS_DISPOSITION"
         state["active_stage"] = "stage2"
         write_state(folder, state)
         return state
@@ -685,11 +683,11 @@ def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             "ATS policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
 
-    if verdict["verdict"] == "WAITING_FOR_HUMAN":
-        ats["status"] = "WAITING_FOR_HUMAN"
+    if verdict["verdict"] == "NEEDS_DISPOSITION":
+        ats["status"] = "NEEDS_DISPOSITION"
         ats["findings_hash"] = fhash
-        s2["status"] = "WAITING_FOR_HUMAN"
-        state["status"] = "WAITING_FOR_HUMAN"
+        s2["status"] = "NEEDS_DISPOSITION"
+        state["status"] = "NEEDS_DISPOSITION"
         state["active_stage"] = "stage2"
         write_state(folder, state)
         return state
@@ -745,11 +743,11 @@ def _apply_subphase_verdict(
             + "\n  - ".join(verdict.get("reasons") or [])
         )
 
-    if verdict["verdict"] == "WAITING_FOR_HUMAN":
-        phase_rec["status"] = "WAITING_FOR_HUMAN"
+    if verdict["verdict"] == "NEEDS_DISPOSITION":
+        phase_rec["status"] = "NEEDS_DISPOSITION"
         phase_rec["findings_hash"] = fhash
-        s2["status"] = "WAITING_FOR_HUMAN"
-        state["status"] = "WAITING_FOR_HUMAN"
+        s2["status"] = "NEEDS_DISPOSITION"
+        state["status"] = "NEEDS_DISPOSITION"
         state["active_stage"] = "stage2"
         write_state(folder, state)
         return state
@@ -1014,10 +1012,10 @@ def run_stage2_policy(folder: str, state: dict[str, Any]) -> dict[str, Any]:
 
     ok, errors = contracts.check_stage2_ready(folder)
     if not ok:
-        sub["policy"]["status"] = "WAITING_FOR_HUMAN"
+        sub["policy"]["status"] = "NEEDS_DISPOSITION"
         sub["policy"]["blockers"] = errors
-        s2["status"] = "WAITING_FOR_HUMAN"
-        state["status"] = "WAITING_FOR_HUMAN"
+        s2["status"] = "NEEDS_DISPOSITION"
+        state["status"] = "NEEDS_DISPOSITION"
         state["active_stage"] = "stage2"
         write_state(folder, state)
         path = os.path.join(folder, "reviews", "policy_findings.json")
@@ -1466,7 +1464,7 @@ def run_until_truth_settled(
     state = run_stage2_policy(folder, state)
     if not do_finalize:
         return state
-    if state.get("status") in ("FAILED", "STALE", "SKIPPED", "WAITING_FOR_HUMAN"):
+    if state.get("status") in ("FAILED", "STALE", "SKIPPED", "NEEDS_DISPOSITION"):
         return state
     s2 = (state.get("stages") or {}).get("stage2") or {}
     if s2.get("status") != "COMPLETE":

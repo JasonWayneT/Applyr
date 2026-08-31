@@ -40,6 +40,12 @@ _CASCADE: dict[str, tuple[str, ...]] = {
     "stage3": (),
 }
 
+_PREV_STAGE: dict[str, str] = {
+    "stage1": "stage0",
+    "stage2": "stage1",
+    "stage3": "stage2",
+}
+
 
 def reconcile_state_against_receipts(
     folder: str,
@@ -84,33 +90,66 @@ def reconcile_state_against_receipts(
             continue
 
         expected = receipt.get("output_hashes") or {}
-        if not expected:
-            continue
-        ok, errs = hashes_match(folder, expected)
-        if ok:
-            continue
-
-        reasons.extend(f"{stage}: {e}" for e in errs)
-        stages[stage] = {
-            "status": "STALE",
-            "receipt_id": receipt_id,
-            "integrity": info.get("integrity") or "CLEAN",
-        }
-        for down in _CASCADE.get(stage, ()):
-            d = stages.get(down) or {}
-            # Lock downstream even if they had COMPLETE/READY/WAITING
-            if d.get("status") and d.get("status") != "LOCKED":
-                stages[down] = {
-                    "status": "LOCKED",
-                    "receipt_id": None,
-                    "integrity": d.get("integrity") or "CLEAN",
+        if expected:
+            ok, errs = hashes_match(folder, expected)
+            if not ok:
+                reasons.extend(f"{stage}: {e}" for e in errs)
+                stages[stage] = {
+                    "status": "STALE",
+                    "receipt_id": receipt_id,
+                    "integrity": info.get("integrity") or "CLEAN",
                 }
-                if down == "stage2":
-                    # CR-079: restart Stage 2 from Truth after upstream STALE
-                    from workflow.reviews import default_stage2_subphases
+                for down in _CASCADE.get(stage, ()):
+                    d = stages.get(down) or {}
+                    # Lock downstream even if they had COMPLETE/READY/WAITING
+                    if d.get("status") and d.get("status") != "LOCKED":
+                        stages[down] = {
+                            "status": "LOCKED",
+                            "receipt_id": None,
+                            "integrity": d.get("integrity") or "CLEAN",
+                        }
+                        if down == "stage2":
+                            # CR-079: restart Stage 2 from Truth after upstream STALE
+                            from workflow.reviews import default_stage2_subphases
 
-                    stages[down]["subphases"] = default_stage2_subphases()
-                reasons.append(f"{down}: LOCKED after {stage} became STALE")
+                            stages[down]["subphases"] = default_stage2_subphases()
+                        reasons.append(f"{down}: LOCKED after {stage} became STALE")
+                continue
+
+        # Chain-integrity check: if this stage's prior_receipt_id doesn't match
+        # the previous stage's current receipt_id, the chain is broken (an
+        # earlier stage was re-run after this stage was already complete).
+        # Mark this stage STALE so it gets re-validated against the new upstream.
+        prior_id = receipt.get("prior_receipt_id")
+        if prior_id and stage != "stage0":
+            prev_stage = _PREV_STAGE.get(stage)
+            if prev_stage:
+                prev_info = stages.get(prev_stage) or {}
+                prev_receipt_id = prev_info.get("receipt_id")
+                if prev_receipt_id and prior_id != prev_receipt_id:
+                    reasons.append(
+                        f"{stage}: prior_receipt_id {prior_id[:20]}... "
+                        f"does not match {prev_stage} receipt_id "
+                        f"{prev_receipt_id[:20]}... (broken chain)"
+                    )
+                    stages[stage] = {
+                        "status": "STALE",
+                        "receipt_id": receipt_id,
+                        "integrity": info.get("integrity") or "CLEAN",
+                    }
+                    for down in _CASCADE.get(stage, ()):
+                        d = stages.get(down) or {}
+                        if d.get("status") and d.get("status") != "LOCKED":
+                            stages[down] = {
+                                "status": "LOCKED",
+                                "receipt_id": None,
+                                "integrity": d.get("integrity") or "CLEAN",
+                            }
+                            if down == "stage2":
+                                from workflow.reviews import default_stage2_subphases
+
+                                stages[down]["subphases"] = default_stage2_subphases()
+                            reasons.append(f"{down}: LOCKED after {stage} chain broken")
 
     if reasons:
         out["status"] = "STALE"

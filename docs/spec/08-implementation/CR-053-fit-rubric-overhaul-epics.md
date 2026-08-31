@@ -205,7 +205,8 @@ already submitted to real employers. If forced to choose one first, do CR-054 Ep
 cheapest fix here and the highest-consequence bug in the whole system.
 
 **Independent corroboration:** the same failure class (a submission silently incomplete with no
-caller-visible error) was found separately on 2026-06-25 in `CODE_FIXES.md` (repo root), Fix 6 — the
+caller-visible error) was found separately on 2026-06-25 in `CODE_FIXES.md` (repo root, since removed — available in
+git history), Fix 6 — the
 `napster_corp_` folder missing Resume/CoverLetter/PDFs with no error logged. That audit proposed
 "completion verification" as its own fix; `docs/pipeline-quality-epics.md` (the epics doc that audit
 fed into) doesn't yet have a dedicated epic for it. CR-054 Epic 1 below supersedes/covers that need —

@@ -4,7 +4,7 @@
 For each slug:
   1. run_until_waiting_for_llm (or adopt + continue) in practice mode
   2. If Resume.md + CoverLetter.md already exist, attempt --resume through
-     Stage 2 until WAITING_FOR_HUMAN or Stage 2 COMPLETE / stop.
+     Stage 2 until NEEDS_DISPOSITION or Stage 2 COMPLETE / stop.
 
 Does not call finalize against the production DB (practice mode).
 Writes data/reports/stabilization_orchestrator_2026-08-11.json
@@ -175,7 +175,7 @@ def main() -> int:
             continue
 
         try:
-            # First resume observes natural WAITING_FOR_HUMAN (Truth/ATS/HM each may wait).
+            # First resume observes natural NEEDS_DISPOSITION (Truth/ATS/HM each may wait).
             state = run_until_truth_settled(
                 str(folder),
                 mode="practice",
@@ -191,7 +191,7 @@ def main() -> int:
             # Multi-cycle dispose: each Stage 2 phase can stop independently, so one
             # fill+resume is not enough to reach Stage 2 COMPLETE.
             dispose_cycles = 0
-            while state.get("status") == "WAITING_FOR_HUMAN" and dispose_cycles < 6:
+            while state.get("status") == "NEEDS_DISPOSITION" and dispose_cycles < 6:
                 filled = _auto_dispose_open_findings(folder)
                 if not filled:
                     break

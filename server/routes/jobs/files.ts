@@ -173,6 +173,7 @@ router.put('/api/jobs/:id/files/:filename', async (req, res) => {
 router.post('/api/jobs/:id/ai-rewrite', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isValidJobId(id)) return res.status(400).json({ error: 'Invalid job id' });
     const { instruction, text } = req.body;
     if (!instruction || !text) return res.status(400).json({ error: 'Instruction and text are required' });
 

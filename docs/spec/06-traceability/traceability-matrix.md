@@ -292,6 +292,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-274` | CR-106 | Provider cascade notifications | `scripts/utils.py`, `server/services/groqClient.ts`, `server/services/geminiClient.ts`, `server/routes/llmUsage.ts`, `src/components/NotificationPanel.tsx` | implemented |
 | `FR-275` | CR-106 | AI Usage we_scoring_summary + ai_rewrite; documented exclusions | `scripts/generate_experience_summary.py`, `scripts/ai_rewrite.py`, `scripts/utils.py`, `src/components/SettingsView.tsx`, `scripts/research-engine.py`, `scripts/llm_stages.py` | implemented |
 | `AC-343`–`AC-352` | CR-106 | Interview parse, cascade notify, task-override defaults | `tests/unit/interviewDateExtractor.test.ts`, `scripts/test_llm_provider_cascade.py`, `scripts/test_resolve_task_providers.py` | implemented |
+| `FR-276`–`FR-277` | CR-107 | Renamed WAITING_FOR_HUMAN to NEEDS_DISPOSITION; AGENTS.md rule reframed as retry behavior | `scripts/workflow/runner.py`, `scripts/workflow/policy.py`, `scripts/run_submission.py`, `scripts/contracts.py`, `scripts/stabilization_orchestrator_corpus.py`, `AGENTS.md` | implemented |
+| `AC-353`–`AC-357` | CR-107 | Rename verified in live code, WAITING_FOR_LLM untouched, full suite green | `scripts/test_workflow_authority.py` | implemented |
 
 
 ## Coverage checklist

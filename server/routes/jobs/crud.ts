@@ -28,6 +28,8 @@ router.get('/api/jobs', (req, res) => {
     const search = req.query.search as string;
     let jobs: any[];
     if (search) {
+      // Escape double quotes for FTS5 MATCH syntax (FTS5 escapes " by doubling)
+      const safeSearch = search.replace(/"/g, '""');
       jobs = db.prepare(`
         SELECT jobs.*, js.score_total, js.score_breakdown_json, js.reason_summary
         FROM jobs 
@@ -35,7 +37,7 @@ router.get('/api/jobs', (req, res) => {
         LEFT JOIN job_scores js ON jobs.id = js.job_id AND js.is_latest = 1
         WHERE jobs_fts MATCH ? 
         ORDER BY rank
-      `).all(`"${search}"*`) as any[];
+      `).all(`"${safeSearch}"*`) as any[];
     } else {
       jobs = db.prepare(`
         SELECT jobs.*, js.score_total, js.score_breakdown_json, js.reason_summary

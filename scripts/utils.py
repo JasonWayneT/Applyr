@@ -780,7 +780,11 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
     """
     import requests
     api_key = settings.get('groqApiKey') or os.getenv('GROQ_API_KEY')
-    target_model = model or 'llama-3.3-70b-versatile'
+    # Found 2026-08-31 during the Stage 0-3 replay: 'llama-3.3-70b-versatile' (this default
+    # since CR-105/106) returns a real 404 "model not found" from Groq's own API -- fully
+    # deprecated from their catalog, not a config issue. Verified openai/gpt-oss-120b against
+    # the live API (GET /openai/v1/models + a real chat completion) before using it here.
+    target_model = model or 'openai/gpt-oss-120b'
     print(f"    [LLM] Calling Groq: {target_model}...", file=sys.stderr)
     for attempt in range(max_retries):
         try:

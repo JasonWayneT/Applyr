@@ -52,6 +52,9 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/verify_master_claims.py",
     "scripts/test_llm_provider_cascade.py",
     "scripts/test_resolve_task_providers.py",
+    "scripts/test_observability.py",
+    "scripts/test_observability_report.py",
+    "scripts/test_run_submission_console_summary.py",
 ]
 
 

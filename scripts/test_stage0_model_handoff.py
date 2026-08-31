@@ -188,11 +188,21 @@ class TestExtractToScoreHandoff(unittest.TestCase):
                 with patch("build_stage0_fit_gate._release_stage0_vram", side_effect=release):
                     with patch("build_stage0_fit_gate._prepare_stage0_score_model"):
                         with patch("build_stage0_fit_gate.classify_gaps", side_effect=classify):
-                            build_stage0_fit_gate(
-                                folder,
-                                db_gate_result=_DB_CLEAR,
-                                prefs=_PREFS_MINIMAL,
-                            )
+                            # Step 4.5 (responsibilities exclusion screen) calls
+                            # evidence_scale.classify_requirement() for real per
+                            # responsibilities line -- unmocked, this hits a live
+                            # Ollama server and fails hard in CI (no local model
+                            # configured). This test is only about VRAM/model
+                            # handoff ordering, not exclusion screening.
+                            with patch(
+                                "build_stage0_fit_gate.screen_responsibilities_for_exclusion",
+                                return_value=[],
+                            ):
+                                build_stage0_fit_gate(
+                                    folder,
+                                    db_gate_result=_DB_CLEAR,
+                                    prefs=_PREFS_MINIMAL,
+                                )
         # Same model: no unload:before-score
         self.assertEqual(
             order[:3],
@@ -233,11 +243,18 @@ class TestExtractToScoreHandoff(unittest.TestCase):
                 with patch("build_stage0_fit_gate._release_stage0_vram", side_effect=release):
                     with patch("build_stage0_fit_gate._prepare_stage0_score_model"):
                         with patch("build_stage0_fit_gate.classify_gaps", side_effect=classify):
-                            build_stage0_fit_gate(
-                                folder,
-                                db_gate_result=_DB_CLEAR,
-                                prefs=_PREFS_MINIMAL,
-                            )
+                            # See comment in test_same_model_skips_before_score_unload:
+                            # the responsibilities exclusion screen isn't mocked
+                            # anywhere else in this test and hits a real LLM.
+                            with patch(
+                                "build_stage0_fit_gate.screen_responsibilities_for_exclusion",
+                                return_value=[],
+                            ):
+                                build_stage0_fit_gate(
+                                    folder,
+                                    db_gate_result=_DB_CLEAR,
+                                    prefs=_PREFS_MINIMAL,
+                                )
         # Different model: unload:before-score is present
         self.assertEqual(
             order[:4],

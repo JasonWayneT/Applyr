@@ -2,7 +2,7 @@
 Central pipeline environment flags.
 
 Implements FR-131, FR-136, FR-141, FR-150 (CR-021).
-See .agent/rules/pipeline_env.md and docs/spec/05-change-requests/CR-021-local-funnel-compose-hardening.md.
+See docs/spec/05-change-requests/CR-021-local-funnel-compose-hardening.md.
 
 Defaults favor compose-mode drafting with deterministic JD profile and cover hooks.
 """

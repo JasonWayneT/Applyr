@@ -38,6 +38,37 @@ from workflow.runner import (  # noqa: E402
     run_until_waiting_for_llm,
 )
 from workflow.state import load_state  # noqa: E402
+from workflow.observability import read_events  # noqa: E402
+
+
+def _fmt_duration(seconds) -> str:
+    if seconds is None:
+        return ""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    return f"{seconds / 60:.0f}m"
+
+
+def _print_console_summary(folder: str, before_count: int) -> None:
+    """Epic D — the compact per-stage line from the observability design doc's §5.1. Reads back
+    whatever this invocation just appended to run_events.jsonl rather than duplicating any
+    stage-specific formatting logic here; every event's own fields already carry what matters."""
+    events = read_events(folder)[before_count:]
+    for e in events:
+        stage = e.get("stage", "?")
+        kind = e.get("event", "?")
+        dur = _fmt_duration(e.get("duration_seconds"))
+        bits = []
+        for key in ("tier", "fit_score", "confidence_score", "extraction_source", "verify_attempts", "integrity", "workflow_status"):
+            if e.get(key) is not None:
+                bits.append(f"{key}={e[key]}")
+        if e.get("findings_by_severity"):
+            fs = e["findings_by_severity"]
+            bits.append("findings=" + ",".join(f"{k}:{v}" for k, v in fs.items()))
+        detail = "  ".join(bits)
+        line = f"Stage {stage:<14} {kind:<17} {dur:>6}  {detail}".rstrip()
+        enc = sys.stdout.encoding or "utf-8"
+        print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
 
 
 def _print_status(folder: str) -> int:
@@ -176,6 +207,11 @@ def main() -> None:
             print(f"ADOPTED status={state.get('status')} active={state.get('active_stage')}")
             sys.exit(0)
 
+        # Epic D (observability design): count events already on disk before this invocation
+        # advances anything, so the console summary below prints only what *this* run produced.
+        _folder_for_events = _resolve_folder(args.folder)
+        _before_count = len(read_events(_folder_for_events))
+
         # Stage 3-only path when already Stage 2 COMPLETE
         if args.finalize and not args.stop_at_waiting and not args.stop_after_stage1:
             folder = _resolve_folder(args.folder)
@@ -249,6 +285,7 @@ def main() -> None:
                 finalize_force=args.force_finalize,
             )
 
+        _print_console_summary(_folder_for_events, _before_count)
         status = state.get("status")
         print(f"WORKFLOW status={status} active={state.get('active_stage')}")
         if status == "SKIPPED":

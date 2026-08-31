@@ -425,10 +425,9 @@ data/
   candidate_preferences.example.json — Template for gate rollout keys (blocked_role_titles, etc.)
   (Authoring/verification content files — master_claims.json, conversion_rubric.md, Resume.md, Cover_Letter_Reference.md, etc. — are catalogued in CLAUDE.md's own File Map table, not duplicated here; this list is infra files the server itself reads/writes.)
 
-.agent/
-  rules/claim_verifier.md — the one rule file still live (reference-only, trigger: manual)
-  DEPRECATED.md — everything else that used to live under .agent/ (job_fit_engine.md, the old workflows/skills files) is archived here with a "use instead" pointer; read it before assuming any other .agent/ path is current. job_fit_engine.md's Stage-0 role was superseded by .claude/skills/generate-submission/SKILL.md; the master Resume.md and Cover_Letter_Reference.md templates now live at data/Resume.md and data/Cover_Letter_Reference.md, not under .agent/.
 ```
+
+`.agent/` was removed 2026-08-31 (public-ready cleanup) — its two still-live reference files moved to `docs/claim-verifier-rubric.md` and `docs/research-packet-contract.md`; everything else under it was already-archived pre-CR-070 pipeline history (job_fit_engine.md, the old workflows/skills files) with no live dependents.
 
 This section previously listed `.agent/rules/job_fit_engine.md`, `Resume.md`, and `Cover_Letter_Reference.md` as live, and `server/` with only 5 top-level files — both wrong by the time this was caught (2026-08-07): the rule files had been archived and the master templates moved to `data/`, and `server/` had grown `domain/`, `middleware/`, `pipeline/`, `repository/`, and a 14-file `services/` directory (CR-072 Gmail sync) with nothing here describing any of it. Caught only because a token-efficiency question prompted a from-scratch grep against the real tree instead of trusting this section — don't let that be the only trigger next time.
 

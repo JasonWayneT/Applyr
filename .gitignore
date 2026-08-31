@@ -31,7 +31,6 @@ data/jobs.db
 # a path via !negation once a parent directory is excluded — confirmed, that pattern doesn't work
 # at any nesting depth). It survives via `git add -f`, not via a gitignore exception. Don't remove
 # it from tracking; it's the single authoritative authoring-process definition, not local config.
-.agent/
 
 # Tracked portable skills live in `.agents/skills/` (Cursor + Antigravity).
 # Do not gitignore `.agents/`. Claude Code still needs a force-added pointer under
@@ -105,6 +104,7 @@ data/*.md
 !data/ats-pipeline.md
 !data/resume-conversion-best-practices.md
 !data/cover-letter-conversion-best-practices.md
+!data/conversion_rubric.md
 
 data/*.json
 !data/*.example.json

@@ -88,9 +88,28 @@ class TestRealAgentsMdExtraction(unittest.TestCase):
         session-009, R25-R32, Phase 2) -- workExperience.md is the canonical
         source and was already the stated source of truth even when AGENTS.md
         carried a duplicate copy. This confirms the fact actually lives there,
-        not just that AGENTS.md points at it."""
+        not just that AGENTS.md points at it.
+
+        Golden-content check against the REAL (gitignored) workExperience.md --
+        only meaningful when real candidate data is present. On a fresh clone
+        or CI, bootstrap_local_data.py creates this file from
+        workExperience.example.md instead, which has no MET section at all by
+        design (2026-08-31: found failing every CI run for exactly this
+        reason). Skip rather than fail when only the example is present.
+        """
         with open(gcp.WORK_EXPERIENCE_MD, encoding="utf-8") as f:
             work_experience = f.read()
+        example_path = os.path.join(
+            os.path.dirname(gcp.WORK_EXPERIENCE_MD), "workExperience.example.md"
+        )
+        if os.path.exists(example_path):
+            with open(example_path, encoding="utf-8") as f:
+                if work_experience == f.read():
+                    self.skipTest(
+                        "data/workExperience.md is just the bootstrapped example "
+                        "(no real candidate data present) -- this golden-content "
+                        "check needs the real, gitignored file."
+                    )
         self.assertIn("MET-01", work_experience)
         self.assertIn("40,000,000", work_experience)
         self.assertIn("ACC-101", work_experience)

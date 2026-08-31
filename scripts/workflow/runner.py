@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,7 @@ from workflow.reviews import (  # noqa: E402
     write_truth_findings,
 )
 from workflow.state import init_state, load_state, utc_now  # noqa: E402
+from workflow.observability import append_event, new_run_id  # noqa: E402
 
 
 class WorkflowError(Exception):
@@ -207,15 +209,27 @@ def adopt_existing(folder: str, mode: str = "production") -> dict[str, Any]:
 
 
 def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
-    """Build/validate Stage 0 via existing worker; write receipt."""
+    """Build/validate Stage 0 via existing worker; write receipt.
+
+    Observability (2026-08-30 design): start time is captured here, at the top of the wrapper,
+    not inside build_receipt -- build_receipt is only ever called after build_stage0_fit_gate()
+    already returned, so it has no way to know when the stage's real work began. See
+    docs/spec/08-implementation/OBSERVABILITY-DESIGN-2026-08-30-stage0-3-replay-reporting.md §4.1.
+    """
+    _run_id = new_run_id()
+    _t0 = time.time()
+    append_event(folder, _run_id, "stage0", "start")
+
     jd = os.path.join(folder, "Original_JD.txt")
     if not os.path.exists(jd):
+        append_event(folder, _run_id, "stage0", "failed", reason="Original_JD.txt not found")
         raise WorkflowError("Original_JD.txt not found")
 
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
     try:
         result = build_stage0_fit_gate(folder, ignore_skip_ledger=force)
     except Stage0ExtractError as exc:
+        append_event(folder, _run_id, "stage0", "failed", reason=str(exc)[:500])
         raise WorkflowError(str(exc)) from exc
     protected = False
     if os.path.exists(gate_path) and not force:
@@ -237,6 +251,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
 
     verdict = policy.evaluate_stage0(result)
     mode = state.get("mode") or "production"
+    _duration = round(time.time() - _t0, 3)
     receipt = build_receipt(
         stage="stage0",
         status="SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE",
@@ -247,11 +262,23 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             "tier": verdict["tier"],
             "decision": verdict["decision"],
             "reasons": verdict["reasons"],
+            "duration_seconds": _duration,
         },
         checks={"contracts.check_stage0_fit_gate": True, "policy.evaluate_stage0": verdict["verdict"]},
     )
+    # M0.1-M0.3, M0.5, M0.7 signals — see the design doc's metric catalog.
+    _event_fields = {
+        "duration_seconds": _duration,
+        "tier": result.get("tier"),
+        "decision": verdict["decision"],
+        "fit_score": result.get("fit_score"),
+        "confidence_score": result.get("confidence_score"),
+        "extraction_source": result.get("extraction_source"),
+        "thin_jd": result.get("thin_jd"),
+    }
 
     if verdict["verdict"] == "SKIP":
+        append_event(folder, _run_id, "stage0", "skipped", **_event_fields)
         return commit_stage(
             folder,
             state,
@@ -279,6 +306,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             workflow_status="FAILED",
             active_stage="stage0",
         )
+        append_event(folder, _run_id, "stage0", "failed", reasons=verdict["reasons"], **_event_fields)
         raise WorkflowError("Stage 0 policy FAIL: " + "; ".join(verdict["reasons"]))
 
     state = commit_stage(
@@ -290,11 +318,22 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     )
     state["stages"]["stage1"]["status"] = "READY"
     write_state(folder, state)
+    append_event(folder, _run_id, "stage0", "complete", **_event_fields)
     return state
 
 
 def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = True) -> dict[str, Any]:
-    """Build packet + authoring prompt; stop at WAITING_FOR_LLM."""
+    """Build packet + authoring prompt; stop at WAITING_FOR_LLM.
+
+    Observability note: this measures only the mechanical packet/prompt build. The real
+    authoring happens in a separate LLM session outside this codebase (no call_llm anywhere in
+    build_authoring_packet.py or build_authoring_prompt) — never attribute the elapsed time
+    between this stage and run_stage1_validate to "LLM latency"; it's wall-clock time-to-draft,
+    which includes whatever the external session took. See the design doc's §1 gap 5 / §3 M1.4.
+    """
+    _run_id = new_run_id()
+    _t0 = time.time()
+    append_event(folder, _run_id, "stage1.prompt", "start")
     # CR-075 safety net — still live under the new layer
     try:
         require_stage_ready("stage0", folder, force=False)
@@ -331,6 +370,7 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
         f.write("\n")
 
     mode = state.get("mode") or "production"
+    _duration = round(time.time() - _t0, 3)
     receipt = build_receipt(
         stage="stage1",
         status="WAITING_FOR_LLM",
@@ -340,20 +380,22 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
             folder,
             ["authoring_packet.json", "authoring_prompt.md", "authoring_prompt_meta.json"],
         ),
-        result={"packet_status": "ready", "meta": meta},
+        result={"packet_status": "ready", "meta": meta, "duration_seconds": _duration},
         checks={
             "contracts.require_stage_ready.stage0": True,
             "packet_status_ready": True,
         },
         prior_receipt_id=r0.get("receipt_id"),
     )
-    return commit_stage(
+    result_state = commit_stage(
         folder,
         state,
         receipt,
         workflow_status="WAITING_FOR_LLM",
         active_stage="stage1",
     )
+    append_event(folder, _run_id, "stage1.prompt", "waiting_for_llm", duration_seconds=_duration)
+    return result_state
 
 
 def _docs_present(folder: str) -> bool:
@@ -372,8 +414,25 @@ def reconcile(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     return new_state
 
 
+def _verify_attempt_count(folder: str) -> int | None:
+    """Length of stage1_first_draft/verify_history.json, if present -- CR-097's own per-attempt
+    log (see author_from_packet.py::run_verify_only), reused here rather than re-counted."""
+    path = os.path.join(folder, "stage1_first_draft", "verify_history.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as f:
+            history = json.load(f)
+        return len(history) if isinstance(history, list) else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
 def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-077: after LLM compose, run verify-only and write Stage 1 COMPLETE receipt."""
+    _run_id = new_run_id()
+    _t0 = time.time()
+    append_event(folder, _run_id, "stage1.validate", "start")
     state = reconcile(folder, state)
     s1 = (state.get("stages") or {}).get("stage1") or {}
     if s1.get("status") == "STALE":
@@ -412,6 +471,14 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     # CR-097 Story 1.3: record inside run_verify_only so a failing attempt is
     # persisted before this runner raises WorkflowError.
     if not verify_ok:
+        append_event(
+            folder,
+            _run_id,
+            "stage1.validate",
+            "verify_failed",
+            duration_seconds=round(time.time() - _t0, 3),
+            attempt=_verify_attempt_count(folder),
+        )
         raise WorkflowError(
             "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
         )
@@ -425,6 +492,8 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     if os.path.exists(os.path.join(folder, "claim_provenance.json")):
         out_files.append("claim_provenance.json")
 
+    _duration = round(time.time() - _t0, 3)
+    _attempt_count = _verify_attempt_count(folder)
     receipt = build_receipt(
         stage="stage1",
         status="COMPLETE",
@@ -434,7 +503,7 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             ["stage0_fit_gate.json", "authoring_packet.json", "authoring_prompt.md"],
         ),
         output_hashes=file_hash_map(folder, out_files),
-        result={"verify_only": True},
+        result={"verify_only": True, "duration_seconds": _duration, "verify_attempts": _attempt_count},
         checks={
             "contracts.check_stage1_ready": True,
             "author_from_packet.run_verify_only": True,
@@ -451,8 +520,74 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     # Unlock Stage 2 READY only — no Stage 2 work in CR-077
     state["stages"]["stage2"]["status"] = "READY"
     state["stages"]["stage2"]["receipt_id"] = None
+    # M1.1/M1.2 — fix-round count reuses CR-097's own verify_history.json rather than
+    # re-tracking attempts here; run_verify_only's own docstring caps normal use at 2 fix
+    # rounds before escalating, so >2 (attempt_count > 3) is out-of-policy, not just "high."
+    append_event(
+        folder,
+        _run_id,
+        "stage1.validate",
+        "complete",
+        duration_seconds=_duration,
+        verify_attempts=_attempt_count,
+    )
     write_state(folder, state)
     return state
+
+
+def _finding_severity_counts(findings_doc: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for f in findings_doc.get("findings") or []:
+        sev = str(f.get("severity") or "UNKNOWN")
+        counts[sev] = counts.get(sev, 0) + 1
+    return counts
+
+
+def _disposition_counts(folder: str, phase: str, findings_doc: dict[str, Any]) -> dict[str, int]:
+    """M2.2 — disposition-type distribution for this phase's current findings.
+    Reads reviews/dispositions.json directly rather than re-deriving from policy's verdict,
+    since the verdict only distinguishes open-vs-resolved, not which enum value was chosen."""
+    path = os.path.join(folder, "reviews", "dispositions.json")
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    by_id = doc.get("by_finding_id") or {}
+    ids_this_phase = {f.get("id") for f in findings_doc.get("findings") or []}
+    counts: dict[str, int] = {}
+    for fid, disp in by_id.items():
+        if fid not in ids_this_phase:
+            continue
+        disp_s = str(disp)
+        counts[disp_s] = counts.get(disp_s, 0) + 1
+    return counts
+
+
+def _emit_subphase_event(
+    folder: str,
+    run_id: str,
+    phase: str,
+    event: str,
+    *,
+    started_at: float,
+    findings_doc: dict[str, Any],
+    reasons: list[str] | None = None,
+) -> None:
+    """Shared Stage 2 subphase observability call — see design doc §3 M2.1/M2.2/M2.3.
+    Used by both the inline truth/ats verdict logic and the shared _apply_subphase_verdict
+    (hm/mech), so all four subphases get identical fields regardless of which code path they
+    take internally."""
+    fields: dict[str, Any] = {
+        "duration_seconds": round(time.time() - started_at, 3),
+        "findings_by_severity": _finding_severity_counts(findings_doc),
+        "disposition_counts": _disposition_counts(folder, phase, findings_doc),
+    }
+    if reasons:
+        fields["reasons"] = reasons
+    append_event(folder, run_id, f"stage2.{phase}", event, **fields)
 
 
 def collect_truth_findings(folder: str) -> dict[str, Any]:
@@ -535,6 +670,8 @@ def collect_truth_findings(folder: str) -> dict[str, Any]:
 
 def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-079: Stage 2A Truth/Evidence — findings + dispositions; never Stage 2 COMPLETE."""
+    _run_id = new_run_id()
+    _t0 = time.time()
     folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
@@ -567,6 +704,7 @@ def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = "FAILED"
         state["active_stage"] = "stage2"
         write_state(folder, state)
+        _emit_subphase_event(folder, _run_id, "truth", "failed", started_at=_t0, findings_doc=findings_doc, reasons=verdict.get("reasons"))
         raise WorkflowError(
             "Truth policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
@@ -579,6 +717,7 @@ def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = "NEEDS_DISPOSITION"
         state["active_stage"] = "stage2"
         write_state(folder, state)
+        _emit_subphase_event(folder, _run_id, "truth", "needs_disposition", started_at=_t0, findings_doc=findings_doc)
         return state
 
     # PASS — mark 2A COMPLETE, unlock ATS for CR-080 (LOCKED until then is wrong —
@@ -593,6 +732,7 @@ def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     state["status"] = "IN_PROGRESS"
     state["active_stage"] = "stage2"
     write_state(folder, state)
+    _emit_subphase_event(folder, _run_id, "truth", "complete", started_at=_t0, findings_doc=findings_doc)
     return state
 
 
@@ -646,6 +786,8 @@ def collect_ats_findings(folder: str) -> dict[str, Any]:
 
 def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-080: Stage 2B ATS/AI — findings + dispositions; never Stage 2 COMPLETE."""
+    _run_id = new_run_id()
+    _t0 = time.time()
     folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
@@ -679,6 +821,7 @@ def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = "FAILED"
         state["active_stage"] = "stage2"
         write_state(folder, state)
+        _emit_subphase_event(folder, _run_id, "ats", "failed", started_at=_t0, findings_doc=findings_doc, reasons=verdict.get("reasons"))
         raise WorkflowError(
             "ATS policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
@@ -690,6 +833,7 @@ def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
         state["status"] = "NEEDS_DISPOSITION"
         state["active_stage"] = "stage2"
         write_state(folder, state)
+        _emit_subphase_event(folder, _run_id, "ats", "needs_disposition", started_at=_t0, findings_doc=findings_doc)
         return state
 
     ats["status"] = "COMPLETE"
@@ -702,6 +846,7 @@ def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     state["status"] = "IN_PROGRESS"
     state["active_stage"] = "stage2"
     write_state(folder, state)
+    _emit_subphase_event(folder, _run_id, "ats", "complete", started_at=_t0, findings_doc=findings_doc)
     return state
 
 
@@ -723,8 +868,15 @@ def _apply_subphase_verdict(
     findings_doc: dict[str, Any],
     next_phase: str | None,
     fail_label: str,
+    run_id: str | None = None,
+    started_at: float | None = None,
 ) -> dict[str, Any]:
-    """Shared disposition → subphase COMPLETE / WAITING / FAIL helper."""
+    """Shared disposition → subphase COMPLETE / WAITING / FAIL helper.
+
+    run_id/started_at are optional (default to a fresh id / now) so any caller that predates this
+    instrumentation still works unchanged — only hm/mech pass real ones today."""
+    _run_id = run_id or new_run_id()
+    _t0 = started_at if started_at is not None else time.time()
     dispositions = sync_dispositions_for_phase(folder, phase, findings_doc)
     verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
     fhash = findings_content_hash(findings_doc)
@@ -738,6 +890,7 @@ def _apply_subphase_verdict(
         state["status"] = "FAILED"
         state["active_stage"] = "stage2"
         write_state(folder, state)
+        _emit_subphase_event(folder, _run_id, phase, "failed", started_at=_t0, findings_doc=findings_doc, reasons=verdict.get("reasons"))
         raise WorkflowError(
             f"{fail_label} policy FAIL:\n  - "
             + "\n  - ".join(verdict.get("reasons") or [])
@@ -750,6 +903,7 @@ def _apply_subphase_verdict(
         state["status"] = "NEEDS_DISPOSITION"
         state["active_stage"] = "stage2"
         write_state(folder, state)
+        _emit_subphase_event(folder, _run_id, phase, "needs_disposition", started_at=_t0, findings_doc=findings_doc)
         return state
 
     phase_rec["status"] = "COMPLETE"
@@ -763,6 +917,7 @@ def _apply_subphase_verdict(
     state["status"] = "IN_PROGRESS"
     state["active_stage"] = "stage2"
     write_state(folder, state)
+    _emit_subphase_event(folder, _run_id, phase, "complete", started_at=_t0, findings_doc=findings_doc)
     return state
 
 
@@ -820,6 +975,8 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
 
 def run_stage2_hm(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-081: Stage 2C Critical HM review."""
+    _run_id = new_run_id()
+    _t0 = time.time()
     folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
@@ -837,6 +994,8 @@ def run_stage2_hm(folder: str, state: dict[str, Any]) -> dict[str, Any]:
         findings_doc=findings_doc,
         next_phase="mech",
         fail_label="HM",
+        run_id=_run_id,
+        started_at=_t0,
     )
 
 
@@ -977,6 +1136,8 @@ def run_stage2_mech(
     folder: str, state: dict[str, Any], *, compile_pdfs: bool = True
 ) -> dict[str, Any]:
     """CR-081: Stage 2D final mechanical verify."""
+    _run_id = new_run_id()
+    _t0 = time.time()
     folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
@@ -994,11 +1155,15 @@ def run_stage2_mech(
         findings_doc=findings_doc,
         next_phase="policy",
         fail_label="Mech",
+        run_id=_run_id,
+        started_at=_t0,
     )
 
 
 def run_stage2_policy(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-081: Stage 2E — write Stage 2 COMPLETE receipt when all subphases + check_stage2_ready."""
+    _run_id = new_run_id()
+    _t0 = time.time()
     folder = _resolve_folder(folder)
     state = reconcile(folder, state)
     state = ensure_stage2_subphases(state)
@@ -1044,20 +1209,29 @@ def run_stage2_policy(folder: str, state: dict[str, Any]) -> dict[str, Any]:
                 indent=2,
             )
             f.write("\n")
+        append_event(
+            folder, _run_id, "stage2.policy", "needs_disposition",
+            duration_seconds=round(time.time() - _t0, 3), blockers=errors,
+        )
         return state
 
     # All clear — mint Stage 2 COMPLETE receipt
     mode = state.get("mode") or "production"
     integrity = s2.get("integrity") or "CLEAN"
+    # Resume.pdf/CoverLetter.pdf are deliberately NOT hashed into output_hashes:
+    # Chromium's page.pdf() (compile_single.py) stamps a fresh /CreationDate and
+    # /ModDate on every render, so a byte hash of the compiled PDF churns even when
+    # the reviewed content is unchanged. That false churn was flipping already-COMPLETE
+    # submissions to STALE (invalidate.py's reconcile cascade locks stage3) and failing
+    # check_workflow_complete purely from an incidental recompile (see amphenol_rf,
+    # replay_log.md entry 3 + follow-up). Content fidelity is still protected here via
+    # the Resume.md/CoverLetter.md hashes below -- those are the documents Stage 2
+    # actually reviewed, and they don't carry a render-time timestamp.
     out_files = [
         "Resume.md",
         "CoverLetter.md",
         "verification_receipt.json",
     ]
-    if os.path.exists(os.path.join(folder, "Resume.pdf")):
-        out_files.append("Resume.pdf")
-    if os.path.exists(os.path.join(folder, "CoverLetter.pdf")):
-        out_files.append("CoverLetter.pdf")
     if os.path.exists(os.path.join(folder, "draft_manifest.json")):
         out_files.append("draft_manifest.json")
 
@@ -1097,6 +1271,12 @@ def run_stage2_policy(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     state["active_stage"] = "stage3"
     write_state(folder, state)
     _run_advisory_defect_scan()
+    # M3.2 — integrity=OVERRIDDEN here is the real Stage 2 quality signal, not the plain
+    # completion fact; keep it in the event, never averaged away in a batch report.
+    append_event(
+        folder, _run_id, "stage2.policy", "complete",
+        duration_seconds=round(time.time() - _t0, 3), integrity=integrity,
+    )
     return state
 
 
@@ -1137,6 +1317,8 @@ def run_stage3_finalize(
     db_path: str | None = None,
 ) -> dict[str, Any]:
     """CR-084: Stage 3 — wrap finalize_submission_job; mint stage3 receipt; terminal status."""
+    _run_id = new_run_id()
+    _t0 = time.time()
     state = reconcile(folder, state)
     folder = _resolve_folder(folder)
     slug = os.path.basename(folder.rstrip("/\\"))
@@ -1201,8 +1383,10 @@ def run_stage3_finalize(
                 "contracts.check_finalize_ready": (not force),
             }
         except NotReadyToFinalizeError as exc:
+            append_event(folder, _run_id, "stage3", "failed", duration_seconds=round(time.time() - _t0, 3), reason=str(exc)[:500])
             raise WorkflowError(str(exc)) from exc
         except ImplausibleJobTitleError as exc:
+            append_event(folder, _run_id, "stage3", "failed", duration_seconds=round(time.time() - _t0, 3), reason=str(exc)[:500])
             raise WorkflowError(str(exc)) from exc
 
     integrity = "OVERRIDDEN" if _integrity_any_overridden(state) else (
@@ -1235,6 +1419,7 @@ def run_stage3_finalize(
     if not in_files:
         in_files = ["verification_receipt.json"]
 
+    _duration = round(time.time() - _t0, 3)
     receipt = build_receipt(
         stage="stage3",
         status="COMPLETE",
@@ -1247,6 +1432,7 @@ def run_stage3_finalize(
             "title": title,
             "reach_out": bool(reach_out),
             "finalize": finalize_result,
+            "duration_seconds": _duration,
         },
         checks=checks,
         prior_receipt_id=r2.get("receipt_id"),
@@ -1276,6 +1462,12 @@ def run_stage3_finalize(
             state["stages"]["stage2"]["status"] = "COMPLETE"
             state["stages"]["stage2"]["receipt_id"] = r2.get("receipt_id")
     write_state(folder, state)
+    # M3.1/M3.2 — wf_status distinguishes COMPLETE from COMPLETE_WITH_OVERRIDE/PRACTICE_COMPLETE;
+    # never collapse integrity into a plain "success" boolean in any downstream report.
+    append_event(
+        folder, _run_id, "stage3", "complete",
+        duration_seconds=_duration, workflow_status=wf_status, integrity=integrity,
+    )
     return state
 
 

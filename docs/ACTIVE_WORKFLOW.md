@@ -1,6 +1,6 @@
 # Active Workflow (Source of Truth)
 
-**Status:** Active · **Replaces:** `.agent/workflows/*`, `.agent/Instructions.md` for WebApp operations  
+**Status:** Active · **Replaces:** the old pre-CR-070 `.agent/workflows/*` pipeline for WebApp operations  
 **See also:** [README.md](../README.md) (setup), [AGENTS.md](../AGENTS.md) (SDD changes)
 
 ---
@@ -33,7 +33,7 @@
 - Pass/skip floor = `data/fit_rubric_calibration.json` → **`score_bands.skip_floor: 40`** / **`tier1_floor: 65`** (CR-093 Story 3.3, locked 2026-08-20). Research-grounded working floor, not yet calibrated against Applyr interview outcomes.
 - Engine: `scripts/evidence_scale.py`, wired into `scripts/build_stage0_fit_gate.py` Step 5.5. Spec: `data/fit_rubric_spec.html`.
 - Deterministic exclusion hard gates run before model-dependent extraction and evidence scoring (CR-100). Obvious no-go roles can be skipped when local models are unavailable; non-excluded roles remain fail-closed.
-- `candidate_preferences.json`'s `min_fit_score` (was default 72) and `.agent/rules/job_fit_engine.md` (archived) no longer exist / apply — do not resurrect either.
+- `candidate_preferences.json`'s `min_fit_score` (was default 72) and the old `job_fit_engine.md` rubric (archived) no longer exist / apply — do not resurrect either.
 
 ### Data sources of truth
 
@@ -52,10 +52,10 @@
 
 Before editing `batch_pipeline.py`, gates, or draft compiler:
 
-1. Read `.agent/rules/pipeline_env.md`
+1. Read `docs/spec/05-change-requests/CR-021-local-funnel-compose-hardening.md` (superseded the archived `pipeline_env.md` rule file)
 2. Call `init_pipeline_prefs()` at script entry (see `scripts/utils.py`)
 3. Prefer **deterministic gates** before LLM (`industry_gate`, title blocklist, keyword/anchor gates)
-4. Draft verification: **`scripts/verification_chain.py`** (not `claim_verifier.md` prose alone)
+4. Draft verification: **`scripts/verification_chain.py`** (not `docs/claim-verifier-rubric.md` prose alone)
 5. Spawn Python only via **`server/pipeline/processRunner.ts`**
 
 ### Verification (run before push)
@@ -90,6 +90,6 @@ Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spe
 
 **Material changes:** `CR-*` → registry → FEAT → traceability → code (cite `FR-*`) → verification → `CHANGELOG.md` + `PRODUCT_CAPABILITIES.md`.
 
-**Do not use for active work:** `.agent/archive/**`, `docs/history/JobAgent_WebApp_PRD 5.0.md` (archived UX), chat `/scout` / `/evaluate` workflows. The old WebApp evaluate route was removed under CR-093.
+**Do not use for active work:** `docs/history/JobAgent_WebApp_PRD 5.0.md` (archived UX), chat `/scout` / `/evaluate` workflows. The old WebApp evaluate route was removed under CR-093.
 
 **Change-request index:** [docs/spec/05-change-requests/README.md](spec/05-change-requests/README.md)

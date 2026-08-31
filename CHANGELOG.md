@@ -1,3 +1,23 @@
+- **Stage 0-3 observability MVP (2026-08-30/31).** Ahead of replaying `data/submissions/*`
+  through Stages 0-3 to find bugs, added the instrumentation designed in
+  `docs/spec/08-implementation/OBSERVABILITY-DESIGN-2026-08-30-stage0-3-replay-reporting.md`:
+  duration is now captured at the top of each `run_stageN` wrapper in
+  `scripts/workflow/runner.py` (not inside `build_receipt`, which only ever runs after a
+  stage's real work already finished — confirmed by tracing the actual call sites, not
+  assumed); a new append-only `observability/run_events.jsonl` per submission (new
+  `scripts/workflow/observability.py`), generalizing the pattern
+  `stage1_first_draft/verify_history.json` already proved for Stage 1, with finding-severity
+  and disposition-type breakdowns per Stage 2 subphase; a per-opportunity Markdown report
+  (`scripts/observability_report.py`, writes `{folder}/observability/report.md`) that degrades
+  gracefully for submissions with no recorded events yet; and a compact per-stage console
+  summary in `run_submission.py`. Running the report generator against all 15 real submissions
+  during development caught a real bug it wasn't looking for: `partner_co`'s
+  `truth_findings.json` emits the same finding id twice, which the report now flags explicitly
+  as a data-quality warning instead of silently producing a disposition table whose numbers
+  didn't add up. Batch reporting (comparing many opportunities at once) and disposition
+  causal-attribution are designed but intentionally not built yet — see the design doc's Epic
+  E/F. 43/43 test suites pass (`run_all_tests.py`), `tsc --noEmit` clean.
+
 - **Workflow authority audit fixes (2026-08-30).** End-to-end functional audit of
   the submission generation workflow found and fixed 5 defects in the receipt-chain
   system. (1) `run_stage1_validate` was writing the Stage 1 COMPLETE receipt's

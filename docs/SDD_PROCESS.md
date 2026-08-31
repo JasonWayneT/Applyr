@@ -10,7 +10,7 @@
 Every change, regardless of size, must propagate through all three layers of the project:
 
 ### 1. Layer 1: Business Documentation (The "Why")
-- **Action:** Update the relevant PRD, Design System (`docs/DESIGN.md`), or Rule file (`.agent/rules/`).
+- **Action:** Update the relevant PRD, Design System (`docs/DESIGN.md`), or Rule file (`docs/claim-verifier-rubric.md`, `docs/research-packet-contract.md`).
 - **Goal:** Ensure the business logic and design intent remain the source of truth.
 
 ### 2. Layer 2: Specifications (The "What")
@@ -42,7 +42,7 @@ Every change, regardless of size, must propagate through all three layers of the
 When improving job opportunity collection (not drafting/research):
 
 1. **Document first:** `CR-027+` in `docs/spec/05-change-requests/`, registry IDs `FR-170+`, update `FEAT-001`, `FEAT-002`, `FEAT-009`, traceability, and `IMP-CR-*` under `docs/spec/08-implementation/`.
-2. **Layer 1:** Update `.agent/rules/job_fit_engine.md` when LLM rubric and deterministic gates must stay aligned.
+2. **Layer 1:** Update `.claude/skills/generate-submission/SKILL.md` Stage 0 when the fit rubric and deterministic gates must stay aligned (job_fit_engine.md was archived and superseded by this; see `AGENTS.md`'s "Active threads" for the current fit-rubric CRs).
 3. **Gate design rules:**
    - Prefer **deterministic** gates before LLM fit; share logic in `scripts/*_gate.py` when possible.
    - TypeScript scout gates (`scout_local.ts`) must mirror Python semantics or call Python; document any intentional subset scope (e.g. industry: company/title only at scout).

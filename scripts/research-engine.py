@@ -67,7 +67,7 @@ def fetch_company_intel_gemini(company, role, prompt):
 def fetch_cover_letter_hook_fact(company, role):
     """
     Lightweight Stage 1 cover-letter research (2026-08-06, Jason-supplied planning doc Round 5) --
-    NOT the Research_Packet_Contract dossier (`.agent/rules/Research_Packet_Contract.md`, reconnected
+    NOT the Research_Packet_Contract dossier (`docs/research-packet-contract.md`, reconnected
     for on-demand interview-cheat-sheet generation only, see generate_cheat_sheet.py -- that full
     packet is only worth the token cost once an interview is actually scheduled).
 
@@ -200,7 +200,7 @@ def fetch_company_intel(company, role, contract_path=None):
 
     # Gemini is the primary research provider (2026-08-06, Jason-supplied) -- not a fallback from
     # Perplexity. `fetch_company_intel_perplexity` above is kept defined for reference/a possible
-    # future re-enablement (same archival-not-deletion pattern as `.agent/archive/`) but is not
+    # future re-enablement (same archival-not-deletion pattern used elsewhere in this repo) but is not
     # called from this path. Previously this function tried Perplexity first when configured (FR-061)
     # and only reached Gemini when it wasn't -- an implicit default, not a deliberate choice.
     return fetch_company_intel_gemini(company, role, prompt)

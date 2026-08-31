@@ -25,12 +25,12 @@ This repository uses BMAD-informed Spec Driven Development. All AI agents must f
 5. `docs/spec/06-traceability/traceability-matrix.md`
 6. `docs/spec/01-bmad-intake.md` (historical sources only)
 
-**Deprecated for active work:** `.agent/archive/**`, `.agent/workflows/*` stubs, `docs/history/JobAgent_WebApp_PRD 5.0.md`
+**Deprecated for active work:** `docs/history/JobAgent_WebApp_PRD 5.0.md`
 
 ## The Three-Layer Rule
 
 Every change must be reflected across all three layers:
-- **Layer 1 (Business):** PRDs (`docs/history/JobAgent_Architecture_and_PRD.md`), rules (`.agent/rules/`), or design system (`docs/DESIGN.md`).
+- **Layer 1 (Business):** PRDs (`docs/history/JobAgent_Architecture_and_PRD.md`), rules (`docs/claim-verifier-rubric.md`, `docs/research-packet-contract.md`), or design system (`docs/DESIGN.md`).
 - **Layer 2 (Specs):** `docs/spec/` directory (Requirements, Feature Specs, Traceability).
 - **Layer 3 (Code):** `scripts/`, `server/`, or `src/`.
 

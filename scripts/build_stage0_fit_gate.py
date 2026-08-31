@@ -2488,7 +2488,20 @@ def _resolve_folder(raw: str) -> Path:
     return p
 
 
-def batch_report(folders: list[Path], write: bool = True, force: bool = False) -> str:
+def _has_stage0_receipt(folder: Path) -> bool:
+    """True once run_submission.py has minted a real Stage 0 receipt for this folder.
+
+    Found 2026-08-30/31 during the Stage 0-3 replay: this CLI's own write path has zero
+    awareness of stage_receipts/ — writing stage0_fit_gate.json here silently orphaned the
+    receipt chain on 7 already-COMPLETE submissions (the file changed under receipts that
+    still recorded its old hash, and stage1's prior_receipt_id kept pointing at the old
+    stage0 receipt). warn_worker_cli only prints a note; nothing actually stopped the write.
+    This makes that a hard refusal instead, since a stderr note evidently wasn't enough.
+    """
+    return (folder / "stage_receipts" / "stage0.json").exists()
+
+
+def batch_report(folders: list[Path], write: bool = True, force: bool = False, bypass_receipt_guard: bool = False) -> str:
     """Story 2.6 — run Stage 0 on many folders; return Markdown Tier 1/2/Skip table.
 
     # Implements FR-252 (batch triage without a cloud agent), FR-264 (placement)
@@ -2507,7 +2520,8 @@ def batch_report(folders: list[Path], write: bool = True, force: bool = False) -
             raise
         out_path = folder / "stage0_fit_gate.json"
         protected = (not force) and _has_extraction_override(out_path)
-        if write and not protected:
+        has_receipt = (not bypass_receipt_guard) and _has_stage0_receipt(folder)
+        if write and not protected and not has_receipt:
             out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
             apply_stage0_placement(folder, result)
         tier = result.get("tier", "Skip")
@@ -2518,6 +2532,12 @@ def batch_report(folders: list[Path], write: bool = True, force: bool = False) -
         reason = reason.replace("\u2192", "->").replace("\u2014", "-").replace("\u2013", "-")
         if protected:
             reason = f"{reason} [NOT WRITTEN -- extraction_override protected, use --force]"
+        elif has_receipt:
+            reason = (
+                f"{reason} [NOT WRITTEN -- stage_receipts/stage0.json already exists; this "
+                "folder is owned by run_submission.py. Use that (--resume/--force), or pass "
+                "--bypass-receipt-guard if you really mean to write here directly.]"
+            )
         company = result.get("company", folder.name)
         buckets[tier].append(f"| {company} | {reason} |")
 
@@ -2562,6 +2582,14 @@ def _main() -> None:
         help="Overwrite an existing stage0_fit_gate.json even if it's hand-corrected "
         "(extraction_override: true). Without this flag such a file is never touched.",
     )
+    parser.add_argument(
+        "--bypass-receipt-guard",
+        action="store_true",
+        help="Write stage0_fit_gate.json even when stage_receipts/stage0.json already exists "
+        "for this folder. Doing so orphans the receipt chain (run_submission.py will report "
+        "check_workflow_complete: NO afterward) -- only pass this if you're about to --resume "
+        "that folder right after to re-mint the chain.",
+    )
     args = parser.parse_args()
 
     if not args.folder:
@@ -2571,7 +2599,7 @@ def _main() -> None:
     write = not args.no_write
 
     if args.batch_table or len(folders) > 1:
-        print(batch_report(folders, write=write, force=args.force))
+        print(batch_report(folders, write=write, force=args.force, bypass_receipt_guard=args.bypass_receipt_guard))
         sys.exit(0)
 
     folder = folders[0]
@@ -2590,7 +2618,8 @@ def _main() -> None:
 
     out_path = folder / "stage0_fit_gate.json"
     protected = (not args.force) and _has_extraction_override(out_path)
-    if write and not protected:
+    has_receipt = (not args.bypass_receipt_guard) and _has_stage0_receipt(folder)
+    if write and not protected and not has_receipt:
         out_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
         from stage0_placement import apply_stage0_placement
         folder = apply_stage0_placement(folder, result)
@@ -2598,6 +2627,14 @@ def _main() -> None:
         print(
             f"NOTE: '{out_path}' has extraction_override: true — not overwritten. "
             "Pass --force to override.",
+            file=sys.stderr,
+        )
+    elif has_receipt:
+        print(
+            f"REFUSED: '{out_path}' already has a Stage 0 receipt "
+            f"(stage_receipts/stage0.json) -- this folder is owned by run_submission.py. "
+            "Use `python scripts/run_submission.py <folder> --resume` (or --force) instead, "
+            "or pass --bypass-receipt-guard if you really mean to write here directly.",
             file=sys.stderr,
         )
 

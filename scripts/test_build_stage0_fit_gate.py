@@ -48,6 +48,7 @@ from build_stage0_fit_gate import (
     extract_salary_range,
     _load_anchor_vocab,
     _has_extraction_override,
+    _has_stage0_receipt,
     batch_report,
     _BACHELORS_SATISFIED_RE,
     _HIGHER_DEGREE_MANDATORY_RE,
@@ -1475,6 +1476,54 @@ class TestExtractionOverrideProtection(unittest.TestCase):
         self.assertFalse(out_path.exists())
         batch_report([folder], write=True, force=False)
         self.assertTrue(out_path.exists())
+
+
+class TestReceiptGuard(unittest.TestCase):
+    """Found 2026-08-30/31 during the Stage 0-3 replay: this file's own CLI/batch_report had
+    zero awareness of stage_receipts/ -- a direct run against an already-COMPLETE submission
+    silently orphaned the receipt chain on 7 real submissions (file changed, receipt didn't).
+    warn_worker_cli only ever printed a stderr note; nothing stopped the write."""
+
+    def _folder_with_receipt(self) -> Path:
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        out_path = folder / "stage0_fit_gate.json"
+        out_path.write_text(json.dumps({"tier": "Tier 2", "decision": "PASS"}, indent=2), encoding="utf-8")
+        receipts_dir = folder / "stage_receipts"
+        receipts_dir.mkdir(parents=True, exist_ok=True)
+        (receipts_dir / "stage0.json").write_text(
+            json.dumps({"stage": "stage0", "status": "COMPLETE"}, indent=2), encoding="utf-8"
+        )
+        return folder
+
+    def test_has_stage0_receipt_detects_it(self):
+        folder = self._folder_with_receipt()
+        self.assertTrue(_has_stage0_receipt(folder))
+
+    def test_has_stage0_receipt_false_when_absent(self):
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        self.assertFalse(_has_stage0_receipt(folder))
+
+    def test_batch_report_refuses_to_overwrite_a_folder_with_a_receipt(self):
+        folder = self._folder_with_receipt()
+        out_path = folder / "stage0_fit_gate.json"
+        before = out_path.read_text(encoding="utf-8")
+        batch_report([folder], write=True, force=False)
+        after = out_path.read_text(encoding="utf-8")
+        self.assertEqual(before, after, "a folder owned by run_submission.py must not be silently overwritten")
+
+    def test_batch_report_writes_anyway_with_bypass_flag(self):
+        folder = self._folder_with_receipt()
+        out_path = folder / "stage0_fit_gate.json"
+        before = out_path.read_text(encoding="utf-8")
+        batch_report([folder], write=True, force=False, bypass_receipt_guard=True)
+        after = out_path.read_text(encoding="utf-8")
+        self.assertNotEqual(before, after, "--bypass-receipt-guard must still allow an explicit direct write")
+
+    def test_batch_report_reason_column_explains_the_refusal(self):
+        folder = self._folder_with_receipt()
+        report = batch_report([folder], write=True, force=False)
+        self.assertIn("NOT WRITTEN", report)
+        self.assertIn("run_submission.py", report)
 
 
 # ---------------------------------------------------------------------------

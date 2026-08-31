@@ -23,6 +23,7 @@ from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import contracts  # noqa: E402
 from workflow.runner import _resolve_folder, WorkflowError  # noqa: E402
 from workflow.receipts import load_receipt  # noqa: E402
 from workflow.observability import read_events  # noqa: E402
@@ -48,9 +49,15 @@ def gather(folder: str) -> dict[str, Any]:
     raising — a submission from before this instrumentation existed should still get a report,
     just a thinner one."""
     slug = os.path.basename(folder.rstrip("/\\"))
+    try:
+        complete, complete_errors = contracts.check_workflow_complete(folder)
+    except Exception as exc:  # noqa: BLE001 — a broken folder must still get a report, not a crash
+        complete, complete_errors = False, [f"check_workflow_complete raised: {exc}"]
     return {
         "slug": slug,
         "folder": folder,
+        "check_workflow_complete": complete,
+        "check_workflow_complete_errors": complete_errors,
         "workflow_state": _load_json_safe(os.path.join(folder, "workflow_state.json")),
         "receipts": {
             stage: load_receipt(folder, stage) for stage in ("stage0", "stage1", "stage2", "stage3")
@@ -148,6 +155,15 @@ def render(data: dict[str, Any]) -> str:
     if header_bits:
         lines.append(" · ".join(header_bits))
     lines.append(f"Workflow status: **{ws.get('status', 'unknown')}**")
+    if data["check_workflow_complete"]:
+        lines.append("`check_workflow_complete`: **YES** — receipt chain verified end-to-end.")
+    else:
+        lines.append(
+            "`check_workflow_complete`: **NO** — the authoritative predicate disagrees with "
+            "the `status` field above. This is a real, not cosmetic, integrity finding:"
+        )
+        for err in data["check_workflow_complete_errors"]:
+            lines.append(f"  - {err}")
     if not data["events"]:
         lines.append(
             "\n> No `observability/run_events.jsonl` found for this opportunity — it predates "

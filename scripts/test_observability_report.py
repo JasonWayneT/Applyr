@@ -48,6 +48,38 @@ class TestGatherAndRenderDegradeGracefully(unittest.TestCase):
         self.assertIn("predates this instrumentation", report)
 
 
+class TestCheckWorkflowCompleteSurfaced(unittest.TestCase):
+    """A real submission (allcares_3af2ed54) was found with workflow_state.json's own `status`
+    saying COMPLETE while contracts.check_workflow_complete said NO (a broken receipt chain).
+    The report must surface that disagreement loudly, not just echo the status field."""
+
+    def test_yes_renders_as_verified(self):
+        data = {
+            "slug": "x", "folder": "/x", "check_workflow_complete": True,
+            "check_workflow_complete_errors": [], "workflow_state": {"status": "COMPLETE"},
+            "receipts": {"stage0": None, "stage1": None, "stage2": None, "stage3": None},
+            "stage0_fit_gate": {}, "findings": {}, "dispositions": {}, "verify_history": [], "events": [],
+        }
+        report = obs_report.render(data)
+        self.assertIn("check_workflow_complete`: **YES**", report)
+
+    def test_no_renders_the_disagreement_and_the_real_errors(self):
+        data = {
+            "slug": "x", "folder": "/x", "check_workflow_complete": False,
+            "check_workflow_complete_errors": [
+                "stage0 output stage0_fit_gate.json hash mismatch (stale vs receipt)",
+                "stage1 prior_receipt_id is 'stage1:abc', expected 'stage0:def' (broken receipt chain)",
+            ],
+            "workflow_state": {"status": "COMPLETE"},
+            "receipts": {"stage0": None, "stage1": None, "stage2": None, "stage3": None},
+            "stage0_fit_gate": {}, "findings": {}, "dispositions": {}, "verify_history": [], "events": [],
+        }
+        report = obs_report.render(data)
+        self.assertIn("check_workflow_complete`: **NO**", report)
+        self.assertIn("broken receipt chain", report)
+        self.assertIn("hash mismatch", report)
+
+
 class TestDispositionTableMath(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -60,6 +92,8 @@ class TestDispositionTableMath(unittest.TestCase):
         return {
             "slug": "test-co",
             "folder": self.folder,
+            "check_workflow_complete": True,
+            "check_workflow_complete_errors": [],
             "workflow_state": {"status": "COMPLETE", "stages": {}},
             "receipts": {"stage0": None, "stage1": None, "stage2": None, "stage3": None},
             "stage0_fit_gate": {},

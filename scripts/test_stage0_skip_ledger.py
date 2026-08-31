@@ -349,12 +349,21 @@ class ImportAndFitGateTests(unittest.TestCase):
             "Requirements:\n- 5 years of product management\n",
             encoding="utf-8",
         )
-        result = build_stage0_fit_gate(
-            folder,
-            db_gate_result={"action": "clear", "reason": "", "reason_code": "no_terminal_rows"},
-            skip_ledger_db=self.db,
-            ignore_skip_ledger=True,
-        )
+        # ignore_skip_ledger=True pushes this past the ledger short-circuit into
+        # real classify_gaps()/screen_responsibilities_for_exclusion() -- both
+        # call evidence_scale.classify_requirement() for real, hitting a live
+        # Ollama server (found 2026-08-31: STAGE0_SECTION_MODE=deterministic
+        # above only forces the regex *extractor*, not classification). This
+        # test only checks the ledger short-circuit didn't fire, so the
+        # classification outcome itself doesn't matter -- mock it out.
+        with mock.patch("build_stage0_fit_gate.classify_gaps", return_value=([], [], [])), \
+                mock.patch("build_stage0_fit_gate.screen_responsibilities_for_exclusion", return_value=[]):
+            result = build_stage0_fit_gate(
+                folder,
+                db_gate_result={"action": "clear", "reason": "", "reason_code": "no_terminal_rows"},
+                skip_ledger_db=self.db,
+                ignore_skip_ledger=True,
+            )
         self.assertNotEqual(result.get("skip_reason_code"), "skip_ledger")
 
 

@@ -1218,15 +1218,20 @@ def run_stage2_policy(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     # All clear — mint Stage 2 COMPLETE receipt
     mode = state.get("mode") or "production"
     integrity = s2.get("integrity") or "CLEAN"
+    # Resume.pdf/CoverLetter.pdf are deliberately NOT hashed into output_hashes:
+    # Chromium's page.pdf() (compile_single.py) stamps a fresh /CreationDate and
+    # /ModDate on every render, so a byte hash of the compiled PDF churns even when
+    # the reviewed content is unchanged. That false churn was flipping already-COMPLETE
+    # submissions to STALE (invalidate.py's reconcile cascade locks stage3) and failing
+    # check_workflow_complete purely from an incidental recompile (see amphenol_rf,
+    # replay_log.md entry 3 + follow-up). Content fidelity is still protected here via
+    # the Resume.md/CoverLetter.md hashes below -- those are the documents Stage 2
+    # actually reviewed, and they don't carry a render-time timestamp.
     out_files = [
         "Resume.md",
         "CoverLetter.md",
         "verification_receipt.json",
     ]
-    if os.path.exists(os.path.join(folder, "Resume.pdf")):
-        out_files.append("Resume.pdf")
-    if os.path.exists(os.path.join(folder, "CoverLetter.pdf")):
-        out_files.append("CoverLetter.pdf")
     if os.path.exists(os.path.join(folder, "draft_manifest.json")):
         out_files.append("draft_manifest.json")
 

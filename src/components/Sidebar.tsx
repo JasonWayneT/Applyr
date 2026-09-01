@@ -7,9 +7,11 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   jobs: Job[];
+  // Implements FR-285: surface the shared Review Center pending count.
+  reviewPendingCount?: number;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs, reviewPendingCount = 0 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [accountLabel, setAccountLabel] = useState('Local account');
@@ -34,6 +36,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
     { name: 'Dashboard', icon: 'grid_view' },
     { name: 'Opportunities', icon: 'view_kanban' },
     { name: 'Job Search', icon: 'radar' },
+    { name: 'Review Center', icon: 'fact_check' },
     { name: 'Tuning Log', icon: 'tune' },
     { name: 'Settings', icon: 'account_circle' },
   ];
@@ -100,9 +103,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
           <button
             key={item.name}
             onClick={() => handleNavigate(item.name)}
-            className={`w-full flex items-center gap-3 py-3 px-4 rounded-xl text-sm transition-all active:translate-x-1 duration-200 border ${
+            className={`w-full flex items-center gap-3 py-3 px-4 rounded-xl text-sm transition-transform active:translate-x-1 duration-200 border ${
               activeTab === item.name
-                ? 'text-sidebar-text-active font-bold border-transparent bg-sidebar-active'
+                ? 'text-on-primary font-bold border-transparent bg-sidebar-active'
                 : 'text-sidebar-text border-transparent hover:text-sidebar-text-active hover:bg-sidebar-hover'
             }`}
           >
@@ -114,8 +117,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs }) => {
             </span>
             <span className="tracking-tight">{item.name}</span>
             {item.name === 'Dashboard' && newJobsCount > 0 && (
-              <span className="ml-auto bg-secondary text-on-secondary text-[10px] font-bold px-2 py-0.5 rounded-full">
+              <span className="ml-auto bg-secondary text-sidebar-bg text-[10px] font-bold px-2 py-0.5 rounded-full">
                 {newJobsCount}
+              </span>
+            )}
+            {item.name === 'Review Center' && reviewPendingCount > 0 && (
+              <span className="ml-auto bg-warning text-sidebar-bg text-[10px] font-bold px-2 py-0.5 rounded-full">
+                {reviewPendingCount}
               </span>
             )}
           </button>

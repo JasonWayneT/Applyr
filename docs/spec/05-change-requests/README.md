@@ -58,6 +58,7 @@
 | CR-081 | HM + final mech + Stage 2 policy receipt — critical_read, compile+verify_one, stage2.json COMPLETE, stage3 READY | **In progress** (2026-08-09) — `FR-262`, `AC-316`–`AC-320` — [spec](CR-081-hm-mech-stage2-receipt.md) |
 | CR-084 | Stage 3 finalize under orchestrator — `--finalize` wraps finalize_submission_job; stage3 receipt; COMPLETE / COMPLETE_WITH_OVERRIDE / PRACTICE_COMPLETE | **In progress** (2026-08-09) — `FR-263`, `AC-321`–`AC-325` — [spec](CR-084-stage3-finalize-orchestrator.md) |
 | CR-103 | ATS retrieval evidence & PDF parser QA | **Implemented** (2026-08-27) — `FR-266`–`FR-267`, `AC-339`–`AC-342` — [spec](CR-103-ats-retrieval-and-parser-qa.md) |
+| CR-108 | Stage 0 evidence cascade, durable checkpoints, skill confirmations, and Review Center | **Proposed** (2026-08-31) — `FR-278`–`FR-285`, `NFR-009`–`NFR-012`, `DATA-002`–`DATA-004` — [spec](CR-108-stage0-evidence-cascade-and-confirmations.md), [implementation plan](../08-implementation/IMP-CR-108-stage0-evidence-cascade.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

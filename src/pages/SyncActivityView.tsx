@@ -556,7 +556,7 @@ const SyncActivityView: React.FC = () => {
       }
     });
 
-    es.addEventListener('run_complete', (e: MessageEvent) => {
+    es.addEventListener('run_complete', () => {
       try {
         setAssetStages((prev) => prev.map((s) => ({ ...s, status: s.status === 'error' ? 'error' : 'done' })));
         setSystemStatus({

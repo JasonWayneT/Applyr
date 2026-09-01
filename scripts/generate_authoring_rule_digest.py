@@ -125,6 +125,10 @@ Bullet counts: most-recent role 5–6; earlier roles 2–3 each.
   - "Centralized Contact Database" → "centralized contact source-of-truth database"
   - "Critical Save Program" → "high-risk account retention program"
   - "White Glove Accounts" → "premium high-revenue enterprise clients"
+- Every claim card states its Employer. Draft that claim ONLY under that employer's
+  role section (Cision / Sterkly / Zero To Sixty) — never under a different role just
+  because it fills that role's gap. A Cision story stays Cision even if Sterkly needs
+  a bullet and nothing else fits.
 
 ---
 
@@ -231,6 +235,7 @@ Never: forced, made, imposed, or drove other teams "into" a decision.
 
 - Every claim_id, excerpt, metric, and company name belongs to THIS job's packet —
   never carried over from a different draft in the same session.
+- Every cited claim's Employer matches the role section you drafted it under (rule 3).
 - Zero gap-confession language ("is new territory for me," "I have not yet," "are
   new to me"). Thin evidence gets the strongest honest bridge, not a named gap.
 - Zero em dashes, semicolons, double-hyphens, or colon-as-elaboration (`word: word`).

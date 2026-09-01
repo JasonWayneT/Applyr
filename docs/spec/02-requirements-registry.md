@@ -707,6 +707,41 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-356` | acceptance | P2 | implemented | `AGENTS.md`'s rule section renamed and reframed around "resolve and retry immediately" | `FR-277` | CR-107 |
 | `AC-357` | acceptance | P2 | implemented | Full Python suite, full JS/TS suite, and `tsc --noEmit` pass after the rename | `FR-277` | CR-107 |
 
+### CR-108 Stage 0 evidence cascade and durable confirmations (FR-278–FR-285)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-278` | functional | P0 | draft | Deterministic Stage 0 evidence index resolves only approved high-precision, ground-truth-backed cases before model escalation | `AC-358` | CR-108 |
+| `FR-279` | functional | P1 | draft | Stage 0 evidence provider/model policy is configurable in AI Usage; default chain is Groq then Gemini, with explicit Local option | `AC-359` | CR-108 |
+| `FR-280` | functional | P0 | draft | Ambiguous Stage 0 requirement lines are classified in one validated structured batch per opportunity | `AC-360` | CR-108 |
+| `FR-281` | functional | P0 | draft | Low-confidence, invalid, or ungrounded HARD judgments cannot disqualify an opportunity | `AC-361` | CR-108 |
+| `FR-282` | functional | P0 | draft | Stage 0 persists per-item checkpoints and resumes a paused opportunity without redoing committed work | `AC-362` | CR-108 |
+| `FR-283` | functional | P0 | draft | Unknown named skills and tools use durable canonical skill memory and grouped confirmation occurrences | `AC-363` | CR-108 |
+| `FR-284` | functional | P0 | draft | User skill attestation remains separate from verified authoring evidence and cannot create unsupported claims | `AC-364` | CR-108 |
+| `FR-285` | functional | P1 | draft | Review Center UI and harness adapter resolve shared durable confirmations and show affected opportunities | `AC-365` | CR-108 |
+| `AC-358` | acceptance | P0 | draft | High-precision verified evidence is resolved without a provider call and never emits HARD | `FR-278` | CR-108 |
+| `AC-359` | acceptance | P1 | draft | Settings uses the configured Stage 0 evidence provider/model policy; no Local or cloud fallback is implicit | `FR-279` | CR-108 |
+| `AC-360` | acceptance | P0 | draft | One structured batch response contains exactly one valid result for every ambiguous item ID | `FR-280` | CR-108 |
+| `AC-361` | acceptance | P0 | draft | Low-confidence or ungrounded HARD is escalated or held, never used for automatic disqualification | `FR-281` | CR-108 |
+| `AC-362` | acceptance | P0 | draft | Crash/restart after a committed judgment reuses it and executes only missing work on resume | `FR-282` | CR-108 |
+| `AC-363` | acceptance | P0 | draft | An unknown named tool creates one grouped durable question, pauses only its opportunity, and does not block other jobs | `FR-283` | CR-108 |
+| `AC-364` | acceptance | P0 | draft | A Yes answer without verified evidence cannot enter the authoring evidence map or generated documents | `FR-284` | CR-108 |
+| `AC-365` | acceptance | P1 | draft | UI and harness answers update the same confirmation record and make the affected opportunity resumable | `FR-285` | CR-108 |
+| `AC-366` | acceptance | P0 | draft | Hard-gate review actions have explicit semantics: keep eligible, confirm disqualification, or remain waiting for more information | `FR-281` | CR-108 |
+| `AC-367` | acceptance | P0 | draft | The active CR-093 golden entries run through the configured provider adapter with deterministic fixture responses for Groq and Gemini, without logging credentials or candidate contact text | `NFR-009`, `NFR-012` | CR-108 |
+| `AC-368` | acceptance | P0 | draft | Python and TypeScript normalize the same Stage 0 provider policy fixture to the same provider order, local-only behavior, and provider-specific model defaults | `FR-279`, `NFR-012` | CR-108 |
+| `AC-369` | acceptance | P0 | draft | Injected failures before, during, and after each Stage 0 checkpoint leave a retryable run and never duplicate a committed judgment | `FR-282`, `NFR-011` | CR-108 |
+| `AC-370` | acceptance | P1 | draft | Isolated API integration tests cover authenticated list/answer behavior, grouped confirmations, hard-gate actions, idempotent repeats, and database injection without using the production database | `FR-285`, `NFR-011` | CR-108 |
+| `AC-371` | acceptance | P0 | draft | Explicit evidence promotion creates a durable source-update proposal and does not make the attestation authorable until the local source-of-truth update is verified | `FR-284`, `DATA-003` | CR-108 |
+| `AC-372` | acceptance | P1 | draft | CR-108 documentation and traceability identify the rollout gate, provider-backed validation limitation, and any unresolved risks after tests complete | `NFR-009`, `NFR-011`, `NFR-012` | CR-108 |
+| `AC-373` | acceptance | P1 | draft | Test-generated Stage 0 rows are attributable to isolated fixtures or an explicit run key, and cleanup never deletes unverified user data | `DATA-002`, `DATA-004` | CR-108 |
+
+### Data Traceability (DATA-002 to DATA-004)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `DATA-002` | data | P0 | draft | Durable Stage 0 request, response, item judgment, and content-hash checkpoint data | `AC-362` | CR-108 |
+| `DATA-003` | data | P0 | draft | Canonical skill memory stores confirmed, negative, uncertain, and evidence-backed states | `AC-363`, `AC-364` | CR-108 |
+| `DATA-004` | data | P1 | draft | Pending confirmation occurrences retain requirement context and affected opportunity links | `AC-363`, `AC-365` | CR-108 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |
@@ -719,6 +754,10 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `NFR-006` | infrastructure | P1 | implemented | Zero-Trust Remote Binding — Vite client and Express server bind to `0.0.0.0` to permit authorized access across overlay networks (Tailscale) |
 | `NFR-007` | cost | P0 | implemented | Cloud authoring input context per company must use a lean packet + rule digest; default path must not reload full `agent_context_pack.md` + full skill into a second independent cloud review agent per company (CR-074) |
 | `NFR-008` | reliability | P1 | implemented | ATS retrieval and PDF parser checks are local, deterministic, and WARN-only |
+| `NFR-009` | accuracy | P0 | draft | Stage 0 cascade must preserve or exceed CR-093's 21/21 active gate-and-source golden-set result and prevent unsafe HARD decisions |
+| `NFR-010` | cost/performance | P1 | draft | Stage 0 records deterministic resolution rate, batch calls, fallback calls, provider/model, tokens when available, and duration |
+| `NFR-011` | reliability | P0 | draft | Stage 0 survives interruption and provider failure by reusing committed judgments and resuming per opportunity |
+| `NFR-012` | security/privacy | P0 | draft | Cloud requests use configured credentials, existing PII redaction, and only the intended JD/evidence context |
 
 ## Security Requirements
 

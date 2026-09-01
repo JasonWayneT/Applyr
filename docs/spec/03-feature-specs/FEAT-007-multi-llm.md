@@ -10,4 +10,18 @@ To enable users to choose their preferred LLM provider (Gemini, Claude, or a loc
 
 ## Requirements Addressed
 * `FR-040`: Multi-LLM Selection & Provider Configuration Support
+* `FR-279`: Stage 0 evidence provider/model policy is configurable, with Groq -> Gemini as the default chain and Local as an explicit option (`CR-108`, rollout-flagged)
 * `AC-041`: Custom LLM routing based on active database settings
+
+## CR-108 hardening verification
+
+The Stage 0 provider policy must be normalized identically by Python and
+TypeScript. A shared fixture covers the default Groq-to-Gemini chain,
+provider-specific model identifiers, explicit Local-only mode, and invalid or
+duplicate provider entries. Provider golden tests use deterministic transport
+fixtures by default. Live Groq/Gemini calls are an opt-in release-gate sample,
+not a required offline test dependency.
+
+The deterministic provider fixtures pass all 21 active CR-093 entries for both
+Groq and Gemini. Python and TypeScript normalization parity is verified. The
+live sample and default cutover remain deferred.

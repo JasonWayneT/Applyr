@@ -457,6 +457,19 @@ HARD_BLOCK_RULES: List[LintRule] = [
         ),
         doc_types=["cover_letter"],
     ),
+    LintRule(
+        rule_id="LR-037",
+        severity="HARD_BLOCK",
+        check_type="regex",
+        pattern=r"\b(query performance footprint|audited database table schemas?|audited table schemas?|database table schemas?)\b",
+        message="Database schema audit or query performance footprint overclaim detected",
+        suggestion=(
+            "Jason queries existing SQL databases to trace data flow (ACC-121 / workExperience.md §1.0), "
+            "but does not audit/design schemas or profile query performance footprints. "
+            "Reframe as: 'Queried and navigated customer SQL databases to trace pipeline data flow...'"
+        ),
+        doc_types=["cover_letter", "resume"],
+    ),
 ]
 
 WARN_RULES: List[LintRule] = [

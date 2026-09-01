@@ -7,6 +7,9 @@ import JobDetailPanel from './components/JobDetailPanel';
 import NotificationPanel from './components/NotificationPanel';
 import TuningLogView from './pages/TuningLogView';
 import SettingsView from './components/SettingsView';
+import ReviewCenterView from './pages/ReviewCenterView';
+import { useReviewCenter } from './hooks/useReviewCenter';
+import { companyOpportunityKey } from './lib/reviewCenter';
 import { useJobs } from './hooks/useJobs';
 import type { OpportunitiesFilter } from './types/opportunities';
 
@@ -16,6 +19,7 @@ function App() {
   const [opportunitiesFilter, setOpportunitiesFilter] = useState<OpportunitiesFilter>('All');
   const mainRef = useRef<HTMLElement>(null);
   const { jobs, isLoaded, selectedJob, setSelectedJob, handleStatusChange } = useJobs();
+  const reviewCenter = useReviewCenter();
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -50,6 +54,25 @@ function App() {
         return <SyncActivityView />;
       case 'Settings':
         return <SettingsView />;
+      // Implements FR-285: expose Review Center within the existing application shell.
+      case 'Review Center':
+        return (
+          <ReviewCenterView
+            items={reviewCenter.items}
+            isLoading={reviewCenter.isLoading}
+            available={reviewCenter.available}
+            error={reviewCenter.error}
+            onRefresh={() => { void reviewCenter.refresh(); }}
+            onAnswer={reviewCenter.answer}
+            onVerifyPromotion={reviewCenter.verifyPromotion}
+            onOpenJob={(jobId) => {
+              const job = jobs.find(candidate =>
+                candidate.id === jobId || companyOpportunityKey(candidate.company) === jobId,
+              );
+              if (job) setSelectedJob(job);
+            }}
+          />
+        );
       case 'Tuning Log':
         return <TuningLogView jobs={jobs} onJobClick={setSelectedJob} />;
       default:
@@ -64,7 +87,12 @@ function App() {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-surface text-on-surface">
       {/* Sidebar Navigation */}
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} jobs={jobs} />
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        jobs={jobs}
+        reviewPendingCount={reviewCenter.pendingCount}
+      />
 
       {/* Top Header */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -113,6 +141,7 @@ function App() {
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
         onStatusChange={handleStatusChange}
+        onNavigateToReviewCenter={() => setActiveTab('Review Center')}
       />
     </div>
   );

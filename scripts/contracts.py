@@ -512,6 +512,10 @@ def check_workflow_complete(folder: str) -> tuple[bool, list[str]]:
         return False, [
             "workflow WAITING_FOR_LLM — paste authoring_prompt.md; Stage 1 not finished"
         ]
+    if status == "WAITING_FOR_INPUT":
+        return False, [
+            "workflow WAITING_FOR_INPUT — resolve Review Center confirmations then --resume"
+        ]
     if status == "NEEDS_DISPOSITION":
         return False, [
             "workflow NEEDS_DISPOSITION — dispose Truth/ATS/HM findings then --resume"

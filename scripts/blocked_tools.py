@@ -150,7 +150,8 @@ def load_skills_catalog_terms(skills_path: str | None = None) -> frozenset[str]:
     terms: set[str] = set()
     if _os.path.exists(path):
         try:
-            catalog = _json.loads(open(path, encoding="utf-8").read())
+            with open(path, encoding="utf-8") as handle:
+                catalog = _json.load(handle)
             for values in catalog.values():
                 for t in values:
                     t = t.strip().lower()

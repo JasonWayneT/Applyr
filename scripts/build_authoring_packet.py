@@ -871,11 +871,19 @@ def _format_excerpt_card(
     """WE span plus hedge header, or a lens pointer for a later lens of the same story.
 
     Implements CR-094: author sees retrieved WE, not catalog `text`.
+
+    CR-108 (2026-08-31, Papigen + a 12-submission sweep): the header must name the
+    claim's employer explicitly. Before this, the header carried no employer signal
+    at all -- only _synthetic_excerpt()'s fallback path did -- so the author had no
+    way to know a "coached an engineer" story belonged to Cision, and repeatedly
+    drafted it under Sterkly instead wherever a role's bullet template needed a
+    coaching-flavored line. Same claim, same bug, in 10 of 18 real submissions.
     """
     from we_acc_index import hedges_for_project
 
     project_id = str(rec.get("project_id") or cid)
     lens = str(rec.get("lens") or "").strip() or "story"
+    employer = str(rec.get("employer") or "").strip() or "unspecified"
     hedges = hedges_for_project(we_text, project_id)
     attr = str(rec.get("attribution") or hedges.get("attribution") or "").strip()
     prohibited = rec.get("prohibited_claims") or hedges.get("prohibited_claims") or []
@@ -883,7 +891,10 @@ def _format_excerpt_card(
         prohibited = [prohibited]
     attr_s = attr.upper() if attr else "unspecified"
     dnc = "; ".join(str(p) for p in prohibited) if prohibited else "none listed"
-    header = f"Lens {lens} of {project_id}. Attribution: {attr_s}. Prohibited: {dnc}."
+    header = (
+        f"Lens {lens} of {project_id}. Employer: {employer}. "
+        f"Attribution: {attr_s}. Prohibited: {dnc}."
+    )
     if pointer_to:
         body = (
             f"{header} Same WE story as {pointer_to}. Write this JD item through the "
@@ -1102,6 +1113,7 @@ def build_claim_constraints(
         out[cid] = {
             "project_id": project_id,
             "lens": str(rec.get("lens") or "").strip() or "story",
+            "employer": str(rec.get("employer") or "").strip(),
             "attribution": attr.upper() if attr else "",
             "prohibited_claims": [str(p) for p in prohibited],
             "allowed_claims": [str(a) for a in allowed],

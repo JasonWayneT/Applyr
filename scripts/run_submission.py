@@ -88,6 +88,7 @@ def _print_status(folder: str) -> int:
         print(f"  - {e}")
     terminal = (
         "WAITING_FOR_LLM",
+        "WAITING_FOR_INPUT",
         "NEEDS_DISPOSITION",
         "SKIPPED",
         "COMPLETE",
@@ -295,6 +296,12 @@ def main() -> None:
             print(
                 "WAITING_FOR_LLM — paste authoring_prompt.md into a fresh agent "
                 "(SYSTEM=digest, USER=packet). Do not load agent_context_pack.md."
+            )
+            sys.exit(0)
+        if status == "WAITING_FOR_INPUT":
+            print(
+                "WAITING_FOR_INPUT — resolve the pending Review Center confirmation "
+                "then rerun this opportunity with --resume."
             )
             sys.exit(0)
         if status == "NEEDS_DISPOSITION":

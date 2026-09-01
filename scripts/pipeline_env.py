@@ -38,6 +38,11 @@ def stage0_section_mode() -> str:
     return _flag("STAGE0_SECTION_MODE", "nlp")
 
 
+def stage0_evidence_cascade_enabled() -> bool:
+    """Return whether the CR-108 batched evidence service is explicitly enabled."""
+    return _flag("STAGE0_EVIDENCE_CASCADE") in ("1", "true", "yes", "on")
+
+
 # DRAFT_MODE values that keep the compose-path deterministic defaults (JD profile,
 # cover hook). "local_rewrite" (CR-062) is an additive layer on top of "compose" — it
 # changes how already-selected text is phrased, not how the JD gets profiled or which

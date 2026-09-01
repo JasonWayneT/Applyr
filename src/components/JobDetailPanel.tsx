@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Job } from '../types/job';
 import { Contact } from '../types/contact';
 import { api } from '../lib/api';
+import { companyOpportunityKey, fetchReviewQueue } from '../lib/reviewCenter';
+import type { ReviewItem } from '../types/reviewCenter';
 import StatusChip from './StatusChip';
 import DocumentEditor from './DocumentEditor';
 import {
@@ -79,6 +81,7 @@ interface JobDetailPanelProps {
   job: Job | null;
   onClose: () => void;
   onStatusChange?: (id: string, newStatus: string) => void;
+  onNavigateToReviewCenter?: () => void;
 }
 
 const STATUS_PROGRESSIONS: Partial<Record<Job['status'], { label: string; next: string; icon: string }>> = {
@@ -89,7 +92,12 @@ const STATUS_PROGRESSIONS: Partial<Record<Job['status'], { label: string; next: 
   'Core Interviews':   { label: 'Offer Received!',      next: 'Offer and Negotiation', icon: 'celebration' },
 };
 
-const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusChange }) => {
+const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
+  job,
+  onClose,
+  onStatusChange,
+  onNavigateToReviewCenter,
+}) => {
   const [files, setFiles] = useState<JobFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [companyLogs, setCompanyLogs] = useState<any[]>([]);
@@ -111,6 +119,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
   const [editingContent, setEditingContent] = useState<string>('');
   const [pdfReloadKey, setPdfReloadKey] = useState<number>(0);
   const [systemStatus, setSystemStatus] = useState<any>(null);
+  const [pausedReview, setPausedReview] = useState<ReviewItem | null>(null);
 
   const [skillGap, setSkillGap] = useState<string | null>(null);
   const [loadingSkillGap, setLoadingSkillGap] = useState(false);
@@ -175,6 +184,20 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
       .then(r => r.json())
       .then(data => setSystemStatus(data))
       .catch(() => {});
+
+    fetchReviewQueue()
+      .then(({ items }) => {
+        const opportunityKey = companyOpportunityKey(job.company);
+        const match = items.find(item =>
+          item.status === 'open' &&
+          (item.type === 'skill_presence' || item.type === 'hard_gate_review') &&
+          item.affectedOpportunities.some(opportunity =>
+            opportunity.jobId === job.id || opportunity.jobId === opportunityKey,
+          ),
+        );
+        setPausedReview(match ?? null);
+      })
+      .catch(() => setPausedReview(null));
 
     setLoadingDebriefs(true);
     resetDebriefForm();
@@ -457,6 +480,31 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({ job, onClose, onStatusC
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-8 applyr-scrollbar">
+            {pausedReview && (
+              <section
+                className="bg-warning-container text-on-warning-container rounded-2xl p-5"
+                aria-label="Review required before this opportunity can continue"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined mt-0.5">pause_circle</span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm font-bold">This opportunity is waiting for your review</h3>
+                    <p className="text-xs mt-1 leading-relaxed">
+                      {pausedReview.title} needs an answer before Stage 0 can continue. Open Review Center to resolve it.
+                    </p>
+                    {onNavigateToReviewCenter && (
+                      <button
+                        type="button"
+                        onClick={onNavigateToReviewCenter}
+                        className="min-h-10 mt-3 px-3 rounded-lg bg-surface-container-lowest text-warning text-xs font-bold hover:bg-surface-container transition-colors"
+                      >
+                        Open Review Center
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </section>
+            )}
             {/* Details — discovered / applied / interview glance */}
             <section className="bg-surface-container-low p-6 rounded-2xl">
               <h3 className="text-lg font-headline font-bold text-on-surface mb-4">Details</h3>

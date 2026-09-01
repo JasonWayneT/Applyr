@@ -1,3 +1,13 @@
+- [DRAFT] **CR-108 Stage 0 evidence cascade and Review Center hardening (2026-08-31).**
+  Added the accuracy-first deterministic evidence cascade, batched Groq-to-Gemini
+  classification, explicit Local selection, durable Stage 0 checkpoints, and shared
+  UI/harness confirmation workflows. The Review Center backend and UI are enabled
+  behind the rollout flag. Deterministic Groq and Gemini fixtures cover all 21 active
+  CR-093 entries, Python and TypeScript policy normalization is parity-tested,
+  checkpoint failure injection and isolated API coverage pass, and evidence promotion
+  now waits for exact local source verification. Live provider sampling, archive replay,
+  and default cutover remain deferred until the CR-093 release gate is complete.
+
 - **Stage 0-3 observability MVP (2026-08-30/31).** Ahead of replaying `data/submissions/*`
   through Stages 0-3 to find bugs, added the instrumentation designed in
   `docs/spec/08-implementation/OBSERVABILITY-DESIGN-2026-08-30-stage0-3-replay-reporting.md`:

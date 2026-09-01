@@ -54,6 +54,11 @@ from build_stage0_fit_gate import (
     _HIGHER_DEGREE_MANDATORY_RE,
     _YEARS_EXPERIENCE_LEADIN_RE,
 )
+from stage0_confirmations import (
+    answer_confirmation,
+    create_skill_confirmation,
+    named_skill_candidates,
+)
 from evidence_scale import EvidenceJudgment
 from stage0_prefs_gate import (
     run_prefs_gate,
@@ -484,13 +489,42 @@ def _make_submission_folder(jd_text: str) -> Path:
 def _build(jd_text: str, company: str = "TestCo", db_result: dict | None = None) -> dict:
     """Build stage0 result for inline JD text."""
     folder = _make_submission_folder(jd_text)
+    db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
+    os.close(db_fd)
     # Rename folder to match company slug for display
-    return build_stage0_fit_gate(
-        folder,
-        db_gate_result=db_result or _DB_CLEAR,
-        prefs=_PREFS_MINIMAL,
-        vocab=_load_anchor_vocab(),
-    )
+    try:
+        # This legacy classification fixture suite predates the interactive
+        # Review Center boundary. Resolve its unknown named-tool candidates
+        # as NOT_PRESENT in the isolated test DB so these tests exercise the
+        # scoring contract; the pause/resume lifecycle is covered separately
+        # by test_stage0_confirmations.py.
+        for candidate in named_skill_candidates([jd_text]):
+            create_skill_confirmation(
+                db_path=db_path,
+                skill_key=candidate.skill_key,
+                display_name=candidate.display_name,
+                requirement=candidate.display_name,
+                opportunity_key=folder.name,
+                opportunity_company=company,
+                opportunity_title="Product Manager",
+            )
+            answer_confirmation(
+                db_path=db_path,
+                review_key=f"skill:{candidate.skill_key}",
+                answer="NOT_PRESENT",
+            )
+        return build_stage0_fit_gate(
+            folder,
+            db_gate_result=db_result or _DB_CLEAR,
+            prefs=_PREFS_MINIMAL,
+            vocab=_load_anchor_vocab(),
+            confirmation_db_path=db_path,
+        )
+    finally:
+        try:
+            os.unlink(db_path)
+        except FileNotFoundError:
+            pass
 
 
 # ---------------------------------------------------------------------------

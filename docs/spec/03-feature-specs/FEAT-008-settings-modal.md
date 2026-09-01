@@ -4,8 +4,8 @@
 To align the Applyr platform design with premium AI products (such as Anthropic Claude), the settings configuration should transition from a static profile sub-tab to a high-fidelity, absolute-positioned modal overlay. This modal provides a single control room for theme styling, API keys, usage limits tracking, and privacy settings.
 
 ## 2. Requirement Mapping
-- **Requirement ID:** `FR-041`
-- **Acceptance Criterion:** `AC-042`
+- **Requirement ID:** `FR-041`, `FR-279`
+- **Acceptance Criterion:** `AC-042`, `AC-359`
 
 ## 3. Visual & Functional Specifications
 
@@ -27,3 +27,10 @@ Replicates the Claude usage panel with clean progress bars and dynamic usage ind
 
 ### C. Unified LLM Engine Selector
 Migrates the Multi-LLM provider selection directly into the modal for seamless, centralized setup.
+
+### D. Stage 0 evidence task settings (CR-108, rollout-flagged)
+The AI Usage area will expose the Stage 0 evidence-classification task separately
+from the global provider selector. It will show the active provider/model policy,
+the default Groq -> Gemini chain, an explicit Local option, and the user's
+responsibility for configured provider charges. It will not silently change the
+provider policy for drafting, email, or research tasks.

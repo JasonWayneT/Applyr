@@ -248,6 +248,23 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-248` | CR-053/055 | Gate prefs preserved on UI materialize | `server/domain/jobSearchPrefs.ts`, `scripts/prefs_rollout.py` | implemented |
 | `IMP-CR-053-055` | CR-053/054/055 | FEAT-002, FEAT-004, FEAT-009 | `docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md` | in_progress |
 | `FR-252` | CR-074 | Deterministic Stage 0 builder | `scripts/build_stage0_fit_gate.py`, `scripts/stage0_db_gate.py`, `scripts/stage0_prefs_gate.py` | implemented |
+| `FR-278` | CR-108 | Deterministic Stage 0 evidence index | `scripts/stage0_evidence_cascade.py`, `scripts/build_stage0_fit_gate.py`, `scripts/stage0_confirmations.py` | in_progress |
+| `FR-279` | CR-108 | Stage 0 provider/model policy | `scripts/stage0_evidence_cascade.py`, `server/services/stage0Policy.ts`, `src/components/SettingsView.tsx` | in_progress |
+| `FR-280` | CR-108 | Batched structured Stage 0 classification | `scripts/stage0_evidence_cascade.py`, `scripts/build_stage0_fit_gate.py` | in_progress |
+| `FR-281` | CR-108 | Asymmetric HARD safety policy | `scripts/stage0_evidence_cascade.py`, `scripts/stage0_confirmations.py`, `server/routes/reviewCenter.ts` | in_progress |
+| `FR-282` | CR-108 | Durable checkpoint and resume behavior | `scripts/stage0_checkpoint.py`, `scripts/build_stage0_fit_gate.py` | in_progress |
+| `FR-283` | CR-108 | Canonical skill memory and grouped confirmations | `scripts/stage0_confirmations.py`, `server/repository/reviewCenterRepository.ts` | in_progress |
+| `FR-284` | CR-108 | Attestation and verified-evidence boundary | `scripts/stage0_confirmations.py`, `server/repository/reviewCenterRepository.ts`, `server/migrations/021_add_evidence_promotion_proposals.sql` | implemented |
+| `FR-285` | CR-108 | Review Center and harness resolver parity | `server/routes/reviewCenter.ts`, `src/pages/ReviewCenterView.tsx`, `scripts/stage0_harness.py` | in_progress |
+| `NFR-009` | CR-108 | Stage 0 golden accuracy and unsafe-HARD release gate | `scripts/check_fit_rubric_golden_set.py`, `scripts/test_stage0_provider_golden.py` | in_progress |
+| `NFR-010` | CR-108 | Stage 0 aggregate provider telemetry | `scripts/build_stage0_fit_gate.py`, `server/routes/llmUsage.ts` | implemented |
+| `NFR-011` | CR-108 | Stage 0 interruption and provider-failure recovery | `scripts/stage0_checkpoint.py`, `scripts/test_stage0_checkpoint_failures.py` | implemented |
+| `NFR-012` | CR-108 | Stage 0 cloud payload privacy boundary | `scripts/stage0_evidence_cascade.py`, `scripts/test_stage0_evidence_cascade.py` | implemented |
+| `DATA-002` | CR-108 | Stage 0 request, response, judgment, and hash checkpoints | `server/migrations/019_add_stage0_checkpoints.sql`, `scripts/stage0_checkpoint.py` | implemented |
+| `DATA-003` | CR-108 | Canonical skill memory and promotion proposals | `server/migrations/018_add_review_center.sql`, `server/migrations/021_add_evidence_promotion_proposals.sql` | implemented |
+| `DATA-004` | CR-108 | Pending confirmation opportunity context | `server/migrations/018_add_review_center.sql`, `server/repository/reviewCenterRepository.ts` | implemented |
+| `AC-358`–`AC-366` | CR-108 | Cascade, safety, checkpoint, confirmation, hard-gate action, and shared-resolution acceptance cases | `scripts/test_stage0_evidence_cascade.py`, `scripts/test_stage0_confirmations.py`, `scripts/test_stage0_checkpoint_failures.py`, `tests/unit/reviewCenterRepository.test.ts` | implemented |
+| `AC-367`–`AC-373` | CR-108 | Provider fixtures, policy parity, crash recovery, isolated API, promotion safety, documentation, and attributable cleanup | `scripts/test_stage0_provider_golden.py`, `scripts/test_stage0_provider_policy.py`, `scripts/test_stage0_checkpoint_failures.py`, `tests/unit/reviewCenterRoute.test.ts`, read-only SQLite audit | implemented |
 | `FR-253` | CR-074 | Authoring packet builder (fail-closed) | `scripts/build_authoring_packet.py`, `scripts/contracts/authoring_packet_schema.json` | implemented |
 | `FR-254` | CR-074 | Single cloud author from packet | `scripts/author_from_packet.py`, `data/authoring_rule_digest.md`, `.claude/skills/generate-submission/SKILL.md` v2.1.0 | implemented |
 | `FR-255` | CR-074 | Scripts-first Stage 2 default (superseded as *entry sequencing* by CR-076–084 / `run_submission.py`; workers still run under Mech 2D) | `scripts/run_submission.py --resume` → Mech → `verify_submission.py`; debug: `author_from_packet.py --verify-only` | implemented (workers); sequencing superseded by FR-257+ |

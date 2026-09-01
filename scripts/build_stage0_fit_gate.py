@@ -42,12 +42,14 @@ and explicit offline runs only).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import os
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 
 # Measured 2026-08-17 on the real PracticeTek JD: this tag beat llama3.1:8b
 # and every 14B local model on responsibilities completeness. Do not swap
@@ -59,6 +61,15 @@ class Stage0ExtractError(RuntimeError):
     """Requirement extraction cannot proceed. Do not substitute another path."""
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+class Stage0NeedsInput(RuntimeError):
+    """Stage 0 has durable confirmation questions and cannot finalize yet."""
+
+    def __init__(self, opportunity_key: str, pending: list[dict[str, str]]) -> None:
+        super().__init__("Stage 0 is waiting for Review Center input")
+        self.opportunity_key = opportunity_key
+        self.pending = pending
+
+
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -136,6 +147,24 @@ from blocked_tools import HARD_BLOCKED_TOOLS as _HARD_BLOCKED_TOOLS  # noqa: E40
 from blocked_tools import hard_blocked_tool_pattern as _shared_hard_tool_pattern  # noqa: E402
 from blocked_tools import load_skills_catalog_terms as _load_skills_catalog_terms_shared  # noqa: E402
 from blocked_tools import looks_like_named_tool as _looks_like_named_tool  # noqa: E402
+from stage0_confirmations import (  # noqa: E402
+    create_hard_gate_review,
+    create_skill_confirmation,
+    get_hard_gate_decision,
+    get_skill_memory,
+    named_skill_candidates,
+)
+from stage0_checkpoint import (  # noqa: E402
+    checkpoint_boundary,
+    complete_judgment,
+    get_completed_judgment,
+    make_item_key,
+    make_run_key,
+    mark_run_status,
+    start_run,
+    update_run_metadata,
+    write_spool,
+)
 
 # Regex pattern to detect hard-blocked tool names in a requirement string.
 # Compiled lazily.
@@ -1585,6 +1614,160 @@ def _classify_one_item(
     return judgment.to_legacy_dict()
 
 
+def _prepare_skill_confirmations(
+    items: list[str],
+    *,
+    folder: Path,
+    company: str,
+    role: str,
+    internal_terms: list[str] | None,
+    db_path: Path | str | None = None,
+) -> tuple[list[dict[str, str]], dict[str, str]]:
+    """Create pending unknown-tool questions and return confirmed presence terms."""
+    candidates = named_skill_candidates(
+        items,
+        known_terms=set(_load_skills_catalog_terms_shared()),
+        internal_terms=internal_terms,
+    )
+    pending: list[dict[str, str]] = []
+    confirmed_terms: dict[str, str] = {}
+    for candidate in candidates:
+        memory = get_skill_memory(candidate.skill_key, db_path)
+        if memory:
+            if memory.get("decision") == "CONFIRMED_USE":
+                confirmed_terms[candidate.skill_key] = candidate.display_name
+            continue
+        requirement = next(
+            (
+                line
+                for line in items
+                if re.search(re.escape(candidate.display_name), line, re.IGNORECASE)
+            ),
+            candidate.display_name,
+        )
+        create_skill_confirmation(
+            db_path=db_path,
+            skill_key=candidate.skill_key,
+            display_name=candidate.display_name,
+            requirement=requirement,
+            opportunity_key=folder.name,
+            opportunity_company=company,
+            opportunity_title=role,
+            evidence_excerpt=(
+                "Applyr found this named tool in the job description, but it is not "
+                "in verified work history."
+            ),
+        )
+        pending.append(
+            {
+                "review_key": f"skill:{candidate.skill_key}",
+                "skill_key": candidate.skill_key,
+                "display_name": candidate.display_name,
+                "requirement": requirement,
+            }
+        )
+    return pending, confirmed_terms
+
+
+def _cap_confirmed_presence(
+    result: dict,
+    item: str,
+    confirmed_terms: dict[str, str],
+) -> dict:
+    """Keep a bare skill attestation at evidence level one during scoring."""
+    for display_name in confirmed_terms.values():
+        if not re.search(re.escape(display_name), item, re.IGNORECASE):
+            continue
+        result["evidence_level"] = min(int(result.get("evidence_level") or 0), 1)
+        result["gap"] = True
+        result["gap_class"] = "SOFT"
+        result["domain_soft"] = False
+        result["anchor"] = (
+            f"User-confirmed use of {display_name}; presence only, with no "
+            "source-backed duration, proficiency, scope, ownership, or outcome."
+        )
+        break
+    return result
+
+
+def _prepare_hard_gate_reviews(
+    classified_required: list[dict],
+    classified_preferred: list[dict],
+    flagged_gaps: list[dict],
+    *,
+    folder: Path,
+    company: str,
+    role: str,
+    db_path: Path | str | None,
+) -> list[dict[str, str]]:
+    """Persist model-proposed HARD decisions before allowing a cascade run to skip.
+
+    A HARD result is a high-consequence decision. It may be confirmed or
+    rejected in Review Center, but it must never become an automatic Skip
+    merely because a provider returned the label. ``KEEP_ELIGIBLE`` removes
+    the hard gate while retaining the gap as a visible soft gap. A completed
+    ``CONFIRM_HARD`` leaves the original hard result intact.
+    """
+    candidates: list[tuple[str, str, dict]] = []
+    for bucket, results in (
+        ("required", classified_required),
+        ("preferred", classified_preferred),
+    ):
+        for ordinal, result in enumerate(results):
+            if result.get("gap_class") == "HARD":
+                candidates.append(
+                    (bucket, make_item_key(bucket, str(result.get("item") or ""), ordinal), result)
+                )
+    pending: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for bucket, item_key, result in candidates:
+        item = str(result.get("item") or "").strip()
+        if not item or (bucket, item) in seen:
+            continue
+        seen.add((bucket, item))
+        review_key = f"hard:{folder.name}:{item_key}"
+        decision = get_hard_gate_decision(review_key, db_path)
+        if decision is None:
+            create_hard_gate_review(
+                db_path=db_path,
+                item_key=item_key,
+                requirement=item,
+                opportunity_key=folder.name,
+                opportunity_company=company,
+                opportunity_title=role,
+                evidence_excerpt=str(result.get("anchor") or ""),
+            )
+            pending.append(
+                {
+                    "review_key": review_key,
+                    "question_type": "hard_gate_review",
+                    "requirement": item,
+                    "item_key": item_key,
+                }
+            )
+            continue
+        if decision == "KEEP_ELIGIBLE":
+            result["gap"] = True
+            result["gap_class"] = "SOFT"
+            result["gap_source"] = None
+            result["domain_soft"] = False
+            result["anchor"] = (
+                "User chose KEEP_ELIGIBLE; retain this as a visible gap without "
+                "using it as an automatic hard disqualification."
+            )
+            for flagged in flagged_gaps:
+                if flagged.get("item") == item and flagged.get("gap_class") == "HARD":
+                    flagged["gap_class"] = "SOFT"
+                    flagged["gap_source"] = None
+                    flagged["anchor"] = result["anchor"]
+    return pending
+
+
+def _sha256_text(value: str) -> str:
+    """Return a content hash for a checkpoint input or item."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def classify_gaps(
     required_items: list[str],
     preferred_items: list[str],
@@ -1592,6 +1775,9 @@ def classify_gaps(
     vocab: set[str] | None = None,
     company: str = "",
     internal_terms: list[str] | None = None,
+    attested_skill_terms: dict[str, str] | None = None,
+    cached_results: dict[str, dict] | None = None,
+    judgment_callback: Callable[[str, int, str, dict], None] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Classify required and preferred items for gaps via the evidence-scale
@@ -1611,20 +1797,38 @@ def classify_gaps(
     company / internal_terms: same meaning as before — excludes the
     employer's own name/product names from being misread as an external
     tool requirement.
+    attested_skill_terms: user-confirmed skill names that remain capped at
+    evidence level 1 until separately promoted.
+    cached_results: completed checkpoint results keyed by bucket/item ordinal.
+    judgment_callback: called after each newly computed judgment.
     """
     del vocab  # deprecated, unused — see docstring
 
     classified_required: list[dict] = []
-    for item in required_items:
+    for ordinal, item in enumerate(required_items):
+        cache_key = make_item_key("required", item, ordinal)
+        result = (cached_results or {}).get(cache_key)
+        if result is None:
+            result = _classify_one_item(
+                item, work_exp, company=company, internal_terms=internal_terms
+            )
+            if judgment_callback:
+                judgment_callback("required", ordinal, item, result)
         classified_required.append(
-            _classify_one_item(item, work_exp, company=company, internal_terms=internal_terms)
+            _cap_confirmed_presence(result, item, attested_skill_terms or {})
         )
 
     classified_preferred: list[dict] = []
-    for item in preferred_items:
-        result = _classify_one_item(
-            item, work_exp, is_required=False, company=company, internal_terms=internal_terms
-        )
+    for ordinal, item in enumerate(preferred_items):
+        cache_key = make_item_key("preferred", item, ordinal)
+        result = (cached_results or {}).get(cache_key)
+        if result is None:
+            result = _classify_one_item(
+                item, work_exp, is_required=False, company=company, internal_terms=internal_terms
+            )
+            if judgment_callback:
+                judgment_callback("preferred", ordinal, item, result)
+        result = _cap_confirmed_presence(result, item, attested_skill_terms or {})
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
         elif result["gap"]:
@@ -1851,6 +2055,7 @@ def build_stage0_fit_gate(
     *,
     ignore_skip_ledger: bool = False,
     skip_ledger_db: Path | str | None = None,
+    confirmation_db_path: Path | str | None = None,
 ) -> dict:
     """
     Full Stage 0 fit-gate for the submission folder at *folder_path*.
@@ -2060,6 +2265,93 @@ def build_stage0_fit_gate(
     required_raw, required_dropped_n = _cap_requirement_bucket(required_raw)
     preferred_raw, preferred_dropped_n = _cap_requirement_bucket(preferred_raw)
 
+    # Implements FR-283: pause only this opportunity for an unknown named tool.
+    # Do this before any evidence-model calls so a pending answer is durable
+    # even when the score model is unavailable.
+    pending_confirmations, attested_skill_terms = _prepare_skill_confirmations(
+        required_raw + preferred_raw,
+        folder=folder,
+        company=company_display,
+        role=role,
+        internal_terms=internal_terms,
+        db_path=confirmation_db_path,
+    )
+    # work_exp is the exact source text used to build the evidence context.
+    # Its hash participates in the run key so a changed source invalidates reuse.
+    from utils import load_file, WORK_EXP_FILE
+    work_exp = load_file(WORK_EXP_FILE) or ""
+    checkpoint_db_path = confirmation_db_path or os.environ.get("APPLYR_STAGE0_REVIEW_DB")
+    checkpoint_db_path = checkpoint_db_path or _DEFAULT_DB
+    jd_hash = _sha256_text(jd_text)
+    evidence_index_hash = _sha256_text(work_exp)
+    prompt_version = "evidence-scale-v1"
+    cascade_enabled = pipeline_env.stage0_evidence_cascade_enabled()
+    stage0_settings: dict = {}
+    if cascade_enabled:
+        from utils import load_llm_settings
+        stage0_settings = load_llm_settings()
+    provider_policy_hash = _sha256_text(
+        json.dumps(
+            (
+                stage0_settings.get("stage0_evidence_classification")
+                if cascade_enabled
+                else {"provider_order": ["local"], "models": {"local": STAGE0_EXTRACT_MODEL}}
+            )
+            or {},
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+    )
+    run_key = make_run_key(
+        folder.name,
+        jd_hash,
+        prompt_version,
+        provider_policy_hash,
+        evidence_index_hash,
+    )
+    request_hash = _sha256_text(
+        json.dumps(
+            {
+                "run_key": run_key,
+                "required": required_raw,
+                "preferred": preferred_raw,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+    )
+    request_spool_path: str | None = None
+    if cascade_enabled:
+        checkpoint_boundary("before_request_spool")
+        request_spool_path, request_hash = write_spool(
+            folder,
+            "request",
+            run_key,
+            {
+                "run_key": run_key,
+                "required": required_raw,
+                "preferred": preferred_raw,
+            },
+        )
+        checkpoint_boundary("after_request_spool")
+    start_run(
+        checkpoint_db_path,
+        run_key=run_key,
+        opportunity_key=folder.name,
+        jd_hash=jd_hash,
+        prompt_version=prompt_version,
+        provider_policy_hash=provider_policy_hash,
+        evidence_index_hash=evidence_index_hash,
+        request_hash=request_hash,
+        request_spool_path=request_spool_path,
+    )
+    checkpoint_boundary("after_run_requested")
+    mark_run_status(checkpoint_db_path, run_key, "RUNNING")
+    if pending_confirmations:
+        mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
+        checkpoint_boundary("after_pending_confirmation_commit")
+        raise Stage0NeedsInput(folder.name, pending_confirmations)
+
     # --- Step 4: Gap classification (CR-093 evidence-scale engine) ---
     # Extract and score now use the same model (qwen2.5:7b-instruct-q4_K_M).
     # No VRAM handoff needed -- the model stays loaded from extraction.
@@ -2083,11 +2375,130 @@ def build_stage0_fit_gate(
     # Epic 2 Story 2.1) rather than this caller blind-truncating up front;
     # a blind 8000-char prefix was confirmed live to miss real evidence
     # (Pendo/Amplitude, ~char 27800 of the real document).
-    from utils import load_file, WORK_EXP_FILE
-    work_exp = load_file(WORK_EXP_FILE) or ""
+    # The evidence index hash above is computed from the exact source text
+    # supplied to the classifier.
+    cached_results: dict[str, dict] = {}
+    for bucket, items in (("required", required_raw), ("preferred", preferred_raw)):
+        for ordinal, item in enumerate(items):
+            item_key = make_item_key(bucket, item, ordinal)
+            cached = get_completed_judgment(
+                checkpoint_db_path,
+                run_key=run_key,
+                item_key=item_key,
+                request_hash=request_hash,
+                content_hash=_sha256_text(item),
+                evidence_index_hash=evidence_index_hash,
+            )
+            if cached and isinstance(cached.get("judgment"), dict):
+                cached_results[item_key] = cached["judgment"]
+
+    def _persist_judgment(bucket: str, ordinal: int, item: str, judgment: dict) -> None:
+        """Persist a newly computed Stage 0 item judgment for safe resume."""
+        item_key = make_item_key(bucket, item, ordinal)
+        complete_judgment(
+            checkpoint_db_path,
+            judgment_key=f"{run_key}:{item_key}",
+            run_key=run_key,
+            opportunity_key=folder.name,
+            item_key=item_key,
+            item_text=item,
+            bucket=bucket,
+            request_hash=request_hash,
+            content_hash=_sha256_text(item),
+            evidence_index_hash=evidence_index_hash,
+            judgment=judgment,
+            provider="local",
+            model="evidence_scale",
+        )
+        checkpoint_boundary("after_judgment_commit")
+
+    import pipeline_env
+    uncached_items = [
+        (bucket, ordinal, item)
+        for bucket, items in (("required", required_raw), ("preferred", preferred_raw))
+        for ordinal, item in enumerate(items)
+        if make_item_key(bucket, item, ordinal) not in cached_results
+    ]
+    if cascade_enabled and uncached_items:
+        from stage0_evidence_cascade import BatchItem, classify_requirements_batch
+        from evidence_scale import build_evidence_context
+
+        batch_items = [
+            BatchItem(
+                make_item_key(bucket, item, ordinal),
+                bucket,
+                item,
+                evidence_excerpt=build_evidence_context(
+                    item,
+                    work_exp,
+                    k=4,
+                    max_chars=6000,
+                ),
+            )
+            for bucket, ordinal, item in uncached_items
+        ]
+        cascade_telemetry = {
+            "stage0_cascade_batches": 1,
+            "stage0_cascade_provider_calls": 0,
+            "stage0_cascade_fallbacks": 0,
+            "stage0_cascade_items": len(batch_items),
+        }
+
+        def _record_provider_event(provider: str, event: str) -> None:
+            """Record provider names and aggregate cascade events without payload text."""
+            del provider
+            if event == "call":
+                cascade_telemetry["stage0_cascade_provider_calls"] += 1
+            elif event == "fallback":
+                cascade_telemetry["stage0_cascade_fallbacks"] += 1
+
+        try:
+            checkpoint_boundary("before_provider_call")
+
+            def _spool_response(raw_response: str) -> None:
+                """Persist the provider response before validation or judgment writes."""
+                response_path, response_hash = write_spool(
+                    folder,
+                    "response",
+                    run_key,
+                    {"raw_response": raw_response},
+                )
+                mark_run_status(
+                    checkpoint_db_path,
+                    run_key,
+                    "RUNNING",
+                    response_spool_path=response_path,
+                    response_hash=response_hash,
+                )
+                checkpoint_boundary("after_response_spool")
+
+            batch_results = classify_requirements_batch(
+                batch_items,
+                settings=stage0_settings,
+                raw_response_callback=_spool_response,
+                provider_event_callback=_record_provider_event,
+            )
+        except Exception as exc:
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        finally:
+            update_run_metadata(checkpoint_db_path, run_key, cascade_telemetry)
+        for batch_item in batch_items:
+            result = batch_results[batch_item.item_id]
+            _persist_judgment(
+                batch_item.bucket,
+                int(batch_item.item_id.split(":", 2)[1]),
+                batch_item.requirement,
+                result,
+            )
+            cached_results[batch_item.item_id] = result
+
     classified_required, classified_preferred, flagged_gaps = classify_gaps(
         required_raw, preferred_raw, work_exp=work_exp, company=company_display,
-        internal_terms=internal_terms,
+        internal_terms=internal_terms, attested_skill_terms=attested_skill_terms,
+        cached_results=cached_results, judgment_callback=_persist_judgment,
     )
 
     # 2026-08-21 follow-up to Fix 1: the JD's own role-framing prose lives in
@@ -2107,6 +2518,23 @@ def build_stage0_fit_gate(
             }
             for h in resp_exclusion_hits
         )
+
+    # Model-proposed HARD decisions are reviewable only on the explicitly
+    # enabled cascade path. The legacy local classifier remains the rollback
+    # path until the cascade has cleared its accuracy and recovery gates.
+    if cascade_enabled:
+        pending_hard_reviews = _prepare_hard_gate_reviews(
+            classified_required,
+            classified_preferred,
+            flagged_gaps,
+            folder=folder,
+            company=company_display,
+            role=role,
+            db_path=checkpoint_db_path,
+        )
+        if pending_hard_reviews:
+            mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
+            raise Stage0NeedsInput(folder.name, pending_hard_reviews)
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)
     word_count = len(re.findall(r"\w+", jd_text or ""))
@@ -2369,6 +2797,9 @@ def build_stage0_fit_gate(
         output["active_application"] = active_application
         flag_note = f"DB shows an active (non-terminal) application already on file: {active_application[0].get('status')} -- verify this isn't a duplicate before sending."
         output["notes"] = (output.get("notes") or "") + " " + flag_note
+
+    mark_run_status(checkpoint_db_path, run_key, "COMPLETE")
+    checkpoint_boundary("after_run_complete")
 
     # Free VRAM once Stage 0 is done. Targeted /api/ps unload, not a sweep
     # of every installed tag. In a batch, the next role's before-extract

@@ -293,6 +293,80 @@ class RunUntilWaitingTests(unittest.TestCase):
         self.assertFalse(ok)
 
 
+class Stage0MissingReceiptDoesNotReExtractTests(unittest.TestCase):
+    """CR-108 (2026-08-31, ebanx_95710d65 incident): workflow_state.json can claim
+    stage0 COMPLETE with a receipt_id while stage_receipts/stage0.json is missing
+    on disk (a legacy/partial-migration gap). reconcile_state_against_receipts()
+    correctly marks that STALE -- but the STALE handler used to always call
+    run_stage0(), which unconditionally re-runs build_stage0_fit_gate()'s real
+    extraction and overwrites stage0_fit_gate.json. On the real folder this
+    incident is named for, Original_JD.txt was itself corrupted (undecoded HTML
+    entities, truncated), so the fresh extraction produced a garbled SKIP that
+    silently replaced a real PASS gate and archived a live submission. These
+    tests assert the missing-receipt case adopts the existing valid gate file
+    instead of re-extracting."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.folder = Path(self._tmpdir.name) / "legacy_co"
+        self.folder.mkdir()
+        _write(self.folder, "Original_JD.txt", "Product Manager\n\n## Requirements\n- Own roadmap\n")
+        self.real_gate = _valid_stage0(tier="Tier 1", decision="PASS")
+        _write(self.folder, "stage0_fit_gate.json", self.real_gate)
+
+        # Simulate the incident: workflow_state.json claims stage0 COMPLETE with a
+        # receipt_id, but stage_receipts/stage0.json was never written (or was
+        # lost) -- load_receipt() will return None for it.
+        state = init_state(str(self.folder), mode="production")
+        state["status"] = "IN_PROGRESS"
+        state["active_stage"] = "stage1"
+        state["stages"]["stage0"] = {
+            "status": "COMPLETE",
+            "receipt_id": "stage0:doesnotexistonanyfile",
+            "integrity": "CLEAN",
+        }
+        state["stages"]["stage1"]["status"] = "READY"
+        write_state(str(self.folder), state)
+
+    def test_missing_receipt_adopts_existing_gate_without_reextracting(self):
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as fake_extract:
+            with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+                run_until_stage1_complete(
+                    str(self.folder), mode="production", adopt=False, no_hook=True, stop_at_waiting=True
+                )
+        fake_extract.assert_not_called()
+        # The real gate content on disk must be byte-for-byte untouched.
+        on_disk = json.loads((self.folder / "stage0_fit_gate.json").read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, self.real_gate)
+        self.assertNotEqual(on_disk.get("decision"), "SKIP")
+
+    def test_missing_receipt_still_mints_a_real_receipt(self):
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as fake_extract:
+            with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+                run_until_stage1_complete(
+                    str(self.folder), mode="production", adopt=False, no_hook=True, stop_at_waiting=True
+                )
+        fake_extract.assert_not_called()
+        r0 = load_receipt(str(self.folder), "stage0")
+        self.assertIsNotNone(r0)
+        self.assertEqual(r0["status"], "COMPLETE")
+        self.assertEqual(r0["result"]["decision"], "PASS")
+
+    def test_genuinely_invalid_gate_still_falls_through_to_reextraction(self):
+        """Adoption must not silently swallow a real problem: if the on-disk gate
+        fails contracts.check_stage0_fit_gate (e.g. corrupted/incomplete file),
+        re-extraction is still the correct fallback."""
+        (self.folder / "stage0_fit_gate.json").write_text("not valid json {{{", encoding="utf-8")
+        skip_gate = _valid_stage0(tier="Skip", decision="SKIP", skip_reason="re-extracted")
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=skip_gate) as fake_extract:
+            with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+                run_until_stage1_complete(
+                    str(self.folder), mode="production", adopt=False, no_hook=True, stop_at_waiting=True
+                )
+        fake_extract.assert_called_once()
+
+
 class Stage1CompleteAndStaleTests(unittest.TestCase):
     """CR-077: Stage 1 COMPLETE chaining + hash cascade."""
 

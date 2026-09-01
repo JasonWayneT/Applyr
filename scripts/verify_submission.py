@@ -96,6 +96,12 @@ def _pdf_page_count(pdf_path: str):
         for line in out.stdout.splitlines():
             if line.startswith("Pages:"):
                 return int(line.split(":", 1)[1].strip())
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(pdf_path)
+        return len(reader.pages)
     except Exception as e:  # noqa: BLE001
         return f"error: {e}"
     return None

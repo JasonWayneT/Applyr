@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -24,6 +25,24 @@ from test_build_stage0_fit_gate import (  # noqa: E402
     _PREFS_MINIMAL,
     _make_submission_folder,
 )
+
+
+def _build_with_isolated_checkpoint(folder):
+    """Run Stage 0 with an ephemeral checkpoint database for this unit fixture."""
+    fd, db_path = tempfile.mkstemp(suffix=".sqlite")
+    os.close(fd)
+    try:
+        return build_stage0_fit_gate(
+            folder,
+            db_gate_result=_DB_CLEAR,
+            prefs=_PREFS_MINIMAL,
+            confirmation_db_path=db_path,
+        )
+    finally:
+        try:
+            os.unlink(db_path)
+        except FileNotFoundError:
+            pass
 
 
 class TestScoreModelPin(unittest.TestCase):
@@ -198,11 +217,7 @@ class TestExtractToScoreHandoff(unittest.TestCase):
                                 "build_stage0_fit_gate.screen_responsibilities_for_exclusion",
                                 return_value=[],
                             ):
-                                build_stage0_fit_gate(
-                                    folder,
-                                    db_gate_result=_DB_CLEAR,
-                                    prefs=_PREFS_MINIMAL,
-                                )
+                                _build_with_isolated_checkpoint(folder)
         # Same model: no unload:before-score
         self.assertEqual(
             order[:3],
@@ -250,11 +265,7 @@ class TestExtractToScoreHandoff(unittest.TestCase):
                                 "build_stage0_fit_gate.screen_responsibilities_for_exclusion",
                                 return_value=[],
                             ):
-                                build_stage0_fit_gate(
-                                    folder,
-                                    db_gate_result=_DB_CLEAR,
-                                    prefs=_PREFS_MINIMAL,
-                                )
+                                _build_with_isolated_checkpoint(folder)
         # Different model: unload:before-score is present
         self.assertEqual(
             order[:4],

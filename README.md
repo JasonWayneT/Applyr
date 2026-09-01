@@ -251,6 +251,15 @@ Live progress and source metrics (fetched, filtered, and passed counts), along w
 
 Full spec: `data/fit_rubric_spec.html` (the research this implements) and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md` (the implementation + calibration record). `docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md` is superseded — read CR-093 instead.
 
+**Current CR-108 rollout:** Applyr uses an accuracy-first cascade for the
+per-requirement evidence step: deterministic evidence retrieval first, one
+batched Groq/Gemini request for unresolved lines, and an explicit Local option
+in AI Usage rather than a local-model default. It also includes durable
+per-opportunity checkpoints and a Review Center workflow for skills absent
+from the profile. Deterministic provider fixtures, crash-recovery tests, and
+isolated API tests pass behind the rollout flag. Live provider sampling, archive
+replay, and default cutover remain deferred until the CR-093 release gate passes.
+
 ### Drafting assets
 
 Sync never auto-drafts — after scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` via `scripts/run_submission.py`. Day-to-day authoring is Claude + ground truth via `.claude/skills/generate-submission/SKILL.md` → `run_submission.py`; there is no other live drafting path (the old "Find New Jobs" page and its `POST /api/evaluate` route were removed 2026-08-19 along with the rest of the old fit-scoring system).

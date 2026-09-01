@@ -4,7 +4,6 @@ import { isValidJobId } from '../../middleware.js';
 import {
   createInterviewDebrief,
   deleteInterviewDebrief,
-  getInterviewDebrief,
   listInterviewDebriefs,
   updateInterviewDebrief,
 } from '../../repository/interviewDebriefRepository.js';

@@ -16,10 +16,14 @@ if _SCRIPT_DIR not in sys.path:
 import contracts  # noqa: E402
 from author_from_packet import build_authoring_prompt, run_verify_only  # noqa: E402
 from build_authoring_packet import build_packet  # noqa: E402
-from build_stage0_fit_gate import Stage0ExtractError, build_stage0_fit_gate  # noqa: E402
+from build_stage0_fit_gate import (  # noqa: E402
+    Stage0ExtractError,
+    Stage0NeedsInput,
+    build_stage0_fit_gate,
+)
 from stage_gate import StageGateNotReadyError, require_stage_ready  # noqa: E402
 
-from claim_provenance import check_claim_provenance  # noqa: E402
+from claim_provenance import check_claim_provenance, check_employer_attribution  # noqa: E402
 from check_ground_truth_coverage import check_folder as check_ground_truth_folder  # noqa: E402
 from finalize_submission_job import (  # noqa: E402
     ImplausibleJobTitleError,
@@ -120,58 +124,82 @@ def _ensure_caller_mode(
     return state
 
 
+def _adopt_stage0_from_disk(
+    folder: str, state: dict[str, Any], mode: str
+) -> tuple[dict[str, Any], bool]:
+    """Mint a Stage 0 receipt from an existing, contract-valid stage0_fit_gate.json
+    already on disk, without re-running extraction. Returns (state, adopted).
+
+    Why this exists as its own function, not inlined in adopt_existing() (CR-108,
+    2026-08-31, found on ebanx_95710d65): a folder can have workflow_state.json
+    claiming stage0 COMPLETE with a receipt_id while stage_receipts/stage0.json
+    itself is missing on disk (a partial/legacy migration gap, not a real edit).
+    reconcile_state_against_receipts() correctly marks that STALE ("receipt_id but
+    file missing") -- but the STALE handler in run_until_stage1_complete() used to
+    respond to *any* stage0 STALE, including this one, by calling run_stage0(),
+    which unconditionally re-runs build_stage0_fit_gate()'s full NLP/LLM extraction
+    and overwrites stage0_fit_gate.json. On ebanx_95710d65 that silently replaced a
+    real, already-authored-against PASS gate with a garbled SKIP (Original_JD.txt
+    itself is corrupted -- undecoded HTML entities, truncated mid-sentence -- so the
+    fresh extraction mis-parsed it), which cascaded into archiving the folder as a
+    genuine Stage 0 rejection. This function is the same "adopt what's already
+    validated on disk" logic that already existed for the *bare* legacy-adoption
+    case (no workflow_state.json at all) -- now reused for the *missing-receipt*
+    case too, so a lost receipt file can never trigger real re-extraction on its own.
+    Re-extraction should only ever happen when there is no valid gate file to adopt,
+    or the caller explicitly forces it (see run_stage0's own `force` path).
+    """
+    stage0_path = os.path.join(folder, "stage0_fit_gate.json")
+    if not os.path.exists(stage0_path):
+        return state, False
+    ok, errors = contracts.check_stage0_fit_gate(folder)
+    if not ok:
+        return state, False
+
+    existing = load_receipt(folder, "stage0")
+    out_hashes = file_hash_map(folder, ["stage0_fit_gate.json"])
+    in_hashes = file_hash_map(folder, ["Original_JD.txt"])
+    if existing and existing.get("output_hashes") == out_hashes:
+        # already adopted
+        return state, True
+
+    gate = _load_json(stage0_path)
+    verdict = policy.evaluate_stage0(gate)
+    status = "SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE"
+    wf_status = "SKIPPED" if status == "SKIPPED" else "IN_PROGRESS"
+    active = None if status == "SKIPPED" else "stage1"
+    receipt = build_receipt(
+        stage="stage0",
+        status=status,
+        mode=mode,
+        input_hashes=in_hashes,
+        output_hashes=out_hashes,
+        result={
+            "tier": verdict["tier"],
+            "decision": verdict["decision"],
+            "adopted": True,
+        },
+        checks={"contracts.check_stage0_fit_gate": True},
+    )
+    if status == "COMPLETE":
+        state = commit_stage(
+            folder, state, receipt, workflow_status=wf_status, active_stage="stage1"
+        )
+        state["stages"]["stage1"]["status"] = "READY"
+        write_state(folder, state)
+    else:
+        state = commit_stage(
+            folder, state, receipt, workflow_status=wf_status, active_stage=active
+        )
+    return state, True
+
+
 def adopt_existing(folder: str, mode: str = "production") -> dict[str, Any]:
     """Create workflow_state + receipts from valid on-disk artifacts (no rebuild)."""
     state = load_state(folder) or init_state(folder, mode=mode)
     write_state(folder, state)
 
-    stage0_path = os.path.join(folder, "stage0_fit_gate.json")
-    if os.path.exists(stage0_path):
-        ok, errors = contracts.check_stage0_fit_gate(folder)
-        if ok:
-            existing = load_receipt(folder, "stage0")
-            out_hashes = file_hash_map(folder, ["stage0_fit_gate.json"])
-            in_hashes = file_hash_map(folder, ["Original_JD.txt"])
-            if existing and existing.get("output_hashes") == out_hashes:
-                # already adopted
-                pass
-            else:
-                gate = _load_json(stage0_path)
-                verdict = policy.evaluate_stage0(gate)
-                status = "SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE"
-                wf_status = "SKIPPED" if status == "SKIPPED" else "IN_PROGRESS"
-                active = None if status == "SKIPPED" else "stage1"
-                receipt = build_receipt(
-                    stage="stage0",
-                    status=status,
-                    mode=mode,
-                    input_hashes=in_hashes,
-                    output_hashes=out_hashes,
-                    result={
-                        "tier": verdict["tier"],
-                        "decision": verdict["decision"],
-                        "adopted": True,
-                    },
-                    checks={"contracts.check_stage0_fit_gate": True},
-                )
-                if status == "COMPLETE":
-                    state = commit_stage(
-                        folder,
-                        state,
-                        receipt,
-                        workflow_status=wf_status,
-                        active_stage="stage1",
-                    )
-                    state["stages"]["stage1"]["status"] = "READY"
-                    write_state(folder, state)
-                else:
-                    state = commit_stage(
-                        folder,
-                        state,
-                        receipt,
-                        workflow_status=wf_status,
-                        active_stage=active,
-                    )
+    state, _ = _adopt_stage0_from_disk(folder, state, mode)
 
     # Prompt-ready mid-state
     packet_path = os.path.join(folder, "authoring_packet.json")
@@ -228,6 +256,38 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
     try:
         result = build_stage0_fit_gate(folder, ignore_skip_ledger=force)
+    except Stage0NeedsInput as exc:
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(folder, ["Original_JD.txt"]),
+            output_hashes={},
+            result={
+                "opportunity_key": exc.opportunity_key,
+                "pending_confirmations": exc.pending,
+                "duration_seconds": _duration,
+            },
+            checks={"review_center_confirmations_persisted": True},
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pending_confirmations=len(exc.pending),
+        )
+        return result_state
     except Stage0ExtractError as exc:
         append_event(folder, _run_id, "stage0", "failed", reason=str(exc)[:500])
         raise WorkflowError(str(exc)) from exc
@@ -607,7 +667,24 @@ def collect_truth_findings(folder: str) -> dict[str, Any]:
                 }
             )
 
-    # 2. Ground-truth coverage — unused JD-relevant claims are WARN
+    # 2. Employer attribution — a bullet citing a claim attributed to a different
+    #    employer than the role section it's drafted under is BLOCK, same tier as a
+    #    fabricated citation: this is a mechanical mismatch (employer field vs. resume
+    #    section), not a judgment call. See check_employer_attribution()'s docstring
+    #    (2026-08-31, Papigen) for the real submission this was found on.
+    emp_ok, emp_errors = check_employer_attribution(folder)
+    if not emp_ok:
+        for i, err in enumerate(emp_errors):
+            findings.append(
+                {
+                    "id": f"truth.employer_attribution.{i}",
+                    "source": "check_employer_attribution",
+                    "severity": "BLOCK",
+                    "message": err,
+                }
+            )
+
+    # 3. Ground-truth coverage — unused JD-relevant claims are WARN
     coverage = check_ground_truth_folder(folder)
     cov_path = os.path.join(folder, "ground_truth_coverage.json")
     with open(cov_path, "w", encoding="utf-8") as f:
@@ -659,6 +736,7 @@ def collect_truth_findings(folder: str) -> dict[str, Any]:
         "findings": findings,
         "checks": {
             "claim_provenance_ok": prov_ok,
+            "employer_attribution_ok": emp_ok,
             "ground_truth_coverage_clean": bool(coverage.get("clean"))
             if not coverage.get("error")
             else False,
@@ -1497,7 +1575,18 @@ def run_until_stage1_complete(
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
     if s0.get("status") == "STALE":
-        state = run_stage0(folder, state, force=force)
+        # CR-108: a STALE here can mean "receipt file missing, content on disk is
+        # still valid" (a legacy-migration gap), not "the input actually changed".
+        # Try adopting the existing stage0_fit_gate.json in place first -- only
+        # fall through to a real re-extraction (run_stage0, which overwrites the
+        # gate file) when there's nothing valid on disk to adopt. See
+        # _adopt_stage0_from_disk's docstring for the incident this fixes.
+        if not force:
+            state, adopted = _adopt_stage0_from_disk(folder, state, state.get("mode") or "production")
+        else:
+            adopted = False
+        if not adopted:
+            state = run_stage0(folder, state, force=force)
         folder = _place_after_stage0(folder, state)
         state = load_state(folder) or state
         if state.get("status") == "SKIPPED":
@@ -1610,7 +1699,13 @@ def run_until_truth_settled(
     )
     if stop_after_stage1:
         return state
-    if state.get("status") in ("SKIPPED", "WAITING_FOR_LLM", "FAILED", "STALE"):
+    if state.get("status") in (
+        "SKIPPED",
+        "WAITING_FOR_LLM",
+        "WAITING_FOR_INPUT",
+        "FAILED",
+        "STALE",
+    ):
         return state
 
     s1 = (state.get("stages") or {}).get("stage1") or {}
@@ -1709,13 +1804,20 @@ def run_until_waiting_for_llm(
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
     if force or s0.get("status") == "STALE" or s0.get("status") not in ("COMPLETE", "SKIPPED"):
-        state = run_stage0(folder, state, force=force)
+        # CR-108: same missing-receipt-vs-real-change distinction as
+        # run_until_stage1_complete above -- try adopting an already-valid
+        # stage0_fit_gate.json before falling through to real re-extraction.
+        adopted = False
+        if not force and s0.get("status") == "STALE":
+            state, adopted = _adopt_stage0_from_disk(folder, state, state.get("mode") or "production")
+        if not adopted:
+            state = run_stage0(folder, state, force=force)
         folder = _place_after_stage0(folder, state)
         state = load_state(folder) or state
         if state.get("status") == "SKIPPED":
             return state
 
-    if state.get("status") == "WAITING_FOR_LLM":
+    if state.get("status") in ("WAITING_FOR_LLM", "WAITING_FOR_INPUT"):
         return state
 
     return run_stage1_prompt(folder, state, no_hook=no_hook)

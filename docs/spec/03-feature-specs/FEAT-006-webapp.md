@@ -5,7 +5,7 @@
 - Feature ID: `FEAT-006`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-003`
-- Related requirements: `FR-023`, `FR-024`, `FR-025`, `FR-026`, `FR-027`, `FR-028`, `FR-029`
+- Related requirements: `FR-023`, `FR-024`, `FR-025`, `FR-026`, `FR-027`, `FR-028`, `FR-029`, `FR-285`
 
 ## Problem statement
 
@@ -28,6 +28,7 @@ A CLI-only pipeline is hard to monitor. Users need a visual dashboard to watch p
 | `FR-027` | Background PDF compiler | python single compile |
 | `FR-028` | Side-by-Side dual pane | Review UI workspace |
 | `FR-029` | LLM-assisted document edit | setting key gated |
+| `FR-285` | Review Center workflow | Existing sidebar entry, focused question view, progressive evidence, and shared UI/harness resolver (`CR-108`, rollout-flagged) |
 
 ## Verification plan
 
@@ -36,3 +37,5 @@ A CLI-only pipeline is hard to monitor. Users need a visual dashboard to watch p
 | `TEST-006` | `FR-024` | manual | Clicking "Sync" starts the terminal log in the UI | verified |
 | `TEST-007` | `FR-026`, `FR-028` | manual | Clicking Edit opens a side-by-side split screen with rich editor | accepted |
 | `TEST-008` | `FR-027` | manual | Clicking Save & Compile saves Markdown, regenerates PDF, and updates iframe | accepted |
+| `TEST-108C` | `FR-285` | integration/UI | Review Center groups pending confirmations, focuses one question, progressively reveals evidence, links affected jobs, and submits answers through the shared resolver | proposed |
+| `TEST-108D` | `FR-285`, `NFR-011` | API integration | Review Center list and answer routes use an injected isolated database and cover authentication, grouped answers, hard-gate actions, and idempotent repeats | verified |

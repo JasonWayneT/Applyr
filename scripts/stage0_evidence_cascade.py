@@ -311,6 +311,33 @@ def _resolve_item_id(raw_id: str, expected: dict[str, BatchItem]) -> str | None:
         ]
         if len(suffix_matches) == 1:
             return suffix_matches[0]
+    # CR-108 (2026-09-09): some providers return just the ordinal ("0", "1")
+    # extracted from the "bucket:ordinal:hash" id. Match it against the
+    # ordinal position (second segment) when exactly one expected id has
+    # that ordinal.
+    ordinal_matches = [
+        full_id
+        for full_id in expected
+        if len(full_id.split(":")) >= 2 and full_id.split(":")[1] == raw_id
+    ]
+    if len(ordinal_matches) == 1:
+        return ordinal_matches[0]
+    # CR-108 (2026-09-09): models sometimes mangle the id format — replacing
+    # ":" with "-", abbreviating "required" to "req", or inventing sequential
+    # ids like "req-001". As a last resort, extract the trailing hash-like
+    # segment (the make_item_key digest) from the raw_id and match it against
+    # the last segment of expected ids. The hash is a 16-char hex digest, so
+    # a match here is as unique as the full id within one batch.
+    raw_segments = re.split(r"[:-]", raw_id)
+    raw_tail = raw_segments[-1] if raw_segments else ""
+    if raw_tail and len(raw_tail) >= 8:
+        hash_matches = [
+            full_id
+            for full_id in expected
+            if full_id.split(":")[-1] == raw_tail
+        ]
+        if len(hash_matches) == 1:
+            return hash_matches[0]
     return None
 
 

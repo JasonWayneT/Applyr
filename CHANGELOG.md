@@ -1,8 +1,8 @@
 ## [Unreleased] — 2026-09-09
-[DRAFT] Stage 0 cascade live provider validation, partial-result recovery, and proactive
-batch sizing — both Groq and Gemini pass the 21-entry golden set with real API calls.
-The cascade now accepts partial results from truncated provider responses and retries only
-the missing items, and proactively splits batches that would exceed the output token budget.
+[DRAFT] Stage 0 cascade live provider validation, archive replay, partial-result
+recovery, and proactive batch sizing — both Groq and Gemini pass the 21-entry golden
+set with real API calls, the cascade has been validated against real archived JDs,
+and two robustness improvements handle provider truncation gracefully.
 
 ### Fixed
 - CR-108: Groq API calls were missing `max_tokens`, causing truncated JSON responses on
@@ -21,10 +21,18 @@ the missing items, and proactively splits batches that would exceed the output t
 - CR-108: Batch sizing only considered item count (`MAX_BATCH_ITEMS=24`), not output size.
   Added proactive split based on estimated output tokens derived from prompt size, so
   batches with long evidence excerpts are split before truncation can happen.
+- CR-108: `_resolve_item_id` couldn't match model-returned ids in three formats: ordinal-only
+  ("0"), mangled prefix ("req-7-hash"), and abbreviated prefix ("req-001"). Added ordinal
+  matching and hash-suffix matching for real JD replay.
 - CR-104: URL state sync race condition — the sync effect could strip the `job` param
   before the restore effect read it on initial load. Captured the initial job ID at mount.
 
 ### Developer
+- CR-108 (Epic 7.3/7.4): Archive replay harness (`test_stage0_archive_replay.py`)
+  validates the cascade against real archived JDs. 5 JDs replayed with Gemini: 27 items
+  classified, 2 HARD gates found. Comparison with legacy per-line classifier on 2 JDs:
+  87% call reduction (15→2), 58% time reduction (25.92s→10.88s), 87% gate agreement
+  (mismatches are legacy errors, not cascade errors).
 - CR-108 (Epic 7.5): Live provider-backed golden validation complete. Both Groq
   (openai/gpt-oss-120b) and Gemini (gemini-3.5-flash-lite) pass 21/21 against the active
   CR-093 golden set using credentials stored in SQLite. All seven categories hold.

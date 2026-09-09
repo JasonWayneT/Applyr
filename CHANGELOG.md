@@ -14,6 +14,14 @@ company fact are now caught and warned against.
 - CR-098: Registered as `FR-295` / `AC-392`; mapped in `FEAT-013`, the traceability matrix,
   and the canonical no-ai-slop skill. The rule ID was renumbered from the earlier draft's
   `LW-036` to `LW-038` because `LW-036` already belongs to the closed-lost jargon rule.
+- CR-108 (Epic 7.1/7.2): Stage 0 cascade golden validation now reports per-category
+  results (`--category` filter added to `test_stage0_provider_golden.py`); the previously
+  dead Layer C model-flagged confirmation tunnel is implemented — the cascade validator
+  honors `needs_user_confirmation` / `canonical_skill` / `skill_kind` (fail-closed when a
+  flag lacks a skill key) and the fit gate creates a durable `skill_presence` pending item
+  for a model-detected tool the extractor missed, pausing that opportunity and resuming on
+  a `CONFIRMED_USE` answer without repeating the provider call. Offline golden fixtures
+  remain 21/21 for Groq and Gemini with one routed batch call each and every category PASS.
 
 ## [Unreleased] — 2026-09-03
 [DRAFT] Stage 0 gate escapes and header placeholder fixes — multiple deterministic gates failed to catch roles that should have been skipped, and resume/cover letter headers with partial placeholders were left unfixed in compiled PDFs.

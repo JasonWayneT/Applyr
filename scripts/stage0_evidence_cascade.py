@@ -303,6 +303,29 @@ def _normalize_result(raw: dict[str, Any], item: BatchItem) -> dict[str, Any]:
     if not reasoning:
         raise CascadeValidationError(f"missing reasoning for {item.item_id}")
 
+    # CR-108 Epic 7.2 (2026-09-08): honor the Layer C model-flagged
+    # confirmation fields. A model that detects a named tool the conservative
+    # extractor missed may set needs_user_confirmation=true with a
+    # canonical_skill and skill_kind so the fit gate can create the same
+    # durable pending item the deterministic path would have created. Fail
+    # closed: a flag with no skill key must never silently finalize as a
+    # permanent anonymous gap -- reject the batch so the provider chain
+    # falls back and a later provider gets the chance to name the entity.
+    flag_value = raw.get("needs_user_confirmation")
+    needs_user_confirmation = (
+        flag_value is True or str(flag_value).strip().lower() in {"true", "1", "yes"}
+    )
+    skill_kind = str(raw.get("skill_kind") or "").strip().lower()
+    if skill_kind not in {"tool", "skill", "domain", "role", "none", ""}:
+        raise CascadeValidationError(f"invalid skill_kind for {item.item_id}: {skill_kind!r}")
+    if skill_kind == "none":
+        skill_kind = ""
+    canonical_skill = str(raw.get("canonical_skill") or "").strip().lower()
+    if needs_user_confirmation and not canonical_skill:
+        raise CascadeValidationError(
+            f"needs_user_confirmation=true without canonical_skill for {item.item_id}"
+        )
+
     unsafe_hard = (
         gate == "HARD"
         and (
@@ -329,6 +352,9 @@ def _normalize_result(raw: dict[str, Any], item: BatchItem) -> dict[str, Any]:
         "evidence_level": evidence_level,
         "confidence": confidence,
         "gate": gate,
+        "needs_user_confirmation": needs_user_confirmation,
+        "canonical_skill": canonical_skill or None,
+        "skill_kind": skill_kind or None,
     }
 
 

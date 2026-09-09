@@ -159,12 +159,39 @@ complete.
 
 ### Epic 7: Golden validation and cutover
 
-- [ ] **7.1** Run all active CR-093 golden entries and record per-category results.
-- [ ] **7.2** Add missing-ground-truth fixtures with expected pending behavior.
+- [x] **7.1** Run all active CR-093 golden entries and record per-category results.
+      Verified 2026-09-08: the fixture runner now prints a per-category
+      PASS/FAIL summary and supports `--category`. Both provider adapters pass
+      21/21 with exactly one routed batch call each, and every category holds
+      (no hidden aggregate masking):
+      `clean_evidence_match 2/2`, `degree_gate 4/4`, `domain_gate 6/6`,
+      `hedge_nongate 1/1`, `internal_term 2/2`, `preferred_nongate 2/2`,
+      `tool_nongate 4/4` -- identical for Groq and Gemini. The four HARD
+      domain/degree gates hold, and the three domain false-positive guards
+      plus all four tool cases stay NONE.
+- [x] **7.2** Add missing-ground-truth fixtures with expected pending behavior.
+      Implemented the previously dead Layer C model tunnel: the cascade
+      validator now honors `needs_user_confirmation`, `canonical_skill`, and
+      `skill_kind` (bool coercion, strict skill_kind vocabulary, fail-closed
+      rejection of a flag without a canonical skill so the provider chain
+      falls back), and the fit gate creates the same durable
+      `skill_presence` confirmation the deterministic extractor path creates
+      for a model-flagged tool that the extractor missed, then pauses with
+      hard-gate reviews in one `Stage0NeedsInput`. A `CONFIRMED_USE` answer
+      caps presence evidence at level 1 and resume reuses the persisted
+      checkpoint (no repeated provider call). Tests:
+      `test_validator_passes_model_flagged_confirmation_through`,
+      `test_validator_coerces_flag_variants_and_defaults_false`,
+      `test_validator_rejects_flag_without_canonical_skill`,
+      `test_flag_with_domain_skill_kind_is_not_a_tool_question`,
+      `test_batch_falls_back_when_flag_lacks_canonical_skill`,
+      `test_model_flagged_unknown_tool_creates_pending_and_pauses`.
 - [ ] **7.3** Run a clean archive sample separate from JD extraction-confounded
-      samples.
+      samples. Deferred with 7.4 -- needs a controlled replay harness and
+      real provider runs (see increment A note above).
 - [ ] **7.4** Compare baseline and cascade call counts, batch sizes, tokens,
-      fallback counts, latency, score, gate, and pending rates.
+      fallback counts, latency, score, gate, and pending rates. Deferred with
+      7.3.
 - [ ] **7.5** Run a controlled provider-backed Groq/Gemini sample.
 - [ ] **7.6** Enable cascade by default only after the CR-108 release gate passes.
 - [ ] **7.7** Remove the legacy per-line local classifier and temporary rollback
@@ -185,6 +212,50 @@ complete.
       An attestation remains non-authorable until `workExperience.md` contains
       the reviewed details and local verification marks the proposal applied.
 - [x] **H6** Attribute and review generated Stage 0 rows before any cleanup.
+
+### Epic 7 increment A -- golden per-category record (7.1) and model-flagged confirmation tunnel (7.2) -- 2026-09-08
+
+**7.1 per-category golden record.** The fixture runner
+(`test_stage0_provider_golden.py`) currently prints only an aggregate 21/21 for
+Groq and Gemini. That hides a category-level collapse behind a healthy aggregate
+-- the same failure the CR-093 checker's own docstring warns about. Add
+`--category` filtering and a per-category PASS/FAIL summary to the fixture runner
+(parallel shape to `check_fit_rubric_golden_set.py`), run it, and record the
+per-category table in this doc below.
+
+**7.2 missing-ground-truth pending fixtures -- the unimplemented model tunnel.**
+CR-108's Layer C response schema defines `needs_user_confirmation`,
+`canonical_skill`, and `skill_kind`, and the design says "If the extractor misses
+an entity and the batch model identifies it, the model may return
+needs_user_confirmation=true, which creates the same pending item." None of the
+three fields is read anywhere in code (grep across scripts/ matches nothing), so a
+model-detected tool that the conservative extractor missed currently scores as a
+permanent anonymous gap with no durable question. The deterministic extractor
+path is already covered by tests; this tunnel is the missing half. Decision:
+
+- Validator: accept and normalize the three fields. `needs_user_confirmation`
+  defaults false (bool coercion for true/false/1/0). `skill_kind` must be one of
+  `tool|skill|domain|role|none`. Fail closed: when `needs_user_confirmation=true`
+  and `canonical_skill` is empty, raise `CascadeValidationError` so the provider
+  chain falls back to Gemini and a headline can never silently finalize as a
+  permanent gap. `skill_kind=domain|role` with the flag is not a tool-presence
+  question -- it scores normally (documented non-question case).
+- Fit gate: after the cascade batch, for each result flagged with a canonical
+  skill (`skill_kind` tool|skill), create/join the confirmation via
+  `create_skill_confirmation` (idempotent per review_key + opportunity, same
+  skill-memory reuse rules as the deterministic path), then pause with any
+  hard-gate reviews in a single `Stage0NeedsInput` raise.
+- Tests: validator pass-through + fail-closed rejection with provider fallback;
+  end-to-end fit-gate test with the deterministic extractor stubbed to miss
+  (patched `named_skill_candidates` returns []) and the provider response flagging
+  the skill, asserting exactly one durable open pending confirmation and a
+  `WAITING_FOR_INPUT` pause, then a `CONFIRMED_USE` answer and resume reusing the
+  persisted checkpoint.
+
+**7.3 / 7.4 remain deferred** with the same live-access dependency as 7.5/7.6: a
+clean archive-sample replay harness and a baseline-vs-cascade cost/latency
+comparison need real provider runs (or a controlled local-provider run) and are
+tracked here, not silently dropped.
 
 ## Required verification commands
 

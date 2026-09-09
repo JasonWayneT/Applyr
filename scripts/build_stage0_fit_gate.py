@@ -148,6 +148,7 @@ from blocked_tools import hard_blocked_tool_pattern as _shared_hard_tool_pattern
 from blocked_tools import load_skills_catalog_terms as _load_skills_catalog_terms_shared  # noqa: E402
 from blocked_tools import looks_like_named_tool as _looks_like_named_tool  # noqa: E402
 from stage0_confirmations import (  # noqa: E402
+    canonical_skill_key,
     create_hard_gate_review,
     create_skill_confirmation,
     get_hard_gate_decision,
@@ -2441,6 +2442,11 @@ def build_stage0_fit_gate(
     prompt_version = "evidence-scale-v1"
     cascade_enabled = pipeline_env.stage0_evidence_cascade_enabled()
     stage0_settings: dict = {}
+    # CR-108 Epic 7.2: model-flagged named tools (needs_user_confirmation +
+    # canonical_skill from the batch response) accumulate here so the fit gate
+    # can create the same durable pending items the deterministic extractor
+    # path creates, after the provider call that flagged them.
+    model_flagged_skills: list[dict[str, str]] = []
     if cascade_enabled:
         from utils import load_llm_settings
         stage0_settings = load_llm_settings()
@@ -2653,6 +2659,17 @@ def build_stage0_fit_gate(
                 result,
             )
             cached_results[batch_item.item_id] = result
+            if (
+                result.get("needs_user_confirmation")
+                and result.get("skill_kind") in ("tool", "skill")
+                and result.get("canonical_skill")
+            ):
+                model_flagged_skills.append(
+                    {
+                        "skill_key": str(result["canonical_skill"]),
+                        "requirement": batch_item.requirement,
+                    }
+                )
 
     classified_required, classified_preferred, flagged_gaps = classify_gaps(
         required_raw, preferred_raw, work_exp=work_exp, company=company_display,
@@ -2697,9 +2714,44 @@ def build_stage0_fit_gate(
             role=role,
             db_path=checkpoint_db_path,
         )
-        if pending_hard_reviews:
+        # CR-108 Epic 7.2: model-flagged named tools create the same durable
+        # pending item the deterministic extractor path creates -- reuse the
+        # skill-memory rules so an already-decided skill is never re-asked.
+        pending_skill_reviews: list[dict[str, str]] = []
+        for flagged in model_flagged_skills:
+            skill_key = canonical_skill_key(flagged["skill_key"])
+            if not skill_key:
+                continue
+            if get_skill_memory(skill_key, checkpoint_db_path):
+                continue
+            display_name = " ".join(
+                word.capitalize() for word in skill_key.split("_")
+            )
+            create_skill_confirmation(
+                db_path=checkpoint_db_path,
+                skill_key=skill_key,
+                display_name=display_name,
+                requirement=flagged["requirement"],
+                opportunity_key=folder.name,
+                opportunity_company=company_display,
+                opportunity_title=role,
+                evidence_excerpt=(
+                    "The Stage 0 model identified this named tool in the job "
+                    "description, but it is not in verified work history."
+                ),
+            )
+            pending_skill_reviews.append(
+                {
+                    "review_key": f"skill:{skill_key}",
+                    "skill_key": skill_key,
+                    "display_name": display_name,
+                    "requirement": flagged["requirement"],
+                }
+            )
+        all_pending = pending_hard_reviews + pending_skill_reviews
+        if all_pending:
             mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
-            raise Stage0NeedsInput(folder.name, pending_hard_reviews)
+            raise Stage0NeedsInput(folder.name, all_pending)
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)
     word_count = len(re.findall(r"\w+", jd_text or ""))

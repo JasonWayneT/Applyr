@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 from unittest.mock import patch
 
@@ -84,7 +85,43 @@ def _check_results(entries: list[dict], results: dict[str, dict]) -> tuple[int, 
     return passed, len(entries)
 
 
-def _run_fixture(entries: list[dict], provider: str) -> tuple[int, int, int]:
+def _report_by_category(entries: list[dict], results: dict[str, dict]) -> None:
+    """Print a per-category PASS/FAIL summary (CR-108 Epic 7.1).
+
+    Same "don't hide a category collapse behind a healthy aggregate" principle
+    check_fit_rubric_golden_set.py documents: an aggregate 21/21 can mask a
+    whole category regressing. Category expectations come from the golden set
+    entries themselves, so the four HARD-gate domain entries must all hold,
+    the three false-positive domain entries must all stay NONE, and so on.
+    """
+    by_category: dict[str, list[tuple[str, bool]]] = defaultdict(list)
+    for entry in entries:
+        result = results[entry["id"]]
+        source_ok = (
+            result.get("gap_source") == entry.get("expected_gap_source")
+            if entry["expected_gate"] == "HARD"
+            else result.get("gap_source") is None
+        )
+        expected_level = entry.get("expected_evidence_level")
+        level_ok = (
+            expected_level is None
+            or abs(int(result["evidence_level"]) - int(expected_level)) <= 1
+        )
+        ok = result["gate"] == entry["expected_gate"] and source_ok and level_ok
+        by_category[entry["category"]].append((entry["id"], ok))
+    for category in sorted(by_category):
+        rows = by_category[category]
+        passed = sum(1 for _, ok in rows if ok)
+        status = "PASS" if passed == len(rows) else "FAIL"
+        print(f"  [{status}] {category}: {passed}/{len(rows)}")
+        for entry_id, ok in rows:
+            if not ok:
+                print(f"      FAIL {entry_id}")
+
+
+def _run_fixture(
+    entries: list[dict], provider: str
+) -> tuple[int, int, int, dict[str, dict]]:
     """Run one provider adapter fixture without making a network request."""
     items = _items(entries)
     calls: list[dict] = []
@@ -109,7 +146,7 @@ def _run_fixture(entries: list[dict], provider: str) -> tuple[int, int, int]:
         if call.get("provider_override") == [provider]
         and call.get("model") == f"{provider}-golden-test"
     )
-    return passed, total, routed
+    return passed, total, routed, results
 
 
 def _run_live(entries: list[dict], provider: str) -> tuple[int, int]:
@@ -132,16 +169,21 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true", help="Use the configured provider and spend quota")
     parser.add_argument("--provider", choices=("groq", "gemini", "local"), default="groq")
+    parser.add_argument("--category", default=None, help="Only check this golden category")
     args = parser.parse_args()
     entries = _active_entries()
+    if args.category:
+        entries = [e for e in entries if e["category"] == args.category]
     if args.live:
         passed, total = _run_live(entries, args.provider)
         print(f"Live {args.provider} golden result: {passed}/{total}")
         return 0 if passed == total else 1
 
     for provider in ("groq", "gemini"):
-        passed, total, routed = _run_fixture(entries, provider)
+        passed, total, routed, results = _run_fixture(entries, provider)
         print(f"Fixture {provider} golden result: {passed}/{total}; routed calls: {routed}")
+        print(f"  per-category ({provider}):")
+        _report_by_category(entries, results)
         if passed != total or routed != 1:
             return 1
     return 0

@@ -137,9 +137,13 @@ modern Stage 2 readiness expectations.
 ## Done criteria (CR level)
 
 - [x] All `AC-379`–`AC-391` boxes in the spec check off
-- [ ] `verify_submission.py` passes on one real submission folder; `npm test` shows no
-      regression (NFR-013 guard). The real-submission portion is blocked because the
-      checkout has no real submission folder; `npm test` passed 47/47.
+- [x] `verify_submission.py` passes on one real submission folder; `npm test` shows no
+      regression (NFR-013 guard). Verified 2026-09-08 on the production
+      `data/submissions/form_health_rerun` folder: `run_submission.py --resume`
+      passed Stage 1 and mechanical verification end to end
+      (`verification_receipt.json` records `mechanically_verified: true`, both
+      PDFs one page), and the full `npm test` suite passed 47/47 with no
+      regression.
 - [x] `git diff` reviewed to confirm no substantive rule change — only contradiction
       fixes, staleness fixes, false-claim deletions, pointer conversions, and the new
       guard

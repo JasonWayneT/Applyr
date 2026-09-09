@@ -542,6 +542,110 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
             finally:
                 os.unlink(db_path)
 
+    def test_model_flagged_unknown_tool_creates_pending_and_pauses(self) -> None:
+        """CR-108 Epic 7.2: when the deterministic extractor misses a named
+        tool (patched to find nothing) and the batch model flags it with
+        needs_user_confirmation + canonical_skill, the fit gate creates the
+        same durable pending item the deterministic path would have, pauses
+        WAITING_FOR_INPUT, and resumes reusing the persisted checkpoint."""
+        with tempfile.TemporaryDirectory() as folder:
+            folder_path = Path(folder)
+            (folder_path / "Original_JD.txt").write_text(
+                "Product Manager\n\nRequirements\n- Experience with Acme Platform integrations\n",
+                encoding="utf-8",
+            )
+            db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
+            os.close(db_fd)
+            try:
+                sections = {
+                    "required": ["Experience with Acme Platform integrations"],
+                    "preferred": [],
+                    "responsibilities": [],
+                    "culture": [],
+                }
+                settings = {
+                    "stage0_evidence_classification": {
+                        "provider_order": ["groq", "gemini"],
+                        "models": {"groq": "groq-test", "gemini": "gemini-test"},
+                    }
+                }
+                calls: list[str] = []
+
+                def provider_response(_system: str, prompt: str, **_kwargs: object) -> str:
+                    calls.append(prompt)
+                    import re
+                    item_id = re.search(r"\[(\S+)\] bucket=", prompt).group(1)
+                    return json.dumps(
+                        {
+                            "results": [
+                                {
+                                    "item_id": item_id,
+                                    "gate": "NONE",
+                                    "gap_source": "",
+                                    "evidence_level": 2,
+                                    "confidence": "high",
+                                    "reasoning": (
+                                        "Acme Platform appears in the JD but not in "
+                                        "verified work history."
+                                    ),
+                                    "needs_user_confirmation": True,
+                                    "canonical_skill": "Acme Platform",
+                                    "skill_kind": "tool",
+                                }
+                            ]
+                        }
+                    )
+
+                # The deterministic extractor misses the tool on purpose.
+                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1"}):
+                    with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
+                        with patch("build_stage0_fit_gate.named_skill_candidates", return_value=[]):
+                            with patch("utils.load_llm_settings", return_value=settings):
+                                with patch("utils.call_llm", side_effect=provider_response):
+                                    with self.assertRaises(Stage0NeedsInput) as raised:
+                                        build_stage0_fit_gate(
+                                            folder_path,
+                                            db_gate_result={"action": "clear"},
+                                            prefs={"blocked_companies": []},
+                                            confirmation_db_path=db_path,
+                                        )
+                pending = list_pending_for_opportunity(folder_path.name, db_path)
+                self.assertEqual(len(pending), 1)
+                self.assertEqual(pending[0]["question_type"], "skill_presence")
+                self.assertEqual(pending[0]["skill_key"], "acme_platform")
+                self.assertEqual(pending[0]["status"], "open")
+                self.assertEqual(
+                    raised.exception.pending[0]["review_key"],
+                    "skill:acme_platform",
+                )
+                self.assertEqual(len(calls), 1)
+
+                answer_confirmation(
+                    db_path=db_path,
+                    review_key=raised.exception.pending[0]["review_key"],
+                    answer="CONFIRMED_USE",
+                )
+                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1"}):
+                    with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
+                        with patch("build_stage0_fit_gate.named_skill_candidates", return_value=[]):
+                            with patch("utils.load_llm_settings", return_value=settings):
+                                with patch(
+                                    "utils.call_llm",
+                                    side_effect=AssertionError("resume should reuse the cached judgment"),
+                                ):
+                                    result = build_stage0_fit_gate(
+                                        folder_path,
+                                        db_gate_result={"action": "clear"},
+                                        prefs={"blocked_companies": []},
+                                        confirmation_db_path=db_path,
+                                    )
+                self.assertFalse(
+                    result.get("decision") == "SKIP" and result.get("skip_reason_code") == "hard_gap"
+                )
+                self.assertEqual(len(calls), 1)
+            finally:
+                os.unlink(db_path)
+
     def test_workflow_pauses_then_resumes_after_hard_gate_answer(self) -> None:
         import json
 

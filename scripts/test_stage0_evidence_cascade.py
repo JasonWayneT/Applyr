@@ -207,6 +207,163 @@ class TestStage0EvidenceCascade(unittest.TestCase):
                 items,
             )
 
+    def test_validator_passes_model_flagged_confirmation_through(self) -> None:
+        """CR-108 Epic 7.2: the Layer C schema's needs_user_confirmation /
+        canonical_skill / skill_kind fields are honored, not dropped, so the
+        fit gate can create the durable pending item the model flagged."""
+        item = BatchItem("required:0:a", "required", "Experience with Acme Platform")
+        results = validate_batch_response(
+            {
+                "results": [
+                    {
+                        "item_id": item.item_id,
+                        "gate": "NONE",
+                        "gap_source": "",
+                        "evidence_level": 2,
+                        "confidence": "high",
+                        "reasoning": "Acme Platform is not documented in the profile.",
+                        "needs_user_confirmation": True,
+                        "canonical_skill": "Acme Platform",
+                        "skill_kind": "tool",
+                    }
+                ]
+            },
+            [item],
+        )
+        normalized = results[item.item_id]
+        self.assertIs(normalized["needs_user_confirmation"], True)
+        self.assertEqual(normalized["canonical_skill"], "acme platform")
+        self.assertEqual(normalized["skill_kind"], "tool")
+
+    def test_validator_coerces_flag_variants_and_defaults_false(self) -> None:
+        item = BatchItem("required:0:a", "required", "Requirement")
+        for raw_flag in (True, "true", 1, "1", "yes"):
+            with self.subTest(flag=raw_flag):
+                results = validate_batch_response(
+                    {
+                        "results": [
+                            {
+                                "item_id": item.item_id,
+                                "gate": "NONE",
+                                "evidence_level": 0,
+                                "confidence": "high",
+                                "reasoning": "ok",
+                                "needs_user_confirmation": raw_flag,
+                                "canonical_skill": "skill_x",
+                                "skill_kind": "tool",
+                            }
+                        ]
+                    },
+                    [item],
+                )
+                self.assertIs(results[item.item_id]["needs_user_confirmation"], True)
+        results = validate_batch_response(
+            {
+                "results": [
+                    {
+                        "item_id": item.item_id,
+                        "gate": "NONE",
+                        "evidence_level": 0,
+                        "confidence": "high",
+                        "reasoning": "ok",
+                    }
+                ]
+            },
+            [item],
+        )
+        self.assertIs(results[item.item_id]["needs_user_confirmation"], False)
+
+    def test_validator_rejects_flag_without_canonical_skill(self) -> None:
+        """Fail closed: a flagged item with no skill key must never silently
+        finalize as a permanent anonymous gap -- the batch falls back so the
+        next provider in the chain gets the chance to name it."""
+        item = BatchItem("required:0:a", "required", "Requirement")
+        with self.assertRaises(CascadeValidationError):
+            validate_batch_response(
+                {
+                    "results": [
+                        {
+                            "item_id": item.item_id,
+                            "gate": "NONE",
+                            "evidence_level": 0,
+                            "confidence": "high",
+                            "reasoning": "ok",
+                            "needs_user_confirmation": True,
+                        }
+                    ]
+                },
+                [item],
+            )
+
+    def test_flag_with_domain_skill_kind_is_not_a_tool_question(self) -> None:
+        """skill_kind=domain or role with the flag is not a tool-presence
+        question -- it scores normally (documented non-question case)."""
+        item = BatchItem("required:0:a", "required", "Requirement")
+        results = validate_batch_response(
+            {
+                "results": [
+                    {
+                        "item_id": item.item_id,
+                        "gate": "NONE",
+                        "evidence_level": 0,
+                        "confidence": "high",
+                        "reasoning": "ok",
+                        "needs_user_confirmation": True,
+                        "canonical_skill": "healthcare",
+                        "skill_kind": "domain",
+                    }
+                ]
+            },
+            [item],
+        )
+        self.assertEqual(results[item.item_id]["skill_kind"], "domain")
+        self.assertIs(results[item.item_id]["needs_user_confirmation"], True)
+
+    def test_batch_falls_back_when_flag_lacks_canonical_skill(self) -> None:
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        item = BatchItem("required:0:a", "required", "Requires a nursing license")
+        flagged = json.dumps(
+            {
+                "results": [
+                    {
+                        "item_id": item.item_id,
+                        "gate": "NONE",
+                        "evidence_level": 0,
+                        "confidence": "high",
+                        "reasoning": "ok",
+                        "needs_user_confirmation": True,
+                    }
+                ]
+            }
+        )
+        valid = json.dumps(
+            {
+                "results": [
+                    {
+                        "item_id": item.item_id,
+                        "gate": "HARD",
+                        "gap_source": "certification",
+                        "evidence_level": 0,
+                        "confidence": "high",
+                        "reasoning": "nursing license is required",
+                    }
+                ]
+            }
+        )
+        with patch("utils.call_llm", side_effect=[flagged, valid]) as call:
+            result = classify_requirements_batch(
+                [item],
+                settings={
+                    "stage0_evidence_classification": {
+                        "provider_order": ["groq", "gemini"],
+                        "models": {"groq": "groq-test", "gemini": "gemini-test"},
+                    }
+                },
+            )
+        self.assertEqual(result[item.item_id]["gap_class"], "HARD")
+        self.assertEqual(call.call_count, 2)
+
     def test_genuinely_invalid_gate_value_is_still_rejected(self) -> None:
         """Tolerance for known synonyms (SOFT) must not become tolerance for
         anything -- an unrecognized gate value still fails closed."""

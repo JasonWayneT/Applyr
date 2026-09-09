@@ -44,8 +44,8 @@ addresses that directly.
 
 Quick, standalone, no code risk. Do this first regardless of what happens with the rest of the CR.
 
-- [ ] **Story 1.1**: Correct CLAUDE.md's CR-059 reference to name fit-evaluation and `audit_and_improve` as live LLM call sites (not "zero local LLMs" unqualified). Mirror the exact same edit into AGENTS.md per the repo's byte-identical rule.
-- [ ] **Story 1.2**: Update CR-059's tracker doc status/related-CRs to reference this CR-070 as the follow-up that acted on the fit-scoring/audit-and-improve call sites it had explicitly scoped out.
+- [x] **Story 1.1**: Correct CLAUDE.md's CR-059 reference to name fit-evaluation and `audit_and_improve` as live LLM call sites (not "zero local LLMs" unqualified). Mirror the exact same edit into AGENTS.md per the repo's byte-identical rule. **Resolved by supersession (2026-09-08):** the stale "zero local LLMs" wording no longer exists anywhere in `CLAUDE.md` (now an `@AGENTS.md` import stub) or `AGENTS.md` — grep for `CR-059|zero local|local LLM|Ollama` matches neither file. CR-111's instruction-authority cleanup removed the claim outright, and the precise restatement (true for drafting stages; not true for fit evaluation and `audit_and_improve`) already lives in CR-070's own problem statement. Nothing left to correct.
+- [x] **Story 1.2**: Update CR-059's tracker doc status/related-CRs to reference this CR-070 as the follow-up that acted on the fit-scoring/audit-and-improve call sites it had explicitly scoped out. **Done 2026-09-08:** `CR-059-local-llm-tuning-loop.md`'s `related:` metadata now names CR-070, and the "Why this CR is closed rather than redirected" section carries a Follow-up note pointing at CR-070's Epics 2/3 with the same call-site names. This was the one remaining actionable closing edit in Epic 1.
 
 ## Epic 2 — Fit evaluation: Ollama subprocess → Claude-native reasoning
 

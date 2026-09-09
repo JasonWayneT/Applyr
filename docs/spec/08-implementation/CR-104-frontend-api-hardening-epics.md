@@ -1,5 +1,5 @@
 ---
-status: not started
+status: in_progress
 created: 2026-08-28
 related: docs/ROADMAP_BEST_PRACTICES.md (research/rationale for every epic below — read it first)
 contains: CR-104 (frontend & API hardening pass)
@@ -48,20 +48,30 @@ row).
 This is the biggest epic here — treat each story as its own stopping point if a session runs out of
 budget mid-epic.
 
-- [ ] **Story 1.1**: Create `src/components/job-detail/` and extract the "Application Status" section
+- [x] **Story 1.1**: Create `src/components/job-detail/` and extract the "Application Status" section
   into `StatusSection.tsx`, taking exactly the props it needs (not the whole job object by default —
   check what the section actually reads first).
-- [ ] **Story 1.2**: Extract "Interview Schedule" into `InterviewScheduleSection.tsx`.
-- [ ] **Story 1.3**: Extract "Contacts" into `ContactsSection.tsx`.
-- [ ] **Story 1.4**: Extract "Interview Debrief" into `DebriefSection.tsx`.
-- [ ] **Story 1.5**: Extract "Match Summary" into `MatchSummarySection.tsx`.
-- [ ] **Story 1.6**: Extract "Skill Gap Analysis" into `SkillGapSection.tsx`.
-- [ ] **Story 1.7**: Extract "Your Assets & Links" (including the `DocumentEditor` mount point) into
+- [x] **Story 1.1–1.10 done 2026-09-08.** All nine section components extracted and `JobDetailPanel.tsx`
+  reassembled as a thin shell in one pass. State management stays in the parent; each section is
+  purely presentational, receiving only the props it reads. Main panel dropped from 1309 to 603 lines;
+  the 9 extracted components total 1051 lines (prop-interface overhead accounts for the net increase).
+  Verification: `tsc --noEmit` clean, `vitest run` 356/0, `npm run build` success, `npm run lint` 0
+  errors (26 pre-existing warnings unchanged). Story 1.11 (full browser pass) remains the gate before
+  this epic is considered verified — run the dev server and exercise every section per the story's
+  checklist. The "Details" glance section and "Scoring Transparency" score-breakdown section were kept
+  inline in the shell (not named in any story); MatchSummarySection includes both the summary text and
+  the scoring transparency bars since they're adjacent and read the same job fields.
+- [x] **Story 1.2**: Extract "Interview Schedule" into `InterviewScheduleSection.tsx`.
+- [x] **Story 1.3**: Extract "Contacts" into `ContactsSection.tsx`.
+- [x] **Story 1.4**: Extract "Interview Debrief" into `DebriefSection.tsx`.
+- [x] **Story 1.5**: Extract "Match Summary" into `MatchSummarySection.tsx`.
+- [x] **Story 1.6**: Extract "Skill Gap Analysis" into `SkillGapSection.tsx`.
+- [x] **Story 1.7**: Extract "Your Assets & Links" (including the `DocumentEditor` mount point) into
   `AssetsSection.tsx`.
-- [ ] **Story 1.8**: Extract "Pipeline Process Logs" into `LogsSection.tsx`.
-- [ ] **Story 1.9**: Extract the closure modal (Self-Reject / No Longer Available / Confirm Deletion)
+- [x] **Story 1.8**: Extract "Pipeline Process Logs" into `LogsSection.tsx`.
+- [x] **Story 1.9**: Extract the closure modal (Self-Reject / No Longer Available / Confirm Deletion)
   into `ClosureModal.tsx`.
-- [ ] **Story 1.10**: Reassemble `JobDetailPanel.tsx` as a thin shell that composes the sections above
+- [x] **Story 1.10**: Reassemble `JobDetailPanel.tsx` as a thin shell that composes the sections above
   in the original order. Don't add error-boundary wrapping yet — the reusable `ErrorBoundary`
   component doesn't exist until Epic 4; that epic comes back and wraps each of these sections
   individually once it does.

@@ -1,6 +1,7 @@
 import React from 'react';
 import { api } from '../../lib/api';
 import DocumentEditor from '../DocumentEditor';
+import ErrorBoundary from '../ErrorBoundary';
 
 interface JobFile {
   name: string;
@@ -183,17 +184,32 @@ const AssetsSection: React.FC<AssetsSectionProps> = ({
             </div>
           )}
 
-          {/* Right Pane: Toast UI rich document editor */}
+          {/* Right Pane: Toast UI rich document editor — isolated boundary
+              because it renders unpredictable AI-generated content (CR-104 Epic 4 Story 4.5) */}
           <div className={editingFile.endsWith('.md') ? 'w-1/2 h-full' : 'w-full h-full'}>
-            <DocumentEditor
-              jobId={jobId}
-              filename={editingFile}
-              initialValue={editingContent}
-              jobTitle={jobTitle}
-              jobCompany={jobCompany}
+            <ErrorBoundary
+              fallback={
+                <div className="flex flex-col items-center justify-center h-full text-on-surface-variant text-sm gap-4">
+                  <p>The document editor encountered an error.</p>
+                  <button
+                    onClick={onClearEditingFile}
+                    className="btn-secondary text-xs px-4 py-2 rounded-xl"
+                  >
+                    Close editor
+                  </button>
+                </div>
+              }
+            >
+              <DocumentEditor
+                jobId={jobId}
+                filename={editingFile}
+                initialValue={editingContent}
+                jobTitle={jobTitle}
+                jobCompany={jobCompany}
               onSaveSuccess={onSaveSuccess}
               onClose={onClearEditingFile}
             />
+            </ErrorBoundary>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ import NotificationPanel from './components/NotificationPanel';
 import TuningLogView from './pages/TuningLogView';
 import SettingsView from './components/SettingsView';
 import ReviewCenterView from './pages/ReviewCenterView';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useReviewCenter } from './hooks/useReviewCenter';
 import { companyOpportunityKey } from './lib/reviewCenter';
 import { useJobs } from './hooks/useJobs';
@@ -140,7 +141,23 @@ function App() {
         {/* Main Content Area */}
         <main ref={mainRef} className="flex-1 overflow-y-auto px-8 pt-8 pb-12 applyr-scrollbar">
           <div className="max-w-7xl mx-auto">
-            {isLoaded ? renderPage() : (
+            {isLoaded ? (
+              <ErrorBoundary
+                fallback={
+                  <div className="flex flex-col items-center justify-center h-64 text-on-surface-variant text-sm gap-4">
+                    <p>Something went wrong. Try reloading the page.</p>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="btn-primary text-xs px-4 py-2 rounded-xl"
+                    >
+                      Reload
+                    </button>
+                  </div>
+                }
+              >
+                {renderPage()}
+              </ErrorBoundary>
+            ) : (
               <div className="flex items-center justify-center h-64 text-on-surface-variant text-sm gap-2">
                 <span className="material-symbols-outlined animate-spin">progress_activity</span>
                 Loading...
@@ -150,13 +167,30 @@ function App() {
         </main>
       </div>
 
-      {/* Slide-out Job Detail Panel */}
-      <JobDetailPanel
-        job={selectedJob}
-        onClose={() => setSelectedJob(null)}
-        onStatusChange={handleStatusChange}
-        onNavigateToReviewCenter={() => setActiveTab('Review Center')}
-      />
+      {/* Slide-out Job Detail Panel — isolated boundary so a panel crash
+          doesn't take out the rest of the app (CR-104 Epic 4 Story 4.3) */}
+      <ErrorBoundary
+        fallback={
+          <div className="fixed right-0 top-0 h-full w-[520px] bg-surface z-50 editorial-shadow animate-slide-in p-8">
+            <p className="text-sm text-on-surface-variant">
+              This panel encountered an error. Close and reopen the job to try again.
+            </p>
+            <button
+              onClick={() => setSelectedJob(null)}
+              className="mt-4 text-xs text-primary hover:underline"
+            >
+              Close panel
+            </button>
+          </div>
+        }
+      >
+        <JobDetailPanel
+          job={selectedJob}
+          onClose={() => setSelectedJob(null)}
+          onStatusChange={handleStatusChange}
+          onNavigateToReviewCenter={() => setActiveTab('Review Center')}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { api } from '../lib/api';
 import { companyOpportunityKey, fetchReviewQueue } from '../lib/reviewCenter';
 import type { ReviewItem } from '../types/reviewCenter';
 import StatusChip from './StatusChip';
+import ErrorBoundary from './ErrorBoundary';
 import {
   statusRequiresInterviewDateTime,
   isValidInterviewDateTime,
@@ -510,78 +511,92 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
               </div>
             </section>
 
-            <StatusSection status={job.status} />
+            <ErrorBoundary><StatusSection status={job.status} /></ErrorBoundary>
 
-            <InterviewScheduleSection
-              interviewDate={interviewDate}
-              onDateChange={handleDateChange}
-              progression={progression}
-            />
+            <ErrorBoundary>
+              <InterviewScheduleSection
+                interviewDate={interviewDate}
+                onDateChange={handleDateChange}
+                progression={progression}
+              />
+            </ErrorBoundary>
 
-            <ContactsSection
-              contacts={contacts}
-              loading={loadingContacts}
-              showAddForm={showAddContact}
-              formState={contactForm}
-              saving={savingContact}
-              error={contactError}
-              onToggleAddForm={setShowAddContact}
-              onFormChange={setContactForm}
-              onSave={saveContact}
-              onCancel={() => { setShowAddContact(false); setContactForm(EMPTY_CONTACT_FORM); setContactError(null); }}
-            />
+            <ErrorBoundary>
+              <ContactsSection
+                contacts={contacts}
+                loading={loadingContacts}
+                showAddForm={showAddContact}
+                formState={contactForm}
+                saving={savingContact}
+                error={contactError}
+                onToggleAddForm={setShowAddContact}
+                onFormChange={setContactForm}
+                onSave={saveContact}
+                onCancel={() => { setShowAddContact(false); setContactForm(EMPTY_CONTACT_FORM); setContactError(null); }}
+              />
+            </ErrorBoundary>
 
-            <DebriefSection
-              debriefs={debriefs}
-              loadingDebriefs={loadingDebriefs}
-              form={debriefForm}
-              formErrors={debriefFieldErrors}
-              saving={savingDebrief}
-              editingId={editingDebriefId}
-              error={debriefError}
-              onFormChange={setDebriefForm}
-              onFormErrorChange={setDebriefFieldErrors}
-              onSave={saveDebrief}
-              onResetForm={resetDebriefForm}
-              onStartEdit={startEditDebrief}
-              onDelete={deleteDebrief}
-            />
+            <ErrorBoundary>
+              <DebriefSection
+                debriefs={debriefs}
+                loadingDebriefs={loadingDebriefs}
+                form={debriefForm}
+                formErrors={debriefFieldErrors}
+                saving={savingDebrief}
+                editingId={editingDebriefId}
+                error={debriefError}
+                onFormChange={setDebriefForm}
+                onFormErrorChange={setDebriefFieldErrors}
+                onSave={saveDebrief}
+                onResetForm={resetDebriefForm}
+                onStartEdit={startEditDebrief}
+                onDelete={deleteDebrief}
+              />
+            </ErrorBoundary>
 
-            <MatchSummarySection
-              summary={job.summary}
-              scoreTotal={job.score_total}
-              score={job.score}
-              scoreBreakdownJson={job.score_breakdown_json}
-              reasonSummary={job.reason_summary}
-            />
+            <ErrorBoundary>
+              <MatchSummarySection
+                summary={job.summary}
+                scoreTotal={job.score_total}
+                score={job.score}
+                scoreBreakdownJson={job.score_breakdown_json}
+                reasonSummary={job.reason_summary}
+              />
+            </ErrorBoundary>
 
-            <SkillGapSection
-              skillGap={skillGap}
-              loading={loadingSkillGap}
-              onAnalyze={fetchSkillGap}
-            />
+            <ErrorBoundary>
+              <SkillGapSection
+                skillGap={skillGap}
+                loading={loadingSkillGap}
+                onAnalyze={fetchSkillGap}
+              />
+            </ErrorBoundary>
 
-            <AssetsSection
-              jobId={job.id}
-              jobTitle={job.title}
-              jobCompany={job.company}
-              jobUrl={job.url}
-              files={files}
-              loadingFiles={loadingFiles}
-              editingFile={editingFile}
-              editingContent={editingContent}
-              pdfReloadKey={pdfReloadKey}
-              onStartEdit={handleStartEdit}
-              onClearEditingFile={() => setEditingFile(null)}
-              onSaveSuccess={() => setPdfReloadKey(prev => prev + 1)}
-            />
+            <ErrorBoundary>
+              <AssetsSection
+                jobId={job.id}
+                jobTitle={job.title}
+                jobCompany={job.company}
+                jobUrl={job.url}
+                files={files}
+                loadingFiles={loadingFiles}
+                editingFile={editingFile}
+                editingContent={editingContent}
+                pdfReloadKey={pdfReloadKey}
+                onStartEdit={handleStartEdit}
+                onClearEditingFile={() => setEditingFile(null)}
+                onSaveSuccess={() => setPdfReloadKey(prev => prev + 1)}
+              />
+            </ErrorBoundary>
 
-            <LogsSection
-              logs={companyLogs}
-              loading={loadingLogs}
-              systemStatus={systemStatus}
-              companyName={job.company}
-            />
+            <ErrorBoundary>
+              <LogsSection
+                logs={companyLogs}
+                loading={loadingLogs}
+                systemStatus={systemStatus}
+                companyName={job.company}
+              />
+            </ErrorBoundary>
           </div>
 
           <ClosureModal

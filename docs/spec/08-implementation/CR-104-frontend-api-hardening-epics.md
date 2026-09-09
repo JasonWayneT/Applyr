@@ -165,23 +165,28 @@ the other two-thirds of the usual baseline trio and are currently missing entire
 **Why:** zero error boundaries exist anywhere in the frontend today — one bad render anywhere
 white-screens the entire app. See `ROADMAP_BEST_PRACTICES.md` §1.2.
 
-- [ ] **Story 4.1**: Create `src/components/ErrorBoundary.tsx` — a reusable class component (error
+- [x] **Story 4.1**: Create `src/components/ErrorBoundary.tsx` — a reusable class component (error
   boundaries still require a class component in React) taking a `fallback` render prop or a simple
   default "Something went wrong here" message, and logging the caught error via `componentDidCatch`
   (`console.error` at minimum — don't swallow it silently).
-- [ ] **Story 4.2**: Wrap `renderPage()`'s output in `src/App.tsx` in one root `ErrorBoundary` with a
+  **Done 2026-09-09.**
+- [x] **Story 4.2**: Wrap `renderPage()`'s output in `src/App.tsx` in one root `ErrorBoundary` with a
   fallback that includes a reload button.
-- [ ] **Story 4.3**: Wrap the `<JobDetailPanel />` render in `src/App.tsx` in its own `ErrorBoundary`,
+  **Done 2026-09-09.** Root boundary wraps `renderPage()` with a reload-button fallback.
+- [x] **Story 4.3**: Wrap the `<JobDetailPanel />` render in `src/App.tsx` in its own `ErrorBoundary`,
   separate from the root one — a crash in the slide-out panel shouldn't take out the rest of the app
   behind it.
-- [ ] **Story 4.4**: Now that Epic 1 split the panel into `src/components/job-detail/*`, wrap each of
+  **Done 2026-09-09.** Panel-level boundary with a close-panel fallback.
+- [x] **Story 4.4**: Now that Epic 1 split the panel into `src/components/job-detail/*`, wrap each of
   those sections (`StatusSection`, `InterviewScheduleSection`, `ContactsSection`, `DebriefSection`,
   `MatchSummarySection`, `SkillGapSection`, `AssetsSection`, `LogsSection`) individually in its own
   `ErrorBoundary` inside `JobDetailPanel.tsx`'s composing shell — this is the granular placement the
   research called for, and it's cheap now that the sections are already separate components.
-- [ ] **Story 4.5**: Wrap `DocumentEditor`'s render specifically (it mounts inside `AssetsSection.tsx`
+  **Done 2026-09-09.** All 8 sections wrapped in their own `ErrorBoundary` inside the composing shell.
+- [x] **Story 4.5**: Wrap `DocumentEditor`'s render specifically (it mounts inside `AssetsSection.tsx`
   after Epic 1) in its own `ErrorBoundary` too — this is the component most likely to render
   unpredictable AI-generated content, worth isolating even within `AssetsSection`.
+  **Done 2026-09-09.** DocumentEditor wrapped with a close-editor fallback inside AssetsSection.
 - [ ] **Story 4.6 — verify**: Temporarily throw an error inside one wrapped section (e.g. a fake
   `throw new Error('test')` in `SkillGapSection.tsx`'s render), confirm only that section shows the
   fallback UI while the rest of the panel and app keep working, then remove the test throw before

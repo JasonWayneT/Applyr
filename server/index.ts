@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import { logActivity } from './db.js';
 import { ARCHIVE_DIR, SUBMISSION_DIR } from './shared.js';
@@ -46,6 +48,21 @@ const corsOrigins = [
   /^http:\/\/localhost:\d+$/,
   /^http:\/\/127\.0\.0\.1:\d+$/,
 ];
+
+// CR-104 Epic 3: baseline Express hardening — Helmet for security headers,
+// rate limiting to cap abuse. Sized generously (300 req/min per IP) so the
+// app's own polling (5-10s intervals from multiple components) never trips.
+app.use(helmet());
+app.use(
+  '/api/',
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please slow down.' },
+  }),
+);
 
 app.use(cors({
   origin(origin, callback) {

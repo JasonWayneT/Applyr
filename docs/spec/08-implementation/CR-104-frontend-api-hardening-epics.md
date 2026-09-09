@@ -141,14 +141,18 @@ Tailscale/phone use).
 the other two-thirds of the usual baseline trio and are currently missing entirely. See
 `ROADMAP_BEST_PRACTICES.md` §1.4.
 
-- [ ] **Story 3.1**: `npm install helmet express-rate-limit`.
-- [ ] **Story 3.2**: In `server/index.ts`, add `app.use(helmet())` early in the middleware stack
+- [x] **Story 3.1**: `npm install helmet express-rate-limit`.
+  **Done 2026-09-09.**
+- [x] **Story 3.2**: In `server/index.ts`, add `app.use(helmet())` early in the middleware stack
   (before the route mounts, alongside `cors()`).
-- [ ] **Story 3.3**: Add a rate limiter applied to mutating routes (or all `/api/*` routes — your
+  **Done 2026-09-09.** `helmet()` added before `cors()` and route mounts.
+- [x] **Story 3.3**: Add a rate limiter applied to mutating routes (or all `/api/*` routes — your
   call, but keep GET-heavy polling routes like `/api/jobs` and `/api/gmail-sync/notifications` in
   mind). Size the window/limit generously — this app already polls itself every 5-10 seconds from
   multiple components (see `ROADMAP_BEST_PRACTICES.md` §1.1), so a naive default limit will trip on
   normal use. Something like 300 requests/minute per IP is a safe starting point; tune from there.
+  **Done 2026-09-09.** Applied to all `/api/` routes at 300 req/min per IP with standard headers.
+  The app's own polling (~24-36 req/min from 2-3 components at 5-10s intervals) is well under the cap.
 - [ ] **Story 3.4 — verify**: `curl -I` a route and confirm Helmet's headers are present. Write a
   throwaway loop hitting an endpoint past the configured limit and confirm a 429 comes back, then
   confirm normal app usage (leave the dev server + browser open for a couple of minutes with the app's

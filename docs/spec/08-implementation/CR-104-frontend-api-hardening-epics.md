@@ -199,20 +199,25 @@ white-screens the entire app. See `ROADMAP_BEST_PRACTICES.md` §1.2.
 **Why:** five independent, uncoordinated polling loops, no shared cache, no tab-visibility awareness.
 `useJobs` is the biggest one and every screen depends on it. See `ROADMAP_BEST_PRACTICES.md` §1.1.
 
-- [ ] **Story 5.1**: `npm install @tanstack/react-query`. Add a `QueryClientProvider` at the root in
+- [x] **Story 5.1**: `npm install @tanstack/react-query`. Add a `QueryClientProvider` at the root in
   `src/App.tsx` (or a new `src/main.tsx` wrapper if that's the cleaner spot — check how the app is
   currently bootstrapped first).
-- [ ] **Story 5.2**: Convert `src/hooks/useJobs.ts` to use `useQuery` with `refetchInterval: 5000`
+  **Done 2026-09-09.** `QueryClientProvider` added in `src/main.tsx` (the app's bootstrap point).
+- [x] **Story 5.2**: Convert `src/hooks/useJobs.ts` to use `useQuery` with `refetchInterval: 5000`
   (matching today's `POLL_INTERVAL_MS`), keeping the hook's existing return shape (`jobs`, `isLoaded`,
   `selectedJob`, `setSelectedJob`, `handleStatusChange`) unchanged so nothing consuming it needs to be
   touched in this story.
+  **Done 2026-09-09.** `useJobs` now uses `useQuery` with `queryKey: ['jobs']`, `refetchInterval: 5000`,
+  `staleTime: 5000`. `handleStatusChange` invalidates the query instead of manually refetching. Return
+  shape unchanged — no consumers touched.
 - [ ] **Story 5.3 — verify**: Dashboard, Opportunities, and Tuning Log all still show live data;
   confirm via the browser's Network tab that requests are still deduped (no duplicate simultaneous
   `/api/jobs` calls from different components) and that navigating between tabs no longer triggers a
   fresh loading spinner for data already in cache.
-- [ ] **Story 5.4 (stretch, optional within this epic)**: Migrate `NotificationPanel.tsx`'s Gmail poll
-  to the same `QueryClient` for consistency. Not required to close this epic — note explicitly if
-  skipped, so it's clear this was a deliberate scope cut, not an oversight.
+- [x] **Story 5.4 (stretch, optional within this epic)**: Deliberately skipped — `NotificationPanel`'s
+  Gmail poll is a separate concern (different endpoint, different polling cadence) and migrating it
+  adds no meaningful dedup benefit since no other component polls that route. Noted as a scope cut,
+  not an oversight.
 
 ---
 

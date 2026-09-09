@@ -32,6 +32,16 @@ const app  = express();
 const PORT = 3000;
 const HOST = process.env.APPLYR_HOST || '127.0.0.1';
 
+// CR-104 Epic 2: fail-closed when binding to all interfaces without an auth token.
+// Prevents silently running unprotected on a wide bind (0.0.0.0 / Tailscale / LAN).
+if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !process.env.APPLYR_API_TOKEN) {
+  console.error(
+    `\n  FATAL: APPLYR_HOST="${HOST}" binds to a non-localhost address, but APPLYR_API_TOKEN is not set.\n` +
+    `  Set APPLYR_API_TOKEN to protect mutating routes, or unset APPLYR_HOST to bind localhost only.\n`
+  );
+  process.exit(1);
+}
+
 const corsOrigins = [
   /^http:\/\/localhost:\d+$/,
   /^http:\/\/127\.0\.0\.1:\d+$/,

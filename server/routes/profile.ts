@@ -13,6 +13,57 @@ const router = Router();
 
 router.use(requireApiToken);
 
+// CR-104 Epic 2: mask API key values in GET responses and preserve originals on POST.
+// Known secret fields inside the llm_settings and api_connections profile blobs.
+const SECRET_FIELDS: Record<string, string[]> = {
+  llm_settings: ['geminiApiKey', 'claudeApiKey', 'perplexityApiKey', 'groqApiKey'],
+  api_connections: ['adzunaAppKey', 'theirstackApiKey'],
+};
+
+const MASK_PREFIX = '••••••••';
+
+/** Mask a secret value to show only the last 4 characters. */
+function maskSecret(value: string): string {
+  if (!value || value.length < 8) return MASK_PREFIX;
+  return `${MASK_PREFIX}${value.slice(-4)}`;
+}
+
+/** Returns true if a value looks like a masked secret (starts with the mask prefix). */
+function isMasked(value: unknown): boolean {
+  return typeof value === 'string' && value.startsWith(MASK_PREFIX);
+}
+
+/** Mask known secret fields in a profile blob before sending to the client. */
+function maskSecretsInBlob(key: string, data: Record<string, unknown>): Record<string, unknown> {
+  const fields = SECRET_FIELDS[key];
+  if (!fields) return data;
+  const masked = { ...data };
+  for (const field of fields) {
+    if (typeof masked[field] === 'string' && (masked[field] as string).length > 0) {
+      masked[field] = maskSecret(masked[field] as string);
+    }
+  }
+  return masked;
+}
+
+/** Preserve existing secret values when the client sends back a masked value unchanged. */
+function preserveSecretsOnSave(key: string, incoming: Record<string, unknown>): Record<string, unknown> {
+  const fields = SECRET_FIELDS[key];
+  if (!fields) return incoming;
+  let row: { value: string } | undefined;
+  try {
+    row = db.prepare('SELECT value FROM profiles WHERE key = ?').get(key) as { value: string } | undefined;
+  } catch { /* not stored yet — nothing to preserve */ }
+  const existing = row ? (JSON.parse(row.value) as Record<string, unknown>) : {};
+  const merged = { ...incoming };
+  for (const field of fields) {
+    if (isMasked(merged[field]) && typeof existing[field] === 'string') {
+      merged[field] = existing[field];
+    }
+  }
+  return merged;
+}
+
 // ---------------------------------------------------------------------------
 // Proof-code assignment for workExperience.md (Implements SDD anti-hallucination contract)
 // Scans existing IDs before assigning new ones so re-saves never collide or renumber.
@@ -151,7 +202,9 @@ router.post('/api/profile/job_search', (req, res) => {
 router.get('/api/profile/:key', (req, res) => {
   try {
     const row = db.prepare('SELECT value FROM profiles WHERE key = ?').get(req.params.key) as any;
-    res.json(row ? JSON.parse(row.value) : {});
+    const data = row ? JSON.parse(row.value) as Record<string, unknown> : {};
+    // CR-104 Epic 2: mask secret fields before sending to client
+    res.json(maskSecretsInBlob(req.params.key, data));
   } catch {
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
@@ -159,7 +212,9 @@ router.get('/api/profile/:key', (req, res) => {
 
 router.post('/api/profile/:key', (req, res) => {
   try {
-    db.prepare('INSERT OR REPLACE INTO profiles (key, value) VALUES (?, ?)').run(req.params.key, JSON.stringify(req.body));
+    // CR-104 Epic 2: preserve existing secrets when client sends back masked values
+    const data = preserveSecretsOnSave(req.params.key, req.body as Record<string, unknown>);
+    db.prepare('INSERT OR REPLACE INTO profiles (key, value) VALUES (?, ?)').run(req.params.key, JSON.stringify(data));
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: 'Failed to update profile' });

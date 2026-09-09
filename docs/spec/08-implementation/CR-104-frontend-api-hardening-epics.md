@@ -93,20 +93,39 @@ token is off by default, and Settings' API-key fields are never masked when read
 only require the token when a user deliberately opts into wider access (e.g. for their own
 Tailscale/phone use).
 
-- [ ] **Story 2.1**: In `server/index.ts`, replace the hardcoded `app.listen(PORT, '0.0.0.0', ...)`
+- [x] **Story 2.1**: In `server/index.ts`, replace the hardcoded `app.listen(PORT, '0.0.0.0', ...)`
   with a bind address controlled by a new env var, e.g. `APPLYR_BIND_ALL` (unset/false → bind
   `127.0.0.1`; `true` → bind `0.0.0.0`, preserving today's behavior for anyone already relying on it).
   Log which mode it started in.
-- [ ] **Story 2.2**: In `server/middleware.ts`'s `requireApiToken`, when `APPLYR_BIND_ALL` is true and
+  **Done 2026-09-09.** The server already bound to `127.0.0.1` by default via `APPLYR_HOST` env var
+  (not `APPLYR_BIND_ALL` as the story named it — same semantics, already shipped before this CR was
+  written). No code change needed for this story; the existing `APPLYR_HOST` approach is retained.
+- [x] **Story 2.2**: In `server/middleware.ts`'s `requireApiToken`, when `APPLYR_BIND_ALL` is true and
   `APPLYR_API_TOKEN` is unset, fail startup with a clear error message explaining why (don't silently
   run unprotected on a wide bind) rather than just falling through to `next()` as it does today.
-- [ ] **Story 2.3**: Update `README.md` (and `.env.example` / equivalent, if one exists — check first)
+  **Done 2026-09-09.** Added a fail-closed check in `server/index.ts` before `app.listen`: if
+  `APPLYR_HOST` is set to anything other than `127.0.0.1`/`localhost` and `APPLYR_API_TOKEN` is unset,
+  the server prints a FATAL error and exits. Implemented in `index.ts` rather than `middleware.ts`
+  because the check is a startup-time gate, not a per-request middleware — failing at `app.listen`
+  is cleaner than wiring it through `requireApiToken` which runs on every request.
+- [x] **Story 2.3**: Update `README.md` (and `.env.example` / equivalent, if one exists — check first)
   to document both env vars and this default.
-- [ ] **Story 2.4**: Find every GET route that returns stored API key values (start with
+  **Done 2026-09-09.** Added a "Server bind address and auth" paragraph under "### 5. Start the app"
+  documenting `APPLYR_HOST`, `APPLYR_API_TOKEN`, the fail-closed behavior, and the key masking. No
+  `.env.example` exists in the repo (the README already says "No `.env` file required").
+- [x] **Story 2.4**: Find every GET route that returns stored API key values (start with
   `server/routes/profile.ts`'s `api_connections`/`llm_settings` handlers) and mask them before they
   leave the server — return something like `sk-...ab12` (last 4 chars only) instead of the full value.
   Confirm the Settings UI (`src/components/SettingsView.tsx`) still renders sensibly with a masked
   value (it should already treat the field as opaque display text, not something it parses).
+  **Done 2026-09-09.** Added `maskSecretsInBlob` and `preserveSecretsOnSave` to `server/routes/profile.ts`.
+  GET `/api/profile/:key` now masks known secret fields (`geminiApiKey`, `claudeApiKey`,
+  `perplexityApiKey`, `groqApiKey` in `llm_settings`; `adzunaAppKey`, `theirstackApiKey` in
+  `api_connections`) to `••••••••` + last 4 chars. POST preserves existing stored values when the
+  client sends a masked value back unchanged (detected via the `••••••••` prefix), so a debounced
+  save that re-submits the masked value doesn't overwrite the real key. The Settings UI renders the
+  masked value in `type="password"` inputs (and `type="text"` for Gemini) without parsing the value —
+  confirmed by code inspection, not yet by browser exercise (Story 2.5).
 - [ ] **Story 2.5 — verify**: Start the server fresh with no env vars set — confirm it binds to
   localhost only (`netstat`/`curl` from a non-localhost angle should fail, or just confirm the log
   line). Set `APPLYR_BIND_ALL=true` with no token — confirm it now refuses to start with a clear

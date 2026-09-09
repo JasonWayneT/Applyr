@@ -102,6 +102,8 @@ This starts both the React frontend (Vite, usually port `5173` or `5174` if busy
 
 Open the **Local** URL printed by Vite (e.g. **[http://localhost:5173](http://localhost:5173)**). The UI proxies `/api` to the backend in dev.
 
+**Server bind address and auth (CR-104):** the backend defaults to `127.0.0.1` (localhost only). To bind all interfaces for Tailscale/phone access, set `APPLYR_HOST=0.0.0.0` — but then you **must** also set `APPLYR_API_TOKEN` to protect mutating routes; the server will refuse to start otherwise. When the token is set, the frontend needs `VITE_APPLYR_API_TOKEN` set to the same value so its API calls include the `X-Applyr-Token` header. API keys configured through Settings are masked (`••••••••` + last 4 chars) in API responses so they never leave the server in full.
+
 ### Troubleshooting empty UI or startup errors
 
 | Symptom | Fix |

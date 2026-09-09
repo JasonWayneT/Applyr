@@ -390,7 +390,14 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-on-surface/20 backdrop-blur-[2px] z-40 transition-opacity animate-fade-in"
+        role="button"
+        tabIndex={0}
         onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.currentTarget.click();
+          }
+        }}
       />
 
       {/* Panel */}
@@ -465,28 +472,30 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
               <h3 className="text-lg font-headline font-bold text-on-surface mb-4">Details</h3>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
+                  <span className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
                     Discovered
-                  </label>
+                  </span>
                   <p className="text-sm font-medium text-on-surface py-2.5">
                     {formatGlanceDate(job.created_at) || '—'}
                   </p>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
+                  <span className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
                     Applied
-                  </label>
+                  </span>
                   {APPLICATION_FUNNEL_SET.has(job.status) || job.applied_at || job.status === 'Closed' ? (
                     <div className="flex items-center gap-2 py-2.5">
                       <p className="text-sm font-medium text-on-surface min-w-0">
                         {formatGlanceDate(appliedAtDate) || '—'}
                       </p>
                       <label
+                        htmlFor="applied-at-input"
                         className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-primary cursor-pointer transition-colors"
                         title="Edit applied date"
                       >
                         <span className="material-symbols-outlined text-[18px]">calendar_month</span>
                         <input
+                          id="applied-at-input"
                           type="date"
                           value={appliedAtDate}
                           onChange={(e) => handleAppliedAtChange(e.target.value)}
@@ -499,9 +508,9 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
                   )}
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
+                  <span className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
                     Interview
-                  </label>
+                  </span>
                   <p className="text-sm font-medium text-on-surface py-2.5">
                     {interviewDate
                       ? new Date(interviewDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })

@@ -46,8 +46,9 @@ const ClosureModal: React.FC<ClosureModalProps> = ({
         <div className="space-y-4 animate-fade-in">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Last Stage</label>
+              <label htmlFor="closure-stage-input" className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Last Stage</label>
               <select
+                id="closure-stage-input"
                 value={closureData.stage}
                 onChange={e => onClosureDataChange({ ...closureData, stage: e.target.value })}
                 className="input-applyr w-full text-xs rounded-lg py-2"
@@ -58,7 +59,7 @@ const ClosureModal: React.FC<ClosureModalProps> = ({
               </select>
             </div>
             <div className="col-span-2">
-              <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Outcome</label>
+              <span className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Outcome</span>
               <div className="flex flex-wrap gap-1.5">
                 {[
                   { value: 'Rejected', label: 'Closed', color: 'bg-status-closed-bg text-status-closed-text border border-outline-variant' },
@@ -83,10 +84,11 @@ const ClosureModal: React.FC<ClosureModalProps> = ({
             </div>
           </div>
           <div>
-            <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
+            <label htmlFor="closure-notes-input" className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">
               {closureData.type === 'Self-Rejected' ? 'Critique & Feedback (Why is this not a fit?)' : 'Notes (Optional)'}
             </label>
             <textarea
+              id="closure-notes-input"
               placeholder={
                 closureData.type === 'Self-Rejected'
                   ? "e.g., Criteria needs to weigh legacy tech stack, or solo PM role..."

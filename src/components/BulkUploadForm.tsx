@@ -82,11 +82,18 @@ const BulkUploadForm: React.FC<BulkUploadFormProps> = ({ onBatchRun, isLoading }
       {!parsedJobs.length ? (
         <div
           className={`w-full h-[400px] flex flex-col items-center justify-center border-2 border-dashed rounded-2xl transition-colors cursor-pointer ${dragActive ? 'border-primary bg-primary-container/20' : 'border-outline-variant bg-surface-container-lowest hover:border-primary/30'}`}
+          role="button"
+          tabIndex={0}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
           onDrop={handleDrop}
           onClick={() => inputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.currentTarget.click();
+            }
+          }}
         >
           <input
              ref={inputRef}

@@ -386,7 +386,14 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
             {pipelineJobs.slice(0, 10).map(job => (
               <div
                 key={job.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onJobClick(job)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.currentTarget.click();
+                  }
+                }}
                 className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 outlined-surface hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
               >
                 <div className="flex items-center gap-4 flex-1">
@@ -488,7 +495,14 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
             {displayedActiveJobs.map(job => (
               <div
                 key={job.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onJobClick(job)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.currentTarget.click();
+                  }
+                }}
                 className="group bg-surface-container-lowest p-6 rounded-3xl flex flex-col md:flex-row md:items-center gap-4 outlined-surface hover:shadow-lg transition-all border border-outline-variant hover:border-outline cursor-pointer"
               >
                 <div className="flex items-center gap-4 flex-1">
@@ -562,7 +576,14 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
             {upcomingInterviews.map(job => (
               <div 
                 key={job.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onJobClick(job)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.currentTarget.click();
+                  }
+                }}
                 className="bg-surface-container-lowest p-6 rounded-3xl outlined-surface border border-outline-variant hover:border-primary transition-all cursor-pointer group"
               >
                 <div className="flex items-start justify-between mb-4">

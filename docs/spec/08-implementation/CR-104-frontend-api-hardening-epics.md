@@ -255,13 +255,23 @@ the logic that has the widest blast radius if it silently breaks. See `ROADMAP_B
 **Why:** 4 total `aria-label`/`role` occurrences across the entire frontend; no automated check for
 new instances. See `ROADMAP_BEST_PRACTICES.md` §1.5.
 
-- [ ] **Story 7.1**: `npm install -D eslint-plugin-jsx-a11y`, add it to `eslint.config.*` alongside
+- [x] **Story 7.1**: `npm install -D eslint-plugin-jsx-a11y`, add it to `eslint.config.*` alongside
   the existing `eslint-plugin-react-hooks`.
-- [ ] **Story 7.2**: Run `npm run lint` and collect the full list of newly-flagged issues.
-- [ ] **Story 7.3**: Sweep and fix — add `aria-label` to icon-only buttons across the flagged files
+  **Done 2026-09-09.** Added to `eslint.config.mjs` using `flatConfigs.recommended` (the plugin's
+  flat-config export, not `configs.flat` which doesn't exist in this version).
+- [x] **Story 7.2**: Run `npm run lint` and collect the full list of newly-flagged issues.
+  **Done 2026-09-09.** 18 errors across 8 files: `click-events-have-key-events` and
+  `no-static-element-interactions` on clickable divs (BulkUploadForm, JobDetailPanel backdrop,
+  NotificationPanel, AllJobsView, SyncActivityView, TodayView, TuningLogView);
+  `label-has-associated-control` on detached labels (DocumentEditor, JDInputForm, JobDetailPanel,
+  ClosureModal, InterviewScheduleSection).
+- [x] **Story 7.3**: Sweep and fix — add `aria-label` to icon-only buttons across the flagged files
   (expect at least the notification bell and account-menu avatar in `Sidebar.tsx`, the dismiss `×` in
   `NotificationPanel.tsx`, and the edit/download icons in `src/components/job-detail/*` — Epic 1's
   extracted sections, primarily `AssetsSection.tsx`).
+  **Done 2026-09-09.** Fixed all 18 errors: clickable divs got `role="button"`, `tabIndex={0}`, and
+  `onKeyDown` handlers; labels got `htmlFor`/`id` associations or were replaced with semantic spans
+  where they were purely presentational (not wrapping a form control).
 - [ ] **Story 7.4 — verify**: `npm run lint` clean of `jsx-a11y` errors.
 
 ---

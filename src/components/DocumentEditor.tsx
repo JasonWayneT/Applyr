@@ -303,10 +303,11 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           {hasAiKey ? (
             <div className="space-y-4">
               <div>
-                <label className="block text-[9px] font-extrabold text-on-surface-variant uppercase tracking-widest mb-2">
+                <label htmlFor="ai-instruction-input" className="block text-[9px] font-extrabold text-on-surface-variant uppercase tracking-widest mb-2">
                   Instruction
                 </label>
                 <textarea
+                  id="ai-instruction-input"
                   value={aiInstruction}
                   onChange={(e) => setAiInstruction(e.target.value)}
                   placeholder="e.g., 'Make the introductory paragraph sound more technical and emphasize B2B experience.'"

@@ -681,8 +681,9 @@ const SyncActivityView: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
           {/* Target Role */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Target Role</label>
+            <label htmlFor="target-role-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Target Role</label>
             <input
+              id="target-role-input"
               type="text"
               value={settings.targetRole}
               onChange={e => update('targetRole', e.target.value)}
@@ -694,8 +695,9 @@ const SyncActivityView: React.FC = () => {
 
           {/* Additional search titles */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Additional Search Titles</label>
+            <label htmlFor="additional-search-titles-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Additional Search Titles</label>
             <input
+              id="additional-search-titles-input"
               type="text"
               value={settings.additionalSearchTerms}
               onChange={e => update('additionalSearchTerms', e.target.value)}
@@ -709,7 +711,7 @@ const SyncActivityView: React.FC = () => {
 
           {/* Work Setting */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Work Setting</label>
+            <span className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Work Setting</span>
             <div className="flex gap-1.5 p-1 bg-surface-container-low rounded-xl border border-outline-variant/10">
               {['Remote', 'Hybrid', 'On-site'].map(opt => (
                 <button
@@ -729,8 +731,9 @@ const SyncActivityView: React.FC = () => {
 
           {/* Location */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Location</label>
+            <label htmlFor="location-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Location</label>
             <select
+              id="location-input"
               value={settings.location}
               onChange={e => update('location', e.target.value)}
               className="input-applyr w-full rounded-xl text-xs py-2.5 bg-surface-container-low cursor-pointer"
@@ -753,7 +756,7 @@ const SyncActivityView: React.FC = () => {
 
           {/* Date Posted */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Date Posted</label>
+            <span className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Date Posted</span>
             <div className="grid grid-cols-2 gap-1.5">
               {DATE_OPTIONS.map(opt => (
                 <button
@@ -774,7 +777,7 @@ const SyncActivityView: React.FC = () => {
 
         {/* Experience Level — full row */}
         <div className="pt-2 border-t border-outline-variant/10">
-          <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Experience Level</label>
+          <span className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Experience Level</span>
           <div className="relative" ref={expRef}>
             <button
               type="button"
@@ -828,8 +831,9 @@ const SyncActivityView: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Title Blocklist (auto-reject)</label>
+            <label htmlFor="title-blocklist-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Title Blocklist (auto-reject)</label>
             <textarea
+              id="title-blocklist-input"
               value={settings.titleBlocklist}
               onChange={e => update('titleBlocklist', e.target.value)}
               rows={3}
@@ -839,8 +843,9 @@ const SyncActivityView: React.FC = () => {
             <p className="text-[10px] text-on-surface-variant mt-1 italic">Comma separated. Whole-word match on job title only. Senior is allowed; use years cap below.</p>
           </div>
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Max years required (reject above)</label>
+            <label htmlFor="max-years-required-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Max years required (reject above)</label>
             <input
+              id="max-years-required-input"
               type="number"
               min={3}
               max={15}
@@ -851,8 +856,9 @@ const SyncActivityView: React.FC = () => {
             <p className="text-[10px] text-on-surface-variant mt-1 italic">JD requiring more than this is auto-rejected (your profile: ~6 years).</p>
           </div>
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Industry Blocklist</label>
+            <label htmlFor="industry-blocklist-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Industry Blocklist</label>
             <textarea
+              id="industry-blocklist-input"
               value={settings.industryBlocklist}
               onChange={e => update('industryBlocklist', e.target.value)}
               rows={3}
@@ -862,10 +868,11 @@ const SyncActivityView: React.FC = () => {
             <p className="text-[10px] text-on-surface-variant mt-1 italic">Comma separated. Matched against company descriptions.</p>
           </div>
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Minimum Salary</label>
+            <label htmlFor="minimum-salary-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Minimum Salary</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">$</span>
               <input
+                id="minimum-salary-input"
                 type="number"
                 value={settings.minSalary}
                 onChange={e => update('minSalary', parseInt(e.target.value) || 0)}

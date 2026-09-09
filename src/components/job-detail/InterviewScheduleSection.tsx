@@ -27,8 +27,9 @@ const InterviewScheduleSection: React.FC<InterviewScheduleSectionProps> = ({
       </div>
       <div className="space-y-4">
         <div>
-          <label className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Date & Time</label>
+          <label htmlFor="interview-date-input" className="block text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1.5">Date & Time</label>
           <input
+            id="interview-date-input"
             type="datetime-local"
             value={interviewDate}
             onChange={(e) => onDateChange(e.target.value)}

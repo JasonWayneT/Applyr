@@ -176,7 +176,14 @@ const TuningLogView: React.FC<TuningLogViewProps> = ({ jobs, onJobClick }) => {
             {selfRejectedJobs.map(job => (
               <div
                 key={job.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onJobClick(job)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.currentTarget.click();
+                  }
+                }}
                 className="group bg-surface-container-lowest p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-outline-variant hover:border-outline hover:shadow-lg transition-all cursor-pointer outlined-surface"
               >
                 {/* Job Metadata Column */}

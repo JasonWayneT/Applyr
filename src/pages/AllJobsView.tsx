@@ -166,7 +166,14 @@ const AllJobsView: React.FC<AllJobsViewProps> = ({ jobs, onJobClick, activeFilte
                 {filteredJobs.map(job => (
                   <div
                     key={job.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onJobClick(job)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.currentTarget.click();
+                      }
+                    }}
                     className={`group bg-surface-container-lowest p-5 rounded-2xl flex items-center justify-between outlined-surface hover:shadow-lg transition-all border border-outline-variant hover:border-outline border-l-4 cursor-pointer ${
                       job.score && job.score >= tier1Floor
                         ? 'border-l-primary'

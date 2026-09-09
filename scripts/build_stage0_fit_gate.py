@@ -2009,13 +2009,17 @@ def screen_responsibilities_for_exclusion(
     2026-09-01 Improvement #2: all non-deterministic responsibility lines
     are batched into a single classify_requirements_batch() call instead of
     one sequential classify_requirement() call per line. CR-108 Epic 7.7
-    (2026-09-09): the legacy sequential fallback was removed — a batch
-    failure now raises rather than silently degrading.
+    (2026-09-09): the legacy per-line sequential classifier was removed --
+    a batch failure no longer falls back to it.
 
     Fails open per-line on a classification error: this is a bonus
     screening pass on top of the required/preferred judgments classify_gaps()
     already did, not a fail-closed gate -- one line's LLM error should never
-    abort a Stage 0 run that would otherwise have completed correctly.
+    abort a Stage 0 run that would otherwise have completed correctly. A
+    batch failure (both providers exhausted, validation error, etc.) is
+    caught and this pass returns only whatever Phase 1 already found rather
+    than raising -- unlike classify_gaps()'s cached_results miss, which is a
+    real error, this bonus pass failing just means one extra check didn't run.
     """
     hits: list[dict] = []
     # Phase 1: deterministic 0-to-1 regex fast path (zero-cost, no LLM call).
@@ -2037,12 +2041,17 @@ def screen_responsibilities_for_exclusion(
         return hits
 
     # Phase 2: batch all remaining lines through the evidence cascade.
-    # CR-108 Epic 7.7 (2026-09-09): the legacy per-line sequential fallback
-    # (Phase 3) was removed after the cascade passed its release gate.
-    # A batch failure now raises rather than silently degrading to individual
-    # LLM calls — the cascade's own retry/fallback logic handles transient
-    # provider failures, and a persistent failure is a real error the caller
-    # should see, not something to mask with a slower, inconsistent path.
+    # CR-108 Epic 7.7 (2026-09-09): the legacy per-line sequential classifier
+    # (the old Phase 3 fallback) was removed after the cascade passed its
+    # release gate -- a batch failure no longer degrades to it. But this
+    # function's own fail-open contract (see docstring) still holds: a batch
+    # failure here means this bonus screening pass contributes nothing this
+    # run, not that the whole Stage 0 run for this opportunity should abort.
+    # Bug found on review (2026-09-09): an earlier version of this cutover
+    # let a batch failure propagate uncaught -- worse, as whatever raw
+    # exception type the cascade raises (CascadeValidationError, a transport
+    # error, ...), not even the Stage0ExtractError the workflow runner knows
+    # how to handle, so it also broke that error-type contract on the way out.
     from stage0_evidence_cascade import BatchItem, classify_requirements_batch
     from evidence_scale import build_evidence_context
     from stage0_checkpoint import make_item_key
@@ -2058,10 +2067,13 @@ def screen_responsibilities_for_exclusion(
         )
         for ordinal, line in enumerate(unclassified_lines)
     ]
-    batch_results = classify_requirements_batch(
-        batch_items,
-        settings=settings,
-    )
+    try:
+        batch_results = classify_requirements_batch(
+            batch_items,
+            settings=settings,
+        )
+    except Exception:
+        return hits
     for batch_item in batch_items:
         result = batch_results.get(batch_item.item_id)
         if result and result.get("gate") == "HARD":

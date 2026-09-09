@@ -203,16 +203,28 @@ def classify_requirements_batch(
                 if provider_event_callback:
                     provider_event_callback(provider, "call")
                 retry_prompt = _build_batch_prompt(remaining)
-                retry_raw = call_llm(
-                    _SYSTEM_PROMPT,
-                    retry_prompt,
-                    model=models.get(provider) or _DEFAULT_MODELS[provider],
-                    temperature=0.0,
-                    response_mime_type="application/json",
-                    response_schema={"type": "object"},
-                    provider_override=[provider],
-                    request_timeout=120,
-                )
+                # CR-108 bug fix (2026-09-09): a transport error here (timeout,
+                # connection reset, rate limit) must fall back to the next
+                # provider like every other call_llm() invocation in this loop,
+                # not crash out of classify_requirements_batch entirely.
+                # Previously only CascadeValidationError from parsing/validating
+                # the retry response was caught -- a raw call_llm() exception
+                # propagated uncaught, skipping the configured fallback
+                # provider (e.g. Gemini) even though it was available.
+                try:
+                    retry_raw = call_llm(
+                        _SYSTEM_PROMPT,
+                        retry_prompt,
+                        model=models.get(provider) or _DEFAULT_MODELS[provider],
+                        temperature=0.0,
+                        response_mime_type="application/json",
+                        response_schema={"type": "object"},
+                        provider_override=[provider],
+                        request_timeout=120,
+                    )
+                except Exception as exc:
+                    last_error = exc
+                    retry_raw = None
                 if retry_raw:
                     if raw_response_callback:
                         raw_response_callback(retry_raw)

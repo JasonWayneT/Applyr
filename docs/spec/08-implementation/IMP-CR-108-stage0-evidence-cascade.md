@@ -246,6 +246,29 @@ complete.
       78 combined cascade/pipeline/skip_ledger/model_handoff/confirmations tests
       pass, 21/21 fixture golden tests pass.
 
+      **Bug found and fixed (2026-09-09, post-review).** The Phase 3 removal above
+      made a `screen_responsibilities_for_exclusion` batch failure raise -- but
+      that function is a *bonus* screening pass on top of `classify_gaps`'s own
+      required/preferred judgments, and its own docstring still says (unchanged
+      by this cutover) "one line's LLM error should never abort a Stage 0 run
+      that would otherwise have completed correctly." The new code contradicted
+      its own contract. Worse: the exception it now raised on a batch failure
+      wasn't `Stage0ExtractError` (whatever raw type the cascade produces --
+      `CascadeValidationError`, a transport error, ...), so it also bypassed
+      `workflow/runner.py`'s `run_stage0()`, which only catches
+      `Stage0NeedsInput`/`Stage0ExtractError` around this call -- an uncaught
+      exception of the wrong type, not a clean `WorkflowError`. Reproduced live
+      (mocked `classify_requirements_batch` to raise `RuntimeError`; it
+      propagated straight out). Fixed by wrapping the batch call in
+      `try/except Exception: return hits`, restoring the fail-open contract
+      without resurrecting the removed legacy per-line classifier -- a batch
+      failure now means this bonus check contributes nothing this run (any
+      Phase 1 deterministic hits are still returned), not that the run aborts.
+      Added regression test `test_batch_failure_fails_open_instead_of_raising`.
+      154 build_stage0_fit_gate tests pass (153 + the new one), 78 combined
+      cascade/pipeline/skip_ledger/model_handoff/confirmations tests pass,
+      21/21 fixture golden tests pass, `tsc --noEmit` clean.
+
 ### Hardening increment: validation, safety, and source promotion
 
 - [x] **H1** Add a deterministic provider-adapter golden runner for Groq and

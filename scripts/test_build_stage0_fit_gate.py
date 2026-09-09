@@ -1561,6 +1561,30 @@ class TestResponsibilitiesFullJudgmentEscalation(unittest.TestCase):
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["gap_class"], "HARD")
 
+    def test_batch_failure_fails_open_instead_of_raising(self):
+        """Regression: CR-108 Epic 7.7 removed the legacy per-line fallback,
+        and an earlier version of that cutover let a batch failure propagate
+        uncaught -- contradicting this function's own documented fail-open
+        contract, and doing so as whatever raw exception type the cascade
+        happened to raise rather than the Stage0ExtractError the workflow
+        runner's except clauses actually handle. A batch failure must still
+        return whatever Phase 1 already found, not raise."""
+        lines = [
+            "Own the zero to one build of our new platform from scratch.",
+            "Drive cross-functional alignment across engineering and design.",
+        ]
+        with patch(
+            "stage0_evidence_cascade.classify_requirements_batch",
+            side_effect=RuntimeError("both providers exhausted"),
+        ):
+            hits = screen_responsibilities_for_exclusion(
+                lines, work_exp="some work experience", company="Test Co",
+            )
+        # The deterministic Phase 1 hit survives; the Phase 2 batch failure
+        # for the other line is swallowed, not raised.
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["gap_source"], "role_exclusion")
+
 
 # ---------------------------------------------------------------------------
 # Test: DB gate interaction

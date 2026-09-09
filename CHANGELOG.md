@@ -29,6 +29,21 @@ The CR-108 evidence cascade is now the sole Stage 0 classification path.
 - CR-108: `_resolve_item_id` couldn't match model-returned ids in three formats: ordinal-only
   ("0"), mangled prefix ("req-7-hash"), and abbreviated prefix ("req-001"). Added ordinal
   matching and hash-suffix matching for real JD replay.
+- CR-108: found on review — the same-provider retry call added for partial-result recovery
+  was not wrapped in the same broad `except Exception` as every other `call_llm` call in
+  `classify_requirements_batch`'s provider loop. A transport error during the retry (timeout,
+  connection reset, rate limit) crashed the whole classification instead of falling back to
+  the next configured provider, even when it was available — the exact failure mode this
+  robustness pass was meant to handle. Reproduced live, fixed, added a regression test.
+- CR-108: found on review — Epic 7.7's legacy-classifier removal made a
+  `screen_responsibilities_for_exclusion` batch failure raise, contradicting that function's
+  own still-documented fail-open contract ("one line's LLM error should never abort a Stage 0
+  run"). It also raised the wrong exception type for `workflow/runner.py`'s
+  `run_stage0()` to catch (only `Stage0NeedsInput`/`Stage0ExtractError` are handled there),
+  so it escaped uncaught rather than becoming a clean `WorkflowError`. Reproduced live, fixed
+  by catching the batch failure and returning whatever Phase 1 already found instead of
+  raising — without resurrecting the removed legacy per-line classifier. Added a regression
+  test.
 - CR-104: URL state sync race condition — the sync effect could strip the `job` param
   before the restore effect read it on initial load. Captured the initial job ID at mount.
 - CR-104: `SyncActivityView` (Job Search tab) ran its own independent `fetchMatchedJobs()`

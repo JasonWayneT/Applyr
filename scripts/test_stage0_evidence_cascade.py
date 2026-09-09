@@ -523,6 +523,48 @@ class TestStage0EvidenceCascade(unittest.TestCase):
         self.assertIn("required:0:e", call.call_args_list[2].args[1])
         self.assertNotIn("required:0:a", call.call_args_list[2].args[1])
 
+    def test_partial_retry_transport_error_falls_back_to_next_provider(self) -> None:
+        """A transport error on the same-provider retry must fall back to the
+        next configured provider, not crash out of classify_requirements_batch.
+
+        Regression test: the retry call_llm() invocation in the partial-result
+        recovery path was not wrapped in the same broad except Exception used
+        for every other call_llm() call in this loop, so a timeout/connection
+        error during retry propagated uncaught instead of falling back to
+        Gemini like the original (pre-retry) provider-loop design guarantees.
+        """
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        items = [
+            BatchItem(f"required:0:{c}", "required", f"Requirement {c}")
+            for c in "abcde"
+        ]
+        partial = json.dumps({"results": [
+            {"item_id": it.item_id, "gate": "NONE", "evidence_level": 2,
+             "confidence": "high", "reasoning": f"evidence for {it.item_id}", "gap_source": ""}
+            for it in items[:3]
+        ]})
+        # Gemini fallback: returns the remaining 2
+        rest = json.dumps({"results": [
+            {"item_id": it.item_id, "gate": "NONE", "evidence_level": 2,
+             "confidence": "high", "reasoning": f"evidence for {it.item_id}", "gap_source": ""}
+            for it in items[3:]
+        ]})
+        with patch(
+            "utils.call_llm",
+            side_effect=[partial, TimeoutError("groq retry timed out"), rest],
+        ) as call:
+            result = classify_requirements_batch(
+                items,
+                settings={"stage0_evidence_classification": {
+                    "provider_order": ["groq", "gemini"],
+                    "models": {"groq": "groq-test", "gemini": "gemini-test"},
+                }},
+            )
+        self.assertEqual(set(result.keys()), {it.item_id for it in items})
+        self.assertEqual(call.call_count, 3)
+        self.assertEqual(call.call_args_list[2].kwargs["provider_override"], ["gemini"])
+
     def test_proactive_split_for_large_estimated_output(self) -> None:
         """When estimated output exceeds the safe threshold, the batch is split."""
         from stage0_evidence_cascade import (

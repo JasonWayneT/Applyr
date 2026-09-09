@@ -412,7 +412,8 @@ scripts/
     batch_pipeline.py       — DB/JD helper library only (CR-093, 2026-08-19: evaluate_job_fit()/process_single()/process_batch() and the whole old fit-scoring + --mode single|batch CLI removed; no longer directly executable)
     local_draft_stages.py   — stage-based local drafting, builds the Core Competencies section (FR-195)
     finalize_submission_job.py / reconcile_submissions.py — job finalization; archive/remove stale submission folders (FR-030)
-    audit_all_submissions.py / audit_and_improve.py / audit_improve_native.py — audit/improvement passes
+    audit_all_submissions.py — audit quality of all generated assets
+    audit_and_improve.py / audit_improve_native.py — legacy audit/improvement passes (retained per "keep code intact", not called by the live run_submission.py path; superseded by CR-074-084 packet authoring + Stage 2 review)
     regenerate_all_resumes.py / regenerate_all_cover_letters.py / regenerate_all_submissions.py — bulk regeneration utilities
     prefs_rollout.py / apply_gate_rollout.py — one-time gate-prefs migration (see Manual utilities below)
     research-engine.py / generate_experience_summary.py / ai_rewrite.py / utils.py / llm_stages.py — company intelligence lookups (Gemini-search, not on taskProviderOverrides), auto-generated scoring brief (overridable via Settings → AI Usage), LLM-powered manual editing (same), shared LLM-call/path/file-I/O helpers, legacy UI Draft per-stage provider map

@@ -14,25 +14,25 @@ import pipeline_env  # noqa: E402
 
 
 class TestStage0EvidenceCascadeDefault(unittest.TestCase):
-    """2026-09-01, Jason-directed: flipped to on-by-default after live testing
-    against real archived opportunities confirmed the cascade stays cloud-first
-    (Groq then Gemini, no local model calls) for required/preferred gap
-    classification. STAGE0_EVIDENCE_CASCADE=0 stays as the rollback path."""
+    """CR-108 Epic 7.7 (2026-09-09): the cascade is now always on — the legacy
+    per-line classifier was removed and the STAGE0_EVIDENCE_CASCADE env var
+    no longer has any effect. The function is retained for call-site
+    compatibility but always returns True."""
 
-    def test_defaults_on_when_unset(self) -> None:
+    def test_always_on_when_unset(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("STAGE0_EVIDENCE_CASCADE", None)
             self.assertTrue(pipeline_env.stage0_evidence_cascade_enabled())
 
-    def test_explicit_zero_opts_out(self) -> None:
+    def test_always_on_when_zero(self) -> None:
         with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "0"}):
-            self.assertFalse(pipeline_env.stage0_evidence_cascade_enabled())
+            self.assertTrue(pipeline_env.stage0_evidence_cascade_enabled())
 
-    def test_explicit_false_opts_out(self) -> None:
+    def test_always_on_when_false(self) -> None:
         with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "false"}):
-            self.assertFalse(pipeline_env.stage0_evidence_cascade_enabled())
+            self.assertTrue(pipeline_env.stage0_evidence_cascade_enabled())
 
-    def test_explicit_one_stays_enabled(self) -> None:
+    def test_always_on_when_one(self) -> None:
         with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1"}):
             self.assertTrue(pipeline_env.stage0_evidence_cascade_enabled())
 

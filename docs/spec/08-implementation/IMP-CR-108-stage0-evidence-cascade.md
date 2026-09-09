@@ -226,9 +226,25 @@ complete.
       truncation on 21-item batches. Gemini shows minor non-determinism on
       tool-002-v2 (sometimes scores Jira experience as partial evidence level 2
       for a multi-tool line expecting level 0) but passes 20-21/21 across runs.
-- [ ] **7.6** Enable cascade by default only after the CR-108 release gate passes.
-- [ ] **7.7** Remove the legacy per-line local classifier and temporary rollback
-      flag after cutover.
+- [x] **7.6** Enable cascade by default only after the CR-108 release gate passes.
+      Verified 2026-09-09: the release gate is passed (7.3 archive replay, 7.4
+      baseline comparison, 7.5 live golden validation all complete). The cascade
+      was already ON by default in `pipeline_env.py` since 2026-09-01; this story
+      confirms that default is now backed by the full validation record.
+- [x] **7.7** Remove the legacy per-line local classifier and temporary rollback
+      flag after cutover. Verified 2026-09-09: `stage0_evidence_cascade_enabled()`
+      now always returns True — the `STAGE0_EVIDENCE_CASCADE` env var no longer
+      has any effect. Removed the `cascade_enabled` parameter from `classify_gaps`
+      and `screen_responsibilities_for_exclusion` (always cascade). Removed the
+      Phase 3 sequential fallback in `screen_responsibilities_for_exclusion` (batch
+      failure now raises instead of silently degrading to per-line LLM calls).
+      Removed the `_classify_one_item` fallback in `classify_gaps` (missing
+      cached_results now raises instead of silently falling back). Updated 4 test
+      files to mock `classify_requirements_batch` instead of `classify_requirement`.
+      `evidence_scale.classify_requirement` is retained as a function for the golden
+      set checker and archive replay harness. 158 build_stage0_fit_gate tests pass,
+      78 combined cascade/pipeline/skip_ledger/model_handoff/confirmations tests
+      pass, 21/21 fixture golden tests pass.
 
 ### Hardening increment: validation, safety, and source promotion
 
@@ -391,6 +407,27 @@ splitting).
 `test_partial_result_falls_back_for_remaining_items`,
 `test_proactive_split_for_large_estimated_output`,
 `test_no_split_for_normal_sized_batch`. Total: 21 tests, all pass.
+
+**Bug found and fixed (2026-09-09, post-review).** The same-provider retry call
+added above (`call_llm` inside the `if partial_results:` branch of
+`classify_requirements_batch`) was not wrapped in the same broad
+`except Exception` used for every other `call_llm` invocation in this
+provider loop — only `CascadeValidationError` from parsing/validating the
+retry response was caught. A transport error during the retry itself (timeout,
+connection reset, rate limit) propagated uncaught out of
+`classify_requirements_batch` instead of falling back to the next configured
+provider (e.g. Gemini), even though it was available and every other call site
+in this same loop already degrades gracefully that way. Reproduced live with a
+throwaway repro script (`TimeoutError` on the retry leg crashed the whole
+call); at the durable workflow call site
+(`build_stage0_fit_gate.py`'s primary batch call, not the "fails open"
+screening pass), this surfaced as the entire Stage 0 run being marked FAILED
+for what should have been a one-request hiccup. Fixed by wrapping the retry
+`call_llm` call in the same `try/except Exception as exc: last_error = exc`
+pattern as the primary call. Added regression test
+`test_partial_retry_transport_error_falls_back_to_next_provider` (asserts a
+`TimeoutError` on the retry leg still resolves via Gemini fallback rather than
+raising). Total: 22 tests, all pass.
 
 ## Required verification commands
 

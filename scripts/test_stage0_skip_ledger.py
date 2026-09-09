@@ -24,11 +24,39 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # the same guard test_build_stage0_fit_gate.py and test_stage0_model_handoff.py already set.
 os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
-# 2026-09-01: same reasoning, same fix, for the CR-108 evidence cascade -- now that it
-# defaults on, gap classification would otherwise also make a real, unmocked Groq/Gemini
-# call here. Confirmed live: this file's test_force_does_not_short_circuit_on_ledger failed
-# on a real (unmocked) Groq/Gemini response the moment the ambient default changed.
-os.environ["STAGE0_EVIDENCE_CASCADE"] = "0"
+# CR-108 Epic 7.7 (2026-09-09): the legacy per-line classifier was removed.
+# Mock the cascade's batch function to avoid real network calls. Returns
+# clean-pass results for all items so classification doesn't crash or
+# produce HARD gates that would change skip-ledger test outcomes.
+from unittest.mock import patch as _patch  # noqa: E402
+
+def _mock_classify_batch(items, **_kwargs):
+    return {
+        item.item_id: {
+            "item": item.requirement, "anchor": "mock", "gap": False,
+            "gap_class": None, "gap_source": None, "domain_soft": False,
+            "evidence_level": 4, "confidence": "high", "gate": "NONE",
+            "needs_user_confirmation": False, "canonical_skill": None,
+            "skill_kind": None,
+        }
+        for item in items
+    }
+
+_CLASSIFY_PATCHER = None
+
+def setUpModule():
+    global _CLASSIFY_PATCHER
+    _CLASSIFY_PATCHER = _patch(
+        "stage0_evidence_cascade.classify_requirements_batch",
+        side_effect=_mock_classify_batch,
+    )
+    _CLASSIFY_PATCHER.start()
+
+def tearDownModule():
+    global _CLASSIFY_PATCHER
+    if _CLASSIFY_PATCHER is not None:
+        _CLASSIFY_PATCHER.stop()
+        _CLASSIFY_PATCHER = None
 
 from stage0_skip_ledger import (  # noqa: E402
     clear_skip,

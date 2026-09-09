@@ -1839,7 +1839,6 @@ def classify_gaps(
     attested_skill_terms: dict[str, str] | None = None,
     cached_results: dict[str, dict] | None = None,
     judgment_callback: Callable[[str, int, str, dict], None] | None = None,
-    cascade_enabled: bool = False,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Classify required and preferred items for gaps via the evidence-scale
@@ -1861,13 +1860,11 @@ def classify_gaps(
     tool requirement.
     attested_skill_terms: user-confirmed skill names that remain capped at
     evidence level 1 until separately promoted.
-    cached_results: completed checkpoint results keyed by bucket/item ordinal.
+    cached_results: completed checkpoint results keyed by bucket/item ordinal,
+    produced by the CR-108 evidence cascade. Items missing from cached_results
+    are a real error (the cascade should have covered them) — raises
+    Stage0ExtractError rather than silently falling back.
     judgment_callback: called after each newly computed judgment.
-    cascade_enabled: when True, the CR-108 evidence cascade already classified
-    all uncached items via Groq/Gemini. Items missing from cached_results in
-    this mode are a real error (the cascade should have covered them), not a
-    signal to silently fall back to the legacy local-LLM-pinned evidence_scale
-    path. Raises Stage0ExtractError instead of calling _classify_one_item.
     """
     del vocab  # deprecated, unused — see docstring
 
@@ -1876,17 +1873,10 @@ def classify_gaps(
         cache_key = make_item_key("required", item, ordinal)
         result = (cached_results or {}).get(cache_key)
         if result is None:
-            if cascade_enabled:
-                raise Stage0ExtractError(
-                    f"Required item {ordinal} missing from cascade cached_results "
-                    f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini. "
-                    "Do not silently fall back to local-LLM evidence_scale."
-                )
-            result = _classify_one_item(
-                item, work_exp, company=company, internal_terms=internal_terms
+            raise Stage0ExtractError(
+                f"Required item {ordinal} missing from cascade cached_results "
+                f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini."
             )
-            if judgment_callback:
-                judgment_callback("required", ordinal, item, result)
         classified_required.append(
             _cap_confirmed_presence(result, item, attested_skill_terms or {})
         )
@@ -1896,17 +1886,10 @@ def classify_gaps(
         cache_key = make_item_key("preferred", item, ordinal)
         result = (cached_results or {}).get(cache_key)
         if result is None:
-            if cascade_enabled:
-                raise Stage0ExtractError(
-                    f"Preferred item {ordinal} missing from cascade cached_results "
-                    f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini. "
-                    "Do not silently fall back to local-LLM evidence_scale."
-                )
-            result = _classify_one_item(
-                item, work_exp, is_required=False, company=company, internal_terms=internal_terms
+            raise Stage0ExtractError(
+                f"Preferred item {ordinal} missing from cascade cached_results "
+                f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini."
             )
-            if judgment_callback:
-                judgment_callback("preferred", ordinal, item, result)
         result = _cap_confirmed_presence(result, item, attested_skill_terms or {})
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
@@ -2005,7 +1988,6 @@ def screen_responsibilities_for_exclusion(
     company: str = "",
     internal_terms: list[str] | None = None,
     *,
-    cascade_enabled: bool = False,
     settings: dict | None = None,
 ) -> list[dict]:
     """Responsibilities-bucket exclusion screen. Returns classify-shaped dicts
@@ -2024,20 +2006,17 @@ def screen_responsibilities_for_exclusion(
     The free deterministic 0-to-1 regex stays as a zero-cost fast path ahead
     of it; only lines it doesn't already resolve pay for a real judgment call.
 
-    2026-09-01 Improvement #2: when cascade_enabled is True, all non-deterministic
-    responsibility lines are batched into a single classify_requirements_batch()
-    call instead of one sequential classify_requirement() call per line. This
-    mirrors exactly how the caller already batches required/preferred items and
-    eliminates the primary cause of 100+ second Stage 0 times on JDs with 8+
-    responsibilities (e.g. Bazaarvoice).
+    2026-09-01 Improvement #2: all non-deterministic responsibility lines
+    are batched into a single classify_requirements_batch() call instead of
+    one sequential classify_requirement() call per line. CR-108 Epic 7.7
+    (2026-09-09): the legacy sequential fallback was removed — a batch
+    failure now raises rather than silently degrading.
 
     Fails open per-line on a classification error: this is a bonus
     screening pass on top of the required/preferred judgments classify_gaps()
     already did, not a fail-closed gate -- one line's LLM error should never
     abort a Stage 0 run that would otherwise have completed correctly.
     """
-    from evidence_scale import classify_requirement, EvidenceClassificationError
-
     hits: list[dict] = []
     # Phase 1: deterministic 0-to-1 regex fast path (zero-cost, no LLM call).
     unclassified_lines: list[str] = []
@@ -2057,49 +2036,36 @@ def screen_responsibilities_for_exclusion(
     if not unclassified_lines:
         return hits
 
-    # Phase 2: batch the remaining lines when the cascade is enabled.
-    if cascade_enabled:
-        try:
-            from stage0_evidence_cascade import BatchItem, classify_requirements_batch
-            from evidence_scale import build_evidence_context
-            from stage0_checkpoint import make_item_key
+    # Phase 2: batch all remaining lines through the evidence cascade.
+    # CR-108 Epic 7.7 (2026-09-09): the legacy per-line sequential fallback
+    # (Phase 3) was removed after the cascade passed its release gate.
+    # A batch failure now raises rather than silently degrading to individual
+    # LLM calls — the cascade's own retry/fallback logic handles transient
+    # provider failures, and a persistent failure is a real error the caller
+    # should see, not something to mask with a slower, inconsistent path.
+    from stage0_evidence_cascade import BatchItem, classify_requirements_batch
+    from evidence_scale import build_evidence_context
+    from stage0_checkpoint import make_item_key
 
-            batch_items = [
-                BatchItem(
-                    make_item_key("responsibility", line, ordinal),
-                    "required",  # bucket="required" so HARD gates are allowed
-                    line,
-                    evidence_excerpt=build_evidence_context(
-                        line, work_exp, k=4, max_chars=3000,
-                    ),
-                )
-                for ordinal, line in enumerate(unclassified_lines)
-            ]
-            batch_results = classify_requirements_batch(
-                batch_items,
-                settings=settings,
-            )
-            for batch_item in batch_items:
-                result = batch_results.get(batch_item.item_id)
-                if result and result.get("gate") == "HARD":
-                    hits.append(result)
-            return hits
-        except Exception:
-            # Batch failed — fall through to sequential classification.
-            # This is the "fails open" contract: a batch error doesn't abort
-            # the screening pass, it degrades to the per-line path.
-            pass
-
-    # Phase 3: sequential fallback (non-cascade path or batch failure).
-    for line in unclassified_lines:
-        try:
-            judgment = classify_requirement(
-                line, work_exp, is_required=True, company=company, internal_terms=internal_terms,
-            )
-        except EvidenceClassificationError:
-            continue
-        if judgment.gate == "HARD":
-            hits.append(judgment.to_legacy_dict())
+    batch_items = [
+        BatchItem(
+            make_item_key("responsibility", line, ordinal),
+            "required",  # bucket="required" so HARD gates are allowed
+            line,
+            evidence_excerpt=build_evidence_context(
+                line, work_exp, k=4, max_chars=3000,
+            ),
+        )
+        for ordinal, line in enumerate(unclassified_lines)
+    ]
+    batch_results = classify_requirements_batch(
+        batch_items,
+        settings=settings,
+    )
+    for batch_item in batch_items:
+        result = batch_results.get(batch_item.item_id)
+        if result and result.get("gate") == "HARD":
+            hits.append(result)
     return hits
 
 
@@ -2440,24 +2406,16 @@ def build_stage0_fit_gate(
     jd_hash = _sha256_text(jd_text)
     evidence_index_hash = _sha256_text(work_exp)
     prompt_version = "evidence-scale-v1"
-    cascade_enabled = pipeline_env.stage0_evidence_cascade_enabled()
-    stage0_settings: dict = {}
+    from utils import load_llm_settings
+    stage0_settings: dict = load_llm_settings()
     # CR-108 Epic 7.2: model-flagged named tools (needs_user_confirmation +
     # canonical_skill from the batch response) accumulate here so the fit gate
     # can create the same durable pending items the deterministic extractor
     # path creates, after the provider call that flagged them.
     model_flagged_skills: list[dict[str, str]] = []
-    if cascade_enabled:
-        from utils import load_llm_settings
-        stage0_settings = load_llm_settings()
     provider_policy_hash = _sha256_text(
         json.dumps(
-            (
-                stage0_settings.get("stage0_evidence_classification")
-                if cascade_enabled
-                else {"provider_order": ["local"], "models": {"local": STAGE0_EXTRACT_MODEL}}
-            )
-            or {},
+            (stage0_settings.get("stage0_evidence_classification") or {}),
             sort_keys=True,
             ensure_ascii=False,
         )
@@ -2481,19 +2439,18 @@ def build_stage0_fit_gate(
         )
     )
     request_spool_path: str | None = None
-    if cascade_enabled:
-        checkpoint_boundary("before_request_spool")
-        request_spool_path, request_hash = write_spool(
-            folder,
-            "request",
-            run_key,
-            {
-                "run_key": run_key,
-                "required": required_raw,
-                "preferred": preferred_raw,
-            },
-        )
-        checkpoint_boundary("after_request_spool")
+    checkpoint_boundary("before_request_spool")
+    request_spool_path, request_hash = write_spool(
+        folder,
+        "request",
+        run_key,
+        {
+            "run_key": run_key,
+            "required": required_raw,
+            "preferred": preferred_raw,
+        },
+    )
+    checkpoint_boundary("after_request_spool")
     start_run(
         checkpoint_db_path,
         run_key=run_key,
@@ -2579,7 +2536,7 @@ def build_stage0_fit_gate(
         for ordinal, item in enumerate(items)
         if make_item_key(bucket, item, ordinal) not in cached_results
     ]
-    if cascade_enabled and uncached_items:
+    if uncached_items:
         from stage0_evidence_cascade import BatchItem, classify_requirements_batch
         from evidence_scale import build_evidence_context
 
@@ -2675,19 +2632,14 @@ def build_stage0_fit_gate(
         required_raw, preferred_raw, work_exp=work_exp, company=company_display,
         internal_terms=internal_terms, attested_skill_terms=attested_skill_terms,
         cached_results=cached_results, judgment_callback=_persist_judgment,
-        cascade_enabled=cascade_enabled,
     )
 
     # 2026-08-21 follow-up to Fix 1: the JD's own role-framing prose lives in
     # `responsibilities`, which classify_gaps() never sees. Cheap pre-filter,
     # real classifier only on a hit -- see screen_responsibilities_for_exclusion().
-    # 2026-09-01 Improvement #2: pass cascade_enabled + settings so the function
-    # batches all responsibility lines into a single cascade call instead of
-    # one sequential LLM call per line.
     resp_exclusion_hits = screen_responsibilities_for_exclusion(
         responsibilities, work_exp, company=company_display, internal_terms=internal_terms,
-        cascade_enabled=cascade_enabled,
-        settings=stage0_settings if cascade_enabled else None,
+        settings=stage0_settings,
     )
     if resp_exclusion_hits:
         classified_required.extend(resp_exclusion_hits)
@@ -2701,57 +2653,58 @@ def build_stage0_fit_gate(
             for h in resp_exclusion_hits
         )
 
-    # Model-proposed HARD decisions are reviewable only on the explicitly
-    # enabled cascade path. The legacy local classifier remains the rollback
-    # path until the cascade has cleared its accuracy and recovery gates.
-    if cascade_enabled:
-        pending_hard_reviews = _prepare_hard_gate_reviews(
-            classified_required,
-            classified_preferred,
-            flagged_gaps,
-            folder=folder,
-            company=company_display,
-            role=role,
-            db_path=checkpoint_db_path,
+    # CR-108 Epic 7.7 (2026-09-09): the cascade is now the only classification
+    # path — the legacy per-line local classifier was removed after the cascade
+    # passed its release gate (7.3/7.4/7.5). Model-proposed HARD decisions are
+    # always reviewable, and model-flagged named tools always create durable
+    # pending items.
+    pending_hard_reviews = _prepare_hard_gate_reviews(
+        classified_required,
+        classified_preferred,
+        flagged_gaps,
+        folder=folder,
+        company=company_display,
+        role=role,
+        db_path=checkpoint_db_path,
+    )
+    # CR-108 Epic 7.2: model-flagged named tools create the same durable
+    # pending item the deterministic extractor path creates -- reuse the
+    # skill-memory rules so an already-decided skill is never re-asked.
+    pending_skill_reviews: list[dict[str, str]] = []
+    for flagged in model_flagged_skills:
+        skill_key = canonical_skill_key(flagged["skill_key"])
+        if not skill_key:
+            continue
+        if get_skill_memory(skill_key, checkpoint_db_path):
+            continue
+        display_name = " ".join(
+            word.capitalize() for word in skill_key.split("_")
         )
-        # CR-108 Epic 7.2: model-flagged named tools create the same durable
-        # pending item the deterministic extractor path creates -- reuse the
-        # skill-memory rules so an already-decided skill is never re-asked.
-        pending_skill_reviews: list[dict[str, str]] = []
-        for flagged in model_flagged_skills:
-            skill_key = canonical_skill_key(flagged["skill_key"])
-            if not skill_key:
-                continue
-            if get_skill_memory(skill_key, checkpoint_db_path):
-                continue
-            display_name = " ".join(
-                word.capitalize() for word in skill_key.split("_")
-            )
-            create_skill_confirmation(
-                db_path=checkpoint_db_path,
-                skill_key=skill_key,
-                display_name=display_name,
-                requirement=flagged["requirement"],
-                opportunity_key=folder.name,
-                opportunity_company=company_display,
-                opportunity_title=role,
-                evidence_excerpt=(
-                    "The Stage 0 model identified this named tool in the job "
-                    "description, but it is not in verified work history."
-                ),
-            )
-            pending_skill_reviews.append(
-                {
-                    "review_key": f"skill:{skill_key}",
-                    "skill_key": skill_key,
-                    "display_name": display_name,
-                    "requirement": flagged["requirement"],
-                }
-            )
-        all_pending = pending_hard_reviews + pending_skill_reviews
-        if all_pending:
-            mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
-            raise Stage0NeedsInput(folder.name, all_pending)
+        create_skill_confirmation(
+            db_path=checkpoint_db_path,
+            skill_key=skill_key,
+            display_name=display_name,
+            requirement=flagged["requirement"],
+            opportunity_key=folder.name,
+            opportunity_company=company_display,
+            opportunity_title=role,
+            evidence_excerpt=(
+                "The Stage 0 model identified this named tool in the job "
+                "description, but it is not in verified work history."
+            ),
+        )
+        pending_skill_reviews.append(
+            {
+                "review_key": f"skill:{skill_key}",
+                "skill_key": skill_key,
+                "display_name": display_name,
+                "requirement": flagged["requirement"],
+            }
+        )
+    all_pending = pending_hard_reviews + pending_skill_reviews
+    if all_pending:
+        mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
+        raise Stage0NeedsInput(folder.name, all_pending)
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)
     word_count = len(re.findall(r"\w+", jd_text or ""))

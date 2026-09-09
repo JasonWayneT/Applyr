@@ -41,14 +41,13 @@ def stage0_section_mode() -> str:
 def stage0_evidence_cascade_enabled() -> bool:
     """Return whether the CR-108 batched evidence service is enabled.
 
-    Defaults to ON (2026-09-01, Jason-directed, after live testing against
-    real archived opportunities confirmed the cascade correctly stays
-    cloud-first -- Groq then Gemini, no local model calls -- for Stage 0's
-    required/preferred gap classification). Set STAGE0_EVIDENCE_CASCADE=0
-    (or false/no/off) to opt back into the legacy always-local per-item
-    classifier for rollback/debugging; any other explicit value is read
-    normally, this default only applies when the variable is unset."""
-    return _flag("STAGE0_EVIDENCE_CASCADE", "1") in ("1", "true", "yes", "on")
+    Always True after CR-108 Epic 7.6 cutover (2026-09-09): the cascade passed
+    its release gate (golden validation 7.5, archive replay 7.3, baseline
+    comparison 7.4) and the legacy per-line classifier was removed (7.7).
+    The function is retained for call-site compatibility but the
+    STAGE0_EVIDENCE_CASCADE env var no longer has any effect.
+    """
+    return True
 
 
 # DRAFT_MODE values that keep the compose-path deterministic defaults (JD profile,

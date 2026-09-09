@@ -1,8 +1,13 @@
 ## [Unreleased] — 2026-09-09
-[DRAFT] Stage 0 cascade live provider validation, archive replay, partial-result
-recovery, and proactive batch sizing — both Groq and Gemini pass the 21-entry golden
-set with real API calls, the cascade has been validated against real archived JDs,
-and two robustness improvements handle provider truncation gracefully.
+[DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
+partial-result recovery, proactive batch sizing, and legacy classifier removal.
+The CR-108 evidence cascade is now the sole Stage 0 classification path.
+
+### Changed
+- CR-108 (Epic 7.7): Removed the legacy per-line local classifier and STAGE0_EVIDENCE_CASCADE
+  rollback flag. The cascade is now the only classification path. `stage0_evidence_cascade_enabled()`
+  always returns True, the `cascade_enabled` parameter was removed from `classify_gaps` and
+  `screen_responsibilities_for_exclusion`, and the sequential per-line fallback was removed.
 
 ### Fixed
 - CR-108: Groq API calls were missing `max_tokens`, causing truncated JSON responses on
@@ -24,6 +29,12 @@ and two robustness improvements handle provider truncation gracefully.
 - CR-108: `_resolve_item_id` couldn't match model-returned ids in three formats: ordinal-only
   ("0"), mangled prefix ("req-7-hash"), and abbreviated prefix ("req-001"). Added ordinal
   matching and hash-suffix matching for real JD replay.
+- CR-108: found on review — the same-provider retry call added for partial-result recovery
+  was not wrapped in the same broad `except Exception` as every other `call_llm` call in
+  `classify_requirements_batch`'s provider loop. A transport error during the retry (timeout,
+  connection reset, rate limit) crashed the whole classification instead of falling back to
+  the next configured provider, even when it was available — the exact failure mode this
+  robustness pass was meant to handle. Reproduced live, fixed, added a regression test.
 - CR-104: URL state sync race condition — the sync effect could strip the `job` param
   before the restore effect read it on initial load. Captured the initial job ID at mount.
 

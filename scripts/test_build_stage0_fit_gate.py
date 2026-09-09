@@ -35,16 +35,12 @@ os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
 # 2026-09-01: STAGE0_EVIDENCE_CASCADE now defaults to on (pipeline_env.py),
 # routing gap classification through stage0_evidence_cascade.classify_requirements_batch()
-# (real utils.call_llm -- Groq/Gemini) instead of evidence_scale.classify_requirement(),
-# which is the only function _CLASSIFY_PATCHER below mocks. Left alone, every test in
-# this file would silently start making live network calls the moment the ambient
-# default changed elsewhere, defeating this suite's own "no real DB, no LLM" promise --
-# confirmed live: 19 tests failed here on real (unmocked) Groq/Gemini responses, and the
-# whole suite went from ~45s to ~11 minutes. Force the legacy path for this file
-# specifically so its existing offline classify_requirement mock keeps covering what it
-# was built to cover (Story 2.7); cascade-specific behavior has its own dedicated,
-# properly-mocked suite in test_stage0_evidence_cascade.py.
-os.environ["STAGE0_EVIDENCE_CASCADE"] = "0"
+# (real utils.call_llm -- Groq/Gemini) instead of evidence_scale.classify_requirement().
+# CR-108 Epic 7.7 (2026-09-09): the legacy per-line path was removed entirely.
+# This suite mocks classify_requirements_batch with _offline_classify_batch,
+# which wraps the same _offline_classify_requirement heuristic the tests were
+# built against, returning results in the cascade's dict format.
+os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
 from build_stage0_fit_gate import (
     STAGE0_EXTRACT_MODEL,
@@ -268,11 +264,77 @@ def _offline_classify_requirement(
     )
 
 
+def _build_cached_results(required_items, preferred_items=None):
+    """Build cached_results dict for classify_gaps using the offline heuristic.
+
+    CR-108 Epic 7.7: classify_gaps no longer has a per-line fallback — it
+    requires pre-classified cached_results from the cascade. Tests that call
+    classify_gaps directly use this helper to pre-classify items.
+    """
+    from stage0_checkpoint import make_item_key  # noqa: E402
+    preferred_items = preferred_items or []
+    results = {}
+    for ordinal, item in enumerate(required_items):
+        judgment = _offline_classify_requirement(item, "", is_required=True)
+        results[make_item_key("required", item, ordinal)] = {
+            "item": judgment.item, "anchor": judgment.reasoning,
+            "gap": judgment.gap, "gap_class": judgment.gap_class,
+            "domain_soft": judgment.domain_soft,
+            "evidence_level": judgment.evidence_level,
+            "confidence": judgment.confidence,
+            "gap_source": judgment.gap_source,
+        }
+    for ordinal, item in enumerate(preferred_items):
+        judgment = _offline_classify_requirement(item, "", is_required=False)
+        results[make_item_key("preferred", item, ordinal)] = {
+            "item": judgment.item, "anchor": judgment.reasoning,
+            "gap": judgment.gap, "gap_class": judgment.gap_class,
+            "domain_soft": judgment.domain_soft,
+            "evidence_level": judgment.evidence_level,
+            "confidence": judgment.confidence,
+            "gap_source": judgment.gap_source,
+        }
+    return results
+
+
+def _offline_classify_batch(items, *, settings=None, **_kwargs):
+    """Mock for classify_requirements_batch that wraps _offline_classify_requirement.
+
+    Returns a dict keyed by item_id in the cascade's _normalize_result format,
+    so classify_gaps and screen_responsibilities_for_exclusion consume the
+    same shape they get from the real cascade.
+    """
+    from stage0_evidence_cascade import BatchItem  # noqa: E402
+    results = {}
+    for item in items:
+        judgment = _offline_classify_requirement(
+            item.requirement,
+            "",  # work_exp not needed for the offline heuristic
+            is_required=(item.bucket == "required"),
+        )
+        gap_class = judgment.gap_class
+        results[item.item_id] = {
+            "item": judgment.item,
+            "anchor": judgment.reasoning,
+            "gap": gap_class is not None,
+            "gap_class": gap_class,
+            "gap_source": judgment.gap_source or None,
+            "domain_soft": judgment.domain_soft,
+            "evidence_level": judgment.evidence_level,
+            "confidence": judgment.confidence,
+            "gate": judgment.gate,
+            "needs_user_confirmation": False,
+            "canonical_skill": None,
+            "skill_kind": None,
+        }
+    return results
+
+
 def setUpModule():
     global _CLASSIFY_PATCHER
     _CLASSIFY_PATCHER = patch(
-        "evidence_scale.classify_requirement",
-        side_effect=_offline_classify_requirement,
+        "stage0_evidence_cascade.classify_requirements_batch",
+        side_effect=_offline_classify_batch,
     )
     _CLASSIFY_PATCHER.start()
     # CR-110 Gap A: mock the LLM industry classification so prefs gate tests
@@ -1056,7 +1118,10 @@ class TestSectionExtraction(unittest.TestCase):
         prefs = [
             "Familiarity with regulatory and compliance considerations in banking product development."
         ]
-        _, classified_pref, flagged = classify_gaps([], prefs, vocab=vocab)
+        _, classified_pref, flagged = classify_gaps(
+            [], prefs, vocab=vocab,
+            cached_results=_build_cached_results([], prefs),
+        )
         self.assertTrue(classified_pref[0]["gap"])
         self.assertEqual(classified_pref[0]["gap_class"], "SOFT")
         self.assertTrue(classified_pref[0].get("domain_soft"))
@@ -1115,37 +1180,55 @@ class TestGapClassification(unittest.TestCase):
 
     def test_fhir_is_soft_tool_gap_not_hard(self):
         reqs = ["Deep expertise in FHIR and HL7 healthcare data exchange standards"]
-        classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
+        classified, _, flagged = classify_gaps(
+            reqs, [], vocab=self.vocab,
+            cached_results=_build_cached_results(reqs),
+        )
         self.assertTrue(classified[0]["gap"], "FHIR should be flagged as a gap")
         self.assertEqual(classified[0]["gap_class"], "SOFT")
         self.assertTrue(any(g.get("gap_class") == "SOFT" for g in flagged))
 
     def test_agile_is_not_a_gap(self):
         reqs = ["3+ years of product management experience in an agile environment"]
-        classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
+        classified, _, flagged = classify_gaps(
+            reqs, [], vocab=self.vocab,
+            cached_results=_build_cached_results(reqs),
+        )
         self.assertFalse(classified[0]["gap"], "agile/PM exp should find anchors")
 
     def test_snowflake_is_soft_tool_gap_not_hard(self):
         reqs = ["Deep familiarity with Snowflake data warehouse"]
-        classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
+        classified, _, flagged = classify_gaps(
+            reqs, [], vocab=self.vocab,
+            cached_results=_build_cached_results(reqs),
+        )
         self.assertTrue(classified[0]["gap"])
         self.assertEqual(classified[0]["gap_class"], "SOFT")
 
     def test_domain_gap_is_soft(self):
         # Healthcare domain knowledge (not a named hard tool) → SOFT
         reqs = ["Prior experience in the healthcare industry or regulated environment"]
-        classified, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
+        classified, _, flagged = classify_gaps(
+            reqs, [], vocab=self.vocab,
+            cached_results=_build_cached_results(reqs),
+        )
         self.assertTrue(classified[0]["gap"])
         self.assertEqual(classified[0]["gap_class"], "SOFT")
 
     def test_preferred_item_has_handling(self):
         prefs = ["CMMS experience preferred"]
-        _, classified_pref, _ = classify_gaps([], prefs, vocab=self.vocab)
+        _, classified_pref, _ = classify_gaps(
+            [], prefs, vocab=self.vocab,
+            cached_results=_build_cached_results([], prefs),
+        )
         self.assertIn("handling", classified_pref[0])
 
     def test_flagged_gaps_populated_as_soft_for_tools(self):
         reqs = ["FHIR expertise required", "3+ years agile PM experience"]
-        _, _, flagged = classify_gaps(reqs, [], vocab=self.vocab)
+        _, _, flagged = classify_gaps(
+            reqs, [], vocab=self.vocab,
+            cached_results=_build_cached_results(reqs),
+        )
         self.assertTrue(any(g.get("gap_class") == "SOFT" for g in flagged))
         self.assertFalse(any(g.get("gap_class") == "HARD" for g in flagged))
 
@@ -1413,46 +1496,65 @@ class TestResponsibilitiesFullJudgmentEscalation(unittest.TestCase):
         that pre-filter no longer gates whether a line gets real judgment.
         """
         line = "Own the outcomes for a brand-new product area end to end."
-        with patch("evidence_scale.classify_requirement") as mock_classify:
-            mock_classify.return_value = EvidenceJudgment(
-                item=line,
-                gate="NONE",
-                gap_source=None,
-                evidence_level=4,
-                confidence="high",
-                reasoning="documented product-management evidence",
-                is_required=True,
-            )
+        from stage0_checkpoint import make_item_key
+
+        item_id = make_item_key("responsibility", line, 0)
+        with patch("stage0_evidence_cascade.classify_requirements_batch") as mock_batch:
+            mock_batch.return_value = {
+                item_id: {
+                    "item": line,
+                    "anchor": "documented product-management evidence",
+                    "gap": False,
+                    "gap_class": None,
+                    "gap_source": None,
+                    "domain_soft": False,
+                    "evidence_level": 4,
+                    "confidence": "high",
+                    "gate": "NONE",
+                    "needs_user_confirmation": False,
+                    "canonical_skill": None,
+                    "skill_kind": None,
+                }
+            }
             screen_responsibilities_for_exclusion(
                 [line], work_exp="some work experience", company="Test Co",
             )
-        mock_classify.assert_called_once()
-        self.assertEqual(mock_classify.call_args[0][0], line)
+        mock_batch.assert_called_once()
 
     def test_deterministic_0to1_line_never_pays_for_a_classify_call(self):
         """The free zero-cost regex fast path still short-circuits before
         any LLM call for the one unambiguous, high-confidence phrasing."""
         line = "You will own the zero to one build of our new platform."
-        with patch("evidence_scale.classify_requirement") as mock_classify:
+        with patch("stage0_evidence_cascade.classify_requirements_batch") as mock_batch:
             hits = screen_responsibilities_for_exclusion(
                 [line], work_exp="some work experience", company="Test Co",
             )
-        mock_classify.assert_not_called()
+        mock_batch.assert_not_called()
         self.assertEqual(len(hits), 1)
         self.assertEqual(hits[0]["gap_source"], "role_exclusion")
 
     def test_hard_gate_from_full_judgment_is_returned_as_a_hit(self):
         line = "Manage a direct team of engineers and own their growth plans."
-        with patch("evidence_scale.classify_requirement") as mock_classify:
-            mock_classify.return_value = EvidenceJudgment(
-                item=line,
-                gate="HARD",
-                gap_source="role_exclusion",
-                evidence_level=0,
-                confidence="high",
-                reasoning="people-management ownership, not in scope",
-                is_required=True,
-            )
+        from stage0_checkpoint import make_item_key
+
+        item_id = make_item_key("responsibility", line, 0)
+        with patch("stage0_evidence_cascade.classify_requirements_batch") as mock_batch:
+            mock_batch.return_value = {
+                item_id: {
+                    "item": line,
+                    "anchor": "people-management ownership, not in scope",
+                    "gap": True,
+                    "gap_class": "HARD",
+                    "gap_source": "role_exclusion",
+                    "domain_soft": False,
+                    "evidence_level": 0,
+                    "confidence": "high",
+                    "gate": "HARD",
+                    "needs_user_confirmation": False,
+                    "canonical_skill": None,
+                    "skill_kind": None,
+                }
+            }
             hits = screen_responsibilities_for_exclusion(
                 [line], work_exp="some work experience", company="Test Co",
             )
@@ -2027,10 +2129,15 @@ class TestUndergraduateSatisfied(unittest.TestCase):
     def test_undergraduate_degree_not_soft_gap(self):
         from build_stage0_fit_gate import classify_gaps, _load_anchor_vocab
 
+        reqs = [
+            "Undergraduate degree",
+            "3+ years of product management experience in B2B SaaS",
+        ]
         _, _, gaps = classify_gaps(
-            ["Undergraduate degree", "3+ years of product management experience in B2B SaaS"],
+            reqs,
             [],
             vocab=_load_anchor_vocab(),
+            cached_results=_build_cached_results(reqs),
         )
         items = [g["item"].lower() for g in gaps]
         self.assertFalse(any("undergraduate" in i for i in items))
@@ -2694,7 +2801,11 @@ class TestUnbridgeableDomainRequirement(unittest.TestCase):
             - 5+ years of experience with Payroll Tax filing and/or Payroll Tax filing software.
             """
         )
-        result = _build(jd)
+        # CR-108 Epic 7.7: the hard-gate review flow now always runs (it was
+        # previously gated behind cascade_enabled). Mock it to return empty
+        # so this test verifies the HARD gate detection, not the review flow.
+        with patch("build_stage0_fit_gate._prepare_hard_gate_reviews", return_value=[]):
+            result = _build(jd)
         self.assertEqual(result["tier"], "Skip")
         self.assertEqual(result["decision"], "SKIP")
         hard = [g for g in result["flagged_gaps"] if g.get("gap_class") == "HARD"]

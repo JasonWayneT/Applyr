@@ -272,7 +272,9 @@ new instances. See `ROADMAP_BEST_PRACTICES.md` §1.5.
   **Done 2026-09-09.** Fixed all 18 errors: clickable divs got `role="button"`, `tabIndex={0}`, and
   `onKeyDown` handlers; labels got `htmlFor`/`id` associations or were replaced with semantic spans
   where they were purely presentational (not wrapping a form control).
-- [ ] **Story 7.4 — verify**: `npm run lint` clean of `jsx-a11y` errors.
+- [x] **Story 7.4 — verify**: `npm run lint` clean of `jsx-a11y` errors.
+  **Verified 2026-09-09.** `npm run lint` reports 0 errors, 26 pre-existing warnings (all
+  `@typescript-eslint/no-explicit-any` and `react-hooks/exhaustive-deps`, unchanged).
 
 ---
 
@@ -281,12 +283,19 @@ new instances. See `ROADMAP_BEST_PRACTICES.md` §1.5.
 **Why:** no general request-body validation exists server-side beyond two narrow hand-written guards.
 See `ROADMAP_BEST_PRACTICES.md` §1.8.
 
-- [ ] **Story 8.1**: `npm install zod` (it's currently present only as another package's transitive
+- [x] **Story 8.1**: `npm install zod` (it's currently present only as another package's transitive
   dependency — add it as a direct one).
-- [ ] **Story 8.2**: Define Zod schemas for the POST/PATCH bodies in `server/routes/profile.ts`
+  **Done 2026-09-09.**
+- [x] **Story 8.2**: Define Zod schemas for the POST/PATCH bodies in `server/routes/profile.ts`
   (identity, `job_search` prefs, `api_connections`, `llm_settings`, `theirstack_settings`) and
   validate before acting on them, returning a clean 400 with the validation error on failure.
-- [ ] **Story 8.3**: Define schemas for the job-creation/update bodies in `server/routes/jobs/crud.ts`.
+  **Done 2026-09-09.** Created `server/validation.ts` with `validateBody` middleware factory and
+  schemas. Applied to `POST /api/profile/job_search` (`jobSearchSchema`), `POST /api/profile/:key`
+  (`profileBlobSchema`), and `POST /api/experience` (`experienceSchema`).
+- [x] **Story 8.3**: Define schemas for the job-creation/update bodies in `server/routes/jobs/crud.ts`.
+  **Done 2026-09-09.** Applied `createJobSchema` to `POST /api/jobs` (validates company/title
+  required, URL format) and `patchJobSchema` to `PATCH /api/jobs/:id` (validates non-empty object
+  with at least one non-id field).
 - [ ] **Story 8.4 — verify**: Send a deliberately malformed payload to two or three of the newly
   validated routes (missing field, wrong type) and confirm a clean 400 with a useful message comes
   back, instead of the request silently propagating further into the app.

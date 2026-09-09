@@ -9,6 +9,7 @@ import {
   reconcileStage0SalaryRanges,
 } from '../../submissionFolders.js';
 import { isSafeHttpUrl, isValidJobId } from '../../middleware.js';
+import { validateBody, createJobSchema, patchJobSchema } from '../../validation.js';
 import { insertJob, patchJob } from '../../repository/jobRepository.js';
 import {
   APPLICATION_FUNNEL_STATUSES,
@@ -73,7 +74,7 @@ router.get('/api/jobs', (req, res) => {
   }
 });
 
-router.post('/api/jobs', (req, res) => {
+router.post('/api/jobs', validateBody(createJobSchema), (req, res) => {
   try {
     const { id, company, title, url, score, summary, status } = req.body;
     if (!company || !title) return res.status(400).json({ error: 'company and title are required' });
@@ -200,9 +201,9 @@ router.patch('/api/jobs/:id/status', (req, res) => {
   }
 });
 
-router.patch('/api/jobs/:id', (req, res) => {
+router.patch('/api/jobs/:id', validateBody(patchJobSchema), (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const updates = { ...req.body };
     const validKeys = Object.keys(updates).filter(k => k !== 'id');
     if (validKeys.length === 0) return res.status(400).json({ error: 'No valid fields to update' });

@@ -7,6 +7,7 @@ import {
 } from '../shared.js';
 import { CANDIDATE_PREFS_PATH } from '../domain/paths.js';
 import { requireApiToken } from '../middleware.js';
+import { validateBody, jobSearchSchema, experienceSchema, profileBlobSchema } from '../validation.js';
 import { runDetached, pythonScriptPath } from '../pipeline/processRunner.js';
 
 const router = Router();
@@ -188,7 +189,7 @@ router.get('/api/profile/job_search', (_req, res) => {
   }
 });
 
-router.post('/api/profile/job_search', (req, res) => {
+router.post('/api/profile/job_search', validateBody(jobSearchSchema), (req, res) => {
   try {
     db.prepare('INSERT OR REPLACE INTO profiles (key, value) VALUES (?, ?)').run('job_search', JSON.stringify(req.body));
     materializeJobSearchPrefs(req.body);
@@ -210,10 +211,10 @@ router.get('/api/profile/:key', (req, res) => {
   }
 });
 
-router.post('/api/profile/:key', (req, res) => {
+router.post('/api/profile/:key', validateBody(profileBlobSchema), (req, res) => {
   try {
     // CR-104 Epic 2: preserve existing secrets when client sends back masked values
-    const data = preserveSecretsOnSave(req.params.key, req.body as Record<string, unknown>);
+    const data = preserveSecretsOnSave(req.params.key as string, req.body as Record<string, unknown>);
     db.prepare('INSERT OR REPLACE INTO profiles (key, value) VALUES (?, ?)').run(req.params.key, JSON.stringify(data));
     res.json({ success: true });
   } catch {
@@ -248,7 +249,7 @@ router.get('/api/experience', (_req, res) => {
   }
 });
 
-router.post('/api/experience', (req, res) => {
+router.post('/api/experience', validateBody(experienceSchema), (req, res) => {
   try {
     const { content } = req.body;
     const codified = codifyExperienceAndAssignIDs(content);

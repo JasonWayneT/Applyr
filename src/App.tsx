@@ -28,6 +28,7 @@ function App() {
   const mainRef = useRef<HTMLElement>(null);
   const { jobs, isLoaded, selectedJob, setSelectedJob, handleStatusChange } = useJobs();
   const reviewCenter = useReviewCenter();
+  const restoredJobFromUrlRef = useRef(false);
 
   // Sync state changes to URL (replaceState, no page reload)
   useEffect(() => {
@@ -40,6 +41,18 @@ function App() {
     window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
   }, [activeTab, opportunitiesFilter, selectedJob]);
 
+  // Restore the selected job from the URL once jobs have loaded (deep link / refresh).
+  // `job` isn't in the initial useState the way tab/filter are, because it needs the
+  // full Job object from the loaded `jobs` list, not just an id.
+  useEffect(() => {
+    if (restoredJobFromUrlRef.current || !isLoaded) return;
+    restoredJobFromUrlRef.current = true;
+    const jobId = new URLSearchParams(window.location.search).get('job');
+    if (!jobId) return;
+    const job = jobs.find((j) => j.id === jobId);
+    if (job) setSelectedJob(job);
+  }, [isLoaded, jobs, setSelectedJob]);
+
   // Restore state from URL on browser back/forward
   useEffect(() => {
     const onPopState = () => {
@@ -47,11 +60,13 @@ function App() {
       const tab = params.get('tab');
       if (tab) setActiveTab(tab);
       const filter = params.get('filter') as OpportunitiesFilter | null;
-      if (filter) setOpportunitiesFilter(filter);
+      setOpportunitiesFilter(filter || 'All');
+      const jobId = params.get('job');
+      setSelectedJob(jobId ? jobs.find((j) => j.id === jobId) || null : null);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, []);
+  }, [jobs, setSelectedJob]);
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' });

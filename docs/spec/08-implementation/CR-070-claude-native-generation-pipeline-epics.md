@@ -179,7 +179,8 @@ Investigated 2026-07-17 (see resolved Open Decision above): `audit_and_improve.p
 
 ## Epic 7 — Measurement (close the loop on the estimate)
 
-- [ ] **Story 7.1**: Instrument real wall-clock timing per stage (something the current pipeline has zero of, per Phase 1 finding) — at minimum log start/end timestamps around fit-eval, drafting, gate pass, and each PDF render.
+- [x] **Story 7.1**: Instrument real wall-clock timing per stage (something the current pipeline has zero of, per Phase 1 finding) — at minimum log start/end timestamps around fit-eval, drafting, gate pass, and each PDF render.
+  **Done 2026-09-09.** The workflow runner (`scripts/workflow/runner.py`) already records `duration_seconds` for every stage event via `time.time()` / `_t0` / `_emit_subphase_event`. This covers Stage 0 (fit-eval), Stage 1 (prompt + verify), and all Stage 2 subphases (truth, ats, hm, mech, policy). Added a separate `pdf_compile_seconds` field to the Mech phase by timing the `_compile_pdfs` call inside `collect_mech_findings` and surfacing it through `_emit_subphase_event` and the console summary in `run_submission.py`. The timing is written to `run_events.jsonl` and printed in the per-stage console summary on every `--resume` run.
 - [ ] **Story 7.2**: Compare timed results on 3+ JDs, old pipeline vs. new, and record actual numbers in this doc (not the "under a minute" estimate in the CR-070 spec, which is reasoned from removed call counts, not measured).
 
 ## Epic 8 — Authenticity hardening (research-driven, 2026-07-17)

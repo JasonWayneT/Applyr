@@ -645,6 +645,10 @@ def _emit_subphase_event(
         "findings_by_severity": _finding_severity_counts(findings_doc),
         "disposition_counts": _disposition_counts(folder, phase, findings_doc),
     }
+    # CR-070 Story 7.1: surface PDF compile timing when available (Mech phase only).
+    _pdf_secs = findings_doc.get("pdf_compile_seconds")
+    if _pdf_secs is not None:
+        fields["pdf_compile_seconds"] = _pdf_secs
     if reasons:
         fields["reasons"] = reasons
     append_event(folder, run_id, f"stage2.{phase}", event, **fields)
@@ -1136,10 +1140,13 @@ def _compile_pdfs(folder: str) -> None:
 def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str, Any]:
     """Compile PDFs + verify_one; surface failures as findings."""
     findings: list[dict[str, Any]] = []
+    _pdf_compile_seconds: float | None = None
     if compile_pdfs:
+        _compile_t0 = time.time()
         try:
             _compile_pdfs(folder)
         except WorkflowError as exc:
+            _pdf_compile_seconds = round(time.time() - _compile_t0, 3)
             findings.append(
                 {
                     "id": "mech.compile.error",
@@ -1155,6 +1162,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 "generated_by": "scripts/run_submission.py",
                 "findings": findings,
                 "checks": {"compiled": False},
+                "pdf_compile_seconds": _pdf_compile_seconds,
             }
             # Write under reviews for consistency
             path = os.path.join(folder, "reviews", "mech_findings.json")
@@ -1163,6 +1171,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 json.dump(payload, f, indent=2)
                 f.write("\n")
             return payload
+        _pdf_compile_seconds = round(time.time() - _compile_t0, 3)
 
     receipt = verify_one(folder)
     receipt_path = os.path.join(folder, "verification_receipt.json")
@@ -1234,6 +1243,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
             "mechanically_verified": bool(receipt.get("mechanically_verified")),
             "rubric_present": rubric_ok,
         },
+        "pdf_compile_seconds": _pdf_compile_seconds,
     }
     path = os.path.join(folder, "reviews", "mech_findings.json")
     os.makedirs(os.path.dirname(path), exist_ok=True)

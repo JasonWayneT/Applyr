@@ -59,7 +59,7 @@ def _print_console_summary(folder: str, before_count: int) -> None:
         kind = e.get("event", "?")
         dur = _fmt_duration(e.get("duration_seconds"))
         bits = []
-        for key in ("tier", "fit_score", "confidence_score", "extraction_source", "verify_attempts", "integrity", "workflow_status"):
+        for key in ("tier", "fit_score", "confidence_score", "extraction_source", "verify_attempts", "integrity", "workflow_status", "pdf_compile_seconds"):
             if e.get(key) is not None:
                 bits.append(f"{key}={e[key]}")
         if e.get("findings_by_severity"):

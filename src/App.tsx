@@ -66,10 +66,24 @@ function App() {
             onAnswer={reviewCenter.answer}
             onVerifyPromotion={reviewCenter.verifyPromotion}
             onOpenJob={(jobId) => {
-              const job = jobs.find(candidate =>
-                candidate.id === jobId || companyOpportunityKey(candidate.company) === jobId,
-              );
-              if (job) setSelectedJob(job);
+              // The opportunity_key is a folder slug (e.g. "workday_practice"),
+              // which may not exactly match any job's id or company slug.
+              // Try exact match first, then a starts-with fallback so a folder
+              // like "acme_practice" still finds the job at company "Acme".
+              const job = jobs.find(candidate => {
+                const slug = companyOpportunityKey(candidate.company);
+                return candidate.id === jobId
+                  || slug === jobId
+                  || jobId.startsWith(slug)
+                  || slug.startsWith(jobId);
+              });
+              if (job) {
+                setSelectedJob(job);
+              } else {
+                // No matching job in the DB — switch to Opportunities so the
+                // user can find it manually instead of a silent dead click.
+                setActiveTab('Opportunities');
+              }
             }}
           />
         );

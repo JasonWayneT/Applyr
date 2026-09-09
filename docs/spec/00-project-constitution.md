@@ -29,8 +29,8 @@ Use this file to preserve project intent across agents, sessions, rebuilds, and 
 - Frontend: React / Vite / Tailwind CSS
 - Backend: Node.js / Express
 - Database: SQLite (via better-sqlite3)
-- Automation: Python (batch pipeline)
-- LLM Providers: Gemini (Google), Perplexity (Search)
+- Automation: Python scripts (`scripts/`); submissions run through `scripts/run_submission.py` per `docs/ACTIVE_WORKFLOW.md`
+- LLM Providers: Gemini (Google), Perplexity (Search), Claude, Groq, Local (Ollama) — configured via AI Usage settings
 - Package manager: npm
 - Style system: Applyr Design System (Nature-rooted, soft minimalism)
 

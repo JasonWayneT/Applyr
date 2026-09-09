@@ -17,6 +17,9 @@ dist-ssr/
 .vite/
 
 # Database - now lives at data/jobagent.sqlite
+# Review Center answers, skill memory, and answer history all live in this
+# database too (CR-109 / DATA-005) — this wildcard is what keeps a fresh clone
+# free of Jason's personal review answers. Do not narrow it.
 *.sqlite*
 job_hunter.db
 data/jobs.db
@@ -55,6 +58,10 @@ career-ops-main/
 data/jobs/
 data/submissions/
 !data/submissions/.gitkeep
+# 2026-09-03: same PII class as data/submissions/ — copies for today's apply pass and the
+# Stage 0 forensic investigation evidence, never commit.
+data/apply_today/
+data/stage0_investigation_evidence/
 data/pending_review/
 !data/pending_review/.gitkeep
 data/archive/
@@ -99,31 +106,39 @@ _bmad-output/
 
 # Data Privacy - ignore all real candidate data; allow only templates + generic guides
 data/thinking/
-data/*.md
+# 2026-09-08: recursive glob (data/**/*.md, not data/*.md) -- the single-level version left
+# any data/ subdirectory unprotected (found live: data/interview_prep/*.md was untracked and
+# NOT ignored, one `git add -A` away from committing real candidate-tied content). Same class
+# of gap this session flagged once already on 2026-08-14 and left unfixed. Negations below stay
+# top-level-only by design; nothing in a subdirectory is meant to be tracked here.
+data/**/*.md
 !data/*.example.md
 !data/ats-pipeline.md
 !data/resume-conversion-best-practices.md
 !data/cover-letter-conversion-best-practices.md
 !data/conversion_rubric.md
 
-data/*.json
+data/**/*.json
 !data/*.example.json
 # CR-093: scoring-engine calibration constants, not personal candidate data --
 # tracked so a recalibration is a real, reviewable git event, same as any other
 # source-of-truth code change. See the file's own _description field.
 !data/fit_rubric_calibration.json
+# 2026-09-01: configurable LLM rate-limit thresholds, not personal data -- tracked
+# so a threshold change is a real, reviewable git event.
+!data/llm_rate_limits.json
 # CR-093 research spec (HTML). data/*.md and data/*.json are ignored; HTML is
 # not, so this file is tracked by adding it, not by a negation exception.
 # Local resume exports in data/ (PII). Keep on disk, never commit.
-data/*.docx
+data/**/*.docx
 # One-off Stage 0 model bake-offs. Keep on disk, not in git.
 scripts/_bakeoff*.py
 # CR-097: curated Stage 1 example bank (empty until Epic 4 seeds it). Not
 # candidate PII — tracked so a promotion is a reviewable git event.
 !data/authoring_example_bank.json
 
-data/*.txt
-data/*.log
+data/**/*.txt
+data/**/*.log
 data/claim_embeddings.json
 data/cover_voice.md
 data/Resume_LinkedIn_Featured.md

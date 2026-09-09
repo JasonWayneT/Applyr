@@ -29,13 +29,28 @@ export function useReviewCenter() {
 
   const answer = useCallback(async (itemId: string, payload: ReviewAnswerPayload) => {
     await answerReviewItem(itemId, payload);
-    await refresh();
-  }, [refresh]);
+    // Silent refresh: update items without toggling isLoading, which would
+    // flash the full-page loading spinner and cause a visible blink on every
+    // single-tap answer (CR-109 follow-up).
+    try {
+      const result = await fetchReviewQueue();
+      setAvailable(result.available);
+      setItems(result.items);
+    } catch {
+      // Answer succeeded; a stale list is acceptable until the next explicit refresh.
+    }
+  }, []);
 
   const verifyPromotion = useCallback(async (promotionId: string) => {
     await verifyEvidencePromotion(promotionId);
-    await refresh();
-  }, [refresh]);
+    try {
+      const result = await fetchReviewQueue();
+      setAvailable(result.available);
+      setItems(result.items);
+    } catch {
+      // Verification succeeded; stale list is acceptable until next explicit refresh.
+    }
+  }, []);
 
   const pendingCount = useMemo(
     () => items.filter(item => item.status === 'open').length,

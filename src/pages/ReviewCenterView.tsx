@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { hasMinimumEvidence, isSkillReviewType } from '../lib/reviewCenter';
+import { hasMinimumEvidence } from '../lib/reviewCenter';
 import type {
   EvidenceDetails,
   ReviewAnswer,
@@ -155,6 +155,53 @@ function EvidenceFields({
   );
 }
 
+const SKILL_ANSWER_OPTIONS: ReadonlyArray<{ value: ReviewAnswer; label: string; helper: string }> = [
+  { value: 'CONFIRMED_USE', label: "Yes, I've used it", helper: 'Remember this for future opportunities' },
+  { value: 'NOT_PRESENT', label: 'No', helper: 'Do not ask again' },
+  { value: 'UNSURE_NO_REASK', label: 'Not sure', helper: 'Do not ask again automatically' },
+  { value: 'BAD_DATA', label: 'Not a real skill', helper: 'Bad extraction, never ask again' },
+];
+
+const ANSWER_LABELS: Record<ReviewAnswer, string> = {
+  CONFIRMED_USE: "Yes, I've used it",
+  NOT_PRESENT: 'No',
+  UNSURE_NO_REASK: 'Not sure',
+  BAD_DATA: 'Not a real skill',
+  KEEP_ELIGIBLE: 'Keep eligible',
+  CONFIRM_HARD: 'Confirm hard',
+  NEEDS_MORE_INFO: 'Need more information',
+};
+
+function SkillAnswerPad({
+  saving,
+  onSelect,
+}: {
+  saving: boolean;
+  onSelect: (value: ReviewAnswer) => void;
+}) {
+  // Implements FR-288: one tap saves the answer; there is no separate save step.
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {SKILL_ANSWER_OPTIONS.map(option => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onSelect(option.value)}
+          disabled={saving}
+          className={`min-h-12 rounded-xl px-4 py-3 text-left outlined-surface transition-colors disabled:opacity-50 ${
+            option.value === 'BAD_DATA'
+              ? 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container'
+              : 'bg-surface-container-low hover:bg-surface-container-high'
+          }`}
+        >
+          <span className="block text-sm font-bold">{option.label}</span>
+          <span className="block text-[11px] mt-1 opacity-80">{option.helper}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ReviewDetail({
   item,
   onAnswer,
@@ -166,28 +213,24 @@ function ReviewDetail({
   onVerifyPromotion: (promotionId: string) => Promise<void>;
   onOpenJob: (jobId: string) => void;
 }) {
-  const [answer, setAnswer] = useState<ReviewAnswer | null>(null);
   const [details, setDetails] = useState<EvidenceDetails>(EMPTY_DETAILS);
   const [showEvidencePreview, setShowEvidencePreview] = useState(false);
+  const [changingAnswer, setChangingAnswer] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setAnswer(null);
     setDetails(EMPTY_DETAILS);
     setShowEvidencePreview(false);
+    setChangingAnswer(false);
     setSaving(false);
     setError(null);
   }, [item.id]);
 
   const canReviewEvidence = hasMinimumEvidence(details);
-  const isSkill = isSkillReviewType(item.type);
+  const showAnswerPad = item.status === 'open' || changingAnswer;
 
   const saveAnswer = async (selectedAnswer: ReviewAnswer, promote = false) => {
-    if (!selectedAnswer) {
-      setError('Choose an answer before saving.');
-      return;
-    }
     if (promote && !canReviewEvidence) {
       setError('Add where, what, and when before promoting this to verified evidence.');
       return;
@@ -197,9 +240,10 @@ function ReviewDetail({
     try {
       await onAnswer({
         answer: selectedAnswer,
-        details: isSkill ? details : undefined,
+        details: item.type === 'evidence_enrichment' ? details : undefined,
         promoteToVerifiedEvidence: promote,
       });
+      setChangingAnswer(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'The answer could not be saved.');
     } finally {
@@ -207,14 +251,10 @@ function ReviewDetail({
     }
   };
 
-  const chooseAnswer = (value: ReviewAnswer) => {
-    setAnswer(value);
-    setError(null);
-    if (value !== 'CONFIRMED_USE') setShowEvidencePreview(false);
-  };
-
   return (
-    <div className="card-applyr space-y-8">
+    // Implements FR-288: the keyed remount plus card-swap animation is the
+    // visible transition into the next card in the queue.
+    <div className="card-applyr space-y-8 animate-card-swap">
       <div className="flex items-start justify-between gap-4">
         <div>
           <span className={`badge ${item.type === 'hard_gate_review' ? 'bg-warning-container text-on-warning-container' : 'badge-primary'}`}>
@@ -281,7 +321,7 @@ function ReviewDetail({
         </section>
       )}
 
-      {item.status === 'open' && item.type === 'hard_gate_review' && (
+      {showAnswerPad && item.type === 'hard_gate_review' && (
         <div className="space-y-4">
           <div className="bg-warning-container text-on-warning-container rounded-xl p-4">
             <p className="text-sm font-bold">This decision affects whether the opportunity can continue.</p>
@@ -299,7 +339,6 @@ function ReviewDetail({
                 key={value}
                 type="button"
                 onClick={() => {
-                  chooseAnswer(value);
                   void saveAnswer(value);
                 }}
                 className={`${className} min-h-12 rounded-xl px-4 text-left disabled:opacity-50`}
@@ -313,123 +352,117 @@ function ReviewDetail({
         </div>
       )}
 
-      {item.status === 'open' && isSkill && (
-        <div className="space-y-5">
+      {showAnswerPad && item.type === 'skill_presence' && (
+        <div className="space-y-4">
           <div>
             <h3 className="text-xs uppercase tracking-widest font-bold text-on-surface-variant mb-3">Your answer</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {([
-                ['CONFIRMED_USE', "Yes, I've used it", 'Save a bounded presence signal'],
-                ['NOT_PRESENT', 'No', 'Do not ask again'],
-                ['UNSURE_NO_REASK', 'Not sure', 'Do not ask again automatically'],
-              ] as const).map(([value, label, helper]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => chooseAnswer(value)}
-                  aria-pressed={answer === value}
-                  className={`min-h-12 rounded-xl px-4 py-3 text-left outlined-surface transition-colors ${
-                    answer === value
-                      ? 'bg-primary-container border-primary text-on-primary-container'
-                      : 'bg-surface-container-low hover:bg-surface-container-high'
-                  }`}
-                >
-                  <span className="block text-sm font-bold">{label}</span>
-                  <span className="block text-[11px] mt-1 opacity-80">{helper}</span>
-                </button>
-              ))}
-            </div>
+            <SkillAnswerPad saving={saving} onSelect={value => { void saveAnswer(value); }} />
           </div>
-
-          {answer === 'CONFIRMED_USE' && (
-            <div className="bg-surface-container-low rounded-2xl p-5 space-y-5">
-              <div>
-                <h3 className="text-sm font-bold text-on-surface">Add optional context</h3>
-                <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                  A Yes is enough to remember that you used this skill. Add where, what, and when if you want it to support stronger job requirements later.
-                </p>
-              </div>
-              <EvidenceFields
-                details={details}
-                onChange={(field, value) => setDetails(previous => ({ ...previous, [field]: value }))}
-              />
-              {canReviewEvidence && (
-                <div className="bg-success-container text-on-success-container rounded-xl p-4 space-y-3">
-                  <div className="flex items-start gap-2">
-                    <span className="material-symbols-outlined text-base mt-0.5">check_circle</span>
-                    <div>
-                      <p className="text-sm font-bold">Enough context for an evidence review</p>
-                      <p className="text-xs mt-1 leading-relaxed">
-                        Review the proposed wording before deciding whether to add it to verified evidence.
-                      </p>
-                    </div>
-                  </div>
-                  {!showEvidencePreview ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowEvidencePreview(true)}
-                      className="min-h-10 px-3 rounded-lg bg-surface-container-lowest text-success text-xs font-bold hover:bg-surface-container transition-colors"
-                    >
-                      Review evidence preview
-                    </button>
-                  ) : (
-                    <div className="bg-surface-container-lowest rounded-xl p-4">
-                      <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Proposed evidence</p>
-                      <p className="text-sm text-on-surface mt-2 leading-relaxed">
-                        {buildEvidencePreview(details, item.title)}
-                        {details.scope.trim() ? ` Scope: ${details.scope.trim()}.` : ''}
-                        {details.outcome.trim() ? ` Outcome: ${details.outcome.trim()}.` : ''}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void saveAnswer('CONFIRMED_USE', true);
-                        }}
-                        className="btn-primary min-h-10 mt-4 px-4 rounded-lg text-xs"
-                        disabled={saving}
-                      >
-                        Submit for source verification
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {answer && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <p className="text-xs text-on-surface-variant">
-                Your answer is stored for future opportunities using the same skill.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (answer) void saveAnswer(answer);
-                }}
-                className="btn-primary min-h-10 px-5 rounded-xl text-sm shrink-0"
-                disabled={saving}
-              >
-                {saving ? 'Saving...' : 'Save answer'}
-              </button>
-            </div>
-          )}
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            One tap saves and opens the next card. A Yes can get where/what/when detail later under
+            Strengthen evidence, and any answer can be corrected from Completed.
+          </p>
         </div>
       )}
 
-      {item.status === 'completed' && item.promotionStatus === 'PENDING_SOURCE_UPDATE' && item.promotionId ? (
-        <PromotionVerification
-          promotionId={item.promotionId}
-          onVerify={onVerifyPromotion}
-          onError={setError}
-        />
-      ) : item.status === 'completed' && (
-        <div className="bg-success-container text-on-success-container rounded-xl p-4 flex items-start gap-2">
-          <span className="material-symbols-outlined text-base mt-0.5">check_circle</span>
-          <p className="text-sm leading-relaxed">
-            This review item is complete. Its decision is available to future Stage 0 runs.
-            {item.promotionStatus === 'VERIFIED' ? ' The evidence is verified in the source of truth.' : ''}
+      {showAnswerPad && item.type === 'evidence_enrichment' && (
+        <div className="space-y-5">
+          <div className="bg-surface-container-low rounded-2xl p-5 space-y-5">
+            <div>
+              <h3 className="text-sm font-bold text-on-surface">Add optional context</h3>
+              <p className="text-xs text-on-surface-variant mt-1 leading-relaxed">
+                A Yes is enough to remember that you used this skill. Add where, what, and when if you want it to support stronger job requirements later.
+              </p>
+            </div>
+            <EvidenceFields
+              details={details}
+              onChange={(field, value) => setDetails(previous => ({ ...previous, [field]: value }))}
+            />
+            {canReviewEvidence && (
+              <div className="bg-success-container text-on-success-container rounded-xl p-4 space-y-3">
+                <div className="flex items-start gap-2">
+                  <span className="material-symbols-outlined text-base mt-0.5">check_circle</span>
+                  <div>
+                    <p className="text-sm font-bold">Enough context for an evidence review</p>
+                    <p className="text-xs mt-1 leading-relaxed">
+                      Review the proposed wording before deciding whether to add it to verified evidence.
+                    </p>
+                  </div>
+                </div>
+                {!showEvidencePreview ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowEvidencePreview(true)}
+                    className="min-h-10 px-3 rounded-lg bg-surface-container-lowest text-success text-xs font-bold hover:bg-surface-container transition-colors"
+                  >
+                    Review evidence preview
+                  </button>
+                ) : (
+                  <div className="bg-surface-container-lowest rounded-xl p-4">
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Proposed evidence</p>
+                    <p className="text-sm text-on-surface mt-2 leading-relaxed">
+                      {buildEvidencePreview(details, item.title)}
+                      {details.scope.trim() ? ` Scope: ${details.scope.trim()}.` : ''}
+                      {details.outcome.trim() ? ` Outcome: ${details.outcome.trim()}.` : ''}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void saveAnswer('CONFIRMED_USE', true);
+                      }}
+                      className="btn-primary min-h-10 mt-4 px-4 rounded-lg text-xs"
+                      disabled={saving}
+                    >
+                      Submit for source verification
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-xs uppercase tracking-widest font-bold text-on-surface-variant mb-3">Your answer</h3>
+            <SkillAnswerPad saving={saving} onSelect={value => { void saveAnswer(value); }} />
+          </div>
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            Your answer is stored for future opportunities using the same skill.
           </p>
+        </div>
+      )}
+
+      {item.status === 'completed' && !changingAnswer && (
+        <div className="space-y-4">
+          {item.promotionStatus === 'PENDING_SOURCE_UPDATE' && item.promotionId ? (
+            <PromotionVerification
+              promotionId={item.promotionId}
+              onVerify={onVerifyPromotion}
+              onError={setError}
+            />
+          ) : (
+            <div className="bg-success-container text-on-success-container rounded-xl p-4 flex items-start gap-2">
+              <span className="material-symbols-outlined text-base mt-0.5">check_circle</span>
+              <p className="text-sm leading-relaxed">
+                This review item is complete. Its decision is available to future Stage 0 runs.
+                {item.promotionStatus === 'VERIFIED' ? ' The evidence is verified in the source of truth.' : ''}
+              </p>
+            </div>
+          )}
+          {/* Implements FR-289: a completed card stays correctable in place. */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {item.answer ? (
+              <p className="text-sm text-on-surface-variant">
+                Your answer: <span className="font-bold text-on-surface">{ANSWER_LABELS[item.answer]}</span>
+              </p>
+            ) : <span />}
+            <button
+              type="button"
+              onClick={() => setChangingAnswer(true)}
+              className="btn-secondary min-h-10 px-4 rounded-xl text-sm shrink-0"
+            >
+              Change answer
+            </button>
+          </div>
         </div>
       )}
 
@@ -522,6 +555,17 @@ const ReviewCenterView: React.FC<ReviewCenterViewProps> = ({
   }, [selectedId, visibleItems]);
 
   const selectedItem = visibleItems.find(item => item.id === selectedId) ?? null;
+
+  // Implements FR-288: a saved answer advances straight to the next card in the
+  // queue. Corrections made from the Completed queue stay on the same card.
+  const handleAnswer = async (item: ReviewItem, payload: ReviewAnswerPayload) => {
+    const index = visibleItems.findIndex(candidate => candidate.id === item.id);
+    const next = index >= 0 ? visibleItems[index + 1] ?? null : null;
+    await onAnswer(item.id, payload);
+    if (queue !== 'completed' && next) {
+      setSelectedId(next.id);
+    }
+  };
 
   const renderQueue = () => (
     <section className="bg-surface-container-low rounded-2xl p-3 outlined-surface" aria-label="Review Center queue">
@@ -621,15 +665,17 @@ const ReviewCenterView: React.FC<ReviewCenterViewProps> = ({
             <ReviewDetail
               key={selectedItem.id}
               item={selectedItem}
-              onAnswer={payload => onAnswer(selectedItem.id, payload)}
+              onAnswer={payload => handleAnswer(selectedItem, payload)}
               onVerifyPromotion={onVerifyPromotion}
               onOpenJob={onOpenJob}
             />
           ) : (
             <EmptyState
-              icon="touch_app"
-              title="Choose a review item"
-              body="Select an item from the queue to see the context and decide what should happen next."
+              icon="task_alt"
+              title={queue === 'completed' ? 'Nothing completed yet' : 'This queue is clear'}
+              body={queue === 'completed'
+                ? 'Answered items land here, where you can revisit or correct any of them.'
+                : 'Every question in this queue has an answer. Completed holds anything you want to revisit.'}
             />
           )}
         </div>

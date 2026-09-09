@@ -24,6 +24,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # the same guard test_build_stage0_fit_gate.py and test_stage0_model_handoff.py already set.
 os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
+# 2026-09-01: same reasoning, same fix, for the CR-108 evidence cascade -- now that it
+# defaults on, gap classification would otherwise also make a real, unmocked Groq/Gemini
+# call here. Confirmed live: this file's test_force_does_not_short_circuit_on_ledger failed
+# on a real (unmocked) Groq/Gemini response the moment the ambient default changed.
+os.environ["STAGE0_EVIDENCE_CASCADE"] = "0"
+
 from stage0_skip_ledger import (  # noqa: E402
     clear_skip,
     connect,

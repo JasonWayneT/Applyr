@@ -121,24 +121,36 @@ def compute_status(folder: str) -> dict:
     }
 
 
+def _print(line: str) -> None:
+    """Console-safe print -- folder/company names can carry non-ASCII characters
+    (e.g. collēctīvus_holdings) that crash a cp1252 Windows console. Same
+    encode/decode-with-replace pattern already used in run_submission.py's
+    event printing, applied here so a non-ASCII folder name degrades to '?'
+    characters instead of crashing before STATUS ever prints (found
+    2026-09-03: the crash was silently read as "can't verify" by a Stop hook,
+    when the underlying submission was actually fine)."""
+    enc = sys.stdout.encoding or "utf-8"
+    print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
 def _print_report(status: dict) -> None:
-    print(f"\n{status['submission']}:")
+    _print(f"\n{status['submission']}:")
     for c in status["checks"]:
         mark = "PASS" if c["passed"] else "FAIL"
-        print(f"  [{mark}] {c['name']}")
+        _print(f"  [{mark}] {c['name']}")
         for e in c["errors"]:
-            print(f"         - {e}")
+            _print(f"         - {e}")
     for w in status["warnings"]:
-        print(f"  [WARN] {w}")
-    print(f"  STATUS: {'DONE' if status['done'] else 'INCOMPLETE'}")
+        _print(f"  [WARN] {w}")
+    _print(f"  STATUS: {'DONE' if status['done'] else 'INCOMPLETE'}")
     wf = status.get("workflow_authority") or {}
     if wf.get("adopted"):
-        print(
+        _print(
             f"  [INFO] workflow-authority (CR-076+): status={wf.get('status')} "
             f"check_workflow_complete={'YES' if wf.get('check_workflow_complete') else 'NO'}"
         )
     else:
-        print("  [INFO] workflow-authority (CR-076+): not yet adopted (no workflow_state.json)")
+        _print("  [INFO] workflow-authority (CR-076+): not yet adopted (no workflow_state.json)")
 
 
 def main() -> None:

@@ -14,9 +14,23 @@
   "weighting_model": {
     "required_weight": 3.0,
     "preferred_weight": 1.0,
-    "confidence_multiplier": {"high": 1.0, "medium": 0.85, "low": 0.65},
+    "confidence_multiplier": {"high": 1.0, "medium": 0.85, "low": 0.5},
+    "repetition_modifier": {
+      "enabled": true,
+      "threshold": 3,
+      "bonus": 1,
+      "cap": 4,
+      "rationale": "Spec Sec. 10: if the same evidence_level appears 3+ times across required items, +1 to each (capped at 4). Rewards consistent, repeated evidence of the same capability across multiple requirement lines."
+    },
+    "hedge_modifier": {
+      "enabled": true,
+      "penalty": 1,
+      "floor": 0,
+      "patterns": ["contributed to", "partnered on", "assisted with", "supported", "helped with"],
+      "rationale": "Spec Sec. 10: if reasoning contains hedge language, -1 to evidence_level (floored at 0). Hedge language signals the candidate's involvement was indirect, not a direct ownership claim."
+    },
     "status": "design inference, not calibrated",
-    "rationale": "Per data/fit_rubric_spec.html Sec. 10: the research supports the ORDERING (required outweighs preferred, direct evidence outweighs adjacent) but not these exact magnitudes. Repetition (+1, capped) and hedge-language (-1) modifiers from the same spec section are not yet implemented in code at all.",
-    "note": "Still read as Python module constants in scripts/evidence_scale.py (_REQUIRED_WEIGHT, _PREFERRED_WEIGHT, _CONFIDENCE_MULTIPLIER), not yet wired to this file -- flagged here so the next recalibration pass moves them together with score_bands instead of finding them scattered again."
+    "rationale": "Per data/fit_rubric_spec.html Sec. 10: the research supports the ORDERING (required outweighs preferred, direct evidence outweighs adjacent) but not these exact magnitudes. Repetition (+1, capped) and hedge-language (-1) modifiers from the same spec section are now implemented (2026-09-01 Improvement #7). 'low' confidence multiplier lowered from 0.65 to 0.5 to better reflect the reduced reliability of low-confidence judgments.",
+    "note": "Now wired to this file (2026-09-01 Improvement #7): scripts/evidence_scale.py reads required_weight, preferred_weight, confidence_multiplier, repetition_modifier, and hedge_modifier from this file at runtime, falling back to the hardcoded module constants when the file is absent or a key is missing."
   }
 }

@@ -33,6 +33,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # TestSectionExtractionLLM below.
 os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
+# 2026-09-01: STAGE0_EVIDENCE_CASCADE now defaults to on (pipeline_env.py),
+# routing gap classification through stage0_evidence_cascade.classify_requirements_batch()
+# (real utils.call_llm -- Groq/Gemini) instead of evidence_scale.classify_requirement(),
+# which is the only function _CLASSIFY_PATCHER below mocks. Left alone, every test in
+# this file would silently start making live network calls the moment the ambient
+# default changed elsewhere, defeating this suite's own "no real DB, no LLM" promise --
+# confirmed live: 19 tests failed here on real (unmocked) Groq/Gemini responses, and the
+# whole suite went from ~45s to ~11 minutes. Force the legacy path for this file
+# specifically so its existing offline classify_requirement mock keeps covering what it
+# was built to cover (Story 2.7); cascade-specific behavior has its own dedicated,
+# properly-mocked suite in test_stage0_evidence_cascade.py.
+os.environ["STAGE0_EVIDENCE_CASCADE"] = "0"
+
 from build_stage0_fit_gate import (
     STAGE0_EXTRACT_MODEL,
     Stage0ExtractError,
@@ -142,6 +155,7 @@ _REGULATED_DOMAIN = (
 _DOMAIN_HEDGE_RE = re.compile(r"\b(ideally|preferred|a plus)\b", re.I)
 
 _CLASSIFY_PATCHER = None
+_INDUSTRY_SEMANTIC_PATCHER = None
 
 
 def _offline_classify_requirement(
@@ -261,6 +275,14 @@ def setUpModule():
         side_effect=_offline_classify_requirement,
     )
     _CLASSIFY_PATCHER.start()
+    # CR-110 Gap A: mock the LLM industry classification so prefs gate tests
+    # don't make real network calls. Returns no-block (fail-open default).
+    global _INDUSTRY_SEMANTIC_PATCHER
+    _INDUSTRY_SEMANTIC_PATCHER = patch(
+        "industry_semantic.classify_industry_safe",
+        return_value={"blocked_industry": "", "confidence": "high", "reasoning": "mocked"},
+    )
+    _INDUSTRY_SEMANTIC_PATCHER.start()
 
 
 def tearDownModule():
@@ -268,6 +290,10 @@ def tearDownModule():
     if _CLASSIFY_PATCHER is not None:
         _CLASSIFY_PATCHER.stop()
         _CLASSIFY_PATCHER = None
+    global _INDUSTRY_SEMANTIC_PATCHER
+    if _INDUSTRY_SEMANTIC_PATCHER is not None:
+        _INDUSTRY_SEMANTIC_PATCHER.stop()
+        _INDUSTRY_SEMANTIC_PATCHER = None
 
 
 # ---------------------------------------------------------------------------
@@ -620,6 +646,36 @@ class TestPreferenceRejectShortCircuit(unittest.TestCase):
             prefs=_PREFS_MINIMAL,
         )
         self.assertEqual(result["url"], "https://example.com/jobs/pm-role")
+
+
+class TestPrefsGateObservability(unittest.TestCase):
+    def test_prefs_gate_error_visible(self):
+        failed = {
+            "passed": True,
+            "rejects": [],
+            "flags": [{"code": "prefs_gate_error", "note": "test error"}],
+            "_gate_failed": True,
+        }
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        with patch("build_stage0_fit_gate.run_prefs_gate_safe", return_value=failed):
+            result = build_stage0_fit_gate(
+                folder,
+                db_gate_result=_DB_CLEAR,
+                prefs=_PREFS_MINIMAL,
+            )
+        self.assertIn("prefs_gate_error", result["prefs_gate_flags"])
+
+    def test_prefs_gate_rejects_stored(self):
+        passed = {"passed": True, "rejects": [], "flags": []}
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+        with patch("build_stage0_fit_gate.run_prefs_gate_safe", return_value=passed):
+            result = build_stage0_fit_gate(
+                folder,
+                db_gate_result=_DB_CLEAR,
+                prefs=_PREFS_MINIMAL,
+            )
+        self.assertEqual(result["prefs_gate_rejects"], [])
+        self.assertEqual(result["prefs_gate_flags"], [])
 
 
 # ---------------------------------------------------------------------------
@@ -1261,6 +1317,27 @@ class TestRevenueBilling(unittest.TestCase):
         ok_jd = "You will drive revenue growth and monitor revenue metrics for the product."
         rejects = _check_revenue_billing(ok_jd)
         self.assertEqual(rejects, [])
+
+
+class TestRevenueBillingBroadened(unittest.TestCase):
+    def test_product_line_revenue_margin_blocked(self):
+        jd = "Manage product line performance. Including revenue and margin"
+        codes = {r["code"] for r in _check_revenue_billing(jd)}
+        self.assertIn("exclusion_zone_revenue_billing", codes)
+
+    def test_dynamic_pricing_blocked(self):
+        jd = "define and evolve how dynamic pricing works for customers"
+        codes = {r["code"] for r in _check_revenue_billing(jd)}
+        self.assertIn("exclusion_zone_revenue_billing", codes)
+
+    def test_payroll_billing_workstreams_blocked(self):
+        jd = "Own product strategy for finance, payroll, and compliance workstreams"
+        codes = {r["code"] for r in _check_revenue_billing(jd)}
+        self.assertIn("exclusion_zone_revenue_billing", codes)
+
+    def test_revenue_mention_still_not_blocked(self):
+        jd = "You will drive revenue growth and monitor revenue metrics for the product."
+        self.assertEqual(_check_revenue_billing(jd), [])
 
 
 # ---------------------------------------------------------------------------

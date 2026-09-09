@@ -43,6 +43,19 @@ _NON_EXPERIENCE_CONTEXT = re.compile(
 
 MAX_PLAUSIBLE_YEARS = 25
 
+# Word-number to digit mapping for spelled-out year counts (found 2026-09-03:
+# hale_products_inc JD said "Twelve+ years" but regex \d+ only matches digits).
+_WORD_NUMBERS: dict[str, int] = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+    "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+}
+_WORD_NUMBER_RE = re.compile(
+    r"\b(" + "|".join(_WORD_NUMBERS.keys()) + r")\s*\+?\s*years?",
+    re.I,
+)
+
 # Always valid — explicit requirement language in match.
 _ANCHORED_YEARS_PATTERNS = [
     re.compile(
@@ -54,13 +67,16 @@ _ANCHORED_YEARS_PATTERNS = [
 ]
 
 # Requirements-section or experience-context only.
+# Fixed 2026-09-03: added ['\u2019']? after years? to handle "years' experience"
+# (curly/straight apostrophe, found on sprezzatura JD). Added pattern for
+# "N years in product management" (without "experience" keyword, hale JD).
 _LOOSE_YEARS_PATTERNS = [
-    re.compile(r"(\d+)\s*[-–]\s*(\d+)\s*years?", re.I),
-    re.compile(r"(\d+)\s+to\s+(\d+)\s+years?", re.I),
-    re.compile(r"(\d+)\s+years?\s+(?:of\s+)?(?:product\s+)?(?:management\s+)?experience", re.I),
-    re.compile(r"(\d+)\s+years?\s+of\s+(?:professional\s+)?(?:product\s+)?experience", re.I),
+    re.compile(r"(\d+)\s*[-\u2013]\s*(\d+)\s*years?", re.I),
+    re.compile(r"(\d+)\s+to\s+(\d+)\s*years?", re.I),
+    re.compile(r"(\d+)\s+years?['\u2019']?\s+(?:of\s+)?(?:product\s+)?(?:management\s+)?experience", re.I),
+    re.compile(r"(\d+)\s+years?['\u2019']?\s+of\s+(?:professional\s+)?(?:product\s+)?experience", re.I),
+    re.compile(r"(\d+)\s+years?['\u2019']?\s+(?:in\s+)?(?:product\s+)?management", re.I),
 ]
-
 
 def _strip_html(text: str) -> str:
     if not text:
@@ -330,26 +346,41 @@ def _first_is_role_designation(title: str) -> bool:
 
 
 def blocked_title_lists(prefs: dict | None) -> Tuple[list[str], list[str]]:
-    """Return (role_designation_terms, focus_area_words) from prefs with legacy fallback."""
+    """Return (role_designation_terms, focus_area_words) from prefs.
+
+    Merges ``blocked_role_titles`` (pipeline-managed) with ``blocked_titles``
+    (UI-sourced) so a term present in only one list is still enforced. Found
+    2026-09-03: ``blocked_titles`` had "Junior" but ``blocked_role_titles``
+    did not, and this function ignored ``blocked_titles`` entirely when
+    ``blocked_role_titles`` existed, so "Junior Product Manager" passed the
+    title gate. Same for "Associate" (absent from both lists, but present in
+    ``_DEFAULT_BLOCKED_ROLE_TITLES`` which was never reached because
+    ``blocked_role_titles`` was non-None).
+    """
     prefs = prefs or {}
     role = prefs.get("blocked_role_titles")
     focus = prefs.get("blocked_focus_area_words")
-    if role is not None or focus is not None:
-        return list(role or []), list(focus or [])
-
     legacy = list(prefs.get("blocked_titles") or [])
-    if not legacy:
+
+    if role is None and focus is None and not legacy:
         return list(_DEFAULT_BLOCKED_ROLE_TITLES), list(_DEFAULT_BLOCKED_FOCUS_AREA_WORDS)
 
+    # Merge: start from blocked_role_titles, add any blocked_titles entries
+    # not already present (de-duplicated case-insensitively).
+    role_terms: list[str] = list(role or [])
+    focus_terms: list[str] = list(focus or [])
+    existing_role_lower = {t.lower() for t in role_terms}
+    existing_focus_lower = {t.lower() for t in focus_terms}
     focus_set = {w.lower() for w in _DEFAULT_BLOCKED_FOCUS_AREA_WORDS}
-    role_out: list[str] = []
-    focus_out: list[str] = []
     for term in legacy:
-        if term.lower() in focus_set:
-            focus_out.append(term)
-        else:
-            role_out.append(term)
-    return role_out, focus_out
+        tl = term.lower()
+        if tl in focus_set and tl not in existing_focus_lower:
+            focus_terms.append(term)
+            existing_focus_lower.add(tl)
+        elif tl not in existing_role_lower and tl not in existing_focus_lower:
+            role_terms.append(term)
+            existing_role_lower.add(tl)
+    return role_terms, focus_terms
 
 
 def title_matches_blocked(title: str, blocked: str) -> bool:
@@ -446,10 +477,32 @@ def _collect_from_match(text: str, match: re.Match[str]) -> Optional[int]:
     return value
 
 
+def _normalize_quotes(text: str) -> str:
+    """Normalize curly/smart quotes to ASCII equivalents (OWASP UAX-15 guidance).
+
+    Production NLP systems normalize text to a canonical encoding before
+    applying regex patterns. Found 2026-09-03: sprezzatura JD had a curly
+    apostrophe (U+2019) in "years' experience" that broke the years gate.
+    """
+    if not text:
+        return text
+    return (
+        text.replace("\u2018", "'")
+        .replace("\u2019", "'")
+        .replace("\u201a", "'")
+        .replace("\u201b", "'")
+        .replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2013", "-")
+        .replace("\u2014", "--")
+    )
+
+
 def parse_max_years_required(jd_text: str) -> Optional[int]:
     """Highest years figure implied as required in JD — requirements-anchored (CR-055)."""
     if not jd_text:
         return None
+    jd_text = _normalize_quotes(jd_text)
     found: list[int] = []
 
     for pat in _ANCHORED_YEARS_PATTERNS:
@@ -470,12 +523,24 @@ def parse_max_years_required(jd_text: str) -> Optional[int]:
                 if val is not None:
                     found.append(val)
 
+    # Check for spelled-out word numbers (e.g. "Twelve+ years")
+    for m in _WORD_NUMBER_RE.finditer(jd_text):
+        word = m.group(1).lower()
+        val = _WORD_NUMBERS.get(word)
+        if val is not None and val not in found:
+            ctx = _context_window(jd_text, m.start(), m.end())
+            if _plausible_years(val, ctx):
+                found.append(val)
+
     return max(found) if found else None
 
 
 def check_years_gate(jd_text: str, prefs: dict) -> Tuple[bool, str]:
     """
-    Returns (passes, reason). Fails closed when JD requires more than max years.
+    Returns (passes, reason). Fails closed when JD requires >= max years.
+
+    CR-110 Round 5: Jason targets mid-level (below 7). Roles requiring 7 or
+    more years are blocked; roles requiring fewer than 7 are candidates.
     """
     exp = (prefs or {}).get("experience_range") or {}
     max_years = exp.get("max")
@@ -484,7 +549,7 @@ def check_years_gate(jd_text: str, prefs: dict) -> Tuple[bool, str]:
     required = parse_max_years_required(jd_text)
     if required is None:
         return True, ""
-    if required > int(max_years):
+    if required >= int(max_years):
         return False, f"required_years_{required}_exceeds_max_{max_years}"
     return True, ""
 

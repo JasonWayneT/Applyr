@@ -154,6 +154,79 @@ class TestStage0EvidenceCascade(unittest.TestCase):
                 items,
             )
 
+    def test_gemini_soft_gate_and_level_field_are_accepted(self) -> None:
+        """CR-108 cascade testing (2026-09-01): confirmed live on a real archived
+        JD -- Gemini returned gate="SOFT" (not the prompted HARD/NONE binary,
+        plausibly bleeding in from this codebase's own gap_class vocabulary)
+        and a field named "level" instead of "evidence_level". Both are label
+        differences the strict validator used to reject outright, discarding an
+        otherwise well-reasoned, safe response and failing the whole batch with
+        no remaining provider to fall back to."""
+        item = BatchItem("required:0:a", "required", "Bachelor's degree in a related field")
+        results = validate_batch_response(
+            {
+                "results": [
+                    {
+                        "item_id": "a",  # bare hash suffix, no "required:0:" prefix
+                        "bucket": "required",
+                        "gate": "SOFT",
+                        "level": 3,
+                        "confidence": "high",
+                        "reasoning": "Evidence shows a related business degree.",
+                    }
+                ]
+            },
+            [item],
+        )
+        self.assertEqual(results[item.item_id]["gate"], "NONE")
+        self.assertEqual(results[item.item_id]["evidence_level"], 3)
+        # evidence_level 3 (> 2) means well-supported -- no gap at all, same
+        # as it would be under the literal "NONE" gate the prompt specifies.
+        self.assertIsNone(results[item.item_id]["gap_class"])
+
+    def test_bare_hash_item_id_is_rejected_when_ambiguous(self) -> None:
+        """The bare-hash fallback must never guess between two items that
+        happen to share a hash suffix -- safety over convenience."""
+        items = [
+            BatchItem("required:0:abc123", "required", "Requirement one"),
+            BatchItem("preferred:0:abc123", "preferred", "Requirement two"),
+        ]
+        with self.assertRaises(CascadeValidationError):
+            validate_batch_response(
+                {
+                    "results": [
+                        {
+                            "item_id": "abc123",
+                            "gate": "NONE",
+                            "evidence_level": 2,
+                            "confidence": "high",
+                            "reasoning": "ambiguous",
+                        }
+                    ]
+                },
+                items,
+            )
+
+    def test_genuinely_invalid_gate_value_is_still_rejected(self) -> None:
+        """Tolerance for known synonyms (SOFT) must not become tolerance for
+        anything -- an unrecognized gate value still fails closed."""
+        item = BatchItem("required:0:a", "required", "Requirement")
+        with self.assertRaises(CascadeValidationError):
+            validate_batch_response(
+                {
+                    "results": [
+                        {
+                            "item_id": "required:0:a",
+                            "gate": "MAYBE",
+                            "evidence_level": 2,
+                            "confidence": "high",
+                            "reasoning": "unclear",
+                        }
+                    ]
+                },
+                [item],
+            )
+
     def test_batch_uses_configured_provider_then_falls_back_after_invalid_response(self) -> None:
         from stage0_evidence_cascade import classify_requirements_batch
 

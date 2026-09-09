@@ -88,12 +88,22 @@ def classify_requirements_batch(
     raw_response_callback: Callable[[str], None] | None = None,
     provider_event_callback: Callable[[str, str], None] | None = None,
 ) -> dict[str, dict[str, Any]]:
-    """Classify all ambiguous items in one validated structured provider request."""
+    """Classify all ambiguous items in one validated structured provider request.
+
+    2026-09-01 Improvement #4: batches exceeding MAX_BATCH_ITEMS are now
+    automatically split into chunks of <= MAX_BATCH_ITEMS, classified
+    independently, and merged. This replaces the previous CascadeValidationError
+    that discarded all results when a batch was too large.
+    """
     if not items:
         return {}
+    # Improvement #4: automatic chunking for batches > MAX_BATCH_ITEMS.
     if len(items) > MAX_BATCH_ITEMS:
-        raise CascadeValidationError(
-            f"Stage 0 batch has {len(items)} items; maximum is {MAX_BATCH_ITEMS}"
+        return _classify_in_chunks(
+            items,
+            settings=settings,
+            raw_response_callback=raw_response_callback,
+            provider_event_callback=provider_event_callback,
         )
     from utils import call_llm, load_llm_settings
 
@@ -142,6 +152,81 @@ def classify_requirements_batch(
     raise CascadeUnavailable("No configured Stage 0 evidence provider returned a response")
 
 
+def _classify_in_chunks(
+    items: list[BatchItem],
+    *,
+    settings: dict[str, Any] | None = None,
+    raw_response_callback: Callable[[str], None] | None = None,
+    provider_event_callback: Callable[[str, str], None] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Split a large batch into MAX_BATCH_ITEMS-sized chunks, classify each,
+    and merge results. If a chunk fails, its items are re-attempted individually
+    (partial acceptance) so one bad chunk doesn't discard valid results from
+    other chunks."""
+    merged: dict[str, dict[str, Any]] = {}
+    for i in range(0, len(items), MAX_BATCH_ITEMS):
+        chunk = items[i : i + MAX_BATCH_ITEMS]
+        try:
+            chunk_results = classify_requirements_batch(
+                chunk,
+                settings=settings,
+                raw_response_callback=raw_response_callback,
+                provider_event_callback=provider_event_callback,
+            )
+            merged.update(chunk_results)
+        except (CascadeValidationError, CascadeUnavailable):
+            # Partial acceptance: try each item in the failed chunk individually
+            # so valid items from other chunks are not discarded.
+            for single in chunk:
+                try:
+                    single_results = classify_requirements_batch(
+                        [single],
+                        settings=settings,
+                        raw_response_callback=raw_response_callback,
+                        provider_event_callback=provider_event_callback,
+                    )
+                    merged.update(single_results)
+                except (CascadeValidationError, CascadeUnavailable):
+                    # This single item truly failed -- skip it rather than
+                    # abort the whole batch. The caller's missing-item check
+                    # will surface it.
+                    continue
+    return merged
+
+
+def _resolve_item_id(raw_id: str, expected: dict[str, BatchItem]) -> str | None:
+    """Resolve a provider-returned item_id against the expected id set.
+
+    CR-108 cascade testing (2026-09-01): confirmed live on a real archived JD
+    that Gemini can drop the "bucket:ordinal:" prefix from a compound
+    make_item_key() id (e.g. "required:0:bf418179f1c24783") and return only
+    the trailing hash ("bf418179f1c24783") -- plausibly because its own
+    response already carries "bucket" as a separate field, so the model
+    treats the prefix as redundant and normalizes it away. That's a display
+    difference, not an ambiguity: the hash suffix alone is exactly as unique
+    as the full id within one company's batch (same digest algorithm, same
+    input), so accept it when -- and only when -- it identifies exactly one
+    expected item. A suffix shared by two expected items is never silently
+    guessed; the caller's "unknown batch item_id" error still fires for that.
+    """
+    if raw_id in expected:
+        return raw_id
+    # Try progressively shorter suffixes of the expected id against the raw_id.
+    # Providers can drop the "bucket:" prefix (returning "ordinal:hash") or
+    # even drop everything but the hash. Each shorter suffix is only accepted
+    # when it identifies exactly one expected item.
+    max_parts = max((full_id.count(":") for full_id in expected), default=0)
+    for drop in range(1, max_parts + 1):
+        suffix_matches = [
+            full_id
+            for full_id in expected
+            if ":".join(full_id.split(":")[drop:]) == raw_id
+        ]
+        if len(suffix_matches) == 1:
+            return suffix_matches[0]
+    return None
+
+
 def validate_batch_response(
     payload: dict[str, Any],
     items: list[BatchItem],
@@ -155,11 +240,12 @@ def validate_batch_response(
     for raw in payload["results"]:
         if not isinstance(raw, dict):
             raise CascadeValidationError("batch result must be an object")
-        item_id = raw.get("item_id")
-        if not isinstance(item_id, str) or item_id not in expected:
-            raise CascadeValidationError(f"unknown batch item_id: {item_id!r}")
+        raw_id = raw.get("item_id")
+        item_id = _resolve_item_id(raw_id, expected) if isinstance(raw_id, str) else None
+        if item_id is None:
+            raise CascadeValidationError(f"unknown batch item_id: {raw_id!r}")
         if item_id in seen:
-            raise CascadeValidationError(f"duplicate batch item_id: {item_id!r}")
+            raise CascadeValidationError(f"duplicate batch item_id: {raw_id!r}")
         seen.add(item_id)
         item = expected[item_id]
         normalized[item_id] = _normalize_result(raw, item)
@@ -172,6 +258,23 @@ def validate_batch_response(
 def _normalize_result(raw: dict[str, Any], item: BatchItem) -> dict[str, Any]:
     """Normalize one provider result while holding unsafe HARD decisions."""
     gate = str(raw.get("gate") or "").strip().upper()
+    # CR-108 cascade testing (2026-09-01): Gemini returned "SOFT" live on a
+    # real archived JD instead of the prompted HARD/NONE binary -- plausibly
+    # picked up from this codebase's own ambient gap_class vocabulary
+    # (HARD/SOFT appears throughout build_stage0_fit_gate.py) rather than
+    # this prompt's own instructions. "SOFT" only ever means "not a hard
+    # gate" here, exactly like NONE -- the actual gap_class the caller sees
+    # is still computed from evidence_level below, so normalizing the label
+    # doesn't change what gets decided, only whether a harmless synonym
+    # discards an otherwise well-reasoned, safe response.
+    if gate == "SOFT":
+        gate = "NONE"
+    # CR-108 cascade testing (2026-09-01): Gemini can also omit the "gate"
+    # field entirely, returning only evidence_level/level + reasoning. An
+    # absent gate is "not a hard gate" -- the actual gap_class is computed
+    # from evidence_level below, so defaulting to NONE is safe.
+    if gate == "":
+        gate = "NONE"
     source = str(raw.get("gap_source") or "").strip().lower()
     if source in {"none", "null"}:
         source = ""
@@ -179,8 +282,14 @@ def _normalize_result(raw: dict[str, Any], item: BatchItem) -> dict[str, Any]:
         raise CascadeValidationError(f"invalid gate for {item.item_id}: {gate!r}")
     if source not in _GATE_SOURCES and source != "":
         raise CascadeValidationError(f"invalid gap_source for {item.item_id}: {source!r}")
+    # CR-108 cascade testing (2026-09-01): same real response also used a
+    # field named "level" instead of the prompted "evidence_level". Accept
+    # either name -- this is a label difference, not a value one.
+    level_value = raw.get("evidence_level")
+    if level_value is None:
+        level_value = raw.get("level")
     try:
-        evidence_level = int(raw.get("evidence_level"))
+        evidence_level = int(level_value)
     except (TypeError, ValueError) as exc:
         raise CascadeValidationError(f"invalid evidence_level for {item.item_id}") from exc
     if evidence_level not in range(5):
@@ -231,8 +340,30 @@ def _reasoning_grounded_in_item(item: str, reasoning: str) -> bool:
 
 
 def _build_batch_prompt(items: list[BatchItem]) -> str:
-    """Build a redaction-safe batch prompt from requirement and retrieved evidence text."""
+    """Build a redaction-safe batch prompt from requirement and retrieved evidence text.
+
+    2026-09-01 Improvement #1: now includes k=2 few-shot examples retrieved from
+    data/fit_rubric_golden_set.json (via fit_rubric_examples.retrieve_examples)
+    before the items, aligning the batch path with the single-item path's
+    few-shot support. Falls back to no examples if the golden set is missing
+    (same skip-not-fail posture as the single-item path).
+    """
     lines = ["Classify every item exactly once. Return JSON only.", ""]
+
+    # Improvement #1: retrieve k=2 few-shot examples for the batch.
+    few_shot_block = ""
+    try:
+        from fit_rubric_examples import retrieve_examples, format_evidence_examples_for_prompt
+        # Use the first item's requirement as the query for retrieval ranking.
+        query = items[0].requirement if items else ""
+        examples = retrieve_examples(query, None, k=2)
+        few_shot_block = format_evidence_examples_for_prompt(examples)
+    except Exception:
+        pass
+    if few_shot_block:
+        lines.append(few_shot_block)
+        lines.append("")
+
     for item in items:
         lines.append(f"[{item.item_id}] bucket={item.bucket}")
         lines.append(f"requirement={item.requirement}")
@@ -269,11 +400,40 @@ def _clean_provider_order(values: list[Any]) -> list[str]:
 
 _SYSTEM_PROMPT = """You classify job requirements against supplied candidate evidence.
 Return {"results":[...]} with one result per item_id.
-Use gate=HARD only for an unambiguous required degree, domain, role-exclusion,
-or certification requirement that is the only path. Tools never use HARD.
-Preferred items never use HARD. Evidence level is 0 through 4. Confidence is
-high, medium, or low. Reasoning must cite the requirement's own vocabulary.
-Do not invent facts or use evidence outside the supplied excerpts."""
+
+EVIDENCE SCALE (0-4) -- rate how much of the requirement the candidate's documented \
+experience actually satisfies:
+0 = No documented evidence. Nothing in the candidate profile addresses this.
+1 = Adjacent evidence. Candidate did work sharing the underlying capability, not the requested work itself.
+2 = Partial direct evidence. Candidate did meaningful parts of it, but scope/tooling/context/ownership differs.
+3 = Direct evidence. Candidate clearly did substantially equivalent work, comparable scope.
+4 = Strong direct evidence. Substantially equivalent work with comparable-or-greater ownership, scope, or outcome.
+
+OR-ALTERNATIVE LINES -- when a line offers multiple alternatives joined by "or", \
+rate evidence_level against whichever single alternative the candidate matches BEST, \
+not the worst. The line is satisfied if ANY listed alternative is well-documented.
+
+FORBIDDEN AS EVIDENCE (score 0 if this is the only basis): a title alone, an employer \
+name alone, company size, a merely-adjacent industry, an implied department interaction, \
+a tool the candidate "probably" touched, seniority implying a capability, or trainability. \
+Potential is not evidence of demonstrated experience.
+
+HARD GATES -- gate="HARD" ends scoring for this line outright (disqualifying). \
+A line from the PREFERRED bucket NEVER gates. Gating is possible ONLY for a REQUIRED-bucket \
+line, and only in these four categories:
+- degree: a required advanced degree (Master's/MBA/PhD/JD/MD) with NO Bachelor's alternative.
+- domain: a required regulated/specialized domain paired with its OWN years-of-experience threshold.
+- role_exclusion: a role category incompatible with the candidate's background (people management, \
+AI/ML ownership, revenue/billing ownership, title above Senior IC, or building from nothing).
+- certification: a required professional certification/license (PMP, CPA, PE, RN license, etc.).
+Tools never gate. Bare years-of-experience never gates. If gate="HARD", gap_source MUST be \
+exactly one of "degree", "domain", "role_exclusion", or "certification".
+
+CONFIDENCE -- "high" when both line and evidence are unambiguous; "medium" when real \
+interpretation was needed; "low" when the JD line is vague or evidence is thin.
+
+Reasoning must cite the requirement's own vocabulary and the specific evidence that \
+supports your rating. Do not invent facts or use evidence outside the supplied excerpts."""
 
 
 def _tokens(value: str) -> set[str]:

@@ -1,3 +1,171 @@
+## [Unreleased] — 2026-09-08
+[DRAFT] Generic cover-letter hook guard (CR-098 follow-on): cover letters that open by
+labeling the role ("shows what makes this role interesting") instead of stating a concrete
+company fact are now caught and warned against.
+
+### Changed
+- CR-098: `LW-038` (WARN) fires when the opening hook uses the self-referential "what makes
+  this role/opportunity/position interesting/compelling/exciting" shape. The author prompt's
+  COVER LETTER VOICE block now states the same rule so the shape is prevented at first draft,
+  not only caught in review. The check is narrow by design: a specific hook and the same
+  words outside the opening hook pass.
+
+### Developer
+- CR-098: Registered as `FR-295` / `AC-392`; mapped in `FEAT-013`, the traceability matrix,
+  and the canonical no-ai-slop skill. The rule ID was renumbered from the earlier draft's
+  `LW-036` to `LW-038` because `LW-036` already belongs to the closed-lost jargon rule.
+
+## [Unreleased] — 2026-09-03
+[DRAFT] Stage 0 gate escapes and header placeholder fixes — multiple deterministic gates failed to catch roles that should have been skipped, and resume/cover letter headers with partial placeholders were left unfixed in compiled PDFs.
+
+### Fixed
+- CR-110: Title gate now blocks "Junior" and "Associate" titles — blocked_title_lists() merges blocked_role_titles with blocked_titles instead of ignoring the UI list; "Associate" and "Junior" added to blocked_role_titles in candidate_preferences.json
+- CR-110: Years gate now detects "10 years' experience" (apostrophe) and "Twelve+ years" (spelled-out numbers) — regex patterns fixed and word-number mapping added
+- CR-110: Revenue/billing exclusion zone regex broadened to catch real JD phrasings (product line revenue/margin, dynamic pricing, payroll/billing workstreams)
+- CR-110: Header placeholder fix now handles partial placeholders (real name + bracketed contact info) and blank contact lines, not just fully-bracketed headers
+- CR-110: `run_prefs_gate_safe` now logs errors to stderr and includes `_gate_failed` flag — previously caught all exceptions silently and returned passed=True, skipping every deterministic gate with no trace
+- CR-110: Prefs gate rejects and flags now stored in stage0_fit_gate.json output as `prefs_gate_rejects` and `prefs_gate_flags` — previously discarded, making gate auditing impossible
+- CR-110: Header placeholder check now blocking in verify_submission.py — resumes with [phone]/[email]/[LinkedIn] in the header cannot pass mechanical verification
+- CR-110: Text normalization for curly quotes/apostrophes added to seniority_gate.py — prevents future regex misses on smart-quote variants from HTML-exported JDs
+- CR-110: Self-clearing dispositions (FALSE_POSITIVE, ACCEPTED_AS_CORRECT, HUMAN_ACCEPTED_RISK) now require substantive reasoning in dispositions.json — bare strings no longer clear these findings; RESOLVED_EDIT and NOT_APPLICABLE remain bare-string compatible
+- CR-110: LLM-based industry classification added as supplementary gate — uses Groq/Gemini to catch blocked industries the keyword gate misses (e.g., a gambling company that never says "gambling"); high/medium confidence blocks, low confidence flags, LLM failure fails open
+- CR-110: JD content validation now blocks template JDs with bracket placeholders ([Company X], [phone], [email]) and talent-matching network pages ("apply once and get matched") — previously only a 200-char minimum check existed between DB insert and Stage 0
+
+### Changed
+- CR-110: blocked_title_lists() in seniority_gate.py now merges blocked_role_titles and blocked_titles instead of preferring one over the other
+- CR-110: `mechanically_verified` conjunction now includes `header_placeholders.ok` — bracket placeholders in resume/cover letter headers are a blocking failure
+- CR-110: Removed "Junior (1-2 Years)" from `experience_levels` in candidate_preferences.json — field is vestigial (no code reads it since CR-010 decommissioned LinkedIn scouting), removal eliminates cosmetic inconsistency with title blocklist
+
+[DRAFT] **CR-111 — Instruction-authority hygiene (2026-09-07).**
+
+### Changed
+- CR-111: Declared one canonical copy for the four duplicated instruction skills and
+  replaced the other copies with small pointer stubs, preventing cross-harness skill drift.
+
+### Developer
+- CR-111: Added `scripts/check_instruction_drift.py` with fixture tests and wired it into
+  `check_context_pack_freshness.py`; the guard checks pointer size, canonical targets,
+  absolute file URLs, and known stale instruction patterns.
+
+- **Fix: `check_submission_status.py` / `verify_submission.py` / `stage_gate.py` crashed on non-ASCII
+  company folder names (2026-09-03).** A submission folder with a diacritic in its name (e.g.
+  `collēctīvus_holdings`) crashed all three scripts with `UnicodeEncodeError` on a cp1252 Windows
+  console, before any PASS/FAIL/STATUS line printed. A Stop hook reading the crash as "can't verify"
+  correctly refused to accept a completion claim for that folder even though the submission itself
+  was mechanically clean. Fixed by routing the status-line prints through an encode/decode-with-
+  `errors="replace"` helper (the same pattern `run_submission.py`'s event printing already used) in
+  all three files — a non-ASCII name now degrades to `?` characters in console output instead of
+  crashing the process. 40 existing tests across `test_check_submission_status.py`,
+  `test_stage_gate.py`, `test_verify_submission.py` still pass.
+
+[DRAFT] **CR-109 — Review Center queue UX, extraction precision, bad-data loop (2026-09-02).**
+
+### Fixed
+- [BUG-001] Review Center no longer asks "Have you used Spirit/Preferred/Thinking in your
+  work?": named-tool extraction now rejects JD label shapes (a candidate followed by `:` or
+  `)`), knows trait/qualifier/role-title/generic-tech vocabulary as stopwords, and blocks any
+  candidate containing a hard-blocked tool as a token run (closes the "Workday Ecosystem /
+  Workday Web Services / Workday Recruiting" hole, since `workday` itself was always blocked).
+
+### Changed
+- Review Center answers are now single-tap: selecting an answer saves it immediately and the
+  next card in the queue appears with a short transition. There is no "Save answer" step.
+  Mistakes are corrected from the Completed queue, where each card now shows its recorded
+  answer and a Change answer button; every change is preserved in the answer history.
+- Optional where/what/when details for a "Yes" answer now live only on the Strengthen
+  evidence card that a Yes automatically creates, instead of a duplicate inline form.
+
+### New
+- "Not a real skill" (BAD_DATA) answer on skill cards: flags an extraction false positive so
+  Applyr permanently stops asking about that candidate and accumulates a learning record for
+  future extraction improvements. Supported end to end (UI, API, harness, durable memory).
+
+### Developer
+- [CR-109] Migration `022_add_bad_data_answer.sql` adds BAD_DATA to the answer/decision CHECK
+  vocabularies via idempotent table rebuild; review answers/skill memory/history remain only
+  in the gitignored `data/jobagent.sqlite` (DATA-005, verified via `git check-ignore`).
+
+---
+
+- **Stage 0 improvement plan — 10 improvements (2026-09-01).** All 9 Stage 0
+  bugs were previously fixed and verified; this batch covers *improvements*
+  (faster, more accurate, better matching), not bug fixes. All 244 existing
+  tests pass (80 authoring packet + 152 stage0 fit gate + 12 cascade).
+  (1) **Few-shot examples in batch prompt** (`stage0_evidence_cascade.py`):
+  expanded the 6-line `_SYSTEM_PROMPT` to include evidence scale 0-4
+  definitions, OR-alternative handling, forbidden evidence, and HARD gate
+  categories — aligning the batch path with the single-item path's
+  `evidence_scale._SYSTEM_PROMPT`. Added k=2 few-shot example retrieval from
+  `data/fit_rubric_golden_set.json` in `_build_batch_prompt`.
+  (2) **Batched responsibilities exclusion scanner**
+  (`build_stage0_fit_gate.py`): `screen_responsibilities_for_exclusion()`
+  now batches all non-deterministic responsibility lines into a single
+  `classify_requirements_batch()` call when the cascade is enabled, instead
+  of one sequential `classify_requirement()` call per line. Eliminates the
+  primary cause of 100+ second Stage 0 times on JDs with 8+ responsibilities.
+  Falls back to sequential on batch failure.
+  (3) **Track 429 failures and skip rate-limited providers** (`utils.py`):
+  added `_log_rate_limited()` to log real HTTP 429 responses to
+  `activity_log`; `check_rate_limits()` now counts recent RATE_LIMITED
+  entries and skips a provider with >3 in the last 5 minutes (configurable
+  via `data/llm_rate_limits.json`). Replaced the blocking `time.sleep(60)`
+  on RPM approach with `return False` (cascade to next provider).
+  (4) **Automatic chunking for batches >24 items**
+  (`stage0_evidence_cascade.py`): `classify_requirements_batch()` now
+  splits large batches into MAX_BATCH_ITEMS-sized chunks, classifies each
+  independently, and merges results. Failed chunks retry items
+  individually (partial acceptance) so one bad chunk doesn't discard valid
+  results from others.
+  (5) **Expanded deterministic exclusion zone regex**
+  (`build_stage0_fit_gate.py`): `_DETERMINISTIC_0TO1_BUILD_RE` now catches
+  "founding PM", "build from scratch", "greenfield product", "shaping an
+  early-stage product area", and "where none previously existed" — common
+  exclusion-zone phrasing the original regex missed.
+  (6) **TF-IDF-weighted evidence context retrieval** (`evidence_scale.py`):
+  `build_evidence_context()` now applies `_rarity_weight()` from
+  `jd_tailoring.py` to each overlapping token before computing similarity,
+  so a chunk mentioning "roadmap" and "Jira" ranks higher than one
+  mentioning "roadmap" and "cooking". Increased k from 6 to 8 for WE
+  documents >50K chars. Falls back to unweighted Jaccard if the rarity
+  table is unavailable.
+  (7) **Deferred fit-score modifiers** (`evidence_scale.py` +
+  `fit_rubric_calibration.json`): implemented the repetition modifier
+  (+1, capped at 4, when same evidence_level appears 3+ times across
+  required items) and the hedge modifier (-1, floored at 0, when reasoning
+  contains hedge language like "contributed to" / "partnered on"). Moved
+  weights and confidence multipliers from hardcoded constants to
+  `data/fit_rubric_calibration.json`. Lowered "low" confidence multiplier
+  from 0.65 to 0.5.
+  (8) **Anchor-vocabulary matching in specificity scoring**
+  (`build_stage0_fit_gate.py`): `_requirement_specificity_score()` now
+  adds +1.0 for items containing terms from the anchor vocabulary (claims
+  tags + skills catalog), prioritizing specific, decision-bearing
+  requirements over generic ones when capping.
+  (9) **More stage signal patterns** (`build_stage0_fit_gate.py`):
+  `_STAGE_SIGNALS` reordered by priority (enterprise > public > PE-backed >
+  VC-backed > startup > unknown) and expanded with bootstrapped, profitable,
+  hypergrowth, scale-up, post-Series-B, and employee-count-range patterns.
+  (10) **Configurable rate limit thresholds** (`utils.py` +
+  `data/llm_rate_limits.json`): thresholds now loaded from a new config
+  file at import time, with Claude and Perplexity entries added. Hardcoded
+  defaults remain as fallback when the file is absent or a key is missing.
+
+- **Stage 2 parallel PDF compilation + pre-collect findings (2026-09-01).**
+  Two optimizations to `scripts/workflow/runner.py` that reduce Stage 2 wall-clock
+  time and `--resume` cycle friction without changing any verification gate:
+  (1) `_compile_pdfs()` now launches Resume.pdf and CoverLetter.pdf compilation
+  in parallel via `subprocess.Popen` instead of sequentially, with a sequential
+  fallback if either parallel compile fails (resource-contention recovery);
+  (2) when a lightweight Stage 2 subphase (Truth/ATS/HM) returns
+  `NEEDS_DISPOSITION`, the orchestrator pre-collects findings from remaining
+  lightweight subphases and syncs their dispositions in the same pass, so the
+  agent can dispose all WARN findings in one `--resume` cycle instead of one per
+  subphase. Mech is not pre-collected (requires PDF compilation). Documentation
+  updated in `.claude/skills/generate-submission/SKILL.md`,
+  `.codex/skills/generate-submission/SKILL.md`,
+  `.claude/workflows/generate-submission-batch.js`, and
+  `scripts/stabilization_orchestrator_corpus.py`.
+
 - [DRAFT] **CR-108 Stage 0 evidence cascade and Review Center hardening (2026-08-31).**
   Added the accuracy-first deterministic evidence cascade, batched Groq-to-Gemini
   classification, explicit Local selection, durable Stage 0 checkpoints, and shared

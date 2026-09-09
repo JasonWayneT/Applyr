@@ -518,4 +518,14 @@
   .animate-fade-in {
     animation: fadeIn 300ms ease-out;
   }
+
+  /* Review Center card-to-card transition (CR-109 / FR-288): a short
+     fade-plus-rise so advancing to the next card is visibly perceptible. */
+  @keyframes cardSwap {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-card-swap {
+    animation: cardSwap 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
 }

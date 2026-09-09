@@ -53,6 +53,10 @@ HARD_BLOCKED_TOOLS: frozenset[str] = frozenset({
     # allow-list layer that catches tools not on this necessarily-incomplete
     # deny-list going forward)
     "guidewire", "guidewire policycenter", "duck creek", "majesco",
+    # Programming languages not in Jason's history (2026-09-03, Jason-supplied
+    # after alphasense JD wanted hands-on Python -- not in workExperience.md,
+    # do not claim it)
+    "python",
 })
 
 # Prefer human-readable forms in lint messages / alternation (longest first).
@@ -177,6 +181,77 @@ _TOOL_DETECTION_STOPWORDS: frozenset[str] = frozenset({
     "united", "states", "america", "remote", "hybrid", "onsite",
     "experience", "requirements", "qualifications", "responsibilities",
     "excellent", "strong", "proven", "demonstrated", "ability",
+    # Added 2026-09-01 (CR-108 cascade testing): these were caught only after
+    # this stopword list started feeding a BLOCKING gate (Stage0NeedsInput via
+    # _prepare_skill_confirmations), not just the original WARN-tier use this
+    # list's own comment above describes. A false positive here now produces
+    # an individually-blocking "Have you used X in your work?" review-center
+    # question per company, not a glance-and-dismiss WARN -- so degree/field/
+    # domain words (which appear in nearly every JD's education/domain lines)
+    # need to be excluded proactively, not just as they're each independently
+    # rediscovered. Confirmed live on one real archived JD (early_warning):
+    # Engineering, STEM, Computer Science, Information Systems, Data
+    # Architecture, Data Engineering, Data Product Management, Software
+    # Engineering, Platform Engineering, Platform Product Management,
+    # Analytics Engineering, and Visa all fired as false "named tool" hits.
+    "engineering", "science", "sciences", "computer", "stem", "information",
+    "systems", "architecture", "analytics", "platform", "visa", "degree",
+    "data", "software", "business", "healthcare", "health", "public",
+    "administration", "administrative",
+    "bachelor", "bachelors", "master", "masters", "mba", "phd", "diploma",
+    "field", "discipline", "related", "equivalent", "certification",
+    "certifications", "certified", "management", "engineer", "engineers",
+    # Added 2026-09-02 (CR-109 / BUG-001): JD trait words, qualifier words,
+    # role-title words, and generic tech nouns confirmed firing as false
+    # "named tool" blocking questions in a live Review Center queue (Spirit,
+    # Thinking, Fluency, Prioritization, Methodologies, Competencies,
+    # Preferred, Implementation Consultant, Solutions Architect, Talent
+    # Acquisition, API, HCM, GTM, LLM, Finance, Legal, Sales). The label-shape
+    # guard in looks_like_named_tool() kills the colon/header variants of
+    # these; the stopwords cover the same vocabulary when it appears without
+    # that punctuation. The BAD_DATA review answer (FR-287) is the durable
+    # learning loop for whatever still slips past both layers.
+    "preferred", "highly", "bonus", "ideally",
+    "spirit", "entrepreneurial", "mindset", "thinking", "fluency",
+    "prioritization", "methodologies", "competencies", "aptitude", "acumen",
+    "ownership", "communication", "communications", "collaboration",
+    "solutions", "implementation", "integration", "consultant", "talent",
+    "acquisition", "finance", "legal", "sales", "marketing", "recruiting",
+    "api", "apis", "rest", "json", "xml", "llm", "llms", "ai", "ml",
+    "machine", "learning", "gtm", "hcm", "ats", "crm", "hris",
+    # Added 2026-09-02 (CR-109 follow-up): second batch confirmed in a live
+    # Stage 0 run the same day — Tools And Frameworks, Utilizing Strategic
+    # Marketing, SKILLS AND REQUIRED, Decision Making, Strategy, Empathy,
+    # KPIs, CSPO. None are named tools/products.
+    "tools", "frameworks", "utilizing", "strategic", "skills", "required",
+    "decision", "making", "strategy", "empathy", "kpis", "cspo",
+    "stakeholder", "stakeholders",
+    # Added 2026-09-02 (CR-109 follow-up 2): Jason flagged "Judgment" as an
+    # absurd card. These are soft skills / traits / competencies that the
+    # evidence comparison evaluates — they are never binary tool-questions.
+    "judgment", "judgement", "negotiation", "analytical", "critical",
+    "creativity", "adaptability", "resilience", "leadership", "mentorship",
+    "coaching", "facilitation", "presentation", "storytelling",
+    "organization", "planning", "execution", "teamwork", "networking",
+    "influence", "persuasion", "listening", "writing", "verbal",
+    "interpersonal", "conceptual", "logical", "quantitative", "qualitative",
+    "research", "analysis", "synthesis", "evaluation", "vision", "mission",
+    "purpose", "values", "culture", "ethics", "integrity", "accountability",
+    "responsibility", "initiative", "proactive", "awareness", "alignment",
+    "engagement", "empowerment", "governance", "compliance", "scalability",
+    "agility", "capability", "capacity", "curiosity", "rigor", "rigour",
+    "collaboration", "communication", "communications",
+})
+
+# Abstract-noun suffixes — a word ending in one of these is almost certainly
+# a common English abstract noun (Judgment, Prioritization, Leadership,
+# Resilience, Empowerment, Scalability), not a named tool/product. Tool names
+# are proper nouns that don't follow English derivational morphology —
+# "Kafka", "Asana", "Greenhouse", "Excel", "SAML" don't end in -tion/-ment.
+# This is a structural guard so the stopword list isn't the only defense.
+_ABSTRACT_NOUN_SUFFIXES: frozenset[str] = frozenset({
+    "tion", "sion", "ment", "ness", "ity", "ship", "ance", "ence",
+    "ism", "ist", "dom", "acy", "ency", "logy", "graphy",
 })
 
 # Mid-sentence capitalized token run: NOT at the start of the string/sentence
@@ -204,6 +279,24 @@ def looks_like_named_tool(text: str) -> list[str]:
         candidate = m.group(0).strip()
         first_word = candidate.split()[0].lower()
         if first_word in _TOOL_DETECTION_STOPWORDS:
+            continue
+        # Structural guard (CR-109 follow-up 2): a word ending in an
+        # abstract-noun suffix is an English derivation (Judgment, Leadership,
+        # Prioritization, Resilience), not a tool/product name. Tool names are
+        # proper nouns that don't follow English morphology. This is the
+        # structural complement to the stopword list — together they catch
+        # soft skills and traits without enumerating every English word.
+        if any(first_word.endswith(suffix) for suffix in _ABSTRACT_NOUN_SUFFIXES):
+            continue
+        # Implements FR-286 / BUG-001 (CR-109, 2026-09-02): reject JD label
+        # shapes. A capitalized run immediately followed by ":" is a bullet
+        # label, not a product ("Entrepreneurial Spirit:", "Systems
+        # Thinking:", "Ruthless Prioritization:"); one immediately followed
+        # by ")" is a parenthesized qualifier, not a product ("(Highly
+        # Preferred):"). Both fired as live blocking Review Center questions
+        # asking Jason whether he has "used Spirit" or "used Preferred".
+        tail = text[m.end():m.end() + 1]
+        if tail in {":", ")"}:
             continue
         hits.append(candidate)
     return hits

@@ -9,6 +9,7 @@ export type ReviewAnswer =
   | 'CONFIRMED_USE'
   | 'NOT_PRESENT'
   | 'UNSURE_NO_REASK'
+  | 'BAD_DATA'
   | 'KEEP_ELIGIBLE'
   | 'CONFIRM_HARD'
   | 'NEEDS_MORE_INFO';
@@ -34,6 +35,8 @@ export interface ReviewItem {
   promotionId?: string;
   promotionStatus?: EvidencePromotionStatus;
   affectedOpportunities: ReviewOpportunity[];
+  /** Implements FR-289: surface the recorded answer so completed cards stay correctable. */
+  answer?: ReviewAnswer;
   createdAt: string;
 }
 
@@ -85,6 +88,7 @@ const SKILL_ANSWERS = new Set<ReviewAnswer>([
   'CONFIRMED_USE',
   'NOT_PRESENT',
   'UNSURE_NO_REASK',
+  'BAD_DATA',
 ]);
 
 const HARD_GATE_ANSWERS = new Set<ReviewAnswer>([
@@ -162,6 +166,7 @@ function mapGroup(
     evidenceStatus,
     promotionId: promotion?.id,
     promotionStatus: promotion?.status,
+    answer: rows.map(row => row.answer).find((value): value is ReviewAnswer => Boolean(value)),
     affectedOpportunities: rows.map(row => ({
       jobId: row.opportunity_key,
       company: row.opportunity_company,
@@ -370,7 +375,7 @@ function createEvidenceEnrichment(
 function upsertSkillMemory(
   skillKey: string,
   displayName: string,
-  decision: 'CONFIRMED_USE' | 'NOT_PRESENT' | 'UNSURE_NO_REASK' | 'VERIFIED_EVIDENCE',
+  decision: 'CONFIRMED_USE' | 'NOT_PRESENT' | 'UNSURE_NO_REASK' | 'VERIFIED_EVIDENCE' | 'BAD_DATA',
   details: EvidenceDetails,
   database: Database.Database,
 ): void {
@@ -456,9 +461,11 @@ export function answerReviewItem(
 
   if (isSkill && rows[0].skill_key) {
     const skillKey = rows[0].skill_key;
+    // Implements FR-287: BAD_DATA records that the extracted candidate was not a
+    // real skill/tool so the same candidate is never queued again.
     const decision = existingPromotion?.status === 'VERIFIED'
       ? 'VERIFIED_EVIDENCE'
-      : answer as 'CONFIRMED_USE' | 'NOT_PRESENT' | 'UNSURE_NO_REASK';
+      : answer as 'CONFIRMED_USE' | 'NOT_PRESENT' | 'UNSURE_NO_REASK' | 'BAD_DATA';
     upsertSkillMemory(skillKey, rows[0].title, decision, details, database);
     if (promoteToVerifiedEvidence) {
       promotionId = existingPromotion?.id ?? randomUUID();
@@ -480,7 +487,7 @@ export function answerReviewItem(
     if (answer === 'CONFIRMED_USE' && !promoteToVerifiedEvidence) {
       for (const row of rows) createEvidenceEnrichment(row, database);
     }
-    if (answer === 'NOT_PRESENT' || answer === 'UNSURE_NO_REASK') {
+    if (answer === 'NOT_PRESENT' || answer === 'UNSURE_NO_REASK' || answer === 'BAD_DATA') {
       database.prepare(`
         UPDATE pending_skill_confirmations
         SET status = 'completed', answer = ?, updated_at = ?, resolved_at = ?

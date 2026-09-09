@@ -29,6 +29,9 @@ A CLI-only pipeline is hard to monitor. Users need a visual dashboard to watch p
 | `FR-028` | Side-by-Side dual pane | Review UI workspace |
 | `FR-029` | LLM-assisted document edit | setting key gated |
 | `FR-285` | Review Center workflow | Existing sidebar entry, focused question view, progressive evidence, and shared UI/harness resolver (`CR-108`, rollout-flagged) |
+| `FR-287` | Bad-data flag | "Not a real skill" answer durably suppresses extraction false positives and feeds the learning loop (`CR-109`) |
+| `FR-288` | Single-tap queue flow | Answers save on selection and advance to the next card with a visible transition; no save step (`CR-109`) |
+| `FR-289` | Completed-card correction | Completed cards show the recorded answer and support in-place change (`CR-109`) |
 
 ## Verification plan
 
@@ -39,3 +42,7 @@ A CLI-only pipeline is hard to monitor. Users need a visual dashboard to watch p
 | `TEST-008` | `FR-027` | manual | Clicking Save & Compile saves Markdown, regenerates PDF, and updates iframe | accepted |
 | `TEST-108C` | `FR-285` | integration/UI | Review Center groups pending confirmations, focuses one question, progressively reveals evidence, links affected jobs, and submits answers through the shared resolver | proposed |
 | `TEST-108D` | `FR-285`, `NFR-011` | API integration | Review Center list and answer routes use an injected isolated database and cover authentication, grouped answers, hard-gate actions, and idempotent repeats | verified |
+| `TEST-109A` | `FR-287`, `AC-375`, `AC-376` | unit/API | BAD_DATA completes skill items, writes durable memory, records history, suppresses re-queue, and is rejected on hard-gate reviews | verified |
+| `TEST-109B` | `FR-286`, `AC-374` | unit | Live-failure JD lines (Spirit/Preferred/Thinking/Workday compounds) produce zero or only real-tool candidates | verified |
+| `TEST-109C` | `FR-289`, `AC-377`, `AC-378` | unit/API | Completed items surface their recorded answer; re-answering updates memory and appends history | verified |
+| `TEST-109D` | `FR-288` | manual UI | Answering a card saves in one tap, the next card appears with the card-swap transition, and the queue drains to a clear state | proposed |

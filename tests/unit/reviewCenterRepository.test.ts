@@ -24,6 +24,10 @@ const migrations = [
     path.join(process.cwd(), 'server', 'migrations', '021_add_evidence_promotion_proposals.sql'),
     'utf8',
   ),
+  readFileSync(
+    path.join(process.cwd(), 'server', 'migrations', '022_add_bad_data_answer.sql'),
+    'utf8',
+  ),
 ].join('\n');
 
 describe('review center repository', () => {
@@ -169,6 +173,66 @@ describe('review center repository', () => {
         .prepare('SELECT decision, evidence_level FROM skill_memory WHERE skill_key = ?')
         .get('servicenow_itsm'),
     ).toEqual({ decision: 'VERIFIED_EVIDENCE', evidence_level: 2 });
+  });
+
+  it('records BAD_DATA durably, creates no enrichment, and surfaces the answer', () => {
+    // Implements FR-287 (CR-109): a bad-extraction flag teaches Applyr to never
+    // re-ask the candidate and stays visible on the completed card.
+    const database = createDatabase();
+    createReview(database);
+    expect(
+      answerReviewItem('skill:servicenow_itsm', 'BAD_DATA', undefined, false, database),
+    ).toEqual({ ok: true, status: 'completed' });
+
+    expect(listReviewItems('open', database)).toHaveLength(0);
+    const memory = database
+      .prepare('SELECT decision, evidence_level FROM skill_memory WHERE skill_key = ?')
+      .get('servicenow_itsm') as { decision: string; evidence_level: number };
+    expect(memory).toEqual({ decision: 'BAD_DATA', evidence_level: 0 });
+    const completed = listReviewItems('completed', database);
+    expect(completed).toHaveLength(1);
+    expect(completed[0].answer).toBe('BAD_DATA');
+    expect(
+      database
+        .prepare('SELECT answer FROM review_answer_history WHERE review_key = ?')
+        .get('skill:servicenow_itsm'),
+    ).toEqual({ answer: 'BAD_DATA' });
+  });
+
+  it('rejects BAD_DATA on hard-gate reviews', () => {
+    const database = createDatabase();
+    const review = createHardGateReview(
+      {
+        itemKey: 'required:0:license',
+        requirement: 'Requires an active professional license',
+        opportunityKey: 'acme',
+        opportunityCompany: 'Acme',
+        opportunityTitle: 'Product Manager',
+      },
+      database,
+    );
+    expect(
+      answerReviewItem(review.reviewKey, 'BAD_DATA', undefined, false, database),
+    ).toEqual({ ok: false, error: 'Invalid hard-gate answer' });
+  });
+
+  it('supports correcting a completed answer (change answer)', () => {
+    // Implements FR-289 (CR-109): a completed card stays correctable and the
+    // durable memory follows the latest answer.
+    const database = createDatabase();
+    createReview(database);
+    answerReviewItem('skill:servicenow_itsm', 'NOT_PRESENT', undefined, false, database);
+    answerReviewItem('skill:servicenow_itsm', 'CONFIRMED_USE', undefined, false, database);
+    const memory = database
+      .prepare('SELECT decision FROM skill_memory WHERE skill_key = ?')
+      .get('servicenow_itsm') as { decision: string };
+    expect(memory.decision).toBe('CONFIRMED_USE');
+    expect(listReviewItems('completed', database)[0].answer).toBe('CONFIRMED_USE');
+    expect(
+      database
+        .prepare('SELECT count(*) AS count FROM review_answer_history WHERE review_key = ?')
+        .get('skill:servicenow_itsm'),
+    ).toEqual({ count: 2 });
   });
 
   it('keeps a hard-gate review open for more information', () => {

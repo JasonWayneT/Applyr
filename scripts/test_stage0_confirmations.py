@@ -41,6 +41,7 @@ _MIGRATIONS = (
     _ROOT / "server" / "migrations" / "019_add_stage0_checkpoints.sql",
     _ROOT / "server" / "migrations" / "020_add_review_answer_history.sql",
     _ROOT / "server" / "migrations" / "021_add_evidence_promotion_proposals.sql",
+    _ROOT / "server" / "migrations" / "022_add_bad_data_answer.sql",
 )
 
 
@@ -71,6 +72,142 @@ class TestStage0Confirmations(unittest.TestCase):
             known_terms={"trello"},
         )
         self.assertEqual([candidate.display_name for candidate in candidates], ["Acme Platform"])
+
+    def test_generic_degree_and_field_words_are_not_treated_as_tools(self) -> None:
+        """CR-108 cascade testing (2026-09-01): once named_skill_candidates() feeds a
+        BLOCKING gate (Stage0NeedsInput), a false positive here isn't a cheap glance-
+        and-dismiss WARN anymore -- it's an individually-blocking review question per
+        company. Confirmed live on a real archived JD (early_warning): all 12 of these
+        terms fired as false "named tool" hits before this fix."""
+        candidates = named_skill_candidates(
+            [
+                "Bachelor's degree in Computer Science, Engineering, or related field.",
+                "Background in STEM or Information Systems preferred.",
+                "Experience in Data Architecture, Data Engineering, or Analytics Engineering.",
+                "Familiarity with Software Engineering and Platform Engineering practices.",
+                "Prior work in Data Product Management or Platform Product Management.",
+                "Must be authorized to work without Visa sponsorship.",
+                "Bachelor's degree in Business, Healthcare Administration, or Public Health.",
+            ],
+        )
+        self.assertEqual(candidates, [])
+
+    def test_jd_label_shapes_are_not_treated_as_tools(self) -> None:
+        """CR-109 / BUG-001 (2026-09-02): live Review Center queues asked Jason
+        "Have you used Spirit in your work?" and "Have you used Preferred in
+        your work?" because JD label shapes ("Entrepreneurial Spirit: ...",
+        "(Highly Preferred): ...") matched the mid-sentence capitalization
+        heuristic. The regex can only start mid-run (a line-leading word has
+        no [a-z,] whitespace before it), so "Spirit" matched even though
+        "Entrepreneurial" could not. Candidates followed by ":" or ")" are
+        labels/qualifiers, not products."""
+        candidates = named_skill_candidates(
+            [
+                "Entrepreneurial Spirit: Demonstrate a track record of delivering results.",
+                "Systems Thinking: The ability to map complex data flows.",
+                "Ruthless Prioritization: The ability to use data to make tough decisions.",
+                "Technical Fluency: Comfortable speaking with engineers.",
+                "Integration Methodologies: Strong understanding of REST APIs.",
+                "Key Competencies",
+            ],
+        )
+        self.assertEqual(candidates, [])
+
+    def test_abstract_noun_suffix_guard_filters_soft_skills(self) -> None:
+        """CR-109 follow-up 2 (2026-09-02): Jason flagged "Have you used
+        Judgment in your work?" as an absurd card. Soft skills, traits, and
+        competencies are evaluated through evidence comparison, not binary
+        tool questions. Words ending in abstract-noun suffixes (-tion, -ment,
+        -ship, -ity, -ness, -ance, -ence, etc.) are English derivations, not
+        tool/product names. The suffix guard is the structural complement to
+        the stopword list so we don't whack-a-mole every English trait word."""
+        candidates = named_skill_candidates(
+            [
+                "Uses Judgment and strategic thinking to prioritize roadmap investments.",
+                "Strong Leadership and Mentorship capabilities.",
+                "Demonstrate Resilience and Adaptability in fast-moving environments.",
+                "Build Alignment across Engineering and cross-functional teams.",
+                "Drive Engagement and Empowerment across the organization.",
+                "Ensure Governance and Compliance across all data flows.",
+                "Scalability and Agility in product architecture decisions.",
+                "Influence and Persuasion skills for stakeholder management.",
+                "Awareness of industry trends and best practices.",
+                "Partnership and Collaboration with external vendors.",
+            ],
+        )
+        self.assertEqual(candidates, [])
+
+    def test_blocked_tool_inside_longer_candidate_is_excluded(self) -> None:
+        """CR-109 / BUG-001: "workday" is hard-blocked, yet "Workday Ecosystem",
+        "Workday Web Services", and "Workday Recruiting" all queued as blocking
+        questions because the blocked check compared only the whole key."""
+        candidates = named_skill_candidates(
+            [
+                "The Workday Ecosystem (Highly Preferred): Hands-on familiarity with "
+                "Workday Web Services (WWS), Studio, EIB, Extend, and Workday "
+                "Recruiting/HCM data models.",
+            ],
+        )
+        names = [candidate.display_name for candidate in candidates]
+        self.assertNotIn("Workday Ecosystem", names)
+        self.assertNotIn("Workday Web Services", names)
+        self.assertNotIn("Workday Recruiting", names)
+        self.assertNotIn("Preferred", names)
+        # Real Workday-adjacent tools without a blocked token stay askable.
+        self.assertEqual(sorted(names), ["EIB", "Extend", "Studio"])
+
+    def test_bad_data_answer_is_durable_and_never_asked_again(self) -> None:
+        """CR-109 / FR-287: BAD_DATA records an extraction false positive as
+        durable memory so the same candidate is never queued again, at
+        evidence level 0, with no evidence-enrichment follow-up."""
+        create_skill_confirmation(
+            db_path=self.db_path,
+            skill_key="spirit",
+            display_name="Spirit",
+            requirement="Entrepreneurial Spirit: Demonstrate a track record.",
+            opportunity_key="acme",
+            opportunity_company="Acme",
+            opportunity_title="Product Manager",
+        )
+        result = answer_confirmation(
+            db_path=self.db_path,
+            review_key="skill:spirit",
+            answer="BAD_DATA",
+        )
+        self.assertEqual(result.status, "completed")
+        memory = get_skill_memory("spirit", self.db_path)
+        self.assertIsNotNone(memory)
+        self.assertEqual(memory["decision"], "BAD_DATA")
+        self.assertEqual(memory["evidence_level"], 0)
+        # No evidence-enrichment follow-up is created for bad data.
+        self.assertEqual(list_pending_for_opportunity("acme", self.db_path), [])
+        history_conn = sqlite3.connect(self.db_path)
+        try:
+            self.assertEqual(
+                history_conn.execute(
+                    "SELECT answer FROM review_answer_history WHERE review_key = ?",
+                    ("skill:spirit",),
+                ).fetchone()[0],
+                "BAD_DATA",
+            )
+        finally:
+            history_conn.close()
+
+    def test_real_named_ai_tools_still_flagged_alongside_generic_words(self) -> None:
+        """The generic-word stopword additions must not swallow a genuinely
+        unverified named tool sitting in the same line -- confirmed live
+        alongside the false positives above (bamboo_health): ChatGPT and
+        Copilot correctly stayed flagged as real ask-the-human candidates."""
+        candidates = named_skill_candidates(
+            [
+                "Active use of AI-supported tools such as ChatGPT, Claude, or Copilot.",
+            ],
+            known_terms={"claude"},
+        )
+        self.assertEqual(
+            sorted(c.display_name for c in candidates),
+            ["ChatGPT", "Copilot"],
+        )
 
     def test_confirmation_creation_is_idempotent_per_opportunity(self) -> None:
         first = create_skill_confirmation(
@@ -260,7 +397,7 @@ class TestStage0Confirmations(unittest.TestCase):
         self.assertEqual(question["review_key"], "skill:acme_platform")
         self.assertEqual(
             question["options"],
-            ["CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK"],
+            ["CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK", "BAD_DATA"],
         )
         self.assertEqual(question["affected_opportunities"], ["acme"])
 
@@ -334,7 +471,8 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
 
                 def provider_response(_system: str, prompt: str, **_kwargs: object) -> str:
                     calls.append(prompt)
-                    item_id = prompt.split("[", 1)[1].split("]", 1)[0]
+                    import re
+                    item_id = re.search(r"\[(\S+)\] bucket=", prompt).group(1)
                     return json.dumps(
                         {
                             "results": [
@@ -444,7 +582,8 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                 )
 
                 def provider_response(_system: str, prompt: str, **_kwargs: object) -> str:
-                    item_id = prompt.split("[", 1)[1].split("]", 1)[0]
+                    import re
+                    item_id = re.search(r"\[(\S+)\] bucket=", prompt).group(1)
                     return response.replace("required:0:9b1f", item_id)
 
                 with patch.dict(

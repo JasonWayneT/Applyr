@@ -31,6 +31,14 @@ describe('Review Center data contract', () => {
     })]);
   });
 
+  it('passes through a stored answer and ignores unknown answer values', () => {
+    // Implements FR-289: completed cards render their recorded answer.
+    const [item] = normalizeReviewItems([{ id: 'a', title: 'Spirit', answer: 'BAD_DATA' }]);
+    expect(item.answer).toBe('BAD_DATA');
+    const [unknown] = normalizeReviewItems([{ id: 'b', title: 'Trello', answer: 'SOMETHING_ELSE' }]);
+    expect(unknown.answer).toBeUndefined();
+  });
+
   it('drops malformed review items instead of rendering unsafe partial records', () => {
     expect(normalizeReviewItems([
       { id: 'missing-title' },

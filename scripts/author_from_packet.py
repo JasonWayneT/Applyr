@@ -85,11 +85,29 @@ If it is not "ready", stop and print the incomplete_reasons — do not draft.
 Required, preferred, and responsibility JD items appear in `evidence_map` together with
 their claim_ids — there is no separate list of them elsewhere in this packet.
 
+BULLET PRIORITIZATION: The resume must fit on exactly one page. Prioritize the
+strongest, most JD-relevant evidence over completeness. Within each role section,
+order bullets by JD-relevance: claims mapping to `required` evidence_map items come
+before `preferred` or `responsibilities`. When a bullet carries a hard metric, put
+the number near the verb, not trailing at the end of a long clause. Bullet counts:
+most recent role (Cision) 5-6 bullets; earlier roles (Sterkly, Zero To Sixty) 2-3
+bullets each. If there are more high-priority claims than available bullet slots,
+prefer claims mapping to `required` items over `preferred` items. When a JD item
+has two mapped claim_ids, use the stronger one (higher attribution tier: OWNED
+beats CONTRIBUTED) in the resume bullet; the second can support a cover-letter
+proof point for the same JD item if the letter benefits from it. Some excerpt cards
+may be present to satisfy the 3-role resume rule but may not map to any JD item.
+Use these only if a role section needs a bullet and no JD-mapped claim is available
+for that employer. Do not force a low-relevance claim into a bullet over a
+higher-relevance claim from the same employer.
+
 COVER LETTER VOICE: end the letter on the last concrete fact. Do not add a recap
 kicker that labels the paragraph ("That's genuine...", "That's how I treated...",
 "lives or dies on"). Do not use negative listing ("Not X. A Y.").
 Never print "closed-lost". Say lost subscriptions or lost subscription opportunities.
 Never claim a design team. Jason has not worked with design.
+Never open by calling the role interesting, compelling, or exciting; name the
+concrete company action, product, or operating problem instead.
 
 Output exactly three fenced code blocks in this order:
   1. A block labeled "Resume.md" containing the full resume Markdown.
@@ -244,7 +262,9 @@ def build_authoring_prompt(
             "important JD items. Use every one in a resume bullet or cover-letter proof "
             "point, and cite it in claim_provenance.json: "
             + ", ".join(priority_claims)
-            + ". Do not add unsupported content simply to make room."
+            + ". Place the highest-priority claims in the most JD-relevant resume bullets "
+            "(first bullet in the role section, not buried at the bottom). "
+            "Do not add unsupported content simply to make room."
         )
     ats_terms = [
         row["term"]

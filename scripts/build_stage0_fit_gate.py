@@ -156,6 +156,7 @@ from stage0_confirmations import (  # noqa: E402
 )
 from stage0_checkpoint import (  # noqa: E402
     checkpoint_boundary,
+    clean_spool,
     complete_judgment,
     get_completed_judgment,
     make_item_key,
@@ -836,6 +837,19 @@ _SPECIFICITY_GENERIC_SOFT_SKILL_RE = re.compile(
     re.I,
 )
 
+# 2026-09-01 Improvement #8: cached anchor vocabulary for specificity scoring.
+# Loaded lazily so the cost is paid only when _requirement_specificity_score
+# is actually called (i.e. a bucket exceeds the 12-item cap), not on every
+# import or every Stage 0 run.
+_anchor_vocab_cache: set[str] | None = None
+
+
+def _get_cached_anchor_vocab() -> set[str]:
+    global _anchor_vocab_cache
+    if _anchor_vocab_cache is None:
+        _anchor_vocab_cache = _load_anchor_vocab()
+    return _anchor_vocab_cache
+
 
 def _requirement_specificity_score(item: str) -> float:
     """Deterministic proxy for how much one requirement line is worth
@@ -854,6 +868,14 @@ def _requirement_specificity_score(item: str) -> float:
     read couldn't already assume. Everything else (the common case) scores
     on length alone, as a mild, cheap proxy for "says something specific"
     over "a stray short fragment."
+
+    2026-09-01 Improvement #8: +1.0 for items containing terms from the anchor
+    vocabulary (claims tags + skills catalog). A requirement like "Experience
+    with Salesforce Health Cloud" (no digit, not a generic soft skill) now
+    scores higher than "Experience working in a collaborative environment",
+    prioritizing specific, decision-bearing requirements over generic ones
+    when capping. Only affects which items survive the 12-item cap for very
+    large JDs.
     """
     text = (item or "").strip()
     if _SPECIFICITY_GENERIC_SOFT_SKILL_RE.match(text):
@@ -863,6 +885,11 @@ def _requirement_specificity_score(item: str) -> float:
     if len(words) < 4:
         score -= 1.0
     score += min(len(words), 30) * 0.01
+    # Anchor-vocabulary boost: +1.0 if any anchor term appears in the item.
+    lower = text.lower()
+    anchor_vocab = _get_cached_anchor_vocab()
+    if any(term in lower for term in anchor_vocab if len(term) >= 4):
+        score += 1.0
     return score
 
 
@@ -1031,6 +1058,7 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
 
     import joblib
     import csv
+    import warnings
     from utils import call_llm, extract_json_from_text, resolve_task_providers
 
     model_path = _REPO_ROOT / "data" / "stage0_classifier.pkl"
@@ -1038,7 +1066,12 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
         print("NLP Model not found, falling back to deterministic extraction.", file=sys.stderr)
         return None
 
-    pipeline = joblib.load(model_path)
+    # Suppress sklearn InconsistentVersionWarning — the classifier was trained on
+    # sklearn 1.9.0 and is running on 1.8.0. The model is functionally compatible
+    # (TF-IDF + LogReg), the version mismatch is a known-safe pickle format difference.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Trying to unpickle estimator")
+        pipeline = joblib.load(model_path)
     classes = list(pipeline.classes_)
 
     lines = _normalize_jd_punctuation(jd_text).splitlines()
@@ -1369,19 +1402,46 @@ def _detect_thin_jd(jd_text: str, required_items: list) -> bool:
     return False
 
 
+# 2026-09-01 Improvement #9: reordered by priority (enterprise > public >
+# PE-backed > VC-backed > startup > unknown) so a JD mentioning both
+# "Fortune 500" and "startup" reports the more specific, higher-priority
+# signal. Added patterns for bootstrapped, profitable, hypergrowth,
+# scale-up, post-Series-B, and employee-count ranges.
 _STAGE_SIGNALS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"\bseries\s+[abcde]\b", re.I), "VC-backed (Series found)"),
-    (re.compile(r"\bseed\s+(?:stage|funded|round)\b", re.I), "seed-stage startup"),
+    # Priority 1: enterprise / large company
+    (re.compile(r"\b(?:fortune\s+\d{3}|enterprise\s+saas|global\s+enterprise|large\s+enterprise)\b", re.I), "enterprise/large company"),
+    # Priority 2: public company
+    (re.compile(r"\b(?:ipo|publicly\s+traded|nasdaq|nyse|stock\s+exchange\s+listed)\b", re.I), "public company"),
+    # Priority 3: pre-IPO
     (re.compile(r"\bpre.ipo\b", re.I), "pre-IPO"),
-    (re.compile(r"\b(?:ipo|publicly\s+traded|nasdaq|nyse)\b", re.I), "public company"),
-    (re.compile(r"\b(?:fortune\s+\d{3}|enterprise\s+saas|global\s+enterprise)\b", re.I), "enterprise/large company"),
-    (re.compile(r"\b(?:startup|early.stage|growth.stage)\b", re.I), "startup / growth-stage"),
+    # Priority 4: PE-backed
     (re.compile(r"\b(?:private\s+equity|pe.backed)\b", re.I), "PE-backed"),
+    # Priority 5: VC-backed (specific series)
+    (re.compile(r"\bseries\s+[abcde]\b", re.I), "VC-backed (Series found)"),
+    (re.compile(r"\bpost.series.b\b", re.I), "VC-backed (post-Series B)"),
+    # Priority 6: bootstrapped / profitable
+    (re.compile(r"\bbootstrapped\b", re.I), "bootstrapped"),
+    (re.compile(r"\bprofitable\s+(?:company|business|startup)\b", re.I), "profitable company"),
+    # Priority 7: hypergrowth / scale-up
+    (re.compile(r"\bhypergrowth\b", re.I), "hypergrowth company"),
+    (re.compile(r"\bscale.?up\b", re.I), "scale-up"),
+    # Priority 8: seed-stage startup
+    (re.compile(r"\bseed\s+(?:stage|funded|round)\b", re.I), "seed-stage startup"),
+    # Priority 9: generic startup / growth-stage
+    (re.compile(r"\b(?:startup|early.stage|growth.stage)\b", re.I), "startup / growth-stage"),
+    # Priority 10: employee-count ranges (weaker signal)
+    (re.compile(r"\b(?:50|100|200|500|1000|2000|5000|10000)\+?\s+(?:employees|people|team\s+members)\b", re.I), "mid-to-large company (by employee count)"),
 ]
 
 
 def _detect_stage_signal(jd_text: str) -> str:
-    """Return a human-readable stage signal or the standard unknown string."""
+    """Return a human-readable stage signal or the standard unknown string.
+
+    2026-09-01 Improvement #9: patterns are now priority-ordered (enterprise
+    > public > PE-backed > VC-backed > startup > unknown) so a JD mentioning
+    multiple signals reports the most specific one. First-match wins, so the
+    list order above IS the priority order.
+    """
     for pat, label in _STAGE_SIGNALS:
         if pat.search(jd_text):
             return label
@@ -1778,6 +1838,7 @@ def classify_gaps(
     attested_skill_terms: dict[str, str] | None = None,
     cached_results: dict[str, dict] | None = None,
     judgment_callback: Callable[[str, int, str, dict], None] | None = None,
+    cascade_enabled: bool = False,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Classify required and preferred items for gaps via the evidence-scale
@@ -1801,6 +1862,11 @@ def classify_gaps(
     evidence level 1 until separately promoted.
     cached_results: completed checkpoint results keyed by bucket/item ordinal.
     judgment_callback: called after each newly computed judgment.
+    cascade_enabled: when True, the CR-108 evidence cascade already classified
+    all uncached items via Groq/Gemini. Items missing from cached_results in
+    this mode are a real error (the cascade should have covered them), not a
+    signal to silently fall back to the legacy local-LLM-pinned evidence_scale
+    path. Raises Stage0ExtractError instead of calling _classify_one_item.
     """
     del vocab  # deprecated, unused — see docstring
 
@@ -1809,6 +1875,12 @@ def classify_gaps(
         cache_key = make_item_key("required", item, ordinal)
         result = (cached_results or {}).get(cache_key)
         if result is None:
+            if cascade_enabled:
+                raise Stage0ExtractError(
+                    f"Required item {ordinal} missing from cascade cached_results "
+                    f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini. "
+                    "Do not silently fall back to local-LLM evidence_scale."
+                )
             result = _classify_one_item(
                 item, work_exp, company=company, internal_terms=internal_terms
             )
@@ -1823,6 +1895,12 @@ def classify_gaps(
         cache_key = make_item_key("preferred", item, ordinal)
         result = (cached_results or {}).get(cache_key)
         if result is None:
+            if cascade_enabled:
+                raise Stage0ExtractError(
+                    f"Preferred item {ordinal} missing from cascade cached_results "
+                    f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini. "
+                    "Do not silently fall back to local-LLM evidence_scale."
+                )
             result = _classify_one_item(
                 item, work_exp, is_required=False, company=company, internal_terms=internal_terms
             )
@@ -1905,7 +1983,18 @@ def classify_gaps(
 _DETERMINISTIC_0TO1_BUILD_RE = re.compile(
     r"(?:own|lead|drive|responsible\s+for)\w*\s+(?:the\s+|a\s+|this\s+)?"
     r"(?:zero.to.one|0.to.1)\s+(?:build|launch|creation)|"
-    r"(?:zero.to.one|0.to.1)\s+(?:build|launch)\s+of",
+    r"(?:zero.to.one|0.to.1)\s+(?:build|launch)\s+of|"
+    # 2026-09-01 Improvement #5: common exclusion-zone phrasing that the
+    # original regex missed. Each alternative is narrowly anchored to
+    # unambiguous 0-to-1 / founding framing, not to any generic mention of
+    # "first" or "build" — "first product manager" alone is NOT a match
+    # (could be a legitimate non-founding role), but "founding PM" or
+    # "first product manager to build from scratch" is.
+    r"(?:founding|first)\s+(?:pm|product\s+manager)\b(?=.*(?:build|launch|scratch|ground|nothing|greenfield|zero))|"
+    r"(?:build|create|launch)\s+(?:from\s+scratch|from\s+the\s+ground\s+up|from\s+nothing)\b|"
+    r"\bgreenfield\s+(?:product|build|launch)\b|"
+    r"(?:shaping|maturing)\s+an?\s+early.stage\s+product\s+area\b|"
+    r"(?:where|when)\s+none\s+(?:previously\s+)?existed\b",
     re.I,
 )
 
@@ -1914,6 +2003,9 @@ def screen_responsibilities_for_exclusion(
     work_exp: str,
     company: str = "",
     internal_terms: list[str] | None = None,
+    *,
+    cascade_enabled: bool = False,
+    settings: dict | None = None,
 ) -> list[dict]:
     """Responsibilities-bucket exclusion screen. Returns classify-shaped dicts
     (same shape _classify_one_item() returns for a HARD gap) for confirmed
@@ -1931,6 +2023,13 @@ def screen_responsibilities_for_exclusion(
     The free deterministic 0-to-1 regex stays as a zero-cost fast path ahead
     of it; only lines it doesn't already resolve pay for a real judgment call.
 
+    2026-09-01 Improvement #2: when cascade_enabled is True, all non-deterministic
+    responsibility lines are batched into a single classify_requirements_batch()
+    call instead of one sequential classify_requirement() call per line. This
+    mirrors exactly how the caller already batches required/preferred items and
+    eliminates the primary cause of 100+ second Stage 0 times on JDs with 8+
+    responsibilities (e.g. Bazaarvoice).
+
     Fails open per-line on a classification error: this is a bonus
     screening pass on top of the required/preferred judgments classify_gaps()
     already did, not a fail-closed gate -- one line's LLM error should never
@@ -1939,6 +2038,8 @@ def screen_responsibilities_for_exclusion(
     from evidence_scale import classify_requirement, EvidenceClassificationError
 
     hits: list[dict] = []
+    # Phase 1: deterministic 0-to-1 regex fast path (zero-cost, no LLM call).
+    unclassified_lines: list[str] = []
     for line in responsibilities or []:
         if _DETERMINISTIC_0TO1_BUILD_RE.search(line):
             hits.append({
@@ -1949,7 +2050,47 @@ def screen_responsibilities_for_exclusion(
                 "domain_soft": False,
                 "gap_source": "role_exclusion",
             })
-            continue
+        else:
+            unclassified_lines.append(line)
+
+    if not unclassified_lines:
+        return hits
+
+    # Phase 2: batch the remaining lines when the cascade is enabled.
+    if cascade_enabled:
+        try:
+            from stage0_evidence_cascade import BatchItem, classify_requirements_batch
+            from evidence_scale import build_evidence_context
+            from stage0_checkpoint import make_item_key
+
+            batch_items = [
+                BatchItem(
+                    make_item_key("responsibility", line, ordinal),
+                    "required",  # bucket="required" so HARD gates are allowed
+                    line,
+                    evidence_excerpt=build_evidence_context(
+                        line, work_exp, k=4, max_chars=3000,
+                    ),
+                )
+                for ordinal, line in enumerate(unclassified_lines)
+            ]
+            batch_results = classify_requirements_batch(
+                batch_items,
+                settings=settings,
+            )
+            for batch_item in batch_items:
+                result = batch_results.get(batch_item.item_id)
+                if result and result.get("gate") == "HARD":
+                    hits.append(result)
+            return hits
+        except Exception:
+            # Batch failed — fall through to sequential classification.
+            # This is the "fails open" contract: a batch error doesn't abort
+            # the screening pass, it degrades to the per-line path.
+            pass
+
+    # Phase 3: sequential fallback (non-cascade path or batch failure).
+    for line in unclassified_lines:
         try:
             judgment = classify_requirement(
                 line, work_exp, is_required=True, company=company, internal_terms=internal_terms,
@@ -2087,6 +2228,10 @@ def build_stage0_fit_gate(
 
     if not jd_file.exists():
         raise FileNotFoundError(f"Original_JD.txt not found in {folder}")
+
+    # 2026-09-01: clean up any stale spool files from a previous failed run
+    # before starting a new Stage 0 evaluation.
+    clean_spool(folder)
 
     raw_text = jd_file.read_text(encoding="utf-8", errors="replace")
     url, jd_text = _parse_url_and_jd(raw_text)
@@ -2265,6 +2410,17 @@ def build_stage0_fit_gate(
     required_raw, required_dropped_n = _cap_requirement_bucket(required_raw)
     preferred_raw, preferred_dropped_n = _cap_requirement_bucket(preferred_raw)
 
+    # Resolved once, up front, so every Review Center write in this function --
+    # skill confirmations included -- honors the same override. Previously this
+    # was computed after _prepare_skill_confirmations() already ran with the
+    # raw (unresolved) confirmation_db_path param, so APPLYR_STAGE0_REVIEW_DB
+    # silently never reached skill confirmations and they always landed in the
+    # real production DB regardless of the override (found 2026-09-01, testing
+    # archived opportunities against an isolated review DB: 12 skill-confirmation
+    # rows landed in data/jobagent.sqlite instead of the intended test DB).
+    checkpoint_db_path = confirmation_db_path or os.environ.get("APPLYR_STAGE0_REVIEW_DB")
+    checkpoint_db_path = checkpoint_db_path or _DEFAULT_DB
+
     # Implements FR-283: pause only this opportunity for an unknown named tool.
     # Do this before any evidence-model calls so a pending answer is durable
     # even when the score model is unavailable.
@@ -2274,14 +2430,12 @@ def build_stage0_fit_gate(
         company=company_display,
         role=role,
         internal_terms=internal_terms,
-        db_path=confirmation_db_path,
+        db_path=checkpoint_db_path,
     )
     # work_exp is the exact source text used to build the evidence context.
     # Its hash participates in the run key so a changed source invalidates reuse.
     from utils import load_file, WORK_EXP_FILE
     work_exp = load_file(WORK_EXP_FILE) or ""
-    checkpoint_db_path = confirmation_db_path or os.environ.get("APPLYR_STAGE0_REVIEW_DB")
-    checkpoint_db_path = checkpoint_db_path or _DEFAULT_DB
     jd_hash = _sha256_text(jd_text)
     evidence_index_hash = _sha256_text(work_exp)
     prompt_version = "evidence-scale-v1"
@@ -2428,11 +2582,15 @@ def build_stage0_fit_gate(
                 make_item_key(bucket, item, ordinal),
                 bucket,
                 item,
+                # 2026-09-01: reduced from 6000 to 3000 to stay under Groq's
+                # 8000 TPM free-tier limit. With 9 items (a large JD), 6000 chars
+                # per item produced ~13500 tokens — well over the limit. At 3000
+                # chars per item, 9 items produce ~6750 tokens, safely under 8000.
                 evidence_excerpt=build_evidence_context(
                     item,
                     work_exp,
                     k=4,
-                    max_chars=6000,
+                    max_chars=3000,
                 ),
             )
             for bucket, ordinal, item in uncached_items
@@ -2480,6 +2638,7 @@ def build_stage0_fit_gate(
             )
         except Exception as exc:
             mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
             raise Stage0ExtractError(
                 f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
             ) from exc
@@ -2499,13 +2658,19 @@ def build_stage0_fit_gate(
         required_raw, preferred_raw, work_exp=work_exp, company=company_display,
         internal_terms=internal_terms, attested_skill_terms=attested_skill_terms,
         cached_results=cached_results, judgment_callback=_persist_judgment,
+        cascade_enabled=cascade_enabled,
     )
 
     # 2026-08-21 follow-up to Fix 1: the JD's own role-framing prose lives in
     # `responsibilities`, which classify_gaps() never sees. Cheap pre-filter,
     # real classifier only on a hit -- see screen_responsibilities_for_exclusion().
+    # 2026-09-01 Improvement #2: pass cascade_enabled + settings so the function
+    # batches all responsibility lines into a single cascade call instead of
+    # one sequential LLM call per line.
     resp_exclusion_hits = screen_responsibilities_for_exclusion(
         responsibilities, work_exp, company=company_display, internal_terms=internal_terms,
+        cascade_enabled=cascade_enabled,
+        settings=stage0_settings if cascade_enabled else None,
     )
     if resp_exclusion_hits:
         classified_required.extend(resp_exclusion_hits)
@@ -2765,6 +2930,8 @@ def build_stage0_fit_gate(
         "flagged_gaps": flagged_gaps,
         "zero_anchor_required_items": zero_anchor_required,
         "exclusion_zone_check": exclusion_check,
+        "prefs_gate_rejects": [r["code"] for r in prefs_result.get("rejects", [])],
+        "prefs_gate_flags": [f["code"] for f in prefs_result.get("flags", [])],
         "notes": " ".join(notes_parts) or tier,
     }
 
@@ -2875,15 +3042,32 @@ def _prepare_stage0_score_model() -> None:
 
 
 def run_prefs_gate_safe(company: str, jd_text: str, prefs: dict) -> dict:
-    """Thin wrapper that catches import errors during tests."""
+    """Fail-loud wrapper: runs the prefs gate and surfaces errors visibly.
+
+    Previously this caught ALL exceptions and returned ``passed: True``
+    silently, which meant every deterministic gate (industry, title, years,
+    exclusion zones, solo PM) was skipped with no trace in the output.
+    Found 2026-09-03: this was not the direct cause of the gate escapes
+    (the gates ran without exceptions but had logic bugs), but it is the
+    highest-risk pattern for future drift — if any import inside
+    ``run_prefs_gate`` fails, all gates silently pass.
+
+    Now: logs the error to stderr and includes it in the result flags, but
+    still passes (fail-open with compensating controls) because the
+    evidence-scale fit scoring still runs and can catch bad fits. The error
+    is also stored in the stage0 output via ``prefs_gate_error`` so it is
+    visible in the JSON artifact, not just stderr.
+    """
     try:
         from stage0_prefs_gate import run_prefs_gate
         return run_prefs_gate(company, jd_text, prefs)
     except Exception as exc:
+        print(f"WARNING: prefs gate failed to run: {exc}", file=sys.stderr)
         return {
             "passed": True,
             "rejects": [],
             "flags": [{"code": "prefs_gate_error", "note": str(exc)}],
+            "_gate_failed": True,
         }
 
 

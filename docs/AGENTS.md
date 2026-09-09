@@ -1,6 +1,6 @@
 # Agent Operating Rules for Spec Driven Development
 
-This repository uses BMAD-informed Spec Driven Development. All AI agents must follow this file and **[SDD_PROCESS.md](file:///c:/Users/Jason/Desktop/Jason/Resource/Code%20Projects/JobAgent/SDD_PROCESS.md)** before making changes.
+This repository uses BMAD-informed Spec Driven Development. The canonical always-on instruction set is the repository-root [`AGENTS.md`](../AGENTS.md); this file is the engineering-process and standards module under it and defers to it on any conflict. All AI agents must follow this file and **[SDD_PROCESS.md](SDD_PROCESS.md)** before making changes.
 
 ## Prime directive
 

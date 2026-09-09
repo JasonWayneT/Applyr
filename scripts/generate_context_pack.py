@@ -62,7 +62,7 @@ from datetime import datetime, timezone
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 AGENTS_MD = os.path.join(REPO_ROOT, "AGENTS.md")
-SKILL_MD = os.path.join(REPO_ROOT, ".claude", "skills", "generate-submission", "SKILL.md")
+SKILL_MD = os.path.join(REPO_ROOT, ".codex", "skills", "generate-submission", "SKILL.md")
 WORK_EXPERIENCE_MD = os.path.join(REPO_ROOT, "data", "workExperience.md")
 CONVERSION_RUBRIC_MD = os.path.join(REPO_ROOT, "data", "conversion_rubric.md")
 MASTER_CLAIMS_JSON = os.path.join(REPO_ROOT, "data", "master_claims.json")
@@ -238,7 +238,7 @@ def generate_pack() -> tuple[str, dict]:
         "proceed on stale rules.",
         "",
         "**If you are fixing a process bug (not drafting a submission), also read "
-        "`.claude/skills/generate-submission/SKILL.md`'s Self-repair protocol section directly "
+        "`.codex/skills/generate-submission/SKILL.md`'s Self-repair protocol section directly "
         "-- it is intentionally excluded from this pack as drafting-irrelevant.**",
         "",
         "**Claim retrieval**: read `data/master_claims_tags_only.json` for claim tags "
@@ -253,7 +253,7 @@ def generate_pack() -> tuple[str, dict]:
         "",
         "---",
         "",
-        "## From SKILL.md (.claude/skills/generate-submission/SKILL.md)",
+        "## From SKILL.md (.codex/skills/generate-submission/SKILL.md)",
         "",
         skill_trimmed,
         "",

@@ -1078,26 +1078,59 @@ def run_stage2_hm(folder: str, state: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compile_pdfs(folder: str) -> None:
-    """Shell out to compile_single.py for Resume + CoverLetter (existing worker)."""
+    """Shell out to compile_single.py for Resume + CoverLetter (existing worker).
+
+    2026-09-01: compile both PDFs in parallel (two subprocess.Popen instances)
+    instead of sequentially. Falls back to sequential if the parallel compile
+    fails on either file, so a resource-contention failure is retried safely.
+    """
+    import subprocess
+
     py = sys.executable
     script = os.path.join(_SCRIPT_DIR, "compile_single.py")
+    cwd = os.path.dirname(_SCRIPT_DIR)
+
+    jobs: list[tuple[str, str, str, str]] = []  # (md_name, pdf_name, md_path, pdf_path)
     for md_name, pdf_name in (("Resume.md", "Resume.pdf"), ("CoverLetter.md", "CoverLetter.pdf")):
         md = os.path.join(folder, md_name)
         pdf = os.path.join(folder, pdf_name)
         if not os.path.exists(md):
             raise WorkflowError(f"{md_name} missing — cannot compile")
-        import subprocess
+        jobs.append((md_name, pdf_name, md, pdf))
 
-        proc = subprocess.run(
+    # Parallel compile
+    procs: list[tuple[str, subprocess.Popen]] = []
+    for md_name, pdf_name, md, pdf in jobs:
+        procs.append((md_name, subprocess.Popen(
             [py, script, md, pdf],
-            cwd=os.path.dirname(_SCRIPT_DIR),
-            capture_output=True,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-        )
+        )))
+
+    errors: list[str] = []
+    for md_name, proc in procs:
+        stdout, stderr = proc.communicate()
         if proc.returncode != 0:
-            raise WorkflowError(
-                f"compile_single failed for {md_name}:\n{proc.stderr or proc.stdout}"
-            )
+            errors.append(f"compile_single failed for {md_name}:\n{stderr or stdout}")
+
+    if errors:
+        # Fallback: retry failed files sequentially (resource contention recovery)
+        if len(errors) == 1:
+            # One succeeded, one failed — retry the failed one sequentially
+            for md_name, pdf_name, md, pdf in jobs:
+                if md_name == errors[0].split("for ")[1].split(":")[0]:
+                    proc = subprocess.run(
+                        [py, script, md, pdf], cwd=cwd, capture_output=True, text=True
+                    )
+                    if proc.returncode != 0:
+                        raise WorkflowError(
+                            f"compile_single failed for {md_name} (sequential retry):\n"
+                            f"{proc.stderr or proc.stdout}"
+                        )
+                    return
+        raise WorkflowError("\n".join(errors))
 
 
 def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str, Any]:
@@ -1620,7 +1653,16 @@ def run_until_stage1_complete(
         # current location for a PASS. A SKIPPED state returns above instead
         # of re-resolving: _resolve_folder() doesn't search archive/skipped/,
         # same as the STALE-branch a few lines up already handles this.
-        folder = _resolve_folder(state.get("slug") or folder)
+        # Fallback (2026-09-08, --mode practice run under data/authored_drafts/):
+        # _place_after_stage0 never moves unmanaged folders, so when bare-slug
+        # resolution fails (folder outside submissions|pending_review) the
+        # original absolute `folder` is still valid -- keep it instead of
+        # raising after Stage 1 receipts were already committed.
+        try:
+            folder = _resolve_folder(state.get("slug") or folder)
+        except WorkflowError:
+            if not os.path.isdir(folder):
+                raise
         state = reconcile(folder, state)
         s1 = (state.get("stages") or {}).get("stage1") or {}
 
@@ -1664,6 +1706,21 @@ def run_until_stage1_complete(
     return run_until_waiting_for_llm(
         folder, mode=mode, adopt=False, no_hook=no_hook, force=force
     )
+
+
+def _pre_collect_stage2_findings(folder: str, phases: list[str]) -> None:
+    """2026-09-01: Pre-collect findings and sync dispositions for remaining Stage 2
+    subphases so the agent can dispose all findings in one --resume cycle instead
+    of one per subphase. Only collects for lightweight subphases (ats, hm) — Mech
+    is skipped because it requires PDF compilation."""
+    for phase in phases:
+        if phase == "ats":
+            findings_doc = collect_ats_findings(folder)
+        elif phase == "hm":
+            findings_doc = collect_hm_findings(folder)
+        else:
+            continue
+        sync_dispositions_for_phase(folder, phase, findings_doc)
 
 
 def run_until_truth_settled(
@@ -1719,6 +1776,11 @@ def run_until_truth_settled(
         return state
     truth = (state.get("stages") or {}).get("stage2", {}).get("subphases", {}).get("truth") or {}
     if truth.get("status") != "COMPLETE":
+        # 2026-09-01: pre-collect findings from remaining subphases so the agent
+        # can dispose all WARN findings in one --resume cycle instead of one per
+        # subphase. Only for NEEDS_DISPOSITION (not FAILED/STALE/SKIPPED).
+        if truth.get("status") == "NEEDS_DISPOSITION":
+            _pre_collect_stage2_findings(folder, ["ats", "hm"])
         return state
 
     state = run_stage2_ats(folder, state)
@@ -1728,6 +1790,8 @@ def run_until_truth_settled(
         return state
     ats = (state.get("stages") or {}).get("stage2", {}).get("subphases", {}).get("ats") or {}
     if ats.get("status") != "COMPLETE":
+        if ats.get("status") == "NEEDS_DISPOSITION":
+            _pre_collect_stage2_findings(folder, ["hm"])
         return state
 
     state = run_stage2_hm(folder, state)

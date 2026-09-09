@@ -20,14 +20,16 @@ _MIGRATIONS = (
     _ROOT / "server" / "migrations" / "018_add_review_center.sql",
     _ROOT / "server" / "migrations" / "020_add_review_answer_history.sql",
     _ROOT / "server" / "migrations" / "021_add_evidence_promotion_proposals.sql",
+    _ROOT / "server" / "migrations" / "022_add_bad_data_answer.sql",
 )
 SkillDecision = Literal[
     "CONFIRMED_USE",
     "NOT_PRESENT",
     "UNSURE_NO_REASK",
     "VERIFIED_EVIDENCE",
+    "BAD_DATA",
 ]
-SkillAnswer = Literal["CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK"]
+SkillAnswer = Literal["CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK", "BAD_DATA"]
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,27 @@ def _catalog_keys(known_terms: set[str] | None) -> set[str]:
     return keys
 
 
+def _contains_blocked_key(skill_key: str, blocked_keys: set[str]) -> bool:
+    """Return True when a hard-blocked tool appears as a token run in *skill_key*.
+
+    Implements FR-286 / BUG-001 (CR-109, 2026-09-02): the blocked check used to
+    compare only the whole candidate key, so "Workday Ecosystem", "Workday Web
+    Services", and "Workday Recruiting" all produced blocking confirmation
+    questions even though "workday" itself is hard-blocked. Token-based (not
+    substring) so "sap" cannot false-positive inside an unrelated word.
+    """
+    tokens = skill_key.split("_")
+    for blocked in blocked_keys:
+        parts = blocked.split("_")
+        size = len(parts)
+        if size and any(
+            tokens[index:index + size] == parts
+            for index in range(len(tokens) - size + 1)
+        ):
+            return True
+    return False
+
+
 def named_skill_candidates(
     lines: list[str],
     *,
@@ -103,6 +126,7 @@ def named_skill_candidates(
                 or first_key in known_keys
                 or skill_key in internal_keys
                 or skill_key in blocked_keys
+                or _contains_blocked_key(skill_key, blocked_keys)
             ):
                 continue
             seen.add(skill_key)
@@ -393,7 +417,7 @@ def answer_confirmation(
     promote_to_verified_evidence: bool = False,
 ) -> AnswerResult:
     """Resolve a skill confirmation and maintain its durable memory."""
-    if answer not in {"CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK"}:
+    if answer not in {"CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK", "BAD_DATA"}:
         raise ValueError("invalid skill confirmation answer")
     connection = _connect(db_path)
     try:
@@ -446,6 +470,9 @@ def answer_confirmation(
             if existing_promotion and existing_promotion["status"] == "VERIFIED"
             else answer
         )
+        # Implements FR-287: BAD_DATA means the extraction itself was wrong (the
+        # candidate is not a real skill/tool). It is recorded durably so the
+        # same candidate is never asked again, at evidence level 0.
         evidence_level = (
             2 if decision == "VERIFIED_EVIDENCE"
             else 1 if decision == "CONFIRMED_USE"
@@ -505,7 +532,7 @@ def answer_confirmation(
             if is_presence and answer == "CONFIRMED_USE" and not promote_to_verified_evidence:
                 for row in rows:
                     _create_evidence_enrichment(connection, row, now)
-            if answer in {"NOT_PRESENT", "UNSURE_NO_REASK"}:
+            if answer in {"NOT_PRESENT", "UNSURE_NO_REASK", "BAD_DATA"}:
                 connection.execute(
                     """
                     UPDATE pending_skill_confirmations

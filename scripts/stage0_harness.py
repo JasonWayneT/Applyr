@@ -26,7 +26,9 @@ def question_envelope(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
         options = ["KEEP_ELIGIBLE", "CONFIRM_HARD", "NEEDS_MORE_INFO"]
     else:
         question_name = "stage0_skill_confirmation"
-        options = ["CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK"]
+        # Implements FR-287: BAD_DATA flags an extraction false positive so the
+        # candidate is never asked again (durable bad-data learning loop).
+        options = ["CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK", "BAD_DATA"]
     affected = list(dict.fromkeys(str(row["opportunity_key"]) for row in rows))
     envelope: dict[str, Any] = {
         "type": question_name,

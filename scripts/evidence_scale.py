@@ -136,21 +136,49 @@ def build_evidence_context(item: str, full_work_exp: str, k: int = 6, max_chars:
     pattern as fit_rubric_examples.retrieve_examples(). Falls back to a
     12000-char prefix (unchanged behavior, just a bigger window) when the
     document has no heading structure to chunk on, so this never returns
-    less context than the old blind-truncation approach did."""
+    less context than the old blind-truncation approach did.
+
+    2026-09-01 Improvement #6: now applies TF-IDF (rarity) weighting to each
+    overlapping token before computing similarity, so a chunk mentioning
+    "roadmap" and "Jira" ranks higher for a "roadmap prioritization" requirement
+    than one mentioning "roadmap" and "cooking". Uses _rarity_weight() from
+    jd_tailoring.py (same fix as Stage 1 improvement #1). Also increases k
+    from 6 to 8 for larger WE documents (>50K chars) so more relevant chunks
+    are surfaced when the document is large.
+    """
     chunks = _chunk_work_exp(full_work_exp)
     if not chunks:
         return (full_work_exp or "")[:max_chars]
 
+    # Improvement #6: increase k for larger WE documents.
+    if k == 6 and len(full_work_exp) > 50000:
+        k = 8
+
     query_tokens = _tokenize(item)
+
+    # Improvement #6: load rarity weights for TF-IDF scoring.
+    rarity_weight = _get_rarity_weight_fn()
+
     scored: list[tuple[float, str, str]] = []
     for heading, body in chunks:
         chunk_tokens = _tokenize(heading) | _tokenize(body)
         if not chunk_tokens:
             continue
         overlap = query_tokens & chunk_tokens
-        union = query_tokens | chunk_tokens
-        jaccard = len(overlap) / len(union) if union else 0.0
-        scored.append((jaccard, heading, body))
+        if not overlap:
+            scored.append((0.0, heading, body))
+            continue
+        # TF-IDF weighted Jaccard: weight each overlapping token by its rarity
+        # (IDF-like) so rare, specific terms contribute more than common ones.
+        if rarity_weight is not None:
+            weighted_overlap = sum(rarity_weight(tok) for tok in overlap)
+            weighted_union = sum(rarity_weight(tok) for tok in (query_tokens | chunk_tokens))
+            similarity = weighted_overlap / weighted_union if weighted_union else 0.0
+        else:
+            # Fallback to unweighted Jaccard if rarity table unavailable.
+            union = query_tokens | chunk_tokens
+            similarity = len(overlap) / len(union) if union else 0.0
+        scored.append((similarity, heading, body))
 
     scored.sort(key=lambda row: row[0], reverse=True)
 
@@ -165,6 +193,19 @@ def build_evidence_context(item: str, full_work_exp: str, k: int = 6, max_chars:
         if budget <= 0:
             break
     return "\n\n".join(selected)
+
+
+def _get_rarity_weight_fn():
+    """Import _rarity_weight from jd_tailoring.py lazily. Returns None if the
+    function or its dependency (master_claims_tags_only.json) is unavailable,
+    so build_evidence_context falls back to unweighted Jaccard."""
+    try:
+        from jd_tailoring import _rarity_weight
+        # Call once to trigger table loading and verify it works.
+        _rarity_weight("test")
+        return _rarity_weight
+    except Exception:
+        return None
 
 Gate = Literal["HARD", "NONE"]
 Confidence = Literal["high", "medium", "low"]
@@ -550,9 +591,14 @@ def _reasoning_grounded_in_item(item: str, reasoning: str) -> bool:
     return bool(item_tokens & reasoning_tokens)
 
 
-def _call_once(prompt: str, model: str) -> dict:
+def _call_once(prompt: str, model: str | None = None) -> dict:
     """One evidence_scale LLM call, parsed to a raw dict. Raises
-    EvidenceClassificationError on any failure -- see module docstring."""
+    EvidenceClassificationError on any failure -- see module docstring.
+
+    2026-09-01: model param is now ignored for provider selection — evidence_scale
+    uses Groq/Gemini (cloud), and each provider uses its own default model via
+    call_llm_stage → stage_model → None → call_llm provider defaults. The param
+    is kept for backward compatibility with callers that still pass it."""
     from llm_stages import call_llm_stage
     from pipeline_env import fit_llm_timeout_sec, fit_num_predict
 
@@ -563,7 +609,6 @@ def _call_once(prompt: str, model: str) -> dict:
         temperature=0.0,
         response_mime_type="application/json",
         response_schema=_SCHEMA,
-        model=model,
         options_override={"num_predict": fit_num_predict()},
         request_timeout=fit_llm_timeout_sec(),
     )
@@ -602,17 +647,18 @@ def classify_requirement(
     evidence_context = build_evidence_context(item, work_exp)
     prompt = _build_prompt(item, evidence_context, is_required, company, internal_terms, few_shot_block)
 
-    model = _score_model()
-    _ensure_score_model_ready(model)
-
-    data = _call_once(prompt, model)
+    # 2026-09-01: evidence_scale now uses Groq/Gemini (cloud). No local model
+    # preparation needed — _ensure_score_model_ready was for local Ollama.
+    # _call_once no longer passes model to call_llm_stage; each cloud provider
+    # uses its own default model.
+    data = _call_once(prompt)
     reasoning_mismatch = False
     if str(data.get("gate", "")).strip().upper() == "HARD" and not _reasoning_grounded_in_item(
         item, str(data.get("reasoning", ""))
     ):
         # Retry once -- a single-call attention slip shouldn't finalize a
         # disqualifying rejection on its first, ungrounded answer.
-        retry_data = _call_once(prompt, model)
+        retry_data = _call_once(prompt)
         if str(retry_data.get("gate", "")).strip().upper() == "HARD" and not _reasoning_grounded_in_item(
             item, str(retry_data.get("reasoning", ""))
         ):
@@ -720,7 +766,7 @@ def classify_requirement(
 # ---------------------------------------------------------------------------
 
 # Spec Sec. 12 confidence multipliers.
-_CONFIDENCE_MULTIPLIER = {"high": 1.00, "medium": 0.85, "low": 0.65}
+_CONFIDENCE_MULTIPLIER = {"high": 1.00, "medium": 0.85, "low": 0.50}
 
 # Spec Sec. 10 base weights. Required Core Duty/Domain and Required Tool/
 # Knowledge both weight 3 -- there's no formula reason to distinguish them
@@ -729,11 +775,120 @@ _CONFIDENCE_MULTIPLIER = {"high": 1.00, "medium": 0.85, "low": 0.65}
 _REQUIRED_WEIGHT = 3.0
 _PREFERRED_WEIGHT = 1.0
 
-# NOT IMPLEMENTED: spec Sec. 10's repetition (+1, capped) and hedge-language
-# (-1) weight modifiers. Both are explicitly flagged in the spec as design
-# inference awaiting real calibration, not settled numbers -- deferred
-# rather than guessed at. Every item currently gets its bucket's base
-# weight only. Tracked as a CR-093 Epic 2 follow-up, not silently dropped.
+# 2026-09-01 Improvement #7: repetition and hedge modifier defaults.
+# Loaded from data/fit_rubric_calibration.json at runtime; these are the
+# fallbacks when the file is absent or keys are missing.
+_REPETITION_MODIFIER = {"enabled": True, "threshold": 3, "bonus": 1, "cap": 4}
+_HEDGE_MODIFIER = {
+    "enabled": True,
+    "penalty": 1,
+    "floor": 0,
+    "patterns": ["contributed to", "partnered on", "assisted with", "supported", "helped with"],
+}
+_HEDGE_PATTERN_RE: re.Pattern | None = None
+
+
+def _load_weighting_model() -> None:
+    """Load weighting model from data/fit_rubric_calibration.json into the
+    module-level constants. Called once at import time. Never raises -- a
+    missing or malformed file silently falls back to the hardcoded defaults."""
+    global _REQUIRED_WEIGHT, _PREFERRED_WEIGHT, _CONFIDENCE_MULTIPLIER
+    global _REPETITION_MODIFIER, _HEDGE_MODIFIER, _HEDGE_PATTERN_RE
+    try:
+        with open(_CALIBRATION_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        wm = data.get("weighting_model", {})
+        if "required_weight" in wm:
+            _REQUIRED_WEIGHT = float(wm["required_weight"])
+        if "preferred_weight" in wm:
+            _PREFERRED_WEIGHT = float(wm["preferred_weight"])
+        cm = wm.get("confidence_multiplier")
+        if isinstance(cm, dict):
+            _CONFIDENCE_MULTIPLIER = {
+                "high": float(cm.get("high", 1.0)),
+                "medium": float(cm.get("medium", 0.85)),
+                "low": float(cm.get("low", 0.50)),
+            }
+        rm = wm.get("repetition_modifier")
+        if isinstance(rm, dict):
+            _REPETITION_MODIFIER = {
+                "enabled": bool(rm.get("enabled", True)),
+                "threshold": int(rm.get("threshold", 3)),
+                "bonus": int(rm.get("bonus", 1)),
+                "cap": int(rm.get("cap", 4)),
+            }
+        hm = wm.get("hedge_modifier")
+        if isinstance(hm, dict):
+            _HEDGE_MODIFIER = {
+                "enabled": bool(hm.get("enabled", True)),
+                "penalty": int(hm.get("penalty", 1)),
+                "floor": int(hm.get("floor", 0)),
+                "patterns": hm.get("patterns", _HEDGE_MODIFIER["patterns"]),
+            }
+        _HEDGE_PATTERN_RE = None  # force recompile
+    except Exception:
+        pass
+
+
+_load_weighting_model()
+
+
+def _get_hedge_pattern() -> re.Pattern:
+    """Compile the hedge-language regex lazily from the current patterns."""
+    global _HEDGE_PATTERN_RE
+    if _HEDGE_PATTERN_RE is None:
+        patterns = _HEDGE_MODIFIER.get("patterns", [])
+        if patterns:
+            _HEDGE_PATTERN_RE = re.compile(
+                "|".join(re.escape(p) for p in patterns), re.I
+            )
+        else:
+            _HEDGE_PATTERN_RE = re.compile(r"(?!x)x")  # never-match
+    return _HEDGE_PATTERN_RE
+
+
+def _apply_repetition_modifier(classified_required: list[dict]) -> None:
+    """Spec Sec. 10 repetition modifier: if the same evidence_level appears
+    3+ times across required items, +1 to each (capped at 4). Mutates items
+    in place. Only applies when the modifier is enabled."""
+    if not _REPETITION_MODIFIER.get("enabled"):
+        return
+    threshold = _REPETITION_MODIFIER.get("threshold", 3)
+    bonus = _REPETITION_MODIFIER.get("bonus", 1)
+    cap = _REPETITION_MODIFIER.get("cap", 4)
+
+    # Count evidence_level occurrences across required items.
+    level_counts: dict[int, int] = {}
+    for it in classified_required:
+        level = it.get("evidence_level")
+        if level is not None:
+            level_counts[level] = level_counts.get(level, 0) + 1
+
+    # Apply bonus to items whose level appears threshold+ times.
+    for it in classified_required:
+        level = it.get("evidence_level")
+        if level is not None and level_counts.get(level, 0) >= threshold:
+            it["evidence_level"] = min(level + bonus, cap)
+
+
+def _apply_hedge_modifier(classified_required: list[dict], classified_preferred: list[dict]) -> None:
+    """Spec Sec. 10 hedge-language modifier: if reasoning contains hedge
+    language ("contributed to", "partnered on"), -1 to evidence_level (floored
+    at 0). Mutates items in place. Only applies when the modifier is enabled."""
+    if not _HEDGE_MODIFIER.get("enabled"):
+        return
+    penalty = _HEDGE_MODIFIER.get("penalty", 1)
+    floor = _HEDGE_MODIFIER.get("floor", 0)
+    hedge_re = _get_hedge_pattern()
+
+    for it in classified_required + classified_preferred:
+        level = it.get("evidence_level")
+        if level is None:
+            continue
+        # Check the anchor/reasoning field for hedge language.
+        reasoning = str(it.get("anchor", "") or "").lower()
+        if hedge_re.search(reasoning):
+            it["evidence_level"] = max(level - penalty, floor)
 
 
 def compute_fit_score(classified_required: list[dict], classified_preferred: list[dict]) -> dict:
@@ -742,6 +897,12 @@ def compute_fit_score(classified_required: list[dict], classified_preferred: lis
     pass. Hard gates run first and are entirely outside the formula (spec
     Sec. 11): any classified_required item with gap_class=="HARD" makes the
     whole result DISQUALIFIED regardless of every other item's score.
+
+    2026-09-01 Improvement #7: now applies the repetition modifier (+1, capped
+    at 4) when the same evidence_level appears 3+ times across required items,
+    and the hedge modifier (-1, floored at 0) when reasoning contains hedge
+    language. Weights and confidence multipliers are now loaded from
+    data/fit_rubric_calibration.json instead of hardcoded.
 
     Returns:
         {
@@ -764,6 +925,14 @@ def compute_fit_score(classified_required: list[dict], classified_preferred: lis
                 "preferred_match": 0,
             }
 
+    # Improvement #7: apply modifiers before scoring.
+    # Work on copies so the caller's dicts are not mutated before the score
+    # is returned (the caller may re-read evidence_level for display).
+    req_copy = [dict(it) for it in classified_required]
+    pref_copy = [dict(it) for it in classified_preferred]
+    _apply_repetition_modifier(req_copy)
+    _apply_hedge_modifier(req_copy, pref_copy)
+
     def _weighted_sums(items: list[dict], weight: float) -> tuple[float, float, float]:
         num = den = conf_num = 0.0
         for it in items:
@@ -777,8 +946,8 @@ def compute_fit_score(classified_required: list[dict], classified_preferred: lis
             conf_num += weight * conf
         return num, den, conf_num
 
-    req_num, req_den, req_conf = _weighted_sums(classified_required, _REQUIRED_WEIGHT)
-    pref_num, pref_den, pref_conf = _weighted_sums(classified_preferred, _PREFERRED_WEIGHT)
+    req_num, req_den, req_conf = _weighted_sums(req_copy, _REQUIRED_WEIGHT)
+    pref_num, pref_den, pref_conf = _weighted_sums(pref_copy, _PREFERRED_WEIGHT)
 
     total_num, total_den, total_conf = req_num + pref_num, req_den + pref_den, req_conf + pref_conf
 

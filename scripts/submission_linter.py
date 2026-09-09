@@ -473,6 +473,8 @@ HARD_BLOCK_RULES: List[LintRule] = [
 ]
 
 WARN_RULES: List[LintRule] = [
+    # Implements FR-291 (CR-111): 220–450 is the WARN tolerance band, not the authoring
+    # target. The authoritative cover-letter authoring target is 250–400 words (root AGENTS.md).
     LintRule(
         rule_id="LW-001",
         severity="WARN",
@@ -1459,6 +1461,34 @@ def check_hook_jd_paraphrase(cover_letter_text: str, jd_text: str) -> List[LintV
     )]
 
 
+# Implements FR-295 / AC-392: a narrow generic-hook guard, not a prose-quality classifier.
+_GENERIC_HOOK_SELF_REFERENCE_RE = re.compile(
+    r"\b(?:shows?|highlights?|captures?|reflects?|explains?|is)\s+what\s+makes\s+"
+    r"(?:this|the)\s+(?:role|opportunity|position)\s+(?:interesting|compelling|exciting)\b",
+    re.IGNORECASE,
+)
+
+
+def check_generic_hook_self_reference(cover_letter_text: str) -> List[LintViolation]:
+    """Return LW-038 warnings for generic self-referential cover-letter hooks."""
+    hook = _extract_hook(cover_letter_text)
+    match = _GENERIC_HOOK_SELF_REFERENCE_RE.search(hook)
+    if not match:
+        return []
+    return [LintViolation(
+        rule_id="LW-038",
+        severity="WARN",
+        message=(
+            f'Generic self-referential hook phrase detected: "{match.group(0)}". '
+            "It labels the role instead of stating the company-specific product, action, or problem."
+        ),
+        suggestion=(
+            "Replace the phrase with the specific company action, product, or operating problem "
+            "that the opening already identifies."
+        ),
+    )]
+
+
 def _extract_summary(resume_text: str) -> str:
     """Return the PROFESSIONAL SUMMARY section body (between its heading and the next ## heading)."""
     m = re.search(r"##\s*PROFESSIONAL SUMMARY\s*\n(.*?)(?=\n##\s|\Z)", resume_text, re.DOTALL | re.IGNORECASE)
@@ -2221,6 +2251,25 @@ def lint_folder(folder: str) -> List[dict]:
                 "warns": len(hook_warns),
                 "infos": 0,
                 "result": LintResult(passed=True, warns=hook_warns, document_type="hook"),
+            })
+
+    # Implements FR-295 / AC-392: generic self-referential hooks do not need the JD text.
+    if "cover_letter" in texts_by_doc_type:
+        generic_hook_warns = check_generic_hook_self_reference(texts_by_doc_type["cover_letter"])
+        if generic_hook_warns:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "cover_letter generic hook",
+                "doc_type": "hook",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(generic_hook_warns),
+                "infos": 0,
+                "result": LintResult(
+                    passed=True,
+                    warns=generic_hook_warns,
+                    document_type="hook",
+                ),
             })
 
     # LR-031: resume summary vs JD B2B SaaS positioning check (needs Original_JD.txt).

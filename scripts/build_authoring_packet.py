@@ -110,7 +110,12 @@ _MIN_EXCERPTS_PER_CANONICAL_EMPLOYER = 2
 # the whole evidence_map, not per-item — each row still picks from its own ranked
 # candidate list, so a capped-out claim is replaced by that row's own next-best match,
 # never an unrelated claim forced in just to fill a slot.
-_MAX_SLOTS_PER_PROJECT = 3
+# 2026-09-01: raised from 3 to 4 — Cision is Jason's most evidence-rich role
+# and frequently has the strongest claim for 4+ required items. At 3, the
+# 4th required item got a weaker claim from a different employer even when
+# a stronger Cision claim was available. Per-bucket application would be
+# more granular, but raising to 4 is the simpler fix for the common case.
+_MAX_SLOTS_PER_PROJECT = 4
 
 # CR-085: short, explicit, conservative boilerplate phrase list. Generic JD lines that
 # carry no evidence-worthy signal still consumed a full 67-claim scoring pass and an
@@ -511,6 +516,16 @@ def _score_claims_for_item(
     except ImportError:
         use_jd_scorer = False
 
+    # 2026-09-01: rarity-weight the primary overlap signal so a claim matching
+    # one distinctive token (e.g. "pendo") outscores a claim matching three
+    # generic-but-non-stoplisted tokens (e.g. "platform", "data", "migration").
+    # Falls back to raw count if jd_tailoring._rarity_weight is unavailable.
+    try:
+        from jd_tailoring import _rarity_weight  # type: ignore
+        use_rarity = True
+    except ImportError:
+        use_rarity = False
+
     # Item-specific word overlap — primary signal
     item_words = set(re.findall(r"[a-z]{4,}", item_text.lower()))
 
@@ -522,8 +537,13 @@ def _score_claims_for_item(
         tag_words = set(re.findall(r"[a-z]{4,}", ct.lower()))
 
         # Primary: distinctive item-specific overlap (weighted heavily)
+        # 2026-09-01: rarity-weighted sum instead of raw count, so rare precise
+        # matches (e.g. "pendo", "gdpr") dominate over multiple generic matches.
         overlap_words = _distinctive_overlap(item_words, tag_words)
-        overlap = len(overlap_words)
+        if use_rarity:
+            overlap = sum(_rarity_weight(w) for w in overlap_words)
+        else:
+            overlap = len(overlap_words)
 
         # Soft-gap capability boost: when the JD item names compliance/privacy/
         # regulatory work, prefer claims whose *primary* theme is that capability
@@ -578,7 +598,9 @@ def _score_claims_for_item(
             jd_score = overlap
 
         # Combined: capability boost + overlap dominate; jd_score breaks ties
-        total = capability_boost + overlap * 1000 + jd_score
+        # 2026-09-01: overlap is now a rarity-weighted float; round to int for
+        # consistent sorting and comparison.
+        total = capability_boost + int(round(overlap * 1000)) + jd_score
         # CR-087: full-JD score alone must not put a claim into Top-2 when the item
         # shares no distinctive tokens and no soft-gap capability boost fired.
         if overlap == 0 and capability_boost == 0:
@@ -972,7 +994,12 @@ def _add_excerpt(
         return excerpts[cid]
     project_id = str(rec.get("project_id") or cid)
     pointer_to = span_holders.get(project_id)
-    excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text, pointer_to=pointer_to)
+    # 2026-09-01: extend max_chars for CONTRIBUTED claims to preserve the
+    # hedge sentence (e.g. "contributed to" / "partnered on") which often
+    # appears in the 2nd or 3rd sentence and gets truncated at 900 chars.
+    attribution = str(rec.get("attribution") or "").upper()
+    excerpt_max = _EXCERPT_MAX_CHARS + 300 if attribution == "CONTRIBUTED" else _EXCERPT_MAX_CHARS
+    excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text, max_chars=excerpt_max, pointer_to=pointer_to)
     if excerpt:
         excerpts[cid] = excerpt
         if pointer_to is None and not _is_thin_synthetic_excerpt(excerpt):
@@ -1325,7 +1352,11 @@ def _build_jd_buckets(stage0: dict) -> dict:
     }
 
 
-def _shrink_excerpts_to_budget(excerpts: dict[str, str], overage_tokens: int) -> dict[str, str]:
+def _shrink_excerpts_to_budget(
+    excerpts: dict[str, str],
+    overage_tokens: int,
+    required_claim_ids: set[str] | None = None,
+) -> dict[str, str]:
     """Adaptive post-hoc shrink pass (2026-08-21, Schellman fix).
 
     Real measured tradeoff, not hidden: raising _EXCERPT_MAX_CHARS to 900
@@ -1345,11 +1376,39 @@ def _shrink_excerpts_to_budget(excerpts: dict[str, str], overage_tokens: int) ->
     Never truncates mid-word/mid-sentence: re-runs _truncate_at_sentence on
     the already-built excerpt text, so a shrink only ever removes whole
     trailing sentences, same as the original build.
+
+    2026-09-01: when required_claim_ids is provided, shrink non-required
+    excerpts first (preferred/responsibilities), preserving required-item
+    evidence at full length as long as possible.
     """
     if not excerpts or overage_tokens <= 0:
         return excerpts
     # utf-8 bytes / 4 approximation, matching assemble_packet()'s own estimator.
     overage_chars = overage_tokens * 4
+
+    # 2026-09-01: two-phase shrink — non-required first, then required.
+    if required_claim_ids:
+        non_required = {k: v for k, v in excerpts.items() if k not in required_claim_ids}
+        required = {k: v for k, v in excerpts.items() if k in required_claim_ids}
+
+        # Phase 1: shrink non-required excerpts
+        if non_required:
+            total_nr = sum(len(v) for v in non_required.values())
+            if total_nr > 0:
+                shrunk_nr: dict[str, str] = {}
+                for cid, text in non_required.items():
+                    share = len(text) / total_nr
+                    target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
+                    shrunk_nr[cid] = _truncate_at_sentence(text, target) if target < len(text) else text
+                # Recalculate overage after phase 1
+                phase1_savings = sum(len(v) for v in non_required.values()) - sum(len(v) for v in shrunk_nr.values())
+                remaining_overage_chars = max(0, overage_chars - phase1_savings)
+                if remaining_overage_chars <= 0:
+                    return {**shrunk_nr, **required}
+                # Phase 2: shrink required excerpts with remaining overage
+                overage_chars = remaining_overage_chars
+                excerpts = {**shrunk_nr, **required}
+
     total_chars = sum(len(v) for v in excerpts.values())
     if total_chars <= 0:
         return excerpts
@@ -1446,7 +1505,15 @@ def assemble_packet(
     # packet built at the full excerpt cap actually comes in over budget --
     # see _shrink_excerpts_to_budget()'s own docstring.
     if estimated_tokens > _TOKEN_BUDGET:
-        shrunk_excerpts = _shrink_excerpts_to_budget(excerpts, estimated_tokens - _TOKEN_BUDGET)
+        # 2026-09-01: pass required claim_ids so non-required excerpts shrink first
+        required_cids: set[str] = set()
+        for row in evidence_map:
+            if row.get("bucket") == "required":
+                for cid in row.get("claim_ids") or []:
+                    required_cids.add(cid)
+        shrunk_excerpts = _shrink_excerpts_to_budget(
+            excerpts, estimated_tokens - _TOKEN_BUDGET, required_cids
+        )
         if shrunk_excerpts != excerpts:
             excerpts = shrunk_excerpts
             draft["excerpts"] = excerpts

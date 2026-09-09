@@ -33,6 +33,43 @@ ALL_DISPOSITIONS = CLEAN_DISPOSITIONS | OVERRIDE_DISPOSITIONS
 
 BLOCKING_SEVERITIES = frozenset({"BLOCK"})
 
+# Dispositions that claim the finding was wrong or accept a risk must carry
+# substantive reasoning so the judgment call is accountable (CR-110).
+# RESOLVED_EDIT needs no reasoning — the edit itself is the evidence.
+# NOT_APPLICABLE is a scope claim that is usually self-evident from context.
+REASONING_REQUIRED = frozenset(
+    {
+        "FALSE_POSITIVE",
+        "ACCEPTED_AS_CORRECT",
+        "HUMAN_ACCEPTED_RISK",
+    }
+)
+
+# Minimum character count for reasoning to be considered substantive.
+REASONING_MIN_CHARS = 10
+
+
+def parse_disposition(value: Any) -> tuple[str | None, str | None]:
+    """Parse a disposition entry that may be a bare string or an object.
+
+    Accepts two shapes (backward-compatible):
+      "FALSE_POSITIVE"                              — bare string, no reasoning
+      {"disposition": "FALSE_POSITIVE", "reasoning": "explanation"}
+
+    Returns (disposition_upper, reasoning_or_none).
+    """
+    if value is None:
+        return (None, None)
+    if isinstance(value, str):
+        return (value.strip().upper(), None)
+    if isinstance(value, dict):
+        disp = str(value.get("disposition") or "").strip().upper()
+        reasoning = value.get("reasoning")
+        if reasoning is not None:
+            reasoning = str(reasoning).strip()
+        return (disp or None, reasoning)
+    return (None, None)
+
 
 def reviews_dir(folder: str) -> str:
     return os.path.join(folder, REVIEWS_DIR)
@@ -137,6 +174,10 @@ def _write_dispositions(
         "note": (
             "Set each finding_id to one of: RESOLVED_EDIT, ACCEPTED_AS_CORRECT, "
             "NOT_APPLICABLE, FALSE_POSITIVE, HUMAN_ACCEPTED_RISK. "
+            "For FALSE_POSITIVE, ACCEPTED_AS_CORRECT, and HUMAN_ACCEPTED_RISK, "
+            "use an object with reasoning: "
+            '{\"disposition\": \"FALSE_POSITIVE\", \"reasoning\": \"why it is wrong\"}. '
+            "RESOLVED_EDIT and NOT_APPLICABLE may be bare strings. "
             "Dispositions are bound to the findings content hash for each review "
             "phase (truth/ats/hm/mech); a regenerated finding with the same id but "
             "different content clears that disposition automatically. "

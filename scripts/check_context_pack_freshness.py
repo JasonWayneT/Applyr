@@ -84,15 +84,24 @@ def check_freshness(pack_path: str = PACK_PATH) -> tuple[bool, list[str]]:
 
 def main() -> None:
     is_fresh, problems = check_freshness()
-    if is_fresh:
+    # Implements AC-390 / FR-293: run instruction-authority checks on the same
+    # verification path as the context-pack freshness gate.
+    from check_instruction_drift import check_drift
+
+    drift_problems = check_drift()
+    if is_fresh and not drift_problems:
         print("FRESH -- data/agent_context_pack.md matches its recorded sources.")
         sys.exit(0)
-    else:
+    if not is_fresh:
         print("STALE -- data/agent_context_pack.md is out of date or invalid:")
         for p in problems:
             print(f"  - {p}")
         print("\nRegenerate with: python scripts/generate_context_pack.py")
-        sys.exit(1)
+    if drift_problems:
+        print("\nDRIFT -- instruction authority checks failed:")
+        for p in drift_problems:
+            print(f"  - {p}")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -157,10 +157,55 @@ def load_candidate_preferences():
 # headers technically do per-call; counting our own calls against the documented cap is
 # the same estimate-not-authoritative approach for both until a real per-response tracker
 # replaces this (see docs/ROADMAP_BEST_PRACTICES.md's free-tier cascade item).
+#
+# 2026-09-01 Improvement #10: thresholds are now loaded from
+# data/llm_rate_limits.json (with Claude and Perplexity entries added). The
+# hardcoded dict below is the fallback when the config file is absent or a
+# provider key is missing -- same behavior as before for existing providers.
 _RATE_LIMIT_THRESHOLDS = {
     'gemini': (1400, 1500, 14, 15),
     'groq': (14000, 14400, 28, 30),
+    'claude': (900, 1000, 45, 50),
+    'perplexity': (900, 1000, 45, 50),
 }
+
+# 2026-09-01 Improvement #3: cooldown window and threshold for skipping a
+# provider after real HTTP 429 responses. Loaded from llm_rate_limits.json.
+_RATE_LIMITED_COOLDOWN_MINUTES = 5
+_RATE_LIMITED_THRESHOLD = 3
+
+
+def _load_rate_limit_config() -> None:
+    """Load rate-limit thresholds from data/llm_rate_limits.json into the
+    module-level _RATE_LIMIT_THRESHOLDS dict. Called once at import time.
+    Never raises -- a missing or malformed file silently falls back to the
+    hardcoded defaults above."""
+    import json
+    config_path = os.path.join(DATA_DIR, 'llm_rate_limits.json')
+    try:
+        if not os.path.exists(config_path):
+            return
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        providers = config.get('providers', {})
+        for provider, vals in providers.items():
+            provider = provider.lower()
+            if not isinstance(vals, dict):
+                continue
+            daily_warn = int(vals.get('daily_warn', 0))
+            daily_real = int(vals.get('daily_real', 0))
+            minute_warn = int(vals.get('minute_warn', 0))
+            minute_real = int(vals.get('minute_real', 0))
+            if daily_warn and daily_real and minute_warn and minute_real:
+                _RATE_LIMIT_THRESHOLDS[provider] = (daily_warn, daily_real, minute_warn, minute_real)
+        global _RATE_LIMITED_COOLDOWN_MINUTES, _RATE_LIMITED_THRESHOLD
+        _RATE_LIMITED_COOLDOWN_MINUTES = int(config.get('rate_limited_cooldown_minutes', _RATE_LIMITED_COOLDOWN_MINUTES))
+        _RATE_LIMITED_THRESHOLD = int(config.get('rate_limited_threshold', _RATE_LIMITED_THRESHOLD))
+    except Exception as e:
+        print(f"    [Rate Limit Config] Error loading llm_rate_limits.json: {e}", file=sys.stderr)
+
+
+_load_rate_limit_config()
 
 
 def _log_provider_notification(provider: str, message: str, reason: str, dedupe: bool = False, extra: dict | None = None) -> None:
@@ -203,11 +248,43 @@ def _log_provider_notification(provider: str, message: str, reason: str, dedupe:
         print(f"    [Notification Error] {e}", file=sys.stderr)
 
 
+def _log_rate_limited(provider: str) -> None:
+    """2026-09-01 Improvement #3: log a real HTTP 429 response to activity_log
+    so check_rate_limits() can count recent RATE_LIMITED entries and skip a
+    provider that's actively throttling, instead of wasting a round-trip
+    before cascading. Writes a lightweight INFO entry (not a notification) --
+    check_rate_limits reads this via message LIKE '%[{provider}] RATE_LIMITED%'."""
+    import sqlite3
+    try:
+        if not os.path.exists(DB_PATH):
+            return
+        conn = sqlite3.connect(DB_PATH, timeout=10.0)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO activity_log (level, source, message) VALUES ('WARN', 'LLM_Call', ?)",
+            (f'[{provider}] RATE_LIMITED',),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 def check_rate_limits(provider: str) -> bool:
     """
     Checks rate limits for a provider via activity_log.
     Returns True if allowed to proceed, False if provider should be skipped/disabled.
-    Sleeps if approaching RPM limit.
+
+    2026-09-01 Improvement #3: now also counts recent RATE_LIMITED entries from
+    real HTTP 429 responses. If a provider has >= _RATE_LIMITED_THRESHOLD
+    RATE_LIMITED entries in the last _RATE_LIMITED_COOLDOWN_MINUTES minutes,
+    returns False (skip this provider, let the caller cascade to the next one)
+    instead of wasting a round-trip on a provider that's actively throttling.
+
+    2026-09-01 Improvement #3: replaced the blocking time.sleep(60) on RPM
+    approach with return False -- let the caller cascade to the next provider
+    instead of blocking the whole pipeline for 60 seconds. The sleep was the
+    primary cause of 2-5 second stalls per call when Groq was rate-limited.
     """
     thresholds = _RATE_LIMIT_THRESHOLDS.get(provider)
     if thresholds is None:
@@ -220,6 +297,34 @@ def check_rate_limits(provider: str) -> bool:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path, timeout=10.0)
             cursor = conn.cursor()
+
+            # Improvement #3: check for recent real HTTP 429 responses.
+            # If the provider has been actively throttling, skip it now
+            # rather than wasting a round-trip before cascading.
+            cursor.execute(
+                "SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' "
+                "AND message LIKE ? AND timestamp >= datetime('now', ?)",
+                (f'%[{provider}] RATE_LIMITED%', f'-{_RATE_LIMITED_COOLDOWN_MINUTES} minutes'),
+            )
+            rate_limited_count = cursor.fetchone()[0]
+            if rate_limited_count >= _RATE_LIMITED_THRESHOLD:
+                print(
+                    f"    [Circuit Breaker] {provider.capitalize()} received {rate_limited_count} "
+                    f"HTTP 429s in the last {_RATE_LIMITED_COOLDOWN_MINUTES}m — skipping, "
+                    "cascading to next provider.",
+                    file=sys.stderr,
+                )
+                conn.close()
+                _log_provider_notification(
+                    provider,
+                    f"{provider.capitalize()} received {rate_limited_count} HTTP 429 responses "
+                    f"in the last {_RATE_LIMITED_COOLDOWN_MINUTES} minutes — skipping this provider, "
+                    "tasks will cascade to their next configured provider.",
+                    reason="rate_limited_skip",
+                    dedupe=True,
+                    extra={"rate_limited_count": rate_limited_count, "cooldown_minutes": _RATE_LIMITED_COOLDOWN_MINUTES},
+                )
+                return False
 
             cursor.execute(
                 "SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE ? AND timestamp >= datetime('now', '-24 hours')",
@@ -251,9 +356,15 @@ def check_rate_limits(provider: str) -> bool:
             conn.commit()
             conn.close()
 
+            # Improvement #3: replaced blocking time.sleep(60) with return False.
+            # Let the caller cascade to the next provider instead of blocking.
             if minute_calls >= minute_warn:
-                print(f"    [Circuit Breaker] {provider.capitalize()} RPM approaching limit ({minute_calls}/{minute_real}). Sleeping 60s...", file=sys.stderr)
-                time.sleep(60)
+                print(
+                    f"    [Circuit Breaker] {provider.capitalize()} RPM approaching limit "
+                    f"({minute_calls}/{minute_real}) — skipping, cascading to next provider.",
+                    file=sys.stderr,
+                )
+                return False
 
     except Exception as e:
         print(f"    [Circuit Breaker Error] {e}", file=sys.stderr)
@@ -529,6 +640,7 @@ def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
             err = str(e).lower()
             if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
                 print(f"    [LLM Notice] Gemini is busy/rate-limited ({err[:100]}). Falling back to local model tier...", file=sys.stderr)
+                _log_rate_limited("gemini")
                 _log_provider_notification(
                     "gemini",
                     "Gemini is rate-limited/unavailable — cascading to the next configured provider for this call.",
@@ -548,7 +660,11 @@ def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
 # a real quota exhaustion. See CR-105's free-tier research: Anthropic exposes the same live
 # rate-limit header shape as Groq; Perplexity only exposes Retry-After on the 429 itself, no
 # proactive headers, but that's still enough to make the same cascade-vs-wait call.
-_CASCADE_WAIT_THRESHOLD_SECONDS = 30
+# 2026-09-01: reduced from 30 to 5 — a 30s threshold meant Groq rate-limit
+# waits of 7-26s would block instead of cascading to Gemini, making Stage 0
+# take 5+ minutes on larger JDs. At 5s, waits of 5+ seconds cascade
+# immediately to the next provider (Gemini), keeping Stage 0 responsive.
+_CASCADE_WAIT_THRESHOLD_SECONDS = 5
 
 
 def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries):
@@ -577,6 +693,7 @@ def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_r
             elif res.status_code == 429:
                 retry_after = res.headers.get("retry-after")
                 wait = float(retry_after) if retry_after else 60 * (attempt + 1)
+                _log_rate_limited("claude")
                 if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
                     print(f"    [LLM] Claude rate limit needs {wait:.0f}s -- cascading to next provider.", file=sys.stderr)
                     _log_provider_notification(
@@ -752,6 +869,7 @@ def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retr
             elif res.status_code == 429:
                 retry_after = res.headers.get("retry-after")
                 wait = float(retry_after) if retry_after else 60 * (attempt + 1)
+                _log_rate_limited("perplexity")
                 if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
                     print(f"    [LLM] Perplexity rate limit needs {wait:.0f}s -- cascading to next provider.", file=sys.stderr)
                     _log_provider_notification(
@@ -808,6 +926,7 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
             elif res.status_code == 429:
                 retry_after = res.headers.get("retry-after")
                 wait = float(retry_after) if retry_after else 5 * (attempt + 1)
+                _log_rate_limited("groq")
                 if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
                     # A multi-minute-or-longer wait means the daily cap is exhausted, not a
                     # momentary throttle -- cascade to the next provider now rather than block.

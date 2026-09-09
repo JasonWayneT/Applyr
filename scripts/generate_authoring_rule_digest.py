@@ -66,6 +66,10 @@ packet's mapped claim_ids (strongest honest bridge); never substitute a weaker p
 that bridge excerpt is present; hard gaps are never claimed as owned. Rubric 70/65 is a
 floor check after the bridges are in — not the stop condition. Prefer the JD's bare honest
 base title only (no borrowed domain qualifier). Bullets stay ~2–3 lines for scan.
+A "weaker proxy" is a claim with a lower attribution tier (CONTRIBUTED < OWNED) or a
+claim whose tags match the JD item less precisely. When two claims map to the same JD
+item, prefer the OWNED claim in the resume; use the CONTRIBUTED claim only if the
+letter needs a second proof point for that item.
 
 ---
 
@@ -114,7 +118,16 @@ Bullet counts: most-recent role 5–6; earlier roles 2–3 each.
 
 ## 3. Resume Bullet Rules
 
-- Order bullets by JD-relevance first. Among equally-relevant bullets, prefer the one with a hard metric.
+- Order bullets by JD-relevance first. JD-relevance is determined by the evidence_map:
+  claims mapping to `required` items are more relevant than `preferred` or `responsibilities`.
+  Among equally-relevant bullets, prefer the one with a hard metric.
+- When a JD item has two mapped claim_ids, use the stronger one (higher attribution tier:
+  OWNED beats CONTRIBUTED) in the resume bullet. The second claim can support a cover-letter
+  proof point for the same JD item if the letter's argument benefits from it.
+- Some excerpt cards may be present to satisfy the 3-role resume rule but may not map to any
+  JD item. Use these only if a role section needs a bullet and no JD-mapped claim is available
+  for that employer. Do not force a low-relevance claim into a bullet over a higher-relevance
+  claim from the same employer.
 - Lead with the metric when a bullet carries one — put the number close to the verb, not at the end.
 - Bullet length: ~2–3 lines. No multi-sentence blocks.
 - Do NOT list a team (Engineering, DBA, etc.) as a cross-functional partner unless it appears in the verified list: Engineering, DBA, DevOps, Customer Experience (CX), Customer Support, Sales, Account Management, Legal, InfoSec, Product Marketing, Executive/Presidential Leadership, Upgrades.
@@ -236,6 +249,8 @@ Never: forced, made, imposed, or drove other teams "into" a decision.
 - Every claim_id, excerpt, metric, and company name belongs to THIS job's packet —
   never carried over from a different draft in the same session.
 - Every cited claim's Employer matches the role section you drafted it under (rule 3).
+- Resume bullets within each role are ordered by JD-relevance (required-mapped claims
+  first), not by chronological importance or metric size alone.
 - Zero gap-confession language ("is new territory for me," "I have not yet," "are
   new to me"). Thin evidence gets the strongest honest bridge, not a named gap.
 - Zero em dashes, semicolons, double-hyphens, or colon-as-elaboration (`word: word`).

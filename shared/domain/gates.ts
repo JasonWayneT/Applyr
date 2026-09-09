@@ -93,11 +93,12 @@ export function parseMaxYearsRequired(text: string): number | null {
 
 /**
  * Buffer above experience_range.max before a years requirement is rejected at ingest.
- * CR-056 previously silently killed valid Senior PM roles with a zero-buffer cutoff;
- * Stage 0 (not this gate) owns nuanced fit judgment. Ambiguous / borderline / unparseable
- * JDs must pass through.
+ * CR-110 Round 5: Jason targets mid-level only — roles requiring max or more
+ * years are blocked at both ingest (this gate) and Stage 0. Zero buffer so
+ * `required >= maxExperienceYears` rejects (e.g. 7+ blocked when max is 7).
+ * Ambiguous / unparseable years still pass through.
  */
-export const YEARS_EXPERIENCE_REJECT_BUFFER = 2;
+export const YEARS_EXPERIENCE_REJECT_BUFFER = 0;
 
 /**
  * Drop age / company-tenure years so ingest never silently kills a real fit (CR-055 class).
@@ -186,7 +187,7 @@ export function passesYearsExperienceGate(job: ScrapedJob, config: GateConfig): 
   const required = parseYearsForIngestGate(`${title}\n${desc}`);
   if (required === null) return true;
   const ceiling = config.maxExperienceYears + YEARS_EXPERIENCE_REJECT_BUFFER;
-  if (required > ceiling) {
+  if (required >= ceiling) {
     console.log(
       `[REJECT] ${title} at ${job.company} — required_years_${required}_exceeds_max_${config.maxExperienceYears}_plus_buffer_${YEARS_EXPERIENCE_REJECT_BUFFER}`,
     );

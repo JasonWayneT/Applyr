@@ -157,12 +157,30 @@ def _check_zero_to_one(jd_text: str) -> list[dict]:
 
 _REVENUE_OWN_RE = re.compile(
     r"\b("
+    # Original patterns (ownership of revenue model, billing, P&L, pricing)
     r"own\s+(?:the\s+)?(?:revenue\s+model|billing\s+(?:system|product|platform)|p\s*[&and]+\s*l|pricing\s+strategy)|"
     r"(?:revenue|billing|payments?)\s+ownership|"
     r"manage\s+(?:the\s+)?p\s*[&and]+\s*l|"
     r"p\s*[&and]+\s*l\s+(?:ownership|responsibility|accountability)|"
     r"own\s+(?:the\s+)?(?:billing|payments?|monetization)\s+product|"
-    r"drive\s+(?:and\s+)?own\s+(?:revenue|billing)"
+    r"drive\s+(?:and\s+)?own\s+(?:revenue|billing)|"
+    # Added 2026-09-03: broader phrasings found in real JDs that the original
+    # regex missed, allowing revenue/billing/pricing roles to pass Stage 0.
+    # amphenol_rf/hale: "Manage product line performance. Including revenue and margin"
+    r"(?:manage|drive|own|lead)\s+product\s+line\s+(?:performance|revenue|margin|growth|profitability)|"
+    r"revenue\s+and\s+margin|"
+    r"product\s+line\s+(?:growth\s+and\s+)?profitability|"
+    # beyond: "define and evolve how dynamic pricing works"
+    r"define\s+and\s+evolve\s+.*dynamic\s+pricing|"
+    r"owning\s+.*pricing\s+algorithm|"
+    r"translating\s+pricing\s+strategy\s+into|"
+    # harnham: "pricing updates", "billing, ordering", "pricing models"
+    r"(?:manage|own|support)\s+.*(?:pricing\s+updates?|pricing\s+models?)|"
+    r"billing\s*,?\s*(?:and\s+)?(?:ordering|invoicing)|"
+    # tenth_revolution_group: "Own product strategy for finance, payroll"
+    r"own\s+product\s+strategy\s+.*?(?:finance|payroll|billing)|"
+    r"payroll\s+(?:processing|management|invoicing)|"
+    r"(?:finance|payroll|billing)\s+(?:workstreams?|solutions?|products?)"
     r")\b",
     re.I,
 )
@@ -278,7 +296,7 @@ def run_prefs_gate(
     # 1. Blocked company
     rejects.extend(_check_blocked_company(company, prefs))
 
-    # 2. Blocked industry (reuse existing gate)
+    # 2. Blocked industry — keyword gate (deterministic, fast, free)
     from industry_gate import batch_industry_blocked
     blocked, term = batch_industry_blocked(company, jd_text, prefs)
     if blocked:
@@ -286,6 +304,26 @@ def run_prefs_gate(
             "code": "blocked_industry",
             "reason": f"Industry blocklist match: '{term}'",
         })
+
+    # 2b. Blocked industry — LLM semantic gate (supplementary, CR-110 Gap A)
+    # Only runs when the keyword gate did not block. Fail-open on LLM error.
+    if not blocked:
+        from industry_semantic import classify_industry_safe
+        blocked_industries = prefs.get("blocked_industries") or []
+        if blocked_industries:
+            result = classify_industry_safe(jd_text, blocked_industries, company)
+            llm_blocked = result.get("blocked_industry", "")
+            llm_confidence = result.get("confidence", "low")
+            if llm_blocked and llm_confidence in ("high", "medium"):
+                rejects.append({
+                    "code": "blocked_industry_semantic",
+                    "reason": f"LLM industry classification: '{llm_blocked}' ({llm_confidence})",
+                })
+            elif llm_blocked and llm_confidence == "low":
+                flags.append({
+                    "code": "blocked_industry_semantic_low",
+                    "note": f"Possible blocked industry (low confidence): '{llm_blocked}'",
+                })
 
     # 3. Title blocklist
     from seniority_gate import passes_title_gate
@@ -325,6 +363,11 @@ def run_prefs_gate(
     rejects.extend(_check_people_management(jd_text))
     rejects.extend(_check_revenue_billing(jd_text))
     rejects.extend(_check_ai_ml_ownership(jd_text))
+
+    # 9. JD content validation (CR-110 Gap B)
+    from jd_content_validation import check_jd_placeholders, check_network_page
+    rejects.extend(check_jd_placeholders(jd_text))
+    rejects.extend(check_network_page(jd_text))
 
     # Deduplicate rejects by code (keep first)
     seen_codes: set[str] = set()

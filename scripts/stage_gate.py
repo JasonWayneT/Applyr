@@ -47,6 +47,16 @@ OVERRIDE_LOG_PATH: str | None = None
 sys.path.insert(0, _SCRIPT_DIR)
 import contracts  # noqa: E402
 
+
+def _print(line: str) -> None:
+    """Console-safe print -- company names can carry non-ASCII characters (e.g.
+    collēctīvus_holdings) that crash a cp1252 Windows console (found
+    2026-09-03: the crash was silently read by a Stop hook as "can't verify,"
+    when the submission itself was actually fine). Same encode/decode-with-
+    replace pattern already used in run_submission.py's event printing."""
+    enc = sys.stdout.encoding or "utf-8"
+    print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
 _STAGE_CHECKS: dict[str, Callable[[str], tuple[bool, list[str]]]] = {
     "stage0": contracts.check_stage0_fit_gate,
     "stage1": contracts.check_stage1_ready,
@@ -314,12 +324,12 @@ def apply_stage2_verdict(
     company = os.path.basename(folder)
     ok, errors = contracts.check_stage2_ready(folder)
     if ok:
-        print(f"{company}: STAGE 2: COMPLETE")
+        _print(f"{company}: STAGE 2: COMPLETE")
         return False
 
-    print(f"{company}: STAGE 2: INCOMPLETE")
+    _print(f"{company}: STAGE 2: INCOMPLETE")
     for e in errors:
-        print(f"  - {e}")
+        _print(f"  - {e}")
 
     if not folder_has_rubric_score(folder):
         # Mid-flow: rubric not entered yet. Verdict is informational only.

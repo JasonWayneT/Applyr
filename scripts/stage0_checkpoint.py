@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import tempfile
 from datetime import datetime, timezone
@@ -82,8 +83,16 @@ def make_run_key(
 
 
 def make_item_key(bucket: str, item_text: str, ordinal: int) -> str:
-    """Build a stable item key that distinguishes repeated lines in one bucket."""
-    return f"{_safe_part(bucket)}:{ordinal}:{_digest(item_text.strip())[:16]}"
+    """Build a stable item key that distinguishes repeated lines in one bucket.
+
+    The hash suffix is encoded as letters (a-p) rather than hex (0-9a-f) to
+    avoid producing digit-only subsequences that LLM provider safety filters
+    (e.g. Gemini) can redact as phone numbers, corrupting the item_id in the
+    provider's JSON response. See CR-108 cascade testing 2026-09-01.
+    """
+    hex_digest = _digest(item_text.strip())[:16]
+    letter_encoded = "".join(chr(ord("a") + int(c, 16)) for c in hex_digest)
+    return f"{_safe_part(bucket)}:{ordinal}:{letter_encoded}"
 
 
 def start_run(
@@ -327,6 +336,16 @@ def write_spool(
             pass
         raise
     return str(target), digest
+
+
+def clean_spool(folder: Path) -> None:
+    """Remove the .stage0_spool directory and all stale spool files.
+
+    Called at the start of a new Stage 0 run to clear any leftover files
+    from a previous failed run, and on failure to prevent confusion."""
+    spool_dir = folder / ".stage0_spool"
+    if spool_dir.exists():
+        shutil.rmtree(spool_dir, ignore_errors=True)
 
 
 def _safe_part(value: str) -> str:

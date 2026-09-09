@@ -765,6 +765,11 @@ class TestCoverVoiceKickerLint(unittest.TestCase):
         self.assertIn("COVER LETTER VOICE", _PREAMBLE)
         self.assertIn("lives or dies", _PREAMBLE)
 
+    def test_preamble_blocks_generic_role_labels(self):
+        from author_from_packet import _PREAMBLE
+        self.assertIn("Never open by calling the role interesting, compelling, or exciting", _PREAMBLE)
+        self.assertIn("concrete company action, product, or operating problem instead", _PREAMBLE)
+
     def test_lw036_warns_on_closed_lost(self):
         from submission_linter import lint_document
         text = self._letter("I prioritized the work from Salesforce closed-lost notes.")

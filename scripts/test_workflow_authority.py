@@ -691,7 +691,10 @@ class TruthReviewTests(unittest.TestCase):
                 # Human disposes
                 disp_path = self.folder / "reviews" / "dispositions.json"
                 data = json.loads(disp_path.read_text(encoding="utf-8"))
-                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = "FALSE_POSITIVE"
+                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = {
+                    "disposition": "FALSE_POSITIVE",
+                    "reasoning": "ACC-102 metric is verified in workExperience.md MET-09",
+                }
                 disp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
                 state = run_stage2_truth(str(self.folder), load_state(str(self.folder)))
         self.assertEqual(state["stages"]["stage2"]["subphases"]["truth"]["status"], "COMPLETE")
@@ -742,7 +745,10 @@ class TruthReviewTests(unittest.TestCase):
                 data = json.loads(disp_path.read_text(encoding="utf-8"))
                 self.assertIn("bound_findings_hashes", data)
                 self.assertIn("truth", data["bound_findings_hashes"])
-                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = "FALSE_POSITIVE"
+                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = {
+                    "disposition": "FALSE_POSITIVE",
+                    "reasoning": "ACC-102 metric is verified in workExperience.md MET-09",
+                }
                 disp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
                 # Same findings content — disposition must still clear the wait
                 state = run_stage2_truth(str(self.folder), load_state(str(self.folder)))
@@ -779,7 +785,7 @@ class TruthReviewTests(unittest.TestCase):
                     }
                 ]
             },
-            {"by_finding_id": {"truth.provenance.0": "FALSE_POSITIVE"}},
+            {"by_finding_id": {"truth.provenance.0": {"disposition": "FALSE_POSITIVE", "reasoning": "provenance check misfired"}}},
         )
         self.assertEqual(verdict["verdict"], "FAIL")
 
@@ -796,10 +802,96 @@ class TruthReviewTests(unittest.TestCase):
                     }
                 ]
             },
-            {"by_finding_id": {"truth.provenance.0": "HUMAN_ACCEPTED_RISK"}},
+            {"by_finding_id": {"truth.provenance.0": {"disposition": "HUMAN_ACCEPTED_RISK", "reasoning": "low-risk fabrication in boilerplate section"}}},
         )
         self.assertEqual(verdict["verdict"], "PASS")
         self.assertEqual(verdict["integrity"], "OVERRIDDEN")
+
+    # ── CR-110: reasoning requirement for self-clearing dispositions ──
+
+    def test_false_positive_without_reasoning_needs_disposition(self):
+        """FALSE_POSITIVE as a bare string must not clear — reasoning required."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "FALSE_POSITIVE"}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
+        self.assertIn("f1", verdict["open_finding_ids"])
+        self.assertTrue(
+            any("reasoning" in r for r in verdict["reasons"]),
+            f"expected reasoning mention in reasons: {verdict['reasons']}",
+        )
+
+    def test_false_positive_with_reasoning_passes(self):
+        """FALSE_POSITIVE with substantive reasoning clears the finding."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": {"disposition": "FALSE_POSITIVE", "reasoning": "finding misfired, metric is present in line 3"}}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_accepted_as_correct_without_reasoning_needs_disposition(self):
+        """ACCEPTED_AS_CORRECT as a bare string must not clear — reasoning required."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "ACCEPTED_AS_CORRECT"}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
+
+    def test_accepted_as_correct_with_reasoning_passes(self):
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": {"disposition": "ACCEPTED_AS_CORRECT", "reasoning": "bullet already cites this metric via MET-09"}}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_resolved_edit_without_reasoning_still_passes(self):
+        """RESOLVED_EDIT does not require reasoning — the edit is the evidence."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "RESOLVED_EDIT"}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_not_applicable_without_reasoning_still_passes(self):
+        """NOT_APPLICABLE does not require reasoning — scope claim is self-evident."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "NOT_APPLICABLE"}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_human_accepted_risk_without_reasoning_needs_disposition(self):
+        """HUMAN_ACCEPTED_RISK requires reasoning — risk acceptance must be justified."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "BLOCK", "message": "fabricated"}]},
+            {"by_finding_id": {"f1": "HUMAN_ACCEPTED_RISK"}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
+
+    def test_short_reasoning_rejected(self):
+        """Reasoning shorter than REASONING_MIN_CHARS is not substantive."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": {"disposition": "FALSE_POSITIVE", "reasoning": "ok"}}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
 
 
 class AtsReviewTests(unittest.TestCase):
@@ -1018,7 +1110,10 @@ class Stage2PolicyTests(unittest.TestCase):
         ):
             run_stage2_hm(str(self.folder), load_state(str(self.folder)))
         disp = json.loads((self.folder / "reviews" / "dispositions.json").read_text(encoding="utf-8"))
-        disp["by_finding_id"]["hm.critical_read"] = "ACCEPTED_AS_CORRECT"
+        disp["by_finding_id"]["hm.critical_read"] = {
+            "disposition": "ACCEPTED_AS_CORRECT",
+            "reasoning": "critical read finding is a style preference not a defect",
+        }
         (self.folder / "reviews" / "dispositions.json").write_text(
             json.dumps(disp, indent=2), encoding="utf-8"
         )
@@ -1062,7 +1157,10 @@ class Stage2PolicyTests(unittest.TestCase):
             )
             for k in list(disp["by_finding_id"]):
                 if disp["by_finding_id"][k] is None:
-                    disp["by_finding_id"][k] = "ACCEPTED_AS_CORRECT"
+                    disp["by_finding_id"][k] = {
+                        "disposition": "ACCEPTED_AS_CORRECT",
+                        "reasoning": "finding reviewed and deemed correct as-is",
+                    }
             (self.folder / "reviews" / "dispositions.json").write_text(
                 json.dumps(disp, indent=2), encoding="utf-8"
             )
@@ -1363,6 +1461,40 @@ class EndToEndChainIntegrityTests(unittest.TestCase):
                             adopt=False,
                             no_hook=True,
                         )
+
+    def test_unmanaged_folder_re_resolves_by_slug_without_raising(self):
+        """Regression (2026-09-08): a --mode practice run under an unmanaged
+        folder (data/authored_drafts/) committed Stage 0/1 receipts, then
+        run_until_stage1_complete re-resolved the bare slug against
+        submissions|pending_review and raised WorkflowError after the receipts
+        were written. A folder outside those roots must fall back to its still
+        valid absolute path: _place_after_stage0 never moves unmanaged folders
+        (practice mode early-returns), so the pre-resolve path remains correct.
+        """
+        def fake_build_packet(folder, no_hook=True):
+            return self.packet
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        # Fresh state (stage0 READY, slug == temp-folder basename that resolves
+        # nowhere under submissions|pending_review) forces the Stage 0 execution
+        # branch, which is the only path that re-resolves by slug.
+        with mock.patch("workflow.runner.reconcile", side_effect=lambda f, s: s):
+            with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=self.gate):
+                with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+                    with mock.patch("workflow.runner.build_packet", side_effect=fake_build_packet):
+                        with mock.patch("workflow.runner.build_authoring_prompt", side_effect=fake_prompt):
+                            with mock.patch("workflow.runner.require_stage_ready"):
+                                state = run_until_stage1_complete(
+                                    str(self.folder),
+                                    mode="production",
+                                    adopt=False,
+                                    no_hook=True,
+                                    stop_at_waiting=True,
+                                )
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "stage_receipts" / "stage1.json").exists())
 
     def test_check_workflow_complete_passes_after_actual_stage1_validate(self):
         """The full Stage 0 → Stage 1 validate path must produce a receipt

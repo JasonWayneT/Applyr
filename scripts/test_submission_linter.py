@@ -10,6 +10,7 @@ from submission_linter import (
     check_b2b_saas_positioning,
     check_attribution_verb_strength,
     check_cross_employer_audience_bleed,
+    check_generic_hook_self_reference,
     check_jd_specificity_floor,
     check_wrong_job_company_bleed,
     known_company_names,
@@ -625,6 +626,36 @@ def test_LW021_allows_target_framing_before_past_employer_bridge():
     assert check_cross_employer_audience_bleed(
         "", letter, jd, company_name="Sony Interactive Entertainment"
     ) == []
+
+
+def test_LW038_warns_on_generic_self_referential_hook():
+    letter = (
+        "Dear Hiring Manager,\n\n"
+        "Form Health's new care-delivery program shows what makes this role interesting.\n\n"
+        "At Cision, I turned churn signals into product priorities."
+    )
+    findings = check_generic_hook_self_reference(letter)
+    assert any(v.rule_id == "LW-038" for v in findings)
+
+
+def test_LW038_allows_specific_hook():
+    letter = (
+        "Dear Hiring Manager,\n\n"
+        "Form Health's new care-delivery program expands access by reducing the "
+        "administrative work around prescribing.\n\n"
+        "At Cision, I turned churn signals into product priorities."
+    )
+    assert check_generic_hook_self_reference(letter) == []
+
+
+def test_LW038_ignores_self_reference_outside_hook():
+    letter = (
+        "Dear Hiring Manager,\n\n"
+        "Form Health's new care-delivery program expands access by reducing the "
+        "administrative work around prescribing.\n\n"
+        "That work shows what makes this role interesting to me."
+    )
+    assert check_generic_hook_self_reference(letter) == []
 
 
 def test_LW028_allows_acc303_separate_subject_attribution():

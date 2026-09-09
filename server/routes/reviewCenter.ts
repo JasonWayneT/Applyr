@@ -15,6 +15,7 @@ const ANSWERS = new Set<ReviewAnswer>([
   'CONFIRMED_USE',
   'NOT_PRESENT',
   'UNSURE_NO_REASK',
+  'BAD_DATA',
   'KEEP_ELIGIBLE',
   'CONFIRM_HARD',
   'NEEDS_MORE_INFO',

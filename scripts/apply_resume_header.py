@@ -152,10 +152,23 @@ def patch_file(path: str, h: dict) -> str:
 
     if len(lines) >= 2:
         l1, l2 = lines[0].rstrip("\n"), lines[1].rstrip("\n")
-        if _PLACEHOLDER_LINE1.match(l1) and _PLACEHOLDER_LINE2.match(l2):
-            new1, new2 = real_header_lines(h)
+        new1, new2 = real_header_lines(h)
+        header_changed = False
+        # Line 1: replace if it's a [Name]/[Full Name] placeholder
+        if _PLACEHOLDER_LINE1.match(l1):
             lines[0] = new1 + "\n"
+            header_changed = True
+        # Line 2: replace if it contains any bracket placeholder OR is blank.
+        # Found 2026-09-03: compose runs produce mixed headers where line 1
+        # is already the real name but line 2 has [phone]/[email]/[LinkedIn]
+        # brackets (the model can infer name/location but not PII it doesn't
+        # have). Also found: tenth_revolution_group had a blank line 2.
+        # The old code required BOTH lines to be fully bracketed, so it
+        # skipped these cases and left literal brackets in the compiled PDF.
+        if _PLACEHOLDER_LINE2.match(l2) or ("[" in l2 and "]" in l2) or not l2.strip():
             lines[1] = new2 + "\n"
+            header_changed = True
+        if header_changed:
             actions.append("header")
 
     for i, line in enumerate(lines):

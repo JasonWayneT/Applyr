@@ -265,6 +265,12 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `DATA-004` | CR-108 | Pending confirmation opportunity context | `server/migrations/018_add_review_center.sql`, `server/repository/reviewCenterRepository.ts` | implemented |
 | `AC-358`–`AC-366` | CR-108 | Cascade, safety, checkpoint, confirmation, hard-gate action, and shared-resolution acceptance cases | `scripts/test_stage0_evidence_cascade.py`, `scripts/test_stage0_confirmations.py`, `scripts/test_stage0_checkpoint_failures.py`, `tests/unit/reviewCenterRepository.test.ts` | implemented |
 | `AC-367`–`AC-373` | CR-108 | Provider fixtures, policy parity, crash recovery, isolated API, promotion safety, documentation, and attributable cleanup | `scripts/test_stage0_provider_golden.py`, `scripts/test_stage0_provider_policy.py`, `scripts/test_stage0_checkpoint_failures.py`, `tests/unit/reviewCenterRoute.test.ts`, read-only SQLite audit | implemented |
+| `FR-286` | CR-109 | Named-tool extraction precision (label/qualifier guards, stopwords, blocked-tool token containment) | `scripts/blocked_tools.py`, `scripts/stage0_confirmations.py` | implemented |
+| `FR-287` | CR-109 | `BAD_DATA` first-class review answer and durable suppression | `scripts/stage0_confirmations.py`, `scripts/stage0_harness.py`, `server/repository/reviewCenterRepository.ts`, `server/routes/reviewCenter.ts`, `server/migrations/022_add_bad_data_answer.sql`, `src/pages/ReviewCenterView.tsx` | implemented |
+| `FR-288` | CR-109 | Single-tap answers with auto-advance transition | `src/pages/ReviewCenterView.tsx`, `src/index.css` | implemented |
+| `FR-289` | CR-109 | Completed-card answer visibility and in-place correction | `server/repository/reviewCenterRepository.ts`, `src/lib/reviewCenter.ts`, `src/types/reviewCenter.ts`, `src/pages/ReviewCenterView.tsx` | implemented |
+| `DATA-005` | CR-109 | Review answers only in gitignored local SQLite | `.gitignore` (`*.sqlite*`), `server/migrations/022_add_bad_data_answer.sql` | implemented |
+| `AC-374`–`AC-378` | CR-109 | Extraction precision, BAD_DATA durability, per-type vocabulary, answer surfacing, and correction-trail acceptance cases | `scripts/test_stage0_confirmations.py`, `tests/unit/reviewCenterRepository.test.ts`, `tests/unit/reviewCenterRoute.test.ts`, `src/lib/reviewCenter.test.ts` | implemented |
 | `FR-253` | CR-074 | Authoring packet builder (fail-closed) | `scripts/build_authoring_packet.py`, `scripts/contracts/authoring_packet_schema.json` | implemented |
 | `FR-254` | CR-074 | Single cloud author from packet | `scripts/author_from_packet.py`, `data/authoring_rule_digest.md`, `.claude/skills/generate-submission/SKILL.md` v2.1.0 | implemented |
 | `FR-255` | CR-074 | Scripts-first Stage 2 default (superseded as *entry sequencing* by CR-076–084 / `run_submission.py`; workers still run under Mech 2D) | `scripts/run_submission.py --resume` → Mech → `verify_submission.py`; debug: `author_from_packet.py --verify-only` | implemented (workers); sequencing superseded by FR-257+ |
@@ -311,6 +317,14 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-343`–`AC-352` | CR-106 | Interview parse, cascade notify, task-override defaults | `tests/unit/interviewDateExtractor.test.ts`, `scripts/test_llm_provider_cascade.py`, `scripts/test_resolve_task_providers.py` | implemented |
 | `FR-276`–`FR-277` | CR-107 | Renamed WAITING_FOR_HUMAN to NEEDS_DISPOSITION; AGENTS.md rule reframed as retry behavior | `scripts/workflow/runner.py`, `scripts/workflow/policy.py`, `scripts/run_submission.py`, `scripts/contracts.py`, `scripts/stabilization_orchestrator_corpus.py`, `AGENTS.md` | implemented |
 | `AC-353`–`AC-357` | CR-107 | Rename verified in live code, WAITING_FOR_LLM untouched, full suite green | `scripts/test_workflow_authority.py` | implemented |
+| `FR-290`–`FR-291` | CR-111 | Instruction authority contradictions and stale shared facts resolved | `AGENTS.md`, `docs/AGENTS.md`, `docs/ACTIVE_WORKFLOW.md`, `docs/spec/02-requirements-registry.md`, `docs/spec/05-change-requests/README.md`, `docs/spec/00-project-constitution.md`, `.claude/agents/` | implemented |
+| `FR-292` | CR-111 | One canonical skill copy with pointer stubs across harness directories | `.codex/skills/`, `.claude/skills/`, `.agents/skills/submission-no-ai-slop/SKILL.md` | implemented |
+| `FR-293` | CR-111 | Instruction drift guard and verification-path integration | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py`, `scripts/check_context_pack_freshness.py` | implemented |
+| `FR-294` | CR-111 | `docs/AGENTS.md` defers to root authority and uses a repo-relative SDD link | `docs/AGENTS.md` | implemented |
+| `FR-295` | CR-098 | Generic self-referential opening-hook WARN | `FEAT-013`, `scripts/submission_linter.py`, `scripts/test_submission_linter.py`, `.agents/skills/submission-no-ai-slop/SKILL.md`, `scripts/author_from_packet.py` preamble | implemented |
+| `NFR-013` | CR-111 | No submission behavior change; guard and tests are isolated | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py` | implemented |
+| `AC-379`–`AC-386`, `AC-388`–`AC-391` | CR-111 | Authority, canonicalization, drift, and docs acceptance checks | focused drift tests, real-tree drift check, pointer inspection | implemented |
+| `AC-387` | CR-111 | Live Claude Code and Codex skill-loading verification | harness-bridge session 009 R52 (Claude PASS), R53 (Codex PASS) | implemented |
 
 
 ## Coverage checklist

@@ -232,6 +232,42 @@ def _check_pdf_parseability(pdf_path: str, md_text: str, doc_type: str) -> dict:
     }
 
 
+def _check_header_placeholders(folder: str) -> dict:
+    """Check Resume.md and CoverLetter.md headers for bracket placeholders.
+
+    Found 2026-09-03: 10 of 20 evidence folders had ``[phone]``, ``[email]``,
+    ``[LinkedIn]`` in the compiled PDF header because ``apply_resume_header.py``
+    only fixed fully-bracketed headers. No validator checked for this — the
+    PDF parseability check is informational only, not blocking. This check
+    makes bracket placeholders in the header a BLOCKING failure so a
+    submission with unreachable contact info cannot pass mechanical
+    verification.
+    """
+    results = {}
+    for fname in ("Resume.md", "CoverLetter.md"):
+        path = os.path.join(folder, fname)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+        if len(lines) < 2:
+            results[fname] = {"has_placeholder": True, "detail": "header line 2 missing or blank"}
+            continue
+        line2 = lines[1].strip()
+        if not line2:
+            results[fname] = {"has_placeholder": True, "detail": "header line 2 is blank"}
+            continue
+        if "[" in line2 and "]" in line2:
+            results[fname] = {"has_placeholder": True, "detail": f"bracket placeholder in header: {line2}"}
+            continue
+        results[fname] = {"has_placeholder": False, "detail": "ok"}
+    return {
+        "checked": bool(results),
+        "files": results,
+        "ok": all(not r.get("has_placeholder") for r in results.values()) if results else False,
+    }
+
+
 def _check_packet_ats_contract(folder: str, resume_text: str) -> dict:
     """Report packet-supported ATS terms and whether each appears in the resume."""
     packet_path = os.path.join(folder.rstrip("/\\"), "authoring_packet.json")
@@ -337,6 +373,10 @@ def verify_one(folder: str) -> dict:
         receipt["page_counts"]["Resume.pdf"] == 1 and receipt["page_counts"]["CoverLetter.pdf"] == 1
     )
 
+    # Header placeholder check (CR-110): blocking — a resume with [phone]
+    # in the header is not sendable. No previous validator caught this.
+    receipt["header_placeholders"] = _check_header_placeholders(folder)
+
     # CR-073 Epic 1 -- WARN-only regression guard, does not affect mechanically_verified.
     if os.path.exists(resume_md):
         receipt["reading_order"] = _check_reading_order(
@@ -427,6 +467,7 @@ def verify_one(folder: str) -> dict:
         and receipt["check_cover_letter"]["passed"]
         and receipt["unapproved_metrics_clean"]
         and receipt["page_counts_ok"]
+        and receipt.get("header_placeholders", {}).get("ok", False)
     )
 
     # CR-075 Epic 2 Story 2.2 -- proves *which bytes* this receipt verified, so a future
@@ -499,6 +540,17 @@ def audit_rubric_scores(folders: list[str]) -> list[str]:
     return warnings
 
 
+def _print(line: str) -> None:
+    """Console-safe print -- company names can carry non-ASCII characters (e.g.
+    collēctīvus_holdings) that crash a cp1252 Windows console before this
+    command's status line ever prints. Same encode/decode-with-replace pattern
+    already used in run_submission.py's event printing (found 2026-09-03: the
+    crash was silently read by a Stop hook as "can't verify," when the
+    submission itself was actually fine)."""
+    enc = sys.stdout.encoding or "utf-8"
+    print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
 def main() -> None:
     raw_args = sys.argv[1:]
     try:
@@ -523,7 +575,7 @@ def main() -> None:
             for w in warnings:
                 print(f"  - {w}")
             sys.exit(1)
-        print(f"Rubric score audit clean for: {', '.join(os.path.basename(f.rstrip('/\\')) for f in folders)}")
+        _print(f"Rubric score audit clean for: {', '.join(os.path.basename(f.rstrip('/\\')) for f in folders)}")
         return
 
     any_failed = False
@@ -534,7 +586,7 @@ def main() -> None:
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(receipt, f, indent=2)
         status = "MECHANICALLY CLEAN" if receipt["mechanically_verified"] else "FAILED -- see verification_receipt.json"
-        print(f"{receipt['submission']}: {status} (rubric_score still needs manual entry + --audit pass)")
+        _print(f"{receipt['submission']}: {status} (rubric_score still needs manual entry + --audit pass)")
         if not receipt["mechanically_verified"]:
             any_failed = True
 

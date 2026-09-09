@@ -4,7 +4,7 @@ export type ReviewItemStatus = 'open' | 'completed';
 
 export type EvidencePromotionStatus = 'PENDING_SOURCE_UPDATE' | 'VERIFIED' | 'REJECTED';
 
-export type SkillReviewAnswer = 'CONFIRMED_USE' | 'NOT_PRESENT' | 'UNSURE_NO_REASK';
+export type SkillReviewAnswer = 'CONFIRMED_USE' | 'NOT_PRESENT' | 'UNSURE_NO_REASK' | 'BAD_DATA';
 
 export type HardGateReviewAnswer = 'KEEP_ELIGIBLE' | 'CONFIRM_HARD' | 'NEEDS_MORE_INFO';
 
@@ -39,6 +39,8 @@ export interface ReviewItem {
   promotionId?: string;
   promotionStatus?: EvidencePromotionStatus;
   affectedOpportunities: AffectedOpportunity[];
+  /** The recorded answer on a completed item; drives correction UX (FR-289). */
+  answer?: ReviewAnswer;
   createdAt?: string;
 }
 

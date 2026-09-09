@@ -11,6 +11,7 @@ const migrations = [
   '018_add_review_center.sql',
   '020_add_review_answer_history.sql',
   '021_add_evidence_promotion_proposals.sql',
+  '022_add_bad_data_answer.sql',
 ].map(file => readFileSync(path.join(process.cwd(), 'server', 'migrations', file), 'utf8')).join('\n');
 
 const databases: Database.Database[] = [];
@@ -163,5 +164,35 @@ describe('Review Center API routes', () => {
     });
     expect(confirmed.status).toBe(200);
     expect((await (await request(baseUrl, '/api/review-center/items?status=open')).json()).items).toHaveLength(0);
+  });
+
+  it('accepts BAD_DATA on skill items and returns the stored answer', async () => {
+    // Implements FR-287 / FR-289 (CR-109): the bad-data flag flows through the
+    // API and stays visible on the completed item for correction.
+    const database = createDatabase();
+    createSkillConfirmation(
+      {
+        skillKey: 'Spirit',
+        title: 'Spirit',
+        question: 'Have you used Spirit in your work?',
+        summary: 'Answer this question.',
+        opportunityKey: 'acme',
+        opportunityCompany: 'Acme',
+        opportunityTitle: 'Product Manager',
+      },
+      database,
+    );
+    const baseUrl = await startTestServer(database);
+    const answer = await request(baseUrl, '/api/review-center/items/skill%3Aspirit/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answer: 'BAD_DATA' }),
+    });
+    expect(answer.status).toBe(200);
+
+    const completed = await request(baseUrl, '/api/review-center/items?status=completed');
+    const items = (await completed.json()).items;
+    expect(items).toHaveLength(1);
+    expect(items[0].answer).toBe('BAD_DATA');
   });
 });

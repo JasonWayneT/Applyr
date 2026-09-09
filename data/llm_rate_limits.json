@@ -1,0 +1,31 @@
+{
+  "_description": "Configurable rate-limit thresholds for LLM providers. Loaded by scripts/utils.py check_rate_limits(). When this file is absent or a provider key is missing, the hardcoded defaults in _RATE_LIMIT_THRESHOLDS are used instead. Thresholds are (daily_warn, daily_real, minute_warn, minute_real) -- check_rate_limits disables a provider at daily_warn and sleeps at minute_warn. The 429 cooldown window (minutes) controls how long a provider is skipped after receiving real HTTP 429 responses.",
+  "providers": {
+    "gemini": {
+      "daily_warn": 1400,
+      "daily_real": 1500,
+      "minute_warn": 14,
+      "minute_real": 15
+    },
+    "groq": {
+      "daily_warn": 14000,
+      "daily_real": 14400,
+      "minute_warn": 28,
+      "minute_real": 30
+    },
+    "claude": {
+      "daily_warn": 900,
+      "daily_real": 1000,
+      "minute_warn": 45,
+      "minute_real": 50
+    },
+    "perplexity": {
+      "daily_warn": 900,
+      "daily_real": 1000,
+      "minute_warn": 45,
+      "minute_real": 50
+    }
+  },
+  "rate_limited_cooldown_minutes": 5,
+  "rate_limited_threshold": 3
+}

@@ -45,6 +45,22 @@ function normalizeAffectedOpportunities(value: unknown): ReviewItem['affectedOpp
   }));
 }
 
+const REVIEW_ANSWERS = new Set([
+  'CONFIRMED_USE',
+  'NOT_PRESENT',
+  'UNSURE_NO_REASK',
+  'BAD_DATA',
+  'KEEP_ELIGIBLE',
+  'CONFIRM_HARD',
+  'NEEDS_MORE_INFO',
+]);
+
+function normalizeAnswer(value: unknown): ReviewItem['answer'] {
+  return typeof value === 'string' && REVIEW_ANSWERS.has(value)
+    ? (value as ReviewItem['answer'])
+    : undefined;
+}
+
 function normalizeItem(value: unknown, index: number): ReviewItem | null {
   if (!isRecord(value)) return null;
   const id = stringValue(value.id, `review-${index}`);
@@ -70,6 +86,7 @@ function normalizeItem(value: unknown, index: number): ReviewItem | null {
     affectedOpportunities: normalizeAffectedOpportunities(
       value.affectedOpportunities || value.affected_opportunities,
     ),
+    answer: normalizeAnswer(value.answer),
     createdAt: stringValue(value.createdAt || value.created_at) || undefined,
   };
 }

@@ -76,11 +76,13 @@ Real employer submissions should use **`SUBMISSION_MODE=1`**, which enables the 
 | Cover audit | same manifest → `cover_letter_audit.grade` | `Pass` when `STRICT_COVER_AUDIT=1` |
 | Rubric (advisory) | `rubric_score.overall` | Review if `< 60` or `threshold_flag` |
 
+> **Two rubrics, don't mix them (CR-111):** the `<60` advisory above is the CR-042-era pipeline rubric shape (`rubric_score.overall`). The current submission rubric is `data/conversion_rubric.md` — R1–R8 resume / C1–C5 cover letter, with per-document floors of 70+ (resume) and 65+ (cover letter) per root `AGENTS.md`. Similar numbers, different instruments.
+
 If critique fails after auto-retry (CR-042 Phase 1B), read `conversion_critique.retry_log` and fix root cause (catalog gap, JD/theme mismatch) — **regen**; do not hand-edit around guards.
 
 Fleet health (CR-042 Phase 2B): `python scripts/fleet_conversion_report.py`
 
-Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spec `docs/spec/03-feature-specs/cover_voice.example.md`; target 300–400 words.
+Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spec `docs/spec/03-feature-specs/cover_voice.example.md`; authoring target 250–400 words (CR-111 decision; `submission_linter.py` LW-001 warns outside the wider 220–450 tolerance). Note: `cover_phrasing.py`'s `WORD_MIN/WORD_MAX` constants still say 300–400 — reconciling them would change compose behavior and is deferred out of CR-111.
 
 ---
 

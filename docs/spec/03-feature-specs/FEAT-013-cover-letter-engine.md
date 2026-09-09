@@ -19,6 +19,7 @@ Generate **conversion-oriented** cover letters that complement resumes: JD match
 | `FR-161` | `format_themes_for_prose` for summary and cover themes |
 | `FR-162` | `cover_letter_audit` weighted rubric |
 | `FR-163` | `ranked_needs` from JD responsibilities |
+| `FR-295` | Warn on generic self-referential opening hooks, scoped to the first body paragraph |
 
 ## User-visible behavior
 
@@ -30,8 +31,10 @@ Generate **conversion-oriented** cover letters that complement resumes: JD match
 ## Cover voice (CR-043)
 
 - Deterministic phrasing via `scripts/cover_phrasing.py` — see `cover_voice.example.md`
-- Word band **300–400**; proof bodies are `cover_story` without robot JD bridges
+- Word band **300–400** (renderer constant; superseded as the authoring target by the 250–400 band per CR-111 — see root `AGENTS.md`); proof bodies are `cover_story` without robot JD bridges
 - No LLM voice rewrite on submission path
+- `LW-038` warns when an opening calls a role “interesting,” “compelling,” or “exciting”
+  without stating the concrete company action, product, or operating problem instead.
 
 ## Out of scope (v1)
 

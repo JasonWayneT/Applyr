@@ -7,6 +7,9 @@ from workflow.reviews import (
     ALL_DISPOSITIONS,
     BLOCKING_SEVERITIES,
     OVERRIDE_DISPOSITIONS,
+    REASONING_REQUIRED,
+    REASONING_MIN_CHARS,
+    parse_disposition,
 )
 
 
@@ -113,13 +116,12 @@ def evaluate_truth_findings(
                 "reasons": reasons,
             }
         severity = str(item.get("severity") or "WARN").upper()
-        disp = by_id.get(fid)
-        if disp is None or disp == "":
+        disp_s, reasoning = parse_disposition(by_id.get(fid))
+        if disp_s is None or disp_s == "":
             open_ids.append(str(fid))
             continue
-        disp_s = str(disp).strip().upper()
         if disp_s not in ALL_DISPOSITIONS:
-            reasons.append(f"{fid}: invalid disposition {disp!r}")
+            reasons.append(f"{fid}: invalid disposition {by_id.get(fid)!r}")
             return {
                 "verdict": "FAIL",
                 "integrity": "CLEAN",
@@ -140,15 +142,28 @@ def evaluate_truth_findings(
                 "open_finding_ids": open_ids,
                 "reasons": reasons,
             }
+        # Require substantive reasoning for dispositions that claim the
+        # finding was wrong or accept a risk (CR-110).
+        if disp_s in REASONING_REQUIRED:
+            if not reasoning or len(reasoning) < REASONING_MIN_CHARS:
+                open_ids.append(str(fid))
+                reasons.append(
+                    f"{fid}: {disp_s} requires reasoning "
+                    f"(>= {REASONING_MIN_CHARS} chars); "
+                    "use {\"disposition\": \"...\", \"reasoning\": \"...\"}"
+                )
+                continue
         if disp_s in OVERRIDE_DISPOSITIONS:
             any_override = True
 
     if open_ids:
+        detail = list(reasons)
+        detail.append(f"{len(open_ids)} finding(s) need disposition")
         return {
             "verdict": "NEEDS_DISPOSITION",
             "integrity": "CLEAN",
             "open_finding_ids": open_ids,
-            "reasons": [f"{len(open_ids)} finding(s) need disposition"],
+            "reasons": detail,
         }
 
     if reasons:

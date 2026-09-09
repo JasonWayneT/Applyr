@@ -1,5 +1,5 @@
 ---
-status: closed_partial
+status: closed_superseded
 created: 2026-07-13
 spec: ../05-change-requests/CR-064-claim-score-formula-rework.md
 eval_set: ../../reports/jd-theme-claim-eval-set.md
@@ -7,6 +7,17 @@ predecessor_tracker: CR-063-jd-theme-claim-selection-loop-tracker.md
 ---
 
 # CR-064 Tracker — Claim-Score Formula Rework (`score_claim_for_jd`)
+
+> **Terminal disposition (2026-09-09):** Superseded by CR-074 (packet-authoring flow) and CR-093
+> (evidence-scale fit engine + deletion of the old drafting/fit-scoring system). The target function
+> `score_claim_for_jd` in `scripts/jd_tailoring.py` is on the retired deterministic drafting path —
+> the canonical workflow (`run_submission.py`) uses the CR-074 packet-authoring flow with its own
+> evidence ranking (`packet_evidence_utilization.py`) and does not call `score_claim_for_jd` or any of
+> its 6 call sites. The diagnosis (no deduplication, no rarity weighting) was correct and validated by
+> CR-063's eval loop, but the fix was never implemented and the target code was retired before it could
+> be. If the rarity/dedup insight is still worth applying, it should be ported into
+> `packet_evidence_utilization.py` under a new CR, not this one. Round 1 never started; orientation
+> steps below were completed but are retained as historical record.
 
 Resumable round-by-round log, same discipline as its predecessor CR-063. **Read the Session Handoff
 block at the very bottom of this file first** — if a prior session left one filled in, that block tells

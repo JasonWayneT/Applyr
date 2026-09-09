@@ -227,13 +227,23 @@ white-screens the entire app. See `ROADMAP_BEST_PRACTICES.md` §1.2.
 the logic that has the widest blast radius if it silently breaks. See `ROADMAP_BEST_PRACTICES.md`
 §1.6.
 
-- [ ] **Story 6.1**: Add unit tests for `shared/domain/jobPipeline.ts` — cover every status-transition
+- [x] **Story 6.1**: Add unit tests for `shared/domain/jobPipeline.ts` — cover every status-transition
   rule and `statusRequiresInterviewDateTime()`.
-- [ ] **Story 6.2**: Add unit tests for `shared/domain/interviewDebrief.ts`.
-- [ ] **Story 6.3**: Add tests for `src/components/job-detail/StatusSection.tsx`'s status-stepper
+  **Already done** — `tests/unit/jobPipeline.test.ts` (6 tests) already covers all status-transition
+  rules, `statusRequiresInterviewDateTime()`, `isValidInterviewDateTime()`, datetime normalization,
+  funnel classification, and `deriveStatusForInterviewDateChange()`. No new tests needed.
+- [x] **Story 6.2**: Add unit tests for `shared/domain/interviewDebrief.ts`.
+  **Done 2026-09-09.** Added `tests/unit/interviewDebrief.test.ts` (9 tests) covering
+  `INTERVIEW_DEBRIEF_OUTCOMES`, `isValidDebriefOutcome`, `normalizeDebriefDate`, and
+  `toDebriefDateInputValue`.
+- [x] **Story 6.3**: Add tests for `src/components/job-detail/StatusSection.tsx`'s status-stepper
   logic (already isolated in its own file since Epic 1 — if the decision logic is still tangled
   inside JSX event handlers within that file, pull it out into a small testable function first, don't
   write a test that requires full component rendering just to exercise a status-transition rule).
+  **Done 2026-09-09.** Extracted `computeTimelineSteps(status)` as a pure exported function from
+  `StatusSection.tsx` and added `tests/unit/statusSection.test.ts` (7 tests) covering every status
+  in the funnel (Backlog, Drafted, Applied, Recruiter Screen, Core Interviews, Offer and Negotiation)
+  plus an unknown/terminal status (Closed).
 - [ ] **Story 6.4 — verify**: `npm run test:vitest` passes clean, and confirm the new tests actually
   fail if you temporarily break the logic they cover (a quick sanity check that they're testing the
   real thing, not a tautology).

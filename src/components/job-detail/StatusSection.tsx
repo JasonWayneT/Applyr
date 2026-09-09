@@ -1,19 +1,31 @@
 import React from 'react';
 import type { Job } from '../../types/job';
 
-interface StatusSectionProps {
-  status: Job['status'];
+export interface TimelineStep {
+  label: string;
+  done: boolean;
+  active: boolean;
 }
 
-/** Application Status timeline stepper — extracted from JobDetailPanel (CR-104 Story 1.1). */
-const StatusSection: React.FC<StatusSectionProps> = ({ status }) => {
-  const timelineSteps = [
+/** Pure function computing timeline stepper state from a job status.
+ * Extracted for testability (CR-104 Epic 6 Story 6.3). */
+export function computeTimelineSteps(status: string): TimelineStep[] {
+  return [
     { label: 'Backlog',            done: true,                                                                          active: status === 'Backlog' || status === 'Drafted' },
     { label: 'Applied',            done: ['Applied','Recruiter Screen','Core Interviews','Offer and Negotiation'].includes(status), active: status === 'Applied' },
     { label: 'Recruiter Screen',   done: ['Core Interviews','Offer and Negotiation'].includes(status),              active: status === 'Recruiter Screen' },
     { label: 'Core Interviews',    done: status === 'Offer and Negotiation',                                        active: status === 'Core Interviews' },
     { label: 'Offer',              done: status === 'Offer and Negotiation',                                        active: status === 'Offer and Negotiation' },
   ];
+}
+
+interface StatusSectionProps {
+  status: Job['status'];
+}
+
+/** Application Status timeline stepper — extracted from JobDetailPanel (CR-104 Story 1.1). */
+const StatusSection: React.FC<StatusSectionProps> = ({ status }) => {
+  const timelineSteps = computeTimelineSteps(status);
 
   return (
     <section className="bg-surface-container-low p-6 rounded-2xl">

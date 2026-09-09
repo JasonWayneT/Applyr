@@ -339,6 +339,42 @@ runner's output shape.
 baseline-vs-cascade cost/latency comparison still need a controlled replay
 environment beyond the golden-set live run.
 
+### Epic 7 increment C — partial-result recovery and proactive batch sizing — 2026-09-09
+
+**Problem.** The cascade had two fragility issues for provider truncation:
+(1) `validate_batch_response` rejected partial results entirely when items
+were missing, forcing the fallback provider to re-send the full batch and
+waste the work the first provider already did; (2) batch sizing only
+considered item count (`MAX_BATCH_ITEMS=24`), not output size, so batches
+with long evidence excerpts could exceed the output token budget even when
+under the item count limit.
+
+**Fix 1: partial-result acceptance.** `validate_batch_response` now accepts
+a `partial=True` parameter that returns `(normalized_dict, missing_set)`
+instead of raising on missing items. The provider loop in
+`classify_requirements_batch` was restructured to track `merged` (accumulated
+results) and `remaining` (items not yet classified). When a provider returns
+a truncated response that JSON repair only partially recovers, the recovered
+items are kept and only the missing items are retried — same provider first
+(smaller batch is less likely to truncate), then fallback provider for any
+still-missing items. An empty response (zero recovered items) skips the
+same-provider retry and falls back directly.
+
+**Fix 2: proactive batch sizing.** Added `_estimate_output_tokens(items)`
+which estimates output tokens from the prompt size using a conservative
+ratio (0.35 tokens/char, empirically derived from live testing). When the
+estimate exceeds `_SAFE_OUTPUT_TOKENS` (6000, leaving 25% margin under the
+8192 `max_tokens`), the batch is split in half before sending. The split is
+recursive — halves that are still too big split again. Batches of 2 or fewer
+items are never split (a single item with huge evidence won't benefit from
+splitting).
+
+**Tests.** 4 new unit tests in `test_stage0_evidence_cascade.py`:
+`test_partial_result_retries_missing_with_same_provider`,
+`test_partial_result_falls_back_for_remaining_items`,
+`test_proactive_split_for_large_estimated_output`,
+`test_no_split_for_normal_sized_batch`. Total: 21 tests, all pass.
+
 ## Required verification commands
 
 During implementation, the narrow checks must include:

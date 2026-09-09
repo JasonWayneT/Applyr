@@ -449,6 +449,152 @@ class TestStage0EvidenceCascade(unittest.TestCase):
         self.assertEqual(result[item.item_id]["gap_class"], "HARD")
         self.assertEqual(call.call_count, 2)
 
+    def test_partial_result_retries_missing_with_same_provider(self) -> None:
+        """Truncated response: recovered items are kept, missing items retried with same provider."""
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        items = [
+            BatchItem(f"required:0:{c}", "required", f"Requirement {c}")
+            for c in "abcde"
+        ]
+        # First call: returns 3 of 5 items (truncation)
+        partial = json.dumps({"results": [
+            {"item_id": it.item_id, "gate": "NONE", "evidence_level": 2,
+             "confidence": "high", "reasoning": f"evidence for {it.item_id}", "gap_source": ""}
+            for it in items[:3]
+        ]})
+        # Retry: returns the remaining 2
+        rest = json.dumps({"results": [
+            {"item_id": it.item_id, "gate": "NONE", "evidence_level": 2,
+             "confidence": "high", "reasoning": f"evidence for {it.item_id}", "gap_source": ""}
+            for it in items[3:]
+        ]})
+        with patch("utils.call_llm", side_effect=[partial, rest]) as call:
+            result = classify_requirements_batch(
+                items,
+                settings={"stage0_evidence_classification": {
+                    "provider_order": ["groq", "gemini"],
+                    "models": {"groq": "groq-test", "gemini": "gemini-test"},
+                }},
+            )
+        self.assertEqual(set(result.keys()), {it.item_id for it in items})
+        self.assertEqual(call.call_count, 2)
+        # Both calls went to Groq (same-provider retry)
+        self.assertEqual(call.call_args_list[0].kwargs["provider_override"], ["groq"])
+        self.assertEqual(call.call_args_list[1].kwargs["provider_override"], ["groq"])
+
+    def test_partial_result_falls_back_for_remaining_items(self) -> None:
+        """When same-provider retry also fails, fallback gets only the missing items."""
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        items = [
+            BatchItem(f"required:0:{c}", "required", f"Requirement {c}")
+            for c in "abcde"
+        ]
+        partial = json.dumps({"results": [
+            {"item_id": it.item_id, "gate": "NONE", "evidence_level": 2,
+             "confidence": "high", "reasoning": f"evidence for {it.item_id}", "gap_source": ""}
+            for it in items[:3]
+        ]})
+        # Retry with Groq: also partial (returns nothing new)
+        empty_retry = json.dumps({"results": []})
+        # Gemini: returns the remaining 2
+        rest = json.dumps({"results": [
+            {"item_id": it.item_id, "gate": "NONE", "evidence_level": 2,
+             "confidence": "high", "reasoning": f"evidence for {it.item_id}", "gap_source": ""}
+            for it in items[3:]
+        ]})
+        with patch("utils.call_llm", side_effect=[partial, empty_retry, rest]) as call:
+            result = classify_requirements_batch(
+                items,
+                settings={"stage0_evidence_classification": {
+                    "provider_order": ["groq", "gemini"],
+                    "models": {"groq": "groq-test", "gemini": "gemini-test"},
+                }},
+            )
+        self.assertEqual(set(result.keys()), {it.item_id for it in items})
+        self.assertEqual(call.call_count, 3)
+        # Third call (Gemini) should only have the 2 missing items
+        gemini_prompt = call.call_args_list[2].args[1] if call.call_args_list[2].args else call.call_args_list[2].kwargs.get("user_prompt", "")
+        # Check via the prompt content — the Gemini call's prompt should contain
+        # only items d and e, not a, b, c
+        # call_llm is called with (system_prompt, user_prompt, ...) so args[1] is the user prompt
+        self.assertIn("required:0:d", call.call_args_list[2].args[1])
+        self.assertIn("required:0:e", call.call_args_list[2].args[1])
+        self.assertNotIn("required:0:a", call.call_args_list[2].args[1])
+
+    def test_proactive_split_for_large_estimated_output(self) -> None:
+        """When estimated output exceeds the safe threshold, the batch is split."""
+        from stage0_evidence_cascade import (
+            classify_requirements_batch,
+            _estimate_output_tokens,
+            _SAFE_OUTPUT_TOKENS,
+        )
+
+        # Create items with very long evidence excerpts to trigger the split
+        items = [
+            BatchItem(f"required:0:{i}", "required", f"Requirement {i}",
+                      evidence_excerpt="x" * 2000)
+            for i in range(10)
+        ]
+        # Verify the estimate exceeds the threshold
+        self.assertGreater(_estimate_output_tokens(items), _SAFE_OUTPUT_TOKENS)
+
+        def fake_call(system, prompt, **kwargs):
+            # Extract item_ids from the prompt format: [required:0:N] bucket=...
+            import re
+            ids = re.findall(r'\[(required:0:\d+)\]', prompt)
+            return json.dumps({"results": [
+                {"item_id": item_id, "gate": "NONE", "evidence_level": 2,
+                 "confidence": "high", "reasoning": "test evidence", "gap_source": ""}
+                for item_id in ids
+            ]})
+
+        with patch("utils.call_llm", side_effect=fake_call) as call:
+            result = classify_requirements_batch(
+                items,
+                settings={"stage0_evidence_classification": {
+                    "provider_order": ["groq"],
+                    "models": {"groq": "groq-test"},
+                }},
+            )
+        self.assertEqual(set(result.keys()), {it.item_id for it in items})
+        # Should have been split into 2 calls (3 items each)
+        self.assertEqual(call.call_count, 2)
+
+    def test_no_split_for_normal_sized_batch(self) -> None:
+        """A normal-sized batch with moderate evidence is not split."""
+        from stage0_evidence_cascade import (
+            classify_requirements_batch,
+            _estimate_output_tokens,
+            _SAFE_OUTPUT_TOKENS,
+        )
+
+        items = [
+            BatchItem(f"required:0:{c}", "required", f"Requirement {c}")
+            for c in "abcde"
+        ]
+        self.assertLess(_estimate_output_tokens(items), _SAFE_OUTPUT_TOKENS)
+
+        def fake_call(system, prompt, **kwargs):
+            return json.dumps({"results": [
+                {"item_id": it.item_id, "gate": "NONE", "evidence_level": 2,
+                 "confidence": "high", "reasoning": "test", "gap_source": ""}
+                for it in items
+            ]})
+
+        with patch("utils.call_llm", side_effect=fake_call) as call:
+            result = classify_requirements_batch(
+                items,
+                settings={"stage0_evidence_classification": {
+                    "provider_order": ["groq"],
+                    "models": {"groq": "groq-test"},
+                }},
+            )
+        self.assertEqual(set(result.keys()), {it.item_id for it in items})
+        # One call, no split
+        self.assertEqual(call.call_count, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,15 @@ from typing import Any, Callable
 
 
 MAX_BATCH_ITEMS = 24
+
+# CR-108 Epic 7.5 (2026-09-09): proactive batch sizing. When the estimated
+# output tokens for a batch exceed _SAFE_OUTPUT_TOKENS, the batch is split in
+# half before sending. This prevents truncation on providers (notably Groq)
+# that have an output token limit. The estimate is based on the prompt size,
+# which naturally accounts for evidence excerpt length, not just item count.
+_SAFE_OUTPUT_TOKENS = 6000  # 25% margin under the 8192 Groq max_tokens
+_OUTPUT_TOKEN_RATIO = 0.35  # conservative: output tokens per prompt char
+_MIN_SPLIT_BATCH = 3  # don't split batches too small to benefit
 _SUPPORTED_PROVIDERS = ("groq", "gemini", "local")
 _DEFAULT_MODELS = {
     "groq": "openai/gpt-oss-120b",
@@ -94,6 +103,18 @@ def classify_requirements_batch(
     automatically split into chunks of <= MAX_BATCH_ITEMS, classified
     independently, and merged. This replaces the previous CascadeValidationError
     that discarded all results when a batch was too large.
+
+    CR-108 Epic 7.5 (2026-09-09): two robustness improvements for provider
+    truncation:
+    - Proactive split: if estimated output tokens exceed _SAFE_OUTPUT_TOKENS,
+      the batch is split in half and each half is classified recursively.
+      This prevents truncation before it happens by accounting for evidence
+      excerpt length, not just item count.
+    - Partial-result acceptance: when a provider returns a truncated response
+      that the JSON repair can only partially recover, the recovered items are
+      accepted and only the missing items are retried (same provider first,
+      then fallback). This avoids re-sending the full batch to the fallback
+      provider and wasting the work the first provider already did.
     """
     if not items:
         return {}
@@ -105,17 +126,44 @@ def classify_requirements_batch(
             raw_response_callback=raw_response_callback,
             provider_event_callback=provider_event_callback,
         )
+    # CR-108: proactive split based on estimated output size. Accounts for
+    # long evidence excerpts that would exceed the output token budget even
+    # when the item count is under MAX_BATCH_ITEMS. Recursive: halves that
+    # are still too big split again. Don't split batches too small to benefit.
+    if len(items) >= _MIN_SPLIT_BATCH and _estimate_output_tokens(items) > _SAFE_OUTPUT_TOKENS:
+        mid = len(items) // 2
+        left = classify_requirements_batch(
+            items[:mid],
+            settings=settings,
+            raw_response_callback=raw_response_callback,
+            provider_event_callback=provider_event_callback,
+        )
+        right = classify_requirements_batch(
+            items[mid:],
+            settings=settings,
+            raw_response_callback=raw_response_callback,
+            provider_event_callback=provider_event_callback,
+        )
+        return {**left, **right}
     from utils import call_llm, load_llm_settings
 
     active_settings = settings if settings is not None else load_llm_settings()
     policy = normalize_stage0_evidence_policy(active_settings)
     providers = policy["provider_order"]
     models = policy["models"]
-    prompt = _build_batch_prompt(items)
     last_error: Exception | None = None
+    # CR-108: track accumulated results and remaining items across providers.
+    # When a provider returns a partial response (truncation + JSON repair),
+    # the recovered items are kept and only the missing items are retried.
+    merged: dict[str, dict[str, Any]] = {}
+    remaining = list(items)
     for provider_index, provider in enumerate(providers):
+        if not remaining:
+            break
         if provider_event_callback:
             provider_event_callback(provider, "call")
+        # Send only the items not yet classified by a previous provider.
+        prompt = _build_batch_prompt(remaining)
         try:
             raw = call_llm(
                 _SYSTEM_PROMPT,
@@ -128,9 +176,6 @@ def classify_requirements_batch(
                 request_timeout=120,
             )
         except Exception as exc:
-            # A provider timeout or transport error is recoverable when the
-            # policy includes another provider. Keep the failure for an
-            # accurate final error if every configured provider fails.
             last_error = exc
             if provider_event_callback and provider_index + 1 < len(providers):
                 provider_event_callback(provider, "fallback")
@@ -142,14 +187,56 @@ def classify_requirements_batch(
         if raw_response_callback:
             raw_response_callback(raw)
         try:
-            return validate_batch_response(_parse_json_object(raw), items)
+            parsed = _parse_json_object(raw)
+            partial_results, missing_ids = validate_batch_response(
+                parsed, remaining, partial=True
+            )
+            merged.update(partial_results)
+            remaining = [item for item in remaining if item.item_id in missing_ids]
+            if not remaining:
+                return merged
+            # Only retry with the same provider when we actually recovered
+            # some items (a truncation with partial success). An empty or
+            # wholly-invalid response is a complete failure — fall back to
+            # the next provider rather than retrying the same one.
+            if partial_results:
+                if provider_event_callback:
+                    provider_event_callback(provider, "call")
+                retry_prompt = _build_batch_prompt(remaining)
+                retry_raw = call_llm(
+                    _SYSTEM_PROMPT,
+                    retry_prompt,
+                    model=models.get(provider) or _DEFAULT_MODELS[provider],
+                    temperature=0.0,
+                    response_mime_type="application/json",
+                    response_schema={"type": "object"},
+                    provider_override=[provider],
+                    request_timeout=120,
+                )
+                if retry_raw:
+                    if raw_response_callback:
+                        raw_response_callback(retry_raw)
+                    retry_parsed = _parse_json_object(retry_raw)
+                    retry_results, retry_missing = validate_batch_response(
+                        retry_parsed, remaining, partial=True
+                    )
+                    merged.update(retry_results)
+                    remaining = [item for item in remaining if item.item_id in retry_missing]
+            if not remaining:
+                return merged
+            if provider_event_callback and provider_index + 1 < len(providers):
+                provider_event_callback(provider, "fallback")
         except CascadeValidationError as exc:
             last_error = exc
             if provider_event_callback and provider_index + 1 < len(providers):
                 provider_event_callback(provider, "fallback")
-    if last_error:
-        raise last_error
-    raise CascadeUnavailable("No configured Stage 0 evidence provider returned a response")
+    if remaining:
+        if last_error:
+            raise last_error
+        raise CascadeValidationError(
+            f"missing batch item_ids after all providers: {sorted(i.item_id for i in remaining)!r}"
+        )
+    return merged
 
 
 def _classify_in_chunks(
@@ -230,8 +317,17 @@ def _resolve_item_id(raw_id: str, expected: dict[str, BatchItem]) -> str | None:
 def validate_batch_response(
     payload: dict[str, Any],
     items: list[BatchItem],
-) -> dict[str, dict[str, Any]]:
-    """Validate and normalize exactly one safe result for every batch item."""
+    *,
+    partial: bool = False,
+) -> dict[str, dict[str, Any]] | tuple[dict[str, dict[str, Any]], set[str]]:
+    """Validate and normalize exactly one safe result for every batch item.
+
+    When partial=False (default), raises CascadeValidationError if any item is
+    missing. When partial=True, returns (normalized_dict, missing_set) so the
+    caller can accept recovered results and retry only the missing items.
+    Other validation errors (invalid gate, unknown item_id, ungrounded HARD)
+    always raise regardless of the partial flag.
+    """
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         raise CascadeValidationError("batch response must contain a results list")
     expected = {item.item_id: item for item in items}
@@ -251,7 +347,11 @@ def validate_batch_response(
         normalized[item_id] = _normalize_result(raw, item)
     missing = set(expected) - seen
     if missing:
+        if partial:
+            return normalized, missing
         raise CascadeValidationError(f"missing batch item_ids: {sorted(missing)!r}")
+    if partial:
+        return normalized, set()
     return normalized
 
 
@@ -363,6 +463,18 @@ def _reasoning_grounded_in_item(item: str, reasoning: str) -> bool:
     item_tokens = _tokens(item) - _FILLER_WORDS
     reasoning_tokens = _tokens(reasoning) - _FILLER_WORDS
     return not item_tokens or not reasoning_tokens or bool(item_tokens & reasoning_tokens)
+
+
+def _estimate_output_tokens(items: list[BatchItem]) -> int:
+    """Estimate output tokens for a batch based on prompt size.
+
+    Empirically derived from live CR-108 golden testing: a 5969-char prompt
+    (21 items with evidence excerpts) produced ~1600 output tokens, a ratio
+    of 0.27 tokens/char. The conservative 0.35 ratio accounts for verbose
+    reasoning and longer evidence excerpts in production JDs.
+    """
+    prompt = _build_batch_prompt(items)
+    return int(len(prompt) * _OUTPUT_TOKEN_RATIO)
 
 
 def _build_batch_prompt(items: list[BatchItem]) -> str:

@@ -1,7 +1,8 @@
 ## [Unreleased] — 2026-09-09
-[DRAFT] Stage 0 cascade live provider validation and frontend hardening verification —
-both Groq and Gemini now pass the 21-entry golden set with real API calls, and the
-CR-104 frontend/API hardening verify stories are checked off after browser testing.
+[DRAFT] Stage 0 cascade live provider validation, partial-result recovery, and proactive
+batch sizing — both Groq and Gemini pass the 21-entry golden set with real API calls.
+The cascade now accepts partial results from truncated provider responses and retries only
+the missing items, and proactively splits batches that would exceed the output token budget.
 
 ### Fixed
 - CR-108: Groq API calls were missing `max_tokens`, causing truncated JSON responses on
@@ -14,6 +15,12 @@ CR-104 frontend/API hardening verify stories are checked off after browser testi
   evidence_level > 0 and wired them through `_items()`.
 - CR-108: Added `_repair_truncated_json()` to recover individual result objects from
   truncated provider responses via balanced-brace scan inside the `results` array.
+- CR-108: `validate_batch_response` rejected partial results entirely when items were
+  missing, forcing the fallback provider to re-send the full batch. Added partial mode
+  that returns recovered items + missing set so only the missing items are retried.
+- CR-108: Batch sizing only considered item count (`MAX_BATCH_ITEMS=24`), not output size.
+  Added proactive split based on estimated output tokens derived from prompt size, so
+  batches with long evidence excerpts are split before truncation can happen.
 - CR-104: URL state sync race condition — the sync effect could strip the `job` param
   before the restore effect read it on initial load. Captured the initial job ID at mount.
 
@@ -23,7 +30,9 @@ CR-104 frontend/API hardening verify stories are checked off after browser testi
   CR-093 golden set using credentials stored in SQLite. All seven categories hold.
   Gemini shows minor non-determinism on tool-002-v2 (20-21/21 across runs). Four fixes
   were required: explicit JSON schema in prompt, evidence excerpts in golden set, JSON
-  repair for truncated responses, and Groq max_tokens increase.
+  repair for truncated responses, and Groq max_tokens increase. Two robustness improvements
+  added: partial-result acceptance with same-provider retry for missing items, and proactive
+  batch splitting based on estimated output token count. 4 new unit tests cover both.
 - CR-104: Browser verification complete for Stories 1.11 (component decomposition) and
   2.5 (fail-closed bind + API key masking). All sections exercised, no regressions.
 

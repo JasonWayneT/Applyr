@@ -399,13 +399,83 @@ def _build_batch_prompt(items: list[BatchItem]) -> str:
     return "\n".join(lines)
 
 
+def _repair_truncated_json(raw: str) -> dict[str, Any] | None:
+    """Attempt to recover a results dict from a truncated or malformed JSON response.
+
+    LLM providers (notably Groq's gpt-oss-120b) sometimes produce valid JSON
+    for the first N items but truncate or malform the tail of a large batch.
+    This function extracts individual result objects via a balanced-brace scan
+    and returns a synthetic {"results": [...]} dict if at least one valid object
+    is found. Returns None if no objects can be recovered.
+    """
+    # Find the start of the "results" array, then scan for individual
+    # result objects within it. This avoids the problem where the outer
+    # JSON object is truncated and its closing brace is missing.
+    results_idx = raw.find('"results"')
+    if results_idx == -1:
+        # No "results" key — try scanning the whole string for item_id objects
+        scan_start = 0
+    else:
+        # Skip past "results": [
+        bracket_idx = raw.find('[', results_idx)
+        scan_start = bracket_idx + 1 if bracket_idx != -1 else results_idx
+
+    objects: list[dict[str, Any]] = []
+    i = scan_start
+    while i < len(raw):
+        brace = raw.find("{", i)
+        if brace == -1:
+            break
+        depth = 0
+        j = brace
+        in_string = False
+        escape = False
+        while j < len(raw):
+            ch = raw[j]
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = not in_string
+            elif not in_string:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = raw[brace : j + 1]
+                        try:
+                            obj = json.loads(candidate)
+                            if isinstance(obj, dict) and "item_id" in obj:
+                                objects.append(obj)
+                        except json.JSONDecodeError:
+                            pass
+                        break
+            j += 1
+        i = j + 1 if j < len(raw) else len(raw)
+    if not objects:
+        return None
+    return {"results": objects}
+
+
 def _parse_json_object(raw: str) -> dict[str, Any]:
-    """Parse a JSON object from a provider response without accepting a JSON array."""
+    """Parse a JSON object from a provider response without accepting a JSON array.
+
+    Includes a repair step for truncated/malformed responses: if the standard
+    JSON parse fails, attempt to recover individual result objects via a
+    balanced-brace scan. This handles the common failure mode where a provider
+    (notably Groq) produces valid JSON for most items but truncates the tail.
+    """
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     candidate = match.group(0) if match else raw
     try:
         value = json.loads(candidate)
     except json.JSONDecodeError as exc:
+        # CR-108: attempt repair before giving up
+        repaired = _repair_truncated_json(raw)
+        if repaired is not None:
+            return repaired
         raise CascadeValidationError(f"invalid JSON batch response: {exc}") from exc
     if not isinstance(value, dict):
         raise CascadeValidationError("batch response must be a JSON object")
@@ -426,6 +496,16 @@ def _clean_provider_order(values: list[Any]) -> list[str]:
 
 _SYSTEM_PROMPT = """You classify job requirements against supplied candidate evidence.
 Return {"results":[...]} with one result per item_id.
+
+RESPONSE FORMAT — every result object MUST include ALL of these fields:
+  "item_id": the item's id string
+  "gate": "HARD" or "NONE" (use "NONE" for any non-disqualifying line)
+  "evidence_level": integer 0-4
+  "confidence": "high" or "medium" or "low"
+  "reasoning": a non-empty string citing the requirement's vocabulary and the evidence
+  "gap_source": "degree" or "domain" or "role_exclusion" or "certification" (only when gate="HARD"; empty string otherwise)
+
+Example: {"item_id":"req-001","gate":"NONE","evidence_level":3,"confidence":"high","reasoning":"The requirement asks for roadmap ownership and the candidate led the C3 platform roadmap for 4 years.","gap_source":""}
 
 EVIDENCE SCALE (0-4) -- rate how much of the requirement the candidate's documented \
 experience actually satisfies:

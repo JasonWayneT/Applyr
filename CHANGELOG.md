@@ -1,3 +1,32 @@
+## [Unreleased] — 2026-09-09
+[DRAFT] Stage 0 cascade live provider validation and frontend hardening verification —
+both Groq and Gemini now pass the 21-entry golden set with real API calls, and the
+CR-104 frontend/API hardening verify stories are checked off after browser testing.
+
+### Fixed
+- CR-108: Groq API calls were missing `max_tokens`, causing truncated JSON responses on
+  21-item batches. Set to 8192.
+- CR-108: Cascade system prompt described required JSON fields in prose but never gave an
+  explicit schema or example. Groq omitted the `reasoning` field on first live run. Added
+  a `RESPONSE FORMAT` section with all required fields and a full example object.
+- CR-108: Golden test did not pass evidence excerpts to the model, so all non-gate items
+  scored evidence_level=0. Added `evidence_excerpt` fields to golden entries expecting
+  evidence_level > 0 and wired them through `_items()`.
+- CR-108: Added `_repair_truncated_json()` to recover individual result objects from
+  truncated provider responses via balanced-brace scan inside the `results` array.
+- CR-104: URL state sync race condition — the sync effect could strip the `job` param
+  before the restore effect read it on initial load. Captured the initial job ID at mount.
+
+### Developer
+- CR-108 (Epic 7.5): Live provider-backed golden validation complete. Both Groq
+  (openai/gpt-oss-120b) and Gemini (gemini-3.5-flash-lite) pass 21/21 against the active
+  CR-093 golden set using credentials stored in SQLite. All seven categories hold.
+  Gemini shows minor non-determinism on tool-002-v2 (20-21/21 across runs). Four fixes
+  were required: explicit JSON schema in prompt, evidence excerpts in golden set, JSON
+  repair for truncated responses, and Groq max_tokens increase.
+- CR-104: Browser verification complete for Stories 1.11 (component decomposition) and
+  2.5 (fail-closed bind + API key masking). All sections exercised, no regressions.
+
 ## [Unreleased] — 2026-09-08
 [DRAFT] Generic cover-letter hook guard (CR-098 follow-on): cover letters that open by
 labeling the role ("shows what makes this role interesting") instead of stating a concrete

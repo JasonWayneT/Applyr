@@ -913,6 +913,7 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
             payload = {
                 "model": target_model,
                 "temperature": temperature,
+                "max_tokens": 8192,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},

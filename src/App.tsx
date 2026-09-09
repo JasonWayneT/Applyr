@@ -29,6 +29,12 @@ function App() {
   const { jobs, isLoaded, selectedJob, setSelectedJob, handleStatusChange } = useJobs();
   const reviewCenter = useReviewCenter();
   const restoredJobFromUrlRef = useRef(false);
+  // Captured once at mount, before the URL-sync effect below can delete the `job` param
+  // (selectedJob is still null on first render, so that effect strips `job` from the URL
+  // on its very first run unless we've already read it out here).
+  const initialJobIdRef = useRef<string | null>(
+    new URLSearchParams(window.location.search).get('job')
+  );
 
   // Sync state changes to URL (replaceState, no page reload)
   useEffect(() => {
@@ -47,7 +53,7 @@ function App() {
   useEffect(() => {
     if (restoredJobFromUrlRef.current || !isLoaded) return;
     restoredJobFromUrlRef.current = true;
-    const jobId = new URLSearchParams(window.location.search).get('job');
+    const jobId = initialJobIdRef.current;
     if (!jobId) return;
     const job = jobs.find((j) => j.id === jobId);
     if (job) setSelectedJob(job);

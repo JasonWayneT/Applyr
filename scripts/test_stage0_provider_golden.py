@@ -35,6 +35,7 @@ def _items(entries: list[dict]) -> list[BatchItem]:
             entry["id"],
             "preferred" if entry.get("requirement_type") == "Preferred/Bonus" else "required",
             entry["jd_line"],
+            evidence_excerpt=entry.get("evidence_excerpt", ""),
         )
         for entry in entries
     ]
@@ -81,7 +82,16 @@ def _check_results(entries: list[dict], results: dict[str, dict]) -> tuple[int, 
         if ok:
             passed += 1
         else:
-            print(f"FAIL {entry['id']}: gate/source/level mismatch")
+            exp_src = entry.get("expected_gap_source", "")
+            act_src = result.get("gap_source", "")
+            exp_lvl = expected_level if expected_level is not None else "?"
+            act_lvl = result.get("evidence_level", "?")
+            print(
+                f"FAIL {entry['id']}: "
+                f"gate exp={entry['expected_gate']} act={result['gate']}, "
+                f"source exp={exp_src} act={act_src}, "
+                f"level exp={exp_lvl} act={act_lvl}"
+            )
     return passed, len(entries)
 
 
@@ -161,7 +171,10 @@ def _run_live(entries: list[dict], provider: str) -> tuple[int, int]:
     config["local_only"] = provider == "local"
     settings["stage0_evidence_classification"] = config
     results = classify_requirements_batch(_items(entries), settings=settings)
-    return _check_results(entries, results)
+    passed, total = _check_results(entries, results)
+    print(f"  per-category ({provider} live):")
+    _report_by_category(entries, results)
+    return passed, total
 
 
 def main() -> int:

@@ -239,23 +239,30 @@ white-screens the entire app. See `ROADMAP_BEST_PRACTICES.md` §1.2.
   **Done 2026-09-09.** `useJobs` now uses `useQuery` with `queryKey: ['jobs']`, `refetchInterval: 5000`,
   `staleTime: 5000`. `handleStatusChange` invalidates the query instead of manually refetching. Return
   shape unchanged — no consumers touched.
-- [ ] **Story 5.3 — verify**: Dashboard, Opportunities, and Tuning Log all still show live data;
+- [x] **Story 5.3 — verify**: Dashboard, Opportunities, and Tuning Log all still show live data;
   confirm via the browser's Network tab that requests are still deduped (no duplicate simultaneous
   `/api/jobs` calls from different components) and that navigating between tabs no longer triggers a
   fresh loading spinner for data already in cache.
-  **Partially verified 2026-09-09 — left unchecked, real finding.** Dashboard, Opportunities, and
-  Tuning Log all show live data instantly on tab switch, no loading spinner (cache reuse confirmed).
-  But the "no duplicate simultaneous `/api/jobs` calls" half fails: `src/pages/SyncActivityView.tsx`
-  (Job Search tab) still runs its own independent `fetchMatchedJobs()` on a 3s `setInterval` hitting
-  `/api/jobs` directly via raw `fetch` (line ~341), entirely separate from the shared `useJobs()`
-  query Story 5.2 converted. While the Job Search tab is open this produces genuine duplicate
-  simultaneous `/api/jobs` traffic (confirmed in the Network tab — a tight cluster of ~15 calls).
-  Story 5.4 only documents skipping NotificationPanel's Gmail poll as a deliberate scope cut; this
-  second uncoordinated poller isn't mentioned there, so it reads as unaddressed rather than a
-  deliberate cut. Not fixed here — wiring `jobs` into `SyncActivityView` as a prop and deriving
-  `matchedJobs` from it (instead of its own fetch+interval) is a real code change to a component this
-  session hadn't otherwise touched, not a one-line verification fix, so it's flagged for a decision
-  rather than made silently.
+  **Found and fixed 2026-09-09.** Initial pass found a real gap: `src/pages/SyncActivityView.tsx`
+  (Job Search tab) ran its own independent `fetchMatchedJobs()` on a 3s `setInterval` hitting
+  `/api/jobs` directly via raw `fetch`, entirely separate from the shared `useJobs()` query Story 5.2
+  converted — genuine duplicate `/api/jobs` traffic confirmed in the Network tab while that tab was
+  open. Fixed: `SyncActivityView` now takes `jobs: Job[]` as a prop (passed from `App.tsx`, same
+  pattern as `TodayView`/`AllJobsView`) and derives `matchedJobs` via `useMemo` from the shared list
+  instead of fetching its own copy. The 3s interval no longer touches `/api/jobs` at all (still polls
+  `fetchLogs`/`fetchSources`/`fetchSystemStatus`, which are separate endpoints, unchanged). The three
+  spots that used to call `fetchMatchedJobs()` for an immediate refresh (after dismissing a job, on
+  the `stage_handoff` SSE event, on `run_complete`) now call
+  `queryClient.invalidateQueries({ queryKey: ['jobs'] })` instead, so an immediate refresh still
+  happens on those events. `tsc --noEmit` clean, `npm run lint` 0 errors (24 warnings, down from 26 —
+  removing `fetchMatchedJobs` also resolved two stale `react-hooks/exhaustive-deps` warnings that
+  referenced it), `vitest` 367/367. Re-verified live in the browser: Job Search's Pipeline Roles /
+  Evaluated section still renders correctly (real jobs, correct counts), and
+  `performance.getEntriesByType('resource')` on `/api/jobs` showed a single clean ~5.9s cadence
+  (one request per tick) with no more 3s-interval duplicate — confirmed with real timestamps, not
+  just request counts (the Network tab's own rolling buffer was misleading for this specific check).
+  Dashboard/Opportunities/Tuning Log tab switches still show live data instantly with no loading
+  spinner, as verified in the initial pass.
 - [x] **Story 5.4 (stretch, optional within this epic)**: Deliberately skipped — `NotificationPanel`'s
   Gmail poll is a separate concern (different endpoint, different polling cadence) and migrating it
   adds no meaningful dedup benefit since no other component polls that route. Noted as a scope cut,

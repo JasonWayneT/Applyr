@@ -29,14 +29,13 @@ The CR-108 evidence cascade is now the sole Stage 0 classification path.
 - CR-108: `_resolve_item_id` couldn't match model-returned ids in three formats: ordinal-only
   ("0"), mangled prefix ("req-7-hash"), and abbreviated prefix ("req-001"). Added ordinal
   matching and hash-suffix matching for real JD replay.
-- CR-108: found on review — the same-provider retry call added for partial-result recovery
-  was not wrapped in the same broad `except Exception` as every other `call_llm` call in
-  `classify_requirements_batch`'s provider loop. A transport error during the retry (timeout,
-  connection reset, rate limit) crashed the whole classification instead of falling back to
-  the next configured provider, even when it was available — the exact failure mode this
-  robustness pass was meant to handle. Reproduced live, fixed, added a regression test.
 - CR-104: URL state sync race condition — the sync effect could strip the `job` param
   before the restore effect read it on initial load. Captured the initial job ID at mount.
+- CR-104: `SyncActivityView` (Job Search tab) ran its own independent `fetchMatchedJobs()`
+  on a 3s interval hitting `/api/jobs` directly, duplicating the shared `useJobs()` query
+  Story 5.2 converted. Now takes `jobs` as a prop and derives `matchedJobs` via `useMemo`;
+  the three spots that called `fetchMatchedJobs()` for an immediate refresh now invalidate
+  the shared query instead.
 
 ### Developer
 - CR-108 (Epic 7.3/7.4): Archive replay harness (`test_stage0_archive_replay.py`)

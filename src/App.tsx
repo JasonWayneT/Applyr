@@ -104,7 +104,7 @@ function App() {
           />
         );
       case 'Job Search':
-        return <SyncActivityView />;
+        return <SyncActivityView jobs={jobs} />;
       case 'Settings':
         return <SettingsView />;
       // Implements FR-285: expose Review Center within the existing application shell.

@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useFitThresholds } from '../hooks/useFitThresholds';
 import PipelineTracker, { Stage, StageStatus } from '../components/PipelineTracker';
+import type { Job } from '../types/job';
 
 interface ActivityLog {
   id: number;
@@ -12,15 +14,10 @@ interface ActivityLog {
   meta: string | null;
 }
 
-interface JobMatch {
-  id: string;
-  company: string;
-  title: string;
-  score: number;
-  status: string;
-  created_at: string;
-  has_assets?: boolean;
-}
+// CR-104 Story 5.3 fix: matched jobs used to be fetched independently on a 3s poll,
+// duplicating the shared useJobs() query's own polling. Now derived from the jobs
+// list passed down from App.tsx, so `JobMatch` is just the shape that filter needs.
+type JobMatch = Job;
 
 type PipelineStatus = 'idle' | 'scout_running' | 'evaluate_running' | 'drafting' | 'completed';
 
@@ -209,10 +206,19 @@ interface SourceEntry {
   credits_reset_at?: string | null;
 }
 
-const SyncActivityView: React.FC = () => {
+interface SyncActivityViewProps {
+  jobs: Job[];
+}
+
+const SyncActivityView: React.FC<SyncActivityViewProps> = ({ jobs }) => {
   const { skip_floor: skipFloor } = useFitThresholds();
+  const queryClient = useQueryClient();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [matchedJobs, setMatchedJobs] = useState<JobMatch[]>([]);
+  // CR-104 Story 5.3: derived from the shared jobs list, not its own fetch+poll.
+  const matchedJobs = useMemo(
+    () => jobs.filter((job) => isActionablePipelineJob(job, skipFloor)),
+    [jobs, skipFloor]
+  );
   const [sources, setSources] = useState<SourceEntry[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
     status: 'idle',
@@ -336,16 +342,6 @@ const SyncActivityView: React.FC = () => {
     }
   };
 
-  const fetchMatchedJobs = async () => {
-    try {
-      const res = await fetch(api('/api/jobs'));
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setMatchedJobs(data.filter((job: JobMatch) => isActionablePipelineJob(job, skipFloor)));
-      }
-    } catch { /* ignore */ }
-  };
-
   const fetchSources = async () => {
     try {
       const res = await fetch(api('/api/sources'));
@@ -417,18 +413,16 @@ const SyncActivityView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (res.ok) fetchMatchedJobs();
+      if (res.ok) queryClient.invalidateQueries({ queryKey: ['jobs'] });
     } catch { /* ignore */ }
   };
 
   useEffect(() => {
     fetchLogs();
-    fetchMatchedJobs();
     fetchSources();
     fetchSystemStatus();
     const interval = setInterval(() => {
       fetchLogs();
-      fetchMatchedJobs();
       fetchSources();
       fetchSystemStatus();
     }, 3000);
@@ -469,7 +463,7 @@ const SyncActivityView: React.FC = () => {
           current_item: currentItem || prev.current_item,
         }));
         fetchLogs();
-        fetchMatchedJobs();
+        queryClient.invalidateQueries({ queryKey: ['jobs'] });
       } catch (err) {
         console.error('Failed to parse stage_handoff SSE event:', err);
       }
@@ -565,7 +559,7 @@ const SyncActivityView: React.FC = () => {
         });
         setIsSyncing(false);
         fetchLogs();
-        fetchMatchedJobs();
+        queryClient.invalidateQueries({ queryKey: ['jobs'] });
         fetchSources();
       } catch (err) {
         console.error('Failed to parse run_complete SSE event:', err);
@@ -582,7 +576,7 @@ const SyncActivityView: React.FC = () => {
         setTimeout(() => connectSSE(), 3000);
       }
     };
-  }, [handleAssetProgress, resetAssetStages]);
+  }, [handleAssetProgress, resetAssetStages, queryClient]);
 
   const disconnectSSE = useCallback(() => {
     if (eventSourceRef.current) {

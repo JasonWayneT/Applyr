@@ -574,6 +574,13 @@ const SyncActivityView: React.FC = () => {
 
     es.onerror = () => {
       console.warn('SSE connection encountered an error.');
+      // Native EventSource auto-reconnects for transient drops, but if the
+      // connection enters CLOSED state (e.g. server returns 4xx), it won't
+      // retry. Clear the ref and attempt reconnection with a short delay.
+      if (es.readyState === EventSource.CLOSED) {
+        eventSourceRef.current = null;
+        setTimeout(() => connectSSE(), 3000);
+      }
     };
   }, [handleAssetProgress, resetAssetStages]);
 

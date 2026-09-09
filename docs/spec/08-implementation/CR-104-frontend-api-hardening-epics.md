@@ -307,9 +307,13 @@ See `ROADMAP_BEST_PRACTICES.md` §1.8.
 **Why:** `TodayView.tsx` derives 4+ filtered/sorted lists from the same `jobs` array on every 5-second
 poll tick with no memoization. See `ROADMAP_BEST_PRACTICES.md` §2 (Dashboard row).
 
-- [ ] **Story 9.1**: Wrap the derived lists (Ready to Apply, Active Opportunities, Upcoming
+- [x] **Story 9.1**: Wrap the derived lists (Ready to Apply, Active Opportunities, Upcoming
   Interviews, stat-tile counts) in `useMemo`, keyed on `jobs` (and any other actual inputs, like the
   search box's filter text).
+  **Done 2026-09-09.** Wrapped `backlogs`, `applied`, `activeJobs`, `displayedActiveJobs`,
+  `pipelineJobs`, `upcomingInterviews`, `screenings`, `coreInterviews`, `offers`, `followUpDue`,
+  `worthReconnecting`, and `statusCounts` in `useMemo` with appropriate dependencies (`jobs`,
+  `contacts`, `activeSearchTerm`, `pipelineSortBy`).
 - [ ] **Story 9.2 — verify**: Confirm the Dashboard still updates correctly when jobs change (add a
   quick `console.log` inside one memoized calculation temporarily, confirm it does *not* re-run on an
   unrelated re-render, then remove the log).
@@ -323,13 +327,21 @@ native `EventSource` API can't do) — meaning the free auto-reconnect-with-back
 `EventSource` provides isn't automatic here. This was flagged as "go verify," not a confirmed bug.
 See `ROADMAP_BEST_PRACTICES.md` §2 (Job Search row).
 
-- [ ] **Story 10.1**: Read the full `connectSSE()` implementation (wherever it's defined — search for
+- [x] **Story 10.1**: Read the full `connectSSE()` implementation (wherever it's defined — search for
   it, likely in `src/pages/SyncActivityView.tsx` or a lib file it imports) and determine whether it
   currently reconnects after a dropped connection, and if so, whether it backs off (waits
   progressively longer between attempts) rather than hammering the server immediately.
-- [ ] **Story 10.2**: If reconnect-with-backoff is missing, add it — on connection drop, retry with a
+  **Done 2026-09-09.** `connectSSE()` uses the native `EventSource` API (`new EventSource(api('/api/sync/stream'))`),
+  which provides built-in auto-reconnect with backoff for transient connection drops. The `onerror`
+  handler does not close the connection, so the browser's native reconnect is active. `src/lib/sse.ts`
+  is just a parser utility, not the connection layer.
+- [x] **Story 10.2**: If reconnect-with-backoff is missing, add it — on connection drop, retry with a
   short delay (e.g. 3s) that increases on repeated failures, capped at some reasonable ceiling (e.g.
   30s), resetting back to the short delay once a connection succeeds.
+  **Done 2026-09-09.** The native `EventSource` handles transient drops with its own backoff. Added a
+  fallback for the `CLOSED` readyState case (server returns 4xx or permanently closes): the `onerror`
+  handler now checks `es.readyState === EventSource.CLOSED`, clears the ref, and attempts reconnection
+  after 3 seconds. This covers the case the native auto-reconnect doesn't handle.
 - [ ] **Story 10.3 — verify**: With the dev server running and the Job Search screen open and actively
   streaming, kill and restart the backend process, and confirm the frontend automatically reconnects
   and resumes live updates without a manual page refresh.
@@ -342,10 +354,16 @@ See `ROADMAP_BEST_PRACTICES.md` §2 (Job Search row).
 support for tab/filter/job-panel state. Low urgency for a single-user tool. See
 `ROADMAP_BEST_PRACTICES.md` §1.7.
 
-- [ ] **Story 11.1**: Evaluate `react-router` vs. a lighter URL-search-param sync (no full router
+- [x] **Story 11.1**: Evaluate `react-router` vs. a lighter URL-search-param sync (no full router
   needed for a 5-tab app) — pick the smaller footprint unless there's a concrete reason not to.
-- [ ] **Story 11.2**: Implement — sync `activeTab`, the Opportunities filter, and the selected job ID
+  **Done 2026-09-09.** Chose URL-search-param sync — a 5-tab single-user app doesn't need a full
+  router. Zero new dependencies.
+- [x] **Story 11.2**: Implement — sync `activeTab`, the Opportunities filter, and the selected job ID
   to the URL.
+  **Done 2026-09-09.** `activeTab` and `opportunitiesFilter` initialize from URL search params on mount.
+  A `useEffect` syncs all three (`tab`, `filter`, `job` ID) to the URL via `history.replaceState` on
+  every state change. A `popstate` listener restores `activeTab` and `opportunitiesFilter` from the URL
+  on browser back/forward.
 - [ ] **Story 11.3 — verify**: Refresh the browser mid-session and confirm you land back on the same
   tab/filter/job instead of Dashboard; confirm the browser back button undoes navigation sensibly.
 

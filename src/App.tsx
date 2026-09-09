@@ -15,12 +15,43 @@ import { useJobs } from './hooks/useJobs';
 import type { OpportunitiesFilter } from './types/opportunities';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('Dashboard');
+  // CR-104 Epic 11: initialize state from URL search params for deep-link/back-button support.
+  const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('tab') || 'Dashboard';
+  });
   const [isNotifOpen, setIsNotifOpen] = useState(false);
-  const [opportunitiesFilter, setOpportunitiesFilter] = useState<OpportunitiesFilter>('All');
+  const [opportunitiesFilter, setOpportunitiesFilter] = useState<OpportunitiesFilter>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return (params.get('filter') as OpportunitiesFilter) || 'All';
+  });
   const mainRef = useRef<HTMLElement>(null);
   const { jobs, isLoaded, selectedJob, setSelectedJob, handleStatusChange } = useJobs();
   const reviewCenter = useReviewCenter();
+
+  // Sync state changes to URL (replaceState, no page reload)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', activeTab);
+    if (opportunitiesFilter !== 'All') params.set('filter', opportunitiesFilter);
+    else params.delete('filter');
+    if (selectedJob) params.set('job', selectedJob.id);
+    else params.delete('job');
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+  }, [activeTab, opportunitiesFilter, selectedJob]);
+
+  // Restore state from URL on browser back/forward
+  useEffect(() => {
+    const onPopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab) setActiveTab(tab);
+      const filter = params.get('filter') as OpportunitiesFilter | null;
+      if (filter) setOpportunitiesFilter(filter);
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'instant' });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Job } from '../types/job';
 import { Contact } from '../types/contact';
 import StatusChip from '../components/StatusChip';
@@ -165,24 +165,22 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
   };
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const followUpDue = contacts
+  const followUpDue = useMemo(() => contacts
     .filter(c => c.next_follow_up_due && c.next_follow_up_due.slice(0, 10) <= todayStr)
-    .sort((a, b) => a.next_follow_up_due!.localeCompare(b.next_follow_up_due!));
-  const worthReconnecting = contacts
+    .sort((a, b) => a.next_follow_up_due!.localeCompare(b.next_follow_up_due!)), [contacts, todayStr]);
+  const worthReconnecting = useMemo(() => contacts
     .filter(c => !c.next_follow_up_due && Date.now() - new Date(c.last_touch_at).getTime() >= SIXTY_DAYS_MS)
-    .sort((a, b) => new Date(a.last_touch_at).getTime() - new Date(b.last_touch_at).getTime());
+    .sort((a, b) => new Date(a.last_touch_at).getTime() - new Date(b.last_touch_at).getTime()), [contacts]);
 
-  const backlogs = jobs.filter(j => j.status === 'Backlog' && j.has_assets);
-  const applied = jobs.filter(j => j.status === 'Applied');
-  const activeJobs = jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status));
-  const activeSearchMatches = activeSearchTerm.trim() === ''
-    ? activeJobs
-    : activeJobs.filter(j => {
-        const term = activeSearchTerm.trim().toLowerCase();
-        return j.company.toLowerCase().includes(term) || j.title.toLowerCase().includes(term);
-      });
-  const displayedActiveJobs = activeSearchTerm.trim() === '' ? activeSearchMatches.slice(0, 20) : activeSearchMatches;
-  const pipelineJobs = jobs
+  const backlogs = useMemo(() => jobs.filter(j => j.status === 'Backlog' && j.has_assets), [jobs]);
+  const applied = useMemo(() => jobs.filter(j => j.status === 'Applied'), [jobs]);
+  const activeJobs = useMemo(() => jobs.filter(j => ['Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation'].includes(j.status)), [jobs]);
+  const displayedActiveJobs = useMemo(() => {
+    const term = activeSearchTerm.trim().toLowerCase();
+    if (!term) return activeJobs.slice(0, 20);
+    return activeJobs.filter(j => j.company.toLowerCase().includes(term) || j.title.toLowerCase().includes(term));
+  }, [activeJobs, activeSearchTerm]);
+  const pipelineJobs = useMemo(() => jobs
     .filter(j => j.status === 'Backlog' && j.has_assets)
     .sort((a, b) => {
       switch (pipelineSortBy) {
@@ -192,19 +190,21 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
         case 'newest':
         default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       }
-    });
-  const now = Date.now();
-  const upcomingInterviews = jobs
-    .filter(j => {
-      if (!j.interview_date || ['Closed'].includes(j.status)) return false;
-      return new Date(j.interview_date).getTime() > now;
-    })
-    .sort((a, b) => new Date(a.interview_date!).getTime() - new Date(b.interview_date!).getTime());
+    }), [jobs, pipelineSortBy]);
+  const upcomingInterviews = useMemo(() => {
+    const now = Date.now();
+    return jobs
+      .filter(j => {
+        if (!j.interview_date || ['Closed'].includes(j.status)) return false;
+        return new Date(j.interview_date).getTime() > now;
+      })
+      .sort((a, b) => new Date(a.interview_date!).getTime() - new Date(b.interview_date!).getTime());
+  }, [jobs]);
 
   const nextInterview = upcomingInterviews[0];
-  const screenings = jobs.filter(j => j.status === 'Recruiter Screen');
-  const coreInterviews = jobs.filter(j => j.status === 'Core Interviews');
-  const offers = jobs.filter(j => j.status === 'Offer and Negotiation');
+  const screenings = useMemo(() => jobs.filter(j => j.status === 'Recruiter Screen'), [jobs]);
+  const coreInterviews = useMemo(() => jobs.filter(j => j.status === 'Core Interviews'), [jobs]);
+  const offers = useMemo(() => jobs.filter(j => j.status === 'Offer and Negotiation'), [jobs]);
 
   // Scale within this chart's series only (not total jobs). Sqrt blend keeps 1 vs 16 vs 78 visually distinct
   // without a flat 12% floor that made Screening look like Backlog (BUG-006 chart follow-up).
@@ -219,22 +219,23 @@ const TodayView: React.FC<TodayViewProps> = ({ jobs, onJobClick, onNavigateToOpp
     return `${Math.min(96, Math.max(minVisible, blended))}%`;
   };
 
-  const funnelCounts = [
-    backlogs.length,
-    applied.length,
-    screenings.length,
-    coreInterviews.length,
-    offers.length,
-  ];
-  const funnelMax = Math.max(...funnelCounts, 1);
-
-  const statusCounts = [
-    { label: 'Ready to Apply', count: backlogs.length, height: getChartBarHeight(backlogs.length, funnelMax) },
-    { label: 'Applied', count: applied.length, height: getChartBarHeight(applied.length, funnelMax) },
-    { label: 'Screening', count: screenings.length, height: getChartBarHeight(screenings.length, funnelMax) },
-    { label: 'Interviews', count: coreInterviews.length, height: getChartBarHeight(coreInterviews.length, funnelMax) },
-    { label: 'Offers', count: offers.length, height: getChartBarHeight(offers.length, funnelMax) },
-  ];
+  const statusCounts = useMemo(() => {
+    const funnelCounts = [
+      backlogs.length,
+      applied.length,
+      screenings.length,
+      coreInterviews.length,
+      offers.length,
+    ];
+    const funnelMax = Math.max(...funnelCounts, 1);
+    return [
+      { label: 'Ready to Apply', count: backlogs.length, height: getChartBarHeight(backlogs.length, funnelMax) },
+      { label: 'Applied', count: applied.length, height: getChartBarHeight(applied.length, funnelMax) },
+      { label: 'Screening', count: screenings.length, height: getChartBarHeight(screenings.length, funnelMax) },
+      { label: 'Interviews', count: coreInterviews.length, height: getChartBarHeight(coreInterviews.length, funnelMax) },
+      { label: 'Offers', count: offers.length, height: getChartBarHeight(offers.length, funnelMax) },
+    ];
+  }, [backlogs, applied, screenings, coreInterviews, offers]);
 
   const goToOpportunities = (label: string) => {
     const filter = DASHBOARD_FILTER_MAP[label];

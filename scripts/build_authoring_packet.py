@@ -626,6 +626,7 @@ def build_evidence_map(
     claims: dict[str, dict],
     disabled: set[str],
     jd_profile: Any = None,
+    trace_out: list | None = None,
 ) -> list[dict]:
     """Story 3.1 — Map JD items to strongest claim IDs.
 
@@ -640,6 +641,14 @@ def build_evidence_map(
     ranked list, so a capped-out claim is replaced by that row's own next-best match. Also
     filters generic boilerplate lines out of preferred/responsibilities (never required)
     before they consume a scoring pass at all.
+
+    CR-112 Story 3.2 (FR-303 / AC-400): optional *trace_out* receives the full
+    per-item ranking for evidence_selection_trace.json. Packet rows may carry
+    cheap omitted_reasons (`top2_cutoff` | `project_slot_cap`) only. Scores,
+    score_zero catalog noise, and boilerplate filters stay out of the packet.
+    Pick rules stay the 8bbc497 rules: score <= 0 is not picked; a capped
+    project continues to the next candidate; after two picks further positive
+    scores are top2_cutoff. Recording losers must not change who wins.
     """
     # Build a soft-gap bridge lookup from flagged_gaps + required item bridges
     soft_gap_bridges: dict[str, str] = {}
@@ -706,6 +715,14 @@ def build_evidence_map(
             continue
         if _is_boilerplate_item(item):
             print(f"INFO: filtered boilerplate preferred item: {item[:80]!r}", file=sys.stderr)
+            if trace_out is not None:
+                trace_out.append({
+                    "jd_item": item,
+                    "bucket": "preferred",
+                    "picked": [],
+                    "candidates": [],
+                    "filter": "boilerplate_filtered",
+                })
             continue
         _enqueue(item, "preferred", is_required=False)
 
@@ -715,6 +732,14 @@ def build_evidence_map(
             continue
         if _is_boilerplate_item(item):
             print(f"INFO: filtered boilerplate responsibility item: {item[:80]!r}", file=sys.stderr)
+            if trace_out is not None:
+                trace_out.append({
+                    "jd_item": item,
+                    "bucket": "responsibilities",
+                    "picked": [],
+                    "candidates": [],
+                    "filter": "boilerplate_filtered",
+                })
             continue
         _enqueue(item, "responsibilities", is_required=False)
 
@@ -735,14 +760,28 @@ def build_evidence_map(
     evidence_map: list[dict] = []
     for row in pending:
         picked: list[str] = []
+        omitted: list[dict] = []
+        candidates_full: list[dict] = []
         for cid, score in row["scored"]:
-            if score <= 0 or len(picked) >= 2:
-                break
             proj = _project_of(cid)
-            if project_counts.get(proj, 0) >= _MAX_SLOTS_PER_PROJECT:
-                continue
-            picked.append(cid)
-            project_counts[proj] = project_counts.get(proj, 0) + 1
+            if score <= 0:
+                reason = "score_zero"
+            elif project_counts.get(proj, 0) >= _MAX_SLOTS_PER_PROJECT:
+                reason = "project_slot_cap"
+            elif len(picked) >= 2:
+                reason = "top2_cutoff"
+            else:
+                reason = "picked"
+                picked.append(cid)
+                project_counts[proj] = project_counts.get(proj, 0) + 1
+            candidates_full.append({
+                "claim_id": cid,
+                "score": score,
+                "reason": reason,
+                "attribution": (claims.get(cid) or {}).get("attribution"),
+            })
+            if reason in ("top2_cutoff", "project_slot_cap"):
+                omitted.append({"claim_id": cid, "reason": reason})
         bridge = row["bridge"]
         # CR-090 follow-up: an administratively-satisfied required item (Bachelor's
         # degree, years-of-experience already gated by seniority_gate.py) correctly
@@ -768,7 +807,16 @@ def build_evidence_map(
             "bucket": row["bucket"],
             "claim_ids": picked,
             "bridge": bridge,
+            "omitted_reasons": omitted,
         })
+        if trace_out is not None:
+            trace_out.append({
+                "jd_item": row["jd_item"],
+                "bucket": row["bucket"],
+                "picked": list(picked),
+                "candidates": candidates_full,
+                "filter": None,
+            })
 
     return evidence_map
 
@@ -1659,7 +1707,10 @@ def build_packet(
         we_text, ai_text = _load_source_texts()
 
     # Story 3.1 — Evidence map
-    evidence_map = build_evidence_map(stage0, jd_text, claims, disabled, jd_profile)
+    selection_trace: list = []
+    evidence_map = build_evidence_map(
+        stage0, jd_text, claims, disabled, jd_profile, trace_out=selection_trace
+    )
 
     # Story 3.2 — Excerpts (evidence map + canonical-role floor + JD skill anchors)
     excerpts = build_excerpts(
@@ -1697,8 +1748,28 @@ def build_packet(
         jd_text=jd_text,
         ats_term_contract=ats_term_contract,
     )
+    _write_selection_trace(folder, packet, selection_trace)
 
     return packet
+
+
+def _write_selection_trace(folder: Path, packet: dict, items: list) -> None:
+    """CR-112 Story 3.2: full ranking audit lives beside the packet, not in it.
+
+    Implements FR-303 / AC-400. Stage 1 author_from_packet dumps
+    authoring_packet.json only; this sibling file is never loaded into
+    authoring_prompt.md. Candidate scores stay here. Packet omitted_reasons
+    may carry only top2_cutoff and project_slot_cap.
+    """
+    payload = {
+        "schema_version": "1.0",
+        "slug": packet.get("slug"),
+        "packet_version": packet.get("rule_digest_version"),
+        "estimated_tokens": packet.get("estimated_tokens"),
+        "items": items,
+    }
+    path = folder / "evidence_selection_trace.json"
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _one_line(packet: dict, folder: Path) -> str:

@@ -1,3 +1,19 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Story 3.2 — record why a scored claim lost its packet slot.
+Cheap `omitted_reasons` (`top2_cutoff` | `project_slot_cap`) stay on the
+evidence_map row. Full ranking, including `score_zero` catalog noise and
+boilerplate filters, lives in sibling `evidence_selection_trace.json`.
+Stage 1 `authoring_prompt.md` never loads that file and must not contain
+candidate scores. Ranking still does not auto-insert a larger unused metric.
+
+### Added
+- `evidence_selection_trace.json` written by `build_packet`
+- `scripts/test_cr112_story32.py`
+
+### Changed
+- `scripts/build_authoring_packet.py` `build_evidence_map` records why
+  scored claims lost Top-2 without changing who wins
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

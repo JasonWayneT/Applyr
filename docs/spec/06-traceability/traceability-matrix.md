@@ -325,6 +325,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `NFR-013` | CR-111 | No submission behavior change; guard and tests are isolated | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py` | implemented |
 | `AC-379`–`AC-386`, `AC-388`–`AC-391` | CR-111 | Authority, canonicalization, drift, and docs acceptance checks | focused drift tests, real-tree drift check, pointer inspection | implemented |
 | `AC-387` | CR-111 | Live Claude Code and Codex skill-loading verification | harness-bridge session 009 R52 (Claude PASS), R53 (Codex PASS) | implemented |
+| `FR-303` | CR-112 | Omitted reason-codes in packet; full ranking in sibling trace | `scripts/build_authoring_packet.py`, `scripts/test_cr112_story32.py` | in_progress |
+| `AC-400` | CR-112 | Pearl-like top2_cutoff, prompt has no scores, score_zero TRACE-only | `scripts/test_cr112_story32.py` | in_progress |
 
 
 ## Coverage checklist

@@ -75,6 +75,8 @@ data/context_pack_validation/
 # Batch/Stage0/packet-eval run dumps. Already-tracked files under data/reports/ stay tracked;
 # new dated dumps stay local (Layer D hygiene, 2026-08-12).
 data/reports/
+# CR-112 Epic 6 runtime eval output (sanitized fixtures live in tests/fixtures/cr112_eval/).
+data/eval/
 pipeline-log.md
 pipeline_log.txt
 

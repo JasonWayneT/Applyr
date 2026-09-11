@@ -319,10 +319,7 @@ Merged onto `cr112-integration`.
 - Metrics table from the investigation §5 filled once as baseline (no code change required beyond logging).
 - Paid model calls listed with a budget line. Default: zero.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Frozen sanitized set
-in `tests/fixtures/cr112_eval/` (5 fictional JDs). Runtime copy
-`data/eval/cr112/` (gitignored). Paid calls = 0. Production sqlite refused.
-Investigation §5 baseline filled.
+**Status:** [x] accepted locally on `cr112-story61` (2026-09-11). Independent review ACCEPT. Frozen sanitized set in `tests/fixtures/cr112_eval/` (5 fictional JDs). Runtime copy `data/eval/cr112/` (gitignored). Default assemble remains off. Paid calls = 0. Production sqlite refused. Offline CLI baseline: `prompt_meta_estimated_tokens=742`. Merged onto `cr112-integration`.
 
 ### Story 6.2 — Instrument harness vs API separately
 
@@ -331,10 +328,7 @@ Investigation §5 baseline filled.
 - `run_events.jsonl` present on the eval folders.
 - Report never adds subscription minutes to API cents.
 
-**Status:** [ ] planned; not in the Epic 1 commit. `run_events.jsonl` on
-eval folders. Columns kept separate: `prompt_meta_estimated_tokens`,
-`call_llm_invocations`, `harness_spawn_count`. Baseline: all three paid/spawn
-counters 0; prompt-meta estimate 742 (bytes÷4, not a tokenizer count).
+**Status:** [x] accepted locally on `cr112-story61` (2026-09-11). Independent review ACCEPT. Columns kept separate: `prompt_meta_estimated_tokens`, `call_llm_invocations`, `harness_spawn_count`, `api_cents`, and `subscription_minutes`. Baseline: paid=0, spawn=0, api_cents=0, subscription_minutes=0, prompt-meta estimate 742 (`bytes_div_4_estimate`). `--paid-llm` still does not call `call_llm`. Merged onto `cr112-integration`.
 
 ---
 

@@ -1,0 +1,27 @@
+{
+  "company": "Contoso Harbor",
+  "role": "Technical Product Manager",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 1",
+  "reach_out": false,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "Product management for data remediation and source-of-truth workflows", "gap": false},
+    {"item": "Partner with engineering and DBA teams on sequencing", "gap": false},
+    {"item": "Translate messy operational problems into a backlog", "gap": false}
+  ],
+  "preferred": [
+    {"item": "SQL investigation for product questions", "gap": false},
+    {"item": "Experience with customer-facing reporting quality", "gap": false}
+  ],
+  "responsibilities": [
+    "Prioritize data defects against customer impact",
+    "Keep legal and CX in the loop on high-risk changes"
+  ],
+  "culture": [],
+  "flagged_gaps": [],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-112 sanitized eval fixture. Fictional employer."
+}

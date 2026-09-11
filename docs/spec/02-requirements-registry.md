@@ -807,6 +807,14 @@ Epic 1 allocated 2026-09-10. Stories remain pending independent review (not self
 | `AC-394` | acceptance | P0 | in_progress | Isolated `assemble_packet` over-budget fixture is `incomplete` with a budget reason and still carries `claim_constraints`; never `ready` with `{}` | `FR-297` | CR-112 |
 | `AC-395` | acceptance | P0 | in_progress | `audit_packet_integrity.py` flags the SupplyHouse-shaped packet in temp fixtures, writes nothing, and does not treat a sidecar as authorization; the 2026-09-10 live scan records affected folders in the CR-112 tracker | `FR-298` | CR-112 |
 
+### CR-112 Controlled offline evaluation (FR-310–FR-311)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-310` | functional | P1 | draft | A sanitized offline eval harness materializes five fictional JD fixtures into a gitignored eval output, refuses production `jobagent.sqlite`, keeps packet assembly off by default, and records per-folder observability events without touching live submissions | `AC-407` | CR-112 |
+| `FR-311` | functional | P1 | draft | The eval harness reports prompt-meta token estimates, harness spawn counts, `call_llm` invocations, API cents, and subscription minutes as separate columns, with paid LLM usage remaining opt-in and zero-call in this story | `AC-408` | CR-112 |
+| `AC-407` | acceptance | P1 | draft | Materializing the frozen eval set yields exactly five fictional fixture folders with sanitized JDs and fit-gate JSON, default CLI execution keeps packet assembly off, refuses production SQLite, writes `observability/run_events.jsonl`, and never copies live submissions | `FR-310` | CR-112 |
+| `AC-408` | acceptance | P1 | draft | The eval baseline records `prompt_meta_estimated_tokens`, `call_llm_invocations`, `harness_spawn_count`, `api_cents`, and `subscription_minutes` separately, keeps paid/API/spawn counters at zero by default and under `--paid-llm`, and labels the token method `bytes_div_4_estimate` | `FR-311` | CR-112 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

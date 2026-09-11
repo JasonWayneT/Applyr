@@ -337,6 +337,10 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-402` | CR-112 | Fingerprint fixture empty claim_ids; product/years negatives | `scripts/test_cr112_story34.py` | in_progress |
 | `FR-306` | CR-112 | Advisory trailing-gerund rate | `scripts/report_resume_gerund_rate.py`, `scripts/test_cr112_story51.py` | in_progress |
 | `AC-403` | CR-112 | Story 5.1 advisory trailing-gerund acceptance | `scripts/test_cr112_story51.py`, `python scripts/report_resume_gerund_rate.py --json --root data/submissions` | in_progress |
+| `FR-310` | CR-112 | Frozen sanitized offline eval set | `scripts/run_cr112_eval.py`, `scripts/test_cr112_story61.py`, `tests/fixtures/cr112_eval/` | in_progress |
+| `FR-311` | CR-112 | Separate harness/API token-cost columns | `scripts/run_cr112_eval.py`, `scripts/test_cr112_story61.py` | in_progress |
+| `AC-407` | CR-112 | Five-folder sanitized materialization, default assemble-off, production SQLite refusal | `scripts/test_cr112_story61.py` | in_progress |
+| `AC-408` | CR-112 | Zero-call paid opt-in, separate totals, bytes_div_4_estimate | `scripts/test_cr112_story61.py` | in_progress |
 
 
 ## Coverage checklist

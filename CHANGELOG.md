@@ -1,3 +1,17 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Stories 2.1 + 2.3 — lean default spawn. Stage 0 uses
+`run_submission.py`; Stage 1 pastes `authoring_prompt.md` only; Stage 2
+`--resume` is mechanical and is not `hm.critical_read`. AGENTS trigger forbids
+per-JD Task/Agent spawn. Story 2.2 (batch.js) deferred because `.claude/` is
+gitignored.
+
+### Changed
+- `.codex/skills/generate-submission/SKILL.md`
+- `AGENTS.md` (root trigger paragraph only)
+
+### Added
+- `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3; no batch.js requirement)
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

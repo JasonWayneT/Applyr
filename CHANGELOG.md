@@ -1,18 +1,15 @@
-## [Unreleased] — 2026-09-10
-[DRAFT] CR-112 Epic 1 only — lock Stage 0 sequential-ID reject and
-authoring-packet `claim_constraints` fail-closed, and add a read-only
-detector for already-wiped packets. Do not call this "resilience":
-invented `req-001` IDs are rejected rather than remapped by list
-position, and a packet that cannot keep `claim_constraints` under budget
-is `incomplete`, not `ready` with an empty fence. Epics 2–6 are not in
-this entry.
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
+Stage 0 IDs and packet constraints, plus Stories 2.1 + 2.3 lean default
+spawn. Stage 0 uses `run_submission.py`. Stage 1 pastes
+`authoring_prompt.md` only. Stage 2 `--resume` is mechanical and is not
+`hm.critical_read`. AGENTS trigger forbids per-JD Task/Agent spawn.
+Story 2.2 lands later in this integration.
 
 On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
 rejected `req-001`, and `assemble_packet` already omitted the wipe. The
-list-position remap and the constraint wipe lived in an uncommitted dirty
-tree, never on HEAD. This commit documents that reject, adds isolated
-regression tests including simulated Groq-to-Gemini fallback, and adds
-the detector for packets the wipe already shipped.
+list-position remap and the constraint wipe lived in an uncommitted
+candidate tree, never on HEAD.
 
 ### Fixed
 - CR-112 Story 1.1 (`FR-296` / `AC-393`): `_resolve_item_id` must not map
@@ -50,6 +47,11 @@ the detector for packets the wipe already shipped.
 ### Changed
 - `scripts/run_all_tests.py` now runs `test_stage0_evidence_cascade.py`
   and `test_audit_packet_integrity.py`.
+- `.codex/skills/generate-submission/SKILL.md`
+- `AGENTS.md` (root trigger paragraph only)
+
+### Added
+- `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3)
 
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,

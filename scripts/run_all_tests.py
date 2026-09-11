@@ -55,6 +55,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_stage0_provider_golden.py",
     "scripts/test_stage0_evidence_cascade.py",
     "scripts/test_audit_packet_integrity.py",
+    "scripts/test_cr112_story32.py",
     "scripts/test_stage0_checkpoint_failures.py",
     "scripts/test_stage0_confirmations.py",
     "scripts/test_resolve_task_providers.py",

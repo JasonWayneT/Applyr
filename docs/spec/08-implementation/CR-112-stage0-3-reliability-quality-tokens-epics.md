@@ -203,18 +203,18 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 ### Story 3.2 — Record why a scored claim lost the slot
 
-**Files:** `scripts/build_authoring_packet.py` `build_evidence_map`, packet schema (additive field, e.g. `selection_trace` or per-row `rejected`).
+**Files:** `scripts/build_authoring_packet.py` (`build_evidence_map`, `_write_selection_trace`), `scripts/test_cr112_story32.py`.
 
 **Acceptance:**
-- For each JD item, if ACC-101-SAVINGS (or any swap-candidate fixture id) was scored and not picked, the packet stores reason: `top2_cutoff` | `score_zero` | `project_slot_cap` | `disabled` | `boilerplate_filtered`.
-- Sanitized fixture: Pearl-like item where SAVINGS ranks 3rd must emit `top2_cutoff`, not silence.
-- No automatic insert of the larger metric.
-- **The reason code (a short enum value) may live in the packet JSON since it's cheap, but the full ranking explanation — every scored candidate, its score, and why each lost — is NOT written into `authoring_prompt.md` or any field the Stage 1 author prompt reads by default.** This is the same failure mode as F3's constraint wipe (packet bloat under token pressure): a detailed audit trail is exactly the kind of content that inflates the packet back toward the budget ceiling. Store it in a separate diagnostic file (e.g. `evidence_selection_trace.json`, sibling to `authoring_packet.json`) that Stage 1 never loads.
+- Packet `evidence_map` rows store cheap `omitted_reasons` `{claim_id, reason}` where reason is `top2_cutoff` or `project_slot_cap` only.
+- Full ranking (every scored candidate, score, reason, attribution) lives in sibling `evidence_selection_trace.json`. Stage 1 never loads that file.
+- `score_zero` catalog noise and `boilerplate_filtered` preferred/responsibility lines are TRACE-only. Boilerplate items still get no evidence_map row.
+- No `disabled` pick-loop skip and no `disabled` omitted reason. Production scoring already skips disabled claims.
+- Sanitized Pearl-like fixture: SAVINGS ranks 3rd emits `top2_cutoff`, is not auto-inserted, and rank-1 SAVINGS is picked.
+- Author prompt may contain the cheap reason code. It must not contain candidate scores or `evidence_selection_trace.json`.
+- Production `build_packet` writes the sibling trace. A hand-call of `_write_selection_trace` is not coverage.
 
-**Status:** [ ] planned; not in the Epic 1 commit. `omitted_reasons` on
-evidence_map rows; full scores in `evidence_selection_trace.json`. Pearl-like
-fixture emits `top2_cutoff`. Author prompt does not contain candidate scores.
-Packet suite re-run green after the additive field.
+**Status:** [x] accepted locally on `cr112-story32` (2026-09-11). Independent review ACCEPT. Packet enum is `top2_cutoff` | `project_slot_cap`. TRACE holds scores, `score_zero`, and `boilerplate_filtered`. Merged onto `cr112-integration`.
 
 ### Story 3.3 — Advisory swap report (read-only)
 

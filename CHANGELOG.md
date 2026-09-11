@@ -1,3 +1,14 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Story 3.3 — advisory evidence-swap report. Reads
+`evidence_selection_trace.json` and writes `evidence_swap_report.json`.
+Never rewrites drafts, never blocks finalize, never enters the Stage 1
+author prompt. Boilerplate-filtered TRACE rows are INTENTIONAL_TRADEOFF,
+not PACKET_MISSING.
+
+### Added
+- `scripts/report_evidence_swaps.py`
+- `scripts/test_cr112_story33.py`
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

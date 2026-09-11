@@ -56,6 +56,8 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_stage0_evidence_cascade.py",
     "scripts/test_audit_packet_integrity.py",
     "scripts/test_cr112_story32.py",
+    "scripts/test_cr112_lean_spawn.py",
+    "scripts/test_cr112_story31.py",
     "scripts/test_cr112_story33.py",
     "scripts/test_cr112_story34.py",
     "scripts/test_cr112_adversarial.py",

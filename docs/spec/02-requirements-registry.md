@@ -785,6 +785,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-389` | acceptance | P1 | implemented | Drift guard exits nonzero on fixtures with a regrown stub, banned phrase, or `file:///` link | `FR-293` | CR-111 |
 | `AC-390` | acceptance | P1 | implemented | Drift guard runs in the same verification path as `check_context_pack_freshness.py` and passes clean on `main` | `FR-293` | CR-111 |
 | `AC-391` | acceptance | P2 | implemented | `docs/AGENTS.md` defers to root `AGENTS.md`; the `SDD_PROCESS.md` link is repo-relative | `FR-294` | CR-111 |
+| `FR-306` | functional | P2 | in_progress | Advisory trailing-gerund rate reporter scans `Resume.md` bullet lines for F7's case-insensitive comma / `by` / `while` + `-ing` pattern, reports `slug`, `bullet_count`, `trailing_mechanism_count`, `rate`, and `examples`, always exits 0, and never rewrites or gates submissions | `AC-403` | CR-112 |
+| `AC-403` | acceptance | P2 | in_progress | Temp synthetic resume bullets count `by`, `while`, and comma + `-ing`, ignore end-of-bullet and `after` cases, skip folders without `Resume.md`, preserve file bytes, stay unwired from the linter/workflow path, and record the 2026-09-11 seven-folder live scan counts only | `FR-306` | CR-112 |
 
 ## Non-Functional Requirements
 

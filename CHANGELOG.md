@@ -1,3 +1,28 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Story 5.1 advisory trailing-gerund reporter. This measures F7's
+comma / `by` / `while` + `-ing` texture, not the stale end-of-bullet `ing`
+metric from dirty main. No linter rule. No rewrite.
+
+### Added
+- CR-112 Story 5.1 (`FR-306` / `AC-403`): added
+  `scripts/report_resume_gerund_rate.py`, a read-only advisory CLI for
+  `Resume.md` bullets. It reports `slug`, `bullet_count`,
+  `trailing_mechanism_count`, `rate`, and up to 8 example bullets, always exits
+  0, prints `Advisory only. No linter rule. No rewrite.` in text mode, and is
+  not wired into `submission_linter.py`, `run_submission.py`, or Stage 0-3
+  gating.
+
+### Developer
+- CR-112 Story 5.1: `python -m unittest scripts.test_cr112_story51 -v` passes
+  in the isolated `cr112-story51` worktree. The focused suite covers the F7
+  regex behavior, the advisory CLI contract, skip/no-rewrite behavior, and the
+  non-wiring guard using temp synthetic `Resume.md` fixtures only.
+- CR-112 Story 5.1 live scan (2026-09-11, read-only) supersedes the stale
+  dirty-main metric numbers: `arbiter` 11/11 (1.00), `cdw` 9/10 (0.90),
+  `loot_labs` 7/9 (0.78), `marlowe_companies_inc` 10/10 (1.00), `pearl_com`
+  6/11 (0.55), `supplyhouse` 7/10 (0.70), `trax_technologies` 9/10 (0.90). No
+  live example text was copied into git.
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

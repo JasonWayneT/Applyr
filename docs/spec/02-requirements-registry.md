@@ -814,6 +814,8 @@ Epic 1 allocated 2026-09-10. Stories remain pending independent review (not self
 | `FR-311` | functional | P1 | draft | The eval harness reports prompt-meta token estimates, harness spawn counts, `call_llm` invocations, API cents, and subscription minutes as separate columns, with paid LLM usage remaining opt-in and zero-call in this story | `AC-408` | CR-112 |
 | `AC-407` | acceptance | P1 | draft | Materializing the frozen eval set yields exactly five fictional fixture folders with sanitized JDs and fit-gate JSON, default CLI execution keeps packet assembly off, refuses production SQLite, writes `observability/run_events.jsonl`, and never copies live submissions | `FR-310` | CR-112 |
 | `AC-408` | acceptance | P1 | draft | The eval baseline records `prompt_meta_estimated_tokens`, `call_llm_invocations`, `harness_spawn_count`, `api_cents`, and `subscription_minutes` separately, keeps paid/API/spawn counters at zero by default and under `--paid-llm`, and labels the token method `bytes_div_4_estimate` | `FR-311` | CR-112 |
+| `FR-300` | functional | P1 | in_progress | Opt-in batch Author/Review runner does not load `workExperience.md`; ground truth is packet excerpts + constraints + drafts + JD + rubric; never the default spawn | `AC-397` | CR-112 |
+| `AC-397` | acceptance | P1 | in_progress | Tracked `.claude/workflows/generate-submission-batch.js` `reviewPrompt` forbids WE; `whenToUse` says never-default; cap remains 3 unless `allowLargeBatch` | `FR-300` | CR-112 |
 
 ## Non-Functional Requirements
 

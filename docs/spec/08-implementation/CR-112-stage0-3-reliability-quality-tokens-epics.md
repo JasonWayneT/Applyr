@@ -156,7 +156,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - Header/whenToUse state this is never the default for routine drafting.
 - Existing 3-company cap and `allowLargeBatch` stay.
 
-**Status:** [ ] planned; not in the Epic 1 commit. `reviewPrompt` uses packet excerpts + `claim_constraints`; does not load WE. Header/whenToUse say never-default. Cap 3 unchanged.
+**Status:** [x] accepted locally on `cr112-story22` (2026-09-11). File is force-added despite `.claude/` gitignore. `reviewPrompt` forbids `workExperience.md`. `whenToUse` is never-default. Cap 3 + `allowLargeBatch` unchanged. Claude Workflow() primitives kept; portable rewrite deferred. Merged onto `cr112-integration`.
 
 ### Story 2.3 — AGENTS.md trigger phrase
 

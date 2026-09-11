@@ -329,6 +329,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-297` | CR-112 | Do not ready a packet after dropping `claim_constraints` | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py` | in_progress |
 | `FR-298` | CR-112 | Read-only detector for wiped-constraint ready packets | `scripts/audit_packet_integrity.py`, `scripts/test_audit_packet_integrity.py` | in_progress |
 | `AC-393`–`AC-395` | CR-112 | Sequential-ID reject/shuffle/fallback, budget fail-closed, live packet audit | focused Python tests + 2026-09-10 `data/submissions/` scan | in_progress |
+| `FR-300` | CR-112 | Batch review without WE; never-default; 3-company cap | `.claude/workflows/generate-submission-batch.js`, `scripts/test_cr112_story22.py` | in_progress |
+| `AC-397` | CR-112 | reviewPrompt forbids WE; whenToUse never-default; allowLargeBatch cap | `scripts/test_cr112_story22.py` | in_progress |
 | `FR-303` | CR-112 | Omitted reason-codes in packet; full ranking in sibling trace | `scripts/build_authoring_packet.py`, `scripts/test_cr112_story32.py` | in_progress |
 | `AC-400` | CR-112 | Pearl-like top2_cutoff, prompt has no scores, score_zero TRACE-only | `scripts/test_cr112_story32.py` | in_progress |
 | `FR-304` | CR-112 | Advisory evidence-swap report from selection trace | `scripts/report_evidence_swaps.py`, `scripts/test_cr112_story33.py` | in_progress |

@@ -1,11 +1,12 @@
 ## [Unreleased] — 2026-09-11
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
 Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
-Story 3.1 closed-world extra-packet WARN, Story 3.2 omitted_reasons
+Story 3.1 closed-world extra-packet completion block (detection only), Story 3.2 omitted_reasons
 plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip, and Epic 4 adversarial fail-closed, plus Story 5.1 F7 gerund reporter
 (advisory only), and Stories 6.1/6.2 sanitized offline eval harness, plus Story 2.2
-force-added batch runner (never default). Extra-packet is WARN, not a
-hard block. SupplyHouse is not rewritten.
+force-added batch runner (never default). Extra-packet detection FAILs
+Stage 1 verify. Recovery (remove / rewrite / widen / human) is Story 3.6
+and is not in this detector. SupplyHouse is not rewritten.
 
 On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
 rejected `req-001`, and `assemble_packet` already omitted the wipe. The
@@ -46,11 +47,17 @@ candidate tree, never on HEAD.
   human authorization.
 
 ### Changed
+- CR-112 Story 3.1 (`FR-312` / `AC-409`): extra-packet provenance IDs
+  FAIL Stage 1 verify. Detection only. Prefix match still does not
+  clear. `ACCEPTED_AS_CORRECT` / `FALSE_POSITIVE` / `NOT_APPLICABLE` /
+  `HUMAN_ACCEPTED_RISK` cannot clear the finding. Recovery is Story 3.6.
+  FR-302 / AC-399 WARN-and-continue is superseded. No live-folder rewrite.
 - `scripts/run_all_tests.py` now runs `test_stage0_evidence_cascade.py`
   and `test_audit_packet_integrity.py`.
 - `.codex/skills/generate-submission/SKILL.md`
 - `AGENTS.md` (root trigger paragraph only)
-- `scripts/author_from_packet.py` `run_verify_only` emits extra-packet WARNs
+- `scripts/author_from_packet.py` `run_verify_only` FAILs extra-packet cites
+  (`recovery_state=UNRESOLVED` or `CLOSED_WORLD_UNREADABLE`)
 - `scripts/build_authoring_packet.py` `build_evidence_map` records why
   scored claims lost Top-2 without changing who wins
 - `scripts/build_stage0_fit_gate.py` `_is_administratively_satisfied`

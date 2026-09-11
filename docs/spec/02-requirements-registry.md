@@ -791,6 +791,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-401` | acceptance | P2 | in_progress | Isolated synthetic traces: `top2_cutoff` → `SWAP_CANDIDATE`; `project_slot_cap` → `INTENTIONAL_TRADEOFF`; `score_zero` → `INSUFFICIENT_PROOF`; empty item → `PACKET_MISSING`; boilerplate filter → `INTENTIONAL_TRADEOFF`; drafts unchanged; missing/unreadable trace exits nonzero | `FR-304` | CR-112 |
 | `FR-305` | functional | P1 | in_progress | Eligibility-framed background-check / fingerprint and nights-and-weekends required lines skip claim scoring and must not receive product-roadmap claims as Top-2 | `AC-402` | CR-112 |
 | `AC-402` | acceptance | P1 | in_progress | Level II fingerprint fixture has empty `claim_ids` and no `ACC-103-ROADMAP`; product background-check roadmap and years lines still may receive claims | `FR-305` | CR-112 |
+| `FR-306` | functional | P2 | in_progress | Advisory trailing-gerund rate reporter scans `Resume.md` bullet lines for F7's case-insensitive comma / `by` / `while` + `-ing` pattern, reports `slug`, `bullet_count`, `trailing_mechanism_count`, `rate`, and `examples`, always exits 0, and never rewrites or gates submissions | `AC-403` | CR-112 |
+| `AC-403` | acceptance | P2 | in_progress | Temp synthetic resume bullets count `by`, `while`, and comma + `-ing`, ignore end-of-bullet and `after` cases, skip folders without `Resume.md`, preserve file bytes, stay unwired from the linter/workflow path, and record the 2026-09-11 seven-folder live scan counts only | `FR-306` | CR-112 |
 
 ### CR-112 Stage 0–3 reliability, Epic 1 (FR-296–FR-298)
 

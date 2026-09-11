@@ -2,9 +2,9 @@
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
 Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
 Story 3.1 closed-world extra-packet WARN, Story 3.2 omitted_reasons
-plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip, and Epic 4 adversarial fail-closed.
-Extra-packet is WARN, not a hard block. SupplyHouse is not rewritten.
-Story 2.2 lands later in this integration.
+plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip, and Epic 4 adversarial fail-closed, plus Story 5.1 F7 gerund reporter
+(advisory only). Extra-packet is WARN, not a hard block. SupplyHouse is
+not rewritten. Story 2.2 lands later in this integration.
 
 On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
 rejected `req-001`, and `assemble_packet` already omitted the wipe. The
@@ -69,6 +69,8 @@ candidate tree, never on HEAD.
 - `tests/fixtures/adversarial/workflow_cases/`, fixtures README
 - `docs/spec/INVARIANTS_CATALOG.md`
 - `docs/spec/archive/adversarial-payloads/`
+- `scripts/report_resume_gerund_rate.py`
+- `scripts/test_cr112_story51.py`
 
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,

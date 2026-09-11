@@ -335,6 +335,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-401` | CR-112 | Label map + boilerplate filter + no draft rewrite | `scripts/test_cr112_story33.py` | in_progress |
 | `FR-305` | CR-112 | Admin-line skip (eligibility-framed fingerprint / nights-and-weekends) | `scripts/build_stage0_fit_gate.py`, `scripts/build_authoring_packet.py`, `scripts/test_cr112_story34.py` | in_progress |
 | `AC-402` | CR-112 | Fingerprint fixture empty claim_ids; product/years negatives | `scripts/test_cr112_story34.py` | in_progress |
+| `FR-306` | CR-112 | Advisory trailing-gerund rate | `scripts/report_resume_gerund_rate.py`, `scripts/test_cr112_story51.py` | in_progress |
+| `AC-403` | CR-112 | Story 5.1 advisory trailing-gerund acceptance | `scripts/test_cr112_story51.py`, `python scripts/report_resume_gerund_rate.py --json --root data/submissions` | in_progress |
 
 
 ## Coverage checklist

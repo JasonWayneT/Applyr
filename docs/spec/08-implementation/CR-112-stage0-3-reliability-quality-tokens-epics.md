@@ -304,9 +304,7 @@ Merged onto `cr112-integration`.
 
 **Acceptance:** report-only metric on Resume.md bullets. Validated against a human-reviewed sample of the 7 folders before any LW rule. No auto-rewrite.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Synthetic tests green.
-Live scan (advisory only): arbiter 0/11, cdw 1/10 (0.10), loot_labs 1/9 (0.11),
-marlowe 0/10, pearl_com 1/11 (0.09), supplyhouse 0/10, trax 0/10. No LW rule.
+**Status:** [x] accepted locally on `cr112-story51` (2026-09-11). Independent review ACCEPT. F7 metric is comma / `by` / `while` + `-ing`. Live scan (advisory only): `arbiter` 11/11 (1.00), `cdw` 9/10 (0.90), `loot_labs` 7/9 (0.78), `marlowe_companies_inc` 10/10 (1.00), `pearl_com` 6/11 (0.55), `supplyhouse` 7/10 (0.70), `trax_technologies` 9/10 (0.90). No LW rule. Merged onto `cr112-integration`. Do not use dirty-main end-of-bullet `ing` rates (0.09–0.11).
 
 ---
 

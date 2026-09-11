@@ -786,7 +786,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-390` | acceptance | P1 | implemented | Drift guard runs in the same verification path as `check_context_pack_freshness.py` and passes clean on `main` | `FR-293` | CR-111 |
 | `AC-391` | acceptance | P2 | implemented | `docs/AGENTS.md` defers to root `AGENTS.md`; the `SDD_PROCESS.md` link is repo-relative | `FR-294` | CR-111 |
 | `FR-303` | functional | P1 | in_progress | Ranked claims that lose Top-2 store a cheap omitted reason-code (`top2_cutoff` or `project_slot_cap`) on the evidence_map row; the full ranking audit lives in sibling `evidence_selection_trace.json`, never in `authoring_prompt.md` | `AC-400` | CR-112 |
-| `AC-400` | acceptance | P1 | in_progress | Pearl-like fixture where SAVINGS ranks 3rd emits `top2_cutoff` in omitted_reasons and the sibling trace; author prompt does not contain candidate scores; `score_zero` is TRACE-only | `FR-303` | CR-112 |
+| `AC-400` | acceptance | P1 | in_progress | Pearl-like fixture where SAVINGS ranks 3rd emits `top2_cutoff` in omitted_reasons and the sibling trace; author prompt does not contain candidate scores; `score_zero` is TRACE-only; Story 3.5 must not `REPLACE` this fixture | `FR-303` | CR-112 |
 | `FR-304` | functional | P2 | in_progress | Read-only swap report labels omitted ranked claims `SWAP_CANDIDATE` / `INTENTIONAL_TRADEOFF` / `PACKET_MISSING` / `INSUFFICIENT_PROOF` from the selection trace; TRACE `filter=boilerplate_filtered` is `INTENTIONAL_TRADEOFF`, not `PACKET_MISSING` | `AC-401` | CR-112 |
 | `AC-401` | acceptance | P2 | in_progress | Isolated synthetic traces: `top2_cutoff` → `SWAP_CANDIDATE`; `project_slot_cap` → `INTENTIONAL_TRADEOFF`; `score_zero` → `INSUFFICIENT_PROOF`; empty item → `PACKET_MISSING`; boilerplate filter → `INTENTIONAL_TRADEOFF`; drafts unchanged; missing/unreadable trace exits nonzero | `FR-304` | CR-112 |
 | `FR-305` | functional | P1 | in_progress | Eligibility-framed background-check / fingerprint and nights-and-weekends required lines skip claim scoring and must not receive product-roadmap claims as Top-2 | `AC-402` | CR-112 |
@@ -817,6 +817,27 @@ Epic 1 allocated 2026-09-10. Stories remain pending independent review (not self
 | `FR-300` | functional | P1 | in_progress | Opt-in batch Author/Review runner does not load `workExperience.md`; ground truth is packet excerpts + constraints + drafts + JD + rubric; never the default spawn | `AC-397` | CR-112 |
 | `AC-397` | acceptance | P1 | in_progress | Tracked `.claude/workflows/generate-submission-batch.js` `reviewPrompt` forbids WE; `whenToUse` says never-default; cap remains 3 unless `allowLargeBatch` | `FR-300` | CR-112 |
 
+### CR-112 Selection vs closed-world recovery (FR-302 superseded, FR-312–FR-317)
+
+Design: `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-design.md`. Status stays draft until Story 3.0 independent review ACCEPT. Do not implement from these rows before that gate.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-302` | functional | P1 | superseded | Stage 1 verify WARNs on provenance IDs outside the packet closed world and does not fail | `AC-399` | CR-112 Story 3.1 WARN (superseded 2026-09-11) |
+| `AC-399` | acceptance | P1 | superseded | Extra-packet findings are WARN (`truth.provenance.extra.<id>`), prefix match does not clear, verify does not FAIL | `FR-302` | CR-112 |
+| `FR-312` | functional | P0 | draft | Provenance claim IDs not exactly in packet excerpts ∪ evidence_map ∪ soft_gaps are a recoverable Stage 1 completion block; detection does not rank, recommend, or widen; prefix match does not clear | `AC-409` | CR-112 |
+| `AC-409` | acceptance | P0 | draft | Isolated extra-packet fixture FAILs verify while unresolved; healthy exact-ID packet PASSes; prefix SAVINGS-vs-PM still extra; detector does not mutate packet or draft; `ACCEPTED_AS_CORRECT`, `FALSE_POSITIVE`, `NOT_APPLICABLE`, and `HUMAN_ACCEPTED_RISK` cannot clear the finding | `FR-312` | CR-112 |
+| `FR-313` | functional | P0 | draft | A deterministic comparator compares an eligible omitted or extra claim to the weakest selected fact on the same JD item using JD-priority, evidence strength, attribution safety, distinctiveness, domain-truth risk, and document capacity, without `call_llm`, and returns REPLACE / KEEP / AMBIGUOUS / INELIGIBLE. Cross-item REPLACE is forbidden. Missing attribution is a tie, not a rank | `AC-410` | CR-112 |
+| `AC-410` | acceptance | P0 | draft | Pearl-like SAVINGS vs PM is not REPLACE on Class 1 or Class 2; unmapped extra cannot REPLACE a globally weakest required pick; CONTRIBUTED cannot beat missing or OWNED; sibling-lens extras are not REPLACE; disabled/prohibited is INELIGIBLE; metric size alone is not REPLACE; attribution values are case-folded including INFLUENCED and OBSERVED | `FR-313` | CR-112 |
+| `FR-314` | functional | P1 | draft | When the comparator returns REPLACE before authoring, the packet swaps the omitted fact for the weakest selected fact on that item, records the decision in `evidence_selection_trace.json`, and stores `displaced_by_dominance` on the displaced row; AMBIGUOUS preserves the current selection and flags TRACE `selection_review` | `AC-411` | CR-112 |
+| `AC-411` | acceptance | P1 | draft | Pre-authoring REPLACE fixture writes TRACE decision and packet omitted reason `displaced_by_dominance`; author prompt contains no scores or axes; AMBIGUOUS fixture keeps original Top-2 | `FR-314` | CR-112 |
+| `FR-315` | functional | P0 | draft | After extra-packet detection, recovery is a separate step: unsupported/prohibited → rewrite/remove without widening; KEEP or AMBIGUOUS extra → remove extra and keep authorized evidence; REPLACE only if the extra is a same-item TRACE omitted candidate, then explicit packet widen, invalidate the leaked draft, require a new author pass, and verify the new draft; extras not in TRACE omitted cannot widen; HUMAN_COMPARE only for unreadable packet, missing catalog, or WE/constraint conflict | `AC-412` | CR-112 |
+| `AC-412` | acceptance | P0 | draft | Pearl/SupplyHouse-shaped SAVINGS extra → REMOVE_EXTRA; loot_labs SUPPORT and marlowe SEC extras → REMOVE_EXTRA; AMBIGUOUS extra → REMOVE_EXTRA not HUMAN_COMPARE; synthetic same-item TRACE omitted REPLACE → WIDEN_PACKET invalidates draft and does not provenance-stamp leaked sentences; disabled extra → REWRITE_UNSUPPORTED and packet IDs unchanged; unresolved extras keep verify FAIL | `FR-315` | CR-112 |
+| `FR-316` | functional | P0 | draft | Model calls require explicit cost_class; unknown is not callable; groq and gemini default unknown until a user zero-dollar declaration exists; free-tier APIs require that declaration; paid APIs require a user-configured provider and remaining budget; fallback must not move free_zero_dollar to paid or unknown; no eligible provider pauses onto the existing authoring-prompt paste path | `AC-413` | CR-112 |
+| `AC-413` | acceptance | P0 | draft | Missing cost_class refuses the call; default groq→gemini with no declaration does not call; a free provider with paid next-in-chain does not call the paid provider; budget 0 blocks paid; empty eligible list raises a pause error and does not call; eval `--paid-llm` still does not import `call_llm` | `FR-316` | CR-112 |
+| `FR-317` | functional | P0 | draft | Telemetry records model calls, provider, estimated tokens, cost_class, cost_known, known api_cents, and subscription minutes separately; unknown cost must not be represented as zero dollars | `AC-414` | CR-112 |
+| `AC-414` | acceptance | P0 | draft | An unknown-class refused call stores `cost_class=unknown` and `cost_known=false` with `api_cents` omitted or null, never `0`; known free calls may record 0 with `cost_known=true`; columns are never summed | `FR-317` | CR-112 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |
@@ -834,6 +855,7 @@ Epic 1 allocated 2026-09-10. Stories remain pending independent review (not self
 | `NFR-011` | reliability | P0 | draft | Stage 0 survives interruption and provider failure by reusing committed judgments and resuming per opportunity |
 | `NFR-012` | security/privacy | P0 | draft | Cloud requests use configured credentials, existing PII redaction, and only the intended JD/evidence context |
 | `NFR-013` | maintainability | P0 | implemented | CR-111 changes no submission behavior, linter rule, threshold, or pipeline code — doc/agent-file edits plus the drift-guard script only (CR-111) |
+| `NFR-015` | cost | P0 | draft | Deterministic/offline is the default; groq/gemini stay unknown until a user zero-dollar declaration; paid APIs are opt-in with configured provider and budget; unknown cost eligibility fails closed; `api_cents` is omitted or null when `cost_known=false` (CR-112 Epic 7) |
 
 ## Security Requirements
 

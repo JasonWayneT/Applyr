@@ -37,7 +37,13 @@ Epic 1 (fail-open dirty patches)
   → Epic 4 (adversarial honesty)
   → Epic 5 (advisory composition texture)
   → Epic 6 (controlled evaluation)
+  → Epic 7 (model-cost eligibility and telemetry)
 ```
+
+**2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
+`CR-112-selection-and-closed-world-recovery-design.md`. Story 3.0 QA PASS. Story 3.1
+detection QA PASS. Stories 3.5/3.6 may start. Epic 3 is not integration-ready.
+Stories 7.1/7.2 wait on 3.1+3.5+3.6 integration review.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -172,20 +178,40 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Depends on:** Epic 1.2 if packet shape changes. Uses investigation F5/F6.
 
-**Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; citing a claim the packet never offered is visible to Stage 1 verify.
+**Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; an omitted fact that clearly dominates the weakest selected fact is swapped before authoring; citing a claim the packet never offered blocks Stage 1 completion until remove / rewrite / explicit widen / human-compare. Detection and comparative selection stay separate.
 
-### Story 3.1 — Fail or WARN extra-packet provenance IDs
+### Story 3.0 — Pre-implementation design review (no code)
 
-**Files:** `scripts/author_from_packet.py` (`run_verify_only`), tests.
+**Files:** `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-design.md`
 
 **Acceptance:**
-- Any provenance `claim_id` not in packet excerpts ∪ evidence_map ∪ soft_gaps is a finding.
-- First implementation: WARN with a stable id (`truth.provenance.extra.<id>`). Do not hard-block until Jason sees false-positive rate on the 7-folder set (run read-only).
-- Project-prefix match (`ACC-101-SAVINGS` citing as PM) does **not** clear the extra-ID check.
+- Independent reviewer (not the design author) issues ACCEPT / REVISE / REJECT against the seven-folder 2026-09-10 evidence and FR-254.
+- Pearl and SupplyHouse `ACC-101-SAVINGS` must not `REPLACE`.
+- Detection must stay separable from comparison.
+- No live folder rewrite. No implementation of 3.1/3.5/3.6/7.x before ACCEPT.
 
-**Status:** [ ] planned; not in the Epic 1 commit. WARN only
-(`truth.provenance.extra.<id>`). Prefix does not clear. Tests in
-`scripts/test_cr112_epic3.py`. Live scan recorded below. No live rewrites.
+**Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
+against the design, Story 3.1 diff, seven-folder evidence, and FR-254.
+Independent design ACCEPT was `21fd8c64-6c03-4c55-9fc3-4a7a2a974dbb`.
+Epic 3 is not integration-ready.
+
+### Story 3.1 — Detect extra-packet provenance IDs as a recoverable completion block
+
+**Files:** `scripts/author_from_packet.py` (`run_verify_only`), `scripts/packet_closed_world.py`, tests.
+
+**Acceptance:**
+- Any provenance `claim_id` not in packet excerpts ∪ evidence_map ∪ soft_gaps is a finding with stable id `truth.provenance.extra.<id>`.
+- Detection does not rank, recommend, or widen.
+- Unresolved extra IDs FAIL Stage 1 verify. Finalize cannot complete. Agents must not dispose these as `ACCEPTED_AS_CORRECT` / `FALSE_POSITIVE` / `NOT_APPLICABLE` / `HUMAN_ACCEPTED_RISK`. This is not `NEEDS_DISPOSITION`.
+- Project-prefix match (`ACC-101-SAVINGS` citing as PM) does **not** clear the extra-ID check.
+- WARN-and-continue (FR-302 / AC-399) is superseded.
+- Recovery actions live in Story 3.6, not in this detector.
+
+**Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
+on the detection slice (12/12 focused tests; nearby 56/56). Detection
+is FAIL-closed. Recovery stays Story 3.6. Epic 3 is not
+integration-ready. Live scan below is frozen evidence, not a rewrite
+list.
 
 **Live extra-packet scan (2026-09-10),** `python scripts/packet_closed_world.py --root data/submissions`:
 
@@ -199,22 +225,22 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 | supplyhouse | ACC-101-SAVINGS |
 | trax_technologies | (none) |
 
-4 of 7 WARN. Hard-block still deferred. SupplyHouse was not re-authored.
+4 of 7 extra. Do not treat those extras as automatically stronger. SupplyHouse was not re-authored.
 
 ### Story 3.2 — Record why a scored claim lost the slot
 
 **Files:** `scripts/build_authoring_packet.py` (`build_evidence_map`, `_write_selection_trace`), `scripts/test_cr112_story32.py`.
 
 **Acceptance:**
-- Packet `evidence_map` rows store cheap `omitted_reasons` `{claim_id, reason}` where reason is `top2_cutoff` or `project_slot_cap` only.
+- Packet `evidence_map` rows store cheap `omitted_reasons` `{claim_id, reason}` where reason is `top2_cutoff` or `project_slot_cap` only. `displaced_by_dominance` is Story 3.5 / FR-314, not this story.
 - Full ranking (every scored candidate, score, reason, attribution) lives in sibling `evidence_selection_trace.json`. Stage 1 never loads that file.
 - `score_zero` catalog noise and `boilerplate_filtered` preferred/responsibility lines are TRACE-only. Boilerplate items still get no evidence_map row.
 - No `disabled` pick-loop skip and no `disabled` omitted reason. Production scoring already skips disabled claims.
-- Sanitized Pearl-like fixture: SAVINGS ranks 3rd emits `top2_cutoff`, is not auto-inserted, and rank-1 SAVINGS is picked.
-- Author prompt may contain the cheap reason code. It must not contain candidate scores or `evidence_selection_trace.json`.
+- Sanitized Pearl-like fixture: SAVINGS ranks 3rd emits `top2_cutoff`, is **not** auto-inserted, and rank-1 SAVINGS is picked. Story 3.5 must not `REPLACE` this fixture.
+- Author prompt may contain the cheap reason code. It must not contain candidate scores, comparator axes, or `evidence_selection_trace.json`.
 - Production `build_packet` writes the sibling trace. A hand-call of `_write_selection_trace` is not coverage.
 
-**Status:** [x] accepted locally on `cr112-story32` (2026-09-11). Independent review ACCEPT. Packet enum is `top2_cutoff` | `project_slot_cap`. TRACE holds scores, `score_zero`, and `boilerplate_filtered`. Merged onto `cr112-integration`.
+**Status:** [x] accepted locally on `cr112-story32` (2026-09-11). Independent review ACCEPT. Packet enum is `top2_cutoff` | `project_slot_cap` until Story 3.5 adds `displaced_by_dominance`. TRACE holds scores, `score_zero`, and `boilerplate_filtered`. Merged onto `cr112-integration` / local main. Do not weaken Pearl KEEP.
 
 ### Story 3.3 — Advisory swap report (read-only)
 
@@ -240,6 +266,42 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - Fixture cloned from marlowe's Level II fingerprint line, with overlapping ROADMAP tags so the 8bbc497 path would have assigned the claim.
 
 **Status:** [x] accepted locally on `cr112-story34` (2026-09-11). Independent review ACCEPT. Eligibility-framed skip only. Merged onto `cr112-integration`.
+
+### Story 3.5 — Pre-authoring comparative replace
+
+**Depends on:** Story 3.0 ACCEPT, Story 3.2 TRACE.
+
+**Files:** `scripts/build_authoring_packet.py` (post Top-2 pass), new comparator module (name locked at implementation), `scripts/test_cr112_story35.py`.
+
+**Acceptance:**
+- After Top-2, omitted eligible candidates are compared to the weakest selected fact on that item using the six axes in the design doc.
+- `REPLACE` only on clear dominance. Swap before excerpts/prompt. TRACE records the decision. Packet omitted reason for the displaced ID is `displaced_by_dominance`.
+- `AMBIGUOUS` preserves current picks and sets `selection_review: true` on TRACE. No author-prompt scores.
+- Pearl-like SAVINGS fixture does not `REPLACE`. A separate synthetic fixture (not a larger-metric trick) does `REPLACE`.
+- Comparator uses no `call_llm`.
+- Story 3.3 report remains read-only.
+
+**Status:** [ ] ready after Story 3.0/3.1 QA PASS. Not started.
+
+### Story 3.6 — Closed-world recovery after extra-packet detection
+
+**Depends on:** Story 3.0 ACCEPT, Story 3.1 FAIL-closed detection, Story 3.5 comparator.
+
+**Files:** recovery worker + `author_from_packet.py` verify FAIL path, `scripts/test_cr112_story36.py`.
+
+**Acceptance:**
+- Detector still does not recover. Recovery is a separate step.
+- `INELIGIBLE` / prohibited / no WE span → `REWRITE_UNSUPPORTED` (do not widen).
+- Comparator `KEEP` or `AMBIGUOUS` → `REMOVE_EXTRA` (do not widen, do not `HUMAN_COMPARE`).
+- Extra IDs not in TRACE omitted/candidates → `REMOVE_EXTRA` or `REWRITE_UNSUPPORTED`. Never `WIDEN_PACKET`.
+- Comparator `REPLACE` only if A is a same-item TRACE omitted candidate → `WIDEN_PACKET`, invalidate leaked draft, require a new author pass, do not provenance-stamp leaked sentences.
+- `HUMAN_COMPARE` only for unreadable packet, missing catalog, or WE/constraint conflict.
+- Cross-item REPLACE is forbidden.
+- Unresolved extras keep Stage 1 FAIL. Finalize blocked.
+- Fixtures: pearl/supplyhouse SAVINGS, loot_labs SUPPORT, marlowe SEC → `REMOVE_EXTRA`; synthetic same-item TRACE omitted REPLACE → `WIDEN_PACKET` + new author pass; disabled extra → `REWRITE_UNSUPPORTED`.
+- Do not rewrite live seven folders.
+
+**Status:** [ ] ready after Story 3.1 QA PASS. Blocked on Story 3.5 comparator.
 
 ---
 
@@ -332,15 +394,51 @@ Merged onto `cr112-integration`.
 
 ---
 
+## Epic 7 — Model-cost eligibility and telemetry
+
+**Depends on:** none for the registry. Touches CR-108 cascade and `call_llm`. Blocked on Story 3.0 ACCEPT because Jason specified this policy in the same 2026-09-11 design pass.
+
+**Definition of Done:** no model call proceeds with unknown cost eligibility; free providers cannot silently fall back to paid; unknown cost is never reported as zero dollars; missing authorized API pauses onto manual paste.
+
+### Story 7.1 — Cost eligibility, no free→paid fallback, pause to paste
+
+**Files:** new cost-policy module, `scripts/utils.py` `call_llm` / provider cascade, Stage 0 cascade, tests.
+
+**Acceptance:**
+- Every provider has an explicit `cost_class`: `offline` | `free_zero_dollar` | `paid` | `unknown`. Missing class is `unknown`.
+- Groq and Gemini stay `unknown` until Jason records a zero-dollar declaration. Provider name does not imply free.
+- `unknown` is not callable (fail closed).
+- Paid requires user-configured provider allowlist and remaining budget. Unset/0 budget → paid ineligible.
+- Fallback may not move `free_zero_dollar` → `paid` or `unknown`.
+- No eligible provider: do not call; pause; keep `WAITING_FOR_LLM` / `authoring_prompt.md` paste.
+- Does not wire eval `--paid-llm` to `call_llm`.
+
+**Status:** [ ] blocked on Epic 3 integration review (3.1+3.5+3.6).
+
+### Story 7.2 — Cost telemetry: unknown is not zero
+
+**Files:** call sites + eval/metrics writers, tests.
+
+**Acceptance:**
+- Per call / totals record: invocations, provider, estimated tokens, `cost_class`, `cost_known`, `api_cents` only when `cost_known` is true, `subscription_minutes` separately.
+- When `cost_known=false`, `api_cents` is omitted or null, never `0`.
+- Never sum subscription minutes with API cents.
+- Eval 6.1/6.2 baseline remains zero-call with explicit `cost_class` labels, not implied free spend.
+
+**Status:** [ ] blocked on Epic 3 integration review (3.1+3.5+3.6).
+
+---
+
 ## Out of scope
 
 - Rewriting the seven live submissions **as a blanket action.** Story 1.4's per-folder recovery decision is the sole, narrow exception — any re-authoring it triggers is explicit, human-reviewed, and limited to folders the audit actually flags, not a general rewrite pass.
-- Auto-inserting larger metrics
+- Auto-inserting larger metrics (Story 3.5 replace is dominance, not metric size)
 - Automatic style/gerund hard blocks
-- Migrating Stage 1 compose to a cheaper API model
+- Migrating Stage 1 compose to a cheaper API model without Epic 7 eligibility
 - Multi-tenant billing
 - Deleting Antigravity's runner, catalog, or fixtures
 - Accepting CR-097 Epic 7 as CR-097 scope
+- Implementing Stories 3.1-revise / 3.5 / 3.6 / 7.x before Story 3.0 ACCEPT
 
 ---
 

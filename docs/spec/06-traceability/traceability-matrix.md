@@ -343,6 +343,14 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-311` | CR-112 | Separate harness/API token-cost columns | `scripts/run_cr112_eval.py`, `scripts/test_cr112_story61.py` | in_progress |
 | `AC-407` | CR-112 | Five-folder sanitized materialization, default assemble-off, production SQLite refusal | `scripts/test_cr112_story61.py` | in_progress |
 | `AC-408` | CR-112 | Zero-call paid opt-in, separate totals, bytes_div_4_estimate | `scripts/test_cr112_story61.py` | in_progress |
+| `FR-302` / `AC-399` | CR-112 | Extra-packet WARN (superseded 2026-09-11) | `scripts/packet_closed_world.py`, `scripts/test_cr112_story31.py` | superseded |
+| `FR-312` / `AC-409` | CR-112 | Extra-packet detection as Stage 1 completion block; detection-only | design `CR-112-selection-and-closed-world-recovery-design.md`; tests planned `scripts/test_cr112_story31.py` | draft |
+| `FR-313` / `AC-410` | CR-112 | Deterministic six-axis comparator | same design; tests planned `scripts/test_cr112_story35.py` | draft |
+| `FR-314` / `AC-411` | CR-112 | Pre-authoring REPLACE into packet + TRACE | `scripts/build_authoring_packet.py` (planned) | draft |
+| `FR-315` / `AC-412` | CR-112 | Closed-world recovery: remove / rewrite / widen / human | planned Story 3.6 worker | draft |
+| `FR-316` / `AC-413` | CR-112 | Cost eligibility, no free→paid fallback, pause to paste | planned Story 7.1 | draft |
+| `FR-317` / `AC-414` | CR-112 | Cost telemetry; unknown is not zero | planned Story 7.2 | draft |
+| `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | design Epic 7 | draft |
 
 
 ## Coverage checklist

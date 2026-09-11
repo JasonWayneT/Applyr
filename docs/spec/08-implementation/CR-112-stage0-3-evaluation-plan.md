@@ -272,11 +272,13 @@ the accepted local stories:
 | Cost | Do not sum API and subscription | 0 and 0, columns separate |
 | Latency | `run_events.jsonl` on eval set | Eval start/complete only. Live 7 folders still have 0 events unless separately enabled |
 
-## Required user decisions (unchanged)
+## Required user decisions (updated 2026-09-11)
 
-- Push / merge the local CR-112 branches onto main.
-- Set a paid eval budget.
-- Promote extra-packet WARN to hard-block.
+- Push local `main` to origin (Jason: not until product-ready).
+- Independent ACCEPT of `CR-112-selection-and-closed-world-recovery-design.md`
+  before implementing Stories 3.1-revise / 3.5 / 3.6 / 7.x. Extra-packet is
+  not a WARN-vs-hard-stop choice.
+- Declare provider `cost_class` (unknown fails closed).
 - Start a new CR for harness-agnostic Author/Review isolation. That is
   not Story 2.2.
 

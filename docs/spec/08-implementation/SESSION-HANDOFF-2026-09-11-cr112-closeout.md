@@ -8,6 +8,14 @@ shared_session_round: R29
 
 # CR-112 closeout — local stories accepted, eval plan ready, stop
 
+**Supersession (2026-09-11, later same day):** Jason split extra-packet into
+selection vs closed-world recovery and set the model-cost policy. WARN vs
+hard-stop is no longer the open decision. Design:
+`CR-112-selection-and-closed-world-recovery-design.md`. Implementation is
+blocked on Story 3.0 independent review. Local accepted stories were
+merged to `main` at `b873fb5` before that design. Do not implement from
+this closeout.
+
 Standing evidence, commit, and stop-condition rules remain those in
 `SESSION-HANDOFF-2026-09-11-cr112-autonomous-continuation.md` (untracked
 on dirty main / earlier session). That file's Opening Prompt still says
@@ -114,9 +122,9 @@ Do not start a new CR-112 implementation story from this closeout.
 
 ## Required user decisions (do not take them)
 
-- Push / merge the local CR-112 branches onto main.
-- Set a paid eval budget.
-- Promote extra-packet WARN to hard-block.
+- Push local `main` to origin (Jason: not until product-ready).
+- Independent ACCEPT of `CR-112-selection-and-closed-world-recovery-design.md` (Story 3.0).
+- Declare Stage 0 provider `cost_class` (names are not free by default).
 - Start a new CR for harness-agnostic Author/Review isolation.
 
 ## Token / tool limits

@@ -1,0 +1,5 @@
+{
+  "name": "case_hallucinated_claim",
+  "invariant_id": "TRUTH-001",
+  "description": "claim_provenance.json referencing nonexistent claim ID FAKE-999 must fail claim_provenance check."
+}

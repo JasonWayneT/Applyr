@@ -58,6 +58,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_cr112_story32.py",
     "scripts/test_cr112_story33.py",
     "scripts/test_cr112_story34.py",
+    "scripts/test_cr112_adversarial.py",
     "scripts/test_stage0_checkpoint_failures.py",
     "scripts/test_stage0_confirmations.py",
     "scripts/test_resolve_task_providers.py",

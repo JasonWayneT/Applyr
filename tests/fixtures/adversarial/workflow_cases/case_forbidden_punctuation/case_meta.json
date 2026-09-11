@@ -1,0 +1,5 @@
+{
+  "name": "case_forbidden_punctuation",
+  "invariant_id": "DOC-003",
+  "description": "Resume containing semicolons (LR-014) or colon-whitespace-letter em-dash tells (LR-015) must fail linter checks."
+}

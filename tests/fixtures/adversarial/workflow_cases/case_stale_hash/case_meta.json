@@ -1,0 +1,5 @@
+{
+  "name": "case_stale_hash",
+  "invariant_id": "STATE-003",
+  "description": "Corrupting stage0_fit_gate.json content after receipt generation must cause workflow state reconciliation to flag status as STALE."
+}

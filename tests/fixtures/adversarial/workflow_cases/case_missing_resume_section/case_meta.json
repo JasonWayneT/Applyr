@@ -1,0 +1,5 @@
+{
+  "name": "case_missing_resume_section",
+  "invariant_id": "DOC-001",
+  "description": "Resume missing required EDUCATION heading must fail check_stage1_ready."
+}

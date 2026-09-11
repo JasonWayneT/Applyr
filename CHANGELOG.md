@@ -2,7 +2,7 @@
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
 Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
 Story 3.1 closed-world extra-packet WARN, Story 3.2 omitted_reasons
-plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip.
+plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip, and Epic 4 adversarial fail-closed.
 Extra-packet is WARN, not a hard block. SupplyHouse is not rewritten.
 Story 2.2 lands later in this integration.
 
@@ -65,6 +65,10 @@ candidate tree, never on HEAD.
 - `scripts/report_evidence_swaps.py`
 - `scripts/test_cr112_story33.py`
 - `scripts/test_cr112_story34.py`
+- `scripts/run_adversarial_pressure_test.py`, `scripts/test_cr112_adversarial.py`
+- `tests/fixtures/adversarial/workflow_cases/`, fixtures README
+- `docs/spec/INVARIANTS_CATALOG.md`
+- `docs/spec/archive/adversarial-payloads/`
 
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,

@@ -258,9 +258,9 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - `case_stale_hash` fixture either calls the programmatic stale check or is removed from the fixture walk.
 - Unknown directory → not counted as pass.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Unhandled name FAIL.
+**Status:** [x] accepted locally on `cr112-epic4` (2026-09-11). Unhandled name FAIL closed.
 `case_stale_hash` fixture SKIPPED (programmatic STATE-003 covers it). Runner
-13/13 passed, SKIPPED excluded from pass count.
+13/13 passed, SKIPPED excluded from pass count. Merged onto `cr112-integration`.
 
 ### Story 4.2 — Positive control + catalog alignment
 
@@ -271,10 +271,11 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - Catalog rows FIT-*/DOC-002/004/TRUTH-002/003/FINAL-* are either given a programmatic case or marked `enforced_by: not this runner`.
 - `payload_*.txt` either wired or moved to `docs/` / archive with a note.
 
-**Status:** [ ] planned; not in the Epic 1 commit. STATE-004 incomplete
+**Status:** [x] accepted locally on `cr112-epic4` (2026-09-11). STATE-004 incomplete
 False / chained receipts True without mocking the oracle. Catalog column
 `Adversarial runner` marks FIT-*/DOC-002/004/TRUTH-002/003/FINAL-* as
 `not this runner`. Payloads archived under `docs/spec/archive/adversarial-payloads/`.
+Merged onto `cr112-integration`.
 
 ### Story 4.3 — Audit the programmatic `CASES` tier's own assertions, not just the fixture tier
 
@@ -287,10 +288,11 @@ F4's original "KEEP" verdict on programmatic `CASES` assumed calling production 
 - Add a negative-control case per audited check: same folder setup minus the specific defect (e.g. valid punctuation, valid Stage 0 receipt) must NOT raise that specific error — proving the check can distinguish "this invariant" from "some other reason validate failed."
 - Document which programmatic checks were audited and which (if any) are left broad with a stated reason.
 
-**Status:** [ ] planned; not in the Epic 1 commit. STATE-001 named
+**Status:** [x] accepted locally on `cr112-epic4` (2026-09-11). STATE-001 named
 substring + negative control; DOC-003 linter-direct + negative control.
 STATE-002 still asserts skip lock via status (not a bare WorkflowError
 success). Audit list is in `run_adversarial_pressure_test.py`.
+Merged onto `cr112-integration`.
 
 ---
 

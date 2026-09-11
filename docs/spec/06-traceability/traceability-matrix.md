@@ -325,6 +325,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `NFR-013` | CR-111 | No submission behavior change; guard and tests are isolated | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py` | implemented |
 | `AC-379`–`AC-386`, `AC-388`–`AC-391` | CR-111 | Authority, canonicalization, drift, and docs acceptance checks | focused drift tests, real-tree drift check, pointer inspection | implemented |
 | `AC-387` | CR-111 | Live Claude Code and Codex skill-loading verification | harness-bridge session 009 R52 (Claude PASS), R53 (Codex PASS) | implemented |
+| `FR-305` | CR-112 | Admin-line skip (eligibility-framed fingerprint / nights-and-weekends) | `scripts/build_stage0_fit_gate.py`, `scripts/build_authoring_packet.py`, `scripts/test_cr112_story34.py` | in_progress |
+| `AC-402` | CR-112 | Fingerprint fixture empty claim_ids; product/years negatives | `scripts/test_cr112_story34.py` | in_progress |
 
 
 ## Coverage checklist

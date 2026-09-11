@@ -38,6 +38,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
 from authoring_examples import bank_version, select_examples  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
+    _ADMIN_BACKGROUND_RE,
+    _ADMIN_SCHEDULE_RE,
     _BACHELORS_SATISFIED_RE,
     _HIGHER_DEGREE_MANDATORY_RE,
     _get_hard_tool_pattern,
@@ -675,6 +677,18 @@ def build_evidence_map(
     def _enqueue(item: str, bucket: str, *, is_required: bool) -> None:
         forced_bridge = _force_empty_claim_scoring(item)
         soft_raw = (soft_gap_bridges.get(item) or "").strip()
+        # CR-112 Story 3.4 / FR-305: skip scoring for eligibility-framed
+        # fingerprint / background-check and nights-and-weekends lines so a
+        # tag overlap cannot assign ACC-103-ROADMAP. Years and bachelor's
+        # still go through the existing paths. Implements AC-402.
+        if _ADMIN_BACKGROUND_RE.search(item) or _ADMIN_SCHEDULE_RE.search(item):
+            pending.append({
+                "jd_item": item,
+                "bucket": bucket,
+                "bridge": soft_raw or None,
+                "scored": [],
+            })
+            return
         if forced_bridge is not None:
             # No claim_ids: prefer a real Stage-0 soft-gap bridge, else the honesty note.
             # Do not use the generic "Soft gap — transferable…" filler here — that exists for

@@ -1,3 +1,16 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Story 3.4 — eligibility-framed fingerprint / background-check
+and nights-and-weekends JD lines skip claim scoring so they cannot take
+ACC-103-ROADMAP. Product "background check roadmap" and release-schedule
+lines still score. Years lines still may receive claims.
+
+### Changed
+- `scripts/build_stage0_fit_gate.py` `_is_administratively_satisfied`
+- `scripts/build_authoring_packet.py` `_enqueue` skip-scoring for those lines
+
+### Added
+- `scripts/test_cr112_story34.py`
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

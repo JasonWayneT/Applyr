@@ -53,6 +53,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_llm_provider_cascade.py",
     "scripts/test_stage0_provider_policy.py",
     "scripts/test_stage0_provider_golden.py",
+    "scripts/test_cr112_story34.py",
     "scripts/test_stage0_checkpoint_failures.py",
     "scripts/test_stage0_confirmations.py",
     "scripts/test_resolve_task_providers.py",

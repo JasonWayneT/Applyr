@@ -1,0 +1,16 @@
+Product Manager
+
+Adventure Works Ops is a fictional logistics software company. This is an IC product role on an existing operations platform. It is not a founding PM role.
+
+Requirements:
+- Own roadmap for an existing B2B operations platform
+- Work with engineering, support, and account management
+- Use metrics to decide what ships next
+
+Preferred:
+- Salesforce workflow familiarity
+- Experience in fulfillment or onboarding automation
+
+Responsibilities:
+- Cut operational waste without claiming revenue ownership
+- Keep the backlog honest under resource constraints

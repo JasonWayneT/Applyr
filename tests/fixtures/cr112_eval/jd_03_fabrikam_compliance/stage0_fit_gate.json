@@ -1,0 +1,33 @@
+{
+  "company": "Fabrikam Civic",
+  "role": "Product Manager, Compliance Workflows",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 2",
+  "reach_out": true,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "Experience with privacy or compliance workflow product work", "gap": true, "gap_class": "SOFT"},
+    {"item": "Cross-functional alignment with legal, CX, and engineering", "gap": false},
+    {"item": "Ability to sequence constrained work without people-management authority", "gap": false}
+  ],
+  "preferred": [
+    {"item": "GDPR or CCPA program experience", "gap": true, "gap_class": "SOFT"},
+    {"item": "Background in government software", "gap": true, "gap_class": "SOFT"}
+  ],
+  "responsibilities": [
+    "Turn audit findings into a sequenced backlog",
+    "Keep the platform honest about what is owned versus transferable"
+  ],
+  "culture": [],
+  "flagged_gaps": [
+    {
+      "item": "Experience with privacy or compliance workflow product work",
+      "gap_class": "SOFT",
+      "bridge_used": "Compliance workflow work as a transferable bridge. Do not claim the JD domain as owned."
+    }
+  ],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-112 sanitized eval fixture. Fictional employer. Soft-gap practice row."
+}

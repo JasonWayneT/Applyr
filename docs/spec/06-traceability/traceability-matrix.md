@@ -325,6 +325,10 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `NFR-013` | CR-111 | No submission behavior change; guard and tests are isolated | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py` | implemented |
 | `AC-379`–`AC-386`, `AC-388`–`AC-391` | CR-111 | Authority, canonicalization, drift, and docs acceptance checks | focused drift tests, real-tree drift check, pointer inspection | implemented |
 | `AC-387` | CR-111 | Live Claude Code and Codex skill-loading verification | harness-bridge session 009 R52 (Claude PASS), R53 (Codex PASS) | implemented |
+| `FR-310` | CR-112 | Frozen sanitized offline eval set | `scripts/run_cr112_eval.py`, `scripts/test_cr112_story61.py`, `tests/fixtures/cr112_eval/`, `.gitignore`, `docs/spec/08-implementation/CR-112-stage0-3-reliability-quality-tokens-epics.md` | in_progress |
+| `FR-311` | CR-112 | Separate harness/API token-cost columns | `scripts/run_cr112_eval.py`, `scripts/test_cr112_story61.py`, `docs/spec/08-implementation/CR-112-stage0-3-reliability-quality-tokens-epics.md`, `CHANGELOG.md` | in_progress |
+| `AC-407` | CR-112 | Five-folder sanitized materialization, default assemble-off, production SQLite refusal, and observability logging | `scripts/test_cr112_story61.py`, `scripts/run_cr112_eval.py` | in_progress |
+| `AC-408` | CR-112 | Zero-call paid opt-in, separate totals, and `bytes_div_4_estimate` labeling | `scripts/test_cr112_story61.py`, `scripts/run_cr112_eval.py` | in_progress |
 
 
 ## Coverage checklist

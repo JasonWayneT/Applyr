@@ -1,0 +1,28 @@
+{
+  "company": "Wide World Importers",
+  "role": "Product Manager",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 1",
+  "reach_out": false,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "5+ years product management on a B2B SaaS platform", "gap": false},
+    {"item": "Must pass a Level II fingerprint background check", "gap": false},
+    {"item": "Nights and weekends availability required", "gap": false},
+    {"item": "Roadmap ownership with engineering partners", "gap": false}
+  ],
+  "preferred": [
+    {"item": "Bachelor's degree", "gap": false},
+    {"item": "SQL for investigation", "gap": false}
+  ],
+  "responsibilities": [
+    "Sequence platform reliability work",
+    "Partner cross-functionally without direct reports"
+  ],
+  "culture": [],
+  "flagged_gaps": [],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-112 sanitized eval fixture. Admin lines must not receive product-roadmap claims."
+}

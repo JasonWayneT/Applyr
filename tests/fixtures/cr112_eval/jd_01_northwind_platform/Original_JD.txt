@@ -1,0 +1,16 @@
+Product Manager, Platform
+
+Northwind Labs is a fictional B2B workflow company. We are hiring a Product Manager to own an existing customer-facing platform used by operations and account teams.
+
+Requirements:
+- 5+ years of product management on a multi-tenant B2B SaaS platform
+- Roadmap ownership with engineering, CX, and sales partners
+- Comfort with data quality, release sequencing, and incident follow-through
+
+Preferred:
+- SQL for investigation, not warehouse ownership
+- Experience with analytics instrumentation
+
+Responsibilities:
+- Sequence platform work against customer risk
+- Write clear requirements and keep partners aligned

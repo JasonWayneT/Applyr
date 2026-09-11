@@ -786,6 +786,14 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-390` | acceptance | P1 | implemented | Drift guard runs in the same verification path as `check_context_pack_freshness.py` and passes clean on `main` | `FR-293` | CR-111 |
 | `AC-391` | acceptance | P2 | implemented | `docs/AGENTS.md` defers to root `AGENTS.md`; the `SDD_PROCESS.md` link is repo-relative | `FR-294` | CR-111 |
 
+### CR-112 Controlled offline evaluation (FR-310–FR-311)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-310` | functional | P1 | draft | A sanitized offline eval harness materializes five fictional JD fixtures into a gitignored eval output, refuses production `jobagent.sqlite`, keeps packet assembly off by default, and records per-folder observability events without touching live submissions | `AC-407` | CR-112 |
+| `FR-311` | functional | P1 | draft | The eval harness reports prompt-meta token estimates, harness spawn counts, `call_llm` invocations, API cents, and subscription minutes as separate columns, with paid LLM usage remaining opt-in and zero-call in this story | `AC-408` | CR-112 |
+| `AC-407` | acceptance | P1 | draft | Materializing the frozen eval set yields exactly five fictional fixture folders with sanitized JDs and fit-gate JSON, default CLI execution keeps packet assembly off, refuses production SQLite, writes `observability/run_events.jsonl`, and never copies live submissions | `FR-310` | CR-112 |
+| `AC-408` | acceptance | P1 | draft | The eval baseline records `prompt_meta_estimated_tokens`, `call_llm_invocations`, `harness_spawn_count`, `api_cents`, and `subscription_minutes` separately, keeps paid/API/spawn counters at zero by default and under `--paid-llm`, and labels the token method `bytes_div_4_estimate` | `FR-311` | CR-112 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

@@ -1,3 +1,14 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Story 6.1/6.2: sanitized offline eval harness for the Stage 0–3 reliability and token baseline, isolated from live submissions and production SQLite.
+
+### Changed
+- CR-112: Added `scripts/run_cr112_eval.py` with a sanitized fixture materialization flow rooted at `tests/fixtures/cr112_eval/`, default output `data/eval/cr112/`, production-`jobagent.sqlite` refusal, default packet assembly off, and append-only observability events per eval folder.
+- CR-112: Added `scripts/test_cr112_story61.py` covering the frozen five-JD set, sanitize checks, default assemble-off behavior, production SQLite refusal, zero-call paid-flag behavior, observability output, and separate token/cost counters. Registered only this new test module in `scripts/run_all_tests.py`.
+- CR-112: Added the `data/eval/` gitignore hunk and the tracked sanitized fixture set under `tests/fixtures/cr112_eval/`.
+
+### Developer
+- CR-112: Offline CLI baseline run from this worktree using a temp `--out` and default assemble-off recorded `prompt_meta_estimated_tokens=742` with `call_llm_invocations=0`, `harness_spawn_count=0`, `api_cents=0`, and `subscription_minutes=0`. Token method label is `bytes_div_4_estimate`; API cents and subscription minutes remain separate columns.
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

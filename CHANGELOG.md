@@ -1,10 +1,11 @@
 ## [Unreleased] — 2026-09-11
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
-Stage 0 IDs and packet constraints, plus Stories 2.1 + 2.3 lean default
-spawn. Stage 0 uses `run_submission.py`. Stage 1 pastes
-`authoring_prompt.md` only. Stage 2 `--resume` is mechanical and is not
-`hm.critical_read`. AGENTS trigger forbids per-JD Task/Agent spawn.
-Story 2.2 lands later in this integration.
+Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
+and Story 3.1 closed-world extra-packet WARN. Stage 0 uses
+`run_submission.py`. Stage 1 pastes `authoring_prompt.md` only. Stage 2
+`--resume` is mechanical and is not `hm.critical_read`. Extra-packet is
+WARN, not a hard block. SupplyHouse is not rewritten. Story 2.2 lands
+later in this integration.
 
 On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
 rejected `req-001`, and `assemble_packet` already omitted the wipe. The
@@ -49,9 +50,12 @@ candidate tree, never on HEAD.
   and `test_audit_packet_integrity.py`.
 - `.codex/skills/generate-submission/SKILL.md`
 - `AGENTS.md` (root trigger paragraph only)
+- `scripts/author_from_packet.py` `run_verify_only` emits extra-packet WARNs
 
 ### Added
 - `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3)
+- `scripts/packet_closed_world.py`
+- `scripts/test_cr112_story31.py`
 
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,

@@ -71,6 +71,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_cr112_story51.py",
     "scripts/test_run_submission_console_summary.py",
     "scripts/test_cr112_story61.py",
+    "scripts/test_cr112_story71.py",
     "scripts/test_cr112_story22.py",
 ]
 

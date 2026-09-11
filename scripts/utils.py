@@ -951,7 +951,8 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
              response_mime_type=None, tools=None, max_retries=8, provider_override=None,
-             options_override=None, response_schema=None, request_timeout=120):
+             options_override=None, response_schema=None, request_timeout=120,
+             cost_settings=None):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
@@ -961,6 +962,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
     to cloud models, bypassing the local core.
     """
     settings = load_llm_settings()
+    eligibility_settings = cost_settings if cost_settings is not None else settings
     all_providers = _get_configured_providers(settings)
     
     try:
@@ -1001,6 +1003,33 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         )
         return ""
 
+    from cost_eligibility import (
+        authorize_provider_chain,
+        budget_ledger_from_settings,
+        classify_provider,
+        known_call_receipt,
+        raise_if_pause,
+        set_last_receipt,
+        estimate_prompt_tokens,
+        debit_if_paid,
+        unknown_refusal_receipt,
+        exhausted_chain_receipt,
+        CostPauseError,
+    )
+
+    ledger = budget_ledger_from_settings(eligibility_settings)
+    tokens_est = estimate_prompt_tokens(system_prompt or "", user_prompt or "")
+    auth = authorize_provider_chain(
+        providers, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+    )
+    try:
+        raise_if_pause(auth, estimated_tokens=tokens_est)
+    except CostPauseError as exc:
+        set_last_receipt(exc.receipt)
+        print(f"    [LLM] {exc}", file=sys.stderr)
+        raise
+    providers = auth.providers
+
     for i, provider in enumerate(providers):
         if not check_rate_limits(provider):
             continue
@@ -1025,6 +1054,19 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             result = _call_groq(settings, system_prompt, user_prompt, model, temperature, max_retries)
 
         if result is not None:
+            info = classify_provider(
+                provider, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+            )
+            cents = 0 if info.cost_class in {"offline", "free_only"} else (info.estimated_cents or 0)
+            set_last_receipt(
+                known_call_receipt(
+                    provider=provider,
+                    cost_class=info.cost_class,
+                    estimated_tokens=tokens_est,
+                    api_cents=cents,
+                )
+            )
+            debit_if_paid(ledger, info)
             return result
         if _local_only_env():
             print("    [LLM] Local-only mode: no cloud fallback.", file=sys.stderr)
@@ -1032,6 +1074,21 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         if i + 1 < len(providers):
             print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
 
+    last_provider = providers[-1] if providers else None
+    if last_provider:
+        last_info = classify_provider(
+            last_provider, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+        )
+        set_last_receipt(
+            exhausted_chain_receipt(last_info, estimated_tokens=tokens_est)
+        )
+    else:
+        set_last_receipt(
+            unknown_refusal_receipt(
+                estimated_tokens=tokens_est,
+                reason="providers_exhausted",
+            )
+        )
     return ""
 
 

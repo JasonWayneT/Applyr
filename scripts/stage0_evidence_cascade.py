@@ -146,12 +146,14 @@ def classify_requirements_batch(
         )
         return {**left, **right}
     from utils import call_llm, load_llm_settings
+    from cost_eligibility import CostPauseError, classify_provider
 
     active_settings = settings if settings is not None else load_llm_settings()
     policy = normalize_stage0_evidence_policy(active_settings)
     providers = policy["provider_order"]
     models = policy["models"]
     last_error: Exception | None = None
+    seen_free_only = False
     # CR-108: track accumulated results and remaining items across providers.
     # When a provider returns a partial response (truncation + JSON repair),
     # the recovered items are kept and only the missing items are retried.
@@ -160,6 +162,11 @@ def classify_requirements_batch(
     for provider_index, provider in enumerate(providers):
         if not remaining:
             break
+        cost_info = classify_provider(provider, active_settings)
+        if seen_free_only and cost_info.cost_class == "paid_with_budget":
+            continue
+        if cost_info.eligible and cost_info.cost_class == "free_only":
+            seen_free_only = True
         if provider_event_callback:
             provider_event_callback(provider, "call")
         # Send only the items not yet classified by a previous provider.
@@ -174,7 +181,13 @@ def classify_requirements_batch(
                 response_schema={"type": "object"},
                 provider_override=[provider],
                 request_timeout=120,
+                cost_settings=active_settings,
             )
+        except CostPauseError as exc:
+            last_error = exc
+            if provider_event_callback and provider_index + 1 < len(providers):
+                provider_event_callback(provider, "fallback")
+            continue
         except Exception as exc:
             last_error = exc
             if provider_event_callback and provider_index + 1 < len(providers):
@@ -221,6 +234,7 @@ def classify_requirements_batch(
                         response_schema={"type": "object"},
                         provider_override=[provider],
                         request_timeout=120,
+                        cost_settings=active_settings,
                     )
                 except Exception as exc:
                     last_error = exc

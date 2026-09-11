@@ -47,6 +47,12 @@ candidate tree, never on HEAD.
   human authorization.
 
 ### Changed
+- CR-112 Stories 7.1 / 7.2 (`FR-316` / `FR-317` / `AC-413` / `AC-414` /
+  `NFR-015`): model calls require `offline` / `manual_paste` / `free_only` /
+  `paid_with_budget`. Unknown is not callable. Groq/Gemini stay unknown
+  without a zero-charge adapter assertion. `free_only` cannot fall back
+  to paid. Unknown cost omits `api_cents` instead of recording 0. Eval
+  stays zero-call offline. No live-folder rewrite.
 - CR-112 Story 3.6 (`FR-315` / `AC-412`): extra-packet recovery is a
   separate step. KEEP and sibling extras `REMOVE_EXTRA`. True AMBIGUOUS
   pauses for qualitative review. Same-item TRACE REPLACE widens the
@@ -71,6 +77,8 @@ candidate tree, never on HEAD.
   fingerprint / nights-and-weekends lines
 
 ### Added
+- `scripts/cost_eligibility.py`
+- `scripts/test_cr112_story71.py`
 - `scripts/closed_world_recovery.py`
 - `scripts/test_cr112_story36.py`
 - `scripts/evidence_dominance.py`

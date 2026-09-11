@@ -42,8 +42,8 @@ Epic 1 (fail-open dirty patches)
 
 **2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
 `CR-112-selection-and-closed-world-recovery-design.md`. Stories 3.0, 3.1, 3.5, and
-3.6 each have independent QA PASS. Epic 3 integration review is the next gate.
-Stories 7.1/7.2 wait on that review.
+3.6 each have independent QA PASS. Epic 3 integration PASS
+(`d680faf4-4688-4ba6-8a64-0692f239b592`). Stories 7.1/7.2 may start.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -180,7 +180,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; an omitted fact that clearly dominates the weakest selected fact is swapped before authoring; citing a claim the packet never offered blocks Stage 1 completion until remove / rewrite / explicit widen / human-compare. Detection and comparative selection stay separate.
 
-**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 is locally complete pending the 3.1+3.5+3.6 integration review. 7.x does not start until that review PASSes.
+**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 integration PASS (`d680faf4-4688-4ba6-8a64-0692f239b592`). 7.1/7.2 may start. Do not flip story checkboxes from this report.
 
 ### Story 3.0 — Pre-implementation design review (no code)
 
@@ -414,15 +414,20 @@ Merged onto `cr112-integration`.
 **Files:** new cost-policy module, `scripts/utils.py` `call_llm` / provider cascade, Stage 0 cascade, tests.
 
 **Acceptance:**
-- Every provider has an explicit `cost_class`: `offline` | `free_zero_dollar` | `paid` | `unknown`. Missing class is `unknown`.
-- Groq and Gemini stay `unknown` until Jason records a zero-dollar declaration. Provider name does not imply free.
+- Runtime classes are `offline` | `manual_paste` | `free_only` | `paid_with_budget`. Missing class is `unknown`.
+- Groq and Gemini stay `unknown` until an adapter can assert the configured call cannot incur a charge. Advertised free tier is not enough. Provider name does not imply free.
 - `unknown` is not callable (fail closed).
-- Paid requires user-configured provider allowlist and remaining budget. Unset/0 budget → paid ineligible.
-- Fallback may not move `free_zero_dollar` → `paid` or `unknown`.
+- `free_only` requires that zero-charge assertion. User declaration alone does not make a billed project free.
+- Paid requires user-configured provider allowlist, remaining run/batch budget, and a known estimate. Unset/0 budget or unknown estimate → paid ineligible.
+- Fallback may not move `free_only` → `paid_with_budget`. Provider errors cannot silently change cost mode.
 - No eligible provider: do not call; pause; keep `WAITING_FOR_LLM` / `authoring_prompt.md` paste.
 - Does not wire eval `--paid-llm` to `call_llm`.
 
-**Status:** [ ] blocked on Epic 3 integration review (3.1+3.5+3.6).
+**Status:** [x] QA PASS (`18868b0f-a352-4cf6-8a76-b86249672614`) 2026-09-11
+on cost eligibility (then offline-not-cloud, test-hook isolation, and
+exhausted-chain class preserved). Do not push. `CostPauseError` still
+does not mint a Stage 1 `WAITING_FOR_LLM` receipt; Stage 1 authoring
+already stays on paste.
 
 ### Story 7.2 — Cost telemetry: unknown is not zero
 
@@ -434,9 +439,9 @@ Merged onto `cr112-integration`.
 - Never sum subscription minutes with API cents.
 - Eval 6.1/6.2 baseline remains zero-call with explicit `cost_class` labels, not implied free spend.
 
-**Status:** [ ] blocked on Epic 3 integration review (3.1+3.5+3.6).
-
----
+**Status:** [x] QA PASS (`18868b0f-a352-4cf6-8a76-b86249672614`) 2026-09-11
+on unknown ≠ zero telemetry. Eval zero-call stays `offline` with
+`cost_known=true`. Do not push.
 
 ## Out of scope
 

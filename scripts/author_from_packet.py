@@ -641,6 +641,9 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
         if not sentence_ok:
             passed = False
 
+        extra_lines = _warn_extra_packet_provenance(folder)
+        lines.extend(extra_lines)
+
         # Summary
         print("\n".join(lines))
         verdict = "PASS" if passed else "FAIL"
@@ -651,6 +654,34 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             _record_verify_attempt(
                 record_to, passed=passed, violations=violations
             )
+
+
+def _warn_extra_packet_provenance(folder: Path) -> list[str]:
+    """CR-112 Story 3.1: WARN when provenance cites IDs the packet never offered.
+
+    Exact ID match only. Prefix overlap (ACC-101-SAVINGS vs ACC-101-PM) does
+    not clear. Does not fail Stage 1. Implements FR-302.
+    """
+    from packet_closed_world import extra_packet_findings
+
+    packet_path = folder / "authoring_packet.json"
+    prov_path = folder / "claim_provenance.json"
+    if not packet_path.exists() or not prov_path.exists():
+        return []
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    findings = extra_packet_findings(packet, provenance)
+    if not findings:
+        return ["PASS [extra_packet]: no extra-packet provenance IDs"]
+    lines = [
+        f"WARN [{row['id']}]: provenance cites {row['claim_id']} which is not "
+        "in packet excerpts/evidence_map/soft_gaps (exact match; prefix does not count)"
+        for row in findings
+    ]
+    return lines
 
 
 def _normalize_provenance_unit(text: str) -> str:

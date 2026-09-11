@@ -1,3 +1,16 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Story 3.1 — closed-world extra-packet provenance WARN
+(`truth.provenance.extra.<id>`). Exact ID match only; project-prefix overlap
+does not clear. Does not hard-fail Stage 1. Read-only scan via
+`scripts/packet_closed_world.py`. Hard-block deferred. SupplyHouse not rewritten.
+
+### Added
+- `scripts/packet_closed_world.py`
+- `scripts/test_cr112_story31.py`
+
+### Changed
+- `scripts/author_from_packet.py` `run_verify_only` emits extra-packet WARNs
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

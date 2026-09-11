@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
 from authoring_examples import bank_version, select_examples  # noqa: E402
+from evidence_dominance import apply_class1_dominance  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
     _ADMIN_BACKGROUND_RE,
     _ADMIN_SCHEDULE_RE,
@@ -646,11 +647,13 @@ def build_evidence_map(
 
     CR-112 Story 3.2 (FR-303 / AC-400): optional *trace_out* receives the full
     per-item ranking for evidence_selection_trace.json. Packet rows may carry
-    cheap omitted_reasons (`top2_cutoff` | `project_slot_cap`) only. Scores,
+    cheap omitted_reasons (`top2_cutoff` | `project_slot_cap`, and after
+    Story 3.5 `displaced_by_dominance`). Scores,
     score_zero catalog noise, and boilerplate filters stay out of the packet.
     Pick rules stay the 8bbc497 rules: score <= 0 is not picked; a capped
     project continues to the next candidate; after two picks further positive
-    scores are top2_cutoff. Recording losers must not change who wins.
+    scores are top2_cutoff. Story 3.2 recording of losers must not change
+    who wins. Story 3.5 may swap after that pass only on comparator REPLACE.
     """
     # Build a soft-gap bridge lookup from flagged_gaps + required item bridges
     soft_gap_bridges: dict[str, str] = {}
@@ -772,6 +775,7 @@ def build_evidence_map(
 
     project_counts: dict[str, int] = {}
     evidence_map: list[dict] = []
+    row_traces: list[dict] = []
     for row in pending:
         picked: list[str] = []
         omitted: list[dict] = []
@@ -823,15 +827,25 @@ def build_evidence_map(
             "bridge": bridge,
             "omitted_reasons": omitted,
         })
+        item_trace = {
+            "jd_item": row["jd_item"],
+            "bucket": row["bucket"],
+            "picked": list(picked),
+            "candidates": candidates_full,
+            "filter": None,
+        }
+        row_traces.append(item_trace)
         if trace_out is not None:
-            trace_out.append({
-                "jd_item": row["jd_item"],
-                "bucket": row["bucket"],
-                "picked": list(picked),
-                "candidates": candidates_full,
-                "filter": None,
-            })
+            trace_out.append(item_trace)
 
+    apply_class1_dominance(
+        evidence_map,
+        row_traces,
+        claims,
+        jd_text=jd_text,
+        max_slots_per_project=_MAX_SLOTS_PER_PROJECT,
+        disabled=disabled,
+    )
     return evidence_map
 
 
@@ -1780,7 +1794,8 @@ def _write_selection_trace(folder: Path, packet: dict, items: list) -> None:
     Implements FR-303 / AC-400. Stage 1 author_from_packet dumps
     authoring_packet.json only; this sibling file is never loaded into
     authoring_prompt.md. Candidate scores stay here. Packet omitted_reasons
-    may carry only top2_cutoff and project_slot_cap.
+    may carry top2_cutoff, project_slot_cap, and after Story 3.5
+    displaced_by_dominance. Scores and axes stay out of the prompt.
     """
     payload = {
         "schema_version": "1.0",

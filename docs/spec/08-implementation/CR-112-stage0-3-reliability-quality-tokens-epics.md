@@ -271,7 +271,7 @@ list.
 
 **Depends on:** Story 3.0 ACCEPT, Story 3.2 TRACE.
 
-**Files:** `scripts/build_authoring_packet.py` (post Top-2 pass), new comparator module (name locked at implementation), `scripts/test_cr112_story35.py`.
+**Files:** `scripts/build_authoring_packet.py` (post Top-2 pass), `scripts/evidence_dominance.py`, `scripts/test_cr112_story35.py`.
 
 **Acceptance:**
 - After Top-2, omitted eligible candidates are compared to the weakest selected fact on that item using the six axes in the design doc.
@@ -281,7 +281,10 @@ list.
 - Comparator uses no `call_llm`.
 - Story 3.3 report remains read-only.
 
-**Status:** [ ] ready after Story 3.0/3.1 QA PASS. Not started.
+**Status:** [x] QA PASS (`e5d85297-faa2-4002-8452-74517e3547cf`) 2026-09-11
+on the Class 1 comparator (16/16 then 18/18 after eligibility-shadow and
+INFLUENCED/OBSERVED fixtures). Pearl/SupplyHouse SAVINGS never REPLACE.
+Epic 3 is not integration-ready.
 
 ### Story 3.6 — Closed-world recovery after extra-packet detection
 
@@ -301,7 +304,7 @@ list.
 - Fixtures: pearl/supplyhouse SAVINGS, loot_labs SUPPORT, marlowe SEC → `REMOVE_EXTRA`; synthetic same-item TRACE omitted REPLACE → `WIDEN_PACKET` + new author pass; disabled extra → `REWRITE_UNSUPPORTED`.
 - Do not rewrite live seven folders.
 
-**Status:** [ ] ready after Story 3.1 QA PASS. Blocked on Story 3.5 comparator.
+**Status:** [ ] ready after Story 3.5 QA PASS. Not started.
 
 ---
 

@@ -47,11 +47,12 @@ candidate tree, never on HEAD.
   human authorization.
 
 ### Changed
-- CR-112 Story 3.1 (`FR-312` / `AC-409`): extra-packet provenance IDs
-  FAIL Stage 1 verify. Detection only. Prefix match still does not
-  clear. `ACCEPTED_AS_CORRECT` / `FALSE_POSITIVE` / `NOT_APPLICABLE` /
-  `HUMAN_ACCEPTED_RISK` cannot clear the finding. Recovery is Story 3.6.
-  FR-302 / AC-399 WARN-and-continue is superseded. No live-folder rewrite.
+- CR-112 Story 3.5 (`FR-313` / `FR-314` / `AC-410` / `AC-411`): after
+  Top-2, a deterministic comparator may REPLACE an omitted eligible
+  claim that clearly dominates the weakest same-item pick.
+  `displaced_by_dominance` is the packet omitted reason. Pearl and
+  SupplyHouse SAVINGS do not REPLACE. No `call_llm`. No live-folder
+  rewrite. Story 3.3 stays read-only.
 - `scripts/run_all_tests.py` now runs `test_stage0_evidence_cascade.py`
   and `test_audit_packet_integrity.py`.
 - `.codex/skills/generate-submission/SKILL.md`
@@ -65,6 +66,8 @@ candidate tree, never on HEAD.
   fingerprint / nights-and-weekends lines
 
 ### Added
+- `scripts/evidence_dominance.py`
+- `scripts/test_cr112_story35.py`
 - `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3)
 - `scripts/packet_closed_world.py`
 - `scripts/test_cr112_story31.py`

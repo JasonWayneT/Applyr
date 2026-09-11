@@ -7,7 +7,7 @@ from: Cursor (Grok 4.6)
 related: CR-112 Epic 3 Stories 3.1/3.2/3.3, FR-254, FR-302 (superseded), FR-312–FR-317, NFR-015
 investigation: ./INVESTIGATION-2026-09-10-stage0-3-reliability-quality-tokens.md
 evidence_date: 2026-09-10 seven-folder closed-world scan
-implementation: Story 3.0 QA PASS. Story 3.1 detection QA PASS. 3.5/3.6/7.x not started. No live-folder rewrite.
+implementation: Story 3.0 QA PASS. Story 3.1 detection QA PASS. Story 3.5 QA PASS. 3.6/7.x not started. No live-folder rewrite.
 ---
 
 # CR-112 design — selection defects vs closed-world authoring defects

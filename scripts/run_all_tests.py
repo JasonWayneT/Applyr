@@ -59,6 +59,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_cr112_lean_spawn.py",
     "scripts/test_cr112_story31.py",
     "scripts/test_cr112_story35.py",
+    "scripts/test_cr112_story36.py",
     "scripts/test_cr112_story33.py",
     "scripts/test_cr112_story34.py",
     "scripts/test_cr112_adversarial.py",

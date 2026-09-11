@@ -7,7 +7,7 @@ from: Cursor (Grok 4.6)
 related: CR-112 Epic 3 Stories 3.1/3.2/3.3, FR-254, FR-302 (superseded), FR-312–FR-317, NFR-015
 investigation: ./INVESTIGATION-2026-09-10-stage0-3-reliability-quality-tokens.md
 evidence_date: 2026-09-10 seven-folder closed-world scan
-implementation: Story 3.0 QA PASS. Story 3.1 detection QA PASS. Story 3.5 QA PASS. 3.6/7.x not started. No live-folder rewrite.
+implementation: Story 3.0 QA PASS. Story 3.1 detection QA PASS. Story 3.5 QA PASS. Story 3.6 QA PASS. 7.x waits on Epic 3 integration review. No live-folder rewrite.
 ---
 
 # CR-112 design — selection defects vs closed-world authoring defects
@@ -25,8 +25,9 @@ reviewer issues ACCEPT against this file.
 (`21fd8c64-6c03-4c55-9fc3-4a7a2a974dbb`) **REVISE**. Same reviewer
 second pass **ACCEPT**. Sibling-lens distinctiveness lock and duplicate
 decision-rule paragraph corrected after ACCEPT notes. Checkbox for
-Story 3.0 stays open for QA. Stories 3.1/3.5/3.6/7.x may start. Do not
-rewrite the seven live folders.
+Story 3.0 QA PASS after ACCEPT. Stories 3.1, 3.5, and 3.6 have independent
+QA PASS. 7.x waits on the Epic 3 integration review. Do not rewrite the
+seven live folders.
 
 **Not done means:** extra-packet still silently WARNs, a larger metric is
 treated as a better fact, or unknown cost is recorded as zero.
@@ -265,7 +266,8 @@ recovery action completes.
 | Case | Test | Action |
 |---|---|---|
 | Unsupported or prohibited | `INELIGIBLE`, disabled, no WE span, DNC | `REWRITE_UNSUPPORTED`: remove or rewrite the sentence. Rebuild provenance. Re-verify. Do not widen. |
-| Grounded, not REPLACE | eligible and comparator is `KEEP` or `AMBIGUOUS`, including sibling-lens extras | `REMOVE_EXTRA`: drop the extra cite. Keep authorized evidence. If the sentence is only the extra fact, rewrite using authorized IDs. Rebuild provenance. Re-verify. Do not widen. |
+| Grounded, not REPLACE | eligible and comparator is `KEEP`, including sibling-lens extras | `REMOVE_EXTRA`: drop the extra cite. Keep authorized evidence. If the sentence is only the extra fact, rewrite using authorized IDs. Rebuild provenance. Re-verify. Do not widen. |
+| Grounded, ambiguous | eligible and comparator is `AMBIGUOUS` (not sibling/redundant `B_better`) | `QUALITATIVE_REVIEW`: pause with both candidates and comparison axes. Do not auto `REMOVE_EXTRA`. Not `NEEDS_DISPOSITION`. `--resume` after `human_decision` on `closed_world_recovery.json`. |
 | Grounded and clearly stronger | comparator `REPLACE` **and** A is a TRACE omitted candidate on the same item | `WIDEN_PACKET`: rebuild the packet with A in and B displaced, record TRACE. **Invalidate the leaked draft.** Do not rebuild provenance onto the leaked sentences. Require a **new author pass** from the new packet (`WAITING_FOR_LLM` / paste). Then verify the new draft. |
 | Extra not in TRACE omitted | eligible or not, no same-item TRACE row | `REMOVE_EXTRA` or `REWRITE_UNSUPPORTED`. Never `REPLACE` / `WIDEN_PACKET`. Author use is not a ranking signal. |
 | Unsafe to resolve | unreadable packet, missing catalog, or WE/constraint conflict | `HUMAN_COMPARE` only. Not for `AMBIGUOUS`. Not for the seven-folder extras. |
@@ -367,7 +369,7 @@ Implementation is blocked until Story 3.0 ACCEPT.
 | 3.3 | KEEP advisory, no rewrite | FR-304 |
 | 3.4 | KEEP admin skip | FR-305 |
 | 3.5 | NEW pre-authoring comparative replace; `displaced_by_dominance` is this story | FR-313, FR-314 / AC-410, AC-411 |
-| 3.6 | NEW recovery: KEEP/AMBIGUOUS extra → REMOVE_EXTRA; WIDEN requires new author pass; HUMAN_COMPARE only unsafe | FR-315 / AC-412 |
+| 3.6 | NEW recovery: KEEP/sibling extra → REMOVE_EXTRA; true AMBIGUOUS → QUALITATIVE_REVIEW pause; WIDEN requires new author pass; HUMAN_COMPARE only unsafe | FR-315 / AC-412 |
 | 7.1 | Cost eligibility registry, no free→paid fallback, pause to paste; groq/gemini unknown until declared | FR-316 / AC-413 |
 | 7.2 | Telemetry: unknown ≠ zero; `api_cents` null/omitted when `cost_known=false` | FR-317 / AC-414, NFR-015 |
 
@@ -397,8 +399,10 @@ Implementation is blocked until Story 3.0 ACCEPT.
    the leaked sentences. WIDEN invalidates the draft and requires a new
    author pass.
 4. **HUMAN_COMPARE overuse** would recreate WAITING_FOR_HUMAN. Class 2
-   `AMBIGUOUS` is `REMOVE_EXTRA`. HUMAN_COMPARE is only unreadable
-   packet / missing catalog / WE-constraint conflict.
+   `AMBIGUOUS` pauses as `QUALITATIVE_REVIEW` with both candidates and
+   axes, not auto-remove and not `NEEDS_DISPOSITION`. Sibling-lens extras
+   stay `REMOVE_EXTRA`. HUMAN_COMPARE is only unreadable packet / missing
+   catalog / WE-constraint conflict.
 5. **Cost policy vs CR-108** can stall live Stage 0 if groq/gemini stay
    `unknown`. That stall is intended until Jason declares zero-dollar
    eligibility. It is not a reason to default them to free by name.
@@ -434,8 +438,9 @@ Required challenges:
   fallback)? If yes, REJECT.
 - Would SupplyHouse SAVINGS REPLACE? If yes, REJECT.
 - Are loot_labs SUPPORT and marlowe SEC locked to REMOVE_EXTRA?
-- Is Class 2 KEEP/AMBIGUOUS REMOVE_EXTRA, with HUMAN_COMPARE only for
-  unreadable / missing catalog / WE-constraint conflict?
+- Is Class 2 KEEP/sibling `REMOVE_EXTRA`, true AMBIGUOUS a qualitative
+  pause with both candidates, and HUMAN_COMPARE only for unreadable /
+  missing catalog / WE-constraint conflict?
 - Does WIDEN_PACKET require a new author pass and refuse to provenance-
   stamp the leaked draft?
 - Is detection still separable from comparison?

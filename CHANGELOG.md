@@ -47,6 +47,11 @@ candidate tree, never on HEAD.
   human authorization.
 
 ### Changed
+- CR-112 Story 3.6 (`FR-315` / `AC-412`): extra-packet recovery is a
+  separate step. KEEP and sibling extras `REMOVE_EXTRA`. True AMBIGUOUS
+  pauses for qualitative review. Same-item TRACE REPLACE widens the
+  packet, invalidates the leaked draft, and returns `WAITING_FOR_LLM`.
+  Recovery helpers do not write workflow receipts. No live-folder rewrite.
 - CR-112 Story 3.5 (`FR-313` / `FR-314` / `AC-410` / `AC-411`): after
   Top-2, a deterministic comparator may REPLACE an omitted eligible
   claim that clearly dominates the weakest same-item pick.
@@ -66,6 +71,8 @@ candidate tree, never on HEAD.
   fingerprint / nights-and-weekends lines
 
 ### Added
+- `scripts/closed_world_recovery.py`
+- `scripts/test_cr112_story36.py`
 - `scripts/evidence_dominance.py`
 - `scripts/test_cr112_story35.py`
 - `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3)

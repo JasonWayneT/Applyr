@@ -531,17 +531,78 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     # CR-097 Story 1.3: record inside run_verify_only so a failing attempt is
     # persisted before this runner raises WorkflowError.
     if not verify_ok:
-        append_event(
-            folder,
-            _run_id,
-            "stage1.validate",
-            "verify_failed",
-            duration_seconds=round(time.time() - _t0, 3),
-            attempt=_verify_attempt_count(folder),
+        from closed_world_recovery import recover_stage1_extras_guarded
+        from packet_closed_world import extra_packet_findings as extra_findings_fn
+
+        packet = None
+        provenance = None
+        try:
+            with open(os.path.join(folder, "authoring_packet.json"), encoding="utf-8") as handle:
+                packet = json.load(handle)
+            with open(os.path.join(folder, "claim_provenance.json"), encoding="utf-8") as handle:
+                provenance = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            packet = None
+            provenance = None
+        extras = (
+            extra_findings_fn(packet, provenance)
+            if isinstance(packet, dict) and isinstance(provenance, dict)
+            else []
         )
-        raise WorkflowError(
-            "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
-        )
+        if extras:
+            recovery = recover_stage1_extras_guarded(Path(folder), apply=True)
+            if recovery.get("status") == "WAITING_FOR_LLM":
+                prompt_md, meta = build_authoring_prompt(Path(folder), force=True)
+                prompt_path = os.path.join(folder, "authoring_prompt.md")
+                meta_path = os.path.join(folder, "authoring_prompt_meta.json")
+                with open(prompt_path, "w", encoding="utf-8") as handle:
+                    handle.write(prompt_md)
+                with open(meta_path, "w", encoding="utf-8") as handle:
+                    json.dump(meta, handle, indent=2, ensure_ascii=False)
+                    handle.write("\n")
+                mode = state.get("mode") or "production"
+                receipt = build_receipt(
+                    stage="stage1",
+                    status="WAITING_FOR_LLM",
+                    mode=mode,
+                    input_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
+                    output_hashes=file_hash_map(
+                        folder,
+                        ["authoring_packet.json", "authoring_prompt.md", "authoring_prompt_meta.json"],
+                    ),
+                    result={"closed_world_widen": True},
+                    checks={"closed_world_recovery.widen": True},
+                    prior_receipt_id=prior_id,
+                )
+                result_state = commit_stage(
+                    folder,
+                    state,
+                    receipt,
+                    workflow_status="WAITING_FOR_LLM",
+                    active_stage="stage1",
+                )
+                append_event(folder, _run_id, "stage1.validate", "closed_world_widen")
+                return result_state
+            if recovery.get("status") == "PAUSE_REVIEW":
+                raise WorkflowError(
+                    "closed-world recovery paused — see closed_world_recovery.json. "
+                    "Record human_decision on the item (REMOVE_EXTRA or WIDEN_PACKET), "
+                    "then --resume. This is not NEEDS_DISPOSITION."
+                )
+            if recovery.get("applied"):
+                verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+        if not verify_ok:
+            append_event(
+                folder,
+                _run_id,
+                "stage1.validate",
+                "verify_failed",
+                duration_seconds=round(time.time() - _t0, 3),
+                attempt=_verify_attempt_count(folder),
+            )
+            raise WorkflowError(
+                "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
+            )
 
     mode = state.get("mode") or "production"
     out_files = [

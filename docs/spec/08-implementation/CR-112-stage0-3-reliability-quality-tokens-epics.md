@@ -41,9 +41,9 @@ Epic 1 (fail-open dirty patches)
 ```
 
 **2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
-`CR-112-selection-and-closed-world-recovery-design.md`. Story 3.0 QA PASS. Story 3.1
-detection QA PASS. Stories 3.5/3.6 may start. Epic 3 is not integration-ready.
-Stories 7.1/7.2 wait on 3.1+3.5+3.6 integration review.
+`CR-112-selection-and-closed-world-recovery-design.md`. Stories 3.0, 3.1, 3.5, and
+3.6 each have independent QA PASS. Epic 3 integration review is the next gate.
+Stories 7.1/7.2 wait on that review.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -180,6 +180,8 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; an omitted fact that clearly dominates the weakest selected fact is swapped before authoring; citing a claim the packet never offered blocks Stage 1 completion until remove / rewrite / explicit widen / human-compare. Detection and comparative selection stay separate.
 
+**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 is locally complete pending the 3.1+3.5+3.6 integration review. 7.x does not start until that review PASSes.
+
 ### Story 3.0 — Pre-implementation design review (no code)
 
 **Files:** `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-design.md`
@@ -290,21 +292,25 @@ Epic 3 is not integration-ready.
 
 **Depends on:** Story 3.0 ACCEPT, Story 3.1 FAIL-closed detection, Story 3.5 comparator.
 
-**Files:** recovery worker + `author_from_packet.py` verify FAIL path, `scripts/test_cr112_story36.py`.
+**Files:** `scripts/closed_world_recovery.py`, `scripts/workflow/runner.py` (`run_stage1_validate` recovery step), `scripts/test_cr112_story36.py`.
 
 **Acceptance:**
-- Detector still does not recover. Recovery is a separate step.
+- Detector still does not recover. Recovery is a separate step. Helpers do not write `workflow_state.json` or `stage_receipts/`.
 - `INELIGIBLE` / prohibited / no WE span → `REWRITE_UNSUPPORTED` (do not widen).
-- Comparator `KEEP` or `AMBIGUOUS` → `REMOVE_EXTRA` (do not widen, do not `HUMAN_COMPARE`).
+- Comparator `KEEP` or sibling-lens extras → `REMOVE_EXTRA` (do not widen).
+- True `AMBIGUOUS` extra → `QUALITATIVE_REVIEW` pause with both candidates and axes. Not auto-remove. Not `NEEDS_DISPOSITION`.
 - Extra IDs not in TRACE omitted/candidates → `REMOVE_EXTRA` or `REWRITE_UNSUPPORTED`. Never `WIDEN_PACKET`.
-- Comparator `REPLACE` only if A is a same-item TRACE omitted candidate → `WIDEN_PACKET`, invalidate leaked draft, require a new author pass, do not provenance-stamp leaked sentences.
+- Comparator `REPLACE` only if A is a same-item TRACE omitted candidate → `WIDEN_PACKET`, invalidate leaked draft, require a new author pass, do not provenance-stamp leaked sentences. Orchestrator writes `WAITING_FOR_LLM`.
 - `HUMAN_COMPARE` only for unreadable packet, missing catalog, or WE/constraint conflict.
 - Cross-item REPLACE is forbidden.
-- Unresolved extras keep Stage 1 FAIL. Finalize blocked.
+- Unresolved extras keep Stage 1 FAIL. Finalize blocked. `--resume` is the correction path.
 - Fixtures: pearl/supplyhouse SAVINGS, loot_labs SUPPORT, marlowe SEC → `REMOVE_EXTRA`; synthetic same-item TRACE omitted REPLACE → `WIDEN_PACKET` + new author pass; disabled extra → `REWRITE_UNSUPPORTED`.
 - Do not rewrite live seven folders.
 
-**Status:** [ ] ready after Story 3.5 QA PASS. Not started.
+**Status:** [x] QA PASS (`d5a8861b-f6bd-4997-a3c8-9916fe5a40f6`) 2026-09-11
+on Class 2 recovery (8/8 then fixtures added for SupplyHouse and
+constraint conflict). Helper does not mint receipts. Epic 3 integration
+review is the next gate, not 7.x.
 
 ---
 

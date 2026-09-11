@@ -30,7 +30,11 @@ the detector for packets the wipe already shipped.
   with empty `claim_constraints` while `evidence_map` or `soft_gaps` is
   non-empty. Live scan 2026-09-10: 7 folders, 1 flagged (`supplyhouse`).
   Detector writes nothing. A sidecar file is informational and is not
-  authorization. SupplyHouse recovery is not on the active backlog
+  authorization. Unreadable packets (including invalid UTF-8), a missing
+  root, and invalid field types are an incomplete inspection (exit 2), not
+  a clean scan. An unreadable informational disposition sidecar does not
+  abort the scan or clear a packet flag.
+  SupplyHouse recovery is not on the active backlog
   (Jason, 2026-09-10: already corrected; do not rebuild, re-author, or
   request risk acceptance). General detector and tests remain.
 

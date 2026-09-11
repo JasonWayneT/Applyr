@@ -102,11 +102,12 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 **Acceptance:**
 - Detection is read-only: it reports affected folders and writes nothing.
 - A `packet_integrity_disposition.json` sidecar is display-only. It does not unflag. It is not `run_submission` / Stage 2 authorization.
+- Clean / flagged / unable-to-inspect are distinct. Unreadable packets (OSError, JSONDecodeError, UnicodeDecodeError), a missing root, and invalid field types are incomplete (exit 2), not a clean scan. One bad packet does not abort the others. An unreadable informational disposition sidecar does not abort scanning or clear a packet flag. An empty existing root may report zero inspected and must not imply safety.
 - Run once against the then-current live folders; record the table below.
 - Does not rebuild or finalize any submission as a side effect of running the detector.
 
 **Dependencies:** Story 1.2 (fixed generator before any future rebuild someone explicitly requests).
-**Status:** [ ] isolated on `cr112-epic1`; pending review. Detector and tests kept. SupplyHouse recovery removed from the active backlog (Jason, 2026-09-10 chat). No rebuild. No re-author. No risk-acceptance request.
+**Status:** [x] isolated on `cr112-epic1`; Story 1.4 detector incomplete-inspection + R12 UnicodeDecode/split-field coverage accepted after independent review. SupplyHouse recovery remains off the active backlog. No rebuild. No re-author. No risk-acceptance request.
 
 **Live scan (2026-09-10), `python scripts/audit_packet_integrity.py --root data/submissions`:** 7 packets scanned, **1 flagged**. Detector wrote nothing.
 

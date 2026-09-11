@@ -1,3 +1,17 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Story 2.2 — track the Claude Code batch runner without un-ignoring
+`.claude/`. Review does not load workExperience.md. Portable harness rewrite is
+deferred. Default path remains `scripts/run_submission.py`.
+
+### Added
+- `.claude/workflows/generate-submission-batch.js` force-added (`git add -f`),
+  same pattern as generate-submission/SKILL.md
+- `scripts/test_cr112_story22.py`
+
+### Changed
+- `.gitignore` comment names this force-added file and says not to un-ignore
+  the rest of `.claude/`
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

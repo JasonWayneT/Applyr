@@ -59,6 +59,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_observability.py",
     "scripts/test_observability_report.py",
     "scripts/test_run_submission_console_summary.py",
+    "scripts/test_cr112_story22.py",
 ]
 
 

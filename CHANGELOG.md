@@ -1,3 +1,22 @@
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 Epic 4 — adversarial harness honesty (retain-and-verify on
+`cr112-epic4`). Unknown fixture names fail closed. `case_stale_hash` is SKIPPED
+as programmatic coverage. Named invariant asserts use substring-gated
+`WorkflowError` checks. Payload corpus archived under
+`docs/spec/archive/adversarial-payloads/` (not executed by this runner).
+Fixture `case_forbidden_punctuation` is smoke only; programmatic DOC-003 is
+authoritative. Focused unittest + runner 13/13 (SKIPPED excluded). Epics 1–3
+and 5–6 are not in this commit.
+
+### Added
+- `scripts/run_adversarial_pressure_test.py`, `scripts/test_cr112_adversarial.py`
+- `tests/fixtures/adversarial/workflow_cases/`, fixtures README
+- `docs/spec/INVARIANTS_CATALOG.md`
+- `docs/spec/archive/adversarial-payloads/`
+
+### Removed
+- Unwired `tests/fixtures/adversarial/payload_*.txt` (moved to archive)
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

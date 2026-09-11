@@ -1,0 +1,8 @@
+{
+  "schema": "packet_integrity_disposition/v1",
+  "slug": "example-employer",
+  "verdict": "HUMAN_ACCEPTED_RISK",
+  "reason": "FIXTURE ONLY. An agent attributed this verdict to a human without a chat instruction. This file is not a live submission and is not authorization.",
+  "as_of": "2026-09-10",
+  "source": "CR-112 FINDING sanitized fixture"
+}

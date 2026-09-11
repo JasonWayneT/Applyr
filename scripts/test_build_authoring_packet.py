@@ -1550,5 +1550,69 @@ class TestLearnedExamplesPacket(unittest.TestCase):
         self.assertEqual(packet["excerpts"], original)
 
 
+class TestClaimConstraintsBudget(unittest.TestCase):
+    """CR-112 Story 1.2 — do not ready a packet after dropping constraints."""
+
+    def test_over_budget_does_not_wipe_claim_constraints_to_ready(self):
+        """Fat constraints under a tight budget must stay incomplete, not
+        become ready with claim_constraints={}. Implements FR-297 / AC-394.
+        """
+        from build_authoring_packet import _EXCERPT_MIN_CHARS, assemble_packet
+
+        stage0 = {
+            **_STAGE0_TIER1,
+            "thin_jd": True,
+            "required": [],
+            "preferred": [],
+            "responsibilities": [],
+        }
+        excerpt = ("Led quarterly planning. Delivered the release. " * 20)[:_EXCERPT_MIN_CHARS]
+        excerpts = {"ACC-105-AGILE": excerpt}
+        fat_constraints = {
+            "ACC-105-AGILE": {
+                "attribution": "CONTRIBUTED",
+                "prohibited_claims": ["x" * 4000],
+                "notes": "y" * 4000,
+            }
+        }
+        kwargs = dict(
+            stage0=stage0,
+            evidence_map=[
+                {
+                    "jd_item": "Agile planning",
+                    "bucket": "preferred",
+                    "claim_ids": ["ACC-105-AGILE"],
+                    "bridge": None,
+                }
+            ],
+            excerpts=excerpts,
+            disabled=set(),
+            hook_fact=None,
+            company="TestCorp",
+            role_title="Product Manager",
+            slug="testcorp",
+            url=None,
+            jd_text="",
+            ats_term_contract=[],
+        )
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            lean = assemble_packet(**kwargs, claim_constraints={})
+            fat = assemble_packet(**kwargs, claim_constraints=fat_constraints)
+        self.assertGreater(fat["estimated_tokens"], lean["estimated_tokens"])
+        squeezed_budget = lean["estimated_tokens"] + 10
+        self.assertGreater(fat["estimated_tokens"], squeezed_budget)
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            with patch("build_authoring_packet._TOKEN_BUDGET", squeezed_budget):
+                packet = assemble_packet(**kwargs, claim_constraints=fat_constraints)
+        self.assertEqual(packet["packet_status"], "incomplete")
+        self.assertTrue(
+            any("budget" in r.lower() for r in packet["incomplete_reasons"]),
+            packet["incomplete_reasons"],
+        )
+        self.assertEqual(packet["claim_constraints"], fat_constraints)
+        self.assertNotEqual(packet["claim_constraints"], {})
+        self.assertNotEqual(packet["packet_status"], "ready")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

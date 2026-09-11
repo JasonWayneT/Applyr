@@ -1519,6 +1519,13 @@ def assemble_packet(
             draft["excerpts"] = excerpts
             estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
 
+    # CR-112 Story 1.2: do not wipe claim_constraints to squeeze under
+    # _TOKEN_BUDGET. That fence is the Stage 1 attribution hedge
+    # (CONTRIBUTED vs OWNED). A packet that is still over budget after
+    # dropping learned_examples and shrinking excerpts to
+    # _EXCERPT_MIN_CHARS is incomplete. Rule 5 records the budget miss.
+    # Implements FR-297
+
     # Run fail-closed checks
     status, reasons = _check_fail_closed(stage0, evidence_map, excerpts, disabled, estimated_tokens)
 

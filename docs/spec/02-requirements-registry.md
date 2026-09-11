@@ -786,6 +786,19 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-390` | acceptance | P1 | implemented | Drift guard runs in the same verification path as `check_context_pack_freshness.py` and passes clean on `main` | `FR-293` | CR-111 |
 | `AC-391` | acceptance | P2 | implemented | `docs/AGENTS.md` defers to root `AGENTS.md`; the `SDD_PROCESS.md` link is repo-relative | `FR-294` | CR-111 |
 
+### CR-112 Stage 0–3 reliability, Epic 1 (FR-296–FR-298)
+
+Epic 1 allocated 2026-09-10. Stories remain pending independent review (not self-marked done). Epics 2–6 are planned separately and are not allocated in this commit.
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-296` | functional | P0 | in_progress | Stage 0 batch item IDs that are invented sequential labels (`req-001`, `pref-1`) must not attach a judgment to a requirement by list position; unknown ids fail closed so the batch retries or falls back | `AC-393` | CR-112 |
+| `FR-297` | functional | P0 | in_progress | An authoring packet must not be `ready` after dropping `claim_constraints` to squeeze under token budget; the attribution fence stays or the packet is `incomplete` | `AC-394` | CR-112 |
+| `FR-298` | functional | P0 | in_progress | A read-only detector flags already-shipped `ready` packets with empty/missing `claim_constraints` while evidence remains, without rewriting submissions | `AC-395` | CR-112 |
+| `AC-393` | acceptance | P0 | in_progress | Isolated tests: `req-001`/`req-002`/`pref-1` resolve to `None`; shuffled HARD/NONE reasoning does not assign by position; unknown ids raise even under `partial=True`; simulated Groq sequential-ID response falls back to Gemini real ids; unique hash-suffix and unique ordinal still match | `FR-296` | CR-112 |
+| `AC-394` | acceptance | P0 | in_progress | Isolated `assemble_packet` over-budget fixture is `incomplete` with a budget reason and still carries `claim_constraints`; never `ready` with `{}` | `FR-297` | CR-112 |
+| `AC-395` | acceptance | P0 | in_progress | `audit_packet_integrity.py` flags the SupplyHouse-shaped packet in temp fixtures, writes nothing, and does not treat a sidecar as authorization; the 2026-09-10 live scan records affected folders in the CR-112 tracker | `FR-298` | CR-112 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |

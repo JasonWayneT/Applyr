@@ -334,12 +334,15 @@ def _resolve_item_id(raw_id: str, expected: dict[str, BatchItem]) -> str | None:
     ]
     if len(ordinal_matches) == 1:
         return ordinal_matches[0]
-    # CR-108 (2026-09-09): models sometimes mangle the id format — replacing
-    # ":" with "-", abbreviating "required" to "req", or inventing sequential
-    # ids like "req-001". As a last resort, extract the trailing hash-like
-    # segment (the make_item_key digest) from the raw_id and match it against
-    # the last segment of expected ids. The hash is a 16-char hex digest, so
-    # a match here is as unique as the full id within one batch.
+    # CR-108 (2026-09-09) / CR-112 Story 1.1: providers sometimes mangle the
+    # id format (replace ":" with "-", abbreviate "required" to "req") while
+    # still echoing the 16-char hash tail. Accept that hash tail when -- and
+    # only when -- it identifies exactly one expected item.
+    # Invented sequential ids such as "req-001" have a 3-character numeric
+    # tail, not a hash. Mapping those onto list position (the 2026-09-09
+    # dirty patch) attached HARD/NONE to the wrong requirement when the
+    # model's numbering and content disagreed. CR-112 rejects them so the
+    # batch retries or falls back instead of guessing.
     raw_segments = re.split(r"[:-]", raw_id)
     raw_tail = raw_segments[-1] if raw_segments else ""
     if raw_tail and len(raw_tail) >= 8:

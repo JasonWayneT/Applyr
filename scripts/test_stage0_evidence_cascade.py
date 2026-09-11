@@ -15,6 +15,7 @@ from stage0_evidence_cascade import (  # noqa: E402
     CascadeValidationError,
     BatchItem,
     _build_batch_prompt,
+    _resolve_item_id,
     configured_provider_order,
     normalize_stage0_evidence_policy,
     validate_batch_response,
@@ -206,6 +207,245 @@ class TestStage0EvidenceCascade(unittest.TestCase):
                 },
                 items,
             )
+
+    def test_invented_sequential_id_is_rejected(self) -> None:
+        """CR-112 Story 1.1: providers invent "req-001"/"pref-1" ids. Mapping
+        those onto list position attaches HARD/NONE to the wrong requirement
+        when numbering and content disagree. Hash-suffix and unique-ordinal
+        fallbacks still identify one real id. Position mapping must not.
+        Implements FR-296 / AC-393
+        """
+        items = [
+            BatchItem("required:0:aaaaaaaaaaaaaaaa", "required", "Requirement one"),
+            BatchItem("required:1:bbbbbbbbbbbbbbbb", "required", "Requirement two"),
+            BatchItem("preferred:0:cccccccccccccccc", "preferred", "Preferred one"),
+        ]
+        expected = {item.item_id: item for item in items}
+        self.assertIsNone(_resolve_item_id("req-001", expected))
+        self.assertIsNone(_resolve_item_id("req-002", expected))
+        self.assertIsNone(_resolve_item_id("pref-1", expected))
+        # Unique hash suffix remains a display difference, not a guess.
+        self.assertEqual(
+            _resolve_item_id("aaaaaaaaaaaaaaaa", expected),
+            "required:0:aaaaaaaaaaaaaaaa",
+        )
+        with self.assertRaises(CascadeValidationError) as ctx:
+            validate_batch_response(
+                {
+                    "results": [
+                        {"item_id": "req-001", "gate": "HARD", "evidence_level": 0,
+                         "confidence": "high", "gap_source": "domain",
+                         "reasoning": "no evidence for requirement two actually"},
+                        {"item_id": "req-002", "gate": "NONE", "evidence_level": 3,
+                         "confidence": "high",
+                         "reasoning": "strong match for requirement one"},
+                    ]
+                },
+                items,
+            )
+        self.assertIn("unknown batch item_id", str(ctx.exception))
+        self.assertIn("req-001", str(ctx.exception))
+
+    def test_shuffled_sequential_ids_do_not_remap_by_position(self) -> None:
+        """CR-112 Story 1.1: if req-001's HARD reasoning names item two,
+        position mapping would attach HARD to item one. Reject instead.
+        Implements FR-296 / AC-393
+        """
+        items = [
+            BatchItem("required:0:aaaaaaaaaaaaaaaa", "required", "Requirement one"),
+            BatchItem("required:1:bbbbbbbbbbbbbbbb", "required", "Requirement two"),
+        ]
+        with self.assertRaises(CascadeValidationError):
+            validate_batch_response(
+                {
+                    "results": [
+                        {
+                            "item_id": "req-001",
+                            "gate": "HARD",
+                            "evidence_level": 0,
+                            "confidence": "high",
+                            "gap_source": "domain",
+                            "reasoning": "no evidence for requirement two",
+                        },
+                        {
+                            "item_id": "req-002",
+                            "gate": "NONE",
+                            "evidence_level": 3,
+                            "confidence": "high",
+                            "reasoning": "strong match for requirement one",
+                        },
+                    ]
+                },
+                items,
+            )
+        # Unique ordinal and mangled-prefix-plus-hash remain valid.
+        expected = {item.item_id: item for item in items}
+        self.assertEqual(
+            _resolve_item_id("1", expected),
+            "required:1:bbbbbbbbbbbbbbbb",
+        )
+        self.assertEqual(
+            _resolve_item_id("req-bbbbbbbbbbbbbbbb", expected),
+            "required:1:bbbbbbbbbbbbbbbb",
+        )
+
+    def test_unknown_sequential_id_raises_even_when_partial(self) -> None:
+        """Unknown ids are not missing-for-retry. partial=True still fails
+        the whole response so valid siblings in the same payload are discarded.
+        """
+        items = [
+            BatchItem("required:0:aaaaaaaaaaaaaaaa", "required", "Requirement one"),
+            BatchItem("required:1:bbbbbbbbbbbbbbbb", "required", "Requirement two"),
+        ]
+        with self.assertRaises(CascadeValidationError) as ctx:
+            validate_batch_response(
+                {
+                    "results": [
+                        {
+                            "item_id": "req-001",
+                            "gate": "HARD",
+                            "evidence_level": 0,
+                            "confidence": "high",
+                            "gap_source": "domain",
+                            "reasoning": "no evidence for requirement two",
+                        },
+                        {
+                            "item_id": "required:1:bbbbbbbbbbbbbbbb",
+                            "gate": "NONE",
+                            "evidence_level": 3,
+                            "confidence": "high",
+                            "reasoning": "strong match for requirement two",
+                        },
+                    ]
+                },
+                items,
+                partial=True,
+            )
+        self.assertIn("unknown batch item_id", str(ctx.exception))
+
+    def test_invented_sequential_ids_fall_back_to_next_provider(self) -> None:
+        """CR-112 Story 1.1: Groq returns req-001/req-002; that is not a
+        partial miss. The caller falls back to Gemini with the real ids.
+        Simulated retry/fallback. No live call_llm. Implements FR-296 / AC-393.
+        """
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        item_one = BatchItem(
+            "required:0:aaaaaaaaaaaaaaaa", "required", "Requirement one"
+        )
+        item_two = BatchItem(
+            "required:1:bbbbbbbbbbbbbbbb", "required", "Requirement two"
+        )
+        sequential = json.dumps(
+            {
+                "results": [
+                    {
+                        "item_id": "req-001",
+                        "gate": "HARD",
+                        "gap_source": "domain",
+                        "evidence_level": 0,
+                        "confidence": "high",
+                        "reasoning": "no evidence for requirement two",
+                    },
+                    {
+                        "item_id": "req-002",
+                        "gate": "NONE",
+                        "evidence_level": 3,
+                        "confidence": "high",
+                        "reasoning": "strong match for requirement one",
+                    },
+                ]
+            }
+        )
+        recovered = json.dumps(
+            {
+                "results": [
+                    {
+                        "item_id": item_one.item_id,
+                        "gate": "NONE",
+                        "evidence_level": 3,
+                        "confidence": "high",
+                        "reasoning": "strong match for requirement one",
+                    },
+                    {
+                        "item_id": item_two.item_id,
+                        "gate": "HARD",
+                        "gap_source": "domain",
+                        "evidence_level": 0,
+                        "confidence": "high",
+                        "reasoning": "no evidence for requirement two",
+                    },
+                ]
+            }
+        )
+        events: list[tuple[str, str]] = []
+        with patch("utils.call_llm", side_effect=[sequential, recovered]) as call:
+            result = classify_requirements_batch(
+                [item_one, item_two],
+                settings={
+                    "stage0_evidence_classification": {
+                        "provider_order": ["groq", "gemini"],
+                        "models": {"groq": "groq-test", "gemini": "gemini-test"},
+                    }
+                },
+                provider_event_callback=lambda p, e: events.append((p, e)),
+            )
+        self.assertEqual(call.call_count, 2)
+        self.assertEqual(call.call_args_list[0].kwargs["provider_override"], ["groq"])
+        self.assertEqual(call.call_args_list[1].kwargs["provider_override"], ["gemini"])
+        self.assertIn(("groq", "fallback"), events)
+        self.assertIsNone(result[item_one.item_id]["gap_class"])
+        self.assertEqual(result[item_one.item_id]["gate"], "NONE")
+        self.assertEqual(result[item_two.item_id]["gap_class"], "HARD")
+        self.assertEqual(result[item_two.item_id]["gate"], "HARD")
+
+    def test_invented_sequential_ids_fail_closed_when_all_providers_invent(self) -> None:
+        """If Groq and Gemini both return req-001, the cascade raises the
+        unknown-id error. It must not remap by position on the last attempt.
+        """
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        item_one = BatchItem(
+            "required:0:aaaaaaaaaaaaaaaa", "required", "Requirement one"
+        )
+        item_two = BatchItem(
+            "required:1:bbbbbbbbbbbbbbbb", "required", "Requirement two"
+        )
+        sequential = json.dumps(
+            {
+                "results": [
+                    {
+                        "item_id": "req-001",
+                        "gate": "HARD",
+                        "gap_source": "domain",
+                        "evidence_level": 0,
+                        "confidence": "high",
+                        "reasoning": "no evidence for requirement two",
+                    },
+                    {
+                        "item_id": "req-002",
+                        "gate": "NONE",
+                        "evidence_level": 3,
+                        "confidence": "high",
+                        "reasoning": "strong match for requirement one",
+                    },
+                ]
+            }
+        )
+        with patch("utils.call_llm", side_effect=[sequential, sequential]) as call:
+            with self.assertRaises(CascadeValidationError) as ctx:
+                classify_requirements_batch(
+                    [item_one, item_two],
+                    settings={
+                        "stage0_evidence_classification": {
+                            "provider_order": ["groq", "gemini"],
+                            "models": {"groq": "groq-test", "gemini": "gemini-test"},
+                        }
+                    },
+                )
+        self.assertEqual(call.call_count, 2)
+        self.assertIn("unknown batch item_id", str(ctx.exception))
+        self.assertIn("req-001", str(ctx.exception))
 
     def test_validator_passes_model_flagged_confirmation_through(self) -> None:
         """CR-108 Epic 7.2: the Layer C schema's needs_user_confirmation /

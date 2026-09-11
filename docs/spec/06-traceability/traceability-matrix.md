@@ -325,6 +325,10 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `NFR-013` | CR-111 | No submission behavior change; guard and tests are isolated | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py` | implemented |
 | `AC-379`–`AC-386`, `AC-388`–`AC-391` | CR-111 | Authority, canonicalization, drift, and docs acceptance checks | focused drift tests, real-tree drift check, pointer inspection | implemented |
 | `AC-387` | CR-111 | Live Claude Code and Codex skill-loading verification | harness-bridge session 009 R52 (Claude PASS), R53 (Codex PASS) | implemented |
+| `FR-296` | CR-112 | Reject invented sequential Stage 0 batch item IDs | `scripts/stage0_evidence_cascade.py`, `scripts/test_stage0_evidence_cascade.py` | in_progress |
+| `FR-297` | CR-112 | Do not ready a packet after dropping `claim_constraints` | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py` | in_progress |
+| `FR-298` | CR-112 | Read-only detector for wiped-constraint ready packets | `scripts/audit_packet_integrity.py`, `scripts/test_audit_packet_integrity.py` | in_progress |
+| `AC-393`–`AC-395` | CR-112 | Sequential-ID reject/shuffle/fallback, budget fail-closed, live packet audit | focused Python tests + 2026-09-10 `data/submissions/` scan | in_progress |
 
 
 ## Coverage checklist

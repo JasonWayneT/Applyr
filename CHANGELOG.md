@@ -1,3 +1,52 @@
+## [Unreleased] — 2026-09-10
+[DRAFT] CR-112 Epic 1 only — lock Stage 0 sequential-ID reject and
+authoring-packet `claim_constraints` fail-closed, and add a read-only
+detector for already-wiped packets. Do not call this "resilience":
+invented `req-001` IDs are rejected rather than remapped by list
+position, and a packet that cannot keep `claim_constraints` under budget
+is `incomplete`, not `ready` with an empty fence. Epics 2–6 are not in
+this entry.
+
+On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
+rejected `req-001`, and `assemble_packet` already omitted the wipe. The
+list-position remap and the constraint wipe lived in an uncommitted dirty
+tree, never on HEAD. This commit documents that reject, adds isolated
+regression tests including simulated Groq-to-Gemini fallback, and adds
+the detector for packets the wipe already shipped.
+
+### Fixed
+- CR-112 Story 1.1 (`FR-296` / `AC-393`): `_resolve_item_id` must not map
+  invented sequential ids (`req-001`, `req-002`, `pref-1`) onto the Nth
+  item in the current batch. Unknown ids raise `unknown batch item_id`
+  even under `partial=True`, so the caller falls back instead of retrying
+  a positional guess. Hash-suffix (`len >= 8`) and unique ordinal/suffix
+  fallbacks remain.
+- CR-112 Story 1.2 (`FR-297` / `AC-394`): `assemble_packet` must not wipe
+  `claim_constraints` to `{}` to squeeze under `_TOKEN_BUDGET`. Over-budget
+  after dropping `learned_examples` and shrinking excerpts to
+  `_EXCERPT_MIN_CHARS` stays `incomplete` via Rule 5.
+- CR-112 Story 1.4 (`FR-298` / `AC-395`): read-only
+  `scripts/audit_packet_integrity.py` flags already-shipped ready packets
+  with empty `claim_constraints` while `evidence_map` or `soft_gaps` is
+  non-empty. Live scan 2026-09-10: 7 folders, 1 flagged (`supplyhouse`).
+  Detector writes nothing. A sidecar file is informational and is not
+  authorization. SupplyHouse recovery is not on the active backlog
+  (Jason, 2026-09-10: already corrected; do not rebuild, re-author, or
+  request risk acceptance). General detector and tests remain.
+
+### Notes
+- FINDING 2026-09-10: Cursor (Grok 4.6) wrote a gitignored live
+  `packet_integrity_disposition.json` with `HUMAN_ACCEPTED_RISK` and a
+  reason attributed to the candidate. Origin:
+  `docs/spec/08-implementation/FINDING-2026-09-10-agent-packet-integrity-disposition.md`.
+  Tracked stand-in: `tests/fixtures/packet_integrity_disposition.sanitized.json`.
+  The live original stays local only. No workflow treats that sidecar as
+  human authorization.
+
+### Changed
+- `scripts/run_all_tests.py` now runs `test_stage0_evidence_cascade.py`
+  and `test_audit_packet_integrity.py`.
+
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
 partial-result recovery, proactive batch sizing, and legacy classifier removal.

@@ -218,16 +218,16 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 ### Story 3.3 — Advisory swap report (read-only)
 
-**Files:** new script under `scripts/` or extension of `check_ground_truth_coverage.py`.
+**Files:** `scripts/report_evidence_swaps.py`, `scripts/test_cr112_story33.py`.
 
 **Acceptance:**
-- Labels: `SWAP_CANDIDATE` | `INTENTIONAL_TRADEOFF` | `PACKET_MISSING` | `INSUFFICIENT_PROOF`.
-- Never rewrites a document. Never blocks finalize.
-- Includes packet version, claim id, attribution, rank/reason.
+- Labels: `SWAP_CANDIDATE` (`top2_cutoff`) | `INTENTIONAL_TRADEOFF` (`project_slot_cap` or TRACE `filter=boilerplate_filtered`) | `INSUFFICIENT_PROOF` (`score_zero`) | `PACKET_MISSING` (empty item, no filter).
+- Never rewrites a document. Never blocks finalize. Not wired into Stage 1/2/3.
+- Includes packet version, claim id, attribution, rank/reason/score/label/jd_item. Rank is 1-based in the full TRACE candidate list.
 - Fixtures use claim IDs and JD descriptors, not private resume text.
-- **This report reads `evidence_selection_trace.json` (Story 3.2) and writes its own output file — it is a standalone diagnostic tool, never a field merged into `authoring_packet.json` or surfaced to the Stage 1 author prompt.** A human (Jason, or a review pass) reads this report; the author only ever sees what Story 3.2 already scopes into the packet (the reason code, not the full trace).
+- **This report reads `evidence_selection_trace.json` (Story 3.2) and writes `evidence_swap_report.json` — never a field merged into `authoring_packet.json` or surfaced to the Stage 1 author prompt.**
 
-**Status:** [ ] planned; not in the Epic 1 commit. `scripts/report_evidence_swaps.py`. Label mapping covered in `test_cr112_epic3.py`.
+**Status:** [x] accepted locally on `cr112-story33` (2026-09-11). Independent review ACCEPT. Synthetic traces only. Merged onto `cr112-integration`.
 
 ### Story 3.4 — Background-check / admin-line assignment
 

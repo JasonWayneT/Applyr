@@ -787,6 +787,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-391` | acceptance | P2 | implemented | `docs/AGENTS.md` defers to root `AGENTS.md`; the `SDD_PROCESS.md` link is repo-relative | `FR-294` | CR-111 |
 | `FR-303` | functional | P1 | in_progress | Ranked claims that lose Top-2 store a cheap omitted reason-code (`top2_cutoff` or `project_slot_cap`) on the evidence_map row; the full ranking audit lives in sibling `evidence_selection_trace.json`, never in `authoring_prompt.md` | `AC-400` | CR-112 |
 | `AC-400` | acceptance | P1 | in_progress | Pearl-like fixture where SAVINGS ranks 3rd emits `top2_cutoff` in omitted_reasons and the sibling trace; author prompt does not contain candidate scores; `score_zero` is TRACE-only | `FR-303` | CR-112 |
+| `FR-304` | functional | P2 | in_progress | Read-only swap report labels omitted ranked claims `SWAP_CANDIDATE` / `INTENTIONAL_TRADEOFF` / `PACKET_MISSING` / `INSUFFICIENT_PROOF` from the selection trace; TRACE `filter=boilerplate_filtered` is `INTENTIONAL_TRADEOFF`, not `PACKET_MISSING` | `AC-401` | CR-112 |
+| `AC-401` | acceptance | P2 | in_progress | Isolated synthetic traces: `top2_cutoff` → `SWAP_CANDIDATE`; `project_slot_cap` → `INTENTIONAL_TRADEOFF`; `score_zero` → `INSUFFICIENT_PROOF`; empty item → `PACKET_MISSING`; boilerplate filter → `INTENTIONAL_TRADEOFF`; drafts unchanged; missing/unreadable trace exits nonzero | `FR-304` | CR-112 |
 
 ### CR-112 Stage 0–3 reliability, Epic 1 (FR-296–FR-298)
 

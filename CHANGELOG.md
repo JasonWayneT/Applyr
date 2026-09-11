@@ -1,9 +1,10 @@
 ## [Unreleased] — 2026-09-11
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
 Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
-Story 3.1 closed-world extra-packet WARN, and Story 3.2 omitted_reasons
-plus sibling ranking trace. Extra-packet is WARN, not a hard block.
-SupplyHouse is not rewritten. Story 2.2 lands later in this integration.
+Story 3.1 closed-world extra-packet WARN, Story 3.2 omitted_reasons
+plus sibling ranking trace, and Story 3.3 advisory swap report.
+Extra-packet is WARN, not a hard block. SupplyHouse is not rewritten.
+Story 2.2 lands later in this integration.
 
 On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
 rejected `req-001`, and `assemble_packet` already omitted the wipe. The
@@ -58,6 +59,8 @@ candidate tree, never on HEAD.
 - `scripts/test_cr112_story31.py`
 - `evidence_selection_trace.json` written by `build_packet`
 - `scripts/test_cr112_story32.py`
+- `scripts/report_evidence_swaps.py`
+- `scripts/test_cr112_story33.py`
 
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,

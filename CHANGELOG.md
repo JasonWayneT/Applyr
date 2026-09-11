@@ -2,7 +2,7 @@
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
 Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
 Story 3.1 closed-world extra-packet WARN, Story 3.2 omitted_reasons
-plus sibling ranking trace, and Story 3.3 advisory swap report.
+plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip.
 Extra-packet is WARN, not a hard block. SupplyHouse is not rewritten.
 Story 2.2 lands later in this integration.
 
@@ -52,6 +52,9 @@ candidate tree, never on HEAD.
 - `scripts/author_from_packet.py` `run_verify_only` emits extra-packet WARNs
 - `scripts/build_authoring_packet.py` `build_evidence_map` records why
   scored claims lost Top-2 without changing who wins
+- `scripts/build_stage0_fit_gate.py` `_is_administratively_satisfied`
+- `scripts/build_authoring_packet.py` `_enqueue` skip-scoring for eligibility
+  fingerprint / nights-and-weekends lines
 
 ### Added
 - `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3)
@@ -61,6 +64,7 @@ candidate tree, never on HEAD.
 - `scripts/test_cr112_story32.py`
 - `scripts/report_evidence_swaps.py`
 - `scripts/test_cr112_story33.py`
+- `scripts/test_cr112_story34.py`
 
 ## [Unreleased] — 2026-09-09
 [DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,

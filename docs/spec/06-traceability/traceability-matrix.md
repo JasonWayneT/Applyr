@@ -333,6 +333,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-400` | CR-112 | Pearl-like top2_cutoff, prompt has no scores, score_zero TRACE-only | `scripts/test_cr112_story32.py` | in_progress |
 | `FR-304` | CR-112 | Advisory evidence-swap report from selection trace | `scripts/report_evidence_swaps.py`, `scripts/test_cr112_story33.py` | in_progress |
 | `AC-401` | CR-112 | Label map + boilerplate filter + no draft rewrite | `scripts/test_cr112_story33.py` | in_progress |
+| `FR-305` | CR-112 | Admin-line skip (eligibility-framed fingerprint / nights-and-weekends) | `scripts/build_stage0_fit_gate.py`, `scripts/build_authoring_packet.py`, `scripts/test_cr112_story34.py` | in_progress |
+| `AC-402` | CR-112 | Fingerprint fixture empty claim_ids; product/years negatives | `scripts/test_cr112_story34.py` | in_progress |
 
 
 ## Coverage checklist

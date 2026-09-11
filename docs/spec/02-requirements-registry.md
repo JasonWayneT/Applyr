@@ -789,6 +789,8 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-400` | acceptance | P1 | in_progress | Pearl-like fixture where SAVINGS ranks 3rd emits `top2_cutoff` in omitted_reasons and the sibling trace; author prompt does not contain candidate scores; `score_zero` is TRACE-only | `FR-303` | CR-112 |
 | `FR-304` | functional | P2 | in_progress | Read-only swap report labels omitted ranked claims `SWAP_CANDIDATE` / `INTENTIONAL_TRADEOFF` / `PACKET_MISSING` / `INSUFFICIENT_PROOF` from the selection trace; TRACE `filter=boilerplate_filtered` is `INTENTIONAL_TRADEOFF`, not `PACKET_MISSING` | `AC-401` | CR-112 |
 | `AC-401` | acceptance | P2 | in_progress | Isolated synthetic traces: `top2_cutoff` → `SWAP_CANDIDATE`; `project_slot_cap` → `INTENTIONAL_TRADEOFF`; `score_zero` → `INSUFFICIENT_PROOF`; empty item → `PACKET_MISSING`; boilerplate filter → `INTENTIONAL_TRADEOFF`; drafts unchanged; missing/unreadable trace exits nonzero | `FR-304` | CR-112 |
+| `FR-305` | functional | P1 | in_progress | Eligibility-framed background-check / fingerprint and nights-and-weekends required lines skip claim scoring and must not receive product-roadmap claims as Top-2 | `AC-402` | CR-112 |
+| `AC-402` | acceptance | P1 | in_progress | Level II fingerprint fixture has empty `claim_ids` and no `ACC-103-ROADMAP`; product background-check roadmap and years lines still may receive claims | `FR-305` | CR-112 |
 
 ### CR-112 Stage 0–3 reliability, Epic 1 (FR-296–FR-298)
 

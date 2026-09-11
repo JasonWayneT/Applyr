@@ -231,14 +231,15 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 ### Story 3.4 — Background-check / admin-line assignment
 
-**Files:** `build_authoring_packet.py` scoring / `_is_administratively_satisfied`.
+**Files:** `scripts/build_stage0_fit_gate.py` (`_ADMIN_BACKGROUND_RE`, `_ADMIN_SCHEDULE_RE`, `_is_administratively_satisfied`), `scripts/build_authoring_packet.py` (`_enqueue` skip-scoring), `scripts/test_cr112_story34.py`.
 
 **Acceptance:**
-- A required line that is a background check, schedule, or degree does not receive ACC-103-ROADMAP (or any product-roadmap claim) as its Top-2.
-- Fixture cloned from marlowe's Level II fingerprint line.
+- Eligibility-framed fingerprint / background-check and nights-and-weekends required lines skip `_score_claims_for_item` and do not receive ACC-103-ROADMAP.
+- Product lines that name background check or release schedule as the work still score.
+- Years lines still may receive claims. Bachelor's stays admin via the existing force-empty path.
+- Fixture cloned from marlowe's Level II fingerprint line, with overlapping ROADMAP tags so the 8bbc497 path would have assigned the claim.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Fingerprint and
-nights-and-weekends fixtures have empty `claim_ids` and no ACC-103-ROADMAP.
+**Status:** [x] accepted locally on `cr112-story34` (2026-09-11). Independent review ACCEPT. Eligibility-framed skip only. Merged onto `cr112-integration`.
 
 ---
 

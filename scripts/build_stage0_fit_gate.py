@@ -1618,6 +1618,23 @@ _HIGHER_DEGREE_MANDATORY_RE = re.compile(
     r"\brequires?\s+an?\s+(?:master'?s?|mba|ph\.?d\.?)\b",
     re.I,
 )
+# CR-112 Story 3.4: eligibility-framed screening / nights-and-weekends lines
+# are not product-roadmap claims. Framing is required so "Own the background
+# check product roadmap" stays scorable. No drug-test or on-call matchers.
+_ADMIN_BACKGROUND_RE = re.compile(
+    r"(?:must\s+pass|subject\s+to|(?:is|are)\s+required|(?:^|\b)required\b).{0,80}"
+    r"(?:background\s+check|fingerprints?|fingerprinting|"
+    r"level\s*(?:ii|2)\s+fingerprint)"
+    r"|"
+    r"(?:background\s+check|fingerprints?|fingerprinting|"
+    r"level\s*(?:ii|2)\s+fingerprint).{0,80}"
+    r"(?:must\s+pass|subject\s+to|(?:is|are)\s+required|(?:^|\b)required\b)",
+    re.I,
+)
+_ADMIN_SCHEDULE_RE = re.compile(
+    r"\b(?:nights and weekends|weekend availability)\b",
+    re.I,
+)
 
 
 def _is_administratively_satisfied(item_lower: str) -> bool:
@@ -1628,10 +1645,16 @@ def _is_administratively_satisfied(item_lower: str) -> bool:
     citizenship/work-authorization/security-clearance/travel/supervisory-
     responsibility statements are NOT covered here (left for a separate,
     more careful pass -- some are legally sensitive and shouldn't be
-    silently resolved without confirming Jason's actual status)."""
+    silently resolved without confirming Jason's actual status).
+    CR-112 Story 3.4: eligibility-framed fingerprint / background-check and
+    nights-and-weekends lines also count so an empty score gets the admin
+    bridge instead of the Stage-0-anchored filler. Implements FR-305 / AC-402.
+    """
     if _YEARS_EXPERIENCE_LEADIN_RE.match(item_lower.strip()):
         return True
     if _BACHELORS_SATISFIED_RE.search(item_lower) and not _HIGHER_DEGREE_MANDATORY_RE.search(item_lower):
+        return True
+    if _ADMIN_BACKGROUND_RE.search(item_lower) or _ADMIN_SCHEDULE_RE.search(item_lower):
         return True
     return False
 

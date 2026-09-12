@@ -43,7 +43,9 @@ Epic 1 (fail-open dirty patches)
 **2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
 `CR-112-selection-and-closed-world-recovery-design.md`. Stories 3.0, 3.1, 3.5, and
 3.6 each have independent QA PASS. Epic 3 integration PASS
-(`d680faf4-4688-4ba6-8a64-0692f239b592`). Stories 7.1/7.2 may start.
+(`d680faf4-4688-4ba6-8a64-0692f239b592`). Combined CR-112 candidate
+`7bf6829` is **Integration pending**. Do not mark CR-112 complete.
+Chain evidence: `CR-112-reconciliation-2026-09-11.md`.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -71,7 +73,7 @@ CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and i
 
 **Dependencies:** none.
 **Regression evidence:** existing cascade tests plus the new reject/shuffle cases. Archive replay harness (CR-108 Epic 7.3) is optional later, not this story.
-**Status:** [ ] isolated on `cr112-epic1`; pending review. Reject/shuffle/partial-unknown tests plus simulated Groq→Gemini fallback. Hash-tail `len >= 8` on committed main already rejected `req-001`; this story locks that reject and the fallback path.
+**Status:** [ ] Documentation reconciliation only for location: implementation is on local `main` / this candidate (not only `cr112-epic1`). Cascade rejects invented `req-001` / shuffle remap; CHANGELOG names `FR-296`. Independent review ID not recorded; checkbox stays open.
 
 ### Story 1.2 — Do not ready a packet after dropping claim_constraints
 
@@ -87,14 +89,14 @@ CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and i
 
 **Dependencies:** none. Can parallelize with 1.1.
 **Regression evidence:** new unit test. Do not use a real employer folder as the fixture.
-**Status:** [ ] isolated on `cr112-epic1`; pending review. Comment + budget regression test. Committed main already omitted the wipe; this story locks Rule 5. supplyhouse not rebuilt.
+**Status:** [ ] Documentation reconciliation only for location: Rule 5 / no silent `claim_constraints` wipe is on local `main` / this candidate. Independent review ID not recorded; checkbox stays open. supplyhouse not rebuilt.
 
 ### Story 1.3 — Record the two patches in CHANGELOG + this tracker
 
 **Files:** CHANGELOG.md (DRAFT), this file.
 
 **Acceptance:** both behaviors named; no silent "resilience" language that hides fail-open.
-**Status:** [ ] CHANGELOG [DRAFT] 2026-09-10 Epic 1 only; pending review. Registry `FR-296`–`FR-298` / `AC-393`–`AC-395`. No Epics 2–6 in that entry.
+**Status:** [ ] Documentation reconciliation only for location: CHANGELOG names Stories 1.1–1.3 (`FR-296`–`FR-298` / `AC-393`–`AC-395`) on local `main` / this candidate. Independent review ID not recorded; checkbox stays open.
 
 ### Story 1.4 — Detect already-wiped packets
 
@@ -151,7 +153,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - **Stage 2 default is `--resume` for the mechanical subphases (truth/ats/mech/policy) only.** `--resume` alone does not satisfy `hm.critical_read` — running checks is not a substitute for actually assessing truth, relevance, and writing quality (this is F8: `hm.critical_read` is a WARN placeholder, not a semantic review, and the drafting agent must not silently self-dispose it as ACCEPTED_AS_CORRECT). The prose must require a real qualitative read (of the specific kind F8 describes — proof density, register, tailoring, no AI-tell shape) before `hm.critical_read` is disposed, whether that read is done by the drafting agent as a genuinely separate pass or deferred to Jason. Ladder-2 (multi-agent) review stays Jason-opt-in; this bullet is about not deleting the single-session qualitative read, not about restoring ladder-2 as default.
 - `scripts/check_instruction_drift.py` still passes.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Stage 0 default is `run_submission.py data/pending_review/{slug}`; no WE rescore. Stage 1 paste is `authoring_prompt.md` only. Stage 2 `--resume` is mechanical; qualitative read required before `hm.critical_read`.
+**Status:** [ ] Documentation reconciliation only: required Stage 0/1/2 language is present in `.codex/skills/generate-submission/SKILL.md` on this candidate (`test_cr112_lean_spawn.py`). Not planned. Independent review ID not recorded; checkbox stays open.
 
 ### Story 2.2 — Contain generate-submission-batch.js
 
@@ -170,7 +172,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Acceptance:** "Processing job descriptions today" tells the agent to run `run_submission.py` per slug, one author paste per WAITING_FOR_LLM, and `--resume`. Explicit: do not Task/Agent-spawn per JD. Do not invoke conversion-ready-pass on generate-submission drafts.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Root `AGENTS.md` only.
+**Status:** [ ] Documentation reconciliation only: `AGENTS.md` trigger requires `run_submission.py`, one `authoring_prompt.md` paste, `--resume`, no per-JD spawn, no `conversion-ready-pass` on generate-submission drafts. Not planned. Independent review ID not recorded; checkbox stays open.
 
 ---
 
@@ -180,7 +182,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; an omitted fact that clearly dominates the weakest selected fact is swapped before authoring; citing a claim the packet never offered blocks Stage 1 completion until remove / rewrite / explicit widen / human-compare. Detection and comparative selection stay separate.
 
-**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 integration PASS (`d680faf4-4688-4ba6-8a64-0692f239b592`). 7.1/7.2 may start. Do not flip story checkboxes from this report.
+**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 integration PASS (`d680faf4-4688-4ba6-8a64-0692f239b592`) on `706504a`. Combined candidate `7bf6829`: **Integration pending**. WARN-era Story 3.1 (FR-302 / AC-399) is superseded; detection is FAIL-closed.
 
 ### Story 3.0 — Pre-implementation design review (no code)
 
@@ -195,7 +197,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 **Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
 against the design, Story 3.1 diff, seven-folder evidence, and FR-254.
 Independent design ACCEPT was `21fd8c64-6c03-4c55-9fc3-4a7a2a974dbb`.
-Epic 3 is not integration-ready.
+Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
 
 ### Story 3.1 — Detect extra-packet provenance IDs as a recoverable completion block
 
@@ -211,8 +213,9 @@ Epic 3 is not integration-ready.
 
 **Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
 on the detection slice (12/12 focused tests; nearby 56/56). Detection
-is FAIL-closed. Recovery stays Story 3.6. Epic 3 is not
-integration-ready. Live scan below is frozen evidence, not a rewrite
+is FAIL-closed. Recovery stays Story 3.6. Independent Epic 3
+integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
+Live scan below is frozen evidence, not a rewrite
 list.
 
 **Live extra-packet scan (2026-09-10),** `python scripts/packet_closed_world.py --root data/submissions`:
@@ -286,7 +289,7 @@ list.
 **Status:** [x] QA PASS (`e5d85297-faa2-4002-8452-74517e3547cf`) 2026-09-11
 on the Class 1 comparator (16/16 then 18/18 after eligibility-shadow and
 INFLUENCED/OBSERVED fixtures). Pearl/SupplyHouse SAVINGS never REPLACE.
-Epic 3 is not integration-ready.
+Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
 
 ### Story 3.6 — Closed-world recovery after extra-packet detection
 
@@ -309,8 +312,9 @@ Epic 3 is not integration-ready.
 
 **Status:** [x] QA PASS (`d5a8861b-f6bd-4997-a3c8-9916fe5a40f6`) 2026-09-11
 on Class 2 recovery (8/8 then fixtures added for SupplyHouse and
-constraint conflict). Helper does not mint receipts. Epic 3 integration
-review is the next gate, not 7.x.
+constraint conflict). Helper does not mint receipts. Independent Epic 3
+integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
+Not a 7.x gate.
 
 ---
 
@@ -420,14 +424,17 @@ Merged onto `cr112-integration`.
 - `free_only` requires that zero-charge assertion. User declaration alone does not make a billed project free.
 - Paid requires user-configured provider allowlist, remaining run/batch budget, and a known estimate. Unset/0 budget or unknown estimate → paid ineligible.
 - Fallback may not move `free_only` → `paid_with_budget`. Provider errors cannot silently change cost mode.
-- No eligible provider: do not call; pause; keep `WAITING_FOR_LLM` / `authoring_prompt.md` paste.
+- No eligible provider: do not call; pause at `WAITING_FOR_INPUT` with
+  `pause_kind=cost_authorization`. Never `WAITING_FOR_LLM`. Stage 1 paste
+  does not complete Stage 0.
 - Does not wire eval `--paid-llm` to `call_llm`.
 
 **Status:** [x] QA PASS (`18868b0f-a352-4cf6-8a76-b86249672614`) 2026-09-11
-on cost eligibility (then offline-not-cloud, test-hook isolation, and
-exhausted-chain class preserved). Do not push. `CostPauseError` still
-does not mint a Stage 1 `WAITING_FOR_LLM` receipt; Stage 1 authoring
-already stays on paste.
+on cost eligibility. Follow-up `7bf6829` independent review PASS
+(`97887893-381a-47fa-b521-e5c1d5d2af78`) for canonical
+`WAITING_FOR_INPUT` / `cost_authorization` receipt, bound Stage 0 import,
+and consumed-import rename. Combined candidate: **Integration pending**.
+Do not push. Do not merge onto `cr112-selection-closed-world-design` yet.
 
 ### Story 7.2 — Cost telemetry: unknown is not zero
 
@@ -441,7 +448,8 @@ already stays on paste.
 
 **Status:** [x] QA PASS (`18868b0f-a352-4cf6-8a76-b86249672614`) 2026-09-11
 on unknown ≠ zero telemetry. Eval zero-call stays `offline` with
-`cost_known=true`. Do not push.
+`cost_known=true`. Follow-up `7bf6829` review PASS (`97887893`). Combined
+candidate: **Integration pending**. Do not push.
 
 ## Out of scope
 

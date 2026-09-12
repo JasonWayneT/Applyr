@@ -1,5 +1,5 @@
 ---
-status: integrated_validation_in_progress
+status: integration_ready_first_draft_remaining
 created: 2026-09-11
 from: Cursor (Grok 4.6)
 candidate: 7bf6829
@@ -63,3 +63,69 @@ Local-only prerequisites in this worktree at creation:
 ## Tracker
 
 CR-112 is not complete. Combined-candidate verification is this session. See the epics file for per-story states after documentation reconciliation.
+
+## Combined verification (2026-09-11 / 2026-09-12)
+
+Local HEAD after isolation-test commits: `165485f` (parent chain still `7bf6829` plus four local commits). No push. Production `data/jobagent.sqlite` mtime/size unchanged across practice runs.
+
+### Automated suite from `165485f`
+
+| Check | Result | Class if not green |
+|---|---|---|
+| Epic 3 focused | 66/66 | |
+| Epic 7 focused | 41/41 | |
+| Workflow receipt/invalidation/resume | 49/49 after isolating two tests from live WE | missing live WE; tests now mocked like sibling |
+| Adversarial | 5/5 | |
+| Full `run_all_tests.py --python-only` | 60/60 PASS (206s) | |
+| Frontend vitest | 367 pass after deleting a too-complete worktree sqlite stub | stub schema vs migrations; not a product regression |
+| Build | pass | |
+| Lint | 0 errors; 24 pre-existing `any`/hooks warnings | existing unrelated |
+| Instruction drift | CLEAN after copying gitignored `.claude/skills` pointer stubs | missing local pointer stubs |
+| Privacy `audit_public_repo.py` | PASS (944 tracked files) | |
+| Context-pack freshness | not run | missing `data/agent_context_pack.md`; do not generate a fake pack from example John Doe WE |
+| Diff vs `b873fb5` | no live submissions, WE, claims, or production sqlite | |
+
+Safe untracked local prereqs generated in this worktree only:
+
+- `data/authoring_rule_digest.md` from tracked `generate_authoring_rule_digest.py`
+- `data/workExperience.md` / `data/master_claims.json` from tracked examples (not live PII)
+- `data/master_claims_tags_only.json` stripped from the example catalog (required: `load_claims` reads tags-only, not `master_claims.json`)
+- Do not copy parent live WE, live claims, or production sqlite
+
+### No-cost synthetic practice
+
+Temp folder, `--mode practice`, redirected review sqlite, no provider adapters, no paid budget.
+
+1. Stage 0 finds no authorized provider (`unknown_cost_class`).
+2. Canonical runner commits `WAITING_FOR_INPUT`.
+3. Receipt `pause_kind=cost_authorization`. `model_call_occurred=false`. `cost_applicable=false`. `api_cents` omitted.
+4. `--resume` without `--mode practice` errors on mode mismatch (operational note; not a cost-pause regression). Matching `--mode practice --resume` twice stays paused, zero calls.
+5. Bound `stage0_cascade_import.json` from the generated template is consumed exactly once (`stage0_cascade_import.consumed.json`).
+6. Stage 0 COMPLETE. Packet + `authoring_prompt.md` written. Workflow stops at `WAITING_FOR_LLM`.
+7. `--status` `check_workflow_complete: NO`.
+8. Parent production sqlite unchanged.
+
+Missing digest was generated first. The earlier Story 7 worktree FileNotFoundError is not this run.
+
+### Frozen five-JD corpus
+
+After the tags-only sidecar existed:
+
+| JD | Stage 0 | Import | Packet | Prompt | First draft |
+|---|---|---|---|---|---|
+| northwind | cost pause, then PASS Tier 1 via import | yes, consumed | ready; 13 excerpts; 6/7 rows mapped; no replacements | ~7400 estimated tokens | not authored |
+| contoso | `pause_kind=review_center` (DBA, SQL) before cost pause | n/a | n/a | n/a | stopped |
+| fabrikam / adventure / wideworld | not continued | | | | |
+
+Northwind without tags-only produced `packet_status=ready` with empty `excerpts` / empty `claim_ids`. That is missing sidecar, not an Epic 3 scoring regression. After generating example tags-only, mapping filled.
+
+First-draft Stage 0–3 was not run. Example catalog employers are Acme/Example/Startup. Production template still requires Cision / Sterkly / Zero To Sixty. Live WE was not copied. Authoring a John Doe draft would not prove daily-use quality, and inventing Cision bullets would violate closed-world.
+
+Contoso Review Center pause is example-WE skill confirmations, same class as the fit-gate mock. Do not auto-confirm skills just to green the eval.
+
+### Verdict
+
+`INTEGRATION_READY`. Combined code and no-cost workflow are verified. First-draft product proof remains.
+
+Do not merge onto `cr112-selection-closed-world-design`. Do not push.
+

@@ -43,9 +43,12 @@ Epic 1 (fail-open dirty patches)
 **2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
 `CR-112-selection-and-closed-world-recovery-design.md`. Stories 3.0, 3.1, 3.5, and
 3.6 each have independent QA PASS. Epic 3 integration PASS
-(`d680faf4-4688-4ba6-8a64-0692f239b592`). Combined CR-112 candidate
-`7bf6829` is **Integration pending**. Do not mark CR-112 complete.
-Chain evidence: `CR-112-reconciliation-2026-09-11.md`.
+(`d680faf4-4688-4ba6-8a64-0692f239b592`). Combined candidate starting at
+`7bf6829` (local HEAD `165485f`): automated suite plus no-cost Stage 0→1
+boundary passed. First-draft Stage 0–3 product proof remaining. Do not
+mark CR-112 complete. Chain evidence:
+`CR-112-reconciliation-2026-09-11.md` and
+`SESSION-HANDOFF-2026-09-11-cr112-integrated-validation.md`.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -182,7 +185,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; an omitted fact that clearly dominates the weakest selected fact is swapped before authoring; citing a claim the packet never offered blocks Stage 1 completion until remove / rewrite / explicit widen / human-compare. Detection and comparative selection stay separate.
 
-**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 integration PASS (`d680faf4-4688-4ba6-8a64-0692f239b592`) on `706504a`. Combined candidate `7bf6829`: **Integration pending**. WARN-era Story 3.1 (FR-302 / AC-399) is superseded; detection is FAIL-closed.
+**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 integration PASS (`d680faf4-4688-4ba6-8a64-0692f239b592`) on `706504a`. Combined candidate `7bf6829` / `165485f`: automated + no-cost Stage 0→1 passed; first-draft product proof remaining. WARN-era Story 3.1 (FR-302 / AC-399) is superseded; detection is FAIL-closed.
 
 ### Story 3.0 — Pre-implementation design review (no code)
 
@@ -197,7 +200,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 **Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
 against the design, Story 3.1 diff, seven-folder evidence, and FR-254.
 Independent design ACCEPT was `21fd8c64-6c03-4c55-9fc3-4a7a2a974dbb`.
-Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
+Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
 
 ### Story 3.1 — Detect extra-packet provenance IDs as a recoverable completion block
 
@@ -214,7 +217,7 @@ Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: **Integrat
 **Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
 on the detection slice (12/12 focused tests; nearby 56/56). Detection
 is FAIL-closed. Recovery stays Story 3.6. Independent Epic 3
-integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
+integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
 Live scan below is frozen evidence, not a rewrite
 list.
 
@@ -289,7 +292,7 @@ list.
 **Status:** [x] QA PASS (`e5d85297-faa2-4002-8452-74517e3547cf`) 2026-09-11
 on the Class 1 comparator (16/16 then 18/18 after eligibility-shadow and
 INFLUENCED/OBSERVED fixtures). Pearl/SupplyHouse SAVINGS never REPLACE.
-Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
+Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
 
 ### Story 3.6 — Closed-world recovery after extra-packet detection
 
@@ -313,7 +316,7 @@ Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: **Integrat
 **Status:** [x] QA PASS (`d5a8861b-f6bd-4997-a3c8-9916fe5a40f6`) 2026-09-11
 on Class 2 recovery (8/8 then fixtures added for SupplyHouse and
 constraint conflict). Helper does not mint receipts. Independent Epic 3
-integration PASS (`d680faf4`). Combined candidate: **Integration pending**.
+integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
 Not a 7.x gate.
 
 ---
@@ -433,7 +436,7 @@ Merged onto `cr112-integration`.
 on cost eligibility. Follow-up `7bf6829` independent review PASS
 (`97887893-381a-47fa-b521-e5c1d5d2af78`) for canonical
 `WAITING_FOR_INPUT` / `cost_authorization` receipt, bound Stage 0 import,
-and consumed-import rename. Combined candidate: **Integration pending**.
+and consumed-import rename. Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
 Do not push. Do not merge onto `cr112-selection-closed-world-design` yet.
 
 ### Story 7.2 — Cost telemetry: unknown is not zero
@@ -449,7 +452,8 @@ Do not push. Do not merge onto `cr112-selection-closed-world-design` yet.
 **Status:** [x] QA PASS (`18868b0f-a352-4cf6-8a76-b86249672614`) 2026-09-11
 on unknown ≠ zero telemetry. Eval zero-call stays `offline` with
 `cost_known=true`. Follow-up `7bf6829` review PASS (`97887893`). Combined
-candidate: **Integration pending**. Do not push.
+candidate: automated + no-cost Stage 0→1 passed; first-draft product
+proof remaining. Do not push.
 
 ## Out of scope
 

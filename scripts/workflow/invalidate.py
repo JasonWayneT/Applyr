@@ -52,7 +52,7 @@ def reconcile_state_against_receipts(
     state: dict[str, Any],
     load_receipt_fn,
 ) -> tuple[dict[str, Any], list[str]]:
-    """Mark stages STALE when receipt output_hashes no longer match disk.
+    """Mark stages STALE when receipt output_hashes or input_hashes no longer match disk.
 
     Returns (possibly updated state, list of human-readable reasons).
     Does not write — caller persists via receipts.write_state.
@@ -89,32 +89,39 @@ def reconcile_state_against_receipts(
                     reasons.append(f"{down}: locked after {stage} receipt missing")
             continue
 
-        expected = receipt.get("output_hashes") or {}
-        if expected:
-            ok, errs = hashes_match(folder, expected)
-            if not ok:
-                reasons.extend(f"{stage}: {e}" for e in errs)
-                stages[stage] = {
-                    "status": "STALE",
-                    "receipt_id": receipt_id,
-                    "integrity": info.get("integrity") or "CLEAN",
-                }
-                for down in _CASCADE.get(stage, ()):
-                    d = stages.get(down) or {}
-                    # Lock downstream even if they had COMPLETE/READY/WAITING
-                    if d.get("status") and d.get("status") != "LOCKED":
-                        stages[down] = {
-                            "status": "LOCKED",
-                            "receipt_id": None,
-                            "integrity": d.get("integrity") or "CLEAN",
-                        }
-                        if down == "stage2":
-                            # CR-079: restart Stage 2 from Truth after upstream STALE
-                            from workflow.reviews import default_stage2_subphases
-
-                            stages[down]["subphases"] = default_stage2_subphases()
-                        reasons.append(f"{down}: LOCKED after {stage} became STALE")
+        stale_from_hashes = False
+        for hash_kind in ("output_hashes", "input_hashes"):
+            expected = receipt.get(hash_kind) or {}
+            if not expected:
                 continue
+            ok, errs = hashes_match(folder, expected)
+            if ok:
+                continue
+            reasons.extend(f"{stage}: {e}" for e in errs)
+            stages[stage] = {
+                "status": "STALE",
+                "receipt_id": receipt_id,
+                "integrity": info.get("integrity") or "CLEAN",
+            }
+            for down in _CASCADE.get(stage, ()):
+                d = stages.get(down) or {}
+                # Lock downstream even if they had COMPLETE/READY/WAITING
+                if d.get("status") and d.get("status") != "LOCKED":
+                    stages[down] = {
+                        "status": "LOCKED",
+                        "receipt_id": None,
+                        "integrity": d.get("integrity") or "CLEAN",
+                    }
+                    if down == "stage2":
+                        # CR-079: restart Stage 2 from Truth after upstream STALE
+                        from workflow.reviews import default_stage2_subphases
+
+                        stages[down]["subphases"] = default_stage2_subphases()
+                    reasons.append(f"{down}: LOCKED after {stage} became STALE")
+            stale_from_hashes = True
+            break
+        if stale_from_hashes:
+            continue
 
         # Chain-integrity check: if this stage's prior_receipt_id doesn't match
         # the previous stage's current receipt_id, the chain is broken (an

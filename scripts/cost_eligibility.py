@@ -24,8 +24,13 @@ DEFAULT_COST_CLASS = {
     "groq": "unknown",
 }
 _PAUSE_MESSAGE = (
-    "No cost-eligible LLM provider. Do not call. Pause and use the existing "
-    "authoring_prompt.md paste path."
+    "Processing paused because no eligible Stage 0 classifier was authorized. "
+    "No model API call occurred. No API cost was incurred. Resume the same run "
+    "with --resume after one of: add stage0_cascade_import.json using the provider "
+    "response schema, certify a provider whose adapter can assert zero charge for "
+    "this account and call, or allowlist a paid provider with a positive budget "
+    "and a known estimate. Do not paste authoring_prompt.md. Stage 0 is not "
+    "finished. A free-tier name is not a zero-charge guarantee."
 )
 LAST_RECEIPT: dict[str, Any] | None = None
 
@@ -63,6 +68,9 @@ class BudgetLedger:
         self.remaining_cents -= cents
         if self.batch_remaining_cents is not None:
             self.batch_remaining_cents -= cents
+        persist = getattr(self, "persist", None)
+        if callable(persist):
+            persist(self)
 
 
 @dataclass
@@ -225,7 +233,7 @@ def classify_provider(
                 eligible=False,
                 reason="free_only_unproven",
                 cost_known=False,
-                authorization_mode="unknown",
+                authorization_mode="free_only",
             )
         return ProviderCost(
             provider=provider,
@@ -313,6 +321,11 @@ def authorize_provider_chain(
             provider, settings, ledger=ledger, estimated_tokens=estimated_tokens
         )
         result.decisions.append(info)
+        if (
+            declared_cost_class(provider, settings) == "free_only"
+            or info.authorization_mode == "free_only"
+        ):
+            result.seen_free_only = True
         if not info.eligible:
             continue
         if info.cost_class == "paid_with_budget" and result.seen_free_only:
@@ -330,6 +343,8 @@ def unknown_refusal_receipt(
     provider: str | None = None,
     estimated_tokens: int | None = None,
     reason: str = "unknown_cost_class",
+    authorization_mode: str = "unknown",
+    ineligible_providers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Telemetry for a refused unknown call. api_cents is omitted, never 0."""
     row: dict[str, Any] = {
@@ -337,14 +352,17 @@ def unknown_refusal_receipt(
         "cost_class": "unknown",
         "cost_known": False,
         "cost_confidence": "unknown",
-        "authorization_mode": "unknown",
+        "authorization_mode": authorization_mode,
         "reason": reason,
         "subscription_minutes": 0,
+        "model_call_occurred": False,
     }
     if provider is not None:
         row["provider"] = provider
     if estimated_tokens is not None:
         row["estimated_tokens"] = estimated_tokens
+    if ineligible_providers:
+        row["ineligible_providers"] = list(ineligible_providers)
     return row
 
 
@@ -356,18 +374,34 @@ def known_call_receipt(
     actual_tokens: int | None = None,
     api_cents: int,
     invocations: int = 1,
+    cost_confidence: str | None = None,
+    confirmed: bool = False,
 ) -> dict[str, Any]:
-    """Telemetry for a call whose cost is known. Known free/offline may be 0."""
+    """Telemetry for a call whose cost is known. Free/offline may be 0.
+
+    Paid table prices are estimated, never confirmed, unless the caller
+    passes confirmed=True with trusted provider usage.
+    """
+    if cost_confidence is None:
+        if confirmed:
+            cost_confidence = "confirmed"
+        elif cost_class in {"offline", "free_only"}:
+            cost_confidence = "zero"
+        elif cost_class == "paid_with_budget":
+            cost_confidence = "estimated"
+        else:
+            cost_confidence = "unknown"
     row: dict[str, Any] = {
         "invocations": invocations,
         "provider": provider,
         "estimated_tokens": estimated_tokens,
         "cost_class": cost_class,
         "cost_known": True,
-        "cost_confidence": "known",
+        "cost_confidence": cost_confidence,
         "authorization_mode": cost_class,
         "api_cents": api_cents,
         "subscription_minutes": 0,
+        "model_call_occurred": invocations > 0,
     }
     if actual_tokens is not None:
         row["actual_tokens"] = actual_tokens
@@ -396,7 +430,10 @@ def exhausted_chain_receipt(
         "provider": info.provider,
         "cost_class": info.cost_class,
         "cost_known": info.cost_known,
-        "cost_confidence": "known" if info.cost_known else "unknown",
+        "cost_confidence": (
+            "zero" if info.cost_known and info.cost_class in {"offline", "free_only"}
+            else ("estimated" if info.cost_known and info.cost_class == "paid_with_budget" else "unknown")
+        ),
         "authorization_mode": info.authorization_mode,
         "reason": "providers_exhausted",
         "subscription_minutes": 0,
@@ -412,19 +449,64 @@ def raise_if_pause(auth: Authorization, *, estimated_tokens: int | None = None) 
     """Raise CostPauseError when the filtered chain is empty."""
     if not auth.pause:
         return
+    ineligible = [
+        {
+            "provider": row.provider,
+            "cost_class": row.cost_class,
+            "reason": row.reason,
+            "authorization_mode": row.authorization_mode,
+        }
+        for row in auth.decisions
+        if not row.eligible
+    ]
+    unproven_free = next(
+        (row for row in auth.decisions if row.reason == "free_only_unproven"),
+        None,
+    )
     first_unknown = next(
         (row for row in auth.decisions if row.cost_class == "unknown"),
         None,
     )
-    provider = first_unknown.provider if first_unknown else None
-    reason = first_unknown.reason if first_unknown else "no_eligible_provider"
+    chosen = unproven_free or first_unknown
+    if auth.seen_free_only:
+        mode = "free_only"
+    elif chosen is not None:
+        mode = chosen.authorization_mode
+    else:
+        mode = "unknown"
+    provider = chosen.provider if chosen else None
+    reason = chosen.reason if chosen else "no_eligible_provider"
     raise CostPauseError(
         receipt=unknown_refusal_receipt(
             provider=provider,
             estimated_tokens=estimated_tokens,
             reason=reason,
+            authorization_mode=mode,
+            ineligible_providers=ineligible,
         )
     )
+
+
+def overlay_persisted_budget(ledger: BudgetLedger, metadata: dict[str, Any] | None) -> BudgetLedger:
+    """Apply a prior run remainder. Never raise the current settings ceiling."""
+    metadata = metadata or {}
+    persisted = metadata.get("paid_remaining_cents")
+    if persisted is None:
+        return ledger
+    try:
+        remaining = int(persisted)
+    except (TypeError, ValueError):
+        return ledger
+    ledger.remaining_cents = max(0, min(ledger.remaining_cents, remaining))
+    batch = metadata.get("paid_batch_remaining_cents")
+    if batch is not None and ledger.batch_remaining_cents is not None:
+        try:
+            ledger.batch_remaining_cents = max(
+                0, min(ledger.batch_remaining_cents, int(batch))
+            )
+        except (TypeError, ValueError):
+            pass
+    return ledger
 
 
 def debit_if_paid(ledger: BudgetLedger, info: ProviderCost) -> None:

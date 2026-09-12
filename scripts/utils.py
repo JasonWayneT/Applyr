@@ -952,7 +952,7 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
              response_mime_type=None, tools=None, max_retries=8, provider_override=None,
              options_override=None, response_schema=None, request_timeout=120,
-             cost_settings=None):
+             cost_settings=None, cost_ledger=None):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
@@ -1017,7 +1017,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         CostPauseError,
     )
 
-    ledger = budget_ledger_from_settings(eligibility_settings)
+    ledger = cost_ledger if cost_ledger is not None else budget_ledger_from_settings(eligibility_settings)
     tokens_est = estimate_prompt_tokens(system_prompt or "", user_prompt or "")
     auth = authorize_provider_chain(
         providers, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
@@ -1057,13 +1057,49 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             info = classify_provider(
                 provider, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
             )
-            cents = 0 if info.cost_class in {"offline", "free_only"} else (info.estimated_cents or 0)
+            if info.cost_class in {"offline", "free_only"}:
+                cents = 0
+                confidence = "zero"
+            elif info.estimated_cents is None:
+                set_last_receipt(
+                    unknown_refusal_receipt(
+                        provider=provider,
+                        estimated_tokens=tokens_est,
+                        reason="paid_estimate_unknown",
+                    )
+                )
+                print(
+                    "    [LLM] Missing pricing data; not recording cost as zero.",
+                    file=sys.stderr,
+                )
+                return result
+            else:
+                cents = info.estimated_cents
+                confidence = "estimated"
+            if (
+                info.cost_class == "paid_with_budget"
+                and cents != info.estimated_cents
+            ):
+                set_last_receipt(
+                    unknown_refusal_receipt(
+                        provider=provider,
+                        estimated_tokens=tokens_est,
+                        reason="ledger_receipt_mismatch",
+                    )
+                )
+                raise CostPauseError(
+                    receipt=unknown_refusal_receipt(
+                        provider=provider,
+                        reason="ledger_receipt_mismatch",
+                    )
+                )
             set_last_receipt(
                 known_call_receipt(
                     provider=provider,
                     cost_class=info.cost_class,
                     estimated_tokens=tokens_est,
                     api_cents=cents,
+                    cost_confidence=confidence,
                 )
             )
             debit_if_paid(ledger, info)

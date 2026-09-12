@@ -23,6 +23,26 @@ from stage0_evidence_cascade import (  # noqa: E402
 
 
 class TestStage0EvidenceCascade(unittest.TestCase):
+    def setUp(self) -> None:
+        from cost_eligibility import set_test_zero_charge_providers
+
+        set_test_zero_charge_providers(["groq", "gemini", "local"])
+        self._decl = patch(
+            "cost_eligibility.declared_cost_class",
+            side_effect=lambda provider, settings: {
+                "groq": "free_only",
+                "gemini": "free_only",
+                "local": "offline",
+            }.get(str(provider), "unknown"),
+        )
+        self._decl.start()
+        self.addCleanup(self._decl.stop)
+
+    def tearDown(self) -> None:
+        from cost_eligibility import set_test_zero_charge_providers
+
+        set_test_zero_charge_providers(None)
+
     def test_default_provider_order_is_cloud_first(self) -> None:
         self.assertEqual(
             configured_provider_order(

@@ -496,6 +496,20 @@ def waiting_for_input_message(folder: str) -> str:
             "A certified zero-charge provider or a paid allowlist plus budget "
             "and known estimate also resume the same run."
         )
+    if kind == "requirement_extraction_review":
+        return (
+            "workflow WAITING_FOR_INPUT — Stage 0 requirement extraction needs "
+            "review. One or more bullets extraction could not confidently bucket "
+            "are qualification-likely or ambiguous and cannot bypass review "
+            "(CR-112). See stage_receipts/stage0.json's result.queue for the "
+            "full list with reason codes. "
+            f"Put stage0_requirement_extraction_review.json in {folder} "
+            "(copy from stage0_requirement_extraction_review.template.json in "
+            "that folder) with an explicit bucket set for every item -- "
+            "required, preferred, responsibilities, culture, or exclude. "
+            f"Then: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md. Stage 0 is not finished."
+        )
     return (
         "workflow WAITING_FOR_INPUT — resolve Review Center confirmations then --resume"
     )

@@ -20,6 +20,7 @@ from build_stage0_fit_gate import (  # noqa: E402
     Stage0CostAuthorizationNeeded,
     Stage0ExtractError,
     Stage0NeedsInput,
+    Stage0RequirementExtractionReviewNeeded,
     build_stage0_fit_gate,
 )
 from stage_gate import StageGateNotReadyError, require_stage_ready  # noqa: E402
@@ -288,6 +289,45 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             "waiting_for_input",
             duration_seconds=_duration,
             pending_confirmations=len(exc.pending),
+        )
+        return result_state
+    except Stage0RequirementExtractionReviewNeeded as exc:
+        # CR-112: receipt-only pause (PIN 1) -- fires before run_key/
+        # request_hash/start_run exist, so no stage0_runs row is created and
+        # mark_run_status is never called for this pause.
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(
+                folder, ["Original_JD.txt", "stage0_requirement_extraction_review.json"]
+            ),
+            output_hashes={},
+            result={
+                "pause_kind": "requirement_extraction_review",
+                "opportunity_key": exc.opportunity_key,
+                "queue": exc.queue,
+                "duration_seconds": _duration,
+            },
+            checks={"requirement_extraction_review_recorded": True},
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pause_kind="requirement_extraction_review",
+            queue_size=len(exc.queue),
         )
         return result_state
     except Stage0CostAuthorizationNeeded as exc:

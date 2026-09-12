@@ -159,6 +159,12 @@ def render_cascade_import_template(
         "results": [
             {
                 "item_id": item.item_id,
+                # CR-112 (Defect B, exact-text binding): echoed back so
+                # try_load_cascade_import can verify whoever answered this
+                # import was looking at the real requirement text, not text
+                # they rewrote or a different item entirely.
+                "requirement": item.requirement,
+                "bucket": item.bucket,
                 "gate": "NONE",
                 "evidence_level": 4,
                 "confidence": "high",
@@ -253,6 +259,31 @@ def try_load_cascade_import(
         raise CascadeValidationError("cascade import expected_item_ids is required")
     if not isinstance(declared_ids, list) or list(declared_ids) != actual_ids:
         raise CascadeValidationError("cascade import expected_item_ids do not match this batch")
+    # CR-112 (Defect B, exact-text binding): a submitted import's echoed
+    # requirement/bucket must match the real item text/bucket exactly --
+    # otherwise a classifier could answer about text it rewrote and nothing
+    # would catch it. Checked before validate_batch_response(), which does
+    # not look at these two fields at all.
+    expected_by_id = {item.item_id: item for item in items}
+    raw_results = payload.get("results")
+    if isinstance(raw_results, list):
+        for raw_result in raw_results:
+            if not isinstance(raw_result, dict):
+                continue
+            raw_item_id = raw_result.get("item_id")
+            expected_item = expected_by_id.get(raw_item_id) if isinstance(raw_item_id, str) else None
+            if expected_item is None:
+                continue
+            if str(raw_result.get("requirement") or "") != expected_item.requirement:
+                raise CascadeValidationError(
+                    f"cascade import echoed requirement text for {raw_item_id!r} "
+                    "does not match this batch's real item text"
+                )
+            if str(raw_result.get("bucket") or "") != expected_item.bucket:
+                raise CascadeValidationError(
+                    f"cascade import echoed bucket for {raw_item_id!r} does not "
+                    "match this batch's real item bucket"
+                )
     results = validate_batch_response(payload, items, exact_ids=True)
     assert isinstance(results, dict)
     import_sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()

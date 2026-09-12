@@ -70,6 +70,29 @@ class Stage0NeedsInput(RuntimeError):
         self.pending = pending
 
 
+class Stage0RequirementExtractionReviewNeeded(RuntimeError):
+    """Extraction's own unresolved bullets include a qualification-risk item.
+
+    Raised by build_stage0_fit_gate (never from inside _extract_sections_nlp,
+    PIN 3) when the independent three-way qualification-risk gate
+    (stage0_qualification_risk_gate.classify_qualification_risk) finds at
+    least one QUALIFICATION_LIKELY or AMBIGUOUS bullet among the items the
+    NLP extractor could not confidently bucket. This is a receipt-only pause
+    (PIN 1): it fires before run_key/request_hash/start_run exist, so no
+    stage0_runs row is created and mark_run_status is never called for it.
+    The orchestrator writes WAITING_FOR_INPUT with
+    pause_kind=requirement_extraction_review.
+    """
+
+    def __init__(self, opportunity_key: str, queue: list[dict]) -> None:
+        super().__init__(
+            "Stage 0 requirement extraction produced qualification-risk "
+            "bullets that need review before a terminal PASS or SKIP."
+        )
+        self.opportunity_key = opportunity_key
+        self.queue = queue
+
+
 class Stage0CostAuthorizationNeeded(RuntimeError):
     """Stage 0 cannot classify remaining lines without an authorized provider.
 
@@ -1179,12 +1202,23 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
                     buckets[pred].append(bullet_clean)
                     
     # Active Learning Fallback Loop
+    # CR-112 (2026-09-12, post design review): a bullet the classifier was not
+    # confident about must never be silently defaulted into a bucket just
+    # because no provider answered, the provider's response failed to parse,
+    # or the response only partially mapped the batch -- that is Defect A
+    # (a self-flagged/structurally-unreliable extraction still producing a
+    # terminal PASS or SKIP) and Defect A's silent-loss variant. Every one of
+    # those three cases is instead recorded in `unresolved_for_review` (an
+    # extra key on this same dict, per PIN 3 -- this function still never
+    # raises) so the caller (build_stage0_fit_gate) can run the independent
+    # three-way qualification-risk gate and pause when needed.
+    unresolved_for_review: list[dict] = []
     if fallback_queue:
         print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
         prompt = "Classify these job description bullet points into one of four buckets: 'required', 'preferred', 'responsibilities', or 'culture'. Return ONLY valid JSON as a mapping from the index to the bucket string.\n\n"
         for i, (combo_text, _, _) in enumerate(fallback_queue):
             prompt += f"[{i}] {combo_text}\n"
-            
+
         result = call_llm(
             system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
             user_prompt=prompt,
@@ -1194,7 +1228,7 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
             # Usage > "Stage 0 fallback" (llm_settings.taskProviderOverrides.stage0_extraction).
             provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
         )
-        
+
         if result:
             json_str = extract_json_from_text(result)
             try:
@@ -1202,35 +1236,73 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
                 mapping = json.loads(json_str)
                 feedback_csv = _REPO_ROOT / "data" / "training_data_feedback.csv"
                 write_header = not feedback_csv.exists()
-                
+
+                resolved_indices: set[int] = set()
                 with open(feedback_csv, "a", encoding="utf-8", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=["text", "label", "company", "source_file"])
                     if write_header:
                         writer.writeheader()
-                        
+
                     for i_str, bucket in mapping.items():
-                        idx = int(i_str)
-                        if bucket not in buckets:
+                        try:
+                            idx = int(i_str)
+                        except (TypeError, ValueError):
                             continue
+                        if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
+                            continue
+                        resolved_indices.add(idx)
                         combo_text, bullet_clean, _ = fallback_queue[idx]
                         buckets[bucket].append(bullet_clean)
-                        
+
                         writer.writerow({
                             "text": bullet_clean,
                             "label": bucket,
                             "company": "FeedbackLoop",
                             "source_file": "fallback_api"
                         })
+                # CR-112 (v1/v2/v3 review, "the partial-mapping loss path"): a
+                # partial mapping (fewer indices than fallback_queue, or an
+                # answer naming a bucket string not in `buckets`) must not
+                # silently drop the unmapped items -- they enter the
+                # three-way gate exactly like a no-provider or parse-failure
+                # item.
+                for idx, (combo_text, bullet_clean, header) in enumerate(fallback_queue):
+                    if idx in resolved_indices:
+                        continue
+                    unresolved_for_review.append({
+                        "text": bullet_clean,
+                        "header": header,
+                        "reason": "partial_mapping_unresolved",
+                        "model_call_occurred": True,
+                    })
             except Exception as e:
                 print(f"    [NLP Error] Failed to parse LLM fallback: {e}", file=sys.stderr)
-                # default to responsibilities
-                for _, bullet_clean, _ in fallback_queue:
-                    buckets["responsibilities"].append(bullet_clean)
+                # CR-112: the provider may already have been billed for this
+                # call (model_call_occurred=True) even though the body could
+                # not be parsed -- do not default these into responsibilities.
+                for _, bullet_clean, header in fallback_queue:
+                    unresolved_for_review.append({
+                        "text": bullet_clean,
+                        "header": header,
+                        "reason": "parse_failure",
+                        "model_call_occurred": True,
+                    })
         else:
-            for _, bullet_clean, _ in fallback_queue:
-                buckets["responsibilities"].append(bullet_clean)
-    
+            # CR-112: no eligible provider answered at all (model_call_occurred
+            # =False) -- this is the normal, expected no-cost path, not an edge
+            # case (confirmed real on all 6 measured JDs in the CR-112 design
+            # doc). Do not default these into responsibilities.
+            for _, bullet_clean, header in fallback_queue:
+                unresolved_for_review.append({
+                    "text": bullet_clean,
+                    "header": header,
+                    "reason": "no_provider",
+                    "model_call_occurred": False,
+                })
+
     _recover_mixed_responsibilities(buckets)
+    if unresolved_for_review:
+        buckets["unresolved_for_review"] = unresolved_for_review
     return buckets
 
 def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
@@ -2437,6 +2509,86 @@ def build_stage0_fit_gate(
     if sections is None:
         sections = _extract_sections(jd_text)
         extraction_source = "deterministic"
+
+    # --- Step 3.5: three-way qualification-risk gate (CR-112) ---
+    # PIN 4: spliced in right after sections = ..., before
+    # _count_qualification_required / _detect_thin_jd / _cap_requirement_bucket
+    # read required_raw below. PIN 1: everything in this block runs before
+    # run_key/request_hash/start_run exist (built further below) -- a pause
+    # raised here is receipt-only: no stage0_runs row, no mark_run_status
+    # call. Only the NLP extractor's own unresolved queue is in scope here
+    # (_extract_sections_llm already fails closed with no fallback queue; the
+    # deterministic regex path has no such concept) -- see the CR-112 design
+    # doc's Scope section.
+    requirement_extraction_review: dict = {"bypassed_non_qualification": []}
+    unresolved_queue = list(sections.get("unresolved_for_review") or []) if extraction_source == "nlp" else []
+    if unresolved_queue:
+        from stage0_qualification_risk_gate import classify_qualification_risk, NON_QUALIFICATION
+        from stage0_requirement_extraction_review import (
+            RequirementExtractionReviewValidationError,
+            consume_review_import,
+            try_load_review_import,
+            write_review_template,
+        )
+
+        gate_items: list[dict] = []
+        for entry in unresolved_queue:
+            item_text = entry.get("text", "")
+            item_header = entry.get("header", "")
+            label, reason_code = classify_qualification_risk(
+                item_text, header=item_header, role_title=role
+            )
+            gate_items.append(
+                {
+                    "text": item_text,
+                    "header": item_header,
+                    "label": label,
+                    "reason_code": reason_code,
+                    "extraction_reason": entry.get("reason"),
+                    "model_call_occurred": bool(entry.get("model_call_occurred", False)),
+                }
+            )
+        needs_review = any(item["label"] != NON_QUALIFICATION for item in gate_items)
+
+        if needs_review:
+            _review_jd_hash = _sha256_text(jd_text)
+            try:
+                resolved_buckets = try_load_review_import(
+                    folder,
+                    gate_items,
+                    submission_slug=folder.name,
+                    jd_sha256=_review_jd_hash,
+                )
+            except RequirementExtractionReviewValidationError:
+                # Invalid import: re-pause the same way as no import yet at
+                # all (mirrors try_load_cascade_import's own convention --
+                # a bad manual answer never crashes the run, it re-asks).
+                resolved_buckets = None
+            if resolved_buckets is None:
+                write_review_template(
+                    folder,
+                    submission_slug=folder.name,
+                    jd_sha256=_review_jd_hash,
+                    queue=gate_items,
+                )
+                raise Stage0RequirementExtractionReviewNeeded(folder.name, gate_items)
+            # A human (or a harness answering on a human's behalf) supplied an
+            # explicit, exact-text-bound bucket for every queued item --
+            # apply it. "exclude" means confirmed non-requirement content,
+            # same disposition a NON_QUALIFICATION bypass gets automatically.
+            consume_review_import(folder)
+            for idx, item in enumerate(gate_items):
+                bucket = resolved_buckets[idx]
+                item["resolved_bucket"] = bucket
+                if bucket == "exclude":
+                    continue
+                sections.setdefault(bucket, []).append(item["text"])
+
+        requirement_extraction_review["bypassed_non_qualification"] = [
+            item for item in gate_items if item["label"] == NON_QUALIFICATION
+        ]
+        requirement_extraction_review["queue"] = gate_items
+
     required_raw = sections["required"]
     preferred_raw = sections["preferred"]
     responsibilities = sections["responsibilities"]
@@ -3137,6 +3289,10 @@ def build_stage0_fit_gate(
         "prefs_gate_rejects": [r["code"] for r in prefs_result.get("rejects", [])],
         "prefs_gate_flags": [f["code"] for f in prefs_result.get("flags", [])],
         "notes": " ".join(notes_parts) or tier,
+        # CR-112 test 10: NON_QUALIFICATION bypasses from the three-way gate
+        # are always visible here with their reason code, never silent, even
+        # when nothing paused (every item bypassed).
+        "requirement_extraction_review": requirement_extraction_review,
     }
 
     if skip_reason:

@@ -152,6 +152,7 @@ _DOMAIN_HEDGE_RE = re.compile(r"\b(ideally|preferred|a plus)\b", re.I)
 
 _CLASSIFY_PATCHER = None
 _INDUSTRY_SEMANTIC_PATCHER = None
+_SKILL_CONFIRM_PATCHER = None
 
 
 def _offline_classify_requirement(
@@ -345,6 +346,14 @@ def setUpModule():
         return_value={"blocked_industry": "", "confidence": "high", "reasoning": "mocked"},
     )
     _INDUSTRY_SEMANTIC_PATCHER.start()
+    # Isolated worktrees boot example WE, not live WE. Named-skill Review
+    # Center must not depend on that private corpus for this offline suite.
+    global _SKILL_CONFIRM_PATCHER
+    _SKILL_CONFIRM_PATCHER = patch(
+        "build_stage0_fit_gate._prepare_skill_confirmations",
+        return_value=([], []),
+    )
+    _SKILL_CONFIRM_PATCHER.start()
 
 
 def tearDownModule():
@@ -356,6 +365,10 @@ def tearDownModule():
     if _INDUSTRY_SEMANTIC_PATCHER is not None:
         _INDUSTRY_SEMANTIC_PATCHER.stop()
         _INDUSTRY_SEMANTIC_PATCHER = None
+    global _SKILL_CONFIRM_PATCHER
+    if _SKILL_CONFIRM_PATCHER is not None:
+        _SKILL_CONFIRM_PATCHER.stop()
+        _SKILL_CONFIRM_PATCHER = None
 
 
 # ---------------------------------------------------------------------------

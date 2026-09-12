@@ -329,12 +329,50 @@ class Stage0MissingReceiptDoesNotReExtractTests(unittest.TestCase):
         state["stages"]["stage1"]["status"] = "READY"
         write_state(str(self.folder), state)
 
+    def _ready_packet(self) -> dict:
+        """Synthetic ready packet so these tests do not read live WE/claims."""
+        return {
+            "schema_version": "1.0",
+            "company": "legacy_co",
+            "role_title": "Product Manager",
+            "slug": "legacy_co",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+    def _run_until_waiting_without_live_corpus(self) -> None:
+        """Adopt/mint Stage 0, then stop before a live packet corpus is required."""
+        packet = self._ready_packet()
+        with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt",
+                    return_value=("# prompt\n", {"company": "legacy_co", "total_estimated_tokens": 10}),
+                ):
+                    run_until_stage1_complete(
+                        str(self.folder),
+                        mode="production",
+                        adopt=False,
+                        no_hook=True,
+                        stop_at_waiting=True,
+                    )
+
     def test_missing_receipt_adopts_existing_gate_without_reextracting(self):
         with mock.patch("workflow.runner.build_stage0_fit_gate") as fake_extract:
-            with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
-                run_until_stage1_complete(
-                    str(self.folder), mode="production", adopt=False, no_hook=True, stop_at_waiting=True
-                )
+            self._run_until_waiting_without_live_corpus()
         fake_extract.assert_not_called()
         # The real gate content on disk must be byte-for-byte untouched.
         on_disk = json.loads((self.folder / "stage0_fit_gate.json").read_text(encoding="utf-8"))
@@ -343,10 +381,7 @@ class Stage0MissingReceiptDoesNotReExtractTests(unittest.TestCase):
 
     def test_missing_receipt_still_mints_a_real_receipt(self):
         with mock.patch("workflow.runner.build_stage0_fit_gate") as fake_extract:
-            with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
-                run_until_stage1_complete(
-                    str(self.folder), mode="production", adopt=False, no_hook=True, stop_at_waiting=True
-                )
+            self._run_until_waiting_without_live_corpus()
         fake_extract.assert_not_called()
         r0 = load_receipt(str(self.folder), "stage0")
         self.assertIsNotNone(r0)

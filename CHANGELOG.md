@@ -12,7 +12,7 @@ comes from gitignored `workExperience.md` or explicit
 
 ### Notes
 - Story 8.1 follow-up QA PASS recorded 2026-09-13. Floors stay 70/65.
-- Practice identity still needs independent security + QA review.
+- Story 8.2 security CLEAR and QA PASS recorded 2026-09-13.
 
 ## [Unreleased] — 2026-09-12
 [DRAFT] CR-112 Camunda follow-up on the isolated candidate. CONVERT-READY

@@ -491,9 +491,7 @@ story. Do not lower 70/65.
 missing. No silent John Doe. No production sqlite copy. Explicit
 synthetic mode for fixtures only.
 
-**Status:** [ ] Implemented on the candidate. Design review
-[Review](c3000eab-fd55-4c1f-b99d-d1433b864ebb) ACCEPT WITH CHANGES.
-Independent security + QA not yet recorded. Do not mark CR-112 complete.
+**Status:** [x] QA PASS ([Review](caa75e98-aade-4c21-93c7-4e2140e147de)) 2026-09-13. Security CLEAR ([Review](375d080a-7767-489f-97b1-73cd9d4f650a)). Do not mark CR-112 complete.
 
 ## Out of scope
 

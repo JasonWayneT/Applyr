@@ -73,9 +73,12 @@ Post-edit scores written to `draft_manifest.json`:
 
 Resume movement: R7 7→10, R6 7→9. R4 kept at 10. Independent reader
 [12a050f9](12a050f9-c1b1-49fb-b8ae-80a26588566c) scored resume **68**
-by dropping R4 to 8. That drop is rejected: the document gained a scale
-metric and did not lose an outcome metric. Cover 80 is C5 6→10 (closer
-present, 294 words) plus C2 17→18.
+by dropping R4 to 8. That drop is **not** rejected by the implementer.
+Blind adjudicator [51bee1b0](51bee1b0-e969-4cc0-af2e-5b9bfcfa27cc)
+scored the same corrected resume **71** with R4 also at 8 (unpaired
+scale on ~200 databases). Floor rule: blind >= 70 retains
+`PRACTICE_COMPLETE`. Do not average 68/70/71. Cover 80 is C5 6→10
+(closer present, 294 words) plus C2 17→18.
 
 Disposition: `mech.rubric_floor.resume` = `RESOLVED_EDIT`. No HAR. No
 floor change. Canonical `--resume --mode practice` then `--finalize`.
@@ -142,13 +145,14 @@ prose, not executable `_score_claims_for_item` fixtures.
 
 ## 5. JD 3 eligibility
 
-Yes, with known remaining defects. Vanta is honestly `PRACTICE_COMPLETE`.
-Story 8.4 extraction-review loop has independent QA PASS and security
+Yes, with known remaining defects. Vanta remains `PRACTICE_COMPLETE`
+because a later blind adjudicator scored the corrected resume **71**,
+not because the implementer rejected the independent 68. Story 8.4
+extraction-review loop has independent QA PASS and security
 CLEAR. No manual database or receipt surgery. Identity remains `we`.
 Paid API calls: 0. Ranking formula unchanged (reviewed, not implemented).
 First-draft restatement still happens; detector and bounded recovery
-work. CR-112 stays open. Not daily-use ready. Do not upload. Do not
-begin JD 3 until this session's isolated commits are on the candidate.
+work. CR-112 stays open. Not daily-use ready. Do not upload.
 
 ## 6. Durable paths
 
@@ -164,3 +168,5 @@ begin JD 3 until this session's isolated commits are on the candidate.
 - Practice evidence (gitignored):
   `data/authored_drafts/vanta_cr112_proof/`
   `data/authored_drafts/camunda_cr112_proof/`
+- JD 3 Newsela closeout (this pass):
+  `docs/spec/08-implementation/SESSION-HANDOFF-2026-09-13-cr112-jd3-newsela.md`

@@ -1,4 +1,40 @@
 ## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Vanta blind adjudication, ranking characterization
+corpus, and JD 3 Newsela on the isolated candidate. Blind Vanta resume
+score 71 keeps Vanta `PRACTICE_COMPLETE`. Ranking fixtures characterize
+current behavior, including the known Camunda defect, without changing
+the formula. Score provenance is design-only. Newsela first draft
+Resume 61 stayed below floor after honest recovery (62) and is left
+blocked. No paid APIs. No push. CR-112 remains open. Batch readiness:
+NOT_READY.
+
+### New
+- CR-112 Story 8.5 (`FR-321` / `AC-419`): executable ranking
+  characterization tests for Camunda distributed-systems, Pearl and
+  SupplyHouse REPLACE controls, cost-reduction, ARR/reliability, and
+  near-tie. Camunda SAVINGS-over-messaging is a known-defect report,
+  not a desired rank.
+- CR-112 Story 8.6 (`FR-322` / `AC-420`): score-provenance design.
+  Hash-bound scorecards, reviewer role, 3-point floor band, fail-closed
+  disagreement. Not implemented this pass.
+
+### Notes
+- Vanta corrected resume blind adjudication
+  ([Review](51bee1b0-e969-4cc0-af2e-5b9bfcfa27cc)): Resume **71**.
+  R4 classified ~200 SQL databases as unpaired scale, not an outcome.
+  Floor rule: blind >= 70 retains completion. Manifest 70 is not
+  averaged with 71. Independent 68 is recorded, not selected.
+- JD 3 Newsela (`data/authored_drafts/newsela_cr112_proof/`):
+  independent first-draft Resume **61** / Cover **80**
+  ([Review](adef9c23-397e-4ce3-8744-6eb88b4f6d23)). Mechanical recovery
+  only. Implementer post-edit Resume **62**. `mech.rubric_floor.resume`
+  BLOCK left undisposed. No HAR.
+- Batch-readiness this pass: **NOT_READY**. Durable handoff:
+  `docs/spec/08-implementation/SESSION-HANDOFF-2026-09-13-cr112-jd3-newsela.md`.
+- Header-stack defect recorded, not fixed:
+  `docs/spec/08-implementation/CR-112-unbracketed-placeholder-header-stack-defect.md`.
+
+## [Unreleased] — 2026-09-13
 [DRAFT] CR-112 Story 8.4 durable consumed extraction-review on the
 isolated candidate. Stage 0 `--resume` after cost-authorization no longer
 re-asks a review that was already consumed. No paid APIs. No push.

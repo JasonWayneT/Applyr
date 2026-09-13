@@ -353,6 +353,9 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-318` / `AC-415` | CR-112 | CONVERT-READY floors on Stage 2/3 completion | `scripts/contracts.py`, `scripts/workflow/runner.py`, `scripts/check_submission_status.py`, `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`, `scripts/test_check_submission_status.py`; design `CR-112-completion-contract-quality-floor-defect.md` | draft |
 | `SEC-006` / `AC-416` | CR-112 | Privacy-safe practice identity; no silent placeholder | `scripts/utils.py`, `scripts/author_from_packet.py`, `scripts/quality_checker.py`, `scripts/workflow/runner.py`, `scripts/test_practice_identity.py`; design `CR-112-practice-identity-portability-defect.md` | implemented |
 | `FR-319` / `AC-417` | CR-112 | Lean digest pair-restatement instruction; keep strongest fact, change language | `scripts/generate_authoring_rule_digest.py`, `scripts/test_generate_authoring_rule_digest.py`, `scripts/test_author_from_packet.py`; design `CR-112-lean-digest-pair-restatement-design.md` | implemented |
+| `FR-320` / `AC-418` | CR-112 | Consumed extraction-review durable on Stage 0 restart | `scripts/stage0_requirement_extraction_review.py`, `scripts/build_stage0_fit_gate.py`, `scripts/test_cr112_stage0_extraction_review.py`; design `CR-112-extraction-review-consumed-restart-design.md` | implemented |
+| `FR-321` / `AC-419` | CR-112 | Ranking characterization corpus; Camunda known-defect, not desired rank | `scripts/test_cr112_ranking_characterization.py`, `scripts/run_all_tests.py`; investigation `CR-112-ranking-investigation-savings-vs-messaging.md` | implemented |
+| `FR-322` / `AC-420` | CR-112 | Hash-bound rubric score provenance; band-gated blind read; fail-closed disagreement | design `CR-112-score-provenance-design.md` | draft |
 | `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | design Epic 7 | draft |
 
 

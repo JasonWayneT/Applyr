@@ -516,6 +516,35 @@ synthetic mode for fixtures only.
 
 **Status:** [x] QA PASS ([Review](0139ffbf-80e9-4b70-85e0-34f3889cbdae)) 2026-09-13. Design ACCEPT WITH CHANGES ([Review](221eed13-6cf1-45e0-ba82-14c298ba0877)). Security CLEAR ([Review](c7816cb7-8ef5-4726-88e9-a5614c62d7e1)). 6/6 `TestConsumedReviewDurableOnRestart` OK; full module 56/56 OK. All AC-418 criteria verified. Do not mark CR-112 complete.
 
+### Story 8.5 — Ranking characterization corpus (no formula change)
+
+**Files:**
+- Test: `scripts/test_cr112_ranking_characterization.py`
+- Modify: `scripts/run_all_tests.py` (register the module)
+- Design (already reviewed, no formula): `CR-112-ranking-investigation-savings-vs-messaging.md`
+
+**Acceptance:** `FR-321` / `AC-419`. Fixtures isolate `_score_claims_for_item` inputs. Camunda SAVINGS-over-messaging is `known_defect`, not a desired-rank assert. Cost-reduction and ARR/reliability assert metric-bearing winners. Pearl ranking does not nominate SAVINGS; SupplyHouse REPLACE keeps it out. Near-tie does not auto-REPLACE. Formula unchanged.
+
+**Status:** [x] Independent corpus review ACCEPT ([Review](31c12c40-ee42-4920-8db0-518efef1c113)) 2026-09-13. 12/12 `test_cr112_ranking_characterization.py` OK. Formula unchanged. Do not mark CR-112 complete.
+
+### Story 8.6 — Score provenance contract (design)
+
+**Files:**
+- Design: `docs/spec/08-implementation/CR-112-score-provenance-design.md`
+
+**Acceptance:** `FR-322` / `AC-420`. Design only this pass. Hash-bound scorecards, reviewer role, 3-point floor band for one blind read, fail-closed disagreement. No agent-per-document default.
+
+**Status:** [x] Design review ACCEPT ([Review](5dc974ec-cfc6-43fc-bd4d-d220f18352cf)) 2026-09-13. Follow-up: require `spawned_by` run-id distinct from author/implementer rows so blindness is mechanical. Do not implement this pass. Do not mark CR-112 complete.
+
+### Story 8.7 — Unbracketed placeholder header stack (not started)
+
+**Files:**
+- Defect stub only: `CR-112-unbracketed-placeholder-header-stack-defect.md`
+
+**Acceptance:** unassigned. Placeholder identity must be replaced before H-001; real and placeholder headers must never coexist; malformed identity fails before authoring or completion; tests use synthetic identity only. **Do not implement in the characterization closeout.**
+
+**Status:** [ ] Stub recorded 2026-09-13 from Newsela JD 3. Not SEC-006. No code this pass.
+
 ## Out of scope
 
 - Rewriting the seven live submissions **as a blanket action.** Story 1.4's per-folder recovery decision is the sole, narrow exception — any re-authoring it triggers is explicit, human-reviewed, and limited to folders the audit actually flags, not a general rewrite pass.

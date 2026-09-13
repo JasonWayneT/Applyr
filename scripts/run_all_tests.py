@@ -76,6 +76,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_cr112_story22.py",
     "scripts/test_cr112_stage0_extraction_review.py",
     "scripts/test_practice_identity.py",
+    "scripts/test_cr112_ranking_characterization.py",
 ]
 
 

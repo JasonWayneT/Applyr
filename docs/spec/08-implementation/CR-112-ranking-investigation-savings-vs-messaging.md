@@ -153,8 +153,11 @@ if accepted after review:
 | Cost-reduction required | metric should win | ACC-101-SAVINGS | empty-metric architecture claim |
 | ARR/reliability required | metric should win | platform-stabilization / ARR claim | process-only claim with no outcome |
 
-No code in this story. No packet rebuild. Camunda historical packet
-stays as the positive defect candidate.
+No code in the investigation story. Executable characterization now lives in
+`scripts/test_cr112_ranking_characterization.py` (`FR-321` / `AC-419`).
+Camunda historical packet stays as the positive defect candidate. The
+test reports `known_defect` when SAVINGS still wins slot 1; it does not
+assert that rank as desired.
 
 ## Independent design review (2026-09-13)
 

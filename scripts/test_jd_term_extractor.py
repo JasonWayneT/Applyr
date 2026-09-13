@@ -132,3 +132,143 @@ class TestPacketAtsTermContract(unittest.TestCase):
             )
         self.assertEqual(contract[0]["term"], "Cross-Functional Planning")
         self.assertEqual(contract[0]["claim_ids"], ["ACC-178-SCOPING"])
+
+
+class TestAtsTermContractEligibilityAnchor(unittest.TestCase):
+    """CR-112-ats-term-contract-eligibility-defect: the fallback (tag-matched,
+    no evidence_map anchor) path must not manufacture an ATS-term requirement
+    from a term whose only real JD occurrence is outside the required/
+    preferred/responsibilities text (e.g. benefits boilerplate or marketing
+    copy) -- that produced an impossible citation demand in a real submission
+    (Camunda: "Support" -> ACC-185-CUSTOMER-DISCOVERY, whose card has no
+    allowed_claims; "Visible" -> ACC-134-VISIBLE, a banned VOC codename whose
+    only JD occurrence was "visible impact" in recruiting copy).
+    """
+
+    def test_fallback_term_without_requirement_anchor_is_dropped(self):
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j, "_load_true_vocabulary", return_value={"support": "Support"}
+        ):
+            contract = build_packet_ats_term_contract(
+                jd_text="Perks that support you no matter where you are based.",
+                evidence_map=[],
+                claims={"ACC-185-X": {"tags": ["Support Signals"]}},
+                excerpt_claim_ids={"ACC-185-X"},
+                requirement_text="Own the roadmap and ship on time.",
+            )
+        self.assertEqual(contract, [])
+
+    def test_fallback_term_with_requirement_anchor_is_kept(self):
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j, "_load_true_vocabulary", return_value={"support": "Support"}
+        ):
+            contract = build_packet_ats_term_contract(
+                jd_text="Provide support for enterprise customers day to day.",
+                evidence_map=[],
+                claims={"ACC-185-X": {"tags": ["Support Signals"]}},
+                excerpt_claim_ids={"ACC-185-X"},
+                requirement_text="Provide support for enterprise customers day to day.",
+            )
+        self.assertEqual(len(contract), 1)
+        self.assertEqual(contract[0]["term"], "Support")
+        self.assertEqual(contract[0]["claim_ids"], ["ACC-185-X"])
+
+    def test_requirement_text_none_preserves_legacy_behavior(self):
+        """No requirement_text passed (older/other caller) -> unchanged from
+        pre-fix behavior; a term with no real anchor still enters via tag
+        match alone. Confirms the anchor check is opt-in, not a silent
+        behavior change for any caller that hasn't been updated."""
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j, "_load_true_vocabulary", return_value={"support": "Support"}
+        ):
+            contract = build_packet_ats_term_contract(
+                jd_text="Perks that support you no matter where you are based.",
+                evidence_map=[],
+                claims={"ACC-185-X": {"tags": ["Support Signals"]}},
+                excerpt_claim_ids={"ACC-185-X"},
+            )
+        self.assertEqual(len(contract), 1)
+        self.assertEqual(contract[0]["term"], "Support")
+
+    def test_disabled_claim_dropped_from_fallback_path(self):
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j, "_load_true_vocabulary", return_value={"support": "Support"}
+        ):
+            contract = build_packet_ats_term_contract(
+                jd_text="Provide support for enterprise customers.",
+                evidence_map=[],
+                claims={"ACC-185-X": {"tags": ["Support Signals"]}},
+                excerpt_claim_ids={"ACC-185-X"},
+                disabled={"ACC-185-X"},
+                requirement_text="Provide support for enterprise customers.",
+            )
+        self.assertEqual(contract, [])
+
+    def test_disabled_claim_dropped_from_main_loop(self):
+        contract = build_packet_ats_term_contract(
+            jd_text="Own the roadmap for our platform.",
+            evidence_map=[
+                {
+                    "jd_item": "Own the roadmap for our platform.",
+                    "claim_ids": ["ACC-179-ROADMAP"],
+                }
+            ],
+            disabled={"ACC-179-ROADMAP"},
+        )
+        self.assertEqual(contract, [])
+
+    def test_main_loop_anchored_term_unaffected_by_requirement_text(self):
+        """A term already anchored via evidence_map (main loop) must survive
+        regardless of requirement_text -- the anchor check only applies to
+        the tag-matched fallback path, per the design doc."""
+        contract = build_packet_ats_term_contract(
+            jd_text="Own the roadmap for our platform.",
+            evidence_map=[
+                {
+                    "jd_item": "Own the roadmap for our platform.",
+                    "claim_ids": ["ACC-179-ROADMAP"],
+                }
+            ],
+            requirement_text="",  # deliberately empty/unrelated
+        )
+        self.assertEqual(len(contract), 1)
+        self.assertEqual(contract[0]["claim_ids"], ["ACC-179-ROADMAP"])
+
+    def test_camunda_sanitized_repro(self):
+        """Sanitized synthetic fixture reproducing the exact original failure
+        shape without real JD or candidate text (test 18 of the design doc's
+        list): a term present only in non-requirement JD text, tag-matched to
+        a claim with no usable evidence."""
+        import jd_term_extractor as j
+
+        jd_text = (
+            "We invest in your wellbeing, growth, and perks that support you "
+            "no matter where you are based.\n"
+            "Own the roadmap for foundational platform capabilities."
+        )
+        requirement_text = "Own the roadmap for foundational platform capabilities."
+        with mock.patch.object(
+            j,
+            "_load_true_vocabulary",
+            return_value={"support": "Support", "roadmap": "Roadmap"},
+        ):
+            contract = build_packet_ats_term_contract(
+                jd_text=jd_text,
+                evidence_map=[],
+                claims={
+                    "SIM-UNUSABLE": {"tags": ["Support Signals"]},
+                    "SIM-USABLE": {"tags": ["Roadmap"]},
+                },
+                excerpt_claim_ids={"SIM-UNUSABLE", "SIM-USABLE"},
+                requirement_text=requirement_text,
+            )
+        terms = sorted(e["term"] for e in contract)
+        self.assertEqual(terms, ["Roadmap"])

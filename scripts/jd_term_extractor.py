@@ -207,6 +207,8 @@ def build_packet_ats_term_contract(
     evidence_map: list[dict],
     claims: dict[str, dict] | None = None,
     excerpt_claim_ids: set[str] | None = None,
+    disabled: set[str] | None = None,
+    requirement_text: str | None = None,
 ) -> list[dict]:
     """Return JD terms that the current packet can support in a resume.
 
@@ -214,9 +216,28 @@ def build_packet_ats_term_contract(
     appears in the raw JD, and appears in a mapped JD item with at least one
     packet claim. This keeps the pre-draft author instruction grounded in the
     packet rather than turning every globally true keyword into a requirement.
+
+    Eligibility/anchor defect (found during a real Camunda first-draft
+    correction, see docs/spec/08-implementation/
+    CR-112-ats-term-contract-eligibility-defect.md): the fallback path below
+    (tag-matched, no `evidence_map` anchor) used to add a claim_id whenever a
+    term matched one of that claim's own catalog tags, with no check that the
+    term's actual JD occurrence had anything to do with a real requirement —
+    "Support" matched Camunda's benefits-boilerplate use of the word via
+    ACC-185's "Support Signals" tag, and "Visible" matched marketing copy
+    ("visible impact") via ACC-134's "Visible" tag, in both cases producing a
+    resume requirement the author had no honest way to satisfy. `disabled`
+    (drop a disabled claim_id from either path) and `requirement_text` (when
+    given — Stage 0's own required+preferred+responsibilities bucket text,
+    concatenated — the fallback path's term must actually occur there, not
+    just anywhere in the raw JD) fix both real instances. `requirement_text`
+    defaults to None for backward compatibility with any other caller; when
+    None the fallback path's old (anchor-free) behavior is unchanged.
     """
     vocab = _load_true_vocabulary()
     jd_lower = jd_text.lower()
+    disabled = disabled or set()
+    requirement_lower = requirement_text.lower() if requirement_text is not None else None
     contract: dict[str, dict] = {}
     for term_lower, display in vocab.items():
         if not _term_present(term_lower, jd_lower):
@@ -227,7 +248,7 @@ def build_packet_ats_term_contract(
             item = str(row.get("jd_item") or "")
             claim_ids = [
                 claim_id for claim_id in (row.get("claim_ids") or [])
-                if isinstance(claim_id, str) and claim_id.strip()
+                if isinstance(claim_id, str) and claim_id.strip() and claim_id not in disabled
             ]
             if not claim_ids or not _term_present(term_lower, item.lower()):
                 continue
@@ -242,9 +263,13 @@ def build_packet_ats_term_contract(
                 entry["jd_items"].append(item)
     # Stage 0 may omit a JD line even though the packet builder pulled a
     # verified skill-anchor excerpt for it. Include such terms when the exact
-    # packet claim's tags support them.
+    # packet claim's tags support them AND (when requirement_text is given)
+    # the term genuinely occurs in a real required/preferred/responsibility
+    # line, not merely somewhere in the JD's culture/benefits/marketing prose.
     claims = claims or {}
     for claim_id in excerpt_claim_ids or set():
+        if claim_id in disabled:
+            continue
         claim = claims.get(claim_id) or {}
         tags = [str(tag) for tag in claim.get("tags") or []]
         for term_lower, display in vocab.items():
@@ -252,13 +277,21 @@ def build_packet_ats_term_contract(
                 continue
             if not any(_term_present(term_lower, tag.lower()) for tag in tags):
                 continue
+            if requirement_lower is not None and not _term_present(term_lower, requirement_lower):
+                # Real JD occurrence isn't in a requirement/preferred/
+                # responsibility line -- never actionable via this path, so
+                # never enter the contract at all (not merely under-evidenced).
+                continue
             entry = contract.setdefault(
                 display,
                 {"term": display, "claim_ids": [], "jd_items": []},
             )
             if claim_id not in entry["claim_ids"]:
                 entry["claim_ids"].append(claim_id)
-    return sorted(contract.values(), key=lambda entry: entry["term"].lower())
+    return sorted(
+        (entry for entry in contract.values() if entry["claim_ids"]),
+        key=lambda entry: entry["term"].lower(),
+    )
 
 
 def check_folder(folder: str) -> dict:

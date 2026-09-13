@@ -1404,6 +1404,26 @@ def _build_soft_gaps(stage0: dict, evidence_map: list[dict] | None = None) -> li
     return soft_gaps
 
 
+def _stage0_requirement_text(stage0: dict) -> str:
+    """Concatenated text of Stage 0's own required+preferred+responsibilities
+    bucket items, used as the ATS-term-contract fallback path's requirement
+    anchor (see CR-112-ats-term-contract-eligibility-defect.md). Each bucket
+    entry is a dict with an "item" text field (not a plain string), so this
+    extracts "item" rather than stringifying the whole dict -- stringifying
+    the dict would also match on unrelated fields like "anchor"/"gap_source"
+    reasoning text, which is not itself JD text."""
+    texts: list[str] = []
+    for bucket_name in ("required", "preferred", "responsibilities"):
+        for entry in stage0.get(bucket_name) or []:
+            if isinstance(entry, dict):
+                text = entry.get("item")
+            else:
+                text = entry
+            if isinstance(text, str) and text.strip():
+                texts.append(text)
+    return " ".join(texts)
+
+
 def _build_jd_buckets(stage0: dict) -> dict:
     """Extract jd_buckets from stage0 in the packet schema shape.
 
@@ -1520,7 +1540,12 @@ def assemble_packet(
     soft_gaps = _build_soft_gaps(stage0, evidence_map)
     from jd_term_extractor import build_packet_ats_term_contract
     if ats_term_contract is None:
-        ats_term_contract = build_packet_ats_term_contract(jd_text, evidence_map)
+        ats_term_contract = build_packet_ats_term_contract(
+            jd_text,
+            evidence_map,
+            disabled=disabled,
+            requirement_text=_stage0_requirement_text(stage0),
+        )
 
     # Compute estimated_tokens before status check
     # Build a draft packet without status for size estimation
@@ -1758,6 +1783,8 @@ def build_packet(
         evidence_map,
         claims=claims,
         excerpt_claim_ids=set(excerpts),
+        disabled=disabled,
+        requirement_text=_stage0_requirement_text(stage0),
     )
 
     # Story 3.4 — Hook fact

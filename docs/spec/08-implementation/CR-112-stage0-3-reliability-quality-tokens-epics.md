@@ -502,7 +502,7 @@ synthetic mode for fixtures only.
 
 **Acceptance:** `FR-319` / `AC-417`. Generated digest and Stage 1 prompt SYSTEM BLOCK contain the locked keep-fact / change-language instruction. Negative control proves the checker is not matching incidental "resume" / "cover letter" words. Digest stays under 10000 chars. Detector and Stage 1 pair FAIL unchanged. Not a CR-097 promote. Independent design review DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)).
 
-**Status:** [x] QA PASS ([Review](de184edd-f4e3-4249-88ce-193500cb8161)) 2026-09-13. Design DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Digest 9805 chars, version `9634969118ac5d3d`. Detector unchanged. Do not mark CR-112 complete.
+**Status:** [x] QA PASS ([Review](de184edd-f4e3-4249-88ce-193500cb8161)) 2026-09-13. Design DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Digest 9805 chars, version `9634969118ac5d3d`. Detector unchanged. JD 2 (Vanta) first draft still restated 13 pair phrases; detector caught them. Do not mark CR-112 complete.
 
 ## Out of scope
 

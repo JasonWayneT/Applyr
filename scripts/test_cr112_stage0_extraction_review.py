@@ -16,6 +16,7 @@ here is checked against the CR-112 design doc's own measurement table.
 """
 from __future__ import annotations
 
+import copy
 import json
 import os
 import sys
@@ -132,7 +133,10 @@ def _db() -> str:
 
 
 def _build(folder: Path, sections: dict, db_path: str) -> dict:
-    with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
+    with patch(
+        "build_stage0_fit_gate._extract_sections_nlp",
+        return_value=copy.deepcopy(sections),
+    ):
         return build_stage0_fit_gate(
             folder,
             db_gate_result={"action": "clear"},
@@ -1110,6 +1114,159 @@ class TestRepeatedResumeMakesNoProviderCalls(unittest.TestCase):
         self.assertFalse((folder / REVIEW_IMPORT_NAME).is_file())
         self.assertFalse((folder / REVIEW_CONSUMED_NAME).is_file())
         self.assertTrue((folder / REVIEW_TEMPLATE_NAME).is_file())
+
+
+# ===========================================================================
+# Part I -- consumed extraction review must be durable on Stage 0 restart
+# (Vanta JD 2 ops: after consume, the cost-authorization resume re-asked
+# the same review because try_load_review_import only reads the live file.)
+# ===========================================================================
+_DISTRIBUTED_SYSTEMS_ITEM = "Strong understanding of distributed systems concepts."
+
+
+def _extraction_review_sections() -> dict:
+    return {
+        "required": [],
+        "preferred": [],
+        "responsibilities": [],
+        "culture": [],
+        "unresolved_for_review": [
+            {
+                "text": _DISTRIBUTED_SYSTEMS_ITEM,
+                "header": "What You Bring",
+                "reason": "no_provider",
+                "model_call_occurred": False,
+            }
+        ],
+    }
+
+
+def _answer_extraction_review(folder: Path, bucket: str = "required") -> dict:
+    template = json.loads((folder / REVIEW_TEMPLATE_NAME).read_text(encoding="utf-8"))
+    live = dict(template)
+    live["items"] = [dict(template["items"][0], bucket=bucket)]
+    (folder / REVIEW_IMPORT_NAME).write_text(json.dumps(live), encoding="utf-8")
+    return live
+
+
+class TestConsumedReviewDurableOnRestart(unittest.TestCase):
+    def test_third_build_reuses_consumed_import_without_restoring_live(self):
+        """Vanta loop: pause, answer, consume, later Stage 0 restart.
+
+        The live file is gone. Restoring it must not be required.
+        """
+        folder = _folder()
+        db_path = _db()
+        sections = _extraction_review_sections()
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, sections, db_path)
+        _answer_extraction_review(folder)
+        result = _build(folder, sections, db_path)
+        self.assertIn(
+            _DISTRIBUTED_SYSTEMS_ITEM,
+            [row.get("item") for row in result.get("required", [])],
+        )
+        self.assertTrue((folder / REVIEW_CONSUMED_NAME).is_file())
+        self.assertFalse((folder / REVIEW_IMPORT_NAME).is_file())
+
+        restarted = _build(folder, sections, db_path)
+        self.assertIn(
+            _DISTRIBUTED_SYSTEMS_ITEM,
+            [row.get("item") for row in restarted.get("required", [])],
+        )
+        self.assertTrue((folder / REVIEW_CONSUMED_NAME).is_file())
+        self.assertFalse((folder / REVIEW_IMPORT_NAME).is_file())
+        consumed = json.loads((folder / REVIEW_CONSUMED_NAME).read_text(encoding="utf-8"))
+        self.assertEqual(consumed["items"][0]["bucket"], "required")
+
+    def test_live_import_overrides_consumed_for_deliberate_correction(self):
+        folder = _folder()
+        db_path = _db()
+        sections = _extraction_review_sections()
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, sections, db_path)
+        _answer_extraction_review(folder, bucket="required")
+        _build(folder, sections, db_path)
+        _answer_extraction_review(folder, bucket="preferred")
+        corrected = _build(folder, sections, db_path)
+        self.assertIn(
+            _DISTRIBUTED_SYSTEMS_ITEM,
+            [row.get("item") for row in corrected.get("preferred", [])],
+        )
+        self.assertNotIn(
+            _DISTRIBUTED_SYSTEMS_ITEM,
+            [row.get("item") for row in corrected.get("required", [])],
+        )
+        self.assertFalse((folder / REVIEW_IMPORT_NAME).is_file())
+        consumed = json.loads((folder / REVIEW_CONSUMED_NAME).read_text(encoding="utf-8"))
+        self.assertEqual(consumed["items"][0]["bucket"], "preferred")
+
+    def test_stale_jd_hash_on_consumed_does_not_reuse_prior_buckets(self):
+        folder = _folder()
+        db_path = _db()
+        sections = _extraction_review_sections()
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, sections, db_path)
+        _answer_extraction_review(folder)
+        _build(folder, sections, db_path)
+        payload = json.loads((folder / REVIEW_CONSUMED_NAME).read_text(encoding="utf-8"))
+        payload["jd_sha256"] = "not-the-current-jd"
+        (folder / REVIEW_CONSUMED_NAME).write_text(
+            json.dumps(payload), encoding="utf-8"
+        )
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, sections, db_path)
+
+    def test_changed_queue_text_does_not_reuse_consumed_buckets(self):
+        folder = _folder()
+        db_path = _db()
+        sections = _extraction_review_sections()
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, sections, db_path)
+        _answer_extraction_review(folder)
+        _build(folder, sections, db_path)
+        changed = _extraction_review_sections()
+        changed["unresolved_for_review"][0]["text"] = (
+            "Be technically fluent with APIs, authentication, and permissions"
+        )
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, changed, db_path)
+
+    def test_corrupt_consumed_fails_closed(self):
+        folder = _folder()
+        db_path = _db()
+        sections = _extraction_review_sections()
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, sections, db_path)
+        _answer_extraction_review(folder)
+        _build(folder, sections, db_path)
+        (folder / REVIEW_CONSUMED_NAME).write_text("{not-json", encoding="utf-8")
+        with self.assertRaises(RequirementExtractionReviewValidationError) as ctx:
+            _build(folder, sections, db_path)
+        self.assertTrue(getattr(ctx.exception, "fail_closed", False))
+
+    def test_consume_is_noop_when_only_consumed_exists(self):
+        folder = _folder()
+        db_path = _db()
+        sections = _extraction_review_sections()
+        with self.assertRaises(Stage0RequirementExtractionReviewNeeded):
+            _build(folder, sections, db_path)
+        _answer_extraction_review(folder)
+        _build(folder, sections, db_path)
+        before = (folder / REVIEW_CONSUMED_NAME).read_text(encoding="utf-8")
+        self.assertIsNone(consume_review_import(folder))
+        self.assertEqual(
+            (folder / REVIEW_CONSUMED_NAME).read_text(encoding="utf-8"), before
+        )
+        self.assertFalse((folder / REVIEW_IMPORT_NAME).is_file())
+        restarted = _build(folder, sections, db_path)
+        self.assertIn(
+            _DISTRIBUTED_SYSTEMS_ITEM,
+            [row.get("item") for row in restarted.get("required", [])],
+        )
+        self.assertEqual(
+            (folder / REVIEW_CONSUMED_NAME).read_text(encoding="utf-8"), before
+        )
 
 
 if __name__ == "__main__":

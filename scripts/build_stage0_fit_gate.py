@@ -2559,10 +2559,14 @@ def build_stage0_fit_gate(
                     submission_slug=folder.name,
                     jd_sha256=_review_jd_hash,
                 )
-            except RequirementExtractionReviewValidationError:
-                # Invalid import: re-pause the same way as no import yet at
-                # all (mirrors try_load_cascade_import's own convention --
-                # a bad manual answer never crashes the run, it re-asks).
+            except RequirementExtractionReviewValidationError as exc:
+                # Unreadable consumed review fails closed. Invalid live, or a
+                # consumed file bound to a different JD/queue, re-pauses so a
+                # new review can be answered. Print the reason so a Vanta-style
+                # restart is not mistaken for a first-time pause.
+                if getattr(exc, "fail_closed", False):
+                    raise
+                print(f"[Stage 0] requirement-extraction-review rejected: {exc}")
                 resolved_buckets = None
             if resolved_buckets is None:
                 write_review_template(

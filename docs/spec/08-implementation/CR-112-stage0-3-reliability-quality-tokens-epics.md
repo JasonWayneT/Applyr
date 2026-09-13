@@ -502,7 +502,19 @@ synthetic mode for fixtures only.
 
 **Acceptance:** `FR-319` / `AC-417`. Generated digest and Stage 1 prompt SYSTEM BLOCK contain the locked keep-fact / change-language instruction. Negative control proves the checker is not matching incidental "resume" / "cover letter" words. Digest stays under 10000 chars. Detector and Stage 1 pair FAIL unchanged. Not a CR-097 promote. Independent design review DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)).
 
-**Status:** [x] QA PASS ([Review](de184edd-f4e3-4249-88ce-193500cb8161)) 2026-09-13. Design DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Digest 9805 chars, version `9634969118ac5d3d`. Detector unchanged. JD 2 (Vanta) first draft still restated 13 pair phrases; detector caught them. Do not mark CR-112 complete.
+**Status:** [x] QA PASS ([Review](de184edd-f4e3-4249-88ce-193500cb8161)) 2026-09-13. Design DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Digest 9805 chars, version `9634969118ac5d3d`. Detector unchanged. JD 2 (Vanta) first draft still restated 13 pair phrases; detector caught them. Follow-up design review [Review](8b6fe4c0-479a-4ea9-bbd1-3d84be8d488b) ACCEPT: no further digest paragraph this pass. Detector plus Stage 1 FAIL plus letter-only recovery is the product control. Do not mark CR-112 complete.
+
+### Story 8.4 — Consumed extraction review is durable on Stage 0 restart
+
+**Files:**
+- Modify: `scripts/stage0_requirement_extraction_review.py` (`try_load_review_import`)
+- Modify: `scripts/build_stage0_fit_gate.py` (validation-error catch)
+- Test: `scripts/test_cr112_stage0_extraction_review.py` (`TestConsumedReviewDurableOnRestart`)
+- Design: `docs/spec/08-implementation/CR-112-extraction-review-consumed-restart-design.md`
+
+**Acceptance:** `FR-320` / `AC-418`. After consume, a later Stage 0 restart with unchanged JD and queue must reuse `.consumed.json` and must not require restoring the live import. Live import may correct a prior bucket. Stale JD or changed queue re-pauses without applying old buckets. Unreadable consumed JSON fails closed. Cascade consumed-load is out of scope.
+
+**Status:** [x] QA PASS ([Review](0139ffbf-80e9-4b70-85e0-34f3889cbdae)) 2026-09-13. Design ACCEPT WITH CHANGES ([Review](221eed13-6cf1-45e0-ba82-14c298ba0877)). Security CLEAR ([Review](c7816cb7-8ef5-4726-88e9-a5614c62d7e1)). 6/6 `TestConsumedReviewDurableOnRestart` OK; full module 56/56 OK. All AC-418 criteria verified. Do not mark CR-112 complete.
 
 ## Out of scope
 

@@ -76,7 +76,17 @@ _FORBIDDEN_KEYS = {
 
 
 class RequirementExtractionReviewValidationError(ValueError):
-    """A submitted requirement-extraction-review import cannot be trusted."""
+    """A submitted requirement-extraction-review import cannot be trusted.
+
+    ``fail_closed=True`` is for unreadable consumed reviews: the caller must
+    not treat that as "no review yet" and silently re-pause. Binding
+    mismatches still raise this class with ``fail_closed=False`` so a stale
+    review can be answered again, with the message naming what changed.
+    """
+
+    def __init__(self, message: str, *, fail_closed: bool = False) -> None:
+        super().__init__(message)
+        self.fail_closed = fail_closed
 
 
 def _item_key(index: int, text: str) -> str:
@@ -151,30 +161,44 @@ def try_load_review_import(
     submission_slug: str,
     jd_sha256: str,
 ) -> dict[int, str] | None:
-    """Load a bound manual bucket-correction import. None if the live file is
-    absent. Present-but-invalid raises RequirementExtractionReviewValidationError.
-    Does not write state, does not consume the file.
+    """Load a bound manual bucket-correction import.
+
+    Live file wins (deliberate correction). If live is absent, a valid
+    consumed file for this slug + JD + exact queue is reused so a later
+    Stage 0 restart (cost-authorization --resume) does not re-ask the same
+    review. None if neither file exists.
+
+    Present-but-invalid raises RequirementExtractionReviewValidationError.
+    Unreadable consumed JSON sets ``fail_closed=True``. Does not write
+    state, does not consume the file.
 
     Returns ``{index: bucket}`` only when every queued item has an explicit,
     valid, exact-text-bound bucket answer -- never a partial map.
     """
-    path = Path(folder) / REVIEW_IMPORT_NAME
-    if not path.is_file():
+    live = Path(folder) / REVIEW_IMPORT_NAME
+    consumed = Path(folder) / REVIEW_CONSUMED_NAME
+    if live.is_file():
+        path, source, unreadable_fail_closed = live, "live", False
+    elif consumed.is_file():
+        path, source, unreadable_fail_closed = consumed, "consumed", True
+    else:
         return None
     try:
         raw = path.read_text(encoding="utf-8")
         payload = json.loads(raw)
     except UnicodeDecodeError as exc:
         raise RequirementExtractionReviewValidationError(
-            f"invalid requirement-extraction-review import encoding: {exc}"
+            f"invalid {source} requirement-extraction-review encoding: {exc}",
+            fail_closed=unreadable_fail_closed,
         ) from exc
     except (OSError, json.JSONDecodeError) as exc:
         raise RequirementExtractionReviewValidationError(
-            f"invalid requirement-extraction-review import: {exc}"
+            f"invalid {source} requirement-extraction-review import: {exc}",
+            fail_closed=unreadable_fail_closed,
         ) from exc
     if not isinstance(payload, dict):
         raise RequirementExtractionReviewValidationError(
-            "requirement-extraction-review import must be a JSON object"
+            f"{source} requirement-extraction-review import must be a JSON object"
         )
     forbidden = set(payload) & _FORBIDDEN_KEYS
     if forbidden:
@@ -197,11 +221,13 @@ def try_load_review_import(
         )
     if str(payload.get("submission_slug") or "") != str(submission_slug):
         raise RequirementExtractionReviewValidationError(
-            "requirement-extraction-review submission_slug does not match this folder"
+            f"{source} requirement-extraction-review submission_slug does not "
+            "match this folder; prior review cannot be reused"
         )
     if str(payload.get("jd_sha256") or "") != str(jd_sha256):
         raise RequirementExtractionReviewValidationError(
-            "requirement-extraction-review jd_sha256 does not match this JD"
+            f"{source} requirement-extraction-review jd_sha256 does not match "
+            "this JD; prior review cannot be reused"
         )
     if "created_at" not in payload:
         raise RequirementExtractionReviewValidationError(
@@ -211,7 +237,8 @@ def try_load_review_import(
     items = payload.get("items")
     if not isinstance(items, list) or len(items) != len(queue):
         raise RequirementExtractionReviewValidationError(
-            "requirement-extraction-review items do not match the queued item count"
+            f"{source} requirement-extraction-review items do not match the "
+            "queued item count; prior review cannot be reused"
         )
 
     resolved: dict[int, str] = {}
@@ -238,14 +265,16 @@ def try_load_review_import(
         expected_key = _item_key(index, expected_text)
         if str(raw_item.get("item_key") or "") != expected_key:
             raise RequirementExtractionReviewValidationError(
-                f"requirement-extraction-review item_key does not match item {index}"
+                f"{source} requirement-extraction-review item_key does not "
+                f"match item {index}; prior review cannot be reused"
             )
         # Exact-text binding (same discipline as
         # stage0_evidence_cascade.try_load_cascade_import): a reviewer must
         # answer about the real item text, not text they rewrote.
         if str(raw_item.get("text") or "") != expected_text:
             raise RequirementExtractionReviewValidationError(
-                f"requirement-extraction-review echoed text does not match item {index}"
+                f"{source} requirement-extraction-review echoed text does not "
+                f"match item {index}; prior review cannot be reused"
             )
         bucket = raw_item.get("bucket")
         if bucket not in ALLOWED_BUCKETS:

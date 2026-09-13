@@ -1,8 +1,25 @@
 ## [Unreleased] — 2026-09-13
-[DRAFT] CR-112 Story 8.3 lean-digest pair-restatement instruction on the
-isolated candidate. Stage 1 authors are told the resume and letter may
-share the strongest packet fact but must not restate it in near-identical
-language. Detector unchanged. No paid APIs. No push. CR-112 remains open.
+[DRAFT] CR-112 Story 8.4 durable consumed extraction-review on the
+isolated candidate. Stage 0 `--resume` after cost-authorization no longer
+re-asks a review that was already consumed. No paid APIs. No push.
+CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.4 (`FR-320` / `AC-418`): `try_load_review_import` reuses a
+  valid `.consumed.json` when the live import is absent and the JD plus
+  queue still bind. Unreadable consumed JSON fails closed. Live import
+  still wins for a deliberate correction.
+
+### Notes
+- Design review ACCEPT WITH CHANGES
+  ([Review](221eed13-6cf1-45e0-ba82-14c298ba0877)).
+- Vanta JD 2 practice folder reached `PRACTICE_COMPLETE` after an honest
+  resume `RESOLVED_EDIT` (65 → 70). First-draft baseline preserved.
+- Story 8.3 follow-up design review ACCEPT no further digest paragraph
+  ([Review](8b6fe4c0-479a-4ea9-bbd1-3d84be8d488b)).
+- Ranking investigation design review ACCEPT WITH CHANGES, no formula
+  this pass ([Review](0562aa4a-a797-4c15-8663-02c2f2819fb7)).
+
 
 ### Changed
 - CR-112 Story 8.3 (`FR-319` / `AC-417`): lean authoring digest §5 now

@@ -1,4 +1,23 @@
 ## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Story 8.3 lean-digest pair-restatement instruction on the
+isolated candidate. Stage 1 authors are told the resume and letter may
+share the strongest packet fact but must not restate it in near-identical
+language. Detector unchanged. No paid APIs. No push. CR-112 remains open.
+
+### Changed
+- CR-112 Story 8.3 (`FR-319` / `AC-417`): lean authoring digest §5 now
+  includes the locked keep-fact / change-language line. Generated Stage 1
+  prompt SYSTEM BLOCK carries the same instruction. `LW-009-PAIR`
+  detector and Stage 1 pair FAIL are unchanged.
+
+### Notes
+- Story 8.1 follow-up QA PASS recorded 2026-09-13. Floors stay 70/65.
+- Story 8.2 security CLEAR and QA PASS recorded 2026-09-13.
+- Story 8.3 design review DR-001 ACCEPT WITH CHANGES
+  ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Independent QA PASS
+  ([Review](de184edd-f4e3-4249-88ce-193500cb8161)).
+
+## [Unreleased] — 2026-09-13
 [DRAFT] CR-112 Story 8.2 practice identity on the isolated candidate.
 Silent John Doe fallback is gone from the document pipeline. Identity
 comes from gitignored `workExperience.md` or explicit

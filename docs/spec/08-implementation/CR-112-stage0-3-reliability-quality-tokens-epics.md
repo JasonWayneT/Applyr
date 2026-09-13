@@ -493,6 +493,17 @@ synthetic mode for fixtures only.
 
 **Status:** [x] QA PASS ([Review](caa75e98-aade-4c21-93c7-4e2140e147de)) 2026-09-13. Security CLEAR ([Review](375d080a-7767-489f-97b1-73cd9d4f650a)). Do not mark CR-112 complete.
 
+### Story 8.3 — Lean digest cross-document restatement prevention
+
+**Files:**
+- Modify: `scripts/generate_authoring_rule_digest.py` (`_DIGEST_CONTENT` §5)
+- Test: `scripts/test_generate_authoring_rule_digest.py`, `scripts/test_author_from_packet.py`
+- Design: `docs/spec/08-implementation/CR-112-lean-digest-pair-restatement-design.md`
+
+**Acceptance:** `FR-319` / `AC-417`. Generated digest and Stage 1 prompt SYSTEM BLOCK contain the locked keep-fact / change-language instruction. Negative control proves the checker is not matching incidental "resume" / "cover letter" words. Digest stays under 10000 chars. Detector and Stage 1 pair FAIL unchanged. Not a CR-097 promote. Independent design review DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)).
+
+**Status:** [x] QA PASS ([Review](de184edd-f4e3-4249-88ce-193500cb8161)) 2026-09-13. Design DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Digest 9805 chars, version `9634969118ac5d3d`. Detector unchanged. Do not mark CR-112 complete.
+
 ## Out of scope
 
 - Rewriting the seven live submissions **as a blanket action.** Story 1.4's per-folder recovery decision is the sole, narrow exception — any re-authoring it triggers is explicit, human-reviewed, and limited to folders the audit actually flags, not a general rewrite pass.

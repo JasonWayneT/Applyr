@@ -352,6 +352,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-317` / `AC-414` | CR-112 | Cost telemetry; unknown is not zero | planned Story 7.2 | draft |
 | `FR-318` / `AC-415` | CR-112 | CONVERT-READY floors on Stage 2/3 completion | `scripts/contracts.py`, `scripts/workflow/runner.py`, `scripts/check_submission_status.py`, `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`, `scripts/test_check_submission_status.py`; design `CR-112-completion-contract-quality-floor-defect.md` | draft |
 | `SEC-006` / `AC-416` | CR-112 | Privacy-safe practice identity; no silent placeholder | `scripts/utils.py`, `scripts/author_from_packet.py`, `scripts/quality_checker.py`, `scripts/workflow/runner.py`, `scripts/test_practice_identity.py`; design `CR-112-practice-identity-portability-defect.md` | implemented |
+| `FR-319` / `AC-417` | CR-112 | Lean digest pair-restatement instruction; keep strongest fact, change language | `scripts/generate_authoring_rule_digest.py`, `scripts/test_generate_authoring_rule_digest.py`, `scripts/test_author_from_packet.py`; design `CR-112-lean-digest-pair-restatement-design.md` | implemented |
 | `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | design Epic 7 | draft |
 
 

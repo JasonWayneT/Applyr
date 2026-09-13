@@ -178,6 +178,9 @@ def _write_dispositions(
             "use an object with reasoning: "
             '{\"disposition\": \"FALSE_POSITIVE\", \"reasoning\": \"why it is wrong\"}. '
             "RESOLVED_EDIT and NOT_APPLICABLE may be bare strings. "
+            "For hm.critical_read, a structured hm_review artifact with "
+            "document hashes, reviewer role, and per-document observations "
+            "is required (NOT_APPLICABLE and FALSE_POSITIVE are not allowed). "
             "Dispositions are bound to the findings content hash for each review "
             "phase (truth/ats/hm/mech); a regenerated finding with the same id but "
             "different content clears that disposition automatically. "

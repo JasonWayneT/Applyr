@@ -11,6 +11,13 @@ from workflow.reviews import (
     REASONING_MIN_CHARS,
     parse_disposition,
 )
+from hm_review_contract import HM_DISALLOWED_DISPOSITIONS
+
+# hm.critical_read-specific: these dispositions are not allowed because
+# a hiring-manager read is always required and is not a mechanical check
+# that can misfire. Implements FR-319 / AC-417 (CR-112 Story 8.3).
+# Single source of truth: HM_DISALLOWED_DISPOSITIONS in hm_review_contract.py.
+HM_CRITICAL_READ_DISALLOWED = HM_DISALLOWED_DISPOSITIONS
 
 
 def evaluate_stage0(gate: dict[str, Any]) -> dict[str, Any]:
@@ -122,6 +129,21 @@ def evaluate_truth_findings(
             continue
         if disp_s not in ALL_DISPOSITIONS:
             reasons.append(f"{fid}: invalid disposition {by_id.get(fid)!r}")
+            return {
+                "verdict": "FAIL",
+                "integrity": "CLEAN",
+                "open_finding_ids": open_ids,
+                "reasons": reasons,
+            }
+        # hm.critical_read-specific: disallow NOT_APPLICABLE and FALSE_POSITIVE
+        # because a hiring-manager read is always required and is not a
+        # mechanical check that can misfire. Implements FR-319 / AC-417.
+        if str(fid) == "hm.critical_read" and disp_s in HM_CRITICAL_READ_DISALLOWED:
+            reasons.append(
+                f"{fid}: {disp_s} is not allowed for hm.critical_read — "
+                "a hiring-manager read is always required; use "
+                "ACCEPTED_AS_CORRECT with a structured hm_review artifact"
+            )
             return {
                 "verdict": "FAIL",
                 "integrity": "CLEAN",

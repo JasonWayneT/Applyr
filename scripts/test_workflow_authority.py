@@ -1092,8 +1092,8 @@ class Stage2PolicyTests(unittest.TestCase):
                         run_until_waiting_for_llm(
                             str(self.folder), mode="production", adopt=False, no_hook=True
                         )
-        _write(self.folder, "Resume.md", "# Name\nv1\n")
-        _write(self.folder, "CoverLetter.md", "# Name\nletter\n")
+        _write(self.folder, "Resume.md", "# Name\n\n## PROFESSIONAL SUMMARY\nProduct manager with roadmap ownership experience.\n")
+        _write(self.folder, "CoverLetter.md", "# Name\n\nDear Hiring Manager,\n\nBody paragraph here.\n\nBest regards,\n\nName\n")
         _write(
             self.folder,
             "claim_provenance.json",
@@ -1158,9 +1158,47 @@ class Stage2PolicyTests(unittest.TestCase):
         ):
             run_stage2_hm(str(self.folder), load_state(str(self.folder)))
         disp = json.loads((self.folder / "reviews" / "dispositions.json").read_text(encoding="utf-8"))
+        # CR-112 Story 8.3: hm.critical_read requires a structured review artifact
+        # with verifiable document spans, JD spans, valid reviewer role, and ISO-8601 timestamp.
+        resume_hash = hashlib.sha256((self.folder / "Resume.md").read_bytes()).hexdigest()
+        cover_hash = hashlib.sha256((self.folder / "CoverLetter.md").read_bytes()).hexdigest()
+        jd_hash = hashlib.sha256((self.folder / "Original_JD.txt").read_bytes()).hexdigest()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
         disp["by_finding_id"]["hm.critical_read"] = {
             "disposition": "ACCEPTED_AS_CORRECT",
             "reasoning": "critical read finding is a style preference not a defect",
+            "hm_review": {
+                "reviewed_document_hashes": {
+                    "Resume.md": resume_hash,
+                    "CoverLetter.md": cover_hash,
+                    "Original_JD.txt": jd_hash,
+                },
+                "reviewer_role": "reviewer",
+                "review_timestamp": now,
+                "observations": [
+                    {
+                        "document": "Resume.md",
+                        "location": "PROFESSIONAL SUMMARY section",
+                        "finding": "Three sentences positioning platform PM scope correctly",
+                        "jd_relevance": "JD requires roadmap ownership which is reflected",
+                        "document_span": "Product manager with roadmap ownership experience",
+                        "jd_span": "Own roadmap",
+                        "recommendation": "pass",
+                    },
+                    {
+                        "document": "CoverLetter.md",
+                        "location": "opening paragraph after greeting",
+                        "finding": "Opens with company-specific challenge not generic enthusiasm",
+                        "jd_relevance": "JD emphasizes platform scaling which hook addresses",
+                        "document_span": "Dear Hiring Manager",
+                        "jd_span": "Product Manager",
+                        "recommendation": "pass",
+                    },
+                ],
+                "verdict": "pass",
+                "overall_reasoning": "Both documents engage specifically with the JD requirements.",
+            },
         }
         (self.folder / "reviews" / "dispositions.json").write_text(
             json.dumps(disp, indent=2), encoding="utf-8"

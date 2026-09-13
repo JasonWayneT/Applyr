@@ -48,6 +48,7 @@ from workflow.receipts import (  # noqa: E402
 from workflow.reviews import (  # noqa: E402
     ensure_stage2_subphases,
     findings_content_hash,
+    parse_disposition,
     sync_dispositions_for_phase,
     write_ats_findings,
     write_hm_findings,
@@ -1157,6 +1158,36 @@ def _apply_subphase_verdict(
     fhash = findings_content_hash(findings_doc)
     s2 = state["stages"]["stage2"]
     phase_rec = s2["subphases"][phase]
+
+    # CR-112 Story 8.3: hm.critical_read structured review artifact validation.
+    # After the policy verdict, if phase is "hm" and the verdict is PASS,
+    # validate that any hm.critical_read disposition includes a structured
+    # review artifact. This is a substance gate — the existing policy only
+    # checks reasoning length, not review evidence. Implements FR-319 / AC-417.
+    if phase == "hm" and verdict["verdict"] == "PASS":
+        from hm_review_contract import HM_REVIEW_DISPOSITIONS, validate_hm_review
+        findings_list = findings_doc.get("findings") or []
+        by_id = dispositions.get("by_finding_id") or {}
+        hm_errors: list[str] = []
+        for item in findings_list:
+            if not isinstance(item, dict):
+                continue
+            fid = str(item.get("id") or "")
+            if fid != "hm.critical_read":
+                continue
+            disp_value = by_id.get(fid)
+            disp_s, _ = parse_disposition(disp_value)
+            if disp_s in HM_REVIEW_DISPOSITIONS:
+                ok, errs = validate_hm_review(folder, disp_value)
+                if not ok:
+                    hm_errors.extend(errs)
+        if hm_errors:
+            verdict = {
+                "verdict": "NEEDS_DISPOSITION",
+                "integrity": "CLEAN",
+                "open_finding_ids": ["hm.critical_read"],
+                "reasons": hm_errors,
+            }
 
     if verdict["verdict"] == "FAIL":
         phase_rec["status"] = "FAILED"

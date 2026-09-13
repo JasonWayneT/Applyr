@@ -31,6 +31,7 @@ from contracts import (
     check_draft_manifest,
     check_finalize_ready,
     check_freshness,
+    check_rubric_floors,
     check_stage0_fit_gate,
     check_stage1_ready,
     check_stage2_ready,
@@ -316,6 +317,94 @@ class TestCheckDraftManifest(unittest.TestCase):
             self.assertFalse(ok)
             self.assertTrue(any("cover_letter.total" in e for e in errors))
 
+    def test_resume_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_cover_letter_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 64}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("cover_letter" in e and "65" in e for e in errors))
+
+    def test_exact_floors_pass(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 65}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertTrue(ok, errors)
+
+    def test_resume_69_9_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 69.9}, "cover_letter": {"total": 65}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_nan_total_fails_shape(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": float("nan")}, "cover_letter": {"total": 65}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("resume.total" in e for e in errors))
+            self.assertFalse(any("CONVERT-READY floor" in e for e in errors))
+
+
+# ---------------------------------------------------------------------------
+# check_rubric_floors (CR-112 completion contract)
+# ---------------------------------------------------------------------------
+
+class TestCheckRubricFloors(unittest.TestCase):
+    """Negative controls: floors are independent of shape errors."""
+
+    def test_camunda_shaped_68_69_fails_resume(self):
+        errors = check_rubric_floors({"resume": {"total": 68}, "cover_letter": {"total": 69}})
+        self.assertTrue(any("resume" in e and "70" in e for e in errors))
+        self.assertFalse(any("cover_letter" in e and "65" in e for e in errors))
+
+    def test_resume_69_9_fails(self):
+        errors = check_rubric_floors({"resume": {"total": 69.9}, "cover_letter": {"total": 65}})
+        self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_exact_floors_empty(self):
+        self.assertEqual(
+            check_rubric_floors({"resume": {"total": 70}, "cover_letter": {"total": 65}}),
+            [],
+        )
+
+    def test_missing_score_is_shape_not_floor(self):
+        self.assertEqual(check_rubric_floors("not scored yet"), [])
+        self.assertEqual(check_rubric_floors({"resume": {"total": 78}}), [])
+
+    def test_nan_is_shape_not_a_passing_floor(self):
+        self.assertEqual(
+            check_rubric_floors({"resume": {"total": float("nan")}, "cover_letter": {"total": 65}}),
+            [],
+        )
+
 
 # ---------------------------------------------------------------------------
 # check_verification_receipt
@@ -548,6 +637,31 @@ class TestCheckFinalizeReady(unittest.TestCase):
             self.assertTrue(ok, errors)
             self.assertEqual(errors, [])
 
+    def test_exact_floors_pass(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            self._write_all_valid(folder)
+            manifest = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 65}},
+            }
+            _write_json(folder, "draft_manifest.json", manifest)
+            ok, errors = check_finalize_ready(str(folder))
+            self.assertTrue(ok, errors)
+
+    def test_resume_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            self._write_all_valid(folder)
+            manifest = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            }
+            _write_json(folder, "draft_manifest.json", manifest)
+            ok, errors = check_finalize_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
     def test_missing_receipt_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             folder = Path(tmpdir)
@@ -700,6 +814,57 @@ class TestCheckStage2Ready(unittest.TestCase):
             ok, errors = check_stage2_ready(str(folder))
             self.assertTrue(ok, errors)
             self.assertEqual(errors, [])
+
+    def test_resume_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_cover_letter_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 64}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("cover_letter" in e and "65" in e for e in errors))
+
+    def test_exact_floors_pass(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 65}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertTrue(ok, errors)
+
+    def test_resume_69_9_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 69.9}, "cover_letter": {"total": 65}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
 
     def test_missing_receipt_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:

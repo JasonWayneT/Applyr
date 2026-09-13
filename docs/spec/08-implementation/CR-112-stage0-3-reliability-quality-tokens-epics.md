@@ -455,6 +455,40 @@ on unknown ≠ zero telemetry. Eval zero-call stays `offline` with
 candidate: automated + no-cost Stage 0→1 passed; first-draft product
 proof remaining. Do not push.
 
+## Epic 8 — Completion contract and practice portability (Camunda follow-up)
+
+**Depends on:** Epic 7 candidate plus Stage 0 extraction fallback (`470abdf`)
+and ATS-term-contract eligibility (`089efec`). **Touches:** completion
+predicates, Mech findings, practice Stage 3. Not first-draft digest.
+Not ranking. Not identity implementation.
+
+### Story 8.1 — CONVERT-READY floors are completion gates
+
+**Files:**
+- Modify: `scripts/contracts.py` (`check_rubric_floors`, `check_draft_manifest`, `check_stage2_ready`)
+- Modify: `scripts/workflow/runner.py` (`collect_mech_findings`, `run_stage3_finalize`)
+- Modify: `scripts/check_submission_status.py` (DONE inherits draft-manifest floors)
+- Test: `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`, `scripts/test_check_submission_status.py`
+
+**Acceptance:** `FR-318` / `AC-415`. Resume 68 / Cover Letter 69 cannot
+mint Stage 2 COMPLETE, practice `PRACTICE_COMPLETE`, or status DONE.
+`--force` cannot skip the floor helper. No HAR / exception path in this
+story. Do not lower 70/65.
+
+**Status:** [ ] Implemented on the candidate. Independent QA
+[Review](b782f4e4-bf82-4dec-a31e-e82c43d04f30) ACCEPT WITH CHANGES;
+required tests added after. Do not self-mark PASS. Do not mark CR-112 complete.
+
+### Story 8.2 — Privacy-safe practice identity (design only)
+
+**Files:** design `docs/spec/08-implementation/CR-112-practice-identity-portability-defect.md`
+
+**Acceptance:** `SEC-006`. Fail before authoring when identity is
+missing. No silent John Doe. No production sqlite copy. Explicit
+synthetic mode for fixtures only.
+
+**Status:** [ ] Design only. Do not bundle into Story 8.1.
+
 ## Out of scope
 
 - Rewriting the seven live submissions **as a blanket action.** Story 1.4's per-folder recovery decision is the sole, narrow exception — any re-authoring it triggers is explicit, human-reviewed, and limited to folders the audit actually flags, not a general rewrite pass.

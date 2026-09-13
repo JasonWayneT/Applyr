@@ -29,7 +29,8 @@ sys.path.insert(0, _SCRIPT_DIR)
 
 import contracts  # noqa: E402
 
-_RUBRIC_THRESHOLDS = {"resume": 70, "cover_letter": 65}
+RUBRIC_FLOOR_RESUME = contracts.RUBRIC_FLOOR_RESUME
+RUBRIC_FLOOR_COVER_LETTER = contracts.RUBRIC_FLOOR_COVER_LETTER
 
 
 def compute_status(folder: str) -> dict:
@@ -83,10 +84,10 @@ def compute_status(folder: str) -> dict:
             rubric = manifest.get("rubric_score") or {}
             resume_score = (rubric.get("resume") or {}).get("total")
             cover_score = (rubric.get("cover_letter") or {}).get("total")
-            if isinstance(resume_score, (int, float)) and resume_score < _RUBRIC_THRESHOLDS["resume"]:
-                warnings.append(f"resume rubric score {resume_score} is below the {_RUBRIC_THRESHOLDS['resume']} CONVERT-READY floor")
-            if isinstance(cover_score, (int, float)) and cover_score < _RUBRIC_THRESHOLDS["cover_letter"]:
-                warnings.append(f"cover letter rubric score {cover_score} is below the {_RUBRIC_THRESHOLDS['cover_letter']} CONVERT-READY floor")
+            if isinstance(resume_score, (int, float)) and resume_score < RUBRIC_FLOOR_RESUME:
+                warnings.append(f"resume rubric score {resume_score} is below the {RUBRIC_FLOOR_RESUME} CONVERT-READY floor")
+            if isinstance(cover_score, (int, float)) and cover_score < RUBRIC_FLOOR_COVER_LETTER:
+                warnings.append(f"cover letter rubric score {cover_score} is below the {RUBRIC_FLOOR_COVER_LETTER} CONVERT-READY floor")
     else:
         record("draft_manifest.json exists", False, ["not found -- rubric_score was never recorded"])
 

@@ -1304,6 +1304,53 @@ def _compile_pdfs(folder: str) -> None:
         raise WorkflowError("\n".join(errors))
 
 
+def _rubric_floor_findings(score: Any) -> list[dict[str, Any]]:
+    """Emit BLOCK findings when numeric rubric totals sit below CONVERT-READY floors.
+
+    Shape errors stay on mech.rubric_score_required (WARN). A leftover
+    ACCEPTED_AS_CORRECT on that WARN cannot bind these ids.
+    """
+    # Implements FR-318 / AC-415
+    shape = contracts._check_rubric_score_shape(score)
+    if shape:
+        return []
+    findings: list[dict[str, Any]] = []
+    for err in contracts.check_rubric_floors(score):
+        side = "cover_letter" if "cover_letter" in err else "resume"
+        findings.append(
+            {
+                "id": f"mech.rubric_floor.{side}",
+                "source": "workflow",
+                "severity": "BLOCK",
+                "message": err,
+            }
+        )
+    return findings
+
+
+def _require_completion_rubric_floors(folder: str) -> None:
+    """Fail closed before minting Stage 3 when rubric totals are below floor.
+
+    Shape first, then floors. Does not call check_finalize_ready (practice
+    may skip freshness / verification_passed / DB extras). force=True cannot
+    skip this helper.
+    """
+    # Implements FR-318 / AC-415
+    manifest_path = os.path.join(folder, "draft_manifest.json")
+    manifest, err = contracts.load_json(manifest_path)
+    if err:
+        raise WorkflowError(f"Cannot finalize: {err}")
+    score = None if manifest is None else manifest.get("rubric_score")
+    shape_errs = contracts._check_rubric_score_shape(score)
+    floor_errs = [] if shape_errs else contracts.check_rubric_floors(score)
+    errs = [f"draft_manifest.json: {e}" for e in (shape_errs + floor_errs)]
+    if errs:
+        raise WorkflowError(
+            "Cannot finalize: CONVERT-READY rubric floors not met:\n  - "
+            + "\n  - ".join(errs)
+        )
+
+
 def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str, Any]:
     """Compile PDFs + verify_one; surface failures as findings."""
     findings: list[dict[str, Any]] = []
@@ -1377,6 +1424,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
     # Rubric still required for Stage 2 policy / check_stage2_ready
     manifest_path = os.path.join(folder, "draft_manifest.json")
     rubric_ok = False
+    score = None
     if os.path.exists(manifest_path):
         try:
             with open(manifest_path, encoding="utf-8") as f:
@@ -1399,6 +1447,8 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 ),
             }
         )
+    else:
+        findings.extend(_rubric_floor_findings(score))
 
     payload = {
         "schema_version": 1,
@@ -1644,6 +1694,11 @@ def run_stage3_finalize(
             f"Implausible job title {title!r} (JD chrome, not a role). "
             f"Pass --title with the real role name, or fix stage0_fit_gate.json 'role'."
         )
+
+    # CR-112: floors are not skipped by practice mode or --force. Production
+    # --force may still skip check_finalize_ready extras (freshness, etc.)
+    # inside finalize_job; it cannot mint a below-floor Stage 3 receipt.
+    _require_completion_rubric_floors(folder)
 
     mode = state.get("mode") or "production"
     finalize_result = None

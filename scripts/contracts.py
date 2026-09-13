@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 
@@ -103,14 +104,51 @@ def check_stage0_fit_gate(folder: str) -> tuple[bool, list[str]]:
 # draft_manifest.json
 # ---------------------------------------------------------------------------
 
+# CONVERT-READY floors from data/conversion_rubric.md. Shape lives in
+# _check_rubric_score_shape; numeric floors live here. Do not fold floors
+# into the shape helper (CR-112 completion contract).
+RUBRIC_FLOOR_RESUME = 70
+RUBRIC_FLOOR_COVER_LETTER = 65
+
+
 def _check_rubric_score_shape(score) -> list[str]:
     errors = []
     if not isinstance(score, dict):
         return ["'rubric_score' must be an object with 'resume' and 'cover_letter' sub-scores"]
     for side in ("resume", "cover_letter"):
         sub = score.get(side)
-        if not isinstance(sub, dict) or not isinstance(sub.get("total"), (int, float)):
+        if not isinstance(sub, dict) or not isinstance(sub.get("total"), (int, float)) or not math.isfinite(sub.get("total")):
             errors.append(f"'rubric_score.{side}.total' must be a real number -- a genuinely scored document always has one")
+    return errors
+
+
+def check_rubric_floors(score) -> list[str]:
+    """Return CONVERT-READY floor errors for numeric totals.
+
+    Call after shape is valid. Missing or non-numeric totals are shape
+    errors, not floor errors, and are skipped here. Args: score is the
+    draft_manifest rubric_score object. Returns a list of error strings.
+    """
+    # Implements FR-318 / AC-415 (CR-112 completion-floor)
+    if not isinstance(score, dict):
+        return []
+    errors: list[str] = []
+    resume = score.get("resume")
+    cover = score.get("cover_letter")
+    if isinstance(resume, dict) and isinstance(resume.get("total"), (int, float)) and math.isfinite(resume["total"]):
+        total = resume["total"]
+        if total < RUBRIC_FLOOR_RESUME:
+            errors.append(
+                f"'rubric_score.resume.total' {total} is below the "
+                f"{RUBRIC_FLOOR_RESUME} CONVERT-READY floor"
+            )
+    if isinstance(cover, dict) and isinstance(cover.get("total"), (int, float)) and math.isfinite(cover["total"]):
+        total = cover["total"]
+        if total < RUBRIC_FLOOR_COVER_LETTER:
+            errors.append(
+                f"'rubric_score.cover_letter.total' {total} is below the "
+                f"{RUBRIC_FLOOR_COVER_LETTER} CONVERT-READY floor"
+            )
     return errors
 
 
@@ -139,7 +177,11 @@ def check_draft_manifest(folder: str) -> tuple[bool, list[str]]:
             pass
     if "verification_passed" not in data or not isinstance(data.get("verification_passed"), bool):
         errors.append("draft_manifest.json: 'verification_passed' must be present and a real boolean")
-    errors.extend(f"draft_manifest.json: {e}" for e in _check_rubric_score_shape(data.get("rubric_score")))
+    score = data.get("rubric_score")
+    shape_errors = _check_rubric_score_shape(score)
+    errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
+    if not shape_errors:
+        errors.extend(f"draft_manifest.json: {e}" for e in check_rubric_floors(score))
 
     return len(errors) == 0, errors
 
@@ -385,7 +427,8 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
       - check_freshness() passing (hash-aware where the receipt has content_hashes, mtime
         fallback otherwise).
       - draft_manifest.json present with a populated rubric_score (reused _check_rubric_score_shape
-        shape check -- both resume.total and cover_letter.total must be real numbers).
+        shape check -- both resume.total and cover_letter.total must be real numbers -- then
+        check_rubric_floors: Resume >= 70 and Cover Letter >= 65).
       - Zero linter HARD_BLOCKs: the receipt's own lint_all_clean AND an explicit per-document
         'blocks' emptiness check (both, not just the derived boolean -- defensive against a
         future receipt where the two disagree).
@@ -412,9 +455,11 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
     if err:
         errors.append(err)
     else:
-        errors.extend(
-            f"draft_manifest.json: {e}" for e in _check_rubric_score_shape(manifest.get("rubric_score"))
-        )
+        score = manifest.get("rubric_score")
+        shape_errors = _check_rubric_score_shape(score)
+        errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
+        if not shape_errors:
+            errors.extend(f"draft_manifest.json: {e}" for e in check_rubric_floors(score))
 
     # Load the receipt directly (rather than relying on check_verification_receipt()'s internal
     # load) for the additional fields below. If the receipt is missing/unparseable,

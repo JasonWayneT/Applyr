@@ -7,6 +7,7 @@ Run:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -1258,10 +1259,21 @@ class Stage3FinalizeTests(unittest.TestCase):
         _write(self.folder, "verification_receipt.json", {"mechanically_verified": True})
         _write(self.folder, "stage0_fit_gate.json", _valid_stage0(company="Acme", role="Product Manager"))
 
-    def _seed_stage2_complete(self, mode="production"):
+    def _seed_stage2_complete(self, mode="production", rubric=None):
         from workflow.invalidate import sha256_file
         from workflow.receipts import file_hash_map
 
+        score = rubric or {"resume": {"total": 78}, "cover_letter": {"total": 70}}
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Acme",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": score,
+            },
+        )
         state = init_state(str(self.folder), mode=mode)
         write_state(str(self.folder), state)
         prior_id = None
@@ -1323,6 +1335,83 @@ class Stage3FinalizeTests(unittest.TestCase):
         ok, errors = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)
         self.assertTrue(any("PRACTICE_COMPLETE" in e for e in errors))
+
+    def test_practice_finalize_below_resume_floor_raises(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="practice",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(str(self.folder), load_state(str(self.folder)))
+            fin.assert_not_called()
+        self.assertIn("70", str(ctx.exception))
+        self.assertIn("resume", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
+        state = load_state(str(self.folder))
+        self.assertNotEqual(state.get("status"), "PRACTICE_COMPLETE")
+
+    def test_practice_finalize_force_cannot_skip_floor(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="practice",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(
+                    str(self.folder), load_state(str(self.folder)), force=True
+                )
+            fin.assert_not_called()
+        self.assertIn("CONVERT-READY", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
+
+    def test_practice_finalize_exact_floors_complete(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="practice",
+            rubric={"resume": {"total": 70}, "cover_letter": {"total": 65}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            state = run_stage3_finalize(
+                str(self.folder), load_state(str(self.folder))
+            )
+            fin.assert_not_called()
+        self.assertEqual(state["status"], "PRACTICE_COMPLETE")
+
+    def test_production_finalize_below_resume_floor_raises(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="production",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(str(self.folder), load_state(str(self.folder)))
+            fin.assert_not_called()
+        self.assertIn("70", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
+
+    def test_production_finalize_force_cannot_skip_floor(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="production",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(
+                    str(self.folder), load_state(str(self.folder)), force=True
+                )
+            fin.assert_not_called()
+        self.assertIn("CONVERT-READY", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
 
     def test_production_finalize_writes_complete(self):
         from workflow.runner import run_stage3_finalize
@@ -1580,6 +1669,16 @@ class EndToEndChainIntegrityTests(unittest.TestCase):
                 sub["status"] = "COMPLETE"
         state["stages"]["stage3"]["status"] = "READY"
         write_state(str(self.folder), state)
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Acme",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 78}, "cover_letter": {"total": 70}},
+            },
+        )
 
         # Finalize
         with mock.patch(
@@ -1631,6 +1730,206 @@ class EndToEndChainIntegrityTests(unittest.TestCase):
         self.assertTrue(reasons, f"Expected chain-break reasons, got: {reasons}")
         self.assertEqual(new_state["stages"]["stage1"]["status"], "STALE")
         self.assertEqual(new_state["status"], "STALE")
+
+
+class TestCr112RubricFloorCompletion(unittest.TestCase):
+    """Camunda-shaped 68/69 must not mint PRACTICE_COMPLETE or Mech CLEAN-complete."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.folder = Path(self._tmpdir.name) / "camunda_floor"
+        self.folder.mkdir()
+        _write(self.folder, "Resume.md", "# Name\n")
+        _write(self.folder, "CoverLetter.md", "# Name\n")
+
+    def test_collect_mech_findings_emits_resume_floor_block(self):
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+                "page_counts": {"Resume.pdf": 1, "CoverLetter.pdf": 1},
+            },
+        ):
+            payload = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        ids = [f["id"] for f in payload["findings"]]
+        self.assertIn("mech.rubric_floor.resume", ids)
+        self.assertNotIn("mech.rubric_floor.cover_letter", ids)
+        self.assertTrue(
+            any(f["id"] == "mech.rubric_floor.resume" and f["severity"] == "BLOCK"
+                for f in payload["findings"])
+        )
+
+    def test_collect_mech_findings_emits_cover_letter_floor_block(self):
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 64}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+            },
+        ):
+            payload = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        ids = [f["id"] for f in payload["findings"]]
+        self.assertIn("mech.rubric_floor.cover_letter", ids)
+        self.assertNotIn("mech.rubric_floor.resume", ids)
+
+    def test_leftover_score_required_disposition_does_not_clear_floor_block(self):
+        from workflow.policy import evaluate_truth_findings
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+            },
+        ):
+            findings_doc = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        leftover = {
+            "by_finding_id": {
+                "mech.rubric_score_required": {
+                    "disposition": "ACCEPTED_AS_CORRECT",
+                    "reasoning": "score object is present so the old WARN is stale",
+                }
+            }
+        }
+        verdict = evaluate_truth_findings(findings_doc, leftover)
+        self.assertNotEqual(verdict["verdict"], "PASS")
+        self.assertIn("mech.rubric_floor.resume", verdict.get("open_finding_ids") or [])
+
+    def test_resolved_edit_can_clean_mech_but_floors_still_block(self):
+        from workflow.policy import evaluate_truth_findings
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+            },
+        ):
+            findings_doc = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        disposed = {
+            "by_finding_id": {
+                "mech.rubric_floor.resume": {"disposition": "RESOLVED_EDIT"},
+            }
+        }
+        verdict = evaluate_truth_findings(findings_doc, disposed)
+        self.assertEqual(verdict["verdict"], "PASS")
+        self.assertEqual(verdict.get("integrity"), "CLEAN")
+        floor_errs = contracts.check_rubric_floors(
+            {"resume": {"total": 68}, "cover_letter": {"total": 69}}
+        )
+        self.assertTrue(any("70" in e for e in floor_errs))
+
+    def test_stage2_policy_below_floor_does_not_mint_complete(self):
+        from workflow.reviews import default_stage2_subphases
+        from workflow.runner import run_stage2_policy
+
+        resume = "resume body"
+        cover = "cover letter body"
+        _write(self.folder, "Resume.md", resume)
+        _write(self.folder, "CoverLetter.md", cover)
+        _write(
+            self.folder,
+            "verification_receipt.json",
+            {
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "unapproved_metrics_clean": True,
+                "page_counts_ok": True,
+                "check_resume": {"passed": True},
+                "check_cover_letter": {"passed": True},
+                "lint": [
+                    {"document": "Resume.md", "blocks": [], "warns": []},
+                    {"document": "CoverLetter.md", "blocks": [], "warns": []},
+                ],
+                "content_hashes": {
+                    "algorithm": "sha256",
+                    "Resume.md": hashlib.sha256(resume.encode("utf-8")).hexdigest(),
+                    "CoverLetter.md": hashlib.sha256(cover.encode("utf-8")).hexdigest(),
+                },
+                "rubric_audit": {"ran": True, "clean": True, "findings": []},
+                "claim_provenance": {"ran": True, "ok": True, "findings": []},
+            },
+        )
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        state = init_state(str(self.folder), mode="practice")
+        state["stages"]["stage2"]["subphases"] = default_stage2_subphases()
+        for name in ("truth", "ats", "hm", "mech"):
+            state["stages"]["stage2"]["subphases"][name]["status"] = "COMPLETE"
+        write_state(str(self.folder), state)
+        with mock.patch(
+            "workflow.runner._require_stage1_fresh",
+            return_value={"receipt_id": "stage1:test"},
+        ):
+            with mock.patch("workflow.runner._run_advisory_defect_scan"):
+                out = run_stage2_policy(str(self.folder), load_state(str(self.folder)))
+        self.assertEqual(out["status"], "NEEDS_DISPOSITION")
+        self.assertFalse((self.folder / "stage_receipts" / "stage2.json").exists())
 
 
 if __name__ == "__main__":

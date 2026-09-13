@@ -42,6 +42,18 @@ from workflow.transitions import new_state  # noqa: E402
 from workflow.invalidate import reconcile_state_against_receipts  # noqa: E402
 
 
+def setUpModule():
+    """Story 8.2: existing workflow tests are not identity tests.
+
+    Explicit synthetic mode keeps them off live workExperience.md.
+    """
+    os.environ["APPLYR_SYNTHETIC_IDENTITY"] = "1"
+
+
+def tearDownModule():
+    os.environ.pop("APPLYR_SYNTHETIC_IDENTITY", None)
+
+
 def _write(folder: Path, name: str, content: str | dict) -> Path:
     path = folder / name
     if isinstance(content, dict):

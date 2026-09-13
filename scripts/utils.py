@@ -455,7 +455,11 @@ def load_llm_settings():
     return {}
 
 
-_DEFAULT_IDENTITY = {
+class IdentityError(RuntimeError):
+    """Raised when no WE identity and synthetic mode is not active."""
+
+
+_SYNTHETIC_IDENTITY = {
     "name": "John Doe",
     "email": "email@example.com",
     "phone": "555-019-9238",
@@ -466,27 +470,44 @@ _DEFAULT_IDENTITY = {
 }
 
 
-def load_identity_profile() -> dict:
-    """Reads identity contact fields from SQLite profiles table."""
-    import sqlite3
-    import json
+def _log_identity_source(source: str) -> None:
+    print(f"[identity] identity_source={source}", file=sys.stderr)
 
-    profile = dict(_DEFAULT_IDENTITY)
-    db_path = DB_PATH
+
+def resolve_identity() -> tuple[dict, str]:
+    """Return (profile, identity_source). Never logs PII.
+
+    Source order: synthetic env, then workExperience.md Section 1.0.
+    SQLite is not in this chain. Raises IdentityError when missing.
+    """
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        _log_identity_source("synthetic")
+        return dict(_SYNTHETIC_IDENTITY), "synthetic"
     try:
-        if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT value FROM profiles WHERE key = 'identity'")
-            row = cursor.fetchone()
-            conn.close()
-            if row:
-                data = json.loads(row[0])
-                for key, value in data.items():
-                    if value:
-                        profile[key] = value
-    except Exception as e:
-        print(f"Error loading identity profile from DB: {e}", file=sys.stderr)
+        from apply_resume_header import load_real_header
+
+        header = load_real_header()
+    except Exception:
+        _log_identity_source("missing")
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
+    _log_identity_source("we")
+    return {
+        "name": header.get("name") or "",
+        "email": header.get("email") or "",
+        "phone": header.get("phone") or "",
+        "location": header.get("location") or "",
+        "linkedin": header.get("linkedin") or "",
+        "portfolio": "",
+        "github": "",
+    }, "we"
+
+
+def load_identity_profile() -> dict:
+    """Identity for document headers. WE or explicit synthetic mode. Not SQLite."""
+    profile, _source = resolve_identity()
     return profile
 
 
@@ -516,14 +537,24 @@ def format_contact_header_block(profile: dict | None = None) -> str:
     line, no blank line between them) -- this function was also violating that.
     """
     profile = profile or load_identity_profile()
-    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    name = (profile.get("name") or "").strip()
+    if not name:
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
     return f"# {name}\n{format_contact_line(profile)}\n\n"
 
 
 def contact_placeholder_map(profile: dict | None = None, target_company: str | None = None) -> dict:
     """Template placeholder â†’ profile values for draft post-processing."""
     profile = profile or load_identity_profile()
-    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    name = (profile.get("name") or "").strip()
+    if not name:
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
     placeholders = {
         "[Your Name]": name,
         "*[Your Name]*": name,

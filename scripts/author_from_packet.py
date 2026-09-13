@@ -325,16 +325,30 @@ def _apply_resume_header_if_available(folder: Path) -> str:
     Packet intentionally omits name/contact/location/education/dates so cloud
     authoring never receives real PII. Placeholders left by closed-world compose
     are substituted from workExperience.md via apply_resume_header.py before lint.
+    Synthetic mode skips this patch so tests never ingest live WE.
     """
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        return "SKIP [apply_resume_header] — synthetic identity mode"
+
     try:
         from apply_resume_header import load_real_header, patch_file  # type: ignore
     except Exception as exc:
-        return f"SKIP [apply_resume_header] — import failed: {exc}"
+        return (
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            f"(identity_source=missing); import failed: {exc}"
+        )
 
     try:
         header = load_real_header()
-    except Exception as exc:
-        return f"SKIP [apply_resume_header] — {exc}"
+    except Exception:
+        return (
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            "(identity_source=missing)"
+        )
 
     parts: list[str] = []
     for fname in ("Resume.md", "CoverLetter.md"):
@@ -509,7 +523,13 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             return False
 
         # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
-        lines.append(_apply_resume_header_if_available(folder))
+        header_line = _apply_resume_header_if_available(folder)
+        lines.append(header_line)
+        if header_line.startswith("FAIL"):
+            passed = False
+            print("\n".join(lines))
+            print("\nVERIFY RESULT: FAIL")
+            return False
 
         # Implements FR-265: Stage 1 owns deterministic document quality.
         # These checks used to

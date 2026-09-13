@@ -28,6 +28,15 @@ from author_from_packet import (
 )
 import contracts  # noqa: E402
 
+
+def setUpModule():
+    """Story 8.2: verify-only tests must not patch live WE into temp docs."""
+    os.environ["APPLYR_SYNTHETIC_IDENTITY"] = "1"
+
+
+def tearDownModule():
+    os.environ.pop("APPLYR_SYNTHETIC_IDENTITY", None)
+
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

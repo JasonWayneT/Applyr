@@ -13,8 +13,14 @@ def _header_block() -> str:
 
 
 def _candidate_name_upper() -> str:
-    from utils import load_identity_profile
-    return (load_identity_profile().get("name") or "John Doe").upper()
+    from utils import IdentityError, load_identity_profile
+    name = (load_identity_profile().get("name") or "").strip()
+    if not name:
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
+    return name.upper()
 
 def check_and_repair_cover_letter(file_path):
     """

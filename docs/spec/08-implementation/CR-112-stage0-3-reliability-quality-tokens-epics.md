@@ -477,15 +477,23 @@ story. Do not lower 70/65.
 
 **Status:** [x] QA PASS ([Review](3cd059c0-ba53-42b7-b66a-a6677a310de5)) 2026-09-13 follow-up after 0aaab87 negative controls. Prior review [b782f4e4](b782f4e4-bf82-4dec-a31e-e82c43d04f30) ACCEPT WITH CHANGES; required tests added in `0aaab87`; this follow-up is unqualified PASS. Do not mark CR-112 complete.
 
-### Story 8.2 — Privacy-safe practice identity (design only)
+### Story 8.2 — Privacy-safe practice identity
 
-**Files:** design `docs/spec/08-implementation/CR-112-practice-identity-portability-defect.md`
+**Files:**
+- Modify: `scripts/utils.py` (`resolve_identity`, `load_identity_profile`)
+- Modify: `scripts/author_from_packet.py` (`_apply_resume_header_if_available`)
+- Modify: `scripts/quality_checker.py` (`_candidate_name_upper`)
+- Modify: `scripts/workflow/runner.py` (`run_stage1_prompt`, `run_stage1_validate`)
+- Test: `scripts/test_practice_identity.py`
+- Design: `docs/spec/08-implementation/CR-112-practice-identity-portability-defect.md`
 
-**Acceptance:** `SEC-006`. Fail before authoring when identity is
+**Acceptance:** `SEC-006` / `AC-416`. Fail before authoring when identity is
 missing. No silent John Doe. No production sqlite copy. Explicit
 synthetic mode for fixtures only.
 
-**Status:** [ ] Design only. Do not bundle into Story 8.1.
+**Status:** [ ] Implemented on the candidate. Design review
+[Review](c3000eab-fd55-4c1f-b99d-d1433b864ebb) ACCEPT WITH CHANGES.
+Independent security + QA not yet recorded. Do not mark CR-112 complete.
 
 ## Out of scope
 

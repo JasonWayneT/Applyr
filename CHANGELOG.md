@@ -1,3 +1,19 @@
+## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Story 8.2 practice identity on the isolated candidate.
+Silent John Doe fallback is gone from the document pipeline. Identity
+comes from gitignored `workExperience.md` or explicit
+`APPLYR_SYNTHETIC_IDENTITY=1`. No paid APIs. No push. CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.2 (`SEC-006` / `AC-416`): `load_identity_profile` no
+  longer reads SQLite or fills John Doe. Missing identity fails before
+  `WAITING_FOR_LLM` and at `run_verify_only`. Tests use synthetic
+  identity only.
+
+### Notes
+- Story 8.1 follow-up QA PASS recorded 2026-09-13. Floors stay 70/65.
+- Practice identity still needs independent security + QA review.
+
 ## [Unreleased] — 2026-09-12
 [DRAFT] CR-112 Camunda follow-up on the isolated candidate. CONVERT-READY
 floors (Resume 70, Cover Letter 65) are now completion gates, not
@@ -10,13 +26,15 @@ Resume 68. No paid APIs. No push. No merge to main. CR-112 remains open.
   `check_finalize_ready` fail below floor. Practice and `--force` Stage 3
   cannot skip the helper. Mech emits BLOCK `mech.rubric_floor.resume` /
   `mech.rubric_floor.cover_letter`. `check_submission_status` DONE fails
-  closed once the manifest floors fail. Independent QA not yet recorded.
+  closed once the manifest floors fail. Follow-up QA PASS
+  ([Review](3cd059c0-ba53-42b7-b66a-a6677a310de5)) 2026-09-13.
 
 ### Notes
 - Camunda practice artifacts stay gitignored. Do not re-finalize that
   folder to inflate the resume score. First-draft baseline remains
   Resume 64 / Cover Letter 57, classification `FIRST_DRAFT_WEAK`.
-- Practice identity (`SEC-006`) is design-only in this drop.
+- Practice identity (`SEC-006`) implemented on this candidate, pending
+  security and QA review.
 
 ## [Unreleased] — 2026-09-11
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed

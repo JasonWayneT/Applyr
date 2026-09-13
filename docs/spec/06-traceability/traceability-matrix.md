@@ -351,7 +351,7 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-316` / `AC-413` | CR-112 | Cost eligibility, no free→paid fallback, pause to paste | planned Story 7.1 | draft |
 | `FR-317` / `AC-414` | CR-112 | Cost telemetry; unknown is not zero | planned Story 7.2 | draft |
 | `FR-318` / `AC-415` | CR-112 | CONVERT-READY floors on Stage 2/3 completion | `scripts/contracts.py`, `scripts/workflow/runner.py`, `scripts/check_submission_status.py`, `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`, `scripts/test_check_submission_status.py`; design `CR-112-completion-contract-quality-floor-defect.md` | draft |
-| `SEC-006` | CR-112 | Privacy-safe practice identity; no silent placeholder | design `CR-112-practice-identity-portability-defect.md` | draft |
+| `SEC-006` / `AC-416` | CR-112 | Privacy-safe practice identity; no silent placeholder | `scripts/utils.py`, `scripts/author_from_packet.py`, `scripts/quality_checker.py`, `scripts/workflow/runner.py`, `scripts/test_practice_identity.py`; design `CR-112-practice-identity-portability-defect.md` | in_progress |
 | `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | design Epic 7 | draft |
 
 

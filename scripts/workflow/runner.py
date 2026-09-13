@@ -513,6 +513,22 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
     if not ok:
         raise WorkflowError("Stage 0 outputs stale:\n  - " + "\n  - ".join(errs))
 
+    from utils import IdentityError, resolve_identity
+
+    try:
+        _profile, identity_source = resolve_identity()
+    except IdentityError as exc:
+        raise WorkflowError(
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            "(identity_source=missing)"
+        ) from exc
+    state = dict(state)
+    meta = dict(state.get("metadata") or {})
+    meta["identity_source"] = identity_source
+    state["metadata"] = meta
+
     packet = build_packet(Path(folder), no_hook=no_hook)
     packet_path = os.path.join(folder, "authoring_packet.json")
     with open(packet_path, "w", encoding="utf-8") as f:
@@ -634,6 +650,16 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     prior_id = r0.get("receipt_id")
 
     verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+    from utils import IdentityError, resolve_identity
+
+    try:
+        _profile, identity_source = resolve_identity()
+    except IdentityError:
+        identity_source = "missing"
+    state = dict(state)
+    meta = dict(state.get("metadata") or {})
+    meta["identity_source"] = identity_source
+    state["metadata"] = meta
     # CR-097 Story 1.3: record inside run_verify_only so a failing attempt is
     # persisted before this runner raises WorkflowError.
     if not verify_ok:

@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
-"""HM critical-read disposition contract tests (CR-112 Story 8.3).
+"""HM critical-read disposition contract tests (CR-112 Story 8.3 + 8.3.1).
 
 Tests that hm.critical_read requires a structured review artifact with
 document hashes, reviewer role enum, per-document observations grounded
 in verifiable document spans, and ISO-8601 timestamps. The contract
 prevents silent self-certification with filler strings, bare labels,
 no-op edits, fabricated locations, or automated human-acceptance.
+
+Story 8.3.1 (2026-09-16): RESOLVED_EDIT's edit proof derives from the
+Stage 1 COMPLETE receipt's prior_output_hashes — committed workflow
+state minted only by workflow/receipts.py — not from reviewer-supplied
+hashes. Reviewer-supplied prior_document_hashes in the payload are
+display-only and untrusted. The adversarial controls below attempt the
+bypasses a self-reported prior hash enabled (invented prior hashes,
+unrelated edits, reordered metadata, copied reviews, stale receipts,
+duplicate receipts, role relabeling) and prove each is blocked by the
+HM edit-proof invariant, not by an unrelated missing artifact.
 
 Implements FR-319 / AC-417.
 
@@ -17,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -35,6 +46,7 @@ from workflow.receipts import (  # noqa: E402
     ISSUED_BY,
     build_receipt,
     commit_stage,
+    file_hash_map,
     load_receipt,
     write_receipt,
     write_state,
@@ -202,6 +214,87 @@ class HMContractTestBase(unittest.TestCase):
         ):
             return run_stage2_hm(str(self.folder), load_state(str(self.folder)))
 
+    def _edit_and_revalidate(self, doc: str = "Resume.md", new_content=None) -> None:
+        """Edit a document, then re-run the canonical Stage 1 validate → Truth → ATS chain.
+
+        CR-112 Story 8.3.1: this is the ONLY way RESOLVED_EDIT gains committed
+        pre-edit hashes — the re-validation writes a new Stage 1 COMPLETE receipt
+        whose prior_output_hashes are the pre-edit hashes preserved from the
+        previous COMPLETE receipt. The appended suffix keeps every existing
+        quotable span intact so review observations stay verifiable.
+        """
+        from workflow.runner import run_stage1_validate, run_stage2_ats, run_stage2_truth
+
+        if new_content is None:
+            append = "\n\nAdditional revised statement positioning this role's delivery experience.\n"
+            cur = (self.folder / doc).read_text(encoding="utf-8")
+            new_content = cur + append
+        _write(self.folder, doc, new_content)
+        with mock.patch("workflow.runner.run_verify_only", return_value=True):
+            run_stage1_validate(str(self.folder), load_state(str(self.folder)))
+        with mock.patch(
+            "workflow.runner.check_claim_provenance", return_value=(True, [])
+        ):
+            with mock.patch(
+                "workflow.runner.check_ground_truth_folder",
+                return_value={
+                    "submission": "acme",
+                    "clean": True,
+                    "jd_relevant_claims_possibly_unused": [],
+                    "jd_relevant_but_unverified_claims": [],
+                },
+            ):
+                run_stage2_truth(str(self.folder), load_state(str(self.folder)))
+        with mock.patch(
+            "workflow.runner.check_jd_term_folder",
+            return_value={
+                "submission": "acme",
+                "missing_from_resume": [],
+                "cover_letter_only_mentions": [],
+            },
+        ):
+            run_stage2_ats(str(self.folder), load_state(str(self.folder)))
+
+    def _revalidate_no_edit(self) -> None:
+        """Re-run Stage 1 validate → Truth → ATS without changing any document.
+
+        Used by no-op controls: the new Stage 1 receipt preserves the previous
+        output_hashes as prior_output_hashes even when nothing changed, so the
+        receipt-derived edit proof correctly reports "no change".
+        """
+        from workflow.runner import run_stage1_validate, run_stage2_ats, run_stage2_truth
+
+        with mock.patch("workflow.runner.run_verify_only", return_value=True):
+            run_stage1_validate(str(self.folder), load_state(str(self.folder)))
+        with mock.patch(
+            "workflow.runner.check_claim_provenance", return_value=(True, [])
+        ):
+            with mock.patch(
+                "workflow.runner.check_ground_truth_folder",
+                return_value={
+                    "submission": "acme",
+                    "clean": True,
+                    "jd_relevant_claims_possibly_unused": [],
+                    "jd_relevant_but_unverified_claims": [],
+                },
+            ):
+                run_stage2_truth(str(self.folder), load_state(str(self.folder)))
+        with mock.patch(
+            "workflow.runner.check_jd_term_folder",
+            return_value={
+                "submission": "acme",
+                "missing_from_resume": [],
+                "cover_letter_only_mentions": [],
+            },
+        ):
+            run_stage2_ats(str(self.folder), load_state(str(self.folder)))
+
+    def _replace_stage1_receipt(self, receipt: dict) -> None:
+        """Overwrite stage_receipts/stage1.json with an arbitrary receipt (adversarial use)."""
+        rec_dir = self.folder / "stage_receipts"
+        rec_dir.mkdir(exist_ok=True)
+        (rec_dir / "stage1.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+
     def _valid_structured_review(self) -> dict:
         """Build a valid structured HM review artifact with verifiable spans."""
         resume_hash = _sha256_file(self.folder / "Resume.md")
@@ -249,15 +342,21 @@ class HMContractTestBase(unittest.TestCase):
         }
 
     def _valid_resolved_edit_review(self) -> dict:
-        """Build a valid RESOLVED_EDIT review with prior_document_hashes showing a real edit."""
+        """Build a valid RESOLVED_EDIT review.
+
+        CR-112 Story 8.3.1: prior_document_hashes in the payload are
+        display-only and UNTRUSTED — the validator derives the edit proof
+        from the Stage 1 receipt's prior_output_hashes instead. The payload
+        fields are kept here to prove they neither help nor hurt: a fabricated
+        prior hash must NOT clear the finding on its own.
+        """
         review = self._valid_structured_review()
         review["disposition"] = "RESOLVED_EDIT"
-        review["reasoning"] = "Edited Resume.md summary to 3 sentences and re-reviewed the documents."
+        review["reasoning"] = "Edited Resume.md summary and re-reviewed the documents after re-validation."
         review["hm_review"]["verdict"] = "pass"
-        # Simulate a prior version of Resume.md (different hash)
-        prior_resume = hashlib.sha256(b"# Jane Doe\nold content\n").hexdigest()
+        # Display-only prior: the validator ignores these for the edit proof.
         review["hm_review"]["prior_document_hashes"] = {
-            "Resume.md": prior_resume,
+            "Resume.md": hashlib.sha256(b"# Jane Doe\nold content\n").hexdigest(),
             "CoverLetter.md": _sha256_file(self.folder / "CoverLetter.md"),
             "Original_JD.txt": _sha256_file(self.folder / "Original_JD.txt"),
         }
@@ -360,9 +459,12 @@ class TestValidStructuredReviewClears(HMContractTestBase):
         self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "COMPLETE")
 
     def test_valid_resolved_edit_with_review_clears(self):
-        """RESOLVED_EDIT with prior_document_hashes proving an edit clears hm.critical_read."""
+        """RESOLVED_EDIT with a committed receipt prior proving the edit clears hm.critical_read."""
         self._reach_ats_complete()
         self._run_hm_get_disposition()
+        # The canonical fix loop: edit the implicated document, re-validate so
+        # the Stage 1 receipt records prior_output_hashes, then dispose.
+        self._edit_and_revalidate("Resume.md")
         review = self._valid_resolved_edit_review()
         state = self._dispose_and_rerun_hm("hm.critical_read", review)
         self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "COMPLETE")
@@ -560,20 +662,20 @@ class TestTimestampValidation(HMContractTestBase):
 # ===========================================================================
 
 class TestResolvedEditProof(HMContractTestBase):
+    """CR-112 Story 8.3.1: RESOLVED_EDIT edit proof comes from the Stage 1 receipt."""
 
-    def test_noop_resolved_edit_with_identical_hashes_fails(self):
-        """RESOLVED_EDIT where prior_document_hashes match current hashes must not clear."""
+    def test_noop_resolved_edit_with_unchanged_documents_fails(self):
+        """RESOLVED_EDIT where committed prior == current (no real change) must not clear."""
         self._reach_ats_complete()
         self._run_hm_get_disposition()
+        # Re-validate without editing: the receipt honestly records prior == current.
+        self._revalidate_no_edit()
         review = self._valid_resolved_edit_review()
-        # Set prior hashes to current hashes (no-op edit)
-        review["hm_review"]["prior_document_hashes"]["Resume.md"] = \
-            review["hm_review"]["reviewed_document_hashes"]["Resume.md"]
         state = self._dispose_and_rerun_hm("hm.critical_read", review)
         self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
 
-    def test_resolved_edit_without_prior_hashes_fails(self):
-        """RESOLVED_EDIT without prior_document_hashes must not clear."""
+    def test_resolved_edit_without_committed_prior_fails(self):
+        """RESOLVED_EDIT on a first-validation receipt (no prior_output_hashes) must not clear."""
         self._reach_ats_complete()
         self._run_hm_get_disposition()
         review = self._valid_resolved_edit_review()
@@ -585,30 +687,165 @@ class TestResolvedEditProof(HMContractTestBase):
         """RESOLVED_EDIT without resolution_summary must not clear."""
         self._reach_ats_complete()
         self._run_hm_get_disposition()
+        self._edit_and_revalidate("Resume.md")
         review = self._valid_resolved_edit_review()
         del review["hm_review"]["resolution_summary"]
         state = self._dispose_and_rerun_hm("hm.critical_read", review)
         self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
 
     def test_resolved_edit_with_changed_resume_clears(self):
-        """RESOLVED_EDIT with a changed Resume.md hash clears (positive control)."""
+        """RESOLVED_EDIT with a real Resume.md edit (committed prior) clears (positive control)."""
         self._reach_ats_complete()
         self._run_hm_get_disposition()
+        self._edit_and_revalidate("Resume.md")
         review = self._valid_resolved_edit_review()
-        # prior_document_hashes already has a different Resume.md hash
         state = self._dispose_and_rerun_hm("hm.critical_read", review)
         self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "COMPLETE")
 
     def test_resolved_edit_with_changed_cover_letter_clears(self):
-        """RESOLVED_EDIT with a changed CoverLetter.md hash clears (positive control)."""
+        """RESOLVED_EDIT with a real CoverLetter.md edit (committed prior) clears (positive control)."""
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        self._edit_and_revalidate("CoverLetter.md")
+        review = self._valid_resolved_edit_review()
+        state = self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "COMPLETE")
+
+
+# ===========================================================================
+# CR-112 Story 8.3.1: adversarial controls — receipt-derived edit proof
+# ===========================================================================
+
+class TestResolvedEditAdversarial(HMContractTestBase):
+    """Bypass attempts against the receipt-derived edit proof must fail closed.
+
+    Each test names the bypass, shows it is blocked, and (where the negative
+    control is meaningful) shows that providing the legitimate committed
+    history — with the SAME fabricated payload — clears, proving the receipt,
+    not the payload, is the deciding factor.
+    """
+
+    def test_invented_prior_document_hashes_do_not_clear(self):
+        """Fabricated prior hashes in the payload cannot clear without committed history."""
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        # No re-validation happened: the Stage 1 receipt has no prior_output_hashes.
+        review = self._valid_resolved_edit_review()  # payload claims a change it never made
+        state = self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
+        # Negative control: mint the committed history, reuse the same fabricated
+        # payload prior, and the disposition clears — the receipt was the blocker.
+        self._edit_and_revalidate("Resume.md")
+        review2 = self._valid_resolved_edit_review()  # fresh hashes, same fabricated prior shape
+        state = self._dispose_and_rerun_hm("hm.critical_read", review2)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "COMPLETE")
+
+    def test_unrelated_document_edit_does_not_clear(self):
+        """A change to a non-implicated file cannot satisfy RESOLVED_EDIT."""
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        # Only claim_provenance.json changes — Resume.md and CoverLetter.md are untouched.
+        self._edit_and_revalidate(
+            "claim_provenance.json",
+            new_content={
+                "company": "Acme",
+                "resume_claims": [{"bullet": "x", "claim_ids": ["ACC-101", "MET-01"]}],
+                "cover_letter_claims": [{"proof_point": "y", "claim_ids": ["ACC-101"]}],
+            },
+        )
+        review = self._valid_resolved_edit_review()
+        state = self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
+
+    def test_reorders_receipt_hashes_without_recomputing_id_does_not_clear(self):
+        """Hand-editing receipt hashes without recomputing receipt_id fails at anti-forgery.
+
+        The agent rewrites the edit-proof metadata (copies the current
+        output_hashes over the prior slot so prior == current) without
+        recomputing the canonical receipt_id. The body no longer matches the
+        id, so the validator fails closed on a forged receipt — before the
+        freshness gate even needs to decide whether the edit was real.
+        """
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        self._edit_and_revalidate("Resume.md")
+        receipt = load_receipt(str(self.folder), "stage1")
+        # output_hashes stay intact (== disk) so the runner's freshness gate
+        # still passes; only the prior slot is rewritten, changing the body.
+        receipt["prior_output_hashes"] = dict(receipt["output_hashes"])
+        self._replace_stage1_receipt(receipt)
+        review = self._valid_resolved_edit_review()
+        state = self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
+
+    def test_restored_pre_edit_receipt_does_not_clear(self):
+        """Duplicating the pre-edit receipt back into place fails the freshness chain."""
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        pre_edit_receipt = load_receipt(str(self.folder), "stage1")
+        self._edit_and_revalidate("Resume.md")
+        # Agent overwrites the committed post-edit receipt with the old one.
+        self._replace_stage1_receipt(pre_edit_receipt)
+        review = self._valid_resolved_edit_review()
+        with self.assertRaises(WorkflowError) as ctx:
+            self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertIn("Stage 1 outputs stale", str(ctx.exception))
+
+    def test_missing_receipt_fails_closed(self):
+        """Deleting the Stage 1 receipt blocks RESOLVED_EDIT at the freshness chain."""
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        self._edit_and_revalidate("Resume.md")
+        (self.folder / "stage_receipts" / "stage1.json").unlink()
+        review = self._valid_resolved_edit_review()
+        with self.assertRaises(WorkflowError) as ctx:
+            self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertIn("Stage 1 receipt missing", str(ctx.exception))
+
+    def test_no_edit_with_honest_receipt_and_fabricated_payload_fails(self):
+        """An honest receipt recording no change defeats a payload claiming a change."""
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        self._revalidate_no_edit()  # committed prior == current
+        review = self._valid_resolved_edit_review()  # payload fabricates a different prior
+        state = self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
+        # Negative control: the legitimate committed change (same payload shape) clears.
+        self._edit_and_revalidate("Resume.md")
+        review2 = self._valid_resolved_edit_review()
+        state = self._dispose_and_rerun_hm("hm.critical_read", review2)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "COMPLETE")
+
+    def test_relabeled_role_cannot_unlock_proof_free_resolved_edit(self):
+        """Declaring reviewer_role=human_reviewer does not waive the edit proof."""
         self._reach_ats_complete()
         self._run_hm_get_disposition()
         review = self._valid_resolved_edit_review()
-        # Set prior Resume.md to current (unchanged), but change CoverLetter.md
-        review["hm_review"]["prior_document_hashes"]["Resume.md"] = \
-            review["hm_review"]["reviewed_document_hashes"]["Resume.md"]
-        review["hm_review"]["prior_document_hashes"]["CoverLetter.md"] = \
-            hashlib.sha256(b"# Jane Doe\nold letter\n").hexdigest()
+        review["hm_review"]["reviewer_role"] = "human_reviewer"
+        state = self._dispose_and_rerun_hm("hm.critical_read", review)
+        self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
+
+    def test_multi_edit_carries_original_prior_forward(self):
+        """A second edit preserves the ORIGINAL prior (v1), not the intermediate (v2)."""
+        self._reach_ats_complete()
+        self._run_hm_get_disposition()
+        self._edit_and_revalidate("Resume.md")          # v1 -> v2, prior records v1
+        first_prior = load_receipt(str(self.folder), "stage1")["prior_output_hashes"]
+        self._edit_and_revalidate("Resume.md")          # v2 -> v3: prior must still be v1
+        r1 = load_receipt(str(self.folder), "stage1")
+        self.assertIn("prior_output_hashes", r1)
+        self.assertEqual(
+            r1["prior_output_hashes"]["Resume.md"],
+            first_prior["Resume.md"],
+            "the ORIGINAL pre-edit base must survive re-validation chains",
+        )
+        self.assertNotEqual(
+            r1["prior_output_hashes"]["Resume.md"],
+            r1["output_hashes"]["Resume.md"],
+            "prior and current must still differ after the second edit",
+        )
+        # The carried-forward original prior still proves a real change: v3 != v1.
+        review = self._valid_resolved_edit_review()
         state = self._dispose_and_rerun_hm("hm.critical_read", review)
         self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "COMPLETE")
 
@@ -638,9 +875,10 @@ class TestReviewerRoleValidation(HMContractTestBase):
         self.assertEqual(state["stages"]["stage2"]["subphases"]["hm"]["status"], "NEEDS_DISPOSITION")
 
     def test_author_can_resolve_edit(self):
-        """An author role may use RESOLVED_EDIT (they made the edit)."""
+        """An author role may use RESOLVED_EDIT (they made the edit) once it is receipt-proven."""
         self._reach_ats_complete()
         self._run_hm_get_disposition()
+        self._edit_and_revalidate("Resume.md")
         review = self._valid_resolved_edit_review()
         review["hm_review"]["reviewer_role"] = "author"
         state = self._dispose_and_rerun_hm("hm.critical_read", review)
@@ -921,17 +1159,34 @@ class TestValidateHMReviewUnit(unittest.TestCase):
         self.assertTrue(any("reviewer_role" in e for e in errors))
 
     def test_noop_resolved_edit_fails(self):
+        """RESOLVED_EDIT where committed prior == current (no real change) fails closed."""
         from hm_review_contract import validate_hm_review
+        from workflow.receipts import build_receipt, file_hash_map, write_receipt
+
+        # Mint a Stage 1 COMPLETE receipt whose prior_output_hashes equal the
+        # current on-disk hashes — the honest record of a re-validation with
+        # no edit. The validator must report the no-op, not clear it.
+        receipt = build_receipt(
+            stage="stage1",
+            status="COMPLETE",
+            mode="production",
+            input_hashes={},
+            output_hashes=file_hash_map(
+                str(self.folder), ["Resume.md", "CoverLetter.md", "Original_JD.txt"]
+            ),
+            prior_output_hashes=file_hash_map(
+                str(self.folder), ["Resume.md", "CoverLetter.md"]
+            ),
+            prior_receipt_id="stage0:not-used-by-this-unit",
+        )
+        write_receipt(str(self.folder), receipt)
         review = self._valid_review()
         review["disposition"] = "RESOLVED_EDIT"
         review["reasoning"] = "Edited Resume.md summary to 3 sentences."
-        review["hm_review"]["prior_document_hashes"] = dict(
-            review["hm_review"]["reviewed_document_hashes"]
-        )
         review["hm_review"]["resolution_summary"] = "Fixed the summary to 3 sentences."
         ok, errors = validate_hm_review(str(self.folder), review)
         self.assertFalse(ok)
-        self.assertTrue(any("no-op" in e for e in errors))
+        self.assertTrue(any("no-op" in e for e in errors), errors)
 
 
 if __name__ == "__main__":

@@ -746,6 +746,21 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     if os.path.exists(os.path.join(folder, "claim_provenance.json")):
         out_files.append("claim_provenance.json")
 
+    # CR-112 Story 8.3.1: preserve the authoritative pre-edit state on the
+    # Stage 1 COMPLETE receipt. If this is a re-validation (Stage 1 was already
+    # COMPLETE), the previous COMPLETE receipt's output_hashes become
+    # prior_output_hashes on the new receipt, so a later RESOLVED_EDIT can
+    # prove an implicated document actually changed since the HM finding —
+    # sourced from committed workflow state, never from a reviewer-supplied
+    # payload. First-validation folders (previous receipt is WAITING_FOR_LLM)
+    # keep the field absent: there is no pre-edit state to cite. Once set, the
+    # original prior is carried forward so multi-edit sequences never lose the
+    # base against which "changed" is judged.
+    prev_s1 = load_receipt(folder, "stage1")
+    prior_output_hashes = None
+    if prev_s1 and prev_s1.get("status") == "COMPLETE":
+        prior_output_hashes = prev_s1.get("prior_output_hashes") or prev_s1.get("output_hashes")
+
     _duration = round(time.time() - _t0, 3)
     _attempt_count = _verify_attempt_count(folder)
     receipt = build_receipt(
@@ -757,6 +772,7 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             ["stage0_fit_gate.json", "authoring_packet.json", "authoring_prompt.md"],
         ),
         output_hashes=file_hash_map(folder, out_files),
+        prior_output_hashes=prior_output_hashes,
         result={"verify_only": True, "duration_seconds": _duration, "verify_attempts": _attempt_count},
         checks={
             "contracts.check_stage1_ready": True,
@@ -1178,7 +1194,12 @@ def _apply_subphase_verdict(
             disp_value = by_id.get(fid)
             disp_s, _ = parse_disposition(disp_value)
             if disp_s in HM_REVIEW_DISPOSITIONS:
-                ok, errs = validate_hm_review(folder, disp_value)
+                # CR-112 Story 8.3.1: bind the finding's own implicated
+                # documents into evidence validation so RESOLVED_EDIT must
+                # prove a change to a document the finding actually covers.
+                ok, errs = validate_hm_review(
+                    folder, disp_value, implicated_documents=item.get("implicated_documents")
+                )
                 if not ok:
                     hm_errors.extend(errs)
         if hm_errors:
@@ -1254,6 +1275,11 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
             )
 
     # Explicit critical-read gate: Jason confirms a hiring-manager read happened.
+    # CR-112 Story 8.3.1: implicated_documents names the files covered by the
+    # read (Resume.md + CoverLetter.md). It is stamped here from code, not
+    # supplied by the reviewer, and binds evidence validation so a RESOLVED_EDIT
+    # on the finding must prove a change to one of *these* documents — an
+    # unrelated file edit cannot clear the gate.
     findings.append(
         {
             "id": "hm.critical_read",
@@ -1264,6 +1290,7 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
                 "(conversion_rubric C1–C5 / qualitative Pass 3). "
                 "Dispose ACCEPTED_AS_CORRECT when done."
             ),
+            "implicated_documents": [doc if os.path.exists(os.path.join(folder, doc)) else f"{doc} (missing)" for doc in ("Resume.md", "CoverLetter.md")],
         }
     )
 

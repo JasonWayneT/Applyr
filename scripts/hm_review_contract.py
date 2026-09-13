@@ -1,4 +1,4 @@
-"""HM critical-read review artifact validation (CR-112 Story 8.3).
+"""HM critical-read review artifact validation (CR-112 Story 8.3 + 8.3.1).
 
 Validates that a disposition for hm.critical_read includes a structured
 review artifact demonstrating specific engagement with both documents
@@ -6,11 +6,17 @@ and the JD. This is a substance gate, not a character-count gate —
 the structured observations (document span, finding, jd span per
 document) are the primary proof, with minimum lengths as a backstop.
 
-Implements FR-319 / AC-417.
+Implements FR-319 / AC-417. Story 8.3.1 (2026-09-16): RESOLVED_EDIT's
+edit proof derives from committed workflow state (the Stage 1 COMPLETE
+receipt's prior_output_hashes), not from reviewer-supplied hashes —
+a self-reported prior hash proves nothing, because an agent can invent
+one. Receipts are minted only by workflow/receipts.py via run_submission,
+so a receipt-derived prior is an authoritative, non-narration source.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from datetime import datetime, timezone, timedelta
 from typing import Any
@@ -109,15 +115,182 @@ def _validate_timestamp(timestamp: str) -> str | None:
     return None
 
 
-def validate_hm_review(folder: str, disposition_value: Any) -> tuple[bool, list[str]]:
+IMPLICATED_DOCS_DEFAULT = ("Resume.md", "CoverLetter.md")
+
+
+def _normalize_implicated_documents(value: Any) -> tuple[str, ...] | None:
+    """Return a tuple of implicated document names, or None if the value is unusable."""
+    if value is None:
+        return IMPLICATED_DOCS_DEFAULT
+    if isinstance(value, list) and value:
+        norm = [str(v).strip() for v in value if isinstance(v, str) and v.strip()]
+        if norm:
+            return tuple(norm)
+    return None
+
+
+def _read_stage1_receipt(folder: str) -> dict[str, Any] | None:
+    """Read stage_receipts/stage1.json as a dict, or None if missing/unreadable."""
+    path = os.path.join(folder, "stage_receipts", "stage1.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _receipt_id_matches_body(receipt: dict[str, Any]) -> bool:
+    """Anti-forgery: recompute receipt_id from the canonical body.
+
+    Mirrors workflow.receipts.build_receipt and
+    contracts.check_workflow_complete (sort_keys, compact separators).
+    A handwritten or corrupted receipt whose receipt_id does not match its
+    body fails closed.
+    """
+    rid = receipt.get("receipt_id")
+    stage = receipt.get("stage")
+    if not isinstance(rid, str) or not isinstance(stage, str):
+        return False
+    body = {k: v for k, v in receipt.items() if k != "receipt_id"}
+    canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    expected = f"{stage}:{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+    return rid == expected
+
+
+def _validate_resolved_edit_edit_proof(
+    folder: str,
+    errors: list[str],
+    implicated_documents: Any,
+) -> None:
+    """Append errors proving an edit occurred, using receipt-derived prior hashes.
+
+    CR-112 Story 8.3.1: the edit proof comes from the Stage 1 COMPLETE
+    receipt's prior_output_hashes (workflow-minted committed state), never
+    from the reviewer payload. A self-reported prior hash proves nothing —
+    an agent can invent one. Fails closed on missing/stale/ambiguous/
+    contradictory history; only implicated documents count toward the change,
+    so an unrelated edit cannot clear the finding.
+    """
+    implicated = _normalize_implicated_documents(implicated_documents)
+    if implicated is None:
+        errors.append(
+            "hm.critical_read finding's implicated_documents is unusable — "
+            "RESOLVED_EDIT cannot prove which documents must have changed"
+        )
+        return
+
+    receipt = _read_stage1_receipt(folder)
+    if receipt is None:
+        errors.append(
+            "RESOLVED_EDIT cannot be validated: stage_receipts/stage1.json is "
+            "missing or unreadable — no authoritative pre-edit state exists. "
+            "Re-run run_submission so a Stage 1 COMPLETE receipt is present."
+        )
+        return
+
+    # Anti-forgery: only workflow-minted receipts carry a matching receipt_id.
+    if not _receipt_id_matches_body(receipt):
+        errors.append(
+            "stage_receipts/stage1.json receipt_id does not match its canonical "
+            "body — forged or corrupted receipt; RESOLVED_EDIT fails closed"
+        )
+        return
+    if receipt.get("issued_by") != "scripts/run_submission.py":
+        errors.append(
+            "stage_receipts/stage1.json was not issued by run_submission — "
+            "receipt not workflow-minted; RESOLVED_EDIT fails closed"
+        )
+        return
+    if receipt.get("status") != "COMPLETE":
+        errors.append(
+            f"stage_receipts/stage1.json status is {receipt.get('status')!r}, "
+            "expected COMPLETE; RESOLVED_EDIT fails closed on non-committed history"
+        )
+        return
+    if receipt.get("stage") != "stage1":
+        errors.append(
+            f"stage_receipts/stage1.json stage field is {receipt.get('stage')!r}, "
+            "expected stage1 — duplicated or misplaced receipt from another stage; "
+            "RESOLVED_EDIT fails closed"
+        )
+        return
+
+    prior = receipt.get("prior_output_hashes")
+    if not isinstance(prior, dict) or not prior:
+        errors.append(
+            "Stage 1 receipt has no prior_output_hashes — no committed pre-edit "
+            "state to prove a change against. This is expected on the first "
+            "validation; RESOLVED_EDIT requires a re-validation that preserved "
+            "the prior COMPLETE receipt's hashes."
+        )
+        return
+
+    # Receipt staleness: declared current output hashes must match disk, else
+    # the committed state is not authoritative at validation time.
+    output_hashes = receipt.get("output_hashes")
+    if isinstance(output_hashes, dict):
+        for rel, want in output_hashes.items():
+            if not isinstance(rel, str) or not isinstance(want, str):
+                continue
+            on_disk = _sha256_file(os.path.join(folder, rel))
+            if on_disk is None:
+                errors.append(
+                    f"stage_receipts/stage1.json output {rel} missing on disk — "
+                    "receipt history is stale; RESOLVED_EDIT fails closed"
+                )
+            elif on_disk != want:
+                errors.append(
+                    f"stage_receipts/stage1.json output {rel} no longer matches "
+                    "disk (hash mismatch) — receipt history is stale; "
+                    "RESOLVED_EDIT fails closed"
+                )
+
+    # Edit proof: at least one implicated document must differ prior -> disk now.
+    changed = False
+    for doc in implicated:
+        prior_hash = prior.get(doc)
+        if not isinstance(prior_hash, str) or len(prior_hash) != 64:
+            errors.append(
+                f"resolved-edit prior history for {doc} is missing or malformed "
+                "in stage_receipts/stage1.json — ambiguous history; "
+                "RESOLVED_EDIT fails closed"
+            )
+            continue
+        now_hash = _sha256_file(os.path.join(folder, doc))
+        if now_hash is None:
+            errors.append(f"{doc} missing on disk — cannot verify the edit")
+        elif now_hash != prior_hash:
+            changed = True
+
+    if not changed:
+        errors.append(
+            "RESOLVED_EDIT requires at least one implicated document "
+            f"({', '.join(implicated)}) to differ from the Stage 1 receipt's "
+            "prior_output_hashes — the committed pre-edit state shows no change, "
+            "so an edit cannot be proven. A no-op or unrelated edit is not a "
+            "resolution."
+        )
+
+
+def validate_hm_review(
+    folder: str,
+    disposition_value: Any,
+    implicated_documents: Any = None,
+) -> tuple[bool, list[str]]:
     """Validate an hm.critical_read disposition's structured review artifact.
 
     Args:
         folder: Path to the submission folder containing Resume.md,
-                CoverLetter.md, and Original_JD.txt.
+                CoverLetter.md, Original_JD.txt, and stage_receipts/.
         disposition_value: The disposition entry from dispositions.json
             by_finding_id["hm.critical_read"]. May be a bare string or
             a dict with "disposition", "reasoning", and "hm_review".
+        implicated_documents: Optional list of document names bound to the
+            finding (from the finding's own implicated_documents field).
+            Defaults to ("Resume.md", "CoverLetter.md"). RESOLVED_EDIT's
+            edit proof only counts a change to an implicated document, so
+            an unrelated file edit cannot clear the finding.
 
     Returns:
         (ok, errors) where ok is True if the review artifact is valid
@@ -344,37 +517,13 @@ def validate_hm_review(folder: str, disposition_value: Any) -> tuple[bool, list[
     if not isinstance(overall_reasoning, str) or not overall_reasoning.strip():
         errors.append("hm_review.overall_reasoning must be a non-empty string")
 
-    # --- RESOLVED_EDIT: must prove an edit occurred ---
+    # --- RESOLVED_EDIT: must prove an edit, from committed workflow state ---
     if disposition == "RESOLVED_EDIT":
-        prior_hashes = hm_review.get("prior_document_hashes")
-        if not isinstance(prior_hashes, dict):
-            errors.append(
-                "RESOLVED_EDIT requires hm_review.prior_document_hashes showing "
-                "the document hashes before the edit (at least Resume.md or "
-                "CoverLetter.md must differ from reviewed_document_hashes)"
-            )
-        else:
-            reviewed_hashes = hm_review.get("reviewed_document_hashes") or {}
-            changed = False
-            for doc_name in ("Resume.md", "CoverLetter.md"):
-                prior = prior_hashes.get(doc_name)
-                current = reviewed_hashes.get(doc_name)
-                if (isinstance(prior, str) and isinstance(current, str)
-                        and prior != current and len(prior) == 64):
-                    changed = True
-                elif prior is not None and prior == current:
-                    pass  # unchanged document — allowed
-                elif prior is not None and prior != current and len(prior) != 64:
-                    errors.append(
-                        f"hm_review.prior_document_hashes.{doc_name} "
-                        "must be a 64-char sha256 hex string"
-                    )
-            if not changed:
-                errors.append(
-                    "RESOLVED_EDIT requires at least one document (Resume.md or "
-                    "CoverLetter.md) to have changed from prior_document_hashes to "
-                    "reviewed_document_hashes — a no-op edit is not a resolution"
-                )
+        # CR-112 Story 8.3.1: reviewer-supplied prior_document_hashes are
+        # display-only and untrusted. The edit proof is the Stage 1 receipt's
+        # prior_output_hashes — workflow-minted, fresh, and bound to the
+        # finding's implicated documents.
+        _validate_resolved_edit_edit_proof(folder, errors, implicated_documents)
 
         # RESOLVED_EDIT must specifically confirm the original concern was resolved
         resolution_note = hm_review.get("resolution_summary")

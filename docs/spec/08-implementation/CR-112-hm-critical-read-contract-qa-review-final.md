@@ -7,11 +7,14 @@ branch: cr112-hm-critical-read-contract
 commit: 5f30f2d
 base: c254524
 scope: read-only code review of corrected HM critical-read disposition contract
+post_qa_correction: story 8.3.1 (2026-09-16) — this PASS predates the receipt-derived edit proof; see the addendum at the end
 ---
 
 # HM Critical-Read Disposition Substance Contract — Final QA Review
 
 ## VERDICT: PASS
+
+> **POST-QA CORRECTION (Story 8.3.1, 2026-09-16):** This PASS covered commit `5f30f2d` (amended as `507855b`). Jason subsequently rejected `507855b`: RESOLVED_EDIT's edit proof trusted the reviewer-supplied `prior_document_hashes`, and an agent can invent a prior hash with no edit having occurred. The gap was recorded in this review as non-blocking observation #3 ("self-reported... A reviewer who didn't edit anything could fabricate a prior hash... deliberate tradeoff") and is now confirmed **material**. Story 8.3.1 replaced the self-reported prior with an authoritative, receipt-derived `prior_output_hashes` on the Stage 1 COMPLETE receipt (minted by `workflow/receipts.py` only), bound to the finding's code-stamped `implicated_documents`, with anti-forgery `receipt_id` verification. A fresh bypass-focused QA pass over the 8.3.1 changes is tracked separately; that follow-up is required before this correction is considered closed. See `CR-112-hm-critical-read-contract-design.md` → "Story 8.3.1 — Authoritative Edit Proof".
 
 ## Summary
 
@@ -64,7 +67,7 @@ None.
 
 2. **Timestamp has no lower bound.** A reviewer could set a timestamp from 1999. The timestamp records when the review happened, not proving when it happened. This is consistent with the design doc's declarative-identity principle.
 
-3. **`prior_document_hashes` are self-reported.** The on-disk hash verification proves freshness of `reviewed_document_hashes` but cannot verify that `prior_document_hashes` actually represent a real prior state. A reviewer who didn't edit anything could fabricate a prior hash. The design doc explicitly acknowledges this limitation (section "What This Contract Does Not Prove" item 6). This is a deliberate tradeoff, not a gap.
+3. **`prior_document_hashes` are self-reported.** The on-disk hash verification proves freshness of `reviewed_document_hashes` but cannot verify that `prior_document_hashes` actually represent a real prior state. A reviewer who didn't edit anything could fabricate a prior hash. The design doc explicitly acknowledges this limitation (section "What This Contract Does Not Prove" item 6). This is a deliberate tradeoff, not a gap. **SUPERSEDED by Story 8.3.1:** Jason confirmed this is a material bypass; `prior_document_hashes` are now display-only and RESOLVED_EDIT's edit proof is derived from the receipt-minted `prior_output_hashes` (see the POST-QA CORRECTION note above).
 
 4. **Redundant HUMAN_ACCEPTED_RISK role check.** The role-disposition matrix already prevents non-human_reviewer roles from using HUMAN_ACCEPTED_RISK. The additional explicit check at `hm_review_contract.py:165-170` provides a clearer error message. Belt-and-suspenders, not a bug.
 

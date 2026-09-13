@@ -64,11 +64,19 @@ def build_receipt(
     result: dict[str, Any] | None = None,
     checks: dict[str, Any] | None = None,
     prior_receipt_id: str | None = None,
+    prior_output_hashes: Mapping[str, str] | None = None,
     integrity: str = "CLEAN",
     override: dict[str, Any] | None = None,
     issued_at: str | None = None,
 ) -> dict[str, Any]:
-    """Build a receipt dict (does not write). receipt_id = sha256 of canonical body."""
+    """Build a receipt dict (does not write). receipt_id = sha256 of canonical body.
+
+    prior_output_hashes (CR-112 Story 8.3.1): authoritative pre-edit document
+    hashes preserved from a previous COMPLETE receipt when a stage is re-validated.
+    Stored conditionally — when None the field is absent entirely, so receipts
+    built before this story remain byte-identical and receipt_id consumers
+    (contracts.check_workflow_complete, workflow.invalidate) need no changes.
+    """
     body = {
         "stage": stage,
         "status": status,
@@ -83,6 +91,8 @@ def build_receipt(
         "checks": checks or {},
         "override": override,
     }
+    if prior_output_hashes is not None:
+        body["prior_output_hashes"] = dict(prior_output_hashes)
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     receipt_id = f"{stage}:{sha256_hex_bytes(canonical.encode('utf-8'))}"
     out = dict(body)

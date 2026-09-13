@@ -4,9 +4,13 @@ created: 2026-09-12
 from: Cursor (Grok 4.6)
 candidate: cr112-integrated-validation-candidate
 result: CAMUNDA_FOLLOWUP_FLOOR_LANDED_PENDING_QA
+next_session: ./SESSION-HANDOFF-2026-09-13-cr112-next-session.md
 ---
 
 # Session handoff — CR-112 Camunda follow-up (Cursor)
+
+**Next session starts from**
+`SESSION-HANDOFF-2026-09-13-cr112-next-session.md`, not this file.
 
 Claude finished the Camunda product-proof. This session reconstructed
 that work, independently reviewed the two isolated commits, proved why

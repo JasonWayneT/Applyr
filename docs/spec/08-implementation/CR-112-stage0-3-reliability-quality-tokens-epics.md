@@ -475,9 +475,7 @@ mint Stage 2 COMPLETE, practice `PRACTICE_COMPLETE`, or status DONE.
 `--force` cannot skip the floor helper. No HAR / exception path in this
 story. Do not lower 70/65.
 
-**Status:** [ ] Implemented on the candidate. Independent QA
-[Review](b782f4e4-bf82-4dec-a31e-e82c43d04f30) ACCEPT WITH CHANGES;
-required tests added after. Do not self-mark PASS. Do not mark CR-112 complete.
+**Status:** [x] QA PASS ([Review](3cd059c0-ba53-42b7-b66a-a6677a310de5)) 2026-09-13 follow-up after 0aaab87 negative controls. Prior review [b782f4e4](b782f4e4-bf82-4dec-a31e-e82c43d04f30) ACCEPT WITH CHANGES; required tests added in `0aaab87`; this follow-up is unqualified PASS. Do not mark CR-112 complete.
 
 ### Story 8.2 — Privacy-safe practice identity (design only)
 

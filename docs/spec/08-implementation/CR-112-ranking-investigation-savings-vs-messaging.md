@@ -1,9 +1,12 @@
 ---
-status: investigation_only
+status: reviewed_no_implement
 created: 2026-09-13
 from: Cursor (Grok 4.6)
 candidate: cr112-integrated-validation-candidate
 head: baec191
+design_review: 0562aa4a-a797-4c15-8663-02c2f2819fb7
+verdict: ACCEPT WITH CHANGES
+implement_this_pass: no
 do_not: implement ranking formula in this document
 ---
 
@@ -152,3 +155,20 @@ if accepted after review:
 
 No code in this story. No packet rebuild. Camunda historical packet
 stays as the positive defect candidate.
+
+## Independent design review (2026-09-13)
+
+**Reviewer:** [Review](0562aa4a-a797-4c15-8663-02c2f2819fb7)
+**Verdict: ACCEPT WITH CHANGES. Do not implement this pass.**
+
+Root cause stands. Capping or dropping `jd_score` is necessary but not
+proven sufficient: even at `jd_score = 0`, SAVINGS can still hold two
+overlap tokens (`systems`, `optimization`) against one each for
+RabbitMQ/Kafka. Pearl/SupplyHouse rows test the REPLACE comparator, not
+`_score_claims_for_item`. Cost-reduction and ARR rows have no executable
+fixtures. Near-tie has no mechanical delta.
+
+Before a formula story: prove Camunda flips under the live rarity
+weights; encode cost-reduction and ARR as asserts against
+`_score_claims_for_item`; keep REPLACE rows labeled as a different gate.
+

@@ -117,3 +117,19 @@ Post-addition digest size: 9788 / 10000 (212 chars headroom remaining).
 
 Detector severity. Ranking formula. CR-097 ledger promote. Example-bank
 edits. Regenerating live packets. Camunda re-author.
+
+## JD 2 efficacy (Vanta) and follow-up review
+
+Vanta first draft still produced 13 `LW-009-PAIR` windows (about five
+restatement events). The locked `baec191` sentence was in the actual
+authoring prompt. Detector caught them. Letter-only recovery reduced
+them to 0.
+
+**Follow-up design review:** [Review](8b6fe4c0-479a-4ea9-bbd1-3d84be8d488b)
+**Verdict: ACCEPT. No further digest paragraph this pass.**
+
+Product control is detector plus Stage 1 FAIL plus bounded letter
+recovery, not first-draft compliance. Optional later: one compact
+positive/negative example next to §5 only if a mechanism beyond
+rewording is identified.
+

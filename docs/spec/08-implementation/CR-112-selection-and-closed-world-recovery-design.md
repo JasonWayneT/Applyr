@@ -7,7 +7,7 @@ from: Cursor (Grok 4.6)
 related: CR-112 Epic 3 Stories 3.1/3.2/3.3, FR-254, FR-302 (superseded), FR-312–FR-317, NFR-015
 investigation: ./INVESTIGATION-2026-09-10-stage0-3-reliability-quality-tokens.md
 evidence_date: 2026-09-10 seven-folder closed-world scan
-implementation: Story 3.0 QA PASS. Story 3.1 detection QA PASS. Story 3.5 QA PASS. Story 3.6 QA PASS. 7.x waits on Epic 3 integration review. No live-folder rewrite.
+implementation: Story 3.0 QA PASS. Story 3.1 detection QA PASS. Story 3.5 QA PASS. Story 3.6 QA PASS. Epic 3 integration PASS. Stories 7.1/7.2 QA PASS. No live-folder rewrite.
 ---
 
 # CR-112 design — selection defects vs closed-world authoring defects
@@ -315,28 +315,33 @@ only `run_cr112_eval.py`.
 
 Each provider name in config must have an explicit `cost_class`:
 
-- `offline` — local / no network model call
-- `free_zero_dollar` — user-declared hard $0. Provider name alone is not
-  enough (Gemini/Groq projects can bill)
-- `paid` — allowed only when the user has configured that provider **and**
-  a remaining budget
+- `offline` — local / no billed network model call
+- `manual_paste` — do not call; keep `authoring_prompt.md` paste
+- `free_only` — adapter asserts the configured call cannot incur a charge.
+  Provider name and advertised free tier are not enough. Groq/Gemini
+  projects can bill.
+- `paid_with_budget` — allowed only when the user has configured that
+  provider, a remaining run/batch budget, and a known cost estimate
 - `unknown` — default when class is missing or cannot be proven
 
 `unknown` is not callable. Fail closed. Do not treat unknown as free.
 Do not record unknown as `api_cents: 0`. When `cost_known` is false,
 omit `api_cents` or store `null`. Groq and Gemini stay `unknown` until
-Jason records a real zero-dollar declaration in settings. A declaration
-is a user assertion, not an invoice proof that billing is disabled.
+an adapter can assert no charge under the current account configuration.
+A user declaration without that assertion still classifies as unknown.
 
 ### Runtime rules
 
 1. Deterministic/offline behavior is the default path (packet build,
    comparator, verify, lint).
-2. Free-tier API may run only when `cost_class=free_zero_dollar`.
-3. Paid API requires opt-in provider allowlist plus budget. Budget 0 or
-   unset → paid providers are not eligible.
-4. Provider fallback may move `free_zero_dollar` → `free_zero_dollar` or
-   `offline`. It must not move `free_zero_dollar` → `paid` or `unknown`.
+2. Free-tier API may run only when `cost_class=free_only` and the adapter
+   assertion holds.
+3. Paid API requires opt-in provider allowlist plus budget plus a known
+   estimate. Budget 0, unset, or unknown estimate → paid providers are
+   not eligible. Stop before a call that could exceed remaining budget.
+4. Provider fallback may move `free_only` → `free_only` or `offline`.
+   It must not move `free_only` → `paid_with_budget`. Provider errors
+   cannot silently change cost mode.
 5. If no eligible provider remains, do not call. Pause. Leave
    `WAITING_FOR_LLM` / manual paste of `authoring_prompt.md` as the
    supported author path. Do not spawn review agents to bypass this.
@@ -349,11 +354,10 @@ Eval Story 6.1/6.2 stays zero-call. This policy does not wire `--paid-llm`
 to `call_llm`. That remains a later story after budget + provider are
 real.
 
-CR-108's groq→gemini fallback is allowed only after both are declared
-`free_zero_dollar`. Until that declaration exists, unknown fails closed
-and Stage 0 extract pauses rather than guessing. Declaring both free
-still does not prove a billed Google/Groq project will not invoice. The
-declaration is the eligibility gate, not a metering proof.
+CR-108's groq→gemini fallback is allowed only after both are `free_only`
+with a zero-charge assertion. Until that exists, unknown fails closed
+and Stage 0 extract pauses rather than guessing. Declaring a name "free"
+still does not prove a billed Google/Groq project will not invoice.
 
 ---
 
@@ -370,7 +374,7 @@ Implementation is blocked until Story 3.0 ACCEPT.
 | 3.4 | KEEP admin skip | FR-305 |
 | 3.5 | NEW pre-authoring comparative replace; `displaced_by_dominance` is this story | FR-313, FR-314 / AC-410, AC-411 |
 | 3.6 | NEW recovery: KEEP/sibling extra → REMOVE_EXTRA; true AMBIGUOUS → QUALITATIVE_REVIEW pause; WIDEN requires new author pass; HUMAN_COMPARE only unsafe | FR-315 / AC-412 |
-| 7.1 | Cost eligibility registry, no free→paid fallback, pause to paste; groq/gemini unknown until declared | FR-316 / AC-413 |
+| 7.1 | Cost eligibility registry, no free→paid fallback, pause to paste; groq/gemini unknown until a zero-charge assertion | FR-316 / AC-413 |
 | 7.2 | Telemetry: unknown ≠ zero; `api_cents` null/omitted when `cost_known=false` | FR-317 / AC-414, NFR-015 |
 
 ### Out of scope for these stories

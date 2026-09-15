@@ -17,6 +17,7 @@ import contracts  # noqa: E402
 from author_from_packet import build_authoring_prompt, run_verify_only  # noqa: E402
 from build_authoring_packet import build_packet  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
+    Stage0CostAuthorizationNeeded,
     Stage0ExtractError,
     Stage0NeedsInput,
     build_stage0_fit_gate,
@@ -266,6 +267,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             input_hashes=file_hash_map(folder, ["Original_JD.txt"]),
             output_hashes={},
             result={
+                "pause_kind": "review_center",
                 "opportunity_key": exc.opportunity_key,
                 "pending_confirmations": exc.pending,
                 "duration_seconds": _duration,
@@ -286,6 +288,56 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             "waiting_for_input",
             duration_seconds=_duration,
             pending_confirmations=len(exc.pending),
+        )
+        return result_state
+    except Stage0CostAuthorizationNeeded as exc:
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(
+                folder, ["Original_JD.txt", "stage0_cascade_import.json"]
+            ),
+            output_hashes={},
+            result={
+                "pause_kind": "cost_authorization",
+                "stage": "stage0",
+                "attempted_operation": "evidence_classification",
+                "authorization_mode": exc.authorization_mode,
+                "ineligible_providers": exc.ineligible_providers,
+                "model_call_occurred": False,
+                "cost_applicable": False,
+                "cost_known": False,
+                "cost_confidence": "unknown",
+                "reason": exc.reason,
+                "next_paths": exc.next_paths,
+                "resume_command": f"python scripts/run_submission.py {folder} --resume",
+                "import_path": os.path.join(folder, "stage0_cascade_import.json"),
+                "duration_seconds": _duration,
+                "cost_receipt": exc.cost_receipt,
+            },
+            checks={
+                "cost_authorization_required": True,
+                "model_call_occurred": False,
+            },
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pause_kind="cost_authorization",
+            reason=exc.reason,
         )
         return result_state
     except Stage0ExtractError as exc:
@@ -312,18 +364,32 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     verdict = policy.evaluate_stage0(result)
     mode = state.get("mode") or "production"
     _duration = round(time.time() - _t0, 3)
+    used_import = bool((result.get("cascade_import") or {}).get("used"))
+    consumed_name = None
+    if used_import:
+        from stage0_evidence_cascade import consume_cascade_import
+
+        consumed_name = consume_cascade_import(folder)
+    input_files = ["Original_JD.txt"]
+    if consumed_name:
+        input_files.append(consumed_name)
+    receipt_result = {
+        "tier": verdict["tier"],
+        "decision": verdict["decision"],
+        "reasons": verdict["reasons"],
+        "duration_seconds": _duration,
+    }
+    if used_import:
+        receipt_result["cascade_import"] = dict(result.get("cascade_import") or {})
+        receipt_result["model_call_occurred"] = False
+        receipt_result["cost_applicable"] = False
     receipt = build_receipt(
         stage="stage0",
         status="SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE",
         mode=mode,
-        input_hashes=file_hash_map(folder, ["Original_JD.txt"]),
+        input_hashes=file_hash_map(folder, input_files),
         output_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
-        result={
-            "tier": verdict["tier"],
-            "decision": verdict["decision"],
-            "reasons": verdict["reasons"],
-            "duration_seconds": _duration,
-        },
+        result=receipt_result,
         checks={"contracts.check_stage0_fit_gate": True, "policy.evaluate_stage0": verdict["verdict"]},
     )
     # M0.1-M0.3, M0.5, M0.7 signals — see the design doc's metric catalog.
@@ -1718,6 +1784,8 @@ def run_until_stage1_complete(
         # not an edge case.
         if state.get("status") == "SKIPPED":
             return state
+        if state.get("status") == "WAITING_FOR_INPUT":
+            return state
         # Re-resolve by slug (state["slug"] is always the bare folder name,
         # and _resolve_folder() checks submissions/ before pending_review/)
         # before doing anything else with `folder` -- lands on the real
@@ -1736,6 +1804,12 @@ def run_until_stage1_complete(
                 raise
         state = reconcile(folder, state)
         s1 = (state.get("stages") or {}).get("stage1") or {}
+
+    if state.get("status") == "WAITING_FOR_INPUT":
+        return state
+    s0 = (state.get("stages") or {}).get("stage0") or {}
+    if s0.get("status") == "WAITING_FOR_INPUT":
+        return state
 
     # Stage 1 already COMPLETE + fresh → unlock Stage 2 READY and stop
     if s1.get("status") == "COMPLETE":

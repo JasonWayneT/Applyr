@@ -70,6 +70,50 @@ class Stage0NeedsInput(RuntimeError):
         self.pending = pending
 
 
+class Stage0CostAuthorizationNeeded(RuntimeError):
+    """Stage 0 cannot classify remaining lines without an authorized provider.
+
+    This is a resumable pause, not a terminal extract failure. The orchestrator
+    writes WAITING_FOR_INPUT with pause_kind=cost_authorization.
+    """
+
+    def __init__(
+        self,
+        *,
+        authorization_mode: str = "unknown",
+        ineligible_providers: list[dict] | None = None,
+        model_call_occurred: bool = False,
+        reason: str = "no_eligible_provider",
+        cost_receipt: dict | None = None,
+        next_paths: list[str] | None = None,
+    ) -> None:
+        super().__init__(
+            "Stage 0 paused: no eligible classifier. No model API call occurred."
+        )
+        self.authorization_mode = authorization_mode
+        self.ineligible_providers = ineligible_providers or []
+        self.model_call_occurred = model_call_occurred
+        self.reason = reason
+        self.cost_receipt = cost_receipt or {}
+        self.next_paths = next_paths or [
+            "import_cascade_json",
+            "certify_zero_charge",
+            "paid_allowlist_budget",
+        ]
+
+
+def stage0_cost_pause_from_error(exc: BaseException) -> Stage0CostAuthorizationNeeded:
+    """Map a helper CostPauseError onto the Stage 0 pause type. No receipts."""
+    receipt = getattr(exc, "receipt", None) or {}
+    return Stage0CostAuthorizationNeeded(
+        authorization_mode=str(receipt.get("authorization_mode") or "unknown"),
+        ineligible_providers=list(receipt.get("ineligible_providers") or []),
+        model_call_occurred=False,
+        reason=str(receipt.get("reason") or "no_eligible_provider"),
+        cost_receipt=dict(receipt),
+    )
+
+
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -2565,6 +2609,7 @@ def build_stage0_fit_gate(
         checkpoint_boundary("after_judgment_commit")
 
     import pipeline_env
+    cascade_import_meta: dict | None = None
     uncached_items = [
         (bucket, ordinal, item)
         for bucket, items in (("required", required_raw), ("preferred", preferred_raw))
@@ -2572,8 +2617,22 @@ def build_stage0_fit_gate(
         if make_item_key(bucket, item, ordinal) not in cached_results
     ]
     if uncached_items:
-        from stage0_evidence_cascade import BatchItem, classify_requirements_batch
+        from stage0_evidence_cascade import (
+            BatchItem,
+            CascadeValidationError,
+            CASCADE_IMPORT_NAME,
+            CASCADE_IMPORT_TEMPLATE_NAME,
+            classify_requirements_batch,
+            try_load_cascade_import,
+            write_cascade_import_template,
+        )
         from evidence_scale import build_evidence_context
+        from cost_eligibility import (
+            CostPauseError,
+            budget_ledger_from_settings,
+            overlay_persisted_budget,
+        )
+        from stage0_checkpoint import get_run_metadata
 
         batch_items = [
             BatchItem(
@@ -2628,12 +2687,117 @@ def build_stage0_fit_gate(
                 )
                 checkpoint_boundary("after_response_spool")
 
-            batch_results = classify_requirements_batch(
+            ledger = budget_ledger_from_settings(stage0_settings)
+            overlay_persisted_budget(ledger, get_run_metadata(checkpoint_db_path, run_key))
+
+            def _persist_ledger(current) -> None:
+                update_run_metadata(
+                    checkpoint_db_path,
+                    run_key,
+                    {
+                        "paid_remaining_cents": current.remaining_cents,
+                        "paid_batch_remaining_cents": current.batch_remaining_cents,
+                    },
+                )
+
+            ledger.persist = _persist_ledger
+
+            def _pause_for_cost(exc: BaseException) -> Stage0CostAuthorizationNeeded:
+                write_cascade_import_template(
+                    folder,
+                    submission_slug=folder.name,
+                    jd_sha256=jd_hash,
+                    items=batch_items,
+                )
+                mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
+                pause = (
+                    stage0_cost_pause_from_error(exc)
+                    if isinstance(exc, CostPauseError)
+                    else Stage0CostAuthorizationNeeded(
+                        reason=getattr(exc, "args", ("invalid_cascade_import",))[0]
+                        if not isinstance(exc, Stage0CostAuthorizationNeeded)
+                        else exc.reason,
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                        next_paths=["import_cascade_json"],
+                    )
+                )
+                if isinstance(exc, Stage0CostAuthorizationNeeded):
+                    pause = exc
+                pause.next_paths = [
+                    f"write {CASCADE_IMPORT_NAME} in this folder (template: {CASCADE_IMPORT_TEMPLATE_NAME})",
+                    "certify_zero_charge",
+                    "paid_allowlist_budget",
+                ]
+                return pause
+
+            imported = try_load_cascade_import(
+                folder,
                 batch_items,
-                settings=stage0_settings,
-                raw_response_callback=_spool_response,
-                provider_event_callback=_record_provider_event,
+                submission_slug=folder.name,
+                jd_sha256=jd_hash,
             )
+            if imported is not None:
+                batch_results = imported["results"]
+                cascade_import_meta = {
+                    "used": True,
+                    "import_source": "manual",
+                    "import_sha256": imported["import_sha256"],
+                    "schema_version": imported["schema_version"],
+                    "validation": imported["validation"],
+                    "model_call_occurred": False,
+                    "cost_applicable": False,
+                }
+            else:
+                batch_results = classify_requirements_batch(
+                    batch_items,
+                    settings=stage0_settings,
+                    raw_response_callback=_spool_response,
+                    provider_event_callback=_record_provider_event,
+                    folder=folder,
+                    cost_ledger=ledger,
+                    allow_import=False,
+                )
+            cascade_telemetry["paid_remaining_cents"] = ledger.remaining_cents
+            if ledger.batch_remaining_cents is not None:
+                cascade_telemetry["paid_batch_remaining_cents"] = ledger.batch_remaining_cents
+        except CostPauseError as exc:
+            clean_spool(folder)
+            raise _pause_for_cost(exc) from exc
+        except CascadeValidationError as exc:
+            import_path = folder / CASCADE_IMPORT_NAME
+            if import_path.is_file():
+                clean_spool(folder)
+                raise _pause_for_cost(
+                    Stage0CostAuthorizationNeeded(
+                        reason="invalid_cascade_import",
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                    )
+                ) from exc
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        except UnicodeDecodeError as exc:
+            import_path = folder / CASCADE_IMPORT_NAME
+            if import_path.is_file():
+                clean_spool(folder)
+                raise _pause_for_cost(
+                    Stage0CostAuthorizationNeeded(
+                        reason="invalid_cascade_import",
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                    )
+                ) from exc
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        except Stage0CostAuthorizationNeeded:
+            raise
         except Exception as exc:
             mark_run_status(checkpoint_db_path, run_key, "FAILED")
             clean_spool(folder)
@@ -3004,6 +3168,9 @@ def build_stage0_fit_gate(
         output["active_application"] = active_application
         flag_note = f"DB shows an active (non-terminal) application already on file: {active_application[0].get('status')} -- verify this isn't a duplicate before sending."
         output["notes"] = (output.get("notes") or "") + " " + flag_note
+
+    if cascade_import_meta:
+        output["cascade_import"] = cascade_import_meta
 
     mark_run_status(checkpoint_db_path, run_key, "COMPLETE")
     checkpoint_boundary("after_run_complete")

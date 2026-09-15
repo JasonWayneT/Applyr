@@ -178,6 +178,28 @@ def mark_run_status(
         connection.close()
 
 
+def get_run_metadata(
+    db_path: str | Path | None,
+    run_key: str,
+) -> dict[str, Any]:
+    """Read checkpoint metadata for one Stage 0 run. Empty dict if missing."""
+    connection = _connect(db_path)
+    try:
+        row = connection.execute(
+            "SELECT metadata_json FROM stage0_runs WHERE run_key = ?",
+            (run_key,),
+        ).fetchone()
+        if row is None or not row["metadata_json"]:
+            return {}
+        try:
+            parsed = json.loads(row["metadata_json"])
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    finally:
+        connection.close()
+
+
 def update_run_metadata(
     db_path: str | Path | None,
     run_key: str,

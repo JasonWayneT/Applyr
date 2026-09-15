@@ -480,6 +480,27 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
 # Workflow authority (CR-076) — single DONE oracle (full COMPLETE in later CRs)
 # ---------------------------------------------------------------------------
 
+def waiting_for_input_message(folder: str) -> str:
+    """Status text for WAITING_FOR_INPUT. Branch on pause_kind when present."""
+    receipt_path = os.path.join(folder, "stage_receipts", "stage0.json")
+    receipt, _ = load_json(receipt_path)
+    kind = ((receipt or {}).get("result") or {}).get("pause_kind")
+    if kind == "cost_authorization":
+        return (
+            "workflow WAITING_FOR_INPUT — Stage 0 cost authorization. "
+            "No model API call occurred. No API cost was incurred. "
+            f"Put stage0_cascade_import.json in {folder} "
+            "(copy from stage0_cascade_import.template.json in that folder). "
+            f"Then: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md. "
+            "A certified zero-charge provider or a paid allowlist plus budget "
+            "and known estimate also resume the same run."
+        )
+    return (
+        "workflow WAITING_FOR_INPUT — resolve Review Center confirmations then --resume"
+    )
+
+
 def check_workflow_complete(folder: str) -> tuple[bool, list[str]]:
     """Authoritative production-complete predicate (CR-076 foundation).
 
@@ -513,9 +534,7 @@ def check_workflow_complete(folder: str) -> tuple[bool, list[str]]:
             "workflow WAITING_FOR_LLM — paste authoring_prompt.md; Stage 1 not finished"
         ]
     if status == "WAITING_FOR_INPUT":
-        return False, [
-            "workflow WAITING_FOR_INPUT — resolve Review Center confirmations then --resume"
-        ]
+        return False, [waiting_for_input_message(folder)]
     if status == "NEEDS_DISPOSITION":
         return False, [
             "workflow NEEDS_DISPOSITION — dispose Truth/ATS/HM findings then --resume"

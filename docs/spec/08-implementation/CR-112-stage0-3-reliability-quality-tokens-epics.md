@@ -41,9 +41,35 @@ Epic 1 (fail-open dirty patches)
 ```
 
 **2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
-`CR-112-selection-and-closed-world-recovery-design.md`. Stories 3.0, 3.1, 3.5, and
-3.6 each have independent QA PASS. Epic 3 integration review is the next gate.
-Stories 7.1/7.2 wait on that review.
+`CR-112-selection-and-closed-world-recovery-design.md`.
+
+**2026-09-11 sequence reconciliation:** Story 3.0 QA PASS
+(`2d3549f0`). Stories 3.1/3.5/3.6 and Epic 3 integration are complete on
+`cr112-selection-closed-world-design` @ `706504a`. Stories 7.1/7.2 live
+only on isolated `cr112-story71-72` @ `b7f7197` and are **not mergeable**
+until the cost-pause workflow receipt and Stage 0 continuation path are
+designed and independently reviewed. Do not start a new story on this
+branch. Full chain:
+`docs/spec/08-implementation/CR-112-reconciliation-2026-09-11.md`.
+
+**2026-09-14 status correction:** the design and independent-review
+gate above is now closed. Follow-up commit `7bf6829` on
+`cr112-story71-72` (child of `b7f7197`) implements
+`CR-112-cost-pause-state-design.md` in full. Independent re-review
+**PASSed** (`97887893-381a-47fa-b521-e5c1d5d2af78`, after a first-pass
+FAIL on `expected_item_ids`/`created_at` optionality that was
+corrected). `python -m unittest scripts.test_cr112_story71` is 41/41
+and `scripts.test_stage0_evidence_cascade` is 27/27 (re-verified
+2026-09-14 in an isolated worktree off `cr112-story71-72`). See Story
+7.1/7.2 status lines below and
+`SESSION-HANDOFF-2026-09-11-cr112-story71-72-followup.md` (on that
+branch only) for full evidence. This does **not** mean 7.x is merged:
+`cr112-story71-72` still is not merged onto this sequence branch,
+`cr112-integration`, or `main` — that merge is a separate decision
+pending Jason. One should-fix remains open: `created_at` in the
+cascade-import schema is checked for presence
+(`scripts/stage0_evidence_cascade.py`) but not typed as a non-empty
+string; audit-only field, not an identity/authorization gap.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -419,10 +445,10 @@ Merged onto `cr112-integration`.
 - `unknown` is not callable (fail closed).
 - Paid requires user-configured provider allowlist and remaining budget. Unset/0 budget → paid ineligible.
 - Fallback may not move `free_zero_dollar` → `paid` or `unknown`.
-- No eligible provider: do not call; pause; keep `WAITING_FOR_LLM` / `authoring_prompt.md` paste.
+- No eligible provider: do not call; pause at `WAITING_FOR_INPUT` with `pause_kind=cost_authorization`. Never `WAITING_FOR_LLM`. Stage 1 paste does not complete Stage 0.
 - Does not wire eval `--paid-llm` to `call_llm`.
 
-**Status:** [ ] blocked on Epic 3 integration review (3.1+3.5+3.6).
+**Status:** [x] isolated on `cr112-story71-72` — implemented at `7bf6829` (follow-up commit, child of `b7f7197`). Independent review of `b7f7197` alone was FAIL (`1fa3fdac`). The follow-up implementing the cost-pause receipt and Stage 0 import path was independently re-reviewed and **PASSed** (`97887893`, 2026-09-11, after correcting `expected_item_ids`/`created_at` optionality). 41/41 focused tests (`scripts.test_cr112_story71`), 27/27 cascade regression (`scripts.test_stage0_evidence_cascade`) — both re-run 2026-09-14. Not yet merged onto `cr112-selection-closed-world-design` / `cr112-integration` / `main`; that merge needs Jason's go-ahead. Should-fix still open: `created_at` is presence-checked, not type-checked as non-empty string.
 
 ### Story 7.2 — Cost telemetry: unknown is not zero
 
@@ -434,7 +460,7 @@ Merged onto `cr112-integration`.
 - Never sum subscription minutes with API cents.
 - Eval 6.1/6.2 baseline remains zero-call with explicit `cost_class` labels, not implied free spend.
 
-**Status:** [ ] blocked on Epic 3 integration review (3.1+3.5+3.6).
+**Status:** [x] isolated on `cr112-story71-72` — implemented at `7bf6829` with Story 7.1, same commit and same independent PASS (`97887893`). Telemetry contract (Decision 7 confidence table: `cost_known`/`cost_confidence`/`api_cents`) is in the reviewed follow-up. Not yet merged onto `cr112-selection-closed-world-design` or `cr112-integration` — pending Jason's go-ahead, same as Story 7.1.
 
 ---
 

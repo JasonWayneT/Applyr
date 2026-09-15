@@ -344,19 +344,19 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-407` | CR-112 | Five-folder sanitized materialization, default assemble-off, production SQLite refusal | `scripts/test_cr112_story61.py` | in_progress |
 | `AC-408` | CR-112 | Zero-call paid opt-in, separate totals, bytes_div_4_estimate | `scripts/test_cr112_story61.py` | in_progress |
 | `FR-302` / `AC-399` | CR-112 | Extra-packet WARN (superseded 2026-09-11) | `scripts/packet_closed_world.py`, `scripts/test_cr112_story31.py` | superseded |
-| `FR-312` / `AC-409` | CR-112 | Extra-packet detection as Stage 1 completion block; detection-only | design `CR-112-selection-and-closed-world-recovery-design.md`; tests planned `scripts/test_cr112_story31.py` | draft |
-| `FR-313` / `AC-410` | CR-112 | Deterministic six-axis comparator | same design; tests planned `scripts/test_cr112_story35.py` | draft |
-| `FR-314` / `AC-411` | CR-112 | Pre-authoring REPLACE into packet + TRACE | `scripts/build_authoring_packet.py` (planned) | draft |
-| `FR-315` / `AC-412` | CR-112 | Closed-world recovery: remove / rewrite / widen / human | planned Story 3.6 worker | draft |
-| `FR-316` / `AC-413` | CR-112 | Cost eligibility, no free→paid fallback, pause to paste | planned Story 7.1 | draft |
-| `FR-317` / `AC-414` | CR-112 | Cost telemetry; unknown is not zero | planned Story 7.2 | draft |
+| `FR-312` / `AC-409` | CR-112 | Extra-packet detection as Stage 1 completion block; detection-only | `scripts/author_from_packet.py` (`run_verify_only`), `scripts/packet_closed_world.py`, `scripts/test_cr112_story31.py` | in_progress |
+| `FR-313` / `AC-410` | CR-112 | Deterministic six-axis comparator | `scripts/evidence_dominance.py`, `scripts/build_authoring_packet.py`, `scripts/test_cr112_story35.py` | in_progress |
+| `FR-314` / `AC-411` | CR-112 | Pre-authoring REPLACE into packet + TRACE | `scripts/build_authoring_packet.py`, `scripts/test_cr112_story35.py` | in_progress |
+| `FR-315` / `AC-412` | CR-112 | Closed-world recovery: remove / rewrite / widen / human | `scripts/closed_world_recovery.py`, `scripts/workflow/runner.py` (`run_stage1_validate`), `scripts/test_cr112_story36.py` | in_progress |
+| `FR-316` / `AC-413` | CR-112 | Cost eligibility, no free→paid fallback, pause to paste | `scripts/cost_eligibility.py`, `scripts/build_stage0_fit_gate.py`, `scripts/stage0_evidence_cascade.py`, `scripts/test_cr112_story71.py` | in_progress |
+| `FR-317` / `AC-414` | CR-112 | Cost telemetry; unknown is not zero | `scripts/utils.py`, `scripts/contracts.py`, `scripts/test_cr112_story71.py` | in_progress |
 | `FR-318` / `AC-415` | CR-112 | CONVERT-READY floors on Stage 2/3 completion | `scripts/contracts.py`, `scripts/workflow/runner.py`, `scripts/check_submission_status.py`, `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`, `scripts/test_check_submission_status.py`; design `CR-112-completion-contract-quality-floor-defect.md` | draft |
 | `SEC-006` / `AC-416` | CR-112 | Privacy-safe practice identity; no silent placeholder | `scripts/utils.py`, `scripts/author_from_packet.py`, `scripts/quality_checker.py`, `scripts/workflow/runner.py`, `scripts/test_practice_identity.py`; design `CR-112-practice-identity-portability-defect.md` | implemented |
 | `FR-319` / `AC-417` | CR-112 | Lean digest pair-restatement instruction; keep strongest fact, change language | `scripts/generate_authoring_rule_digest.py`, `scripts/test_generate_authoring_rule_digest.py`, `scripts/test_author_from_packet.py`; design `CR-112-lean-digest-pair-restatement-design.md` | implemented |
 | `FR-320` / `AC-418` | CR-112 | Consumed extraction-review durable on Stage 0 restart | `scripts/stage0_requirement_extraction_review.py`, `scripts/build_stage0_fit_gate.py`, `scripts/test_cr112_stage0_extraction_review.py`; design `CR-112-extraction-review-consumed-restart-design.md` | implemented |
 | `FR-321` / `AC-419` | CR-112 | Ranking characterization corpus; Camunda known-defect, not desired rank | `scripts/test_cr112_ranking_characterization.py`, `scripts/run_all_tests.py`; investigation `CR-112-ranking-investigation-savings-vs-messaging.md` | implemented |
 | `FR-322` / `AC-420` | CR-112 | Hash-bound rubric score provenance; band-gated blind read; fail-closed disagreement | design `CR-112-score-provenance-design.md` | draft |
-| `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | design Epic 7 | draft |
+| `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | same implementation path as FR-316/FR-317 | in_progress |
 
 
 ## Coverage checklist

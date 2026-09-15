@@ -43,12 +43,51 @@ Epic 1 (fail-open dirty patches)
 **2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
 `CR-112-selection-and-closed-world-recovery-design.md`. Stories 3.0, 3.1, 3.5, and
 3.6 each have independent QA PASS. Epic 3 integration PASS
-(`d680faf4-4688-4ba6-8a64-0692f239b592`). Combined candidate starting at
-`7bf6829` (local HEAD `165485f`): automated suite plus no-cost Stage 0→1
-boundary passed. First-draft Stage 0–3 product proof remaining. Do not
-mark CR-112 complete. Chain evidence:
-`CR-112-reconciliation-2026-09-11.md` and
-`SESSION-HANDOFF-2026-09-11-cr112-integrated-validation.md`.
+(`d680faf4-4688-4ba6-8a64-0692f239b592`).
+
+**2026-09-11 sequence reconciliation:** Story 3.0 QA PASS
+(`2d3549f0`). Stories 3.1/3.5/3.6 and Epic 3 integration are complete on
+`cr112-selection-closed-world-design` @ `706504a`. Stories 7.1/7.2 live
+only on isolated `cr112-story71-72` @ `b7f7197` and are **not mergeable**
+until the cost-pause workflow receipt and Stage 0 continuation path are
+designed and independently reviewed. Do not start a new story on this
+branch. Full chain:
+`docs/spec/08-implementation/CR-112-reconciliation-2026-09-11.md`.
+
+**2026-09-14 status correction:** the design and independent-review
+gate above is now closed. Follow-up commit `7bf6829` on
+`cr112-story71-72` (child of `b7f7197`) implements
+`CR-112-cost-pause-state-design.md` in full. Independent re-review
+**PASSed** (`97887893-381a-47fa-b521-e5c1d5d2af78`, after a first-pass
+FAIL on `expected_item_ids`/`created_at` optionality that was
+corrected). `python -m unittest scripts.test_cr112_story71` is 41/41
+and `scripts.test_stage0_evidence_cascade` is 27/27 (re-verified
+2026-09-14 in an isolated worktree off `cr112-story71-72`). See Story
+7.1/7.2 status lines below and
+`SESSION-HANDOFF-2026-09-11-cr112-story71-72-followup.md` (on that
+branch only) for full evidence.
+
+**2026-09-14 merge:** `cr112-story71-72` (`b7f7197` + `7bf6829`) merged
+onto this sequence branch, local only, no push. Merging this branch's
+own copy of this tracker surfaced a second staleness: its Story
+7.1/7.2 Acceptance/Status text still described the pre-fix behavior
+(`free_only`/`paid_with_budget` classes, pausing to `WAITING_FOR_LLM`)
+and an earlier, superseded review (`18868b0f-a352-4cf6-8a76-b86249672614`).
+That predates the `1fa3fdac` FAIL and the `97887893` follow-up PASS and
+does not reflect what `7bf6829` actually implements — resolved in favor
+of the accurate, later-reviewed text below. One should-fix remains
+open: `created_at` in the cascade-import schema is checked for
+presence (`scripts/stage0_evidence_cascade.py`) but not typed as a
+non-empty string; audit-only field, not an identity/authorization gap.
+
+**2026-09-13 validation candidate:** work continuing from `7bf6829`
+recorded automated suite and no-cost Stage 0 to Stage 1 boundary
+evidence, then added Stage 0 extraction fallback, ATS-term-contract,
+completion-floor, practice-identity, lean-digest, consumed-review, and
+ranking-characterization follow-ups. First-draft Stage 0-3 product
+proof still keeps CR-112 from being globally complete. Chain evidence:
+`SESSION-HANDOFF-2026-09-11-cr112-integrated-validation.md` and later
+Story 8 handoffs below.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -424,20 +463,12 @@ Merged onto `cr112-integration`.
 - Runtime classes are `offline` | `manual_paste` | `free_only` | `paid_with_budget`. Missing class is `unknown`.
 - Groq and Gemini stay `unknown` until an adapter can assert the configured call cannot incur a charge. Advertised free tier is not enough. Provider name does not imply free.
 - `unknown` is not callable (fail closed).
-- `free_only` requires that zero-charge assertion. User declaration alone does not make a billed project free.
 - Paid requires user-configured provider allowlist, remaining run/batch budget, and a known estimate. Unset/0 budget or unknown estimate → paid ineligible.
-- Fallback may not move `free_only` → `paid_with_budget`. Provider errors cannot silently change cost mode.
-- No eligible provider: do not call; pause at `WAITING_FOR_INPUT` with
-  `pause_kind=cost_authorization`. Never `WAITING_FOR_LLM`. Stage 1 paste
-  does not complete Stage 0.
+- Fallback may not move `free_only` → `paid_with_budget`, nor `free_zero_dollar` → `paid`/`unknown`. Provider errors cannot silently change cost mode.
+- No eligible provider: do not call; pause at `WAITING_FOR_INPUT` with `pause_kind=cost_authorization`. **Never** `WAITING_FOR_LLM`. Stage 1 paste does not complete Stage 0.
 - Does not wire eval `--paid-llm` to `call_llm`.
 
-**Status:** [x] QA PASS (`18868b0f-a352-4cf6-8a76-b86249672614`) 2026-09-11
-on cost eligibility. Follow-up `7bf6829` independent review PASS
-(`97887893-381a-47fa-b521-e5c1d5d2af78`) for canonical
-`WAITING_FOR_INPUT` / `cost_authorization` receipt, bound Stage 0 import,
-and consumed-import rename. Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
-Do not push. Do not merge onto `cr112-selection-closed-world-design` yet.
+**Status:** [x] implemented at `7bf6829` (follow-up commit, child of `b7f7197`). Independent review of `b7f7197` alone was FAIL (`1fa3fdac`). An earlier, superseded review on this branch's own copy of this doc (`18868b0f`, 2026-09-11) described `b7f7197`'s pre-fix behavior — pausing to `WAITING_FOR_LLM` — which the cost-pause design explicitly rejects; that text and review are stale, not authoritative. The follow-up implementing the cost-pause receipt and Stage 0 import path was independently re-reviewed and **PASSed** (`97887893`, 2026-09-11, after correcting `expected_item_ids`/`created_at` optionality). 41/41 focused tests (`scripts.test_cr112_story71`), 27/27 cascade regression (`scripts.test_stage0_evidence_cascade`) — both re-run 2026-09-14. **Merged** onto `cr112-selection-closed-world-design` 2026-09-14, local only, no push; not yet merged onto `cr112-integration` / `main`. Should-fix still open: `created_at` is presence-checked, not type-checked as non-empty string. Later validation-candidate work also exercised the no-cost Stage 0 to Stage 1 boundary; CR-112 still is not globally complete.
 
 ### Story 7.2 — Cost telemetry: unknown is not zero
 
@@ -449,11 +480,7 @@ Do not push. Do not merge onto `cr112-selection-closed-world-design` yet.
 - Never sum subscription minutes with API cents.
 - Eval 6.1/6.2 baseline remains zero-call with explicit `cost_class` labels, not implied free spend.
 
-**Status:** [x] QA PASS (`18868b0f-a352-4cf6-8a76-b86249672614`) 2026-09-11
-on unknown ≠ zero telemetry. Eval zero-call stays `offline` with
-`cost_known=true`. Follow-up `7bf6829` review PASS (`97887893`). Combined
-candidate: automated + no-cost Stage 0→1 passed; first-draft product
-proof remaining. Do not push.
+**Status:** [x] implemented at `7bf6829` with Story 7.1, same commit and same independent PASS (`97887893`). Superseded by this: an earlier `18868b0f` PASS on this branch's own copy of this doc, predating the follow-up. Telemetry contract (Decision 7 confidence table: `cost_known`/`cost_confidence`/`api_cents`) is in the reviewed follow-up. **Merged** onto `cr112-selection-closed-world-design` 2026-09-14, local only, no push; not yet merged onto `cr112-integration` — same as Story 7.1. Later validation-candidate work keeps eval zero-call as `offline` with `cost_known=true`; first-draft product proof remains open.
 
 ## Epic 8 — Completion contract and practice portability (Camunda follow-up)
 

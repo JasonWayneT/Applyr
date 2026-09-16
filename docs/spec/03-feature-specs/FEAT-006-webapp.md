@@ -5,7 +5,7 @@
 - Feature ID: `FEAT-006`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-003`
-- Related requirements: `FR-023`, `FR-024`, `FR-025`, `FR-026`, `FR-027`, `FR-028`, `FR-029`, `FR-285`
+- Related requirements: `FR-023`, `FR-024`, `FR-025`, `FR-026`, `FR-027`, `FR-028`, `FR-029`, `FR-285`, `FR-316`
 
 ## Problem statement
 
@@ -32,6 +32,7 @@ A CLI-only pipeline is hard to monitor. Users need a visual dashboard to watch p
 | `FR-287` | Bad-data flag | "Not a real skill" answer durably suppresses extraction false positives and feeds the learning loop (`CR-109`) |
 | `FR-288` | Single-tap queue flow | Answers save on selection and advance to the next card with a visible transition; no save step (`CR-109`) |
 | `FR-289` | Completed-card correction | Completed cards show the recorded answer and support in-place change (`CR-109`) |
+| `FR-316` | Submission workflow operator | Review Center shows Stage 0/1/2 status and explicit Start, Resume, and Finalize controls through the authenticated canonical workflow routes (`CR-112`) |
 
 ## Verification plan
 
@@ -46,3 +47,4 @@ A CLI-only pipeline is hard to monitor. Users need a visual dashboard to watch p
 | `TEST-109B` | `FR-286`, `AC-374` | unit | Live-failure JD lines (Spirit/Preferred/Thinking/Workday compounds) produce zero or only real-tool candidates | verified |
 | `TEST-109C` | `FR-289`, `AC-377`, `AC-378` | unit/API | Completed items surface their recorded answer; re-answering updates memory and appends history | verified |
 | `TEST-109D` | `FR-288` | manual UI | Answering a card saves in one tap, the next card appears with the card-swap transition, and the queue drains to a clear state | proposed |
+| `TEST-112O` | `FR-316`, `AC-413` | client unit/UI | Operator response normalization is allowlisted, all four commands use authenticated API routes, and a cost pause renders the required no-call/no-cost/incomplete-stage guidance and three resume prerequisites | verified |

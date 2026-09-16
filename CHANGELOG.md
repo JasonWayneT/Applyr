@@ -239,6 +239,13 @@ candidate tree, never on HEAD.
   fingerprint / nights-and-weekends lines
 
 ### Added
+- CR-112 Story 7.4 (`FR-316` / `AC-413`): Review Center now includes a
+  compact operator for Stage 0/1/2 status and explicit Start, Resume, and
+  Finalize actions through the authenticated backend routes. Cost-pause copy
+  states that no model API call occurred, no API cost was incurred, and Stage
+  0 remains incomplete until cascade JSON is imported, a zero-charge provider
+  is certified, or paid use is authorized. This slice adds no provider
+  configuration or cascade-import UI.
 - CR-112 Story 7.3 (`FR-316` / `AC-413`): authenticated backend operator
   routes for starting, resuming, inspecting, and finalizing
   `scripts/run_submission.py`. The service returns an allowlisted workflow

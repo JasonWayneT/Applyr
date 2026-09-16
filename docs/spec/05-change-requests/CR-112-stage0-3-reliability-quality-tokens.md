@@ -79,9 +79,11 @@ localhost/token-auth hardening.
 ## Implementation status (2026-09-16 working-tree wave)
 
 On `cr112-selection-closed-world-design`: Stories 2.1, 2.3, cost-pause status
-copy, and 7.3 are committed and pending independent review. Story 7.4 remains
-uncommitted in the local working tree. The cascade-import `created_at`
-should-fix is still open. Stories are **not** self-marked done.
+copy, and 7.3 are committed and pending independent review. Story 7.4 is
+implemented in the local working tree and pending independent review. The
+cascade-import `created_at` should-fix is still open. The Metis wave for this
+work is operator-closed and the implementation approval marker was removed.
+Stories are **not** self-marked done.
 
 ## Implementation status (2026-09-10)
 

@@ -96,7 +96,10 @@ operator (Story 7.4) landed after `docs/spec/APPROVED_FOR_IMPLEMENTATION.md`.
 Story 7.5 (the Review Center operator UI) has since landed as well, in a
 separate local commit on this branch.
 `impl-cascade-import-created-at` was not started because Epic 1 is still
-unmerged. Do not self-mark story checkboxes. Do not treat this as merge-ready.
+unmerged. Metis goal `goal-01d7190fd4af` / team run `team-e7fdfc3480fd` was
+operator-closed on 2026-09-16; the approval marker was removed so Metis cannot
+redispatch this wave. Do not self-mark story checkboxes. Do not treat this as
+merge-ready.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -564,9 +567,10 @@ Focused runner and route tests pass locally. Not self-marked done.
 - Client tests cover malformed-response normalization, route construction and
   all four commands, API errors, and exact cost-pause guidance.
 
-**Status:** [x] landed on `cr112-selection-closed-world-design` 2026-09-16 in
-the same commit as the docs/backend operator work. Not self-marked done;
-pending independent review.
+**Status:** [ ] implemented locally on `cr112-selection-closed-world-design`
+2026-09-16, in a separate commit from the backend operator work; pending
+independent review. Compact Review Center panel, cost-pause copy, Review
+Center pause notice, and client tests are present. Not self-marked done.
 
 ---
 

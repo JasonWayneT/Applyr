@@ -23,8 +23,10 @@ The backend exposes authenticated operator commands for the same canonical
 workflow through `/api/run-submission/:scope/:slug/{start,resume,status,finalize}`.
 These routes only invoke `scripts/run_submission.py` and read its
 `workflow_state.json` / `stage_receipts/` output. They do not write workflow
-authority files themselves. Provider configuration and cascade JSON import
-remain outside this operator surface.
+authority files themselves. Review Center's compact workflow operator calls
+these routes to show Stage 0/1/2 status and issue explicit Start, Resume, and
+Finalize commands. Provider configuration and cascade JSON import remain
+outside that panel.
 
 ### Scout pipeline (code order)
 

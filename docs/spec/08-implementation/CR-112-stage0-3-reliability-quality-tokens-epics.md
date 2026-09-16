@@ -125,7 +125,11 @@ CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and i
 - Test: `scripts/test_build_authoring_packet.py` (or nearest existing packet-assemble suite)
 
 **Acceptance:**
-- If excerpts are already at `_EXCERPT_MIN_CHARS` and estimated tokens still exceed `_TOKEN_BUDGET`, `packet_status` is `incomplete` with a recorded reason that names `claim_constraints` / budget, **or** a cheaper field is dropped first with a recorded reason (ATS-term padding, learned_examples already gone).
+- After learned examples, an over-budget packet compacts the author-only
+  `evidence_map[*].omitted_reasons` list before shrinking excerpts and records
+  how many entries were removed. The complete candidate ranking remains in
+  sibling `evidence_selection_trace.json`, which is not loaded by the author.
+- If excerpts are already at `_EXCERPT_MIN_CHARS` and estimated tokens still exceed `_TOKEN_BUDGET`, `packet_status` is `incomplete` with a recorded reason that names `claim_constraints` / budget.
 - `claim_constraints` is never silently replaced with `{}` while `packet_status=ready`.
 - Isolated `assemble_packet` reproduction from the investigation (ready + empty constraints + tokens 2912) must fail after the fix.
 - supplyhouse is **not** rebuilt in this story.

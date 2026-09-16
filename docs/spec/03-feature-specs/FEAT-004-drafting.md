@@ -30,7 +30,7 @@ Writing custom resumes for every job is the biggest bottleneck. The system must 
 | `FR-139` | PDF export gate when verification not passed | `CR-021` |
 | `FR-193` | Theme primary claims + cover/resume numeric corpus alignment | `CR-040` — `theme_primaries.py`, unified cover verify corpus |
 | `FR-265` | Stage 1 first-draft quality contract | `CR-102` — pair repetition, JD specificity, quality checks, defensive language, and exact rebuilt-packet provenance |
-| `FR-296`–`FR-298` | Sequential-ID reject, claim_constraints fail-closed, wiped-packet detector | `CR-112` Epic 1 |
+| `FR-296`–`FR-298` | Sequential-ID reject, budget compaction of author-only omitted-candidate summaries, claim_constraints fail-closed, wiped-packet detector | `CR-112` Epic 1 |
 | `FR-312`–`FR-317` | Extra-packet FAIL (exact ID), comparative selection, recovery, cost eligibility | `CR-112` Stories 3.1/3.5/3.6/7.x — design only until Story 3.0 ACCEPT |
 
 ## Pipeline entry (current)

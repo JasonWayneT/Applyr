@@ -16,7 +16,7 @@ AGENT_DIR = os.path.join(PROJECT_ROOT, ".agent")
 RULES_DIR = os.path.join(AGENT_DIR, "rules")
 SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
 ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "data", "archive", "submissions")
-DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
+DB_PATH = os.environ.get("APPLYR_SANDBOX_DB") or os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
 WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")

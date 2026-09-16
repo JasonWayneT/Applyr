@@ -1553,6 +1553,78 @@ class TestLearnedExamplesPacket(unittest.TestCase):
 class TestClaimConstraintsBudget(unittest.TestCase):
     """CR-112 Story 1.2 — do not ready a packet after dropping constraints."""
 
+    def test_over_budget_compacts_omitted_reasons_before_excerpts(self):
+        """Author-only selection summaries yield to evidence and constraints.
+
+        Implements FR-297 / AC-394.
+        """
+        from build_authoring_packet import assemble_packet
+
+        stage0 = {
+            **_STAGE0_TIER1,
+            "thin_jd": True,
+            "required": [],
+            "preferred": [],
+            "responsibilities": [],
+        }
+        excerpts = {"ACC-105-AGILE": "Led quarterly planning. Delivered the release."}
+        omitted = [
+            {"claim_id": f"ACC-{index:03d}-LONG-CANDIDATE", "reason": "top2_cutoff"}
+            for index in range(40)
+        ]
+        evidence_map = [
+            {
+                "jd_item": "Agile planning",
+                "bucket": "preferred",
+                "claim_ids": ["ACC-105-AGILE"],
+                "bridge": None,
+                "omitted_reasons": omitted,
+            }
+        ]
+        constraints = {
+            "ACC-105-AGILE": {
+                "attribution": "CONTRIBUTED",
+                "prohibited_claims": ["Do not claim sole delivery."],
+            }
+        }
+        kwargs = dict(
+            stage0=stage0,
+            evidence_map=evidence_map,
+            excerpts=excerpts,
+            disabled=set(),
+            hook_fact=None,
+            company="TestCorp",
+            role_title="Product Manager",
+            slug="testcorp",
+            url=None,
+            claim_constraints=constraints,
+            jd_text="",
+            ats_term_contract=[],
+        )
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            baseline = assemble_packet(**kwargs)
+        compacted_size = baseline["estimated_tokens"] - (
+            len(json.dumps(omitted).encode("utf-8")) // 4
+        )
+        budget = compacted_size + 30
+        self.assertLess(budget, baseline["estimated_tokens"])
+
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            with patch("build_authoring_packet._TOKEN_BUDGET", budget):
+                packet = assemble_packet(**kwargs)
+
+        self.assertEqual(packet["packet_status"], "ready")
+        self.assertEqual(packet["evidence_map"][0]["omitted_reasons"], [])
+        self.assertEqual(
+            packet["budget_compaction"],
+            {
+                "omitted_reasons_removed": len(omitted),
+                "reason": "author_prompt_budget_full_trace_preserved",
+            },
+        )
+        self.assertEqual(packet["excerpts"], excerpts)
+        self.assertEqual(packet["claim_constraints"], constraints)
+
     def test_over_budget_does_not_wipe_claim_constraints_to_ready(self):
         """Fat constraints under a tight budget must stay incomplete, not
         become ready with claim_constraints={}. Implements FR-297 / AC-394.

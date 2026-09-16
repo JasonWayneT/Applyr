@@ -1635,6 +1635,27 @@ def assemble_packet(
                 len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
             )
 
+    # Implements FR-297 / AC-394: omitted-candidate summaries help explain
+    # selection but are not authoring evidence. The complete candidate list,
+    # scores, and reasons already live in evidence_selection_trace.json, which
+    # the Stage 1 author never loads. Compact this duplicated prompt field
+    # before shrinking excerpts or weakening attribution constraints.
+    if estimated_tokens > _TOKEN_BUDGET:
+        omitted_count = sum(
+            len(row.get("omitted_reasons") or [])
+            for row in draft["evidence_map"]
+        )
+        if omitted_count:
+            for row in draft["evidence_map"]:
+                row["omitted_reasons"] = []
+            draft["budget_compaction"] = {
+                "omitted_reasons_removed": omitted_count,
+                "reason": "author_prompt_budget_full_trace_preserved",
+            }
+            estimated_tokens = (
+                len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+            )
+
     # Adaptive shrink (2026-08-21, Schellman fix): only reached when the
     # packet built at the full excerpt cap actually comes in over budget --
     # see _shrink_excerpts_to_budget()'s own docstring.

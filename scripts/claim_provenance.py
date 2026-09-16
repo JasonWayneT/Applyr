@@ -89,7 +89,10 @@ def load_valid_claim_ids() -> tuple[set, set]:
     CR-094: Attribution / DO NOT CLAIM / tools ACC tokens in WE are not citable
     accomplishments. Subtract them so a draft cannot "cover" a DNC line by citing it.
     """
-    import we_acc_index as wai
+    try:
+        from . import we_acc_index as wai
+    except (ImportError, ValueError):
+        import we_acc_index as wai
 
     valid: set = set()
     disabled: set = set()

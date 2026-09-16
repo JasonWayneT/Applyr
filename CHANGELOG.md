@@ -17,6 +17,11 @@ real-JD dry run remains a future verification step, so readiness stays
   called by the mechanism.
 
 ### Fixed
+- CR-112 Story 1.2 (`FR-297` / `AC-394`): over-budget authoring packets
+  now remove redundant author-only omitted-candidate summaries before
+  shrinking evidence excerpts. The full ranking audit remains in
+  `evidence_selection_trace.json`, and attribution constraints are never
+  dropped.
 - CR-112 Story 8.7 (`FR-325` / `AC-423`): deterministic identity repair now
   replaces unbracketed contact placeholders and removes stacked placeholder
   headers.

@@ -14,7 +14,7 @@
 | 3 | Scout pipeline (automatic) | New rows in `jobagent.sqlite`; activity logs |
 | 4 | Review **Sync / Opportunities** | Scores, gate rejects, backlog |
 | 5 | **Stage 0 triage** — run `python scripts/run_submission.py data/pending_review/{slug}` | Skip, or a ready authoring packet |
-| 6 | **Stage 1 authoring** — paste `authoring_prompt.md` into a fresh agent; verification blocks deterministic quality, evidence, specificity, repetition, and provenance-contract defects | `Resume.md`, `CoverLetter.md`, `claim_provenance.json` |
+| 6 | **Stage 1 authoring** — paste `authoring_prompt.md` into a fresh agent; verification blocks deterministic quality, evidence, specificity, repetition, and provenance-contract defects. If the packet is over budget, author-only omitted-candidate summaries are compacted first because the complete ranking audit remains in `evidence_selection_trace.json`; excerpts and `claim_constraints` stay authoritative. | `Resume.md`, `CoverLetter.md`, `claim_provenance.json` |
 | 7 | **Stage 2 review + Stage 3 finalize** — resume with `--resume`, finalize explicitly with `--finalize` | Verified PDFs and workflow completion |
 | 8 | **Status** transitions | `data/submissions/` or `data/archive/submissions/` |
 | 7b | **Stage 0 triage** | Incoming JDs: `data/pending_review/`. Skip: `data/archive/skipped/` + `stage0_skips` ledger. PASS: `data/submissions/`. |

@@ -49,6 +49,7 @@ import json
 import math
 import os
 import sys
+from datetime import datetime
 from typing import Any
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -117,6 +118,14 @@ RUBRIC_REVIEWER_ROLES = frozenset(
 RUBRIC_BOUNDARY_BANDS = {
     "resume": (RUBRIC_FLOOR_RESUME - 3, RUBRIC_FLOOR_RESUME + 3),
     "cover_letter": (RUBRIC_FLOOR_COVER_LETTER - 3, RUBRIC_FLOOR_COVER_LETTER + 3),
+}
+RUBRIC_BREAKDOWN_KEYS = {
+    "resume": tuple(f"R{i}" for i in range(1, 9)),
+    "cover_letter": tuple(f"C{i}" for i in range(1, 6)),
+}
+RUBRIC_BREAKDOWN_MAX = {
+    "resume": {"R1": 10, "R2": 15, "R3": 15, "R4": 20, "R5": 15, "R6": 10, "R7": 10, "R8": 5},
+    "cover_letter": {"C1": 25, "C2": 25, "C3": 20, "C4": 20, "C5": 10},
 }
 
 
@@ -200,6 +209,86 @@ def _score_hashes_match_current(score: dict[str, Any], hashes: dict[str, str]) -
     return all(score_hashes.get(side) == digest for side, digest in hashes.items())
 
 
+def _current_rubric_sha256() -> str | None:
+    root = os.path.dirname(_SCRIPT_DIR)
+    return _sha256_hex(os.path.join(root, "data", "conversion_rubric.md"))
+
+
+def _valid_timezone_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def _has_reviewer_run_metadata(row: dict[str, Any]) -> bool:
+    return any(
+        isinstance(row.get(key), str) and bool(row[key].strip())
+        for key in ("reviewer_run_id", "spawned_by")
+    )
+
+
+def _breakdown_errors(row: dict[str, Any], idx: int) -> list[str]:
+    errors: list[str] = []
+    for side, required_keys in RUBRIC_BREAKDOWN_KEYS.items():
+        side_data = row.get(side)
+        if not isinstance(side_data, dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].{side} must be an object")
+            continue
+        breakdown = side_data.get("breakdown")
+        if not isinstance(breakdown, dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown must be an object")
+            continue
+        missing = [key for key in required_keys if key not in breakdown]
+        if missing:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown missing keys: "
+                + ", ".join(missing)
+            )
+        extra = sorted(key for key in breakdown if key not in required_keys)
+        if extra:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown has unknown keys: "
+                + ", ".join(extra)
+            )
+        total = side_data.get("total")
+        if not (isinstance(total, (int, float)) and not isinstance(total, bool) and math.isfinite(total)):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.total must be a finite number")
+            total = None
+        breakdown_sum = 0.0
+        for key in required_keys:
+            value = breakdown.get(key)
+            if key in breakdown and not (
+                isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+            ):
+                errors.append(
+                    f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown.{key} "
+                    "must be a finite number"
+                )
+                continue
+            if key in breakdown:
+                max_value = RUBRIC_BREAKDOWN_MAX[side][key]
+                if value < 0 or value > max_value:
+                    errors.append(
+                        f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown.{key} "
+                        f"must be between 0 and {max_value}"
+                    )
+                breakdown_sum += float(value)
+        if total is not None and not missing and not extra and not math.isclose(
+            breakdown_sum,
+            float(total),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown sum must equal {side}.total"
+            )
+    return errors
+
+
 def _load_rubric_scorecards(folder: str) -> tuple[list[dict[str, Any]], list[str]]:
     path = os.path.join(folder, RUBRIC_SCORECARD_PATH)
     if not os.path.exists(path):
@@ -213,10 +302,27 @@ def _load_rubric_scorecards(folder: str) -> tuple[list[dict[str, Any]], list[str
         return [], [f"{RUBRIC_SCORECARD_PATH} must be an append-only JSON array"]
     rows: list[dict[str, Any]] = []
     errors: list[str] = []
+    rubric_sha256 = _current_rubric_sha256()
     for idx, row in enumerate(data):
         if not isinstance(row, dict):
             errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}] is not an object")
             continue
+        if row.get("schema_version") != 1:
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].schema_version must be 1")
+        if not rubric_sha256:
+            errors.append("data/conversion_rubric.md not found -- cannot bind rubric score provenance")
+        elif row.get("rubric_sha256") != rubric_sha256:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].rubric_sha256 must match data/conversion_rubric.md"
+            )
+        if not _valid_timezone_timestamp(row.get("scored_at")):
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].scored_at must be a timezone-qualified ISO timestamp"
+            )
+        if not _has_reviewer_run_metadata(row):
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}] must include reviewer_run_id or spawned_by"
+            )
         role = row.get("reviewer_role")
         if role not in RUBRIC_REVIEWER_ROLES:
             errors.append(
@@ -225,6 +331,7 @@ def _load_rubric_scorecards(folder: str) -> tuple[list[dict[str, Any]], list[str
             )
         if not isinstance(row.get("document_sha256"), dict):
             errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].document_sha256 must be an object")
+        errors.extend(_breakdown_errors(row, idx))
         rows.append(row)
     return rows, errors
 

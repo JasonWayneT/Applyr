@@ -194,6 +194,7 @@ Do not add reviewers to generate-submission-batch. Do not vote.
 Implemented as pure local completion checks:
 
 - `scripts/contracts.py::check_rubric_score_provenance` validates current Resume/Cover Letter hashes, `draft_manifest.json.rubric_score.document_sha256`, and append-only `reviews/rubric_scorecard.json` rows.
+- CR-113 extends row validation to require `schema_version`, the current `data/conversion_rubric.md` hash, timezone-qualified `scored_at`, reviewer-run metadata, and complete per-criterion breakdowns for `R1`-`R8` and `C1`-`C5`.
 - `scripts/workflow/runner.py` emits Mech BLOCK findings for stale, missing, below-floor, or disputed current-hash scorecards after rubric shape/floor checks.
 - Boundary-band scores require a same-hash `independent_blind` row; clear-margin scores do not.
 - Any current-hash score below the applicable floor blocks. No averaging, voting, or higher-score selection is allowed.

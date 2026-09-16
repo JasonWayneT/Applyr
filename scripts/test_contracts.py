@@ -121,6 +121,32 @@ def _doc_hashes(resume_content: str = _STAGE2_RESUME_CONTENT, cover_content: str
     }
 
 
+def _rubric_sha() -> str:
+    rubric = Path(__file__).resolve().parents[1] / "data" / "conversion_rubric.md"
+    return hashlib.sha256(rubric.read_bytes()).hexdigest()
+
+
+def _criterion_breakdown(max_values: dict[str, int], total: float) -> dict:
+    remaining = float(total)
+    breakdown = {}
+    for key, max_value in max_values.items():
+        value = min(remaining, float(max_value))
+        breakdown[key] = value
+        remaining -= value
+    return breakdown
+
+
+def _resume_breakdown(total: float = 78) -> dict:
+    return _criterion_breakdown(
+        {"R1": 10, "R2": 15, "R3": 15, "R4": 20, "R5": 15, "R6": 10, "R7": 10, "R8": 5},
+        total,
+    )
+
+
+def _cover_breakdown(total: float = 70) -> dict:
+    return _criterion_breakdown({"C1": 25, "C2": 25, "C3": 20, "C4": 20, "C5": 10}, total)
+
+
 def _score(
     resume_total: float = 78,
     cover_total: float = 70,
@@ -143,12 +169,13 @@ def _scorecard_row(
 ) -> dict:
     return {
         "schema_version": 1,
-        "rubric_sha256": "0" * 64,
+        "rubric_sha256": _rubric_sha(),
         "scored_at": "2026-09-15T00:00:00+00:00",
+        "reviewer_run_id": "test-run-001",
         "reviewer_role": role,
         "document_sha256": hashes or _doc_hashes(),
-        "resume": {"total": resume_total, "breakdown": {}, "citations": {}},
-        "cover_letter": {"total": cover_total, "breakdown": {}, "citations": {}},
+        "resume": {"total": resume_total, "breakdown": _resume_breakdown(resume_total), "citations": {}},
+        "cover_letter": {"total": cover_total, "breakdown": _cover_breakdown(cover_total), "citations": {}},
     }
 
 
@@ -562,6 +589,105 @@ class TestCheckRubricScoreProvenance(unittest.TestCase):
             )
             errors = check_rubric_score_provenance(str(folder), score)
             self.assertTrue(any("independent_blind" in e for e in errors), errors)
+
+    def test_scorecard_missing_schema_version_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row.pop("schema_version")
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("schema_version" in e for e in errors), errors)
+
+    def test_scorecard_stale_rubric_hash_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["rubric_sha256"] = "0" * 64
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("rubric_sha256" in e for e in errors), errors)
+
+    def test_scorecard_bad_scored_at_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["scored_at"] = "2026-09-15 00:00:00"
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("scored_at" in e for e in errors), errors)
+
+    def test_scorecard_missing_reviewer_run_metadata_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row.pop("reviewer_run_id")
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("reviewer_run_id" in e or "spawned_by" in e for e in errors), errors)
+
+    def test_scorecard_extra_breakdown_keys_block(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"]["R9"] = 5
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown has unknown keys" in e and "R9" in e for e in errors), errors)
+
+    def test_scorecard_incomplete_breakdown_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"].pop("R8")
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown missing keys" in e and "R8" in e for e in errors), errors)
+
+    def test_scorecard_boolean_breakdown_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"]["R1"] = True
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown.R1 must be a finite number" in e for e in errors), errors)
+
+    def test_scorecard_over_max_breakdown_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"]["R8"] = 6
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown.R8 must be between 0 and 5" in e for e in errors), errors)
+
+    def test_scorecard_breakdown_sum_must_match_total(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["cover_letter"]["breakdown"]["C5"] = 6
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown sum must equal cover_letter.total" in e for e in errors), errors)
 
 
 # ---------------------------------------------------------------------------

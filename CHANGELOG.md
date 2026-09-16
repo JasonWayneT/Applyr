@@ -29,6 +29,7 @@ real-JD dry run remains a future verification step, so readiness stays
   unconstrained empty claims and ungrounded metrics.
 
 ### Changed
+- CR-113 (`FR-322` / `AC-420`): rubric scorecard metadata gate requires `schema_version: 1`, current `rubric_sha256`, timezone-qualified `scored_at`, non-empty `reviewer_run_id` or `spawned_by`, and complete numeric per-criterion breakdowns (R1-R8, C1-C5) matching total scores with no unknown keys.
 - CR-112 Story 8.6 (`FR-322` / `AC-420`): score provenance is implemented,
   hash-bound, role-tagged, boundary-band blind-read aware, and fail-closed on
   current-hash disagreement.

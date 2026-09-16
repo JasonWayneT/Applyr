@@ -82,6 +82,32 @@ def _rubric_score(folder: Path, resume_total: float = 78, cover_total: float = 7
     }
 
 
+def _rubric_sha() -> str:
+    rubric = Path(__file__).resolve().parents[1] / "data" / "conversion_rubric.md"
+    return hashlib.sha256(rubric.read_bytes()).hexdigest()
+
+
+def _criterion_breakdown(max_values: dict[str, int], total: float) -> dict:
+    remaining = float(total)
+    breakdown = {}
+    for key, max_value in max_values.items():
+        value = min(remaining, float(max_value))
+        breakdown[key] = value
+        remaining -= value
+    return breakdown
+
+
+def _resume_breakdown(total: float = 78) -> dict:
+    return _criterion_breakdown(
+        {"R1": 10, "R2": 15, "R3": 15, "R4": 20, "R5": 15, "R6": 10, "R7": 10, "R8": 5},
+        total,
+    )
+
+
+def _cover_breakdown(total: float = 70) -> dict:
+    return _criterion_breakdown({"C1": 25, "C2": 25, "C3": 20, "C4": 20, "C5": 10}, total)
+
+
 def _score_needs_blind(side: str, total: float) -> bool:
     if side == "resume":
         return 67 <= total <= 73
@@ -97,12 +123,13 @@ def _scorecard_row(
 ) -> dict:
     return {
         "schema_version": 1,
-        "rubric_sha256": "0" * 64,
+        "rubric_sha256": _rubric_sha(),
         "scored_at": "2026-09-15T00:00:00+00:00",
+        "reviewer_run_id": "test-run-001",
         "reviewer_role": role,
         "document_sha256": _rubric_hashes(folder),
-        "resume": {"total": resume_total, "breakdown": {}, "citations": {}},
-        "cover_letter": {"total": cover_total, "breakdown": {}, "citations": {}},
+        "resume": {"total": resume_total, "breakdown": _resume_breakdown(resume_total), "citations": {}},
+        "cover_letter": {"total": cover_total, "breakdown": _cover_breakdown(cover_total), "citations": {}},
     }
 
 

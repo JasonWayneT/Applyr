@@ -262,6 +262,18 @@ from the profile. Deterministic provider fixtures, crash-recovery tests, and
 isolated API tests pass behind the rollout flag. Live provider sampling, archive
 replay, and default cutover remain deferred until the CR-093 release gate passes.
 
+**Cost authorization (CR-112 Epic 7):** every model call carries an explicit
+cost class. Groq and Gemini default to `unknown` (never called) until either a
+paid allowlist plus positive budget and known estimate exists, or the operator
+certifies a free-tier-only route with a structured, expiring attestation
+(`freeTierAssertions` in the Settings → AI Usage blob: exact canonical
+statement, strict acknowledgement, 30-day expiry, `groq`/`gemini` only). With
+no eligible provider, Stage 0 pauses at `WAITING_FOR_INPUT` /
+`pause_kind=cost_authorization` without making any API call, and resumes via
+`stage0_cascade_import.json`, a valid attestation, or a paid allowlist. A
+certified free route can never fall back into a paid provider in the same
+chain.
+
 ### Drafting assets
 
 Sync never auto-drafts — after scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` via `scripts/run_submission.py`. Day-to-day authoring is Claude + ground truth via `.claude/skills/generate-submission/SKILL.md` → `run_submission.py`; there is no other live drafting path (the old "Find New Jobs" page and its `POST /api/evaluate` route were removed 2026-08-19 along with the rest of the old fit-scoring system).

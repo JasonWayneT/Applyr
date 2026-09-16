@@ -37,7 +37,58 @@ Epic 1 (fail-open dirty patches)
   → Epic 4 (adversarial honesty)
   → Epic 5 (advisory composition texture)
   → Epic 6 (controlled evaluation)
+  → Epic 7 (model-cost eligibility and telemetry)
 ```
+
+**2026-09-11 design correction (Jason):** extra-packet is two defect classes, not WARN vs hard-stop. Design:
+`CR-112-selection-and-closed-world-recovery-design.md`. Stories 3.0, 3.1, 3.5, and
+3.6 each have independent QA PASS. Epic 3 integration PASS
+(`d680faf4-4688-4ba6-8a64-0692f239b592`).
+
+**2026-09-11 sequence reconciliation:** Story 3.0 QA PASS
+(`2d3549f0`). Stories 3.1/3.5/3.6 and Epic 3 integration are complete on
+`cr112-selection-closed-world-design` @ `706504a`. Stories 7.1/7.2 live
+only on isolated `cr112-story71-72` @ `b7f7197` and are **not mergeable**
+until the cost-pause workflow receipt and Stage 0 continuation path are
+designed and independently reviewed. Do not start a new story on this
+branch. Full chain:
+`docs/spec/08-implementation/CR-112-reconciliation-2026-09-11.md`.
+
+**2026-09-14 status correction:** the design and independent-review
+gate above is now closed. Follow-up commit `7bf6829` on
+`cr112-story71-72` (child of `b7f7197`) implements
+`CR-112-cost-pause-state-design.md` in full. Independent re-review
+**PASSed** (`97887893-381a-47fa-b521-e5c1d5d2af78`, after a first-pass
+FAIL on `expected_item_ids`/`created_at` optionality that was
+corrected). `python -m unittest scripts.test_cr112_story71` is 41/41
+and `scripts.test_stage0_evidence_cascade` is 27/27 (re-verified
+2026-09-14 in an isolated worktree off `cr112-story71-72`). See Story
+7.1/7.2 status lines below and
+`SESSION-HANDOFF-2026-09-11-cr112-story71-72-followup.md` (on that
+branch only) for full evidence.
+
+**2026-09-14 merge:** `cr112-story71-72` (`b7f7197` + `7bf6829`) merged
+onto this sequence branch, local only, no push. Merging this branch's
+own copy of this tracker surfaced a second staleness: its Story
+7.1/7.2 Acceptance/Status text still described the pre-fix behavior
+(`free_only`/`paid_with_budget` classes, pausing to `WAITING_FOR_LLM`)
+and an earlier, superseded review (`18868b0f-a352-4cf6-8a76-b86249672614`).
+That predates the `1fa3fdac` FAIL and the `97887893` follow-up PASS and
+does not reflect what `7bf6829` actually implements — resolved in favor
+of the accurate, later-reviewed text below. The later should-fix for
+`created_at` audit-field validation was closed on `codex/cr112-consolidation`
+2026-09-15: cascade and extraction-review imports now require a
+non-empty string, with focused regressions in `scripts.test_cr112_story71`
+and `scripts.test_cr112_stage0_extraction_review`.
+
+**2026-09-13 validation candidate:** work continuing from `7bf6829`
+recorded automated suite and no-cost Stage 0 to Stage 1 boundary
+evidence, then added Stage 0 extraction fallback, ATS-term-contract,
+completion-floor, practice-identity, lean-digest, consumed-review, and
+ranking-characterization follow-ups. First-draft Stage 0-3 product
+proof still keeps CR-112 from being globally complete. Chain evidence:
+`SESSION-HANDOFF-2026-09-11-cr112-integrated-validation.md` and later
+Story 8 handoffs below.
 
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
@@ -65,7 +116,7 @@ CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and i
 
 **Dependencies:** none.
 **Regression evidence:** existing cascade tests plus the new reject/shuffle cases. Archive replay harness (CR-108 Epic 7.3) is optional later, not this story.
-**Status:** [ ] isolated on `cr112-epic1`; pending review. Reject/shuffle/partial-unknown tests plus simulated Groq→Gemini fallback. Hash-tail `len >= 8` on committed main already rejected `req-001`; this story locks that reject and the fallback path.
+**Status:** [ ] Documentation reconciliation only for location: implementation is on local `main` / this candidate (not only `cr112-epic1`). Cascade rejects invented `req-001` / shuffle remap; CHANGELOG names `FR-296`. Independent review ID not recorded; checkbox stays open.
 
 ### Story 1.2 — Do not ready a packet after dropping claim_constraints
 
@@ -74,21 +125,25 @@ CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and i
 - Test: `scripts/test_build_authoring_packet.py` (or nearest existing packet-assemble suite)
 
 **Acceptance:**
-- If excerpts are already at `_EXCERPT_MIN_CHARS` and estimated tokens still exceed `_TOKEN_BUDGET`, `packet_status` is `incomplete` with a recorded reason that names `claim_constraints` / budget, **or** a cheaper field is dropped first with a recorded reason (ATS-term padding, learned_examples already gone).
+- After learned examples, an over-budget packet compacts the author-only
+  `evidence_map[*].omitted_reasons` list before shrinking excerpts and records
+  how many entries were removed. The complete candidate ranking remains in
+  sibling `evidence_selection_trace.json`, which is not loaded by the author.
+- If excerpts are already at `_EXCERPT_MIN_CHARS` and estimated tokens still exceed `_TOKEN_BUDGET`, `packet_status` is `incomplete` with a recorded reason that names `claim_constraints` / budget.
 - `claim_constraints` is never silently replaced with `{}` while `packet_status=ready`.
 - Isolated `assemble_packet` reproduction from the investigation (ready + empty constraints + tokens 2912) must fail after the fix.
 - supplyhouse is **not** rebuilt in this story.
 
 **Dependencies:** none. Can parallelize with 1.1.
 **Regression evidence:** new unit test. Do not use a real employer folder as the fixture.
-**Status:** [ ] isolated on `cr112-epic1`; pending review. Comment + budget regression test. Committed main already omitted the wipe; this story locks Rule 5. supplyhouse not rebuilt.
+**Status:** [ ] Documentation reconciliation only for location: Rule 5 / no silent `claim_constraints` wipe is on local `main` / this candidate. Independent review ID not recorded; checkbox stays open. supplyhouse not rebuilt.
 
 ### Story 1.3 — Record the two patches in CHANGELOG + this tracker
 
 **Files:** CHANGELOG.md (DRAFT), this file.
 
 **Acceptance:** both behaviors named; no silent "resilience" language that hides fail-open.
-**Status:** [ ] CHANGELOG [DRAFT] 2026-09-10 Epic 1 only; pending review. Registry `FR-296`–`FR-298` / `AC-393`–`AC-395`. No Epics 2–6 in that entry.
+**Status:** [ ] Documentation reconciliation only for location: CHANGELOG names Stories 1.1–1.3 (`FR-296`–`FR-298` / `AC-393`–`AC-395`) on local `main` / this candidate. Independent review ID not recorded; checkbox stays open.
 
 ### Story 1.4 — Detect already-wiped packets
 
@@ -145,7 +200,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - **Stage 2 default is `--resume` for the mechanical subphases (truth/ats/mech/policy) only.** `--resume` alone does not satisfy `hm.critical_read` — running checks is not a substitute for actually assessing truth, relevance, and writing quality (this is F8: `hm.critical_read` is a WARN placeholder, not a semantic review, and the drafting agent must not silently self-dispose it as ACCEPTED_AS_CORRECT). The prose must require a real qualitative read (of the specific kind F8 describes — proof density, register, tailoring, no AI-tell shape) before `hm.critical_read` is disposed, whether that read is done by the drafting agent as a genuinely separate pass or deferred to Jason. Ladder-2 (multi-agent) review stays Jason-opt-in; this bullet is about not deleting the single-session qualitative read, not about restoring ladder-2 as default.
 - `scripts/check_instruction_drift.py` still passes.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Stage 0 default is `run_submission.py data/pending_review/{slug}`; no WE rescore. Stage 1 paste is `authoring_prompt.md` only. Stage 2 `--resume` is mechanical; qualitative read required before `hm.critical_read`.
+**Status:** [ ] Documentation reconciliation only: required Stage 0/1/2 language is present in `.codex/skills/generate-submission/SKILL.md` on this candidate (`test_cr112_lean_spawn.py`). Not planned. Independent review ID not recorded; checkbox stays open.
 
 ### Story 2.2 — Contain generate-submission-batch.js
 
@@ -164,7 +219,7 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Acceptance:** "Processing job descriptions today" tells the agent to run `run_submission.py` per slug, one author paste per WAITING_FOR_LLM, and `--resume`. Explicit: do not Task/Agent-spawn per JD. Do not invoke conversion-ready-pass on generate-submission drafts.
 
-**Status:** [ ] planned; not in the Epic 1 commit. Root `AGENTS.md` only.
+**Status:** [ ] Documentation reconciliation only: `AGENTS.md` trigger requires `run_submission.py`, one `authoring_prompt.md` paste, `--resume`, no per-JD spawn, no `conversion-ready-pass` on generate-submission drafts. Not planned. Independent review ID not recorded; checkbox stays open.
 
 ---
 
@@ -172,20 +227,43 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Depends on:** Epic 1.2 if packet shape changes. Uses investigation F5/F6.
 
-**Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; citing a claim the packet never offered is visible to Stage 1 verify.
+**Definition of Done:** a high-relevance metric claim that loses Top-2 has a recorded reason; an omitted fact that clearly dominates the weakest selected fact is swapped before authoring; citing a claim the packet never offered blocks Stage 1 completion until remove / rewrite / explicit widen / human-compare. Detection and comparative selection stay separate.
 
-### Story 3.1 — Fail or WARN extra-packet provenance IDs
+**Integration status (2026-09-11):** Stories 3.1, 3.5, and 3.6 have independent QA PASS. Epic 3 integration PASS (`d680faf4-4688-4ba6-8a64-0692f239b592`) on `706504a`. Combined candidate `7bf6829` / `165485f`: automated + no-cost Stage 0→1 passed; first-draft product proof remaining. WARN-era Story 3.1 (FR-302 / AC-399) is superseded; detection is FAIL-closed.
 
-**Files:** `scripts/author_from_packet.py` (`run_verify_only`), tests.
+### Story 3.0 — Pre-implementation design review (no code)
+
+**Files:** `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-design.md`
 
 **Acceptance:**
-- Any provenance `claim_id` not in packet excerpts ∪ evidence_map ∪ soft_gaps is a finding.
-- First implementation: WARN with a stable id (`truth.provenance.extra.<id>`). Do not hard-block until Jason sees false-positive rate on the 7-folder set (run read-only).
-- Project-prefix match (`ACC-101-SAVINGS` citing as PM) does **not** clear the extra-ID check.
+- Independent reviewer (not the design author) issues ACCEPT / REVISE / REJECT against the seven-folder 2026-09-10 evidence and FR-254.
+- Pearl and SupplyHouse `ACC-101-SAVINGS` must not `REPLACE`.
+- Detection must stay separable from comparison.
+- No live folder rewrite. No implementation of 3.1/3.5/3.6/7.x before ACCEPT.
 
-**Status:** [ ] planned; not in the Epic 1 commit. WARN only
-(`truth.provenance.extra.<id>`). Prefix does not clear. Tests in
-`scripts/test_cr112_epic3.py`. Live scan recorded below. No live rewrites.
+**Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
+against the design, Story 3.1 diff, seven-folder evidence, and FR-254.
+Independent design ACCEPT was `21fd8c64-6c03-4c55-9fc3-4a7a2a974dbb`.
+Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
+
+### Story 3.1 — Detect extra-packet provenance IDs as a recoverable completion block
+
+**Files:** `scripts/author_from_packet.py` (`run_verify_only`), `scripts/packet_closed_world.py`, tests.
+
+**Acceptance:**
+- Any provenance `claim_id` not in packet excerpts ∪ evidence_map ∪ soft_gaps is a finding with stable id `truth.provenance.extra.<id>`.
+- Detection does not rank, recommend, or widen.
+- Unresolved extra IDs FAIL Stage 1 verify. Finalize cannot complete. Agents must not dispose these as `ACCEPTED_AS_CORRECT` / `FALSE_POSITIVE` / `NOT_APPLICABLE` / `HUMAN_ACCEPTED_RISK`. This is not `NEEDS_DISPOSITION`.
+- Project-prefix match (`ACC-101-SAVINGS` citing as PM) does **not** clear the extra-ID check.
+- WARN-and-continue (FR-302 / AC-399) is superseded.
+- Recovery actions live in Story 3.6, not in this detector.
+
+**Status:** [x] QA PASS (`2d3549f0-39f6-41f9-8386-fc2d74fb76ff`) 2026-09-11
+on the detection slice (12/12 focused tests; nearby 56/56). Detection
+is FAIL-closed. Recovery stays Story 3.6. Independent Epic 3
+integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
+Live scan below is frozen evidence, not a rewrite
+list.
 
 **Live extra-packet scan (2026-09-10),** `python scripts/packet_closed_world.py --root data/submissions`:
 
@@ -199,22 +277,22 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 | supplyhouse | ACC-101-SAVINGS |
 | trax_technologies | (none) |
 
-4 of 7 WARN. Hard-block still deferred. SupplyHouse was not re-authored.
+4 of 7 extra. Do not treat those extras as automatically stronger. SupplyHouse was not re-authored.
 
 ### Story 3.2 — Record why a scored claim lost the slot
 
 **Files:** `scripts/build_authoring_packet.py` (`build_evidence_map`, `_write_selection_trace`), `scripts/test_cr112_story32.py`.
 
 **Acceptance:**
-- Packet `evidence_map` rows store cheap `omitted_reasons` `{claim_id, reason}` where reason is `top2_cutoff` or `project_slot_cap` only.
+- Packet `evidence_map` rows store cheap `omitted_reasons` `{claim_id, reason}` where reason is `top2_cutoff` or `project_slot_cap` only. `displaced_by_dominance` is Story 3.5 / FR-314, not this story.
 - Full ranking (every scored candidate, score, reason, attribution) lives in sibling `evidence_selection_trace.json`. Stage 1 never loads that file.
 - `score_zero` catalog noise and `boilerplate_filtered` preferred/responsibility lines are TRACE-only. Boilerplate items still get no evidence_map row.
 - No `disabled` pick-loop skip and no `disabled` omitted reason. Production scoring already skips disabled claims.
-- Sanitized Pearl-like fixture: SAVINGS ranks 3rd emits `top2_cutoff`, is not auto-inserted, and rank-1 SAVINGS is picked.
-- Author prompt may contain the cheap reason code. It must not contain candidate scores or `evidence_selection_trace.json`.
+- Sanitized Pearl-like fixture: SAVINGS ranks 3rd emits `top2_cutoff`, is **not** auto-inserted, and rank-1 SAVINGS is picked. Story 3.5 must not `REPLACE` this fixture.
+- Author prompt may contain the cheap reason code. It must not contain candidate scores, comparator axes, or `evidence_selection_trace.json`.
 - Production `build_packet` writes the sibling trace. A hand-call of `_write_selection_trace` is not coverage.
 
-**Status:** [x] accepted locally on `cr112-story32` (2026-09-11). Independent review ACCEPT. Packet enum is `top2_cutoff` | `project_slot_cap`. TRACE holds scores, `score_zero`, and `boilerplate_filtered`. Merged onto `cr112-integration`.
+**Status:** [x] accepted locally on `cr112-story32` (2026-09-11). Independent review ACCEPT. Packet enum is `top2_cutoff` | `project_slot_cap` until Story 3.5 adds `displaced_by_dominance`. TRACE holds scores, `score_zero`, and `boilerplate_filtered`. Merged onto `cr112-integration` / local main. Do not weaken Pearl KEEP.
 
 ### Story 3.3 — Advisory swap report (read-only)
 
@@ -240,6 +318,50 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - Fixture cloned from marlowe's Level II fingerprint line, with overlapping ROADMAP tags so the 8bbc497 path would have assigned the claim.
 
 **Status:** [x] accepted locally on `cr112-story34` (2026-09-11). Independent review ACCEPT. Eligibility-framed skip only. Merged onto `cr112-integration`.
+
+### Story 3.5 — Pre-authoring comparative replace
+
+**Depends on:** Story 3.0 ACCEPT, Story 3.2 TRACE.
+
+**Files:** `scripts/build_authoring_packet.py` (post Top-2 pass), `scripts/evidence_dominance.py`, `scripts/test_cr112_story35.py`.
+
+**Acceptance:**
+- After Top-2, omitted eligible candidates are compared to the weakest selected fact on that item using the six axes in the design doc.
+- `REPLACE` only on clear dominance. Swap before excerpts/prompt. TRACE records the decision. Packet omitted reason for the displaced ID is `displaced_by_dominance`.
+- `AMBIGUOUS` preserves current picks and sets `selection_review: true` on TRACE. No author-prompt scores.
+- Pearl-like SAVINGS fixture does not `REPLACE`. A separate synthetic fixture (not a larger-metric trick) does `REPLACE`.
+- Comparator uses no `call_llm`.
+- Story 3.3 report remains read-only.
+
+**Status:** [x] QA PASS (`e5d85297-faa2-4002-8452-74517e3547cf`) 2026-09-11
+on the Class 1 comparator (16/16 then 18/18 after eligibility-shadow and
+INFLUENCED/OBSERVED fixtures). Pearl/SupplyHouse SAVINGS never REPLACE.
+Independent Epic 3 integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
+
+### Story 3.6 — Closed-world recovery after extra-packet detection
+
+**Depends on:** Story 3.0 ACCEPT, Story 3.1 FAIL-closed detection, Story 3.5 comparator.
+
+**Files:** `scripts/closed_world_recovery.py`, `scripts/workflow/runner.py` (`run_stage1_validate` recovery step), `scripts/test_cr112_story36.py`.
+
+**Acceptance:**
+- Detector still does not recover. Recovery is a separate step. Helpers do not write `workflow_state.json` or `stage_receipts/`.
+- `INELIGIBLE` / prohibited / no WE span → `REWRITE_UNSUPPORTED` (do not widen).
+- Comparator `KEEP` or sibling-lens extras → `REMOVE_EXTRA` (do not widen).
+- True `AMBIGUOUS` extra → `QUALITATIVE_REVIEW` pause with both candidates and axes. Not auto-remove. Not `NEEDS_DISPOSITION`.
+- Extra IDs not in TRACE omitted/candidates → `REMOVE_EXTRA` or `REWRITE_UNSUPPORTED`. Never `WIDEN_PACKET`.
+- Comparator `REPLACE` only if A is a same-item TRACE omitted candidate → `WIDEN_PACKET`, invalidate leaked draft, require a new author pass, do not provenance-stamp leaked sentences. Orchestrator writes `WAITING_FOR_LLM`.
+- `HUMAN_COMPARE` only for unreadable packet, missing catalog, or WE/constraint conflict.
+- Cross-item REPLACE is forbidden.
+- Unresolved extras keep Stage 1 FAIL. Finalize blocked. `--resume` is the correction path.
+- Fixtures: pearl/supplyhouse SAVINGS, loot_labs SUPPORT, marlowe SEC → `REMOVE_EXTRA`; synthetic same-item TRACE omitted REPLACE → `WIDEN_PACKET` + new author pass; disabled extra → `REWRITE_UNSUPPORTED`.
+- Do not rewrite live seven folders.
+
+**Status:** [x] QA PASS (`d5a8861b-f6bd-4997-a3c8-9916fe5a40f6`) 2026-09-11
+on Class 2 recovery (8/8 then fixtures added for SupplyHouse and
+constraint conflict). Helper does not mint receipts. Independent Epic 3
+integration PASS (`d680faf4`). Combined candidate: automated + no-cost Stage 0→1 passed; first-draft product proof remaining.
+Not a 7.x gate.
 
 ---
 
@@ -332,15 +454,179 @@ Merged onto `cr112-integration`.
 
 ---
 
+## Epic 7 — Model-cost eligibility and telemetry
+
+**Depends on:** none for the registry. Touches CR-108 cascade and `call_llm`. Blocked on Story 3.0 ACCEPT because Jason specified this policy in the same 2026-09-11 design pass.
+
+**Definition of Done:** no model call proceeds with unknown cost eligibility; free providers cannot silently fall back to paid; unknown cost is never reported as zero dollars; missing authorized API pauses onto manual paste.
+
+### Story 7.1 — Cost eligibility, no free→paid fallback, pause to paste
+
+**Files:** new cost-policy module, `scripts/utils.py` `call_llm` / provider cascade, Stage 0 cascade, tests.
+
+**Acceptance:**
+- Runtime classes are `offline` | `manual_paste` | `free_only` | `paid_with_budget`. Missing class is `unknown`.
+- Groq and Gemini stay `unknown` until an adapter can assert the configured call cannot incur a charge. Advertised free tier is not enough. Provider name does not imply free.
+- `unknown` is not callable (fail closed).
+- Paid requires user-configured provider allowlist, remaining run/batch budget, and a known estimate. Unset/0 budget or unknown estimate → paid ineligible.
+- Fallback may not move `free_only` → `paid_with_budget`, nor `free_zero_dollar` → `paid`/`unknown`. Provider errors cannot silently change cost mode.
+- No eligible provider: do not call; pause at `WAITING_FOR_INPUT` with `pause_kind=cost_authorization`. **Never** `WAITING_FOR_LLM`. Stage 1 paste does not complete Stage 0.
+- Does not wire eval `--paid-llm` to `call_llm`.
+
+**Status:** [x] implemented at `7bf6829` (follow-up commit, child of `b7f7197`). Independent review of `b7f7197` alone was FAIL (`1fa3fdac`). An earlier, superseded review on this branch's own copy of this doc (`18868b0f`, 2026-09-11) described `b7f7197`'s pre-fix behavior — pausing to `WAITING_FOR_LLM` — which the cost-pause design explicitly rejects; that text and review are stale, not authoritative. The follow-up implementing the cost-pause receipt and Stage 0 import path was independently re-reviewed and **PASSed** (`97887893`, 2026-09-11, after correcting `expected_item_ids`/`created_at` optionality). 41/41 focused tests (`scripts.test_cr112_story71`), 27/27 cascade regression (`scripts.test_stage0_evidence_cascade`) — both re-run 2026-09-14. **Merged** onto `cr112-selection-closed-world-design` 2026-09-14, local only, no push; not yet merged onto `cr112-integration` / `main`. Later `created_at` non-empty string validation was implemented 2026-09-15 and verified by `scripts.test_cr112_story71`, `scripts.test_stage0_evidence_cascade`, and `scripts.test_cr112_stage0_extraction_review`. Later validation-candidate work also exercised the no-cost Stage 0 to Stage 1 boundary; CR-112 still is not globally complete.
+
+### Story 7.2 — Cost telemetry: unknown is not zero
+
+**Files:** call sites + eval/metrics writers, tests.
+
+**Acceptance:**
+- Per call / totals record: invocations, provider, estimated tokens, `cost_class`, `cost_known`, `api_cents` only when `cost_known` is true, `subscription_minutes` separately.
+- When `cost_known=false`, `api_cents` is omitted or null, never `0`.
+- Never sum subscription minutes with API cents.
+- Eval 6.1/6.2 baseline remains zero-call with explicit `cost_class` labels, not implied free spend.
+
+**Status:** [x] implemented at `7bf6829` with Story 7.1, same commit and same independent PASS (`97887893`). Superseded by this: an earlier `18868b0f` PASS on this branch's own copy of this doc, predating the follow-up. Telemetry contract (Decision 7 confidence table: `cost_known`/`cost_confidence`/`api_cents`) is in the reviewed follow-up. **Merged** onto `cr112-selection-closed-world-design` 2026-09-14, local only, no push; not yet merged onto `cr112-integration` — same as Story 7.1. Later validation-candidate work keeps eval zero-call as `offline` with `cost_known=true`; first-draft product proof remains open.
+
+### Story 7.3 — Operator free-tier attestation (Groq / Gemini) as `certify_zero_charge`
+
+**Files:** `scripts/cost_eligibility.py` (attestation constants + fail-closed validation), `scripts/utils.py` (`zero_charge_basis` telemetry echo), `scripts/test_cr112_story73.py`, `tests/unit/profileFreeTierAssertions.test.ts`. Design addendum: `CR-112-cost-pause-state-design.md` (2026-09-15). Packet: `.metis/plans/cr112-cost-operator-free-tier-authorization-packet.md`. Requirements: `FR-326` / `AC-424`.
+
+**Acceptance:**
+- A structured, expiring operator attestation (`freeTierAssertions` in the `llm_settings` blob; exact canonical statement, strict `acknowledged: true`, timezone-aware `asserted_at`, 30-day expiry) certifies `free_only` for `groq`/`gemini` only when `costClasses[provider]="free_only"` is also declared.
+- Missing / invalid / expired / non-certifiable attestations fail closed to `unknown` with specific receipt reasons; default installs stay byte-identical to Story 7.1 behavior.
+- Attested free plus allowlisted paid in one chain still strips paid (`free_to_paid_forbidden`); paid allowlist, budget, estimate, cascade import, and pause contracts unchanged.
+- Successful attested calls record `zero_charge_basis="operator_assertion"` and `assertion_asserted_at` alongside `api_cents=0`.
+- No provider, model, API, or network call at any point, including validation. No production SQLite or submission writes.
+
+**Status:** [x] implemented 2026-09-15 on `codex/cr112-consolidation` under the approved packet. Focused tests: `scripts/test_cr112_story73.py` (new, offline) plus unchanged `scripts/test_cr112_story71.py` regression and `tests/unit/profileFreeTierAssertions.test.ts` (vitest settings round-trip). Independent review pending; not yet committed or merged.
+
+## Epic 8 — Completion contract and practice portability (Camunda follow-up)
+
+**Depends on:** Epic 7 candidate plus Stage 0 extraction fallback (`470abdf`)
+and ATS-term-contract eligibility (`089efec`). **Touches:** completion
+predicates, Mech findings, practice Stage 3. Not first-draft digest.
+Not ranking. Not identity implementation.
+
+### Story 8.1 — CONVERT-READY floors are completion gates
+
+**Files:**
+- Modify: `scripts/contracts.py` (`check_rubric_floors`, `check_draft_manifest`, `check_stage2_ready`)
+- Modify: `scripts/workflow/runner.py` (`collect_mech_findings`, `run_stage3_finalize`)
+- Modify: `scripts/check_submission_status.py` (DONE inherits draft-manifest floors)
+- Test: `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`, `scripts/test_check_submission_status.py`
+
+**Acceptance:** `FR-318` / `AC-415`. Resume 68 / Cover Letter 69 cannot
+mint Stage 2 COMPLETE, practice `PRACTICE_COMPLETE`, or status DONE.
+`--force` cannot skip the floor helper. No HAR / exception path in this
+story. Do not lower 70/65.
+
+**Status:** [x] QA PASS ([Review](3cd059c0-ba53-42b7-b66a-a6677a310de5)) 2026-09-13 follow-up after 0aaab87 negative controls. Prior review [b782f4e4](b782f4e4-bf82-4dec-a31e-e82c43d04f30) ACCEPT WITH CHANGES; required tests added in `0aaab87`; this follow-up is unqualified PASS. Do not mark CR-112 complete.
+
+### Story 8.2 — Privacy-safe practice identity
+
+**Files:**
+- Modify: `scripts/utils.py` (`resolve_identity`, `load_identity_profile`)
+- Modify: `scripts/author_from_packet.py` (`_apply_resume_header_if_available`)
+- Modify: `scripts/quality_checker.py` (`_candidate_name_upper`)
+- Modify: `scripts/workflow/runner.py` (`run_stage1_prompt`, `run_stage1_validate`)
+- Test: `scripts/test_practice_identity.py`
+- Design: `docs/spec/08-implementation/CR-112-practice-identity-portability-defect.md`
+
+**Acceptance:** `SEC-006` / `AC-416`. Fail before authoring when identity is
+missing. No silent John Doe. No production sqlite copy. Explicit
+synthetic mode for fixtures only.
+
+**Status:** [x] QA PASS ([Review](caa75e98-aade-4c21-93c7-4e2140e147de)) 2026-09-13. Security CLEAR ([Review](375d080a-7767-489f-97b1-73cd9d4f650a)). Do not mark CR-112 complete.
+
+### Story 8.3 — Lean digest cross-document restatement prevention
+
+**Files:**
+- Modify: `scripts/generate_authoring_rule_digest.py` (`_DIGEST_CONTENT` §5)
+- Test: `scripts/test_generate_authoring_rule_digest.py`, `scripts/test_author_from_packet.py`
+- Design: `docs/spec/08-implementation/CR-112-lean-digest-pair-restatement-design.md`
+
+**Acceptance:** `FR-319` / `AC-417`. Generated digest and Stage 1 prompt SYSTEM BLOCK contain the locked keep-fact / change-language instruction. Negative control proves the checker is not matching incidental "resume" / "cover letter" words. Digest stays under 10000 chars. Detector and Stage 1 pair FAIL unchanged. Not a CR-097 promote. Independent design review DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)).
+
+**Status:** [x] QA PASS ([Review](de184edd-f4e3-4249-88ce-193500cb8161)) 2026-09-13. Design DR-001 ACCEPT WITH CHANGES ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Digest 9805 chars, version `9634969118ac5d3d`. Detector unchanged. JD 2 (Vanta) first draft still restated 13 pair phrases; detector caught them. Follow-up design review [Review](8b6fe4c0-479a-4ea9-bbd1-3d84be8d488b) ACCEPT: no further digest paragraph this pass. Detector plus Stage 1 FAIL plus letter-only recovery is the product control. Do not mark CR-112 complete.
+
+### Story 8.4 — Consumed extraction review is durable on Stage 0 restart
+
+**Files:**
+- Modify: `scripts/stage0_requirement_extraction_review.py` (`try_load_review_import`)
+- Modify: `scripts/build_stage0_fit_gate.py` (validation-error catch)
+- Test: `scripts/test_cr112_stage0_extraction_review.py` (`TestConsumedReviewDurableOnRestart`)
+- Design: `docs/spec/08-implementation/CR-112-extraction-review-consumed-restart-design.md`
+
+**Acceptance:** `FR-320` / `AC-418`. After consume, a later Stage 0 restart with unchanged JD and queue must reuse `.consumed.json` and must not require restoring the live import. Live import may correct a prior bucket. Stale JD or changed queue re-pauses without applying old buckets. Unreadable consumed JSON fails closed. Cascade consumed-load is out of scope.
+
+**Status:** [x] QA PASS ([Review](0139ffbf-80e9-4b70-85e0-34f3889cbdae)) 2026-09-13. Design ACCEPT WITH CHANGES ([Review](221eed13-6cf1-45e0-ba82-14c298ba0877)). Security CLEAR ([Review](c7816cb7-8ef5-4726-88e9-a5614c62d7e1)). 6/6 `TestConsumedReviewDurableOnRestart` OK; full module 56/56 OK. All AC-418 criteria verified. Do not mark CR-112 complete.
+
+### Story 8.5 — Ranking characterization corpus (no formula change)
+
+**Files:**
+- Test: `scripts/test_cr112_ranking_characterization.py`
+- Modify: `scripts/run_all_tests.py` (register the module)
+- Design (already reviewed, no formula): `CR-112-ranking-investigation-savings-vs-messaging.md`
+
+**Acceptance:** `FR-321` / `AC-419`. Fixtures isolate `_score_claims_for_item` inputs. Camunda SAVINGS-over-messaging is `known_defect`, not a desired-rank assert. Cost-reduction and ARR/reliability assert metric-bearing winners. Pearl ranking does not nominate SAVINGS; SupplyHouse REPLACE keeps it out. Near-tie does not auto-REPLACE. Formula unchanged.
+
+**Status:** [x] Independent corpus review ACCEPT ([Review](31c12c40-ee42-4920-8db0-518efef1c113)) 2026-09-13. 12/12 `test_cr112_ranking_characterization.py` OK. Formula unchanged. Do not mark CR-112 complete.
+
+### Story 8.6 — Score provenance contract
+
+**Files:**
+- Design: `docs/spec/08-implementation/CR-112-score-provenance-design.md`
+- Contract helpers: `scripts/contracts.py`
+- Mech findings: `scripts/workflow/runner.py`
+- Tests: `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`
+
+**Acceptance:** `FR-322` / `AC-420`. Hash-bound scorecards, reviewer role, 3-point floor band for one blind read, fail-closed disagreement. No agent-per-document default.
+
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. Design review ACCEPT ([Review](5dc974ec-cfc6-43fc-bd4d-d220f18352cf)) 2026-09-13. Pure local contract helpers and Mech/finalize fail-closed checks enforce `reviews/rubric_scorecard.json` current-hash rows, role-tagged boundary-band blind reads, stale-score rejection, and disagreement fail-closed behavior. Verification: `python -m unittest scripts.test_contracts scripts.test_workflow_authority scripts.test_cr112_story71 scripts.test_stage0_evidence_cascade` => 208 tests OK; `python -m unittest scripts.test_cr112_story31 scripts.test_cr112_story35 scripts.test_cr112_story36 scripts.test_hm_critical_read_contract scripts.test_practice_identity scripts.test_cr112_ranking_characterization` => 123 tests OK. No LLM/API/provider call. Do not mark CR-112 complete.
+
+### Story 8.7 — Unbracketed placeholder header stack
+
+**Files:**
+- Design: `CR-112-unbracketed-placeholder-header-stack-defect.md`
+- Implementation: `scripts/apply_resume_header.py`
+- Tests: `scripts/test_practice_identity.py`
+
+**Acceptance:** `FR-325` / `AC-423`. Placeholder identity must be replaced before H-001; real and placeholder headers must never coexist; malformed identity fails before authoring or completion; tests use synthetic/fake identity only.
+
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. `apply_resume_header.patch_file` now replaces unbracketed contact-label headers and strips stacked placeholder headers below a real header. Verification: `python -m unittest scripts.test_practice_identity` => 12 tests OK. No model/API/provider call.
+
+### Story 8.8 — Ranking correction for Camunda savings-vs-messaging defect
+
+**Files:**
+- Implementation: `scripts/build_authoring_packet.py`
+- Tests: `scripts/test_cr112_ranking_characterization.py`
+- Investigation: `docs/spec/08-implementation/CR-112-ranking-investigation-savings-vs-messaging.md`
+
+**Acceptance:** `FR-323` / `AC-421`. Camunda-like distributed-systems item must rank messaging/architecture evidence above broad savings evidence, while direct cost-reduction and ARR/reliability controls still rank the metric-bearing evidence first. Pearl/SupplyHouse REPLACE controls remain non-REPLACE. No model/API call.
+
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. The ranker now adds a bounded item-specific technical-semantics boost for distributed/event-driven architecture requirements. This is not a metric-size boost and not a blanket ban on `ACC-101-SAVINGS`: direct cost-reduction and ARR/reliability controls still rank metric-bearing evidence first. Verification: `python -m unittest scripts.test_cr112_ranking_characterization` => 12 tests OK; `python -m unittest scripts.test_cr112_story31 scripts.test_cr112_story32 scripts.test_cr112_story33 scripts.test_cr112_story34 scripts.test_cr112_story35 scripts.test_cr112_story36 scripts.test_cr112_ranking_characterization` => 78 tests OK. No model/API/provider call.
+
+### Story 8.9 — Catalog validator alignment with claims-index contract
+
+**Files:**
+- Implementation: `scripts/catalog_validator.py`
+- CLI smoke: `scripts/verify_master_claims.py`
+- Tests: `scripts/test_catalog_validator.py`
+
+**Acceptance:** `FR-324` / `AC-422`. Private catalog validation passes without restoring legacy catalog prose as an authoring source. Empty active claim records still fail unless they have retrieval tags plus explicit allowed/prohibited constraints. Catalog metrics must be grounded in approved metrics, workExperience text, or a metric_ref anchor. No model/API call.
+
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. `python scripts/verify_master_claims.py` now passes against private `data/workExperience.md` and `data/master_claims.json`; `python -m unittest scripts.test_catalog_validator` => 3 tests OK. This updates validation to the CR-094 architecture rather than treating empty legacy `text` as a blocker when tags and constraints are present.
+
 ## Out of scope
 
 - Rewriting the seven live submissions **as a blanket action.** Story 1.4's per-folder recovery decision is the sole, narrow exception — any re-authoring it triggers is explicit, human-reviewed, and limited to folders the audit actually flags, not a general rewrite pass.
-- Auto-inserting larger metrics
+- Auto-inserting larger metrics (Story 3.5 replace is dominance, not metric size)
 - Automatic style/gerund hard blocks
-- Migrating Stage 1 compose to a cheaper API model
+- Migrating Stage 1 compose to a cheaper API model without Epic 7 eligibility
 - Multi-tenant billing
 - Deleting Antigravity's runner, catalog, or fixtures
 - Accepting CR-097 Epic 7 as CR-097 scope
+- Implementing Stories 3.1-revise / 3.5 / 3.6 / 7.x before Story 3.0 ACCEPT
 
 ---
 

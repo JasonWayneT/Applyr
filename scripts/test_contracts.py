@@ -31,6 +31,8 @@ from contracts import (
     check_draft_manifest,
     check_finalize_ready,
     check_freshness,
+    check_rubric_floors,
+    check_rubric_score_provenance,
     check_stage0_fit_gate,
     check_stage1_ready,
     check_stage2_ready,
@@ -112,6 +114,101 @@ def _hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
+def _doc_hashes(resume_content: str = _STAGE2_RESUME_CONTENT, cover_content: str = _STAGE2_COVER_CONTENT) -> dict:
+    return {
+        "resume": _hash(resume_content),
+        "cover_letter": _hash(cover_content),
+    }
+
+
+def _rubric_sha() -> str:
+    rubric = Path(__file__).resolve().parents[1] / "data" / "conversion_rubric.md"
+    return hashlib.sha256(rubric.read_bytes()).hexdigest()
+
+
+def _criterion_breakdown(max_values: dict[str, int], total: float) -> dict:
+    remaining = float(total)
+    breakdown = {}
+    for key, max_value in max_values.items():
+        value = min(remaining, float(max_value))
+        breakdown[key] = value
+        remaining -= value
+    return breakdown
+
+
+def _resume_breakdown(total: float = 78) -> dict:
+    return _criterion_breakdown(
+        {"R1": 10, "R2": 15, "R3": 15, "R4": 20, "R5": 15, "R6": 10, "R7": 10, "R8": 5},
+        total,
+    )
+
+
+def _cover_breakdown(total: float = 70) -> dict:
+    return _criterion_breakdown({"C1": 25, "C2": 25, "C3": 20, "C4": 20, "C5": 10}, total)
+
+
+def _score(
+    resume_total: float = 78,
+    cover_total: float = 70,
+    *,
+    hashes: dict | None = None,
+) -> dict:
+    return {
+        "document_sha256": hashes or _doc_hashes(),
+        "resume": {"total": resume_total},
+        "cover_letter": {"total": cover_total},
+    }
+
+
+def _scorecard_row(
+    resume_total: float = 78,
+    cover_total: float = 70,
+    *,
+    role: str = "authoring_session",
+    hashes: dict | None = None,
+) -> dict:
+    return {
+        "schema_version": 1,
+        "rubric_sha256": _rubric_sha(),
+        "scored_at": "2026-09-15T00:00:00+00:00",
+        "reviewer_run_id": "test-run-001",
+        "reviewer_role": role,
+        "document_sha256": hashes or _doc_hashes(),
+        "resume": {"total": resume_total, "breakdown": _resume_breakdown(resume_total), "citations": {}},
+        "cover_letter": {"total": cover_total, "breakdown": _cover_breakdown(cover_total), "citations": {}},
+    }
+
+
+def _needs_blind(side: str, total: float) -> bool:
+    if side == "resume":
+        return 67 <= total <= 73
+    return 62 <= total <= 68
+
+
+def _write_scorecards(
+    folder: Path,
+    *,
+    resume_total: float = 78,
+    cover_total: float = 70,
+    hashes: dict | None = None,
+    rows: list[dict] | None = None,
+) -> None:
+    if rows is None:
+        rows = [_scorecard_row(resume_total, cover_total, hashes=hashes)]
+        if _needs_blind("resume", resume_total) or _needs_blind("cover_letter", cover_total):
+            rows.append(
+                _scorecard_row(
+                    resume_total,
+                    cover_total,
+                    role="independent_blind",
+                    hashes=hashes,
+                )
+            )
+    reviews = folder / "reviews"
+    reviews.mkdir(exist_ok=True)
+    _write_json(reviews, "rubric_scorecard.json", rows)
+
+
 def _write_stage2_ready_fixture(
     folder: Path,
     receipt_overrides: dict | None = None,
@@ -155,6 +252,24 @@ def _write_stage2_ready_fixture(
     manifest_data = {**_VALID_MANIFEST}
     if manifest_overrides:
         manifest_data.update(manifest_overrides)
+    score = manifest_data.get("rubric_score")
+    if isinstance(score, dict) and isinstance(score.get("resume"), dict) and isinstance(score.get("cover_letter"), dict):
+        resume_total = score["resume"].get("total", 78)
+        cover_total = score["cover_letter"].get("total", 70)
+        if isinstance(resume_total, (int, float)) and isinstance(cover_total, (int, float)):
+            hashes = _doc_hashes(
+                _STAGE2_RESUME_CONTENT if write_resume else "",
+                _STAGE2_COVER_CONTENT if write_cover else "",
+            )
+            score = {**score, "document_sha256": hashes}
+            manifest_data["rubric_score"] = score
+            if resume_total >= 70 and cover_total >= 65 and write_resume and write_cover:
+                _write_scorecards(
+                    folder,
+                    resume_total=resume_total,
+                    cover_total=cover_total,
+                    hashes=hashes,
+                )
     for key in manifest_omit_keys or []:
         manifest_data.pop(key, None)
     _write_json(folder, "draft_manifest.json", manifest_data)
@@ -315,6 +430,264 @@ class TestCheckDraftManifest(unittest.TestCase):
             ok, errors = check_draft_manifest(tmpdir)
             self.assertFalse(ok)
             self.assertTrue(any("cover_letter.total" in e for e in errors))
+
+    def test_resume_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_cover_letter_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 64}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("cover_letter" in e and "65" in e for e in errors))
+
+    def test_exact_floors_pass(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 65}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertTrue(ok, errors)
+
+    def test_resume_69_9_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": 69.9}, "cover_letter": {"total": 65}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_nan_total_fails_shape(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                **_VALID_MANIFEST,
+                "rubric_score": {"resume": {"total": float("nan")}, "cover_letter": {"total": 65}},
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            ok, errors = check_draft_manifest(tmpdir)
+            self.assertFalse(ok)
+            self.assertTrue(any("resume.total" in e for e in errors))
+            self.assertFalse(any("CONVERT-READY floor" in e for e in errors))
+
+
+# ---------------------------------------------------------------------------
+# check_rubric_floors (CR-112 completion contract)
+# ---------------------------------------------------------------------------
+
+class TestCheckRubricFloors(unittest.TestCase):
+    """Negative controls: floors are independent of shape errors."""
+
+    def test_camunda_shaped_68_69_fails_resume(self):
+        errors = check_rubric_floors({"resume": {"total": 68}, "cover_letter": {"total": 69}})
+        self.assertTrue(any("resume" in e and "70" in e for e in errors))
+        self.assertFalse(any("cover_letter" in e and "65" in e for e in errors))
+
+    def test_resume_69_9_fails(self):
+        errors = check_rubric_floors({"resume": {"total": 69.9}, "cover_letter": {"total": 65}})
+        self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_exact_floors_empty(self):
+        self.assertEqual(
+            check_rubric_floors({"resume": {"total": 70}, "cover_letter": {"total": 65}}),
+            [],
+        )
+
+    def test_missing_score_is_shape_not_floor(self):
+        self.assertEqual(check_rubric_floors("not scored yet"), [])
+        self.assertEqual(check_rubric_floors({"resume": {"total": 78}}), [])
+
+    def test_nan_is_shape_not_a_passing_floor(self):
+        self.assertEqual(
+            check_rubric_floors({"resume": {"total": float("nan")}, "cover_letter": {"total": 65}}),
+            [],
+        )
+
+
+# ---------------------------------------------------------------------------
+# check_rubric_score_provenance (CR-112 Story 8.6 / FR-322)
+# ---------------------------------------------------------------------------
+
+class TestCheckRubricScoreProvenance(unittest.TestCase):
+
+    def _write_docs(self, folder: Path, resume: str = _STAGE2_RESUME_CONTENT, cover: str = _STAGE2_COVER_CONTENT) -> dict:
+        _write_text(folder, "Resume.md", resume)
+        _write_text(folder, "CoverLetter.md", cover)
+        return _doc_hashes(resume, cover)
+
+    def test_resume_78_needs_no_blind_row(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            _write_scorecards(folder, resume_total=78, cover_total=70, hashes=hashes)
+            self.assertEqual(check_rubric_score_provenance(str(folder), score), [])
+
+    def test_stale_document_hash_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            old_hashes = self._write_docs(folder, resume="old resume", cover=_STAGE2_COVER_CONTENT)
+            score = _score(78, 70, hashes=old_hashes)
+            _write_scorecards(folder, resume_total=78, cover_total=70, hashes=old_hashes)
+            (folder / "Resume.md").write_text("edited resume", encoding="utf-8")
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("document_sha256" in e or "no scorecard row" in e for e in errors), errors)
+
+    def test_current_hash_70_and_68_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(70, 70, hashes=hashes)
+            _write_scorecards(
+                folder,
+                rows=[
+                    _scorecard_row(70, 70, role="correcting_implementer", hashes=hashes),
+                    _scorecard_row(68, 70, role="independent_blind", hashes=hashes),
+                ],
+            )
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("below 70" in e and "disagreement" in e for e in errors), errors)
+
+    def test_resume_70_plus_blind_71_completes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(70, 70, hashes=hashes)
+            _write_scorecards(
+                folder,
+                rows=[
+                    _scorecard_row(70, 70, role="correcting_implementer", hashes=hashes),
+                    _scorecard_row(71, 70, role="independent_blind", hashes=hashes),
+                ],
+            )
+            self.assertEqual(check_rubric_score_provenance(str(folder), score), [])
+
+    def test_boundary_score_without_blind_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(70, 70, hashes=hashes)
+            _write_scorecards(
+                folder,
+                rows=[_scorecard_row(70, 70, role="correcting_implementer", hashes=hashes)],
+            )
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("independent_blind" in e for e in errors), errors)
+
+    def test_scorecard_missing_schema_version_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row.pop("schema_version")
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("schema_version" in e for e in errors), errors)
+
+    def test_scorecard_stale_rubric_hash_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["rubric_sha256"] = "0" * 64
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("rubric_sha256" in e for e in errors), errors)
+
+    def test_scorecard_bad_scored_at_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["scored_at"] = "2026-09-15 00:00:00"
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("scored_at" in e for e in errors), errors)
+
+    def test_scorecard_missing_reviewer_run_metadata_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row.pop("reviewer_run_id")
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("reviewer_run_id" in e or "spawned_by" in e for e in errors), errors)
+
+    def test_scorecard_extra_breakdown_keys_block(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"]["R9"] = 5
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown has unknown keys" in e and "R9" in e for e in errors), errors)
+
+    def test_scorecard_incomplete_breakdown_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"].pop("R8")
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown missing keys" in e and "R8" in e for e in errors), errors)
+
+    def test_scorecard_boolean_breakdown_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"]["R1"] = True
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown.R1 must be a finite number" in e for e in errors), errors)
+
+    def test_scorecard_over_max_breakdown_blocks(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["resume"]["breakdown"]["R8"] = 6
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown.R8 must be between 0 and 5" in e for e in errors), errors)
+
+    def test_scorecard_breakdown_sum_must_match_total(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            hashes = self._write_docs(folder)
+            score = _score(78, 70, hashes=hashes)
+            row = _scorecard_row(78, 70, hashes=hashes)
+            row["cover_letter"]["breakdown"]["C5"] = 6
+            _write_scorecards(folder, rows=[row])
+            errors = check_rubric_score_provenance(str(folder), score)
+            self.assertTrue(any("breakdown sum must equal cover_letter.total" in e for e in errors), errors)
 
 
 # ---------------------------------------------------------------------------
@@ -538,7 +911,13 @@ class TestCheckFinalizeReady(unittest.TestCase):
         os.utime(cover, (now - 100, now - 100))
         receipt = _write_json(folder, "verification_receipt.json", _VALID_RECEIPT)
         os.utime(receipt, (now, now))
-        _write_json(folder, "draft_manifest.json", _VALID_MANIFEST)
+        hashes = _doc_hashes("content", "content")
+        _write_json(
+            folder,
+            "draft_manifest.json",
+            {**_VALID_MANIFEST, "rubric_score": _score(hashes=hashes)},
+        )
+        _write_scorecards(folder, hashes=hashes)
 
     def test_all_valid_passes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -547,6 +926,37 @@ class TestCheckFinalizeReady(unittest.TestCase):
             ok, errors = check_finalize_ready(str(folder))
             self.assertTrue(ok, errors)
             self.assertEqual(errors, [])
+
+    def test_exact_floors_pass(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            self._write_all_valid(folder)
+            manifest = {
+                **_VALID_MANIFEST,
+                "rubric_score": _score(70, 65, hashes=_doc_hashes("content", "content")),
+            }
+            _write_json(folder, "draft_manifest.json", manifest)
+            _write_scorecards(
+                folder,
+                resume_total=70,
+                cover_total=65,
+                hashes=_doc_hashes("content", "content"),
+            )
+            ok, errors = check_finalize_ready(str(folder))
+            self.assertTrue(ok, errors)
+
+    def test_resume_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            self._write_all_valid(folder)
+            manifest = {
+                **_VALID_MANIFEST,
+                "rubric_score": _score(68, 69, hashes=_doc_hashes("content", "content")),
+            }
+            _write_json(folder, "draft_manifest.json", manifest)
+            ok, errors = check_finalize_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
 
     def test_missing_receipt_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -700,6 +1110,57 @@ class TestCheckStage2Ready(unittest.TestCase):
             ok, errors = check_stage2_ready(str(folder))
             self.assertTrue(ok, errors)
             self.assertEqual(errors, [])
+
+    def test_resume_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
+
+    def test_cover_letter_below_floor_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 64}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("cover_letter" in e and "65" in e for e in errors))
+
+    def test_exact_floors_pass(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 65}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertTrue(ok, errors)
+
+    def test_resume_69_9_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            _write_stage2_ready_fixture(
+                folder,
+                manifest_overrides={
+                    "rubric_score": {"resume": {"total": 69.9}, "cover_letter": {"total": 65}},
+                },
+            )
+            ok, errors = check_stage2_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("resume" in e and "70" in e for e in errors))
 
     def test_missing_receipt_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:

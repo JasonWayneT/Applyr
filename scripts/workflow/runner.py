@@ -17,8 +17,10 @@ import contracts  # noqa: E402
 from author_from_packet import build_authoring_prompt, run_verify_only  # noqa: E402
 from build_authoring_packet import build_packet  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
+    Stage0CostAuthorizationNeeded,
     Stage0ExtractError,
     Stage0NeedsInput,
+    Stage0RequirementExtractionReviewNeeded,
     build_stage0_fit_gate,
 )
 from stage_gate import StageGateNotReadyError, require_stage_ready  # noqa: E402
@@ -46,6 +48,7 @@ from workflow.receipts import (  # noqa: E402
 from workflow.reviews import (  # noqa: E402
     ensure_stage2_subphases,
     findings_content_hash,
+    parse_disposition,
     sync_dispositions_for_phase,
     write_ats_findings,
     write_hm_findings,
@@ -266,6 +269,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             input_hashes=file_hash_map(folder, ["Original_JD.txt"]),
             output_hashes={},
             result={
+                "pause_kind": "review_center",
                 "opportunity_key": exc.opportunity_key,
                 "pending_confirmations": exc.pending,
                 "duration_seconds": _duration,
@@ -286,6 +290,95 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             "waiting_for_input",
             duration_seconds=_duration,
             pending_confirmations=len(exc.pending),
+        )
+        return result_state
+    except Stage0RequirementExtractionReviewNeeded as exc:
+        # CR-112: receipt-only pause (PIN 1) -- fires before run_key/
+        # request_hash/start_run exist, so no stage0_runs row is created and
+        # mark_run_status is never called for this pause.
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(
+                folder, ["Original_JD.txt", "stage0_requirement_extraction_review.json"]
+            ),
+            output_hashes={},
+            result={
+                "pause_kind": "requirement_extraction_review",
+                "opportunity_key": exc.opportunity_key,
+                "queue": exc.queue,
+                "duration_seconds": _duration,
+            },
+            checks={"requirement_extraction_review_recorded": True},
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pause_kind="requirement_extraction_review",
+            queue_size=len(exc.queue),
+        )
+        return result_state
+    except Stage0CostAuthorizationNeeded as exc:
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(
+                folder, ["Original_JD.txt", "stage0_cascade_import.json"]
+            ),
+            output_hashes={},
+            result={
+                "pause_kind": "cost_authorization",
+                "stage": "stage0",
+                "attempted_operation": "evidence_classification",
+                "authorization_mode": exc.authorization_mode,
+                "ineligible_providers": exc.ineligible_providers,
+                "model_call_occurred": False,
+                "cost_applicable": False,
+                "cost_known": False,
+                "cost_confidence": "unknown",
+                "reason": exc.reason,
+                "next_paths": exc.next_paths,
+                "resume_command": f"python scripts/run_submission.py {folder} --resume",
+                "import_path": os.path.join(folder, "stage0_cascade_import.json"),
+                "duration_seconds": _duration,
+                "cost_receipt": exc.cost_receipt,
+            },
+            checks={
+                "cost_authorization_required": True,
+                "model_call_occurred": False,
+            },
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pause_kind="cost_authorization",
+            reason=exc.reason,
         )
         return result_state
     except Stage0ExtractError as exc:
@@ -312,18 +405,32 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     verdict = policy.evaluate_stage0(result)
     mode = state.get("mode") or "production"
     _duration = round(time.time() - _t0, 3)
+    used_import = bool((result.get("cascade_import") or {}).get("used"))
+    consumed_name = None
+    if used_import:
+        from stage0_evidence_cascade import consume_cascade_import
+
+        consumed_name = consume_cascade_import(folder)
+    input_files = ["Original_JD.txt"]
+    if consumed_name:
+        input_files.append(consumed_name)
+    receipt_result = {
+        "tier": verdict["tier"],
+        "decision": verdict["decision"],
+        "reasons": verdict["reasons"],
+        "duration_seconds": _duration,
+    }
+    if used_import:
+        receipt_result["cascade_import"] = dict(result.get("cascade_import") or {})
+        receipt_result["model_call_occurred"] = False
+        receipt_result["cost_applicable"] = False
     receipt = build_receipt(
         stage="stage0",
         status="SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE",
         mode=mode,
-        input_hashes=file_hash_map(folder, ["Original_JD.txt"]),
+        input_hashes=file_hash_map(folder, input_files),
         output_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
-        result={
-            "tier": verdict["tier"],
-            "decision": verdict["decision"],
-            "reasons": verdict["reasons"],
-            "duration_seconds": _duration,
-        },
+        result=receipt_result,
         checks={"contracts.check_stage0_fit_gate": True, "policy.evaluate_stage0": verdict["verdict"]},
     )
     # M0.1-M0.3, M0.5, M0.7 signals — see the design doc's metric catalog.
@@ -406,6 +513,22 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
     ok, errs = hashes_match(folder, r0.get("output_hashes") or {})
     if not ok:
         raise WorkflowError("Stage 0 outputs stale:\n  - " + "\n  - ".join(errs))
+
+    from utils import IdentityError, resolve_identity
+
+    try:
+        _profile, identity_source = resolve_identity()
+    except IdentityError as exc:
+        raise WorkflowError(
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            "(identity_source=missing)"
+        ) from exc
+    state = dict(state)
+    meta = dict(state.get("metadata") or {})
+    meta["identity_source"] = identity_source
+    state["metadata"] = meta
 
     packet = build_packet(Path(folder), no_hook=no_hook)
     packet_path = os.path.join(folder, "authoring_packet.json")
@@ -528,20 +651,91 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     prior_id = r0.get("receipt_id")
 
     verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+    from utils import IdentityError, resolve_identity
+
+    try:
+        _profile, identity_source = resolve_identity()
+    except IdentityError:
+        identity_source = "missing"
+    state = dict(state)
+    meta = dict(state.get("metadata") or {})
+    meta["identity_source"] = identity_source
+    state["metadata"] = meta
     # CR-097 Story 1.3: record inside run_verify_only so a failing attempt is
     # persisted before this runner raises WorkflowError.
     if not verify_ok:
-        append_event(
-            folder,
-            _run_id,
-            "stage1.validate",
-            "verify_failed",
-            duration_seconds=round(time.time() - _t0, 3),
-            attempt=_verify_attempt_count(folder),
+        from closed_world_recovery import recover_stage1_extras_guarded
+        from packet_closed_world import extra_packet_findings as extra_findings_fn
+
+        packet = None
+        provenance = None
+        try:
+            with open(os.path.join(folder, "authoring_packet.json"), encoding="utf-8") as handle:
+                packet = json.load(handle)
+            with open(os.path.join(folder, "claim_provenance.json"), encoding="utf-8") as handle:
+                provenance = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            packet = None
+            provenance = None
+        extras = (
+            extra_findings_fn(packet, provenance)
+            if isinstance(packet, dict) and isinstance(provenance, dict)
+            else []
         )
-        raise WorkflowError(
-            "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
-        )
+        if extras:
+            recovery = recover_stage1_extras_guarded(Path(folder), apply=True)
+            if recovery.get("status") == "WAITING_FOR_LLM":
+                prompt_md, meta = build_authoring_prompt(Path(folder), force=True)
+                prompt_path = os.path.join(folder, "authoring_prompt.md")
+                meta_path = os.path.join(folder, "authoring_prompt_meta.json")
+                with open(prompt_path, "w", encoding="utf-8") as handle:
+                    handle.write(prompt_md)
+                with open(meta_path, "w", encoding="utf-8") as handle:
+                    json.dump(meta, handle, indent=2, ensure_ascii=False)
+                    handle.write("\n")
+                mode = state.get("mode") or "production"
+                receipt = build_receipt(
+                    stage="stage1",
+                    status="WAITING_FOR_LLM",
+                    mode=mode,
+                    input_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
+                    output_hashes=file_hash_map(
+                        folder,
+                        ["authoring_packet.json", "authoring_prompt.md", "authoring_prompt_meta.json"],
+                    ),
+                    result={"closed_world_widen": True},
+                    checks={"closed_world_recovery.widen": True},
+                    prior_receipt_id=prior_id,
+                )
+                result_state = commit_stage(
+                    folder,
+                    state,
+                    receipt,
+                    workflow_status="WAITING_FOR_LLM",
+                    active_stage="stage1",
+                )
+                append_event(folder, _run_id, "stage1.validate", "closed_world_widen")
+                return result_state
+            if recovery.get("status") == "PAUSE_REVIEW":
+                raise WorkflowError(
+                    "closed-world recovery paused — see closed_world_recovery.json. "
+                    "Record human_decision on the item (REMOVE_EXTRA or WIDEN_PACKET), "
+                    "then --resume. This is not NEEDS_DISPOSITION."
+                )
+            if recovery.get("applied"):
+                verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+        if not verify_ok:
+            append_event(
+                folder,
+                _run_id,
+                "stage1.validate",
+                "verify_failed",
+                duration_seconds=round(time.time() - _t0, 3),
+                attempt=_verify_attempt_count(folder),
+            )
+            raise WorkflowError(
+                "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
+            )
 
     mode = state.get("mode") or "production"
     out_files = [
@@ -551,6 +745,21 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     ]
     if os.path.exists(os.path.join(folder, "claim_provenance.json")):
         out_files.append("claim_provenance.json")
+
+    # CR-112 Story 8.3.1: preserve the authoritative pre-edit state on the
+    # Stage 1 COMPLETE receipt. If this is a re-validation (Stage 1 was already
+    # COMPLETE), the previous COMPLETE receipt's output_hashes become
+    # prior_output_hashes on the new receipt, so a later RESOLVED_EDIT can
+    # prove an implicated document actually changed since the HM finding —
+    # sourced from committed workflow state, never from a reviewer-supplied
+    # payload. First-validation folders (previous receipt is WAITING_FOR_LLM)
+    # keep the field absent: there is no pre-edit state to cite. Once set, the
+    # original prior is carried forward so multi-edit sequences never lose the
+    # base against which "changed" is judged.
+    prev_s1 = load_receipt(folder, "stage1")
+    prior_output_hashes = None
+    if prev_s1 and prev_s1.get("status") == "COMPLETE":
+        prior_output_hashes = prev_s1.get("prior_output_hashes") or prev_s1.get("output_hashes")
 
     _duration = round(time.time() - _t0, 3)
     _attempt_count = _verify_attempt_count(folder)
@@ -563,6 +772,7 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             ["stage0_fit_gate.json", "authoring_packet.json", "authoring_prompt.md"],
         ),
         output_hashes=file_hash_map(folder, out_files),
+        prior_output_hashes=prior_output_hashes,
         result={"verify_only": True, "duration_seconds": _duration, "verify_attempts": _attempt_count},
         checks={
             "contracts.check_stage1_ready": True,
@@ -965,6 +1175,41 @@ def _apply_subphase_verdict(
     s2 = state["stages"]["stage2"]
     phase_rec = s2["subphases"][phase]
 
+    # CR-112 Story 8.3: hm.critical_read structured review artifact validation.
+    # After the policy verdict, if phase is "hm" and the verdict is PASS,
+    # validate that any hm.critical_read disposition includes a structured
+    # review artifact. This is a substance gate — the existing policy only
+    # checks reasoning length, not review evidence. Implements FR-319 / AC-417.
+    if phase == "hm" and verdict["verdict"] == "PASS":
+        from hm_review_contract import HM_REVIEW_DISPOSITIONS, validate_hm_review
+        findings_list = findings_doc.get("findings") or []
+        by_id = dispositions.get("by_finding_id") or {}
+        hm_errors: list[str] = []
+        for item in findings_list:
+            if not isinstance(item, dict):
+                continue
+            fid = str(item.get("id") or "")
+            if fid != "hm.critical_read":
+                continue
+            disp_value = by_id.get(fid)
+            disp_s, _ = parse_disposition(disp_value)
+            if disp_s in HM_REVIEW_DISPOSITIONS:
+                # CR-112 Story 8.3.1: bind the finding's own implicated
+                # documents into evidence validation so RESOLVED_EDIT must
+                # prove a change to a document the finding actually covers.
+                ok, errs = validate_hm_review(
+                    folder, disp_value, implicated_documents=item.get("implicated_documents")
+                )
+                if not ok:
+                    hm_errors.extend(errs)
+        if hm_errors:
+            verdict = {
+                "verdict": "NEEDS_DISPOSITION",
+                "integrity": "CLEAN",
+                "open_finding_ids": ["hm.critical_read"],
+                "reasons": hm_errors,
+            }
+
     if verdict["verdict"] == "FAIL":
         phase_rec["status"] = "FAILED"
         phase_rec["findings_hash"] = fhash
@@ -1030,6 +1275,11 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
             )
 
     # Explicit critical-read gate: Jason confirms a hiring-manager read happened.
+    # CR-112 Story 8.3.1: implicated_documents names the files covered by the
+    # read (Resume.md + CoverLetter.md). It is stamped here from code, not
+    # supplied by the reviewer, and binds evidence validation so a RESOLVED_EDIT
+    # on the finding must prove a change to one of *these* documents — an
+    # unrelated file edit cannot clear the gate.
     findings.append(
         {
             "id": "hm.critical_read",
@@ -1040,6 +1290,7 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
                 "(conversion_rubric C1–C5 / qualitative Pass 3). "
                 "Dispose ACCEPTED_AS_CORRECT when done."
             ),
+            "implicated_documents": [doc if os.path.exists(os.path.join(folder, doc)) else f"{doc} (missing)" for doc in ("Resume.md", "CoverLetter.md")],
         }
     )
 
@@ -1137,6 +1388,75 @@ def _compile_pdfs(folder: str) -> None:
         raise WorkflowError("\n".join(errors))
 
 
+def _rubric_floor_findings(score: Any) -> list[dict[str, Any]]:
+    """Emit BLOCK findings when numeric rubric totals sit below CONVERT-READY floors.
+
+    Shape errors stay on mech.rubric_score_required (WARN). A leftover
+    ACCEPTED_AS_CORRECT on that WARN cannot bind these ids.
+    """
+    # Implements FR-318 / AC-415
+    shape = contracts._check_rubric_score_shape(score)
+    if shape:
+        return []
+    findings: list[dict[str, Any]] = []
+    for err in contracts.check_rubric_floors(score):
+        side = "cover_letter" if "cover_letter" in err else "resume"
+        findings.append(
+            {
+                "id": f"mech.rubric_floor.{side}",
+                "source": "workflow",
+                "severity": "BLOCK",
+                "message": err,
+            }
+        )
+    return findings
+
+
+def _rubric_provenance_findings(folder: str, score: Any) -> list[dict[str, Any]]:
+    # Implements FR-322 / AC-420. Only runs after shape and floor checks pass;
+    # below-floor scores already have objective BLOCK findings.
+    shape = contracts._check_rubric_score_shape(score)
+    if shape or contracts.check_rubric_floors(score):
+        return []
+    findings: list[dict[str, Any]] = []
+    for idx, err in enumerate(contracts.check_rubric_score_provenance(folder, score)):
+        findings.append(
+            {
+                "id": f"mech.rubric_score_provenance.{idx}",
+                "source": "workflow",
+                "severity": "BLOCK",
+                "message": err,
+            }
+        )
+    return findings
+
+
+def _require_completion_rubric_floors(folder: str) -> None:
+    """Fail closed before minting Stage 3 when rubric totals are below floor.
+
+    Shape first, then floors. Does not call check_finalize_ready (practice
+    may skip freshness / verification_passed / DB extras). force=True cannot
+    skip this helper.
+    """
+    # Implements FR-318 / AC-415
+    manifest_path = os.path.join(folder, "draft_manifest.json")
+    manifest, err = contracts.load_json(manifest_path)
+    if err:
+        raise WorkflowError(f"Cannot finalize: {err}")
+    score = None if manifest is None else manifest.get("rubric_score")
+    shape_errs = contracts._check_rubric_score_shape(score)
+    floor_errs = [] if shape_errs else contracts.check_rubric_floors(score)
+    provenance_errs = []
+    if not shape_errs and not floor_errs:
+        provenance_errs = contracts.check_rubric_score_provenance(folder, score)
+    errs = [f"draft_manifest.json: {e}" for e in (shape_errs + floor_errs + provenance_errs)]
+    if errs:
+        raise WorkflowError(
+            "Cannot finalize: CONVERT-READY rubric floors not met:\n  - "
+            + "\n  - ".join(errs)
+        )
+
+
 def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str, Any]:
     """Compile PDFs + verify_one; surface failures as findings."""
     findings: list[dict[str, Any]] = []
@@ -1210,6 +1530,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
     # Rubric still required for Stage 2 policy / check_stage2_ready
     manifest_path = os.path.join(folder, "draft_manifest.json")
     rubric_ok = False
+    score = None
     if os.path.exists(manifest_path):
         try:
             with open(manifest_path, encoding="utf-8") as f:
@@ -1232,6 +1553,9 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 ),
             }
         )
+    else:
+        findings.extend(_rubric_floor_findings(score))
+        findings.extend(_rubric_provenance_findings(folder, score))
 
     payload = {
         "schema_version": 1,
@@ -1478,6 +1802,11 @@ def run_stage3_finalize(
             f"Pass --title with the real role name, or fix stage0_fit_gate.json 'role'."
         )
 
+    # CR-112: floors are not skipped by practice mode or --force. Production
+    # --force may still skip check_finalize_ready extras (freshness, etc.)
+    # inside finalize_job; it cannot mint a below-floor Stage 3 receipt.
+    _require_completion_rubric_floors(folder)
+
     mode = state.get("mode") or "production"
     finalize_result = None
 
@@ -1657,6 +1986,8 @@ def run_until_stage1_complete(
         # not an edge case.
         if state.get("status") == "SKIPPED":
             return state
+        if state.get("status") == "WAITING_FOR_INPUT":
+            return state
         # Re-resolve by slug (state["slug"] is always the bare folder name,
         # and _resolve_folder() checks submissions/ before pending_review/)
         # before doing anything else with `folder` -- lands on the real
@@ -1675,6 +2006,12 @@ def run_until_stage1_complete(
                 raise
         state = reconcile(folder, state)
         s1 = (state.get("stages") or {}).get("stage1") or {}
+
+    if state.get("status") == "WAITING_FOR_INPUT":
+        return state
+    s0 = (state.get("stages") or {}).get("stage0") or {}
+    if s0.get("status") == "WAITING_FOR_INPUT":
+        return state
 
     # Stage 1 already COMPLETE + fresh → unlock Stage 2 READY and stop
     if s1.get("status") == "COMPLETE":

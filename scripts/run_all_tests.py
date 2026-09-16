@@ -33,6 +33,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_claim_provenance.py",
     "scripts/test_context_pack.py",
     "scripts/test_author_from_packet.py",
+    "scripts/test_generate_authoring_rule_digest.py",
     "scripts/test_submission_linter.py",
     "scripts/test_scan_authoring_defects.py",
     "scripts/test_import_historical_defects.py",
@@ -58,6 +59,8 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_cr112_story32.py",
     "scripts/test_cr112_lean_spawn.py",
     "scripts/test_cr112_story31.py",
+    "scripts/test_cr112_story35.py",
+    "scripts/test_cr112_story36.py",
     "scripts/test_cr112_story33.py",
     "scripts/test_cr112_story34.py",
     "scripts/test_cr112_adversarial.py",
@@ -69,7 +72,11 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_cr112_story51.py",
     "scripts/test_run_submission_console_summary.py",
     "scripts/test_cr112_story61.py",
+    "scripts/test_cr112_story71.py",
     "scripts/test_cr112_story22.py",
+    "scripts/test_cr112_stage0_extraction_review.py",
+    "scripts/test_practice_identity.py",
+    "scripts/test_cr112_ranking_characterization.py",
 ]
 
 

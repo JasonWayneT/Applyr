@@ -325,16 +325,30 @@ def _apply_resume_header_if_available(folder: Path) -> str:
     Packet intentionally omits name/contact/location/education/dates so cloud
     authoring never receives real PII. Placeholders left by closed-world compose
     are substituted from workExperience.md via apply_resume_header.py before lint.
+    Synthetic mode skips this patch so tests never ingest live WE.
     """
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        return "SKIP [apply_resume_header] — synthetic identity mode"
+
     try:
         from apply_resume_header import load_real_header, patch_file  # type: ignore
     except Exception as exc:
-        return f"SKIP [apply_resume_header] — import failed: {exc}"
+        return (
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            f"(identity_source=missing); import failed: {exc}"
+        )
 
     try:
         header = load_real_header()
-    except Exception as exc:
-        return f"SKIP [apply_resume_header] — {exc}"
+    except Exception:
+        return (
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            "(identity_source=missing)"
+        )
 
     parts: list[str] = []
     for fname in ("Resume.md", "CoverLetter.md"):
@@ -509,7 +523,13 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             return False
 
         # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
-        lines.append(_apply_resume_header_if_available(folder))
+        header_line = _apply_resume_header_if_available(folder)
+        lines.append(header_line)
+        if header_line.startswith("FAIL"):
+            passed = False
+            print("\n".join(lines))
+            print("\nVERIFY RESULT: FAIL")
+            return False
 
         # Implements FR-265: Stage 1 owns deterministic document quality.
         # These checks used to
@@ -641,8 +661,10 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
         if not sentence_ok:
             passed = False
 
-        extra_lines = _warn_extra_packet_provenance(folder)
+        extra_ok, extra_lines = _check_extra_packet_provenance(folder)
         lines.extend(extra_lines)
+        if not extra_ok:
+            passed = False
 
         # Summary
         print("\n".join(lines))
@@ -656,32 +678,50 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             )
 
 
-def _warn_extra_packet_provenance(folder: Path) -> list[str]:
-    """CR-112 Story 3.1: WARN when provenance cites IDs the packet never offered.
+def _check_extra_packet_provenance(folder: Path) -> tuple[bool, list[str]]:
+    """CR-112 Story 3.1: FAIL when provenance cites IDs the packet never offered.
 
     Exact ID match only. Prefix overlap (ACC-101-SAVINGS vs ACC-101-PM) does
-    not clear. Does not fail Stage 1. Implements FR-302.
+    not clear. Detection only: does not rank, recover, or rewrite.
+    Implements FR-312. Recovery is Story 3.6.
     """
     from packet_closed_world import extra_packet_findings
 
     packet_path = folder / "authoring_packet.json"
     prov_path = folder / "claim_provenance.json"
+    unreadable = (
+        "FAIL [extra_packet]: packet or provenance missing or unreadable. "
+        "recovery_state=CLOSED_WORLD_UNREADABLE extra_ids=unknown. "
+        "Stage 1 incomplete until a readable authoring_packet.json and "
+        "claim_provenance.json exist. Detection only. Story 3.6 recovery "
+        "cannot run yet. Do not dispose as ACCEPTED_AS_CORRECT, "
+        "FALSE_POSITIVE, NOT_APPLICABLE, or HUMAN_ACCEPTED_RISK."
+    )
     if not packet_path.exists() or not prov_path.exists():
-        return []
+        return False, [unreadable]
     try:
         packet = json.loads(packet_path.read_text(encoding="utf-8"))
         provenance = json.loads(prov_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return []
+        return False, [unreadable]
+    if not isinstance(packet, dict) or not isinstance(provenance, dict):
+        return False, [unreadable]
     findings = extra_packet_findings(packet, provenance)
     if not findings:
-        return ["PASS [extra_packet]: no extra-packet provenance IDs"]
+        return True, ["PASS [extra_packet]: no extra-packet provenance IDs"]
+    extra_ids = ",".join(row["claim_id"] for row in findings)
     lines = [
-        f"WARN [{row['id']}]: provenance cites {row['claim_id']} which is not "
-        "in packet excerpts/evidence_map/soft_gaps (exact match; prefix does not count)"
+        f"FAIL [{row['id']}]: provenance cites {row['claim_id']} which is not "
+        "in packet excerpts/evidence_map/soft_gaps (exact match; prefix, sibling "
+        "lens, ordinal, substring, and distinctive-tag similarity do not count). "
+        f"extra_ids={extra_ids} recovery_state={row['recovery_state']} "
+        "next=story36_recovery (remove/rewrite, remove-extra, widen+reauthor, "
+        "or qualitative compare). Detection only: no rank, swap, widen, or "
+        "rewrite. Do not dispose as ACCEPTED_AS_CORRECT, FALSE_POSITIVE, "
+        "NOT_APPLICABLE, or HUMAN_ACCEPTED_RISK."
         for row in findings
     ]
-    return lines
+    return False, lines
 
 
 def _normalize_provenance_unit(text: str) -> str:

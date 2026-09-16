@@ -145,10 +145,17 @@ def _run_fixture(
         "stage0_evidence_classification": {
             "provider_order": [provider],
             "models": {provider: f"{provider}-golden-test"},
-        }
+        },
+        "costClasses": {provider: "free_only"},
     }
-    with patch("utils.call_llm", side_effect=fake_call):
-        results = classify_requirements_batch(items, settings=settings)
+    from cost_eligibility import set_test_zero_charge_providers
+
+    set_test_zero_charge_providers([provider])
+    try:
+        with patch("utils.call_llm", side_effect=fake_call):
+            results = classify_requirements_batch(items, settings=settings)
+    finally:
+        set_test_zero_charge_providers([])
     passed, total = _check_results(entries, results)
     routed = sum(
         1

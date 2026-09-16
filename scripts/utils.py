@@ -16,7 +16,7 @@ AGENT_DIR = os.path.join(PROJECT_ROOT, ".agent")
 RULES_DIR = os.path.join(AGENT_DIR, "rules")
 SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
 ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "data", "archive", "submissions")
-DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
+DB_PATH = os.environ.get("APPLYR_SANDBOX_DB") or os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
 WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")
@@ -455,7 +455,11 @@ def load_llm_settings():
     return {}
 
 
-_DEFAULT_IDENTITY = {
+class IdentityError(RuntimeError):
+    """Raised when no WE identity and synthetic mode is not active."""
+
+
+_SYNTHETIC_IDENTITY = {
     "name": "John Doe",
     "email": "email@example.com",
     "phone": "555-019-9238",
@@ -466,27 +470,44 @@ _DEFAULT_IDENTITY = {
 }
 
 
-def load_identity_profile() -> dict:
-    """Reads identity contact fields from SQLite profiles table."""
-    import sqlite3
-    import json
+def _log_identity_source(source: str) -> None:
+    print(f"[identity] identity_source={source}", file=sys.stderr)
 
-    profile = dict(_DEFAULT_IDENTITY)
-    db_path = DB_PATH
+
+def resolve_identity() -> tuple[dict, str]:
+    """Return (profile, identity_source). Never logs PII.
+
+    Source order: synthetic env, then workExperience.md Section 1.0.
+    SQLite is not in this chain. Raises IdentityError when missing.
+    """
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        _log_identity_source("synthetic")
+        return dict(_SYNTHETIC_IDENTITY), "synthetic"
     try:
-        if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT value FROM profiles WHERE key = 'identity'")
-            row = cursor.fetchone()
-            conn.close()
-            if row:
-                data = json.loads(row[0])
-                for key, value in data.items():
-                    if value:
-                        profile[key] = value
-    except Exception as e:
-        print(f"Error loading identity profile from DB: {e}", file=sys.stderr)
+        from apply_resume_header import load_real_header
+
+        header = load_real_header()
+    except Exception:
+        _log_identity_source("missing")
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
+    _log_identity_source("we")
+    return {
+        "name": header.get("name") or "",
+        "email": header.get("email") or "",
+        "phone": header.get("phone") or "",
+        "location": header.get("location") or "",
+        "linkedin": header.get("linkedin") or "",
+        "portfolio": "",
+        "github": "",
+    }, "we"
+
+
+def load_identity_profile() -> dict:
+    """Identity for document headers. WE or explicit synthetic mode. Not SQLite."""
+    profile, _source = resolve_identity()
     return profile
 
 
@@ -516,14 +537,24 @@ def format_contact_header_block(profile: dict | None = None) -> str:
     line, no blank line between them) -- this function was also violating that.
     """
     profile = profile or load_identity_profile()
-    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    name = (profile.get("name") or "").strip()
+    if not name:
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
     return f"# {name}\n{format_contact_line(profile)}\n\n"
 
 
 def contact_placeholder_map(profile: dict | None = None, target_company: str | None = None) -> dict:
     """Template placeholder â†’ profile values for draft post-processing."""
     profile = profile or load_identity_profile()
-    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    name = (profile.get("name") or "").strip()
+    if not name:
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
     placeholders = {
         "[Your Name]": name,
         "*[Your Name]*": name,
@@ -951,7 +982,8 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
              response_mime_type=None, tools=None, max_retries=8, provider_override=None,
-             options_override=None, response_schema=None, request_timeout=120):
+             options_override=None, response_schema=None, request_timeout=120,
+             cost_settings=None, cost_ledger=None):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
@@ -961,6 +993,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
     to cloud models, bypassing the local core.
     """
     settings = load_llm_settings()
+    eligibility_settings = cost_settings if cost_settings is not None else settings
     all_providers = _get_configured_providers(settings)
     
     try:
@@ -1001,6 +1034,34 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         )
         return ""
 
+    from cost_eligibility import (
+        authorize_provider_chain,
+        budget_ledger_from_settings,
+        classify_provider,
+        known_call_receipt,
+        raise_if_pause,
+        set_last_receipt,
+        estimate_prompt_tokens,
+        debit_if_paid,
+        unknown_refusal_receipt,
+        exhausted_chain_receipt,
+        operator_asserted_at,
+        CostPauseError,
+    )
+
+    ledger = cost_ledger if cost_ledger is not None else budget_ledger_from_settings(eligibility_settings)
+    tokens_est = estimate_prompt_tokens(system_prompt or "", user_prompt or "")
+    auth = authorize_provider_chain(
+        providers, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+    )
+    try:
+        raise_if_pause(auth, estimated_tokens=tokens_est)
+    except CostPauseError as exc:
+        set_last_receipt(exc.receipt)
+        print(f"    [LLM] {exc}", file=sys.stderr)
+        raise
+    providers = auth.providers
+
     for i, provider in enumerate(providers):
         if not check_rate_limits(provider):
             continue
@@ -1025,6 +1086,70 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             result = _call_groq(settings, system_prompt, user_prompt, model, temperature, max_retries)
 
         if result is not None:
+            info = classify_provider(
+                provider, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+            )
+            if info.cost_class in {"offline", "free_only"}:
+                cents = 0
+                confidence = "zero"
+            elif info.estimated_cents is None:
+                set_last_receipt(
+                    unknown_refusal_receipt(
+                        provider=provider,
+                        estimated_tokens=tokens_est,
+                        reason="paid_estimate_unknown",
+                    )
+                )
+                print(
+                    "    [LLM] Missing pricing data; not recording cost as zero.",
+                    file=sys.stderr,
+                )
+                return result
+            else:
+                cents = info.estimated_cents
+                confidence = "estimated"
+            if (
+                info.cost_class == "paid_with_budget"
+                and cents != info.estimated_cents
+            ):
+                set_last_receipt(
+                    unknown_refusal_receipt(
+                        provider=provider,
+                        estimated_tokens=tokens_est,
+                        reason="ledger_receipt_mismatch",
+                    )
+                )
+                raise CostPauseError(
+                    receipt=unknown_refusal_receipt(
+                        provider=provider,
+                        reason="ledger_receipt_mismatch",
+                    )
+                )
+            # Implements AC-424: an operator-asserted free call records
+            # zero_charge_basis="operator_assertion" plus the asserted_at echo,
+            # so an attested zero stays distinguishable from a measured zero.
+            attested_at = None
+            if info.cost_class == "free_only":
+                attested_at = operator_asserted_at(provider, eligibility_settings)
+            receipt_extra = (
+                {
+                    "zero_charge_basis": "operator_assertion",
+                    "assertion_asserted_at": attested_at,
+                }
+                if attested_at is not None
+                else {}
+            )
+            set_last_receipt(
+                known_call_receipt(
+                    provider=provider,
+                    cost_class=info.cost_class,
+                    estimated_tokens=tokens_est,
+                    api_cents=cents,
+                    cost_confidence=confidence,
+                    **receipt_extra,
+                )
+            )
+            debit_if_paid(ledger, info)
             return result
         if _local_only_env():
             print("    [LLM] Local-only mode: no cloud fallback.", file=sys.stderr)
@@ -1032,6 +1157,21 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         if i + 1 < len(providers):
             print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
 
+    last_provider = providers[-1] if providers else None
+    if last_provider:
+        last_info = classify_provider(
+            last_provider, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+        )
+        set_last_receipt(
+            exhausted_chain_receipt(last_info, estimated_tokens=tokens_est)
+        )
+    else:
+        set_last_receipt(
+            unknown_refusal_receipt(
+                estimated_tokens=tokens_est,
+                reason="providers_exhausted",
+            )
+        )
     return ""
 
 

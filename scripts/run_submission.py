@@ -299,10 +299,70 @@ def main() -> None:
             )
             sys.exit(0)
         if status == "WAITING_FOR_INPUT":
-            print(
-                "WAITING_FOR_INPUT — resolve the pending Review Center confirmation "
-                "then rerun this opportunity with --resume."
-            )
+            receipt_path = os.path.join(_folder_for_events, "stage_receipts", "stage0.json")
+            pause_kind = None
+            result = {}
+            try:
+                with open(receipt_path, encoding="utf-8") as handle:
+                    result = json.load(handle).get("result") or {}
+                pause_kind = result.get("pause_kind")
+            except (OSError, json.JSONDecodeError, AttributeError):
+                pause_kind = None
+            if pause_kind == "cost_authorization":
+                called = "yes" if result.get("model_call_occurred") else "no"
+                print("WAITING_FOR_INPUT — Stage 0 cost authorization")
+                print(
+                    "Why: no eligible Stage 0 classifier is authorized "
+                    f"(mode={result.get('authorization_mode')}, "
+                    f"reason={result.get('reason')})."
+                )
+                print(f"API call occurred: {called}")
+                print("API cost incurred: no (unknown cost is not recorded as zero)")
+                print(
+                    "Resume the same run: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print(
+                    "Free/manual path: put stage0_cascade_import.json in "
+                    f"{_folder_for_events} (start from "
+                    "stage0_cascade_import.template.json in that same folder), "
+                    "or certify a provider whose adapter can assert zero charge "
+                    "for this account and call."
+                )
+                print(
+                    "Paid path: allowlist the provider, set a positive budget and "
+                    "a known estimate, then --resume."
+                )
+                print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
+            elif pause_kind == "requirement_extraction_review":
+                print("WAITING_FOR_INPUT — Stage 0 requirement extraction review")
+                print(
+                    "Why: extraction could not confidently bucket one or more "
+                    "bullets, and the independent qualification-risk gate found "
+                    "at least one that is qualification-likely or ambiguous "
+                    "(CR-112). Uncertainty pauses; only bullets positively "
+                    "classified as non-qualification bypass review."
+                )
+                queue = result.get("queue") or []
+                print(f"Queued for review: {len(queue)} item(s).")
+                print(
+                    "Fill in stage0_requirement_extraction_review.json in "
+                    f"{_folder_for_events} (start from "
+                    "stage0_requirement_extraction_review.template.json in that "
+                    "same folder) with an explicit bucket per item -- required, "
+                    "preferred, responsibilities, culture, or exclude. No "
+                    "default is accepted."
+                )
+                print(
+                    "Resume the same run: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
+            else:
+                print(
+                    "WAITING_FOR_INPUT — resolve the pending Review Center confirmation "
+                    "then rerun this opportunity with --resume."
+                )
             sys.exit(0)
         if status == "NEEDS_DISPOSITION":
             # CR-107: renamed from WAITING_FOR_HUMAN — a WARN finding here is the agent's own

@@ -70,6 +70,73 @@ class Stage0NeedsInput(RuntimeError):
         self.pending = pending
 
 
+class Stage0RequirementExtractionReviewNeeded(RuntimeError):
+    """Extraction's own unresolved bullets include a qualification-risk item.
+
+    Raised by build_stage0_fit_gate (never from inside _extract_sections_nlp,
+    PIN 3) when the independent three-way qualification-risk gate
+    (stage0_qualification_risk_gate.classify_qualification_risk) finds at
+    least one QUALIFICATION_LIKELY or AMBIGUOUS bullet among the items the
+    NLP extractor could not confidently bucket. This is a receipt-only pause
+    (PIN 1): it fires before run_key/request_hash/start_run exist, so no
+    stage0_runs row is created and mark_run_status is never called for it.
+    The orchestrator writes WAITING_FOR_INPUT with
+    pause_kind=requirement_extraction_review.
+    """
+
+    def __init__(self, opportunity_key: str, queue: list[dict]) -> None:
+        super().__init__(
+            "Stage 0 requirement extraction produced qualification-risk "
+            "bullets that need review before a terminal PASS or SKIP."
+        )
+        self.opportunity_key = opportunity_key
+        self.queue = queue
+
+
+class Stage0CostAuthorizationNeeded(RuntimeError):
+    """Stage 0 cannot classify remaining lines without an authorized provider.
+
+    This is a resumable pause, not a terminal extract failure. The orchestrator
+    writes WAITING_FOR_INPUT with pause_kind=cost_authorization.
+    """
+
+    def __init__(
+        self,
+        *,
+        authorization_mode: str = "unknown",
+        ineligible_providers: list[dict] | None = None,
+        model_call_occurred: bool = False,
+        reason: str = "no_eligible_provider",
+        cost_receipt: dict | None = None,
+        next_paths: list[str] | None = None,
+    ) -> None:
+        super().__init__(
+            "Stage 0 paused: no eligible classifier. No model API call occurred."
+        )
+        self.authorization_mode = authorization_mode
+        self.ineligible_providers = ineligible_providers or []
+        self.model_call_occurred = model_call_occurred
+        self.reason = reason
+        self.cost_receipt = cost_receipt or {}
+        self.next_paths = next_paths or [
+            "import_cascade_json",
+            "certify_zero_charge",
+            "paid_allowlist_budget",
+        ]
+
+
+def stage0_cost_pause_from_error(exc: BaseException) -> Stage0CostAuthorizationNeeded:
+    """Map a helper CostPauseError onto the Stage 0 pause type. No receipts."""
+    receipt = getattr(exc, "receipt", None) or {}
+    return Stage0CostAuthorizationNeeded(
+        authorization_mode=str(receipt.get("authorization_mode") or "unknown"),
+        ineligible_providers=list(receipt.get("ineligible_providers") or []),
+        model_call_occurred=False,
+        reason=str(receipt.get("reason") or "no_eligible_provider"),
+        cost_receipt=dict(receipt),
+    )
+
+
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -1135,12 +1202,23 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
                     buckets[pred].append(bullet_clean)
                     
     # Active Learning Fallback Loop
+    # CR-112 (2026-09-12, post design review): a bullet the classifier was not
+    # confident about must never be silently defaulted into a bucket just
+    # because no provider answered, the provider's response failed to parse,
+    # or the response only partially mapped the batch -- that is Defect A
+    # (a self-flagged/structurally-unreliable extraction still producing a
+    # terminal PASS or SKIP) and Defect A's silent-loss variant. Every one of
+    # those three cases is instead recorded in `unresolved_for_review` (an
+    # extra key on this same dict, per PIN 3 -- this function still never
+    # raises) so the caller (build_stage0_fit_gate) can run the independent
+    # three-way qualification-risk gate and pause when needed.
+    unresolved_for_review: list[dict] = []
     if fallback_queue:
         print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
         prompt = "Classify these job description bullet points into one of four buckets: 'required', 'preferred', 'responsibilities', or 'culture'. Return ONLY valid JSON as a mapping from the index to the bucket string.\n\n"
         for i, (combo_text, _, _) in enumerate(fallback_queue):
             prompt += f"[{i}] {combo_text}\n"
-            
+
         result = call_llm(
             system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
             user_prompt=prompt,
@@ -1150,7 +1228,7 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
             # Usage > "Stage 0 fallback" (llm_settings.taskProviderOverrides.stage0_extraction).
             provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
         )
-        
+
         if result:
             json_str = extract_json_from_text(result)
             try:
@@ -1158,35 +1236,73 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
                 mapping = json.loads(json_str)
                 feedback_csv = _REPO_ROOT / "data" / "training_data_feedback.csv"
                 write_header = not feedback_csv.exists()
-                
+
+                resolved_indices: set[int] = set()
                 with open(feedback_csv, "a", encoding="utf-8", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=["text", "label", "company", "source_file"])
                     if write_header:
                         writer.writeheader()
-                        
+
                     for i_str, bucket in mapping.items():
-                        idx = int(i_str)
-                        if bucket not in buckets:
+                        try:
+                            idx = int(i_str)
+                        except (TypeError, ValueError):
                             continue
+                        if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
+                            continue
+                        resolved_indices.add(idx)
                         combo_text, bullet_clean, _ = fallback_queue[idx]
                         buckets[bucket].append(bullet_clean)
-                        
+
                         writer.writerow({
                             "text": bullet_clean,
                             "label": bucket,
                             "company": "FeedbackLoop",
                             "source_file": "fallback_api"
                         })
+                # CR-112 (v1/v2/v3 review, "the partial-mapping loss path"): a
+                # partial mapping (fewer indices than fallback_queue, or an
+                # answer naming a bucket string not in `buckets`) must not
+                # silently drop the unmapped items -- they enter the
+                # three-way gate exactly like a no-provider or parse-failure
+                # item.
+                for idx, (combo_text, bullet_clean, header) in enumerate(fallback_queue):
+                    if idx in resolved_indices:
+                        continue
+                    unresolved_for_review.append({
+                        "text": bullet_clean,
+                        "header": header,
+                        "reason": "partial_mapping_unresolved",
+                        "model_call_occurred": True,
+                    })
             except Exception as e:
                 print(f"    [NLP Error] Failed to parse LLM fallback: {e}", file=sys.stderr)
-                # default to responsibilities
-                for _, bullet_clean, _ in fallback_queue:
-                    buckets["responsibilities"].append(bullet_clean)
+                # CR-112: the provider may already have been billed for this
+                # call (model_call_occurred=True) even though the body could
+                # not be parsed -- do not default these into responsibilities.
+                for _, bullet_clean, header in fallback_queue:
+                    unresolved_for_review.append({
+                        "text": bullet_clean,
+                        "header": header,
+                        "reason": "parse_failure",
+                        "model_call_occurred": True,
+                    })
         else:
-            for _, bullet_clean, _ in fallback_queue:
-                buckets["responsibilities"].append(bullet_clean)
-    
+            # CR-112: no eligible provider answered at all (model_call_occurred
+            # =False) -- this is the normal, expected no-cost path, not an edge
+            # case (confirmed real on all 6 measured JDs in the CR-112 design
+            # doc). Do not default these into responsibilities.
+            for _, bullet_clean, header in fallback_queue:
+                unresolved_for_review.append({
+                    "text": bullet_clean,
+                    "header": header,
+                    "reason": "no_provider",
+                    "model_call_occurred": False,
+                })
+
     _recover_mixed_responsibilities(buckets)
+    if unresolved_for_review:
+        buckets["unresolved_for_review"] = unresolved_for_review
     return buckets
 
 def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
@@ -2393,6 +2509,90 @@ def build_stage0_fit_gate(
     if sections is None:
         sections = _extract_sections(jd_text)
         extraction_source = "deterministic"
+
+    # --- Step 3.5: three-way qualification-risk gate (CR-112) ---
+    # PIN 4: spliced in right after sections = ..., before
+    # _count_qualification_required / _detect_thin_jd / _cap_requirement_bucket
+    # read required_raw below. PIN 1: everything in this block runs before
+    # run_key/request_hash/start_run exist (built further below) -- a pause
+    # raised here is receipt-only: no stage0_runs row, no mark_run_status
+    # call. Only the NLP extractor's own unresolved queue is in scope here
+    # (_extract_sections_llm already fails closed with no fallback queue; the
+    # deterministic regex path has no such concept) -- see the CR-112 design
+    # doc's Scope section.
+    requirement_extraction_review: dict = {"bypassed_non_qualification": []}
+    unresolved_queue = list(sections.get("unresolved_for_review") or []) if extraction_source == "nlp" else []
+    if unresolved_queue:
+        from stage0_qualification_risk_gate import classify_qualification_risk, NON_QUALIFICATION
+        from stage0_requirement_extraction_review import (
+            RequirementExtractionReviewValidationError,
+            consume_review_import,
+            try_load_review_import,
+            write_review_template,
+        )
+
+        gate_items: list[dict] = []
+        for entry in unresolved_queue:
+            item_text = entry.get("text", "")
+            item_header = entry.get("header", "")
+            label, reason_code = classify_qualification_risk(
+                item_text, header=item_header, role_title=role
+            )
+            gate_items.append(
+                {
+                    "text": item_text,
+                    "header": item_header,
+                    "label": label,
+                    "reason_code": reason_code,
+                    "extraction_reason": entry.get("reason"),
+                    "model_call_occurred": bool(entry.get("model_call_occurred", False)),
+                }
+            )
+        needs_review = any(item["label"] != NON_QUALIFICATION for item in gate_items)
+
+        if needs_review:
+            _review_jd_hash = _sha256_text(jd_text)
+            try:
+                resolved_buckets = try_load_review_import(
+                    folder,
+                    gate_items,
+                    submission_slug=folder.name,
+                    jd_sha256=_review_jd_hash,
+                )
+            except RequirementExtractionReviewValidationError as exc:
+                # Unreadable consumed review fails closed. Invalid live, or a
+                # consumed file bound to a different JD/queue, re-pauses so a
+                # new review can be answered. Print the reason so a Vanta-style
+                # restart is not mistaken for a first-time pause.
+                if getattr(exc, "fail_closed", False):
+                    raise
+                print(f"[Stage 0] requirement-extraction-review rejected: {exc}")
+                resolved_buckets = None
+            if resolved_buckets is None:
+                write_review_template(
+                    folder,
+                    submission_slug=folder.name,
+                    jd_sha256=_review_jd_hash,
+                    queue=gate_items,
+                )
+                raise Stage0RequirementExtractionReviewNeeded(folder.name, gate_items)
+            # A human (or a harness answering on a human's behalf) supplied an
+            # explicit, exact-text-bound bucket for every queued item --
+            # apply it. "exclude" means confirmed non-requirement content,
+            # same disposition a NON_QUALIFICATION bypass gets automatically.
+            consume_review_import(folder)
+            for idx, item in enumerate(gate_items):
+                bucket = resolved_buckets[idx]
+                item["resolved_bucket"] = bucket
+                if bucket == "exclude":
+                    continue
+                sections.setdefault(bucket, []).append(item["text"])
+
+        requirement_extraction_review["bypassed_non_qualification"] = [
+            item for item in gate_items if item["label"] == NON_QUALIFICATION
+        ]
+        requirement_extraction_review["queue"] = gate_items
+
     required_raw = sections["required"]
     preferred_raw = sections["preferred"]
     responsibilities = sections["responsibilities"]
@@ -2565,6 +2765,7 @@ def build_stage0_fit_gate(
         checkpoint_boundary("after_judgment_commit")
 
     import pipeline_env
+    cascade_import_meta: dict | None = None
     uncached_items = [
         (bucket, ordinal, item)
         for bucket, items in (("required", required_raw), ("preferred", preferred_raw))
@@ -2572,8 +2773,22 @@ def build_stage0_fit_gate(
         if make_item_key(bucket, item, ordinal) not in cached_results
     ]
     if uncached_items:
-        from stage0_evidence_cascade import BatchItem, classify_requirements_batch
+        from stage0_evidence_cascade import (
+            BatchItem,
+            CascadeValidationError,
+            CASCADE_IMPORT_NAME,
+            CASCADE_IMPORT_TEMPLATE_NAME,
+            classify_requirements_batch,
+            try_load_cascade_import,
+            write_cascade_import_template,
+        )
         from evidence_scale import build_evidence_context
+        from cost_eligibility import (
+            CostPauseError,
+            budget_ledger_from_settings,
+            overlay_persisted_budget,
+        )
+        from stage0_checkpoint import get_run_metadata
 
         batch_items = [
             BatchItem(
@@ -2628,12 +2843,117 @@ def build_stage0_fit_gate(
                 )
                 checkpoint_boundary("after_response_spool")
 
-            batch_results = classify_requirements_batch(
+            ledger = budget_ledger_from_settings(stage0_settings)
+            overlay_persisted_budget(ledger, get_run_metadata(checkpoint_db_path, run_key))
+
+            def _persist_ledger(current) -> None:
+                update_run_metadata(
+                    checkpoint_db_path,
+                    run_key,
+                    {
+                        "paid_remaining_cents": current.remaining_cents,
+                        "paid_batch_remaining_cents": current.batch_remaining_cents,
+                    },
+                )
+
+            ledger.persist = _persist_ledger
+
+            def _pause_for_cost(exc: BaseException) -> Stage0CostAuthorizationNeeded:
+                write_cascade_import_template(
+                    folder,
+                    submission_slug=folder.name,
+                    jd_sha256=jd_hash,
+                    items=batch_items,
+                )
+                mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
+                pause = (
+                    stage0_cost_pause_from_error(exc)
+                    if isinstance(exc, CostPauseError)
+                    else Stage0CostAuthorizationNeeded(
+                        reason=getattr(exc, "args", ("invalid_cascade_import",))[0]
+                        if not isinstance(exc, Stage0CostAuthorizationNeeded)
+                        else exc.reason,
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                        next_paths=["import_cascade_json"],
+                    )
+                )
+                if isinstance(exc, Stage0CostAuthorizationNeeded):
+                    pause = exc
+                pause.next_paths = [
+                    f"write {CASCADE_IMPORT_NAME} in this folder (template: {CASCADE_IMPORT_TEMPLATE_NAME})",
+                    "certify_zero_charge",
+                    "paid_allowlist_budget",
+                ]
+                return pause
+
+            imported = try_load_cascade_import(
+                folder,
                 batch_items,
-                settings=stage0_settings,
-                raw_response_callback=_spool_response,
-                provider_event_callback=_record_provider_event,
+                submission_slug=folder.name,
+                jd_sha256=jd_hash,
             )
+            if imported is not None:
+                batch_results = imported["results"]
+                cascade_import_meta = {
+                    "used": True,
+                    "import_source": "manual",
+                    "import_sha256": imported["import_sha256"],
+                    "schema_version": imported["schema_version"],
+                    "validation": imported["validation"],
+                    "model_call_occurred": False,
+                    "cost_applicable": False,
+                }
+            else:
+                batch_results = classify_requirements_batch(
+                    batch_items,
+                    settings=stage0_settings,
+                    raw_response_callback=_spool_response,
+                    provider_event_callback=_record_provider_event,
+                    folder=folder,
+                    cost_ledger=ledger,
+                    allow_import=False,
+                )
+            cascade_telemetry["paid_remaining_cents"] = ledger.remaining_cents
+            if ledger.batch_remaining_cents is not None:
+                cascade_telemetry["paid_batch_remaining_cents"] = ledger.batch_remaining_cents
+        except CostPauseError as exc:
+            clean_spool(folder)
+            raise _pause_for_cost(exc) from exc
+        except CascadeValidationError as exc:
+            import_path = folder / CASCADE_IMPORT_NAME
+            if import_path.is_file():
+                clean_spool(folder)
+                raise _pause_for_cost(
+                    Stage0CostAuthorizationNeeded(
+                        reason="invalid_cascade_import",
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                    )
+                ) from exc
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        except UnicodeDecodeError as exc:
+            import_path = folder / CASCADE_IMPORT_NAME
+            if import_path.is_file():
+                clean_spool(folder)
+                raise _pause_for_cost(
+                    Stage0CostAuthorizationNeeded(
+                        reason="invalid_cascade_import",
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                    )
+                ) from exc
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        except Stage0CostAuthorizationNeeded:
+            raise
         except Exception as exc:
             mark_run_status(checkpoint_db_path, run_key, "FAILED")
             clean_spool(folder)
@@ -2973,6 +3293,10 @@ def build_stage0_fit_gate(
         "prefs_gate_rejects": [r["code"] for r in prefs_result.get("rejects", [])],
         "prefs_gate_flags": [f["code"] for f in prefs_result.get("flags", [])],
         "notes": " ".join(notes_parts) or tier,
+        # CR-112 test 10: NON_QUALIFICATION bypasses from the three-way gate
+        # are always visible here with their reason code, never silent, even
+        # when nothing paused (every item bypassed).
+        "requirement_extraction_review": requirement_extraction_review,
     }
 
     if skip_reason:
@@ -3004,6 +3328,9 @@ def build_stage0_fit_gate(
         output["active_application"] = active_application
         flag_note = f"DB shows an active (non-terminal) application already on file: {active_application[0].get('status')} -- verify this isn't a duplicate before sending."
         output["notes"] = (output.get("notes") or "") + " " + flag_note
+
+    if cascade_import_meta:
+        output["cascade_import"] = cascade_import_meta
 
     mark_run_status(checkpoint_db_path, run_key, "COMPLETE")
     checkpoint_boundary("after_run_complete")

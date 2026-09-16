@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "import_source": "manual",
+  "submission_slug": "example-co",
+  "jd_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "batch_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "created_at": "audit-only-not-identity",
+  "expected_item_ids": [
+    "required:0:aaaabbbbccccdddd"
+  ],
+  "results": [
+    {
+      "item_id": "required:0:aaaabbbbccccdddd",
+      "gate": "NONE",
+      "evidence_level": 4,
+      "confidence": "high",
+      "reasoning": "Replace this placeholder with evidence for this item only."
+    }
+  ]
+}

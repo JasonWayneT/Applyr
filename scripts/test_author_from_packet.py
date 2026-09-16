@@ -26,7 +26,20 @@ from author_from_packet import (
     _load_packet,
     build_authoring_prompt,
 )
+from generate_authoring_rule_digest import (
+    contains_pair_restatement_instruction,
+    generate_digest,
+)
 import contracts  # noqa: E402
+
+
+def setUpModule():
+    """Story 8.2: verify-only tests must not patch live WE into temp docs."""
+    os.environ["APPLYR_SYNTHETIC_IDENTITY"] = "1"
+
+
+def tearDownModule():
+    os.environ.pop("APPLYR_SYNTHETIC_IDENTITY", None)
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -251,6 +264,60 @@ class TestBuildAuthoringPrompt(unittest.TestCase):
             prompt_md, meta = self._run(packet=packet, force=True)
         self.assertIn("## SYSTEM BLOCK", prompt_md)
         self.assertIn("WARNING", stderr_buf.getvalue())
+
+    def test_generated_lean_prompt_contains_pair_restatement_instruction(self) -> None:
+        """CR-112 Story 8.3 / AC-417: SYSTEM BLOCK of the generated prompt has the locked line."""
+        digest_content, digest_version = generate_digest()
+        packet = {**_READY_PACKET, "rule_digest_version": digest_version}
+        with tempfile.TemporaryDirectory() as folder_tmp:
+            with tempfile.TemporaryDirectory() as digest_tmp:
+                folder = Path(folder_tmp)
+                (folder / "authoring_packet.json").write_text(
+                    json.dumps(packet, indent=2), encoding="utf-8"
+                )
+                digest_path, version_path = _make_temp_digest(
+                    Path(digest_tmp), content=digest_content, version=digest_version
+                )
+                prompt_md, _meta = build_authoring_prompt(
+                    folder,
+                    digest_path=digest_path,
+                    digest_version_path=version_path,
+                )
+        system_block = prompt_md.split("## USER BLOCK", 1)[0]
+        self.assertIn("## SYSTEM BLOCK", system_block)
+        self.assertTrue(
+            contains_pair_restatement_instruction(system_block),
+            "Generated lean authoring prompt SYSTEM BLOCK missing pair-restatement instruction.",
+        )
+
+    def test_negative_control_prompt_with_incidental_digest_fails_checker(self) -> None:
+        """Negative control: a prompt that names resume and cover letter is not enough."""
+        incidental_digest = (
+            "# Authoring Rule Digest — Test\n"
+            "## Resume Structure\n"
+            "## Cover Letter Structure\n"
+            "Write a resume and a cover letter from the packet.\n"
+        )
+        with tempfile.TemporaryDirectory() as folder_tmp:
+            with tempfile.TemporaryDirectory() as digest_tmp:
+                folder = Path(folder_tmp)
+                (folder / "authoring_packet.json").write_text(
+                    json.dumps(_READY_PACKET, indent=2), encoding="utf-8"
+                )
+                digest_path, version_path = _make_temp_digest(
+                    Path(digest_tmp), content=incidental_digest
+                )
+                prompt_md, _meta = build_authoring_prompt(
+                    folder,
+                    digest_path=digest_path,
+                    digest_version_path=version_path,
+                )
+        self.assertIn("resume", prompt_md.lower())
+        self.assertIn("cover letter", prompt_md.lower())
+        self.assertFalse(
+            contains_pair_restatement_instruction(prompt_md),
+            "Checker matched incidental resume/cover-letter wording in the prompt.",
+        )
 
 
 class TestLoadCurrentDigestVersion(unittest.TestCase):

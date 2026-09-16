@@ -445,6 +445,26 @@ class TestWorkflowWaitingForInput(unittest.TestCase):
 
 
 class TestEnabledCascadeBuilder(unittest.TestCase):
+    def setUp(self) -> None:
+        from cost_eligibility import set_test_zero_charge_providers
+
+        set_test_zero_charge_providers(["groq", "gemini", "local"])
+        self._decl = patch(
+            "cost_eligibility.declared_cost_class",
+            side_effect=lambda provider, settings: {
+                "groq": "free_only",
+                "gemini": "free_only",
+                "local": "offline",
+            }.get(str(provider), "unknown"),
+        )
+        self._decl.start()
+        self.addCleanup(self._decl.stop)
+
+    def tearDown(self) -> None:
+        from cost_eligibility import set_test_zero_charge_providers
+
+        set_test_zero_charge_providers(None)
+
     def test_cascade_spools_reviews_and_reuses_completed_judgment(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             folder_path = Path(folder)
@@ -700,11 +720,17 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                 ):
                     with patch("build_stage0_fit_gate._extract_sections", return_value=sections):
                         with patch("utils.load_llm_settings", return_value=settings):
-                            with patch("utils.call_llm", side_effect=provider_response):
-                                paused = run_stage0(folder, init_state(folder))
+                            with patch(
+                                "stage0_db_gate.evaluate_db_gate",
+                                return_value={"action": "clear"},
+                            ):
+                                with patch("stage0_skip_ledger.lookup_skip", return_value=None):
+                                    with patch("utils.call_llm", side_effect=provider_response):
+                                        paused = run_stage0(folder, init_state(folder))
                 self.assertEqual(paused["status"], "WAITING_FOR_INPUT")
                 receipt = load_receipt(folder, "stage0")
                 self.assertIsNotNone(receipt)
+                self.assertEqual(receipt["result"]["pause_kind"], "review_center")
                 review_key = receipt["result"]["pending_confirmations"][0]["review_key"]
                 answer_hard_gate_review(
                     db_path=db_path,
@@ -721,8 +747,16 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                 ):
                     with patch("build_stage0_fit_gate._extract_sections", return_value=sections):
                         with patch("utils.load_llm_settings", return_value=settings):
-                            with patch("utils.call_llm", side_effect=AssertionError("resume did not reuse checkpoint")):
-                                resumed = run_stage0(folder, paused)
+                            with patch(
+                                "stage0_db_gate.evaluate_db_gate",
+                                return_value={"action": "clear"},
+                            ):
+                                with patch("stage0_skip_ledger.lookup_skip", return_value=None):
+                                    with patch(
+                                        "utils.call_llm",
+                                        side_effect=AssertionError("resume did not reuse checkpoint"),
+                                    ):
+                                        resumed = run_stage0(folder, paused)
                 self.assertEqual(resumed["status"], "IN_PROGRESS")
                 self.assertEqual(resumed["stages"]["stage0"]["status"], "COMPLETE")
             finally:

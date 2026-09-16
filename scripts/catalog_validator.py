@@ -79,9 +79,33 @@ def _load_truth_map(work_exp_path: str) -> Dict[str, str]:
     return load_valid_ids(work_exp_path)
 
 
+def _load_work_exp_text(work_exp_path: str) -> str:
+    try:
+        with open(work_exp_path, encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return ""
+
+
 def _acc_prefix(claim_id: str) -> Optional[str]:
     m = ACC_RE.search(claim_id or "")
     return m.group(0).upper() if m else None
+
+
+def _digits(value: object) -> str:
+    return re.sub(r"[^\d]", "", str(value or ""))
+
+
+def _metric_is_catalog_approved(metric: object, approved_lower: set[str], work_exp_text: str, metric_ref: object) -> bool:
+    mclean = str(metric).lower().replace("$", "").replace(",", "")
+    if any(mclean in al or al in mclean for al in approved_lower):
+        return True
+    metric_digits = _digits(metric)
+    if metric_digits and metric_digits in _digits(work_exp_text):
+        return True
+    if metric_ref and str(metric_ref) in work_exp_text:
+        return True
+    return False
 
 
 def validate_catalog(
@@ -101,11 +125,19 @@ def validate_catalog(
         claims = json.load(f)
 
     truth = _load_truth_map(wpath) if os.path.isfile(wpath) else {}
+    work_exp_text = _load_work_exp_text(wpath) if os.path.isfile(wpath) else ""
     approved_lower = {a.lower().replace(",", "") for a in APPROVED_METRICS}
 
     for cid, val in claims.items():
+        disabled = bool(val.get("disabled"))
         text = (val.get("text") or "").strip()
-        if not text:
+        tags = val.get("tags") or []
+        has_constraints = bool(
+            val.get("allowed_claims")
+            or val.get("prohibited_claims")
+            or val.get("claim_constraints")
+        )
+        if not text and not disabled and not (tags and has_constraints):
             result.errors.append(f"{cid}: empty text")
             result.ok = False
             continue
@@ -129,8 +161,11 @@ def validate_catalog(
                 result.ok = False
 
         for metric in val.get("metrics") or []:
-            mclean = str(metric).lower().replace("$", "").replace(",", "")
-            if not any(mclean in al or al in mclean for al in approved_lower):
+            if disabled:
+                continue
+            if not _metric_is_catalog_approved(
+                metric, approved_lower, work_exp_text, val.get("metric_ref")
+            ):
                 result.errors.append(f"{cid}: metric '{metric}' not in approved list")
                 result.ok = False
 

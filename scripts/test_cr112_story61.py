@@ -144,6 +144,8 @@ class TestCr112Story61(unittest.TestCase):
             self.assertEqual(totals["harness_spawn_count"], 0)
             self.assertEqual(totals["api_cents"], 0)
             self.assertEqual(totals["subscription_minutes"], 0)
+            self.assertTrue(totals["cost_known"])
+            self.assertEqual(totals["cost_class"], "offline")
             self.assertIn("prompt_meta_estimated_tokens", totals)
             self.assertEqual(summary["cost_rule"], "Never add subscription_minutes to api_cents.")
             self.assertEqual(summary["token_method"], "bytes_div_4_estimate")

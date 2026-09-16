@@ -79,6 +79,8 @@ data/context_pack_validation/
 data/reports/
 # CR-112 Epic 6 runtime eval output (sanitized fixtures live in tests/fixtures/cr112_eval/).
 data/eval/
+# E2 dry-run sandbox (setup_e2_sandbox.py). Shim DB + sidecar snapshots + slug folders stay local.
+data/sandbox/
 pipeline-log.md
 pipeline_log.txt
 

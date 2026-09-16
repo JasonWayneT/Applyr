@@ -25,6 +25,7 @@ from generate_authoring_rule_digest import (
     _DIGEST_CONTENT,
     _HARD_CHAR_LIMIT,
     _version_from_content,
+    contains_pair_restatement_instruction,
     generate_digest,
     write_digest,
 )
@@ -98,6 +99,29 @@ class TestGenerateDigest(unittest.TestCase):
             "Attribution Tiers",
         ]:
             self.assertIn(section, content, f"Missing section: {section}")
+
+    def test_digest_contains_pair_restatement_instruction(self) -> None:
+        """CR-112 Story 8.3 / FR-319: generated digest carries the locked pair line."""
+        content, _ = generate_digest()
+        self.assertTrue(
+            contains_pair_restatement_instruction(content),
+            "Digest missing keep-fact / change-language pair-restatement instruction.",
+        )
+
+    def test_negative_control_incidental_resume_cover_letter_is_insufficient(self) -> None:
+        """Negative control: document-type words alone must not satisfy the checker."""
+        incidental = (
+            "## Resume Structure\n"
+            "## Cover Letter Structure\n"
+            "Write a resume and a cover letter from the packet.\n"
+        )
+        self.assertIn("resume", incidental.lower())
+        self.assertIn("cover letter", incidental.lower())
+        self.assertFalse(
+            contains_pair_restatement_instruction(incidental),
+            "Checker matched incidental resume/cover-letter words instead of the "
+            "locked pair-restatement clauses.",
+        )
 
     def test_no_pii_patterns(self) -> None:
         """Digest must not contain email addresses or phone-number patterns."""

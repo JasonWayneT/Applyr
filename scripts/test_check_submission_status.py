@@ -134,6 +134,73 @@ class TestCheckSubmissionStatusShape(unittest.TestCase):
             for prefix in _EXPECTED_NAME_PREFIXES:
                 self.assertRegex(result.stdout, rf"\[PASS\] {prefix}")
 
+    def test_camunda_shaped_scores_are_incomplete(self):
+        """Resume 68 / Cover Letter 69 must not report DONE once floors are gated."""
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp) / "camundaco"
+            folder.mkdir()
+            resume = "# Name\n\n## PROFESSIONAL SUMMARY\n\nA. B. C.\n"
+            cover = "# Name\n\nDear Hiring Manager,\n\nBody.\n\nBest regards,\n\nName\n"
+            (folder / "Resume.md").write_text(resume, encoding="utf-8", newline="\n")
+            (folder / "CoverLetter.md").write_text(cover, encoding="utf-8", newline="\n")
+            (folder / "Resume.pdf").write_bytes(b"%PDF-1.4 minimal")
+            (folder / "CoverLetter.pdf").write_bytes(b"%PDF-1.4 minimal")
+            (folder / "stage0_fit_gate.json").write_text(
+                json.dumps(
+                    {
+                        "company": "CamundaCo",
+                        "required": ["x"],
+                        "preferred": [],
+                        "responsibilities": ["y"],
+                        "flagged_gaps": [],
+                        "stage_signal": "unknown",
+                        "thin_jd": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            resume_hash = hashlib.sha256((folder / "Resume.md").read_bytes()).hexdigest()
+            cover_hash = hashlib.sha256((folder / "CoverLetter.md").read_bytes()).hexdigest()
+            (folder / "verification_receipt.json").write_text(
+                json.dumps(
+                    {
+                        "submission": "camundaco",
+                        "mechanically_verified": True,
+                        "lint_all_clean": True,
+                        "unapproved_metrics_clean": True,
+                        "page_counts_ok": True,
+                        "check_resume": {"passed": True},
+                        "check_cover_letter": {"passed": True},
+                        "content_hashes": {
+                            "algorithm": "sha256",
+                            "Resume.md": resume_hash,
+                            "CoverLetter.md": cover_hash,
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "draft_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "company": "CamundaCo",
+                        "title": "Product Manager",
+                        "verification_passed": True,
+                        "rubric_score": {
+                            "resume": {"total": 68},
+                            "cover_letter": {"total": 69},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            result = self._run(folder)
+            self.assertEqual(result.returncode, 1, msg=result.stdout + result.stderr)
+            self.assertIn("STATUS: INCOMPLETE", result.stdout)
+            self.assertIn("70", result.stdout)
+
 
 class TestCr078WorkflowAuthorityInfo(unittest.TestCase):
     """CR-078 AC-302/303: workflow-authority status is additive info only, never a new gate."""

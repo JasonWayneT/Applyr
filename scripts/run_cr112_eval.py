@@ -104,6 +104,9 @@ def collect_folder_metrics(
 ) -> dict[str, Any]:
     """Collect one folder's offline eval metrics."""
     jd_bytes = (folder / "Original_JD.txt").read_bytes()
+    from cost_eligibility import offline_zero_call_metrics
+
+    cost = offline_zero_call_metrics()
     row = {
         "slug": folder.name,
         "assemble_packets_requested": assemble_packets,
@@ -111,7 +114,11 @@ def collect_folder_metrics(
         "prompt_meta_estimated_tokens": _estimate_tokens_from_bytes(jd_bytes),
         "call_llm_invocations": call_llm_invocations,
         "harness_spawn_count": harness_spawn_count,
-        "api_cents": 0,
+        "cost_class": cost["cost_class"],
+        "cost_known": cost["cost_known"],
+        "cost_confidence": cost["cost_confidence"],
+        "authorization_mode": cost["authorization_mode"],
+        "api_cents": cost["api_cents"],
         "subscription_minutes": 0,
         "cost_rule": _COST_RULE,
         "token_method": _TOKEN_METHOD,
@@ -184,6 +191,8 @@ def run_eval(
             "prompt_meta_estimated_tokens": sum(int(row["prompt_meta_estimated_tokens"]) for row in rows),
             "call_llm_invocations": 0,
             "harness_spawn_count": 0,
+            "cost_class": "offline",
+            "cost_known": True,
             "api_cents": 0,
             "subscription_minutes": 0,
         },

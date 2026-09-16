@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
 from authoring_examples import bank_version, select_examples  # noqa: E402
+from evidence_dominance import apply_class1_dominance  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
     _ADMIN_BACKGROUND_RE,
     _ADMIN_SCHEDULE_RE,
@@ -491,6 +492,37 @@ def _distinctive_overlap(item_words: set[str], claim_words: set[str]) -> set[str
     return {w for w in (item_words & claim_words) if w not in _GENERIC_OVERLAP_TOKENS}
 
 
+def _item_specificity_boost(item_text: str, claim_text: str) -> int:
+    """Prefer direct technical evidence for distributed/event-driven items.
+
+    CR-112 Story 8.8: broad infrastructure savings can share generic words
+    like "systems" and "optimization" with a distributed-systems requirement.
+    When the JD item itself is technical architecture/messaging work, a claim
+    that names messaging/architecture evidence should outrank that broad
+    overlap. This is item-specific; it is not a metric boost or a ban on
+    savings evidence.
+    """
+    item_l = item_text.lower()
+    claim_l = claim_text.lower()
+    technical_item = (
+        re.search(
+            r"\b(distributed|event[-\s]?driven|messaging|message\s+queues?|"
+            r"kafka|rabbitmq|fault\s+tolerance|scalability|architecture)\b",
+            item_l,
+        )
+        is not None
+    )
+    if not technical_item:
+        return 0
+    if re.search(
+        r"\b(kafka|rabbitmq|message\s+queues?|distributed\s+messaging|"
+        r"event[-\s]?driven|data\s+pipeline|product\s+architecture)\b",
+        claim_l,
+    ):
+        return 5000
+    return 0
+
+
 def _score_claims_for_item(
     item_text: str,
     claims: dict[str, dict],
@@ -593,6 +625,8 @@ def _score_claims_for_item(
             ):
                 capability_boost += 12000
 
+        capability_boost += _item_specificity_boost(item_text, ct)
+
         # Secondary: full-JD scorer as tiebreaker
         if use_jd_scorer and jd_profile is not None:
             jd_score = score_claim_for_jd(ct, jd_profile, jd_text)
@@ -646,11 +680,13 @@ def build_evidence_map(
 
     CR-112 Story 3.2 (FR-303 / AC-400): optional *trace_out* receives the full
     per-item ranking for evidence_selection_trace.json. Packet rows may carry
-    cheap omitted_reasons (`top2_cutoff` | `project_slot_cap`) only. Scores,
+    cheap omitted_reasons (`top2_cutoff` | `project_slot_cap`, and after
+    Story 3.5 `displaced_by_dominance`). Scores,
     score_zero catalog noise, and boilerplate filters stay out of the packet.
     Pick rules stay the 8bbc497 rules: score <= 0 is not picked; a capped
     project continues to the next candidate; after two picks further positive
-    scores are top2_cutoff. Recording losers must not change who wins.
+    scores are top2_cutoff. Story 3.2 recording of losers must not change
+    who wins. Story 3.5 may swap after that pass only on comparator REPLACE.
     """
     # Build a soft-gap bridge lookup from flagged_gaps + required item bridges
     soft_gap_bridges: dict[str, str] = {}
@@ -772,6 +808,7 @@ def build_evidence_map(
 
     project_counts: dict[str, int] = {}
     evidence_map: list[dict] = []
+    row_traces: list[dict] = []
     for row in pending:
         picked: list[str] = []
         omitted: list[dict] = []
@@ -823,15 +860,25 @@ def build_evidence_map(
             "bridge": bridge,
             "omitted_reasons": omitted,
         })
+        item_trace = {
+            "jd_item": row["jd_item"],
+            "bucket": row["bucket"],
+            "picked": list(picked),
+            "candidates": candidates_full,
+            "filter": None,
+        }
+        row_traces.append(item_trace)
         if trace_out is not None:
-            trace_out.append({
-                "jd_item": row["jd_item"],
-                "bucket": row["bucket"],
-                "picked": list(picked),
-                "candidates": candidates_full,
-                "filter": None,
-            })
+            trace_out.append(item_trace)
 
+    apply_class1_dominance(
+        evidence_map,
+        row_traces,
+        claims,
+        jd_text=jd_text,
+        max_slots_per_project=_MAX_SLOTS_PER_PROJECT,
+        disabled=disabled,
+    )
     return evidence_map
 
 
@@ -1390,6 +1437,26 @@ def _build_soft_gaps(stage0: dict, evidence_map: list[dict] | None = None) -> li
     return soft_gaps
 
 
+def _stage0_requirement_text(stage0: dict) -> str:
+    """Concatenated text of Stage 0's own required+preferred+responsibilities
+    bucket items, used as the ATS-term-contract fallback path's requirement
+    anchor (see CR-112-ats-term-contract-eligibility-defect.md). Each bucket
+    entry is a dict with an "item" text field (not a plain string), so this
+    extracts "item" rather than stringifying the whole dict -- stringifying
+    the dict would also match on unrelated fields like "anchor"/"gap_source"
+    reasoning text, which is not itself JD text."""
+    texts: list[str] = []
+    for bucket_name in ("required", "preferred", "responsibilities"):
+        for entry in stage0.get(bucket_name) or []:
+            if isinstance(entry, dict):
+                text = entry.get("item")
+            else:
+                text = entry
+            if isinstance(text, str) and text.strip():
+                texts.append(text)
+    return " ".join(texts)
+
+
 def _build_jd_buckets(stage0: dict) -> dict:
     """Extract jd_buckets from stage0 in the packet schema shape.
 
@@ -1506,7 +1573,12 @@ def assemble_packet(
     soft_gaps = _build_soft_gaps(stage0, evidence_map)
     from jd_term_extractor import build_packet_ats_term_contract
     if ats_term_contract is None:
-        ats_term_contract = build_packet_ats_term_contract(jd_text, evidence_map)
+        ats_term_contract = build_packet_ats_term_contract(
+            jd_text,
+            evidence_map,
+            disabled=disabled,
+            requirement_text=_stage0_requirement_text(stage0),
+        )
 
     # Compute estimated_tokens before status check
     # Build a draft packet without status for size estimation
@@ -1559,6 +1631,27 @@ def assemble_packet(
     if estimated_tokens > _TOKEN_BUDGET and draft["learned_examples"]:
         while estimated_tokens > _TOKEN_BUDGET and draft["learned_examples"]:
             draft["learned_examples"].pop()
+            estimated_tokens = (
+                len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+            )
+
+    # Implements FR-297 / AC-394: omitted-candidate summaries help explain
+    # selection but are not authoring evidence. The complete candidate list,
+    # scores, and reasons already live in evidence_selection_trace.json, which
+    # the Stage 1 author never loads. Compact this duplicated prompt field
+    # before shrinking excerpts or weakening attribution constraints.
+    if estimated_tokens > _TOKEN_BUDGET:
+        omitted_count = sum(
+            len(row.get("omitted_reasons") or [])
+            for row in draft["evidence_map"]
+        )
+        if omitted_count:
+            for row in draft["evidence_map"]:
+                row["omitted_reasons"] = []
+            draft["budget_compaction"] = {
+                "omitted_reasons_removed": omitted_count,
+                "reason": "author_prompt_budget_full_trace_preserved",
+            }
             estimated_tokens = (
                 len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
             )
@@ -1744,6 +1837,8 @@ def build_packet(
         evidence_map,
         claims=claims,
         excerpt_claim_ids=set(excerpts),
+        disabled=disabled,
+        requirement_text=_stage0_requirement_text(stage0),
     )
 
     # Story 3.4 — Hook fact
@@ -1780,7 +1875,8 @@ def _write_selection_trace(folder: Path, packet: dict, items: list) -> None:
     Implements FR-303 / AC-400. Stage 1 author_from_packet dumps
     authoring_packet.json only; this sibling file is never loaded into
     authoring_prompt.md. Candidate scores stay here. Packet omitted_reasons
-    may carry only top2_cutoff and project_slot_cap.
+    may carry top2_cutoff, project_slot_cap, and after Story 3.5
+    displaced_by_dominance. Scores and axes stay out of the prompt.
     """
     payload = {
         "schema_version": "1.0",

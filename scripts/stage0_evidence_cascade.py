@@ -2,10 +2,12 @@
 """Batched, provider-configured Stage 0 evidence classification (CR-108)."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 
@@ -26,6 +28,40 @@ _DEFAULT_MODELS = {
     "local": "qwen2.5:7b-instruct-q4_K_M",
 }
 _GATE_SOURCES = {"degree", "domain", "role_exclusion", "certification"}
+CASCADE_IMPORT_NAME = "stage0_cascade_import.json"
+CASCADE_IMPORT_TEMPLATE_NAME = "stage0_cascade_import.template.json"
+CASCADE_IMPORT_CONSUMED_NAME = "stage0_cascade_import.consumed.json"
+CASCADE_IMPORT_SCHEMA_VERSION = 1
+_IMPORT_ALLOWED_KEYS = {
+    "schema_version",
+    "import_source",
+    "submission_slug",
+    "jd_sha256",
+    "batch_sha256",
+    "created_at",
+    "expected_item_ids",
+    "results",
+}
+_IMPORT_FORBIDDEN_KEYS = {
+    "workflow_status",
+    "status",
+    "receipts",
+    "receipt_id",
+    "stages",
+    "api_cents",
+    "cost",
+    "cost_class",
+    "cost_known",
+    "cost_confidence",
+    "verification_passed",
+    "rubric_score",
+    "model_call_occurred",
+    "active_stage",
+    "issued_by",
+    "pause_kind",
+    "workflow_state",
+    "mechanically_verified",
+}
 _FILLER_WORDS = {
     "work",
     "experience",
@@ -90,12 +126,189 @@ def normalize_stage0_evidence_policy(settings: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def cascade_batch_sha256(items: list[BatchItem]) -> str:
+    """Stable identity of the exact requirement batch Stage 0 is classifying."""
+    payload = [
+        {
+            "item_id": item.item_id,
+            "bucket": item.bucket,
+            "requirement": item.requirement,
+        }
+        for item in items
+    ]
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def render_cascade_import_template(
+    *,
+    submission_slug: str,
+    jd_sha256: str,
+    items: list[BatchItem],
+) -> dict[str, Any]:
+    """Bound import skeleton. No private biography. Results must be filled in."""
+    item_ids = [item.item_id for item in items]
+    return {
+        "schema_version": CASCADE_IMPORT_SCHEMA_VERSION,
+        "import_source": "manual",
+        "submission_slug": submission_slug,
+        "jd_sha256": jd_sha256,
+        "batch_sha256": cascade_batch_sha256(items),
+        "created_at": "audit-only-not-identity",
+        "expected_item_ids": item_ids,
+        "results": [
+            {
+                "item_id": item.item_id,
+                # CR-112 (Defect B, exact-text binding): echoed back so
+                # try_load_cascade_import can verify whoever answered this
+                # import was looking at the real requirement text, not text
+                # they rewrote or a different item entirely.
+                "requirement": item.requirement,
+                "bucket": item.bucket,
+                "gate": "NONE",
+                "evidence_level": 4,
+                "confidence": "high",
+                "reasoning": f"Replace this placeholder for {item.item_id}.",
+            }
+            for item in items
+        ],
+    }
+
+
+def write_cascade_import_template(
+    folder: str | Path,
+    *,
+    submission_slug: str,
+    jd_sha256: str,
+    items: list[BatchItem],
+) -> Path:
+    """Write a non-authoritative template next to the live import name."""
+    path = Path(folder) / CASCADE_IMPORT_TEMPLATE_NAME
+    payload = render_cascade_import_template(
+        submission_slug=submission_slug,
+        jd_sha256=jd_sha256,
+        items=items,
+    )
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return path
+
+
+def consume_cascade_import(folder: str | Path) -> str | None:
+    """Rename a successfully used live import. Deterministic; no second live file."""
+    live = Path(folder) / CASCADE_IMPORT_NAME
+    if not live.is_file():
+        return None
+    consumed = Path(folder) / CASCADE_IMPORT_CONSUMED_NAME
+    if consumed.exists():
+        consumed.unlink()
+    live.replace(consumed)
+    return CASCADE_IMPORT_CONSUMED_NAME
+
+
+def try_load_cascade_import(
+    folder: str | Path,
+    items: list[BatchItem],
+    *,
+    submission_slug: str,
+    jd_sha256: str,
+) -> dict[str, Any] | None:
+    """Load a bound manual cascade import. None if the live file is absent.
+
+    Present-but-invalid raises CascadeValidationError. Does not write state.
+    """
+    path = Path(folder) / CASCADE_IMPORT_NAME
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+        payload = json.loads(raw)
+    except UnicodeDecodeError as exc:
+        raise CascadeValidationError(f"invalid cascade import encoding: {exc}") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CascadeValidationError(f"invalid cascade import: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise CascadeValidationError("cascade import must be a JSON object")
+    extra = set(payload) - _IMPORT_ALLOWED_KEYS
+    forbidden = set(payload) & _IMPORT_FORBIDDEN_KEYS
+    if forbidden:
+        raise CascadeValidationError(
+            f"cascade import cannot set workflow or cost fields: {sorted(forbidden)}"
+        )
+    if extra:
+        raise CascadeValidationError(
+            f"cascade import has unsupported keys: {sorted(extra)}"
+        )
+    if payload.get("schema_version") != CASCADE_IMPORT_SCHEMA_VERSION:
+        raise CascadeValidationError(
+            f"cascade import schema_version must be {CASCADE_IMPORT_SCHEMA_VERSION}"
+        )
+    if payload.get("import_source") != "manual":
+        raise CascadeValidationError("cascade import_source must be manual")
+    if str(payload.get("submission_slug") or "") != str(submission_slug):
+        raise CascadeValidationError("cascade import submission_slug does not match this folder")
+    if str(payload.get("jd_sha256") or "") != str(jd_sha256):
+        raise CascadeValidationError("cascade import jd_sha256 does not match this JD")
+    expected_batch = cascade_batch_sha256(items)
+    if str(payload.get("batch_sha256") or "") != expected_batch:
+        raise CascadeValidationError("cascade import batch_sha256 does not match this requirement set")
+    if "created_at" not in payload:
+        raise CascadeValidationError("cascade import created_at is required for audit")
+    if not isinstance(payload.get("created_at"), str) or not payload["created_at"].strip():
+        raise CascadeValidationError("cascade import created_at must be a non-empty string")
+    declared_ids = payload.get("expected_item_ids")
+    actual_ids = [item.item_id for item in items]
+    if declared_ids is None:
+        raise CascadeValidationError("cascade import expected_item_ids is required")
+    if not isinstance(declared_ids, list) or list(declared_ids) != actual_ids:
+        raise CascadeValidationError("cascade import expected_item_ids do not match this batch")
+    # CR-112 (Defect B, exact-text binding): a submitted import's echoed
+    # requirement/bucket must match the real item text/bucket exactly --
+    # otherwise a classifier could answer about text it rewrote and nothing
+    # would catch it. Checked before validate_batch_response(), which does
+    # not look at these two fields at all.
+    expected_by_id = {item.item_id: item for item in items}
+    raw_results = payload.get("results")
+    if isinstance(raw_results, list):
+        for raw_result in raw_results:
+            if not isinstance(raw_result, dict):
+                continue
+            raw_item_id = raw_result.get("item_id")
+            expected_item = expected_by_id.get(raw_item_id) if isinstance(raw_item_id, str) else None
+            if expected_item is None:
+                continue
+            if str(raw_result.get("requirement") or "") != expected_item.requirement:
+                raise CascadeValidationError(
+                    f"cascade import echoed requirement text for {raw_item_id!r} "
+                    "does not match this batch's real item text"
+                )
+            if str(raw_result.get("bucket") or "") != expected_item.bucket:
+                raise CascadeValidationError(
+                    f"cascade import echoed bucket for {raw_item_id!r} does not "
+                    "match this batch's real item bucket"
+                )
+    results = validate_batch_response(payload, items, exact_ids=True)
+    assert isinstance(results, dict)
+    import_sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return {
+        "results": results,
+        "import_source": "manual",
+        "import_sha256": import_sha256,
+        "schema_version": CASCADE_IMPORT_SCHEMA_VERSION,
+        "model_call_occurred": False,
+        "cost_applicable": False,
+        "validation": "pass",
+    }
+
+
 def classify_requirements_batch(
     items: list[BatchItem],
     *,
     settings: dict[str, Any] | None = None,
     raw_response_callback: Callable[[str], None] | None = None,
     provider_event_callback: Callable[[str, str], None] | None = None,
+    folder: str | Path | None = None,
+    cost_ledger: Any | None = None,
+    allow_import: bool = True,
 ) -> dict[str, dict[str, Any]]:
     """Classify all ambiguous items in one validated structured provider request.
 
@@ -118,6 +331,7 @@ def classify_requirements_batch(
     """
     if not items:
         return {}
+    # Manual import is validated only by the Stage 0 builder, never here.
     # Improvement #4: automatic chunking for batches > MAX_BATCH_ITEMS.
     if len(items) > MAX_BATCH_ITEMS:
         return _classify_in_chunks(
@@ -125,6 +339,8 @@ def classify_requirements_batch(
             settings=settings,
             raw_response_callback=raw_response_callback,
             provider_event_callback=provider_event_callback,
+            folder=folder,
+            cost_ledger=cost_ledger,
         )
     # CR-108: proactive split based on estimated output size. Accounts for
     # long evidence excerpts that would exceed the output token budget even
@@ -137,21 +353,44 @@ def classify_requirements_batch(
             settings=settings,
             raw_response_callback=raw_response_callback,
             provider_event_callback=provider_event_callback,
+            folder=folder,
+            cost_ledger=cost_ledger,
+            allow_import=False,
         )
         right = classify_requirements_batch(
             items[mid:],
             settings=settings,
             raw_response_callback=raw_response_callback,
             provider_event_callback=provider_event_callback,
+            folder=folder,
+            cost_ledger=cost_ledger,
+            allow_import=False,
         )
         return {**left, **right}
     from utils import call_llm, load_llm_settings
+    from cost_eligibility import (
+        CostPauseError,
+        authorize_provider_chain,
+        budget_ledger_from_settings,
+        estimate_prompt_tokens,
+        raise_if_pause,
+    )
 
     active_settings = settings if settings is not None else load_llm_settings()
     policy = normalize_stage0_evidence_policy(active_settings)
-    providers = policy["provider_order"]
     models = policy["models"]
     last_error: Exception | None = None
+    ledger = cost_ledger if cost_ledger is not None else budget_ledger_from_settings(active_settings)
+    prompt_for_auth = _build_batch_prompt(items)
+    tokens_est = estimate_prompt_tokens(_SYSTEM_PROMPT, prompt_for_auth)
+    auth = authorize_provider_chain(
+        policy["provider_order"],
+        active_settings,
+        ledger=ledger,
+        estimated_tokens=tokens_est,
+    )
+    raise_if_pause(auth, estimated_tokens=tokens_est)
+    providers = auth.providers
     # CR-108: track accumulated results and remaining items across providers.
     # When a provider returns a partial response (truncation + JSON repair),
     # the recovered items are kept and only the missing items are retried.
@@ -160,9 +399,6 @@ def classify_requirements_batch(
     for provider_index, provider in enumerate(providers):
         if not remaining:
             break
-        if provider_event_callback:
-            provider_event_callback(provider, "call")
-        # Send only the items not yet classified by a previous provider.
         prompt = _build_batch_prompt(remaining)
         try:
             raw = call_llm(
@@ -174,12 +410,18 @@ def classify_requirements_batch(
                 response_schema={"type": "object"},
                 provider_override=[provider],
                 request_timeout=120,
+                cost_settings=active_settings,
+                cost_ledger=ledger,
             )
+        except CostPauseError:
+            raise
         except Exception as exc:
             last_error = exc
             if provider_event_callback and provider_index + 1 < len(providers):
                 provider_event_callback(provider, "fallback")
             continue
+        if provider_event_callback:
+            provider_event_callback(provider, "call")
         if not raw:
             if provider_event_callback and provider_index + 1 < len(providers):
                 provider_event_callback(provider, "fallback")
@@ -221,7 +463,11 @@ def classify_requirements_batch(
                         response_schema={"type": "object"},
                         provider_override=[provider],
                         request_timeout=120,
+                        cost_settings=active_settings,
+                        cost_ledger=ledger,
                     )
+                except CostPauseError:
+                    raise
                 except Exception as exc:
                     last_error = exc
                     retry_raw = None
@@ -257,6 +503,8 @@ def _classify_in_chunks(
     settings: dict[str, Any] | None = None,
     raw_response_callback: Callable[[str], None] | None = None,
     provider_event_callback: Callable[[str, str], None] | None = None,
+    folder: str | Path | None = None,
+    cost_ledger: Any | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Split a large batch into MAX_BATCH_ITEMS-sized chunks, classify each,
     and merge results. If a chunk fails, its items are re-attempted individually
@@ -271,6 +519,9 @@ def _classify_in_chunks(
                 settings=settings,
                 raw_response_callback=raw_response_callback,
                 provider_event_callback=provider_event_callback,
+                folder=folder,
+                cost_ledger=cost_ledger,
+                allow_import=False,
             )
             merged.update(chunk_results)
         except (CascadeValidationError, CascadeUnavailable):
@@ -283,6 +534,9 @@ def _classify_in_chunks(
                         settings=settings,
                         raw_response_callback=raw_response_callback,
                         provider_event_callback=provider_event_callback,
+                        folder=folder,
+                        cost_ledger=cost_ledger,
+                        allow_import=False,
                     )
                     merged.update(single_results)
                 except (CascadeValidationError, CascadeUnavailable):
@@ -361,6 +615,7 @@ def validate_batch_response(
     items: list[BatchItem],
     *,
     partial: bool = False,
+    exact_ids: bool = False,
 ) -> dict[str, dict[str, Any]] | tuple[dict[str, dict[str, Any]], set[str]]:
     """Validate and normalize exactly one safe result for every batch item.
 
@@ -369,6 +624,7 @@ def validate_batch_response(
     caller can accept recovered results and retry only the missing items.
     Other validation errors (invalid gate, unknown item_id, ungrounded HARD)
     always raise regardless of the partial flag.
+    exact_ids=True rejects suffix/ordinal/hash-tail aliases (manual import).
     """
     if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
         raise CascadeValidationError("batch response must contain a results list")
@@ -379,7 +635,10 @@ def validate_batch_response(
         if not isinstance(raw, dict):
             raise CascadeValidationError("batch result must be an object")
         raw_id = raw.get("item_id")
-        item_id = _resolve_item_id(raw_id, expected) if isinstance(raw_id, str) else None
+        if exact_ids:
+            item_id = raw_id if isinstance(raw_id, str) and raw_id in expected else None
+        else:
+            item_id = _resolve_item_id(raw_id, expected) if isinstance(raw_id, str) else None
         if item_id is None:
             raise CascadeValidationError(f"unknown batch item_id: {raw_id!r}")
         if item_id in seen:

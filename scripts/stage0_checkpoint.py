@@ -9,6 +9,7 @@ import re
 import shutil
 import sqlite3
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -21,6 +22,7 @@ _MIGRATIONS = (
     _ROOT / "server" / "migrations" / "019_add_stage0_checkpoints.sql",
     _ROOT / "server" / "migrations" / "020_add_review_answer_history.sql",
     _ROOT / "server" / "migrations" / "021_add_evidence_promotion_proposals.sql",
+    _ROOT / "server" / "migrations" / "023_add_stage0_judgment_corrections.sql",
 )
 _RUN_STATUSES = {"REQUESTED", "RUNNING", "WAITING_FOR_INPUT", "COMPLETE", "FAILED"}
 CHECKPOINT_BOUNDARIES = (
@@ -178,6 +180,28 @@ def mark_run_status(
         connection.close()
 
 
+def get_run_metadata(
+    db_path: str | Path | None,
+    run_key: str,
+) -> dict[str, Any]:
+    """Read checkpoint metadata for one Stage 0 run. Empty dict if missing."""
+    connection = _connect(db_path)
+    try:
+        row = connection.execute(
+            "SELECT metadata_json FROM stage0_runs WHERE run_key = ?",
+            (run_key,),
+        ).fetchone()
+        if row is None or not row["metadata_json"]:
+            return {}
+        try:
+            parsed = json.loads(row["metadata_json"])
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    finally:
+        connection.close()
+
+
 def update_run_metadata(
     db_path: str | Path | None,
     run_key: str,
@@ -301,6 +325,171 @@ def get_completed_judgment(
         except (TypeError, json.JSONDecodeError):
             return None
         return result
+    finally:
+        connection.close()
+
+
+def build_judgment_correction_request(
+    db_path: str | Path | None,
+    *,
+    run_key: str,
+    item_key: str,
+) -> dict[str, Any] | None:
+    """Build the correction-request artifact for one live Stage 0 judgment.
+
+    CR-112 (Defect B, "recurs one layer down if not addressed here too"):
+    make_item_key() letter-encodes a SHA prefix on purpose (to survive
+    provider safety filters), so it is not human-derivable on its own. This
+    carries item_key + bucket + the exact item_text + the current (wrong)
+    judgment, plus the exact reuse hashes correct_judgment() below requires
+    -- so whoever answers a correction never has to inspect
+    stage0_judgments directly to figure out what they are correcting.
+
+    Returns None when no live row exists for this run_key/item_key.
+    """
+    connection = _connect(db_path)
+    try:
+        row = connection.execute(
+            "SELECT * FROM stage0_judgments WHERE run_key = ? AND item_key = ?",
+            (run_key, item_key),
+        ).fetchone()
+        if row is None:
+            return None
+        row = dict(row)
+        try:
+            current_judgment = json.loads(row["judgment_json"])
+        except (TypeError, json.JSONDecodeError):
+            current_judgment = None
+        return {
+            "judgment_key": row["judgment_key"],
+            "run_key": row["run_key"],
+            "opportunity_key": row["opportunity_key"],
+            "item_key": row["item_key"],
+            "bucket": row["bucket"],
+            "item_text": row["item_text"],
+            "current_judgment": current_judgment,
+            "request_hash": row["request_hash"],
+            "content_hash": row["content_hash"],
+            "evidence_index_hash": row["evidence_index_hash"],
+        }
+    finally:
+        connection.close()
+
+
+# CR-112 (Defect B, "cannot itself set fit_score/tier/decision/workflow
+# status" -- mirrors the same forbidden-keys contract already proven for
+# stage0_evidence_cascade's cascade import and Epic 3's closed-world import).
+# A judgment correction only ever changes what classify_gaps() sees for one
+# item on the next --resume; scoring/tier/decision happen through the
+# normal path afterward, never here.
+_CORRECTION_FORBIDDEN_KEYS = {
+    "fit_score",
+    "tier",
+    "decision",
+    "workflow_status",
+    "status",
+    "receipts",
+    "receipt_id",
+    "stages",
+    "active_stage",
+    "issued_by",
+    "pause_kind",
+    "workflow_state",
+    "mechanically_verified",
+    "verification_passed",
+}
+
+
+def correct_judgment(
+    db_path: str | Path | None,
+    *,
+    run_key: str,
+    item_key: str,
+    request_hash: str,
+    content_hash: str,
+    evidence_index_hash: str,
+    opportunity_key: str,
+    corrected_judgment: dict[str, Any],
+    correction_source: str,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Correct a cached Stage 0 item judgment in place, preserving the
+    pre-correction state as append-only history (CR-112 v3, replacing v2's
+    schema-invalid new-row design -- stage0_judgments' own
+    UNIQUE (run_key, item_key, request_hash) forbids a second row for an
+    unchanged requirement set).
+
+    Rejects (raises) on: no live row for run_key/item_key (KeyError), or a
+    mismatched request_hash/content_hash/evidence_index_hash/opportunity_key
+    (ValueError) -- the same reuse-safety hashes get_completed_judgment()
+    already requires to match before trusting a cached judgment. Keyed on
+    what is actually on the stage0_judgments row -- there is no jd_hash
+    column there; that lives on stage0_runs.
+
+    get_completed_judgment() needs zero changes: it keeps reading the single
+    live stage0_judgments row, which this function updates in place after
+    appending the pre-correction state to stage0_judgment_corrections.
+    """
+    connection = _connect(db_path)
+    try:
+        row = connection.execute(
+            "SELECT * FROM stage0_judgments WHERE run_key = ? AND item_key = ?",
+            (run_key, item_key),
+        ).fetchone()
+        if row is None:
+            raise KeyError(
+                f"no cached Stage 0 judgment for item_key={item_key!r} under run_key={run_key!r}"
+            )
+        row = dict(row)
+        if row["request_hash"] != request_hash:
+            raise ValueError("correction request_hash does not match the live judgment row")
+        if row["content_hash"] != content_hash:
+            raise ValueError("correction content_hash does not match the live judgment row")
+        if row["evidence_index_hash"] != evidence_index_hash:
+            raise ValueError("correction evidence_index_hash does not match the live judgment row")
+        if row["opportunity_key"] != opportunity_key:
+            raise ValueError("correction opportunity_key does not match the live judgment row")
+        forbidden = set(corrected_judgment) & _CORRECTION_FORBIDDEN_KEYS
+        if forbidden:
+            raise ValueError(
+                f"judgment correction cannot set workflow/scoring fields: {sorted(forbidden)}"
+            )
+
+        now = _utc_now()
+        corrected_json = json.dumps(corrected_judgment, ensure_ascii=False, sort_keys=True)
+        with connection:
+            connection.execute(
+                """
+                INSERT INTO stage0_judgment_corrections (
+                  id, judgment_key, run_key, opportunity_key, item_key, item_text,
+                  request_hash, previous_judgment_json, corrected_judgment_json,
+                  correction_source, reason, corrected_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    row["judgment_key"],
+                    run_key,
+                    opportunity_key,
+                    item_key,
+                    row["item_text"],
+                    request_hash,
+                    row["judgment_json"],
+                    corrected_json,
+                    correction_source,
+                    reason,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE stage0_judgments
+                SET judgment_json = ?, updated_at = ?
+                WHERE judgment_key = ?
+                """,
+                (corrected_json, now, row["judgment_key"]),
+            )
+        return {"judgment_key": row["judgment_key"], "corrected_at": now}
     finally:
         connection.close()
 

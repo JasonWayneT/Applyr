@@ -5,7 +5,8 @@ A cited claim_id is extra when it is not literally present in packet
 excerpts, evidence_map.claim_ids, or soft_gaps.claim_ids. Project-prefix
 match (ACC-101-SAVINGS vs ACC-101-PM) does not clear the check.
 
-Findings are WARN (`truth.provenance.extra.<id>`), not a Stage 1 hard block.
+Findings are BLOCK (`truth.provenance.extra.<id>`), a Stage 1 completion
+block. This module detects. It does not rank, recommend, or recover.
 """
 from __future__ import annotations
 
@@ -69,14 +70,15 @@ def extra_packet_claim_ids(
 def extra_packet_findings(
     packet: dict[str, Any], provenance: dict[str, Any]
 ) -> list[dict[str, str]]:
-    """Implements FR-302 / AC-399."""
+    """Implements FR-312 / AC-409. Detection only: no rank, recover, or widen."""
     findings: list[dict[str, str]] = []
     for cid in extra_packet_claim_ids(packet, provenance):
         findings.append(
             {
                 "id": f"truth.provenance.extra.{cid}",
                 "claim_id": cid,
-                "severity": "WARN",
+                "severity": "BLOCK",
+                "recovery_state": "UNRESOLVED",
             }
         )
     return findings
@@ -129,7 +131,7 @@ def scan_extra_packet_folders(root: Path) -> list[dict[str, Any]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="WARN scan for provenance IDs outside the packet closed world."
+        description="Read-only scan for provenance IDs outside the packet closed world."
     )
     parser.add_argument(
         "--root",
@@ -147,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         for row in rows:
             extras = ",".join(row["extra_ids"]) if row["extra_ids"] else "(none)"
             print(f"{row['slug']}\t{extras}")
-        print("Read-only. WARN only. Did not rewrite any folder.")
+        print("Read-only. Did not rewrite any folder.")
     return 0
 
 

@@ -1,11 +1,166 @@
+## [Unreleased] — 2026-09-15
+[DRAFT] CR-112 consolidation maintenance reconciles the current candidate
+after Stories 8.6 through 8.9. Focused offline checks pass. The supervised
+real-JD dry run remains a future verification step, so readiness stays
+`SUPERVISED_SMALL_BATCH_READY`.
+
+### New
+- CR-112 Story 7.3 (`FR-326` / `AC-424`): an operator can now certify Groq
+  or Gemini as free-tier-only Stage 0 routes through a structured, expiring
+  attestation in the `llm_settings` blob (`freeTierAssertions`, exact
+  canonical statement, strict acknowledgement, 30-day expiry). Default
+  installs are unchanged: without a valid attestation plus a declared
+  `free_only` cost class, both providers stay `unknown` and the run still
+  pauses at `WAITING_FOR_INPUT` / `pause_kind=cost_authorization`. Paid
+  allowlist, budget, estimate, free-to-paid stripping, cascade import, and
+  pause contracts are unchanged. No provider, network, or paid route is
+  called by the mechanism.
+
+### Fixed
+- CR-112 Story 1.2 (`FR-297` / `AC-394`): over-budget authoring packets
+  now remove redundant author-only omitted-candidate summaries before
+  shrinking evidence excerpts. The full ranking audit remains in
+  `evidence_selection_trace.json`, and attribution constraints are never
+  dropped.
+- CR-112 Story 8.7 (`FR-325` / `AC-423`): deterministic identity repair now
+  replaces unbracketed contact placeholders and removes stacked placeholder
+  headers.
+- CR-112 Story 8.8 (`FR-323` / `AC-421`): distributed and event-driven
+  requirements now favor item-specific messaging or architecture evidence
+  over broad savings evidence, while cost and ARR/reliability controls retain
+  their metric-bearing winners.
+- CR-112 Story 8.9 (`FR-324` / `AC-422`): catalog validation now accepts the
+  CR-094 tags-and-constraints claims-index shape while still rejecting
+  unconstrained empty claims and ungrounded metrics.
+
+### Changed
+- CR-113 (`FR-322` / `AC-420`): rubric scorecard metadata gate requires `schema_version: 1`, current `rubric_sha256`, timezone-qualified `scored_at`, non-empty `reviewer_run_id` or `spawned_by`, and complete numeric per-criterion breakdowns (R1-R8, C1-C5) matching total scores with no unknown keys.
+- CR-112 Story 8.6 (`FR-322` / `AC-420`): score provenance is implemented,
+  hash-bound, role-tagged, boundary-band blind-read aware, and fail-closed on
+  current-hash disagreement.
+- CR-112 status records now identify the supervised real-JD dry run as future
+  product proof. No provider, paid API, production SQLite, or submission data
+  was used during this maintenance verification.
+
+## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Vanta blind adjudication, ranking characterization
+corpus, and JD 3 Newsela on the isolated candidate. Blind Vanta resume
+score 71 keeps Vanta `PRACTICE_COMPLETE`. Ranking fixtures characterize
+current behavior, including the known Camunda defect, without changing
+the formula. Score provenance is design-only. Newsela first draft
+Resume 61 stayed below floor after honest recovery (62) and is left
+blocked. No paid APIs. No push. CR-112 remains open. Batch readiness:
+NOT_READY.
+
+### New
+- CR-112 Story 8.5 (`FR-321` / `AC-419`): executable ranking
+  characterization tests for Camunda distributed-systems, Pearl and
+  SupplyHouse REPLACE controls, cost-reduction, ARR/reliability, and
+  near-tie. Camunda SAVINGS-over-messaging is a known-defect report,
+  not a desired rank.
+- CR-112 Story 8.6 (`FR-322` / `AC-420`): score-provenance design.
+  Hash-bound scorecards, reviewer role, 3-point floor band, fail-closed
+  disagreement. Not implemented this pass.
+
+### Notes
+- Vanta corrected resume blind adjudication
+  ([Review](51bee1b0-e969-4cc0-af2e-5b9bfcfa27cc)): Resume **71**.
+  R4 classified ~200 SQL databases as unpaired scale, not an outcome.
+  Floor rule: blind >= 70 retains completion. Manifest 70 is not
+  averaged with 71. Independent 68 is recorded, not selected.
+- JD 3 Newsela (`data/authored_drafts/newsela_cr112_proof/`):
+  independent first-draft Resume **61** / Cover **80**
+  ([Review](adef9c23-397e-4ce3-8744-6eb88b4f6d23)). Mechanical recovery
+  only. Implementer post-edit Resume **62**. `mech.rubric_floor.resume`
+  BLOCK left undisposed. No HAR.
+- Batch-readiness this pass: **NOT_READY**. Durable handoff:
+  `docs/spec/08-implementation/SESSION-HANDOFF-2026-09-13-cr112-jd3-newsela.md`.
+- Header-stack defect recorded, not fixed:
+  `docs/spec/08-implementation/CR-112-unbracketed-placeholder-header-stack-defect.md`.
+
+## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Story 8.4 durable consumed extraction-review on the
+isolated candidate. Stage 0 `--resume` after cost-authorization no longer
+re-asks a review that was already consumed. No paid APIs. No push.
+CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.4 (`FR-320` / `AC-418`): `try_load_review_import` reuses a
+  valid `.consumed.json` when the live import is absent and the JD plus
+  queue still bind. Unreadable consumed JSON fails closed. Live import
+  still wins for a deliberate correction.
+
+### Notes
+- Design review ACCEPT WITH CHANGES
+  ([Review](221eed13-6cf1-45e0-ba82-14c298ba0877)).
+- Vanta JD 2 practice folder reached `PRACTICE_COMPLETE` after an honest
+  resume `RESOLVED_EDIT` (65 → 70). First-draft baseline preserved.
+- Story 8.3 follow-up design review ACCEPT no further digest paragraph
+  ([Review](8b6fe4c0-479a-4ea9-bbd1-3d84be8d488b)).
+- Ranking investigation design review ACCEPT WITH CHANGES, no formula
+  this pass ([Review](0562aa4a-a797-4c15-8663-02c2f2819fb7)).
+
+
+### Changed
+- CR-112 Story 8.3 (`FR-319` / `AC-417`): lean authoring digest §5 now
+  includes the locked keep-fact / change-language line. Generated Stage 1
+  prompt SYSTEM BLOCK carries the same instruction. `LW-009-PAIR`
+  detector and Stage 1 pair FAIL are unchanged.
+
+### Notes
+- Story 8.1 follow-up QA PASS recorded 2026-09-13. Floors stay 70/65.
+- Story 8.2 security CLEAR and QA PASS recorded 2026-09-13.
+- Story 8.3 design review DR-001 ACCEPT WITH CHANGES
+  ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Independent QA PASS
+  ([Review](de184edd-f4e3-4249-88ce-193500cb8161)).
+
+## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Story 8.2 practice identity on the isolated candidate.
+Silent John Doe fallback is gone from the document pipeline. Identity
+comes from gitignored `workExperience.md` or explicit
+`APPLYR_SYNTHETIC_IDENTITY=1`. No paid APIs. No push. CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.2 (`SEC-006` / `AC-416`): `load_identity_profile` no
+  longer reads SQLite or fills John Doe. Missing identity fails before
+  `WAITING_FOR_LLM` and at `run_verify_only`. Tests use synthetic
+  identity only.
+
+### Notes
+- Story 8.1 follow-up QA PASS recorded 2026-09-13. Floors stay 70/65.
+- Story 8.2 security CLEAR and QA PASS recorded 2026-09-13.
+
+## [Unreleased] — 2026-09-12
+[DRAFT] CR-112 Camunda follow-up on the isolated candidate. CONVERT-READY
+floors (Resume 70, Cover Letter 65) are now completion gates, not
+warnings. Practice finalize can no longer mint `PRACTICE_COMPLETE` at
+Resume 68. No paid APIs. No push. No merge to main. CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.1 (`FR-318` / `AC-415`): `check_rubric_floors` runs
+  after rubric shape. `check_draft_manifest`, `check_stage2_ready`, and
+  `check_finalize_ready` fail below floor. Practice and `--force` Stage 3
+  cannot skip the helper. Mech emits BLOCK `mech.rubric_floor.resume` /
+  `mech.rubric_floor.cover_letter`. `check_submission_status` DONE fails
+  closed once the manifest floors fail. Follow-up QA PASS
+  ([Review](3cd059c0-ba53-42b7-b66a-a6677a310de5)) 2026-09-13.
+
+### Notes
+- Camunda practice artifacts stay gitignored. Do not re-finalize that
+  folder to inflate the resume score. First-draft baseline remains
+  Resume 64 / Cover Letter 57, classification `FIRST_DRAFT_WEAK`.
+- Practice identity (`SEC-006`) implemented on this candidate, pending
+  security and QA review.
+
 ## [Unreleased] — 2026-09-11
 [DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
 Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
-Story 3.1 closed-world extra-packet WARN, Story 3.2 omitted_reasons
+Story 3.1 closed-world extra-packet completion block (detection only), Story 3.2 omitted_reasons
 plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip, and Epic 4 adversarial fail-closed, plus Story 5.1 F7 gerund reporter
 (advisory only), and Stories 6.1/6.2 sanitized offline eval harness, plus Story 2.2
-force-added batch runner (never default). Extra-packet is WARN, not a
-hard block. SupplyHouse is not rewritten.
+force-added batch runner (never default). Extra-packet detection FAILs
+Stage 1 verify. Recovery (remove / rewrite / widen / human) is Story 3.6
+and is not in this detector. SupplyHouse is not rewritten.
 
 On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
 rejected `req-001`, and `assemble_packet` already omitted the wipe. The
@@ -46,11 +201,29 @@ candidate tree, never on HEAD.
   human authorization.
 
 ### Changed
+- CR-112 Stories 7.1 / 7.2 (`FR-316` / `FR-317` / `AC-413` / `AC-414` /
+  `NFR-015`): model calls require `offline` / `manual_paste` / `free_only` /
+  `paid_with_budget`. Unknown is not callable. Groq/Gemini stay unknown
+  without a zero-charge adapter assertion. `free_only` cannot fall back
+  to paid. Unknown cost omits `api_cents` instead of recording 0. Eval
+  stays zero-call offline. No live-folder rewrite.
+- CR-112 Story 3.6 (`FR-315` / `AC-412`): extra-packet recovery is a
+  separate step. KEEP and sibling extras `REMOVE_EXTRA`. True AMBIGUOUS
+  pauses for qualitative review. Same-item TRACE REPLACE widens the
+  packet, invalidates the leaked draft, and returns `WAITING_FOR_LLM`.
+  Recovery helpers do not write workflow receipts. No live-folder rewrite.
+- CR-112 Story 3.5 (`FR-313` / `FR-314` / `AC-410` / `AC-411`): after
+  Top-2, a deterministic comparator may REPLACE an omitted eligible
+  claim that clearly dominates the weakest same-item pick.
+  `displaced_by_dominance` is the packet omitted reason. Pearl and
+  SupplyHouse SAVINGS do not REPLACE. No `call_llm`. No live-folder
+  rewrite. Story 3.3 stays read-only.
 - `scripts/run_all_tests.py` now runs `test_stage0_evidence_cascade.py`
   and `test_audit_packet_integrity.py`.
 - `.codex/skills/generate-submission/SKILL.md`
 - `AGENTS.md` (root trigger paragraph only)
-- `scripts/author_from_packet.py` `run_verify_only` emits extra-packet WARNs
+- `scripts/author_from_packet.py` `run_verify_only` FAILs extra-packet cites
+  (`recovery_state=UNRESOLVED` or `CLOSED_WORLD_UNREADABLE`)
 - `scripts/build_authoring_packet.py` `build_evidence_map` records why
   scored claims lost Top-2 without changing who wins
 - `scripts/build_stage0_fit_gate.py` `_is_administratively_satisfied`
@@ -58,6 +231,12 @@ candidate tree, never on HEAD.
   fingerprint / nights-and-weekends lines
 
 ### Added
+- `scripts/cost_eligibility.py`
+- `scripts/test_cr112_story71.py`
+- `scripts/closed_world_recovery.py`
+- `scripts/test_cr112_story36.py`
+- `scripts/evidence_dominance.py`
+- `scripts/test_cr112_story35.py`
 - `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3)
 - `scripts/packet_closed_world.py`
 - `scripts/test_cr112_story31.py`

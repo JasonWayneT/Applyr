@@ -49,6 +49,7 @@ import json
 import math
 import os
 import sys
+from typing import Any
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -109,6 +110,14 @@ def check_stage0_fit_gate(folder: str) -> tuple[bool, list[str]]:
 # into the shape helper (CR-112 completion contract).
 RUBRIC_FLOOR_RESUME = 70
 RUBRIC_FLOOR_COVER_LETTER = 65
+RUBRIC_SCORECARD_PATH = os.path.join("reviews", "rubric_scorecard.json")
+RUBRIC_REVIEWER_ROLES = frozenset(
+    {"authoring_session", "correcting_implementer", "independent_blind"}
+)
+RUBRIC_BOUNDARY_BANDS = {
+    "resume": (RUBRIC_FLOOR_RESUME - 3, RUBRIC_FLOOR_RESUME + 3),
+    "cover_letter": (RUBRIC_FLOOR_COVER_LETTER - 3, RUBRIC_FLOOR_COVER_LETTER + 3),
+}
 
 
 def _check_rubric_score_shape(score) -> list[str]:
@@ -149,6 +158,155 @@ def check_rubric_floors(score) -> list[str]:
                 f"'rubric_score.cover_letter.total' {total} is below the "
                 f"{RUBRIC_FLOOR_COVER_LETTER} CONVERT-READY floor"
             )
+    return errors
+
+
+def _current_rubric_document_hashes(folder: str) -> tuple[dict[str, str], list[str]]:
+    hashes: dict[str, str] = {}
+    errors: list[str] = []
+    for side, filename in (("resume", "Resume.md"), ("cover_letter", "CoverLetter.md")):
+        path = os.path.join(folder, filename)
+        digest = _sha256_hex(path)
+        if digest is None:
+            errors.append(f"{filename} not found -- cannot bind rubric score provenance")
+        else:
+            hashes[side] = digest
+    return hashes, errors
+
+
+def _score_total(container: Any, side: str) -> float | None:
+    if not isinstance(container, dict):
+        return None
+    sub = container.get(side)
+    if not isinstance(sub, dict):
+        return None
+    total = sub.get("total")
+    if isinstance(total, (int, float)) and math.isfinite(total):
+        return float(total)
+    return None
+
+
+def _row_matches_hashes(row: dict[str, Any], hashes: dict[str, str]) -> bool:
+    row_hashes = row.get("document_sha256")
+    if not isinstance(row_hashes, dict):
+        return False
+    return all(row_hashes.get(side) == digest for side, digest in hashes.items())
+
+
+def _score_hashes_match_current(score: dict[str, Any], hashes: dict[str, str]) -> bool:
+    score_hashes = score.get("document_sha256")
+    if not isinstance(score_hashes, dict):
+        return False
+    return all(score_hashes.get(side) == digest for side, digest in hashes.items())
+
+
+def _load_rubric_scorecards(folder: str) -> tuple[list[dict[str, Any]], list[str]]:
+    path = os.path.join(folder, RUBRIC_SCORECARD_PATH)
+    if not os.path.exists(path):
+        return [], [f"{RUBRIC_SCORECARD_PATH} not found -- rubric scores must be hash-bound"]
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"{RUBRIC_SCORECARD_PATH} could not be read/parsed: {exc}"]
+    if not isinstance(data, list):
+        return [], [f"{RUBRIC_SCORECARD_PATH} must be an append-only JSON array"]
+    rows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for idx, row in enumerate(data):
+        if not isinstance(row, dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}] is not an object")
+            continue
+        role = row.get("reviewer_role")
+        if role not in RUBRIC_REVIEWER_ROLES:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].reviewer_role must be one of "
+                f"{sorted(RUBRIC_REVIEWER_ROLES)}"
+            )
+        if not isinstance(row.get("document_sha256"), dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].document_sha256 must be an object")
+        rows.append(row)
+    return rows, errors
+
+
+def check_rubric_score_provenance(folder: str, score) -> list[str]:
+    """Validate CR-112 score provenance for completion gates.
+
+    This helper does not call an LLM, spawn a reviewer, or mutate files. It
+    reads the current document hashes plus reviews/rubric_scorecard.json and
+    returns fail-closed errors when the manifest score is stale, unbound, or
+    disputed near the floor.
+    """
+    # Implements FR-322 / AC-420.
+    if _check_rubric_score_shape(score):
+        return []
+    assert isinstance(score, dict)
+
+    hashes, errors = _current_rubric_document_hashes(folder)
+    if errors:
+        return errors
+
+    if not _score_hashes_match_current(score, hashes):
+        errors.append(
+            "rubric_score.document_sha256 is missing or stale for the current "
+            "Resume.md/CoverLetter.md"
+        )
+
+    rows, row_errors = _load_rubric_scorecards(folder)
+    errors.extend(row_errors)
+    if row_errors:
+        return errors
+
+    current_rows = [row for row in rows if _row_matches_hashes(row, hashes)]
+    if not current_rows:
+        errors.append(
+            f"{RUBRIC_SCORECARD_PATH}: no scorecard row matches current document hashes"
+        )
+        return errors
+
+    manifest_matches_row = False
+    for row in current_rows:
+        if all(_score_total(row, side) == _score_total(score, side) for side in ("resume", "cover_letter")):
+            manifest_matches_row = True
+            break
+    if not manifest_matches_row:
+        errors.append(
+            "rubric_score totals do not match any current-hash rubric scorecard row"
+        )
+
+    for side, floor in (("resume", RUBRIC_FLOOR_RESUME), ("cover_letter", RUBRIC_FLOOR_COVER_LETTER)):
+        side_rows = [
+            row for row in current_rows
+            if _score_total(row, side) is not None
+        ]
+        if not side_rows:
+            errors.append(f"{RUBRIC_SCORECARD_PATH}: no current-hash {side} score row")
+            continue
+        below = [row for row in side_rows if (_score_total(row, side) or 0) < floor]
+        if below:
+            totals = ", ".join(str(_score_total(row, side)) for row in below)
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}: current-hash {side} score below "
+                f"{floor} CONVERT-READY floor ({totals}); disagreement fails closed"
+            )
+            continue
+
+        lower, upper = RUBRIC_BOUNDARY_BANDS[side]
+        non_blind_band_rows = [
+            row for row in side_rows
+            if row.get("reviewer_role") != "independent_blind"
+            and lower <= (_score_total(row, side) or -1) <= upper
+        ]
+        if non_blind_band_rows:
+            has_blind = any(row.get("reviewer_role") == "independent_blind" for row in side_rows)
+            if not has_blind:
+                totals = ", ".join(str(_score_total(row, side)) for row in non_blind_band_rows)
+                errors.append(
+                    f"{RUBRIC_SCORECARD_PATH}: {side} score in boundary band "
+                    f"{lower}-{upper} ({totals}) requires an independent_blind score "
+                    "for the same document hashes"
+                )
+
     return errors
 
 
@@ -322,6 +480,13 @@ def check_finalize_ready(folder: str) -> tuple[bool, list[str]]:
     manifest, _ = load_json(manifest_path)
     if manifest is not None and manifest.get("verification_passed") is not True:
         errors.append("draft_manifest.json: verification_passed is not True")
+    if manifest is not None:
+        score = manifest.get("rubric_score")
+        if not _check_rubric_score_shape(score) and not check_rubric_floors(score):
+            errors.extend(
+                f"draft_manifest.json: {e}"
+                for e in check_rubric_score_provenance(folder, score)
+            )
 
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
     if os.path.exists(gate_path):
@@ -459,7 +624,13 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
         shape_errors = _check_rubric_score_shape(score)
         errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
         if not shape_errors:
-            errors.extend(f"draft_manifest.json: {e}" for e in check_rubric_floors(score))
+            floor_errors = check_rubric_floors(score)
+            errors.extend(f"draft_manifest.json: {e}" for e in floor_errors)
+            if not floor_errors:
+                errors.extend(
+                    f"draft_manifest.json: {e}"
+                    for e in check_rubric_score_provenance(folder, score)
+                )
 
     # Load the receipt directly (rather than relying on check_verification_receipt()'s internal
     # load) for the additional fields below. If the receipt is missing/unparseable,

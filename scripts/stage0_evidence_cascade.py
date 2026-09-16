@@ -253,6 +253,8 @@ def try_load_cascade_import(
         raise CascadeValidationError("cascade import batch_sha256 does not match this requirement set")
     if "created_at" not in payload:
         raise CascadeValidationError("cascade import created_at is required for audit")
+    if not isinstance(payload.get("created_at"), str) or not payload["created_at"].strip():
+        raise CascadeValidationError("cascade import created_at must be a non-empty string")
     declared_ids = payload.get("expected_item_ids")
     actual_ids = [item.item_id for item in items]
     if declared_ids is None:

@@ -75,10 +75,11 @@ own copy of this tracker surfaced a second staleness: its Story
 and an earlier, superseded review (`18868b0f-a352-4cf6-8a76-b86249672614`).
 That predates the `1fa3fdac` FAIL and the `97887893` follow-up PASS and
 does not reflect what `7bf6829` actually implements — resolved in favor
-of the accurate, later-reviewed text below. One should-fix remains
-open: `created_at` in the cascade-import schema is checked for
-presence (`scripts/stage0_evidence_cascade.py`) but not typed as a
-non-empty string; audit-only field, not an identity/authorization gap.
+of the accurate, later-reviewed text below. The later should-fix for
+`created_at` audit-field validation was closed on `codex/cr112-consolidation`
+2026-09-15: cascade and extraction-review imports now require a
+non-empty string, with focused regressions in `scripts.test_cr112_story71`
+and `scripts.test_cr112_stage0_extraction_review`.
 
 **2026-09-13 validation candidate:** work continuing from `7bf6829`
 recorded automated suite and no-cost Stage 0 to Stage 1 boundary
@@ -468,7 +469,7 @@ Merged onto `cr112-integration`.
 - No eligible provider: do not call; pause at `WAITING_FOR_INPUT` with `pause_kind=cost_authorization`. **Never** `WAITING_FOR_LLM`. Stage 1 paste does not complete Stage 0.
 - Does not wire eval `--paid-llm` to `call_llm`.
 
-**Status:** [x] implemented at `7bf6829` (follow-up commit, child of `b7f7197`). Independent review of `b7f7197` alone was FAIL (`1fa3fdac`). An earlier, superseded review on this branch's own copy of this doc (`18868b0f`, 2026-09-11) described `b7f7197`'s pre-fix behavior — pausing to `WAITING_FOR_LLM` — which the cost-pause design explicitly rejects; that text and review are stale, not authoritative. The follow-up implementing the cost-pause receipt and Stage 0 import path was independently re-reviewed and **PASSed** (`97887893`, 2026-09-11, after correcting `expected_item_ids`/`created_at` optionality). 41/41 focused tests (`scripts.test_cr112_story71`), 27/27 cascade regression (`scripts.test_stage0_evidence_cascade`) — both re-run 2026-09-14. **Merged** onto `cr112-selection-closed-world-design` 2026-09-14, local only, no push; not yet merged onto `cr112-integration` / `main`. Should-fix still open: `created_at` is presence-checked, not type-checked as non-empty string. Later validation-candidate work also exercised the no-cost Stage 0 to Stage 1 boundary; CR-112 still is not globally complete.
+**Status:** [x] implemented at `7bf6829` (follow-up commit, child of `b7f7197`). Independent review of `b7f7197` alone was FAIL (`1fa3fdac`). An earlier, superseded review on this branch's own copy of this doc (`18868b0f`, 2026-09-11) described `b7f7197`'s pre-fix behavior — pausing to `WAITING_FOR_LLM` — which the cost-pause design explicitly rejects; that text and review are stale, not authoritative. The follow-up implementing the cost-pause receipt and Stage 0 import path was independently re-reviewed and **PASSed** (`97887893`, 2026-09-11, after correcting `expected_item_ids`/`created_at` optionality). 41/41 focused tests (`scripts.test_cr112_story71`), 27/27 cascade regression (`scripts.test_stage0_evidence_cascade`) — both re-run 2026-09-14. **Merged** onto `cr112-selection-closed-world-design` 2026-09-14, local only, no push; not yet merged onto `cr112-integration` / `main`. Later `created_at` non-empty string validation was implemented 2026-09-15 and verified by `scripts.test_cr112_story71`, `scripts.test_stage0_evidence_cascade`, and `scripts.test_cr112_stage0_extraction_review`. Later validation-candidate work also exercised the no-cost Stage 0 to Stage 1 boundary; CR-112 still is not globally complete.
 
 ### Story 7.2 — Cost telemetry: unknown is not zero
 
@@ -481,6 +482,19 @@ Merged onto `cr112-integration`.
 - Eval 6.1/6.2 baseline remains zero-call with explicit `cost_class` labels, not implied free spend.
 
 **Status:** [x] implemented at `7bf6829` with Story 7.1, same commit and same independent PASS (`97887893`). Superseded by this: an earlier `18868b0f` PASS on this branch's own copy of this doc, predating the follow-up. Telemetry contract (Decision 7 confidence table: `cost_known`/`cost_confidence`/`api_cents`) is in the reviewed follow-up. **Merged** onto `cr112-selection-closed-world-design` 2026-09-14, local only, no push; not yet merged onto `cr112-integration` — same as Story 7.1. Later validation-candidate work keeps eval zero-call as `offline` with `cost_known=true`; first-draft product proof remains open.
+
+### Story 7.3 — Operator free-tier attestation (Groq / Gemini) as `certify_zero_charge`
+
+**Files:** `scripts/cost_eligibility.py` (attestation constants + fail-closed validation), `scripts/utils.py` (`zero_charge_basis` telemetry echo), `scripts/test_cr112_story73.py`, `tests/unit/profileFreeTierAssertions.test.ts`. Design addendum: `CR-112-cost-pause-state-design.md` (2026-09-15). Packet: `.metis/plans/cr112-cost-operator-free-tier-authorization-packet.md`. Requirements: `FR-326` / `AC-424`.
+
+**Acceptance:**
+- A structured, expiring operator attestation (`freeTierAssertions` in the `llm_settings` blob; exact canonical statement, strict `acknowledged: true`, timezone-aware `asserted_at`, 30-day expiry) certifies `free_only` for `groq`/`gemini` only when `costClasses[provider]="free_only"` is also declared.
+- Missing / invalid / expired / non-certifiable attestations fail closed to `unknown` with specific receipt reasons; default installs stay byte-identical to Story 7.1 behavior.
+- Attested free plus allowlisted paid in one chain still strips paid (`free_to_paid_forbidden`); paid allowlist, budget, estimate, cascade import, and pause contracts unchanged.
+- Successful attested calls record `zero_charge_basis="operator_assertion"` and `assertion_asserted_at` alongside `api_cents=0`.
+- No provider, model, API, or network call at any point, including validation. No production SQLite or submission writes.
+
+**Status:** [x] implemented 2026-09-15 on `codex/cr112-consolidation` under the approved packet. Focused tests: `scripts/test_cr112_story73.py` (new, offline) plus unchanged `scripts/test_cr112_story71.py` regression and `tests/unit/profileFreeTierAssertions.test.ts` (vitest settings round-trip). Independent review pending; not yet committed or merged.
 
 ## Epic 8 — Completion contract and practice portability (Camunda follow-up)
 
@@ -554,23 +568,50 @@ synthetic mode for fixtures only.
 
 **Status:** [x] Independent corpus review ACCEPT ([Review](31c12c40-ee42-4920-8db0-518efef1c113)) 2026-09-13. 12/12 `test_cr112_ranking_characterization.py` OK. Formula unchanged. Do not mark CR-112 complete.
 
-### Story 8.6 — Score provenance contract (design)
+### Story 8.6 — Score provenance contract
 
 **Files:**
 - Design: `docs/spec/08-implementation/CR-112-score-provenance-design.md`
+- Contract helpers: `scripts/contracts.py`
+- Mech findings: `scripts/workflow/runner.py`
+- Tests: `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`
 
-**Acceptance:** `FR-322` / `AC-420`. Design only this pass. Hash-bound scorecards, reviewer role, 3-point floor band for one blind read, fail-closed disagreement. No agent-per-document default.
+**Acceptance:** `FR-322` / `AC-420`. Hash-bound scorecards, reviewer role, 3-point floor band for one blind read, fail-closed disagreement. No agent-per-document default.
 
-**Status:** [x] Design review ACCEPT ([Review](5dc974ec-cfc6-43fc-bd4d-d220f18352cf)) 2026-09-13. Follow-up: require `spawned_by` run-id distinct from author/implementer rows so blindness is mechanical. Do not implement this pass. Do not mark CR-112 complete.
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. Design review ACCEPT ([Review](5dc974ec-cfc6-43fc-bd4d-d220f18352cf)) 2026-09-13. Pure local contract helpers and Mech/finalize fail-closed checks enforce `reviews/rubric_scorecard.json` current-hash rows, role-tagged boundary-band blind reads, stale-score rejection, and disagreement fail-closed behavior. Verification: `python -m unittest scripts.test_contracts scripts.test_workflow_authority scripts.test_cr112_story71 scripts.test_stage0_evidence_cascade` => 208 tests OK; `python -m unittest scripts.test_cr112_story31 scripts.test_cr112_story35 scripts.test_cr112_story36 scripts.test_hm_critical_read_contract scripts.test_practice_identity scripts.test_cr112_ranking_characterization` => 123 tests OK. No LLM/API/provider call. Do not mark CR-112 complete.
 
-### Story 8.7 — Unbracketed placeholder header stack (not started)
+### Story 8.7 — Unbracketed placeholder header stack
 
 **Files:**
-- Defect stub only: `CR-112-unbracketed-placeholder-header-stack-defect.md`
+- Design: `CR-112-unbracketed-placeholder-header-stack-defect.md`
+- Implementation: `scripts/apply_resume_header.py`
+- Tests: `scripts/test_practice_identity.py`
 
-**Acceptance:** unassigned. Placeholder identity must be replaced before H-001; real and placeholder headers must never coexist; malformed identity fails before authoring or completion; tests use synthetic identity only. **Do not implement in the characterization closeout.**
+**Acceptance:** `FR-325` / `AC-423`. Placeholder identity must be replaced before H-001; real and placeholder headers must never coexist; malformed identity fails before authoring or completion; tests use synthetic/fake identity only.
 
-**Status:** [ ] Stub recorded 2026-09-13 from Newsela JD 3. Not SEC-006. No code this pass.
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. `apply_resume_header.patch_file` now replaces unbracketed contact-label headers and strips stacked placeholder headers below a real header. Verification: `python -m unittest scripts.test_practice_identity` => 12 tests OK. No model/API/provider call.
+
+### Story 8.8 — Ranking correction for Camunda savings-vs-messaging defect
+
+**Files:**
+- Implementation: `scripts/build_authoring_packet.py`
+- Tests: `scripts/test_cr112_ranking_characterization.py`
+- Investigation: `docs/spec/08-implementation/CR-112-ranking-investigation-savings-vs-messaging.md`
+
+**Acceptance:** `FR-323` / `AC-421`. Camunda-like distributed-systems item must rank messaging/architecture evidence above broad savings evidence, while direct cost-reduction and ARR/reliability controls still rank the metric-bearing evidence first. Pearl/SupplyHouse REPLACE controls remain non-REPLACE. No model/API call.
+
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. The ranker now adds a bounded item-specific technical-semantics boost for distributed/event-driven architecture requirements. This is not a metric-size boost and not a blanket ban on `ACC-101-SAVINGS`: direct cost-reduction and ARR/reliability controls still rank metric-bearing evidence first. Verification: `python -m unittest scripts.test_cr112_ranking_characterization` => 12 tests OK; `python -m unittest scripts.test_cr112_story31 scripts.test_cr112_story32 scripts.test_cr112_story33 scripts.test_cr112_story34 scripts.test_cr112_story35 scripts.test_cr112_story36 scripts.test_cr112_ranking_characterization` => 78 tests OK. No model/API/provider call.
+
+### Story 8.9 — Catalog validator alignment with claims-index contract
+
+**Files:**
+- Implementation: `scripts/catalog_validator.py`
+- CLI smoke: `scripts/verify_master_claims.py`
+- Tests: `scripts/test_catalog_validator.py`
+
+**Acceptance:** `FR-324` / `AC-422`. Private catalog validation passes without restoring legacy catalog prose as an authoring source. Empty active claim records still fail unless they have retrieval tags plus explicit allowed/prohibited constraints. Catalog metrics must be grounded in approved metrics, workExperience text, or a metric_ref anchor. No model/API call.
+
+**Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. `python scripts/verify_master_claims.py` now passes against private `data/workExperience.md` and `data/master_claims.json`; `python -m unittest scripts.test_catalog_validator` => 3 tests OK. This updates validation to the CR-094 architecture rather than treating empty legacy `text` as a blocker when tags and constraints are present.
 
 ## Out of scope
 

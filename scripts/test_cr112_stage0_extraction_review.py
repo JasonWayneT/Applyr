@@ -733,6 +733,19 @@ class TestRequirementExtractionReviewArtifact(unittest.TestCase):
         with self.assertRaises(RequirementExtractionReviewValidationError):
             try_load_review_import(folder, queue, submission_slug=folder.name, jd_sha256="abc")
 
+    def test_import_created_at_must_be_non_empty_string(self):
+        folder = Path(tempfile.mkdtemp())
+        queue = self._queue()
+        template = render_review_template(submission_slug=folder.name, jd_sha256="abc", queue=queue)
+        for bad_value in (None, "", "   ", 123):
+            with self.subTest(created_at=bad_value):
+                live = dict(template)
+                live["created_at"] = bad_value
+                live["items"] = [dict(template["items"][0], bucket="required")]
+                (folder / REVIEW_IMPORT_NAME).write_text(json.dumps(live), encoding="utf-8")
+                with self.assertRaises(RequirementExtractionReviewValidationError):
+                    try_load_review_import(folder, queue, submission_slug=folder.name, jd_sha256="abc")
+
     def test_import_cannot_set_workflow_or_scoring_fields(self):
         folder = Path(tempfile.mkdtemp())
         queue = self._queue()

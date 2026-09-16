@@ -13,6 +13,7 @@ This module does not call providers and does not write workflow receipts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 COST_CLASSES = ("offline", "manual_paste", "free_only", "paid_with_budget")
@@ -33,6 +34,28 @@ _PAUSE_MESSAGE = (
     "finished. A free-tier name is not a zero-charge guarantee."
 )
 LAST_RECEIPT: dict[str, Any] | None = None
+
+# Implements FR-326 (CR-112 Story 7.3): the structured, expiring operator
+# free-tier attestation is the only settings-based form of the
+# certify_zero_charge resume path. local is already offline; claude and
+# perplexity are permanently excluded (no operator-certifiable free tier in
+# this product, and naming them would weaken the paid guard).
+OPERATOR_FREE_TIER_CERTIFIABLE = frozenset({"groq", "gemini"})
+OPERATOR_FREE_TIER_STATEMENT = {
+    "groq": (
+        "I certify that this Applyr account's Groq configuration is on a free "
+        "tier with billing disabled, that the configured Stage 0 call cannot "
+        "incur a charge, and that I will re-certify if the provider terms or "
+        "my account change."
+    ),
+    "gemini": (
+        "I certify that this Applyr account's Gemini configuration is on a free "
+        "tier with billing disabled, that the configured Stage 0 call cannot "
+        "incur a charge, and that I will re-certify if the provider terms or "
+        "my account change."
+    ),
+}
+OPERATOR_FREE_TIER_ASSERTION_MAX_AGE_DAYS = 30
 
 
 def set_last_receipt(row: dict[str, Any]) -> dict[str, Any]:
@@ -123,17 +146,96 @@ def set_test_zero_charge_providers(providers: Iterable[str] | None) -> None:
     _TEST_ZERO_CHARGE = {str(item) for item in (providers or [])}
 
 
+def _parse_assertion_timestamp(raw: Any) -> datetime | None:
+    """Parse an ISO-8601 timestamp that must carry a timezone. None on any defect."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip()
+    if text.endswith(("Z", "z")):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.tzinfo.utcoffset(parsed) is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def operator_free_tier_assertion(
+    provider: str, settings: dict[str, Any] | None
+) -> tuple[bool, str]:
+    """Validate the operator free-tier attestation for one provider.
+
+    Returns (ok, reason). Never raises: any malformed input degrades to
+    (False, reason) so the classifier fails closed to unknown. Reasons:
+    free_only_assertion_not_certifiable / missing / invalid / expired, or
+    free_only_asserted when valid. This is an accountable human
+    certification, not billing-API proof; no network call is possible here
+    (CR-112 Story 7.3, FR-326).
+    """
+    if provider not in OPERATOR_FREE_TIER_CERTIFIABLE:
+        return False, "free_only_assertion_not_certifiable"
+    try:
+        blob = (settings or {}).get("freeTierAssertions")
+        if blob is None:
+            return False, "free_only_assertion_missing"
+        if not isinstance(blob, dict):
+            return False, "free_only_assertion_invalid"
+        record = blob.get(provider)
+        if record is None:
+            return False, "free_only_assertion_missing"
+        if not isinstance(record, dict):
+            return False, "free_only_assertion_invalid"
+        if record.get("provider") != provider:
+            return False, "free_only_assertion_invalid"
+        if record.get("acknowledged") is not True:
+            return False, "free_only_assertion_invalid"
+        if record.get("statement") != OPERATOR_FREE_TIER_STATEMENT[provider]:
+            return False, "free_only_assertion_invalid"
+        asserted = _parse_assertion_timestamp(record.get("asserted_at"))
+        if asserted is None:
+            return False, "free_only_assertion_invalid"
+        age = datetime.now(timezone.utc) - asserted
+        if age > timedelta(days=OPERATOR_FREE_TIER_ASSERTION_MAX_AGE_DAYS):
+            return False, "free_only_assertion_expired"
+        return True, "free_only_asserted"
+    except Exception:
+        # Fail closed on anything unexpected; no exception escapes this path.
+        return False, "free_only_assertion_invalid"
+
+
+def operator_asserted_at(provider: str, settings: dict[str, Any] | None) -> str | None:
+    """Echo of asserted_at when a valid operator attestation is the zero-charge basis."""
+    ok, _reason = operator_free_tier_assertion(provider, settings)
+    if not ok:
+        return None
+    blob = (settings or {}).get("freeTierAssertions")
+    record = blob.get(provider) if isinstance(blob, dict) else None
+    asserted_at = record.get("asserted_at") if isinstance(record, dict) else None
+    return asserted_at if isinstance(asserted_at, str) else None
+
+
+def _zero_charge_status(provider: str, settings: dict[str, Any] | None) -> tuple[bool, str]:
+    """Shared zero-charge verdict: local and the test stub first, then attestation."""
+    if provider == "local":
+        return True, "offline"
+    if provider in _TEST_ZERO_CHARGE:
+        return True, "free_only_asserted"
+    return operator_free_tier_assertion(provider, settings)
+
+
 def adapter_can_assert_zero_charge(provider: str, settings: dict[str, Any] | None) -> bool:
     """True only when the configured call cannot incur a charge.
 
-    Cloud keys do not prove billing is disabled. Production groq/gemini/
-    claude/perplexity return False. Tests may stub via
-    set_test_zero_charge_providers, not a settings key.
+    `local` is offline. Tests may stub via set_test_zero_charge_providers
+    (process-local only). groq/gemini may additionally qualify through a
+    valid structured, expiring operator free-tier attestation in settings
+    (FR-326). A provider name, an advertised free tier, or a bare settings
+    boolean/list is never enough.
     """
-    del settings
-    if provider == "local":
-        return True
-    return provider in _TEST_ZERO_CHARGE
+    ok, _reason = _zero_charge_status(provider, settings)
+    return ok
 
 
 def _allowlist(settings: dict[str, Any] | None) -> set[str]:
@@ -226,12 +328,13 @@ def classify_provider(
             authorization_mode="offline",
         )
     if declared == "free_only":
-        if not adapter_can_assert_zero_charge(provider, settings):
+        ok, zero_reason = _zero_charge_status(provider, settings)
+        if not ok:
             return ProviderCost(
                 provider=provider,
                 cost_class="unknown",
                 eligible=False,
-                reason="free_only_unproven",
+                reason=zero_reason,
                 cost_known=False,
                 authorization_mode="free_only",
             )
@@ -376,11 +479,16 @@ def known_call_receipt(
     invocations: int = 1,
     cost_confidence: str | None = None,
     confirmed: bool = False,
+    zero_charge_basis: str | None = None,
+    assertion_asserted_at: str | None = None,
 ) -> dict[str, Any]:
     """Telemetry for a call whose cost is known. Free/offline may be 0.
 
     Paid table prices are estimated, never confirmed, unless the caller
-    passes confirmed=True with trusted provider usage.
+    passes confirmed=True with trusted provider usage. An operator-asserted
+    free call also records zero_charge_basis="operator_assertion" and echoes
+    assertion_asserted_at so an attested zero stays auditable as attested,
+    not measured (CR-112 Story 7.3, AC-424).
     """
     if cost_confidence is None:
         if confirmed:
@@ -405,6 +513,10 @@ def known_call_receipt(
     }
     if actual_tokens is not None:
         row["actual_tokens"] = actual_tokens
+    if zero_charge_basis is not None:
+        row["zero_charge_basis"] = zero_charge_basis
+    if assertion_asserted_at is not None:
+        row["assertion_asserted_at"] = assertion_asserted_at
     return row
 
 
@@ -460,7 +572,11 @@ def raise_if_pause(auth: Authorization, *, estimated_tokens: int | None = None) 
         if not row.eligible
     ]
     unproven_free = next(
-        (row for row in auth.decisions if row.reason == "free_only_unproven"),
+        (
+            row
+            for row in auth.decisions
+            if not row.eligible and row.authorization_mode == "free_only"
+        ),
         None,
     )
     first_unknown = next(

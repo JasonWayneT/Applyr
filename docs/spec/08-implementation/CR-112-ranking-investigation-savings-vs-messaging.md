@@ -1,19 +1,22 @@
 ---
-status: reviewed_no_implement
+status: implemented
 created: 2026-09-13
 from: Cursor (Grok 4.6)
-candidate: cr112-integrated-validation-candidate
-head: baec191
+candidate: codex/cr112-consolidation
+originating_candidate: cr112-integrated-validation-candidate
+historical_head: baec191
 design_review: 0562aa4a-a797-4c15-8663-02c2f2819fb7
 verdict: ACCEPT WITH CHANGES
-implement_this_pass: no
-do_not: implement ranking formula in this document
+implement_this_pass: yes
+do_not: add a metric-size boost, hard-code SAVINGS exclusion, weaken controls
 ---
 
 # CR-112 ranking investigation — why SAVINGS beat RabbitMQ/Kafka on Camunda
 
-Design recommendation and regression corpus only. No formula change
-landed. Do not implement until after JD 2 review of this rule.
+Historical design recommendation and regression corpus for the Camunda
+defect. The bounded Story 8.8 correction landed on
+`codex/cr112-consolidation` on 2026-09-15 after the characterization and
+controls were in place.
 
 ## Question
 
@@ -25,7 +28,7 @@ Why did `ACC-101-SAVINGS` (score 8330, picked) outrank
 > scalability, fault tolerance, event-driven architecture, and
 > performance optimization.
 
-## Formula (current)
+## Formula (historical characterized behavior)
 
 `scripts/build_authoring_packet.py` `_score_claims_for_item`:
 
@@ -110,7 +113,7 @@ break honest cost-reduction items.
 
 Those two are the opposite of Camunda's distributed-systems line.
 
-## Intended general rule (not implemented)
+## Intended general rule
 
 Select evidence that jointly maximizes:
 
@@ -174,4 +177,22 @@ fixtures. Near-tie has no mechanical delta.
 Before a formula story: prove Camunda flips under the live rarity
 weights; encode cost-reduction and ARR as asserts against
 `_score_claims_for_item`; keep REPLACE rows labeled as a different gate.
+
+## Implementation record (2026-09-15)
+
+Implemented as Story 8.8 (`FR-323` / `AC-421`) in
+`scripts/build_authoring_packet.py`:
+
+- adds a bounded item-specific technical-semantics boost when a requirement
+  is about distributed or event-driven architecture;
+- does not add a metric-size boost or ban `ACC-101-SAVINGS`;
+- preserves cost-reduction and ARR/reliability metric-positive controls;
+- preserves Pearl and SupplyHouse REPLACE controls as a separate gate.
+
+Verification:
+
+- `python -m unittest scripts.test_cr112_ranking_characterization` passes.
+- The 2026-09-15 combined offline maintenance suite passed 167 tests,
+  including this module.
+- No model, provider, or API call is made by the ranker or these tests.
 

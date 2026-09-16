@@ -233,6 +233,10 @@ def try_load_review_import(
         raise RequirementExtractionReviewValidationError(
             "requirement-extraction-review created_at is required for audit"
         )
+    if not isinstance(payload.get("created_at"), str) or not payload["created_at"].strip():
+        raise RequirementExtractionReviewValidationError(
+            "requirement-extraction-review created_at must be a non-empty string"
+        )
 
     items = payload.get("items")
     if not isinstance(items, list) or len(items) != len(queue):

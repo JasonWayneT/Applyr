@@ -56,11 +56,77 @@ def tearDownModule():
 
 def _write(folder: Path, name: str, content: str | dict) -> Path:
     path = folder / name
-    if isinstance(content, dict):
+    if isinstance(content, (dict, list)):
         path.write_text(json.dumps(content, indent=2), encoding="utf-8")
     else:
         path.write_text(content, encoding="utf-8")
     return path
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _rubric_hashes(folder: Path) -> dict:
+    return {
+        "resume": _sha256_file(folder / "Resume.md"),
+        "cover_letter": _sha256_file(folder / "CoverLetter.md"),
+    }
+
+
+def _rubric_score(folder: Path, resume_total: float = 78, cover_total: float = 70) -> dict:
+    return {
+        "document_sha256": _rubric_hashes(folder),
+        "resume": {"total": resume_total, "breakdown": {}},
+        "cover_letter": {"total": cover_total, "breakdown": {}},
+    }
+
+
+def _score_needs_blind(side: str, total: float) -> bool:
+    if side == "resume":
+        return 67 <= total <= 73
+    return 62 <= total <= 68
+
+
+def _scorecard_row(
+    folder: Path,
+    resume_total: float = 78,
+    cover_total: float = 70,
+    *,
+    role: str = "authoring_session",
+) -> dict:
+    return {
+        "schema_version": 1,
+        "rubric_sha256": "0" * 64,
+        "scored_at": "2026-09-15T00:00:00+00:00",
+        "reviewer_role": role,
+        "document_sha256": _rubric_hashes(folder),
+        "resume": {"total": resume_total, "breakdown": {}, "citations": {}},
+        "cover_letter": {"total": cover_total, "breakdown": {}, "citations": {}},
+    }
+
+
+def _write_rubric_scorecards(
+    folder: Path,
+    resume_total: float = 78,
+    cover_total: float = 70,
+    *,
+    rows: list[dict] | None = None,
+) -> None:
+    if rows is None:
+        rows = [_scorecard_row(folder, resume_total, cover_total)]
+        if _score_needs_blind("resume", resume_total) or _score_needs_blind("cover_letter", cover_total):
+            rows.append(
+                _scorecard_row(
+                    folder,
+                    resume_total,
+                    cover_total,
+                    role="independent_blind",
+                )
+            )
+    reviews = folder / "reviews"
+    reviews.mkdir(exist_ok=True)
+    _write(reviews, "rubric_scorecard.json", rows)
 
 
 def _valid_stage0(**overrides) -> dict:
@@ -1215,13 +1281,9 @@ class Stage2PolicyTests(unittest.TestCase):
         _write(
             self.folder,
             "draft_manifest.json",
-            {
-                "rubric_score": {
-                    "resume": {"total": 75, "breakdown": {}},
-                    "cover_letter": {"total": 70, "breakdown": {}},
-                }
-            },
+            {"rubric_score": _rubric_score(self.folder, 75, 70)},
         )
+        _write_rubric_scorecards(self.folder, 75, 70)
         with mock.patch("workflow.runner._compile_pdfs"):
             with mock.patch(
                 "workflow.runner.verify_one",
@@ -1313,7 +1375,12 @@ class Stage3FinalizeTests(unittest.TestCase):
         from workflow.invalidate import sha256_file
         from workflow.receipts import file_hash_map
 
-        score = rubric or {"resume": {"total": 78}, "cover_letter": {"total": 70}}
+        raw_score = rubric or {"resume": {"total": 78}, "cover_letter": {"total": 70}}
+        resume_total = raw_score["resume"]["total"]
+        cover_total = raw_score["cover_letter"]["total"]
+        score = _rubric_score(self.folder, resume_total, cover_total)
+        if resume_total >= 70 and cover_total >= 65:
+            _write_rubric_scorecards(self.folder, resume_total, cover_total)
         _write(
             self.folder,
             "draft_manifest.json",
@@ -1569,16 +1636,17 @@ class Stage3FinalizeTests(unittest.TestCase):
         # would make a real Groq/Gemini call and write real rows to
         # data/training_data_feedback.csv (CR-105 -- found via a real polluted test run).
         with mock.patch.dict(os.environ, {"STAGE0_SECTION_MODE": "deterministic"}):
-            try:
-                run_until_waiting_for_llm(
-                    str(self.folder),
-                    mode="practice",
-                    adopt=False,
-                    force=True,
-                    no_hook=True,
-                )
-            except WorkflowError:
-                pass
+            with mock.patch("stage0_db_gate.evaluate_db_gate", return_value={"action": "clear"}):
+                try:
+                    run_until_waiting_for_llm(
+                        str(self.folder),
+                        mode="practice",
+                        adopt=False,
+                        force=True,
+                        no_hook=True,
+                    )
+                except WorkflowError:
+                    pass
         reloaded = load_state(str(self.folder))
         self.assertEqual(reloaded.get("mode"), "practice")
 
@@ -1726,9 +1794,10 @@ class EndToEndChainIntegrityTests(unittest.TestCase):
                 "company": "Acme",
                 "title": "Product Manager",
                 "verification_passed": True,
-                "rubric_score": {"resume": {"total": 78}, "cover_letter": {"total": 70}},
+                "rubric_score": _rubric_score(self.folder, 78, 70),
             },
         )
+        _write_rubric_scorecards(self.folder, 78, 70)
 
         # Finalize
         with mock.patch(

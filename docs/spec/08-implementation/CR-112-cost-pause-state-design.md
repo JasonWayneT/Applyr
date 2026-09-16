@@ -183,3 +183,75 @@ Negative controls that fail if the guard is removed:
 - Checkpoint run status is not `FAILED` on a cost pause.
 
 No live API. No `data/submissions` production edit. No push.
+
+---
+
+## Addendum 2026-09-15 — the concrete `certify_zero_charge` path (Story 7.3, FR-326/AC-424)
+
+This addendum defines the operator free-tier attestation as the concrete
+form of Decision 6's `certify_zero_charge` next path. Implementation
+packet: `.metis/plans/cr112-cost-operator-free-tier-authorization-packet.md`.
+Nothing in Decisions 1-7 changes; this adds one new way for
+`adapter_can_assert_zero_charge()` to return True for `groq`/`gemini`.
+
+**Shape.** A typed attestation record per provider in the `llm_settings`
+profile blob (same blob as `costClasses` / `paidProviderAllowlist` /
+`paidBudgetCents`), under a new top-level key `freeTierAssertions`:
+
+```json
+"freeTierAssertions": {
+  "groq": {
+    "provider": "groq",
+    "acknowledged": true,
+    "statement": "<canonical per-provider sentence, character-for-character>",
+    "asserted_at": "2026-09-15T00:00:00Z"
+  }
+}
+```
+
+The canonical statements are constants in `scripts/cost_eligibility.py`
+(`OPERATOR_FREE_TIER_STATEMENT`). `OPERATOR_FREE_TIER_CERTIFIABLE` is
+exactly `{groq, gemini}`; `local` is already `offline`, and `claude` /
+`perplexity` are permanently excluded (no operator-certifiable free tier;
+naming them would weaken the paid guard). `OPERATOR_FREE_TIER_ASSERTION_MAX_AGE_DAYS`
+is 30.
+
+**Validation (all fail-closed, no exception escapes).** In order:
+`local` → True; process-local test stub → True; provider not certifiable
+→ False (`free_only_assertion_not_certifiable`); attestation missing →
+False (`free_only_assertion_missing`); record not an object, `provider`
+mismatch, `acknowledged is not True`, `statement` differing by any
+character, or `asserted_at` missing/unparseable/naive → False
+(`free_only_assertion_invalid`); older than 30 days → False
+(`free_only_assertion_expired`); otherwise True. `classify_provider`
+still requires both halves: `costClasses[provider]="free_only"` **and** a
+valid attestation. Declaration without attestation stays `unknown`;
+attestation without declaration changes nothing.
+
+**Write path.** Only `POST /api/profile/llm_settings`
+(`server/routes/profile.ts`), surfaced via the Settings → AI Usage card.
+Never a direct SQLite edit, file edit, or environment variable.
+`freeTierAssertions` contains no secrets; the CR-104 masking lists are
+unchanged and the route preserves the key verbatim.
+
+**Telemetry (additions only).** A successful operator-asserted free call
+records `cost_class="free_only"`, `cost_known=true`,
+`cost_confidence="zero"`, `api_cents=0`, plus
+`zero_charge_basis="operator_assertion"` and `assertion_asserted_at`
+echoed, so an attested zero stays auditable as attested, not measured.
+Refusals use the new `reason` values above in the existing receipt shape;
+`api_cents` stays omitted. `subscription_minutes` remains separate and is
+never summed with `api_cents` (AC-414).
+
+**Why not a checkbox.** Decision 6 already rejects "Settings checkbox is
+not enough." A bare boolean or provider-name list is the backdoor that
+`test_settings_zero_charge_list_is_not_a_backdoor` guards. The typed
+record with an exact canonical statement, strict boolean identity,
+timestamp, and expiry is the smallest shape meaningfully stronger than a
+checkbox that stays offline; no billing-API verification is possible
+without a network call, which this mechanism never makes.
+
+**Residual risk (accepted).** The attestation cannot prove billing is
+disabled; it records an accountable human certification, re-certified
+every 30 days, with `zero_charge_basis="operator_assertion"` keeping
+attested zeros distinguishable from measured zeros.

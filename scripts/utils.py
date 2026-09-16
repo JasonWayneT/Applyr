@@ -1045,6 +1045,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         debit_if_paid,
         unknown_refusal_receipt,
         exhausted_chain_receipt,
+        operator_asserted_at,
         CostPauseError,
     )
 
@@ -1124,6 +1125,20 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
                         reason="ledger_receipt_mismatch",
                     )
                 )
+            # Implements AC-424: an operator-asserted free call records
+            # zero_charge_basis="operator_assertion" plus the asserted_at echo,
+            # so an attested zero stays distinguishable from a measured zero.
+            attested_at = None
+            if info.cost_class == "free_only":
+                attested_at = operator_asserted_at(provider, eligibility_settings)
+            receipt_extra = (
+                {
+                    "zero_charge_basis": "operator_assertion",
+                    "assertion_asserted_at": attested_at,
+                }
+                if attested_at is not None
+                else {}
+            )
             set_last_receipt(
                 known_call_receipt(
                     provider=provider,
@@ -1131,6 +1146,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
                     estimated_tokens=tokens_est,
                     api_cents=cents,
                     cost_confidence=confidence,
+                    **receipt_extra,
                 )
             )
             debit_if_paid(ledger, info)

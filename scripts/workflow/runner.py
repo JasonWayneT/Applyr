@@ -1412,6 +1412,25 @@ def _rubric_floor_findings(score: Any) -> list[dict[str, Any]]:
     return findings
 
 
+def _rubric_provenance_findings(folder: str, score: Any) -> list[dict[str, Any]]:
+    # Implements FR-322 / AC-420. Only runs after shape and floor checks pass;
+    # below-floor scores already have objective BLOCK findings.
+    shape = contracts._check_rubric_score_shape(score)
+    if shape or contracts.check_rubric_floors(score):
+        return []
+    findings: list[dict[str, Any]] = []
+    for idx, err in enumerate(contracts.check_rubric_score_provenance(folder, score)):
+        findings.append(
+            {
+                "id": f"mech.rubric_score_provenance.{idx}",
+                "source": "workflow",
+                "severity": "BLOCK",
+                "message": err,
+            }
+        )
+    return findings
+
+
 def _require_completion_rubric_floors(folder: str) -> None:
     """Fail closed before minting Stage 3 when rubric totals are below floor.
 
@@ -1427,7 +1446,10 @@ def _require_completion_rubric_floors(folder: str) -> None:
     score = None if manifest is None else manifest.get("rubric_score")
     shape_errs = contracts._check_rubric_score_shape(score)
     floor_errs = [] if shape_errs else contracts.check_rubric_floors(score)
-    errs = [f"draft_manifest.json: {e}" for e in (shape_errs + floor_errs)]
+    provenance_errs = []
+    if not shape_errs and not floor_errs:
+        provenance_errs = contracts.check_rubric_score_provenance(folder, score)
+    errs = [f"draft_manifest.json: {e}" for e in (shape_errs + floor_errs + provenance_errs)]
     if errs:
         raise WorkflowError(
             "Cannot finalize: CONVERT-READY rubric floors not met:\n  - "
@@ -1533,6 +1555,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
         )
     else:
         findings.extend(_rubric_floor_findings(score))
+        findings.extend(_rubric_provenance_findings(folder, score))
 
     payload = {
         "schema_version": 1,

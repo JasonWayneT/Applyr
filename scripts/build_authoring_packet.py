@@ -492,6 +492,37 @@ def _distinctive_overlap(item_words: set[str], claim_words: set[str]) -> set[str
     return {w for w in (item_words & claim_words) if w not in _GENERIC_OVERLAP_TOKENS}
 
 
+def _item_specificity_boost(item_text: str, claim_text: str) -> int:
+    """Prefer direct technical evidence for distributed/event-driven items.
+
+    CR-112 Story 8.8: broad infrastructure savings can share generic words
+    like "systems" and "optimization" with a distributed-systems requirement.
+    When the JD item itself is technical architecture/messaging work, a claim
+    that names messaging/architecture evidence should outrank that broad
+    overlap. This is item-specific; it is not a metric boost or a ban on
+    savings evidence.
+    """
+    item_l = item_text.lower()
+    claim_l = claim_text.lower()
+    technical_item = (
+        re.search(
+            r"\b(distributed|event[-\s]?driven|messaging|message\s+queues?|"
+            r"kafka|rabbitmq|fault\s+tolerance|scalability|architecture)\b",
+            item_l,
+        )
+        is not None
+    )
+    if not technical_item:
+        return 0
+    if re.search(
+        r"\b(kafka|rabbitmq|message\s+queues?|distributed\s+messaging|"
+        r"event[-\s]?driven|data\s+pipeline|product\s+architecture)\b",
+        claim_l,
+    ):
+        return 5000
+    return 0
+
+
 def _score_claims_for_item(
     item_text: str,
     claims: dict[str, dict],
@@ -593,6 +624,8 @@ def _score_claims_for_item(
                 or any("ai tool" in t or "prompt" in t for t in tags_lower)
             ):
                 capability_boost += 12000
+
+        capability_boost += _item_specificity_boost(item_text, ct)
 
         # Secondary: full-JD scorer as tiebreaker
         if use_jd_scorer and jd_profile is not None:

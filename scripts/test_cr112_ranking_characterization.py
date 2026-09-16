@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from build_authoring_packet import (  # noqa: E402
     _claim_text_for_scoring,
     _distinctive_overlap,
+    _item_specificity_boost,
     _score_claims_for_item,
     build_evidence_map,
 )
@@ -228,7 +229,7 @@ def _explain_claim(
         if jd_profile is not None
         else overlap
     )
-    capability_boost = 0
+    capability_boost = _item_specificity_boost(item_text, scoring_text)
     if overlap == 0 and capability_boost == 0:
         expected_total = 0
     else:
@@ -312,30 +313,20 @@ class TestCamundaDistributedSystemsKnownDefect(unittest.TestCase):
             why["ACC-215-RABBITMQ"]["jd_score"],
         )
 
-    def test_savings_slot1_is_known_defect_not_desired(self) -> None:
+    def test_technical_messaging_beats_broad_savings_overlap(self) -> None:
         ranked, why = _rank_with_why(
             CAMUNDA_DISTRIBUTED_ITEM, MESSAGING_CLAIMS, CAMUNDA_LIKE_JD
         )
         slot1 = ranked[0][0]
-        desired = DESIRED_CAMUNDA_SLOT1
-        if slot1 == "ACC-101-SAVINGS":
-            # Characterization of current defective behavior. Do not treat
-            # SAVINGS-in-slot-1 as the standing desired assertion.
-            self.assertEqual(
-                why["ACC-101-SAVINGS"]["overlap_words"],
-                {"systems", "optimization"},
-            )
-            report = {
-                "status": "known_defect",
-                "defect_id": KNOWN_DEFECT_CAMUNDA_SAVINGS,
-                "actual_slot1": slot1,
-                "desired_slot1": sorted(desired),
-                "why": why["ACC-101-SAVINGS"],
-            }
-            self.assertEqual(report["status"], "known_defect")
-            self.assertNotIn(slot1, desired)
-            return
-        self.assertIn(slot1, desired)
+        self.assertIn(slot1, DESIRED_CAMUNDA_SLOT1)
+        self.assertLess(
+            dict(ranked)["ACC-101-SAVINGS"],
+            max(dict(ranked)[cid] for cid in DESIRED_CAMUNDA_SLOT1),
+        )
+        self.assertEqual(
+            why["ACC-101-SAVINGS"]["overlap_words"],
+            {"systems", "optimization"},
+        )
 
     def test_source_does_not_assert_savings_as_desired_rank(self) -> None:
         src = __file__
@@ -369,22 +360,15 @@ class TestSemanticVsFullJdOverlap(unittest.TestCase):
         self.assertGreater(why["ACC-101-PM"]["expected_total"], 0)
         self.assertEqual(why["ACC-105-PROCESS"]["expected_total"], 0)
 
-    def test_corpus_keeps_camunda_failure_on_the_technical_item(self) -> None:
+    def test_corpus_flips_camunda_but_keeps_cost_control(self) -> None:
         technical, _ = _rank_with_why(
             CAMUNDA_DISTRIBUTED_ITEM, MESSAGING_CLAIMS, CAMUNDA_LIKE_JD
         )
         cost, _ = _rank_with_why(
             COST_REDUCTION_ITEM, MESSAGING_CLAIMS, COST_REDUCTION_JD
         )
-        # Direct cost semantics: SAVINGS should win. Distributed-systems
-        # item is the known defect if SAVINGS still wins there too.
         self.assertEqual(cost[0][0], "ACC-101-SAVINGS")
-        if technical[0][0] == "ACC-101-SAVINGS":
-            self.assertEqual(technical[0][0], "ACC-101-SAVINGS")
-            self.assertNotEqual(
-                CAMUNDA_DISTRIBUTED_ITEM.lower().find("distributed"),
-                -1,
-            )
+        self.assertIn(technical[0][0], DESIRED_CAMUNDA_SLOT1)
 
 
 class TestPearlAndSupplyHouseControls(unittest.TestCase):
@@ -508,8 +492,8 @@ class TestNearTieStableNoAutoReplace(unittest.TestCase):
         self.assertNotEqual(result["decision"], "REPLACE")
 
 
-class TestFormulaUnchangedContract(unittest.TestCase):
-    """Guard: characterization must use the live sum, not a new ranker."""
+class TestFormulaContract(unittest.TestCase):
+    """Guard: characterization must use the live ranker arithmetic."""
 
     def test_live_function_is_score_claims_for_item(self) -> None:
         ranked, why = _rank_with_why(

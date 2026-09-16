@@ -1,18 +1,18 @@
 ---
-status: defect_stub
+status: implemented
 created: 2026-09-13
 from: Cursor (Grok 4.6)
-candidate: cr112-integrated-validation-candidate
+candidate: codex/cr112-consolidation
+originating_candidate: cr112-integrated-validation-candidate
 related: CR-112, SEC-006, SESSION-HANDOFF-2026-09-13-cr112-jd3-newsela.md
-implement_this_pass: no
-do_not: fix in this closeout, copy production SQLite, use synthetic identity on a real practice JD, commit PII
+implement_this_pass: yes
+do_not: copy production SQLite, use synthetic identity on a real practice JD, commit PII
 ---
 
 # CR-112 unbracketed placeholder header stack
 
-Bounded defect. **Not implemented.** Do not bundle into Story 8.2
-(`SEC-006`), ranking, or score provenance. Needs its own regression
-story.
+Bounded defect. Implemented as CR-112 Story 8.7 on
+`codex/cr112-consolidation` 2026-09-15.
 
 ## Proven defect (Newsela JD 3, 2026-09-13)
 
@@ -42,7 +42,7 @@ fail closed. This defect is the next gap: a **present but unbracketed**
 placeholder that the helper treats as already-real, after which H-001
 can stack a second header.
 
-## Expected future behavior (unimplemented)
+## Expected behavior
 
 1. Placeholder identity must be recognized and replaced **before**
    H-001 / cover-letter header repair.
@@ -53,10 +53,26 @@ can stack a second header.
    `COMPLETE`).
 4. Tests must use synthetic identity only and contain no PII.
 
-## Out of scope for this stub
+## Out of scope for this story
 
-- Changing `apply_resume_header.py` or H-001 now
 - Re-editing Newsela
 - Ranking formula
 - Score provenance
 - Lowering CONVERT-READY floors
+
+## Implementation record (2026-09-15)
+
+Implemented in `scripts/apply_resume_header.py`:
+
+- Recognizes unbracketed contact-label placeholders such as
+  `Location | Email | Phone | LinkedIn` at the document header.
+- Replaces that two-line placeholder header with the approved
+  `workExperience.md` identity before Stage 1 quality checks and H-001.
+- Strips a stacked placeholder header when a real header has already been
+  injected above it.
+
+Verification:
+
+- `python -m unittest scripts.test_practice_identity` => 12 tests OK.
+- Tests use synthetic/fake identity fixtures and do not commit PII.
+- No LLM, provider, or paid API call.

@@ -942,6 +942,42 @@ class TestStory71FollowUpContracts(unittest.TestCase):
             groq.assert_not_called()
             self.assertEqual(out["status"], "WAITING_FOR_INPUT")
 
+    def test_import_created_at_must_be_non_empty_string(self) -> None:
+        from workflow.runner import run_stage0
+        from workflow.state import load_state
+
+        bad_values = (None, "", "   ", 123)
+        for bad_value in bad_values:
+            with self.subTest(created_at=bad_value):
+                with tempfile.TemporaryDirectory() as tmp:
+                    folder = Path(tmp) / "example-co"
+                    folder.mkdir()
+                    (folder / "Original_JD.txt").write_text(
+                        "Product Manager\n\nRequirements\n- Own the platform roadmap\n",
+                        encoding="utf-8",
+                    )
+                    db_path = self._db(folder)
+                    self._pause_once(folder, db_path)
+                    template = json.loads(
+                        (folder / "stage0_cascade_import.template.json").read_text(encoding="utf-8")
+                    )
+                    filled = _fill_template(template)
+                    filled["created_at"] = bad_value
+                    (folder / "stage0_cascade_import.json").write_text(
+                        json.dumps(filled, indent=2),
+                        encoding="utf-8",
+                    )
+                    settings = {
+                        "stage0_evidence_classification": {"provider_order": ["groq"]},
+                        "costClasses": {"groq": "unknown"},
+                    }
+                    state = load_state(str(folder))
+                    stack, groq, _gemini = self._stage0_ctx(settings, db_path)
+                    with stack:
+                        out = run_stage0(str(folder), state)
+                    groq.assert_not_called()
+                    self.assertEqual(out["status"], "WAITING_FOR_INPUT")
+
     def test_invalid_utf8_import_pauses_without_corrupting_state(self) -> None:
         from workflow.runner import run_stage0
         from workflow.receipts import write_state

@@ -50,20 +50,27 @@ Re-ran the cited test suites in a throwaway detached worktree off
 - `python -m unittest scripts.test_cr112_story71 -v` → **41 passed**
 - `python -m unittest scripts.test_stage0_evidence_cascade -v` → **27 passed**
 
-One should-fix from the handoff remains genuinely open: `created_at` in
-the cascade-import schema is required to be *present*
+At the time of this reconciliation, one should-fix from the handoff
+remained open: `created_at` in the cascade-import schema was required
+to be *present*
 (`scripts/stage0_evidence_cascade.py`, `_REQUIRED_IMPORT_FIELDS` /
-`created_at is required for audit`) but not type-checked as a non-empty
+`created_at is required for audit`) but was not type-checked as a non-empty
 string. Confirmed by reading the code; audit-only field, not an
 identity/authorization gap.
+
+Update 2026-09-15: this should-fix was closed on
+`codex/cr112-consolidation`. `scripts/stage0_evidence_cascade.py` and
+`scripts/stage0_requirement_extraction_review.py` now require
+`created_at` to be a non-empty string. Regressions cover null, blank,
+whitespace, and numeric values.
 
 ## What this reconciliation does NOT do
 
 - Does not merge `cr112-story71-72` onto `cr112-selection-closed-world-design`.
 - Does not merge Epic 3 (`706504a`) onto `cr112-integration` / `main` —
   still pending Jason's explicit ask, per the 2026-09-10/11 record.
-- Does not fix the `created_at` type-check should-fix — that's a code
-  change, out of scope for a docs-only reconciliation.
+- Did not fix the `created_at` type-check should-fix in this docs-only
+  reconciliation; later closed 2026-09-15 on `codex/cr112-consolidation`.
 - Does not touch `data/submissions`, push, or call any provider.
 
 ## Updated docs
@@ -74,3 +81,28 @@ identity/authorization gap.
   `follow_up_review: PASS` frontmatter line.
 - `02-requirements-registry.md` — FR-312–FR-317 / AC-409–AC-414: `draft` → `in_progress`.
 - `06-traceability/traceability-matrix.md` — same rows: `draft`/`planned` → `in_progress`, with real file paths.
+
+## Maintenance update (2026-09-15)
+
+The current `codex/cr112-consolidation` working tree now contains and locally
+verifies the next bounded CR-112 slice:
+
+- Story 8.6, `FR-322` / `AC-420`: hash-bound, role-tagged score provenance
+  with boundary-band blind-read and fail-closed disagreement checks.
+- Story 8.7, `FR-325` / `AC-423`: unbracketed placeholder replacement and
+  stacked-header cleanup.
+- Story 8.8, `FR-323` / `AC-421`: bounded distributed/event-driven
+  requirement semantics correction with cost and ARR/reliability controls.
+- Story 8.9, `FR-324` / `AC-422`: CR-094 claims-index validator alignment
+  with grounded metric validation.
+
+Fresh local evidence:
+
+- `python -m unittest scripts.test_contracts scripts.test_workflow_authority scripts.test_practice_identity scripts.test_cr112_ranking_characterization scripts.test_catalog_validator`
+  completed 167 tests successfully.
+- `python scripts/verify_master_claims.py` printed `Validation Passed.`
+
+No provider/model/API call was made, no paid provider was authorized, and no
+production SQLite or submission data was modified. The supervised real-JD dry
+run remains future product proof. Current readiness is
+`SUPERVISED_SMALL_BATCH_READY`, not `DAILY_USE_READY`.

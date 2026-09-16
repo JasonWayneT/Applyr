@@ -126,6 +126,43 @@ class TestApplyResumeHeaderIdentity(unittest.TestCase):
         self.assertTrue(line.startswith("SKIP [apply_resume_header]"), line)
         self.assertIn("synthetic", line.lower())
 
+    def test_unbracketed_placeholder_header_is_replaced(self):
+        from apply_resume_header import patch_file
+
+        header = dict(_FAKE_WE_HEADER)
+        self.folder.joinpath("CoverLetter.md").write_text(
+            "# Jason\n"
+            "Location | Email | Phone | LinkedIn\n\n"
+            "Dear Hiring Manager,\n\nBody.\n",
+            encoding="utf-8",
+        )
+        result = patch_file(str(self.folder / "CoverLetter.md"), header)
+        text = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+
+        self.assertIn("patched", result)
+        self.assertIn("# Alex Example", text)
+        self.assertIn("San Diego, CA | 555-010-1234 | alex.example@example.com", text)
+        self.assertNotIn("Location | Email | Phone | LinkedIn", text)
+
+    def test_stacked_real_and_placeholder_header_is_stripped(self):
+        from apply_resume_header import patch_file
+
+        header = dict(_FAKE_WE_HEADER)
+        self.folder.joinpath("CoverLetter.md").write_text(
+            "# Alex Example\n"
+            "San Diego, CA | 555-010-1234 | alex.example@example.com | linkedin.com/in/alexexample\n"
+            "# Jason\n"
+            "Location | Email | Phone | LinkedIn\n\n"
+            "Dear Hiring Manager,\n\nBody.\n",
+            encoding="utf-8",
+        )
+        result = patch_file(str(self.folder / "CoverLetter.md"), header)
+        text = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+
+        self.assertIn("stripped stacked placeholder header", result)
+        self.assertEqual(text.count("# Alex Example"), 1)
+        self.assertNotIn("# Jason\nLocation | Email | Phone | LinkedIn", text)
+
     def test_verify_only_fails_on_identity_missing(self):
         from author_from_packet import run_verify_only
 

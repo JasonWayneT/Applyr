@@ -1,17 +1,18 @@
 ---
-status: design_only
+status: implemented
 created: 2026-09-13
 from: Cursor (Grok 4.6)
-candidate: cr112-integrated-validation-candidate
+candidate: codex/cr112-consolidation
+originating_candidate: cr112-integrated-validation-candidate
 related: CR-112, FR-322, AC-420
-implement_this_pass: no
+implement_this_pass: yes
 do_not: majority-vote scores, spawn a reviewer per document, lower 70/65
 ---
 
 # CR-112 score provenance — low-token contract
 
-Design only. Do not implement a scoring architecture in this pass.
-The Vanta 70-vs-68-vs-71 disagreement is the proven defect.
+Implemented as CR-112 Story 8.6 on `codex/cr112-consolidation`
+2026-09-15. The Vanta 70-vs-68-vs-71 disagreement is the proven defect.
 
 ## Question
 
@@ -23,7 +24,7 @@ Can the canonical workflow distinguish:
 4. a stale score from an earlier document hash
 5. conflicting current scorecards
 
-## Current behavior (proven)
+## Pre-implementation behavior (proven defect)
 
 Canonical object: `draft_manifest.json.rubric_score`. Shape check
 requires `resume.total` and `cover_letter.total` as finite numbers.
@@ -71,7 +72,7 @@ Stale-hash is a sibling hole: an edit that does not rewrite
 Normal completions stay one real qualitative read plus mechanical
 gates.
 
-## Contract (next story, not this pass)
+## Implemented contract
 
 Add one optional-then-required sidecar, not a new agent:
 
@@ -157,10 +158,11 @@ provenance. No handoff, no prior scorecards, no "completion depends
 on this." One spawn only, and only in the band. That is the Vanta
 adjudicator load, made mechanical.
 
-## Independent design review (2026-09-13)
+## Independent design review (historical, 2026-09-13)
 
 **Reviewer:** [Review](5dc974ec-cfc6-43fc-bd4d-d220f18352cf)
-**Verdict: ACCEPT. Do not implement this pass.**
+**Verdict at that checkpoint: ACCEPT. Do not implement in the JD 3 proof
+pass.** The bounded implementation landed later on 2026-09-15.
 
 Weakest point recorded: blindness is a prompt exclusion, not a
 mechanical guarantee. Next story should require `spawned_by` run-id
@@ -186,3 +188,19 @@ Story 8.6 / `FR-322` / `AC-420`:
   needs no blind row; no LLM in the helper.
 
 Do not add reviewers to generate-submission-batch. Do not vote.
+
+## Implementation record (2026-09-15)
+
+Implemented as pure local completion checks:
+
+- `scripts/contracts.py::check_rubric_score_provenance` validates current Resume/Cover Letter hashes, `draft_manifest.json.rubric_score.document_sha256`, and append-only `reviews/rubric_scorecard.json` rows.
+- `scripts/workflow/runner.py` emits Mech BLOCK findings for stale, missing, below-floor, or disputed current-hash scorecards after rubric shape/floor checks.
+- Boundary-band scores require a same-hash `independent_blind` row; clear-margin scores do not.
+- Any current-hash score below the applicable floor blocks. No averaging, voting, or higher-score selection is allowed.
+
+Verification:
+
+- `python -m unittest scripts.test_contracts scripts.test_workflow_authority scripts.test_cr112_story71 scripts.test_stage0_evidence_cascade` => 208 tests OK.
+- `python -m unittest scripts.test_cr112_story31 scripts.test_cr112_story35 scripts.test_cr112_story36 scripts.test_hm_critical_read_contract scripts.test_practice_identity scripts.test_cr112_ranking_characterization` => 123 tests OK.
+
+No LLM, provider, or paid API call is made by the helper or tests.

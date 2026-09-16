@@ -46,6 +46,11 @@ _WORK_EXPERIENCE_PATH = os.path.join(_REPO_ROOT, "data", "workExperience.md")
 # placeholders in this failure mode, never partially real.
 _PLACEHOLDER_LINE1 = re.compile(r"^#\s*\[(Full Name|Name)\]\s*$")
 _PLACEHOLDER_LINE2 = re.compile(r"^(\[[A-Za-z ]+\]\s*(\|\s*)?)+$")
+_UNBRACKETED_CONTACT_TOKENS = {"location", "email", "phone", "linkedin"}
+_UNBRACKETED_NAME_PLACEHOLDER = re.compile(
+    r"^#?\s*(?:full\s+name|name|first\s+last|first\s+name|last\s+name|jason)\s*$",
+    re.I,
+)
 _EDUCATION_HEADING = re.compile(r"^##\s*EDUCATION\s*$")
 _PLACEHOLDER_EDU_LINE = re.compile(r"\[")  # any bracket on the line right after the heading
 # ### [Title] | {Company} | [Start Date] - [End Date]
@@ -141,6 +146,33 @@ def real_header_lines(h: dict) -> tuple[str, str]:
     )
 
 
+def _is_unbracketed_contact_placeholder(line: str) -> bool:
+    parts = [
+        re.sub(r"[^A-Za-z]", "", part).lower()
+        for part in re.split(r"\s*\|\s*", line.strip())
+    ]
+    parts = [part for part in parts if part]
+    return len(parts) >= 2 and all(part in _UNBRACKETED_CONTACT_TOKENS for part in parts)
+
+
+def _strip_stacked_placeholder_header(lines: list[str], h: dict) -> tuple[list[str], bool]:
+    """Remove a leftover placeholder header stacked below the real header."""
+    new1, new2 = real_header_lines(h)
+    limit = min(len(lines), 6)
+    for i in range(1, limit):
+        current = lines[i].rstrip("\n")
+        if not _is_unbracketed_contact_placeholder(current):
+            continue
+        previous = lines[i - 1].rstrip("\n")
+        if previous in {new1, new2}:
+            continue
+        if i >= 2 and lines[0].rstrip("\n") == new1 and lines[1].rstrip("\n") == new2:
+            return lines[: i - 1] + lines[i + 1 :], True
+        if _UNBRACKETED_NAME_PLACEHOLDER.match(previous):
+            return lines[: i - 1] + lines[i + 1 :], True
+    return lines, False
+
+
 def patch_file(path: str, h: dict) -> str:
     """Returns a comma-joined summary of what was patched, or 'skipped (...)' reasons."""
     if not os.path.exists(path):
@@ -155,7 +187,8 @@ def patch_file(path: str, h: dict) -> str:
         new1, new2 = real_header_lines(h)
         header_changed = False
         # Line 1: replace if it's a [Name]/[Full Name] placeholder
-        if _PLACEHOLDER_LINE1.match(l1):
+        unbracketed_contact_placeholder = _is_unbracketed_contact_placeholder(l2)
+        if _PLACEHOLDER_LINE1.match(l1) or unbracketed_contact_placeholder:
             lines[0] = new1 + "\n"
             header_changed = True
         # Line 2: replace if it contains any bracket placeholder OR is blank.
@@ -165,11 +198,20 @@ def patch_file(path: str, h: dict) -> str:
         # have). Also found: tenth_revolution_group had a blank line 2.
         # The old code required BOTH lines to be fully bracketed, so it
         # skipped these cases and left literal brackets in the compiled PDF.
-        if _PLACEHOLDER_LINE2.match(l2) or ("[" in l2 and "]" in l2) or not l2.strip():
+        if (
+            _PLACEHOLDER_LINE2.match(l2)
+            or unbracketed_contact_placeholder
+            or ("[" in l2 and "]" in l2)
+            or not l2.strip()
+        ):
             lines[1] = new2 + "\n"
             header_changed = True
         if header_changed:
             actions.append("header")
+
+    lines, stripped_stacked = _strip_stacked_placeholder_header(lines, h)
+    if stripped_stacked:
+        actions.append("stripped stacked placeholder header")
 
     for i, line in enumerate(lines):
         if _EDUCATION_HEADING.match(line.rstrip("\n")):

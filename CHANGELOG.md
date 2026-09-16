@@ -1,3 +1,41 @@
+## [Unreleased] — 2026-09-15
+[DRAFT] CR-112 consolidation maintenance reconciles the current candidate
+after Stories 8.6 through 8.9. Focused offline checks pass. The supervised
+real-JD dry run remains a future verification step, so readiness stays
+`SUPERVISED_SMALL_BATCH_READY`.
+
+### New
+- CR-112 Story 7.3 (`FR-326` / `AC-424`): an operator can now certify Groq
+  or Gemini as free-tier-only Stage 0 routes through a structured, expiring
+  attestation in the `llm_settings` blob (`freeTierAssertions`, exact
+  canonical statement, strict acknowledgement, 30-day expiry). Default
+  installs are unchanged: without a valid attestation plus a declared
+  `free_only` cost class, both providers stay `unknown` and the run still
+  pauses at `WAITING_FOR_INPUT` / `pause_kind=cost_authorization`. Paid
+  allowlist, budget, estimate, free-to-paid stripping, cascade import, and
+  pause contracts are unchanged. No provider, network, or paid route is
+  called by the mechanism.
+
+### Fixed
+- CR-112 Story 8.7 (`FR-325` / `AC-423`): deterministic identity repair now
+  replaces unbracketed contact placeholders and removes stacked placeholder
+  headers.
+- CR-112 Story 8.8 (`FR-323` / `AC-421`): distributed and event-driven
+  requirements now favor item-specific messaging or architecture evidence
+  over broad savings evidence, while cost and ARR/reliability controls retain
+  their metric-bearing winners.
+- CR-112 Story 8.9 (`FR-324` / `AC-422`): catalog validation now accepts the
+  CR-094 tags-and-constraints claims-index shape while still rejecting
+  unconstrained empty claims and ungrounded metrics.
+
+### Changed
+- CR-112 Story 8.6 (`FR-322` / `AC-420`): score provenance is implemented,
+  hash-bound, role-tagged, boundary-band blind-read aware, and fail-closed on
+  current-hash disagreement.
+- CR-112 status records now identify the supervised real-JD dry run as future
+  product proof. No provider, paid API, production SQLite, or submission data
+  was used during this maintenance verification.
+
 ## [Unreleased] — 2026-09-13
 [DRAFT] CR-112 Vanta blind adjudication, ranking characterization
 corpus, and JD 3 Newsela on the isolated candidate. Blind Vanta resume

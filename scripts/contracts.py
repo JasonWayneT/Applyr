@@ -812,12 +812,15 @@ def waiting_for_input_message(folder: str) -> str:
         return (
             "workflow WAITING_FOR_INPUT — Stage 0 cost authorization. "
             "No model API call occurred. No API cost was incurred. "
-            f"Put stage0_cascade_import.json in {folder} "
-            "(copy from stage0_cascade_import.template.json in that folder). "
-            f"Then: python scripts/run_submission.py {folder} --resume. "
-            "Do not paste authoring_prompt.md. "
-            "A certified zero-charge provider or a paid allowlist plus budget "
-            "and known estimate also resume the same run."
+            "Stage 0 is not complete. "
+            "Resume paths: import validated cascade JSON at "
+            f"{os.path.join(folder, 'stage0_cascade_import.json')} "
+            "(copy from stage0_cascade_import.template.json in that folder); "
+            "certify a provider whose adapter can assert zero charge for this "
+            "account and call; or complete paid authorization by allowlisting "
+            "the provider and setting a positive budget and known estimate. "
+            f"Then run: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md."
         )
     if kind == "requirement_extraction_review":
         return (

@@ -1,16 +1,27 @@
-# Approved for Implementation
+# Approved For Implementation
 
-approved: true
+This marker authorizes Metis implementation dispatch for the scoped CR-112 Stage
+0 provider operability wave only.
 
-This marker authorizes the bounded CR-112 consolidation and reliability slice in
-the `codex/cr112-consolidation` worktree. The current operating constraints are:
+## Scope
 
-- use Metis as the dispatch and evidence boundary;
-- no push, merge, rebase, cherry-pick, reset, clean, or stash;
-- no production SQLite or live-submission writes;
-- no paid provider or API-credit usage;
-- stop before any provider/model/API call unless separately authorized;
-- preserve truthful quality-floor and cost-authorization failures.
+- CR-112 Stage 0 provider operability planning and implementation packets
+  recorded in `.metis/team-plans/cr112-stage0-provider-operability-implementation.json`.
+- Documentation, registry, traceability, instruction-file, cost-pause status,
+  cascade-import, minimal backend operator, and minimal UI operator packets
+  listed in that Metis plan.
 
-This is an implementation gate, not a readiness declaration. Completion still
-requires focused verification and supervised product-proof evidence.
+## Constraints
+
+- No live paid provider calls.
+- No production `data/submissions/` mutation.
+- No production SQLite mutation.
+- Do not use Local/Ollama as an implicit fallback.
+- Do not dispatch packets whose design-review or merge prerequisite is unmet.
+- Runtime code remains gated by the relevant FR/AC rows and packet-specific
+  verification commands.
+
+## Approval Record
+
+- Approved by Jason in chat on 2026-09-16 with the instruction to continue using
+  Metis after the read-only team plan completed.

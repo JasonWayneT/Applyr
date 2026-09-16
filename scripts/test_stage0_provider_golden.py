@@ -10,6 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from unittest.mock import patch
 
+from cost_eligibility import set_test_zero_charge_providers
 from stage0_evidence_cascade import BatchItem, classify_requirements_batch
 
 
@@ -148,14 +149,14 @@ def _run_fixture(
         },
         "costClasses": {provider: "free_only"},
     }
-    from cost_eligibility import set_test_zero_charge_providers
-
+    # Implements FR-316: mocked adapters need an explicit test-only zero-charge
+    # assertion. Provider names alone must not bypass production cost eligibility.
     set_test_zero_charge_providers([provider])
     try:
         with patch("utils.call_llm", side_effect=fake_call):
             results = classify_requirements_batch(items, settings=settings)
     finally:
-        set_test_zero_charge_providers([])
+        set_test_zero_charge_providers(None)
     passed, total = _check_results(entries, results)
     routed = sum(
         1

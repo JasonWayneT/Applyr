@@ -255,3 +255,30 @@ without a network call, which this mechanism never makes.
 disabled; it records an accountable human certification, re-certified
 every 30 days, with `zero_charge_basis="operator_assertion"` keeping
 attested zeros distinguishable from measured zeros.
+
+---
+
+## Status-copy refinement (2026-09-16)
+
+Implements `FR-316` / `AC-413`.
+
+Both user-visible `WAITING_FOR_INPUT` paths must branch on
+`result.pause_kind` read from `stage_receipts/stage0.json`:
+
+1. `contracts.waiting_for_input_message`, which feeds `--status`.
+2. The post-run console copy in `run_submission.py`.
+
+For `pause_kind=cost_authorization`, both paths state that no model API
+call occurred, Stage 0 is not complete, and the same run can resume by
+importing validated cascade JSON, certifying a zero-charge provider, or
+authorizing a paid provider with an allowlist, budget, and known estimate.
+Both paths explicitly prohibit pasting `authoring_prompt.md`.
+
+For an old receipt with no `pause_kind`, both paths preserve the existing
+Review Center confirmation copy. This is a compatibility fallback, not a
+new inference from other receipt fields.
+
+The offline provider golden harness must make the same authorization
+contract explicit. Its mocked Groq and Gemini adapters use the test-only
+zero-charge assertion and `free_only` class. A provider name alone never
+authorizes even a deterministic fixture call.

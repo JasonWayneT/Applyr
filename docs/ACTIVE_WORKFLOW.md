@@ -19,6 +19,13 @@
 | 8 | **Status** transitions | `data/submissions/` or `data/archive/submissions/` |
 | 7b | **Stage 0 triage** | Incoming JDs: `data/pending_review/`. Skip: `data/archive/skipped/` + `stage0_skips` ledger. PASS: `data/submissions/`. |
 
+The backend exposes authenticated operator commands for the same canonical
+workflow through `/api/run-submission/:scope/:slug/{start,resume,status,finalize}`.
+These routes only invoke `scripts/run_submission.py` and read its
+`workflow_state.json` / `stage_receipts/` output. They do not write workflow
+authority files themselves. Provider configuration and cascade JSON import
+remain outside this operator surface.
+
 ### Scout pipeline (code order)
 
 1. **Scout** — `server/scout.ts` → connector orchestration (API and approved ATS sources)

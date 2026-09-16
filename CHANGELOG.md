@@ -201,6 +201,12 @@ candidate tree, never on HEAD.
   human authorization.
 
 ### Changed
+- CR-112 Story 7.1 (`FR-316` / `AC-413`): Stage 0 cost-pause status now
+  reads `pause_kind` from the Stage 0 receipt. Cost-authorization copy
+  states that no model API call occurred, Stage 0 is incomplete, and
+  import, certified zero-charge, or paid authorization can resume the
+  run. It prohibits pasting `authoring_prompt.md`. Older receipts without
+  `pause_kind` keep the existing Review Center copy.
 - CR-112 Stories 7.1 / 7.2 (`FR-316` / `FR-317` / `AC-413` / `AC-414` /
   `NFR-015`): model calls require `offline` / `manual_paste` / `free_only` /
   `paid_with_budget`. Unknown is not callable. Groq/Gemini stay unknown
@@ -220,6 +226,8 @@ candidate tree, never on HEAD.
   rewrite. Story 3.3 stays read-only.
 - `scripts/run_all_tests.py` now runs `test_stage0_evidence_cascade.py`
   and `test_audit_packet_integrity.py`.
+- The offline Stage 0 provider golden harness now explicitly certifies
+  its mocked provider as zero-charge instead of relying on provider names.
 - `.codex/skills/generate-submission/SKILL.md`
 - `AGENTS.md` (root trigger paragraph only)
 - `scripts/author_from_packet.py` `run_verify_only` FAILs extra-packet cites
@@ -231,6 +239,12 @@ candidate tree, never on HEAD.
   fingerprint / nights-and-weekends lines
 
 ### Added
+- CR-112 Story 7.3 (`FR-316` / `AC-413`): authenticated backend operator
+  routes for starting, resuming, inspecting, and finalizing
+  `scripts/run_submission.py`. The service returns an allowlisted workflow
+  status projection, uses the centralized no-shell process runner, and rejects
+  overlapping mutating commands for the same submission folder. UI remains
+  out of scope.
 - `scripts/cost_eligibility.py`
 - `scripts/test_cr112_story71.py`
 - `scripts/closed_world_recovery.py`

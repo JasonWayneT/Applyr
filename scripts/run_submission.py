@@ -309,31 +309,34 @@ def main() -> None:
             except (OSError, json.JSONDecodeError, AttributeError):
                 pause_kind = None
             if pause_kind == "cost_authorization":
-                called = "yes" if result.get("model_call_occurred") else "no"
                 print("WAITING_FOR_INPUT — Stage 0 cost authorization")
                 print(
                     "Why: no eligible Stage 0 classifier is authorized "
                     f"(mode={result.get('authorization_mode')}, "
                     f"reason={result.get('reason')})."
                 )
-                print(f"API call occurred: {called}")
-                print("API cost incurred: no (unknown cost is not recorded as zero)")
+                print("No model API call occurred.")
+                print("No API cost was incurred. Unknown cost is not recorded as zero.")
+                print("Stage 0 is not complete.")
                 print(
                     "Resume the same run: python scripts/run_submission.py "
                     f"{_folder_for_events} --resume"
                 )
                 print(
-                    "Free/manual path: put stage0_cascade_import.json in "
+                    "Resume path, import: put stage0_cascade_import.json in "
                     f"{_folder_for_events} (start from "
-                    "stage0_cascade_import.template.json in that same folder), "
-                    "or certify a provider whose adapter can assert zero charge "
+                    "stage0_cascade_import.template.json in that same folder)."
+                )
+                print(
+                    "Resume path, certify: certify a provider whose adapter can "
+                    "assert zero charge "
                     "for this account and call."
                 )
                 print(
-                    "Paid path: allowlist the provider, set a positive budget and "
-                    "a known estimate, then --resume."
+                    "Resume path, paid authorization: allowlist the provider, set "
+                    "a positive budget and a known estimate, then --resume."
                 )
-                print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
+                print("Do not paste authoring_prompt.md.")
             elif pause_kind == "requirement_extraction_review":
                 print("WAITING_FOR_INPUT — Stage 0 requirement extraction review")
                 print(

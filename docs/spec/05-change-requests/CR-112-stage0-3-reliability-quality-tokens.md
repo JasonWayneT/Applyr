@@ -36,9 +36,52 @@ Epic 1 (this commit):
 | `FR-297` / `AC-394` | Do not ready a packet after dropping `claim_constraints` |
 | `FR-298` / `AC-395` | Read-only detector for already-wiped packets |
 
-Epics 2–6 remain planned in the tracker. They are not allocated in the registry by this commit.
+Epics 2–6 remain planned in the tracker. They are not allocated in the registry by this commit. **2026-09-16:** Allocation since progressed — `FR-299`/`AC-396` (Story 2.1) and `FR-301`/`AC-398` (Story 2.3) allocated; `FR-300`/`AC-397` (Story 2.2) and Epics 3–7 previously allocated. See `docs/spec/02-requirements-registry.md` for current FR/AC rows.
 
-2026-09-11 design (not implemented): `FR-312`–`FR-317`, `AC-409`–`AC-414`, `NFR-015`. `FR-302`/`AC-399` superseded. Story 3.0 review 1 REVISE; design revised; second review required before code.
+2026-09-11 design: `FR-312`–`FR-317`, `AC-409`–`AC-414`, `NFR-015`. `FR-302`/`AC-399` superseded. Story 3.0 second review `PASS` (`2d3549f0`). `FR-316`/`FR-317` (Stories 7.1/7.2) implemented and independently re-reviewed `PASS` (`97887893`) 2026-09-11; see 2026-09-14 status correction below and Story 7.1/7.2 status lines in the epics doc.
+
+## Minimal workflow operator slices (2026-09-16)
+
+Implements `FR-316` / `AC-413` and preserves the existing backend controls
+from `FR-164` / `AC-170`, `FR-167` / `AC-173`, `CR-ARCH-004`, and CR-104's
+localhost/token-auth hardening.
+
+### Backend
+
+- Authenticated POST routes start, resume, inspect, or finalize the canonical
+  `scripts/run_submission.py` workflow. There is no alternate workflow writer.
+- Commands pass the selected folder as an argument array through
+  `server/pipeline/processRunner.ts`. `shell:false` and the centralized
+  sanitized child environment remain mandatory.
+- A per-submission in-memory lock rejects overlapping mutating commands with
+  HTTP 409. Status is read-only but authenticated in this operator surface.
+- Responses project only workflow status, mode, active stage, stage
+  status/integrity, and allowlisted pause metadata from `workflow_state.json`
+  and `stage_receipts/*.json`. Hashes, checks, candidate content, paths,
+  provider reasons, and subprocess output are not returned.
+- Folder scope is closed to `data/pending_review/{slug}` and
+  `data/submissions/{slug}`. Traversal and missing folders fail closed.
+
+### Compact Review Center UI
+
+- The Review Center includes an operator panel for one selected folder scope
+  and slug. It shows Stage 0, Stage 1, and Stage 2 status from the authenticated
+  status route and exposes explicit Start, Resume, and Finalize actions.
+- Client actions call only
+  `/api/run-submission/:scope/:slug/{start,resume,status,finalize}`. The client
+  does not invoke Python, read workflow files, or write workflow authority.
+- A Stage 0 `cost_authorization` pause states that no model API call occurred,
+  no API cost was incurred, and Stage 0 is incomplete. It directs the operator
+  to import cascade JSON, certify a zero-charge provider, or authorize paid use
+  before resuming, and it prohibits pasting `authoring_prompt.md`.
+- This packet does not add provider configuration or cascade-import UI.
+
+## Implementation status (2026-09-16 working-tree wave)
+
+On `cr112-selection-closed-world-design`: Stories 2.1, 2.3, cost-pause status
+copy, and 7.3 are committed and pending independent review. Story 7.4 remains
+uncommitted in the local working tree. The cascade-import `created_at`
+should-fix is still open. Stories are **not** self-marked done.
 
 ## Implementation status (2026-09-10)
 

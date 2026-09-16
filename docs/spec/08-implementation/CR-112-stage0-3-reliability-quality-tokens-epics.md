@@ -90,6 +90,14 @@ proof still keeps CR-112 from being globally complete. Chain evidence:
 `SESSION-HANDOFF-2026-09-11-cr112-integrated-validation.md` and later
 Story 8 handoffs below.
 
+**2026-09-16 implementation wave (not independently reviewed):**
+Docs/registry, Stories 2.1 and 2.3, cost-pause status copy, and the backend
+operator (Story 7.4) landed after `docs/spec/APPROVED_FOR_IMPLEMENTATION.md`.
+Story 7.5 (the Review Center operator UI) has since landed as well, in a
+separate local commit on this branch.
+`impl-cascade-import-created-at` was not started because Epic 1 is still
+unmerged. Do not self-mark story checkboxes. Do not treat this as merge-ready.
+
 CR-097 Epics 1–6 stay independent. CR-097 proposed Epic 7 is intake only and is superseded as a tracker by this file's Epic 3.
 
 ---
@@ -200,7 +208,10 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 - **Stage 2 default is `--resume` for the mechanical subphases (truth/ats/mech/policy) only.** `--resume` alone does not satisfy `hm.critical_read` — running checks is not a substitute for actually assessing truth, relevance, and writing quality (this is F8: `hm.critical_read` is a WARN placeholder, not a semantic review, and the drafting agent must not silently self-dispose it as ACCEPTED_AS_CORRECT). The prose must require a real qualitative read (of the specific kind F8 describes — proof density, register, tailoring, no AI-tell shape) before `hm.critical_read` is disposed, whether that read is done by the drafting agent as a genuinely separate pass or deferred to Jason. Ladder-2 (multi-agent) review stays Jason-opt-in; this bullet is about not deleting the single-session qualitative read, not about restoring ladder-2 as default.
 - `scripts/check_instruction_drift.py` still passes.
 
-**Status:** [ ] Documentation reconciliation only: required Stage 0/1/2 language is present in `.codex/skills/generate-submission/SKILL.md` on this candidate (`test_cr112_lean_spawn.py`). Not planned. Independent review ID not recorded; checkbox stays open.
+**Status:** [ ] landed on `cr112-selection-closed-world-design` 2026-09-16;
+pending independent review. Canonical skill updated.
+`scripts/test_cr112_lean_spawn.py` and `scripts/check_instruction_drift.py`
+pass locally. Not self-marked done.
 
 ### Story 2.2 — Contain generate-submission-batch.js
 
@@ -219,7 +230,9 @@ Story 1.2 fixes the generator going forward. It does not rewrite packets already
 
 **Acceptance:** "Processing job descriptions today" tells the agent to run `run_submission.py` per slug, one author paste per WAITING_FOR_LLM, and `--resume`. Explicit: do not Task/Agent-spawn per JD. Do not invoke conversion-ready-pass on generate-submission drafts.
 
-**Status:** [ ] Documentation reconciliation only: `AGENTS.md` trigger requires `run_submission.py`, one `authoring_prompt.md` paste, `--resume`, no per-JD spawn, no `conversion-ready-pass` on generate-submission drafts. Not planned. Independent review ID not recorded; checkbox stays open.
+**Status:** [ ] landed on `cr112-selection-closed-world-design` 2026-09-16;
+pending independent review. Root `AGENTS.md` trigger updated. `CLAUDE.md` not
+modified. Not self-marked done.
 
 ---
 
@@ -500,6 +513,63 @@ Merged onto `cr112-integration`.
 
 **Status:** [x] implemented 2026-09-15 on `codex/cr112-consolidation` under the approved packet. Focused tests: `scripts/test_cr112_story73.py` (new, offline) plus unchanged `scripts/test_cr112_story71.py` regression and `tests/unit/profileFreeTierAssertions.test.ts` (vitest settings round-trip). Independent review pending; not yet committed or merged.
 
+### Story 7.4 — Minimal authenticated backend operator
+
+**Implements:** `FR-316` / `AC-413`; preserves `FR-164` / `AC-170`,
+`FR-167` / `AC-173`, `CR-ARCH-004`, and CR-104's localhost/token-auth
+hardening.
+
+**Files:** `server/routes/runSubmission.ts`,
+`server/services/runSubmissionRunner.ts`,
+`tests/unit/runSubmissionRoute.test.ts`, and
+`tests/unit/runSubmissionRunner.test.ts`.
+
+**Acceptance:**
+- Authenticated `start`, `resume`, `status`, and `finalize` routes invoke only
+  `scripts/run_submission.py` through `processRunner.ts`.
+- Folder arguments are restricted to one validated slug under
+  `data/pending_review/` or `data/submissions/`.
+- Start, resume, and finalize are mutually exclusive per resolved submission
+  folder and return 409 when that folder is already running.
+- The response is rebuilt from `workflow_state.json` and stage receipts after
+  the command. It exposes no document text, hashes, checks, absolute paths,
+  subprocess output, or provider reason strings.
+- Status is authenticated and read-only. Missing or malformed workflow files
+  produce bounded, structured results or errors.
+- No UI is built in this story.
+
+**Status:** [ ] landed on `cr112-selection-closed-world-design` 2026-09-16;
+pending independent review. Authenticated routes/services/tests are present.
+Focused runner and route tests pass locally. Not self-marked done.
+
+### Story 7.5 — Compact Review Center workflow operator
+
+**Implements:** `FR-316` / `AC-413`.
+
+**Files:** `src/types/workflowOperator.ts`,
+`src/lib/workflowOperator.ts`, `src/lib/workflowOperator.test.ts`,
+`src/components/WorkflowOperator.tsx`, and
+`src/pages/ReviewCenterView.tsx`.
+
+**Acceptance:**
+- One compact Review Center panel accepts the closed folder scope and slug,
+  shows Stage 0, Stage 1, and Stage 2 status, and exposes explicit Start,
+  Resume, and Finalize controls.
+- Status and controls call only the authenticated backend operator routes.
+  There are no client-side Python or filesystem calls.
+- A receipt-projected `cost_authorization` pause states that no model API call
+  occurred, no API cost was incurred, Stage 0 is incomplete, and import,
+  certified zero-charge, or paid authorization is required before Resume.
+- Provider configuration and cascade import controls remain out of scope.
+- Client tests cover malformed-response normalization, route construction and
+  all four commands, API errors, and exact cost-pause guidance.
+
+**Status:** [x] landed on `cr112-selection-closed-world-design` 2026-09-16 in
+the same commit as the docs/backend operator work. Not self-marked done;
+pending independent review.
+
+---
+
 ## Epic 8 — Completion contract and practice portability (Camunda follow-up)
 
 **Depends on:** Epic 7 candidate plus Stage 0 extraction fallback (`470abdf`)
@@ -616,6 +686,8 @@ synthetic mode for fixtures only.
 **Acceptance:** `FR-324` / `AC-422`. Private catalog validation passes without restoring legacy catalog prose as an authoring source. Empty active claim records still fail unless they have retrieval tags plus explicit allowed/prohibited constraints. Catalog metrics must be grounded in approved metrics, workExperience text, or a metric_ref anchor. No model/API call.
 
 **Status:** [x] Implemented and verified on `codex/cr112-consolidation` 2026-09-15. `python scripts/verify_master_claims.py` now passes against private `data/workExperience.md` and `data/master_claims.json`; `python -m unittest scripts.test_catalog_validator` => 3 tests OK. This updates validation to the CR-094 architecture rather than treating empty legacy `text` as a blocker when tags and constraints are present.
+
+---
 
 ## Out of scope
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import os
 import sys
@@ -28,6 +29,9 @@ from stage0_evidence_cascade import (  # noqa: E402
     CascadeValidationError,
     classify_requirements_batch,
 )
+
+import contracts  # noqa: E402
+import run_submission  # noqa: E402
 
 
 def _item() -> BatchItem:
@@ -410,6 +414,162 @@ class TestStory71Eligibility(unittest.TestCase):
             self.assertTrue(any("cost authorization" in e for e in errors))
             self.assertTrue(any("No model API call occurred" in e for e in errors))
             self.assertTrue(any("Do not paste authoring_prompt.md" in e for e in errors))
+
+    def test_cost_pause_status_copy_names_every_resume_path(self) -> None:
+        """AC-413: receipt-aware status explains the full pre-Stage-1 pause."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            receipt_dir = folder / "stage_receipts"
+            receipt_dir.mkdir()
+            (receipt_dir / "stage0.json").write_text(
+                json.dumps(
+                    {
+                        "result": {
+                            "pause_kind": "cost_authorization",
+                            "model_call_occurred": False,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            message = contracts.waiting_for_input_message(str(folder))
+
+            self.assertIn("No model API call occurred", message)
+            self.assertIn("Stage 0 is not complete", message)
+            self.assertIn("import", message.lower())
+            self.assertIn("certif", message.lower())
+            self.assertIn("paid authorization", message.lower())
+            self.assertIn("Do not paste authoring_prompt.md", message)
+
+    def test_run_submission_console_reads_cost_pause_receipt(self) -> None:
+        """AC-413: the post-run CLI copy branches independently on the receipt."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            receipt_dir = folder / "stage_receipts"
+            receipt_dir.mkdir()
+            (receipt_dir / "stage0.json").write_text(
+                json.dumps(
+                    {
+                        "result": {
+                            "pause_kind": "cost_authorization",
+                            "authorization_mode": "unknown",
+                            "reason": "unknown_cost_class",
+                            "model_call_occurred": False,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state = {
+                "status": "WAITING_FOR_INPUT",
+                "active_stage": "stage0",
+                "stages": {},
+            }
+            output = io.StringIO()
+            with patch.object(
+                run_submission,
+                "run_until_truth_settled",
+                return_value=state,
+            ), patch.object(sys, "argv", ["run_submission.py", str(folder)]):
+                with contextlib.redirect_stdout(output):
+                    with self.assertRaises(SystemExit) as exited:
+                        run_submission.main()
+
+            self.assertEqual(exited.exception.code, 0)
+            text = output.getvalue()
+            self.assertIn("No model API call occurred", text)
+            self.assertIn("Stage 0 is not complete", text)
+            self.assertIn("import", text.lower())
+            self.assertIn("certif", text.lower())
+            self.assertIn("paid authorization", text.lower())
+            self.assertIn("Do not paste authoring_prompt.md", text)
+
+    def test_status_command_reads_cost_pause_receipt(self) -> None:
+        """AC-413: --status renders cost-pause copy from persisted artifacts."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            receipt_dir = folder / "stage_receipts"
+            receipt_dir.mkdir()
+            (receipt_dir / "stage0.json").write_text(
+                json.dumps(
+                    {
+                        "result": {
+                            "pause_kind": "cost_authorization",
+                            "model_call_occurred": False,
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "workflow_state.json").write_text(
+                json.dumps(
+                    {
+                        "status": "WAITING_FOR_INPUT",
+                        "mode": "production",
+                        "active_stage": "stage0",
+                        "stages": {},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            output = io.StringIO()
+
+            with contextlib.redirect_stdout(output):
+                exit_code = run_submission._print_status(str(folder))
+
+            self.assertEqual(exit_code, 0)
+            text = output.getvalue()
+            self.assertIn("No model API call occurred", text)
+            self.assertIn("Stage 0 is not complete", text)
+            self.assertIn("paid authorization", text.lower())
+            self.assertIn("Do not paste authoring_prompt.md", text)
+
+    def test_legacy_pause_receipt_keeps_review_center_copy(self) -> None:
+        """AC-413: receipts predating pause_kind remain Review Center pauses."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            receipt_dir = folder / "stage_receipts"
+            receipt_dir.mkdir()
+            (receipt_dir / "stage0.json").write_text(
+                json.dumps({"result": {"pending_confirmations": [{"id": "old"}]}}),
+                encoding="utf-8",
+            )
+
+            message = contracts.waiting_for_input_message(str(folder))
+
+            self.assertIn("Review Center confirmations", message)
+            self.assertNotIn("cost authorization", message)
+
+    def test_run_submission_console_preserves_legacy_pause_copy(self) -> None:
+        """AC-413: the post-run CLI also keeps old receipt behavior."""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            receipt_dir = folder / "stage_receipts"
+            receipt_dir.mkdir()
+            (receipt_dir / "stage0.json").write_text(
+                json.dumps({"result": {"pending_confirmations": [{"id": "old"}]}}),
+                encoding="utf-8",
+            )
+            state = {
+                "status": "WAITING_FOR_INPUT",
+                "active_stage": "stage0",
+                "stages": {},
+            }
+            output = io.StringIO()
+            with patch.object(
+                run_submission,
+                "run_until_truth_settled",
+                return_value=state,
+            ), patch.object(sys, "argv", ["run_submission.py", str(folder)]):
+                with contextlib.redirect_stdout(output):
+                    with self.assertRaises(SystemExit) as exited:
+                        run_submission.main()
+
+            self.assertEqual(exited.exception.code, 0)
+            text = output.getvalue()
+            self.assertIn("Review Center confirmation", text)
+            self.assertNotIn("cost authorization", text)
 
 
 class TestStory72Telemetry(unittest.TestCase):

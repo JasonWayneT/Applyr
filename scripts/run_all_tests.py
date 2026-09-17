@@ -67,6 +67,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_stage0_checkpoint_failures.py",
     "scripts/test_stage0_confirmations.py",
     "scripts/test_retrain_stage0.py",
+    "scripts/test_stage0_subscription_adapter.py",
     "scripts/test_resolve_task_providers.py",
     "scripts/test_observability.py",
     "scripts/test_observability_report.py",

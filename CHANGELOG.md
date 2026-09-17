@@ -1,5 +1,13 @@
 ## [Unreleased] - 2026-09-17
 
+### New
+- Stage 0 now has a bounded, switch-off `claudexor@3.12.1` subscription adapter
+  (`scripts/stage0_subscription_adapter.py`) with separate extraction and
+  evidence schemas, item_id binding, cache keys, readonly spawn, and
+  `subscription_minutes` tracked separately from `api_cents`. Failed,
+  substituted, or non-readonly runs go to explicit review. Production stays
+  on the existing Groq/Gemini uncertainty path until replay passes (CR-114).
+
 ### Changed
 - Stage 0 extraction fallback responses no longer write into `training_data_feedback.csv`. Retraining ignores that unverified file and accepts only human-reviewed rows with provenance.
 - Retraining uses a company-held-out set without pre-split feedback duplication, writes a candidate model/report, and requires explicit replay acknowledgment for promotion. The first candidate was not promoted (CR-114).

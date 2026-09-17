@@ -50,7 +50,7 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `FR-284` | Attestation versus authoring evidence boundary | User confirmation cannot create unsupported resume claims (`CR-108`, implemented) |
 | `FR-285` | Review / Questions workflow | Standalone UI and harness adapter share one confirmation resolver (`CR-108`, rollout-flagged) |
 | `FR-327` | Reviewed-only Stage 0 learning | Quarantine unverified fallback labels; company-held-out candidate model (`CR-114`) |
-| `FR-328` | Bounded subscription fallback | Separate extraction and evidence schemas; fail to review (`CR-114`, planned) |
+| `FR-328` | Bounded subscription fallback | Separate extraction and evidence schemas; fail to review (`CR-114`, in progress, production switch off) |
 | `FR-329` | Safe local evidence matcher | Reviewed cases and abstention before decision authority (`CR-114`, planned) |
 
 ## Acceptance criteria
@@ -71,6 +71,9 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `AC-364` | `FR-284` | User answers Yes without verified evidence details | Stage 1 packet is built | The attestation cannot create an authorable claim |
 | `AC-365` | `FR-285` | User answers in the UI or harness | Confirmation resolver runs | Both surfaces update the same durable decision and the opportunity can resume |
 | `AC-366` | `FR-281` | A proposed HARD requires user review | User selects a hard-gate action | `KEEP_ELIGIBLE`, `CONFIRM_HARD`, and `NEEDS_MORE_INFO` produce their documented state transitions |
+| `AC-425` | `FR-327` | An extraction fallback answers an uncertain line | Stage 0 stores the runtime answer | No training CSV is written; retraining ignores legacy feedback |
+| `AC-426` | `FR-328` | The subscription adapter is enabled for an uncertain batch | The harness times out, substitutes a different lane, or returns invalid JSON | Every item enters explicit review; `subscription_minutes` is recorded and `api_cents` stays null |
+| `AC-427` | `FR-329` | A local evidence matcher sees an unreviewed or uncertain phrase | Shadow matching runs | The matcher abstains and cannot emit terminal HARD or Skip |
 
 ## Verification plan
 
@@ -79,3 +82,5 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `TEST-002` | `FR-006` | unit | `evaluate_job_fit` returns score 0 for blocklisted words | verified |
 | `TEST-108A` | `FR-278`–`FR-281`, `AC-358`–`AC-361` | unit/integration | Cascade, response validation, and asymmetric HARD policy preserve the CR-093 gate/source bar | verified offline; release gate pending |
 | `TEST-108B` | `FR-282`–`FR-285`, `AC-362`–`AC-366` | integration/UI | Checkpoint resume, grouped confirmations, hard-gate actions, UI/harness resolution, and attestation boundary pass | verified offline; live UI/release gate pending |
+| `TEST-114A` | `FR-328`, `AC-426` | unit | Adapter mocks cover disable, timeout, malformed JSON, partial ids, cache, ceilings, PII redaction, forbidden/substituted harness, and non-readonly access | in_progress |
+| `TEST-114B` | `FR-327`, `AC-425` | unit | Retrain/extraction tests refuse unverified feedback and keep the live model unchanged | in_progress |

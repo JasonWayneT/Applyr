@@ -142,6 +142,7 @@ scripts/_bakeoff*.py
 data/stage0_classifier.candidate.pkl
 data/stage0_classifier.candidate.report.json
 data/stage0_classifier.previous.pkl
+data/stage0_subscription_cache/
 # CR-097: curated Stage 1 example bank (empty until Epic 4 seeds it). Not
 # candidate PII — tracked so a promotion is a reviewable git event.
 !data/authoring_example_bank.json

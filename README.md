@@ -281,9 +281,12 @@ not verified training data. `scripts/retrain_stage0.py` ignores the legacy
 using columns `text,label,company,source_file,reviewed_by,reviewed_at`,
 and writes a candidate classifier plus company-held-out report. The live model
 is unchanged unless a separate promotion supplies a 30-JD, zero-false-skip
-human-reviewed replay report bound to the candidate hash. The bounded
-subscription-harness and evidence-matcher replacement are still planned;
-the current Groq/Gemini cost authorization and review pause remain in force.
+human-reviewed replay report bound to the candidate hash. A Stage 0-only
+subscription adapter (`scripts/stage0_subscription_adapter.py`, pin
+`claudexor@3.12.1`) exists behind `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` and
+stays off; it does not replace Groq/Gemini until actual-schema smoke and an
+adjudicated 30-JD replay pass. Factory is excluded. The current Groq/Gemini
+cost authorization and review pause remain in force.
 
 ### Drafting assets
 

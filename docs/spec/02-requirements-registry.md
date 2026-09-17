@@ -888,8 +888,8 @@ Design: `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-
 | `AC-425` | acceptance | P0 | in_progress | Fallback extraction writes no training CSV; legacy feedback is ignored; reviewed rows require human identity and timestamp; company and exact-text overlap do not cross holdout; training does not overwrite the live model | `FR-327` | CR-114 |
 | `FR-328` | functional | P0 | in_progress | Separate extraction and evidence subscription-harness adapters are bounded, validated, cached, and fail to explicit review without metered API spillover | `AC-426` | CR-114 |
 | `AC-426` | acceptance | P0 | in_progress | Actual schemas pass replay; exhausted, invalid, or unavailable harness never silently buckets or skips; per-batch call/time limits and subscription minutes are reported separately from API cents | `FR-328` | CR-114 |
-| `FR-329` | functional | P0 | planned | Reviewed evidence matcher abstains on uncertain cases and cannot emit terminal HARD or Skip from ungrounded evidence | `AC-427` | CR-114 |
-| `AC-427` | acceptance | P0 | planned | Locked 30-JD replay has no unreviewed false skips, preserves every uncertain item in resumable review, and records coverage, error, and calls against baseline | `FR-329` | CR-114 |
+| `FR-329` | functional | P0 | in_progress | Reviewed evidence matcher abstains on uncertain cases and cannot emit terminal HARD or Skip from ungrounded evidence | `AC-427` | CR-114 |
+| `AC-427` | acceptance | P0 | in_progress | Locked 30-JD replay has no unreviewed false skips, preserves every uncertain item in resumable review, and records coverage, error, and calls against baseline | `FR-329` | CR-114 |
 
 ## Security Requirements
 

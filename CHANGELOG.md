@@ -9,6 +9,9 @@
   `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` is on, uncertain extraction uses that
   adapter and never Groq/Gemini; the production default stays on the existing
   uncertainty path until replay passes (CR-114).
+- Shadow Stage 0 evidence matching can only return match or abstain from
+  human-reviewed tool aliases. It cannot emit HARD or Skip and is not used
+  in production scoring (CR-114).
 
 ### Changed
 - Stage 0 extraction fallback responses no longer write into `training_data_feedback.csv`. Retraining ignores that unverified file and accepts only human-reviewed rows with provenance.

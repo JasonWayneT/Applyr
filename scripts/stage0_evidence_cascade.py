@@ -22,6 +22,8 @@ _SAFE_OUTPUT_TOKENS = 6000  # 25% margin under the 8192 Groq max_tokens
 _OUTPUT_TOKEN_RATIO = 0.35  # conservative: output tokens per prompt char
 _MIN_SPLIT_BATCH = 3  # don't split batches too small to benefit
 _SUPPORTED_PROVIDERS = ("groq", "gemini", "local")
+# CR-114 Story 5: do not load the Stage 0 subscription adapter module here.
+# Uncertain evidence stays on the existing provider chain until matcher + replay pass.
 _DEFAULT_MODELS = {
     "groq": "openai/gpt-oss-120b",
     "gemini": "gemini-3.5-flash-lite",

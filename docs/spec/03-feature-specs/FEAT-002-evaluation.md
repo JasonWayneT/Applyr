@@ -51,7 +51,7 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `FR-285` | Review / Questions workflow | Standalone UI and harness adapter share one confirmation resolver (`CR-108`, rollout-flagged) |
 | `FR-327` | Reviewed-only Stage 0 learning | Quarantine unverified fallback labels; company-held-out candidate model (`CR-114`) |
 | `FR-328` | Bounded subscription fallback | Separate extraction and evidence schemas; fail to review (`CR-114`, in progress, production switch off) |
-| `FR-329` | Safe local evidence matcher | Reviewed cases and abstention before decision authority (`CR-114`, planned) |
+| `FR-329` | Safe local evidence matcher | Reviewed cases and abstention before decision authority (`CR-114`, in progress, shadow only) |
 
 ## Acceptance criteria
 
@@ -84,3 +84,4 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `TEST-108B` | `FR-282`–`FR-285`, `AC-362`–`AC-366` | integration/UI | Checkpoint resume, grouped confirmations, hard-gate actions, UI/harness resolution, and attestation boundary pass | verified offline; live UI/release gate pending |
 | `TEST-114A` | `FR-328`, `AC-426` | unit | Adapter mocks cover disable, timeout, malformed JSON, partial ids, cache, ceilings, PII redaction, forbidden/substituted harness, and non-readonly access; extraction wiring preserves every uncertain line and never calls Groq/Gemini when the switch is on | in_progress |
 | `TEST-114B` | `FR-327`, `AC-425` | unit | Retrain/extraction tests refuse unverified feedback and keep the live model unchanged | in_progress |
+| `TEST-114C` | `FR-329`, `AC-427` | unit | Shadow matcher matches reviewed tool aliases, abstains otherwise, and never emits HARD or Skip | in_progress |

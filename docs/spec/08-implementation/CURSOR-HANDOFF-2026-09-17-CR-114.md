@@ -34,7 +34,15 @@ No model was promoted. `data/stage0_classifier.pkl` is tracked and unchanged. Ge
 4. **Build the local evidence matcher in shadow (Story 4), then connect uncertain evidence to the bounded adapter (Story 5).** Use only reviewed aliases/cases. Matchers abstain on uncertainty and cannot issue a terminal HARD/Skip without the existing safety policy. Preserve Stage 0 checkpoint/resume. Compare to adjudicated gold before granting any new authority.
 5. **Review Center and release evidence (Stories 6-7).** Expose decision basis, JD/evidence excerpt, uncertainty, and correction action without making generic traits into cards. Inventory all other Stage 0 hosted calls. Run 5-10 archived JD actual-schema smoke, then a timed, redacted, adjudicated 30-JD replay. Measure extraction/evidence errors, false skips, abstentions, review load, calls, time, and both cost units. Set numeric caps from evidence. Keep the production switch off until the gates pass.
 
-If a representative adjudicated corpus or a verified subscription route is unavailable, continue only with code/tests that can be safely verified. Do not manufacture gold labels, mark the remaining stories complete, or claim the production cutover. Write the exact blocker and the smallest required human decision in the final handoff.
+## Current blocker (2026-09-17, later pass)
+
+Stories 5 and 6 are implemented behind the off switch and in Review Center. Independent QA has not checked them.
+
+Stage 0 is **not ready** to enable `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER`.
+
+1. Install or PATH `cursor-agent` (`CLAUDEXOR_CURSOR_BIN`), **or** wait for Codex headroom to reset (`2026-09-17T22:04:03.000Z`) and rerun a 1-item Python argv `--prompt-file` smoke. Do not use Claude or Agy for this smoke.
+2. After a working profile returns a valid extraction **and** evidence schema body, run 5-10 archived JD smokes, then a locked adjudicated 30-JD replay. `data/training_data_approved.csv` does not exist; do not manufacture gold labels.
+3. Keep the production switch off until those gates pass.
 
 ## Commit And Exit Contract
 

@@ -21,6 +21,7 @@ from stage0_confirmations import (
     create_hard_gate_review,
     create_skill_confirmation,
     get_skill_memory,
+    list_open_confirmations,
     list_pending_for_opportunity,
     model_flagged_named_skill,
     named_skill_candidates,
@@ -418,6 +419,24 @@ class TestStage0Confirmations(unittest.TestCase):
             ["CONFIRMED_USE", "NOT_PRESENT", "UNSURE_NO_REASK", "BAD_DATA"],
         )
         self.assertEqual(question["affected_opportunities"], ["acme"])
+
+    def test_review_card_stores_basis_and_uncertainty(self) -> None:
+        create_skill_confirmation(
+            db_path=self.db_path,
+            skill_key="Jira",
+            display_name="Jira",
+            requirement="Experience with Jira",
+            opportunity_key="acme",
+            opportunity_company="Acme",
+            opportunity_title="Product Manager",
+            evidence_excerpt="Named tool is in the JD.",
+            decision_basis="Deterministic named-tool scan.",
+            uncertainty="unknown_named_tool",
+        )
+        rows = list_open_confirmations(self.db_path)
+        self.assertEqual(rows[0]["decision_basis"], "Deterministic named-tool scan.")
+        self.assertEqual(rows[0]["uncertainty"], "unknown_named_tool")
+        self.assertEqual(rows[0]["evidence_excerpt"], "Named tool is in the JD.")
 
     def test_hard_gate_requires_explicit_action_and_more_info_stays_open(self) -> None:
         review = create_hard_gate_review(

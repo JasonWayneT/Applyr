@@ -1929,6 +1929,11 @@ def _prepare_skill_confirmations(
                 "Applyr found this named tool in the job description, but it is not "
                 "in verified work history."
             ),
+            decision_basis=(
+                "Deterministic named-tool scan of the job description. The tool is "
+                "not in verified work history, so Stage 0 cannot treat it as known."
+            ),
+            uncertainty="unknown_named_tool",
         )
         pending.append(
             {
@@ -2008,6 +2013,12 @@ def _prepare_hard_gate_reviews(
                 opportunity_company=company,
                 opportunity_title=role,
                 evidence_excerpt=str(result.get("anchor") or ""),
+                decision_basis=(
+                    f"Stage 0 proposed a HARD gate ({result.get('gap_source') or 'unspecified source'}) "
+                    f"at evidence level {result.get('evidence_level')} with "
+                    f"{result.get('confidence') or 'unknown'} confidence."
+                ),
+                uncertainty=str(result.get("confidence") or "unknown"),
             )
             pending.append(
                 {
@@ -2847,6 +2858,7 @@ def build_stage0_fit_gate(
     if uncached_items:
         from stage0_evidence_cascade import (
             BatchItem,
+            CascadeReviewNeeded,
             CascadeValidationError,
             CASCADE_IMPORT_NAME,
             CASCADE_IMPORT_TEMPLATE_NAME,
@@ -2992,6 +3004,15 @@ def build_stage0_fit_gate(
         except CostPauseError as exc:
             clean_spool(folder)
             raise _pause_for_cost(exc) from exc
+        except CascadeReviewNeeded as exc:
+            clean_spool(folder)
+            raise _pause_for_cost(
+                Stage0CostAuthorizationNeeded(
+                    reason=f"subscription_review:{exc}",
+                    authorization_mode="manual_paste",
+                    model_call_occurred=True,
+                )
+            ) from exc
         except CascadeValidationError as exc:
             import_path = folder / CASCADE_IMPORT_NAME
             if import_path.is_file():
@@ -3119,6 +3140,11 @@ def build_stage0_fit_gate(
                 "The Stage 0 model identified this named tool in the job "
                 "description, but it is not in verified work history."
             ),
+            decision_basis=(
+                "A Stage 0 evidence model flagged this as a named tool present in "
+                "the job description. It is not in verified work history."
+            ),
+            uncertainty="model_flagged_named_tool",
         )
         pending_skill_reviews.append(
             {

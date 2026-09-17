@@ -35,6 +35,8 @@ export interface ReviewItem {
   skillKey?: string;
   requirement?: string;
   evidenceExcerpt?: string;
+  decisionBasis?: string;
+  uncertainty?: string;
   evidenceStatus?: 'not_started' | 'incomplete' | 'ready';
   promotionId?: string;
   promotionStatus?: EvidencePromotionStatus;

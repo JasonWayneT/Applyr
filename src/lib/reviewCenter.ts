@@ -77,6 +77,8 @@ function normalizeItem(value: unknown, index: number): ReviewItem | null {
     skillKey: stringValue(value.skillKey || value.skill_key) || undefined,
     requirement: stringValue(value.requirement) || undefined,
     evidenceExcerpt: stringValue(value.evidenceExcerpt || value.evidence_excerpt) || undefined,
+    decisionBasis: stringValue(value.decisionBasis || value.decision_basis) || undefined,
+    uncertainty: stringValue(value.uncertainty) || undefined,
     evidenceStatus:
       value.evidenceStatus === 'ready' || value.evidenceStatus === 'incomplete'
         ? value.evidenceStatus

@@ -276,7 +276,7 @@ function ReviewDetail({
         <p className="text-sm text-on-surface-variant leading-relaxed mt-3">{item.summary}</p>
       </div>
 
-      {(item.requirement || item.evidenceExcerpt) && (
+      {(item.requirement || item.evidenceExcerpt || item.decisionBasis || item.uncertainty) && (
         <div className="bg-surface-container-low rounded-xl p-5 space-y-4">
           {item.requirement && (
             <div>
@@ -288,6 +288,18 @@ function ReviewDetail({
             <div>
               <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">What Applyr found</p>
               <p className="text-sm text-on-surface mt-1 leading-relaxed">{item.evidenceExcerpt}</p>
+            </div>
+          )}
+          {item.decisionBasis && (
+            <div>
+              <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Why this paused</p>
+              <p className="text-sm text-on-surface mt-1 leading-relaxed">{item.decisionBasis}</p>
+            </div>
+          )}
+          {item.uncertainty && (
+            <div>
+              <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Uncertainty</p>
+              <p className="text-sm text-on-surface mt-1 leading-relaxed">{item.uncertainty.replace(/_/g, ' ')}</p>
             </div>
           )}
         </div>

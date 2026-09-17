@@ -83,6 +83,10 @@ class CascadeValidationError(ValueError):
     """A provider response cannot be trusted as a complete batch."""
 
 
+class CascadeReviewNeeded(CascadeValidationError):
+    """Subscription adapter failed closed and the batch must pause for review."""
+
+
 class CascadeUnavailable(RuntimeError):
     """No configured Stage 0 provider returned a usable response."""
 
@@ -95,6 +99,65 @@ class BatchItem:
     bucket: str
     requirement: str
     evidence_excerpt: str = ""
+
+
+def _subscription_evidence_enabled() -> bool:
+    """Return True only when the CR-114 adapter switch is on. Implements FR-328."""
+    from stage0_subscription_adapter import AdapterConfig, adapter_enabled
+    return adapter_enabled(AdapterConfig())
+
+
+def _classify_requirements_subscription(
+    items: list[BatchItem],
+    *,
+    raw_response_callback: Callable[[str], None] | None = None,
+    provider_event_callback: Callable[[str, str], None] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Classify uncertain evidence through the bounded adapter. Implements FR-328.
+
+    Never calls Groq or Gemini. Invalid, partial, exhausted, or substituted
+    harness output raises CascadeReviewNeeded so Stage 0 can pause for review.
+    Successful rows still pass through validate_batch_response, so unsafe HARD
+    cannot skip.
+    """
+    from stage0_subscription_adapter import (
+        AdapterBudget,
+        AdapterConfig,
+        Stage0Item,
+        run_stage0_subscription,
+    )
+
+    config = AdapterConfig(enabled=True)
+    payload = [
+        Stage0Item(
+            item.item_id,
+            f"requirement={item.requirement}\nevidence={item.evidence_excerpt}",
+        )
+        for item in items
+    ]
+    if provider_event_callback:
+        provider_event_callback("subscription", "call")
+    result = run_stage0_subscription(
+        "evidence", payload, config=config, budget=AdapterBudget(config)
+    )
+    if raw_response_callback:
+        raw_response_callback(
+            json.dumps(
+                {
+                    "outcome": result.outcome,
+                    "results": result.results,
+                    "missing_item_ids": result.missing_item_ids,
+                    "reason": result.reason,
+                    "subscription_minutes": result.subscription_minutes,
+                    "api_cents": result.api_cents,
+                }
+            )
+        )
+    if result.outcome not in {"ok", "cache_hit"} or result.missing_item_ids:
+        raise CascadeReviewNeeded(
+            result.reason or "subscription adapter required review"
+        )
+    return validate_batch_response({"results": result.results}, items, exact_ids=True)
 
 
 def configured_provider_order(settings: dict[str, Any]) -> list[str]:
@@ -369,6 +432,12 @@ def classify_requirements_batch(
             allow_import=False,
         )
         return {**left, **right}
+    if _subscription_evidence_enabled():
+        return _classify_requirements_subscription(
+            items,
+            raw_response_callback=raw_response_callback,
+            provider_event_callback=provider_event_callback,
+        )
     from utils import call_llm, load_llm_settings
     from cost_eligibility import (
         CostPauseError,

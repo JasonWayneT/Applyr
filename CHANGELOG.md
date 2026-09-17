@@ -3,12 +3,13 @@
 ### New
 - Stage 0 now has a bounded, switch-off `claudexor@3.12.1` subscription adapter
   (`scripts/stage0_subscription_adapter.py`) with separate extraction and
-  evidence schemas, item_id binding, cache keys, readonly spawn, and
+  evidence schemas, item_id binding, cache keys, readonly spawn, `--prompt-file`
+  (so Windows `npx.cmd` cannot pipe on `|` in the prompt), and
   `subscription_minutes` tracked separately from `api_cents`. Failed,
   substituted, or non-readonly runs go to explicit review. When
-  `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` is on, uncertain extraction uses that
-  adapter and never Groq/Gemini; the production default stays on the existing
-  uncertainty path until replay passes (CR-114).
+  `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` is on, uncertain extraction and
+  uncertain evidence use that adapter and never Groq/Gemini; the production
+  default stays on the existing uncertainty path until replay passes (CR-114).
 - Shadow Stage 0 evidence matching can only return match or abstain from
   human-reviewed tool aliases. It cannot emit HARD or Skip and is not used
   in production scoring (CR-114).
@@ -16,12 +17,15 @@
 ### Changed
 - Stage 0 extraction fallback responses no longer write into `training_data_feedback.csv`. Retraining ignores that unverified file and accepts only human-reviewed rows with provenance.
 - Retraining uses a company-held-out set without pre-split feedback duplication, writes a candidate model/report, and requires explicit replay acknowledgment for promotion. The first candidate was not promoted (CR-114).
+- Review Center cards now store and render why Stage 0 paused (`decision_basis`) and the uncertainty label beside the existing requirement and evidence excerpt (CR-114 / FR-329).
 
 ### Fixed
 - Stage 0 model-flagged confirmations now require a tool flag plus named-tool
   and JD-grounding checks before creating a Review Center question. Generic
   traits such as "critical thinking" no longer create binary "have you used
   it?" cards through the model-only path.
+- Re-running the CR-109 confirmation table rebuild no longer drops Review Center
+  basis columns on the next Python connect (CR-114).
 
 ## [Unreleased] — 2026-09-15
 [DRAFT] CR-112 consolidation maintenance reconciles the current candidate

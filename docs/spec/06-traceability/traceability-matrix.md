@@ -372,8 +372,8 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-327` / `AC-425` | CR-114 | `scripts/build_stage0_fit_gate.py`, `scripts/retrain_stage0.py` | `scripts/test_retrain_stage0.py`, `scripts/test_cr112_stage0_extraction_review.py` | in_progress |
-| `FR-328` / `AC-426` | CR-114 | `scripts/stage0_subscription_adapter.py`, extraction call site in `scripts/build_stage0_fit_gate.py` (evidence call site still Groq/Gemini) | `scripts/test_stage0_subscription_adapter.py`, `scripts/test_stage0_subscription_extraction.py`; live Cursor schema smoke not yet valid | in_progress |
-| `FR-329` / `AC-427` | CR-114 | `scripts/stage0_evidence_matcher.py` (shadow only; cascade unwired) | `scripts/test_stage0_evidence_matcher.py`, `scripts/test_stage0_subscription_evidence.py`; 30-JD replay not run | in_progress |
+| `FR-328` / `AC-426` | CR-114 | `scripts/stage0_subscription_adapter.py`; extraction and evidence call sites behind `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` (default off) | `scripts/test_stage0_subscription_adapter.py`, `scripts/test_stage0_subscription_extraction.py`, `scripts/test_stage0_subscription_evidence.py`; Cursor CLI missing, Codex over quota; schema body not yet returned | in_progress |
+| `FR-329` / `AC-427` | CR-114 | `scripts/stage0_evidence_matcher.py` (shadow); Review Center `decision_basis`/`uncertainty`; cascade adapter behind off switch | `scripts/test_stage0_evidence_matcher.py`, `scripts/test_stage0_subscription_evidence.py`, `scripts/test_stage0_confirmations.py`, `src/lib/reviewCenter.test.ts`; 30-JD replay not run | in_progress |
 
 ## Coverage checklist
 

@@ -39,6 +39,20 @@ describe('Review Center data contract', () => {
     expect(unknown.answer).toBeUndefined();
   });
 
+  it('passes through decision basis and uncertainty', () => {
+    const [item] = normalizeReviewItems([{
+      id: 'jira',
+      title: 'Jira',
+      requirement: 'Experience with Jira',
+      evidence_excerpt: 'Named tool is in the JD.',
+      decision_basis: 'Deterministic named-tool scan.',
+      uncertainty: 'unknown_named_tool',
+    }]);
+    expect(item.decisionBasis).toBe('Deterministic named-tool scan.');
+    expect(item.uncertainty).toBe('unknown_named_tool');
+    expect(item.evidenceExcerpt).toBe('Named tool is in the JD.');
+  });
+
   it('drops malformed review items instead of rendering unsafe partial records', () => {
     expect(normalizeReviewItems([
       { id: 'missing-title' },

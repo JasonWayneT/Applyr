@@ -199,17 +199,22 @@ def _npx_cmd() -> str:
 
 
 def build_command(
-    prompt: str,
+    prompt_path: Path,
     schema_path: Path,
     config: AdapterConfig,
 ) -> list[str]:
-    """Build the readonly schema-constrained claudexor argv. shell=False only."""
+    """Build the readonly schema-constrained claudexor argv. shell=False only.
+
+    Pass the prompt via --prompt-file. Windows npx.cmd re-parses argv through
+    cmd.exe, so a positional prompt containing `|` was executed as a pipe.
+    """
     return [
         _npx_cmd(),
         "-y",
         CLAUDEXOR_PIN,
         "agent",
-        prompt,
+        "--prompt-file",
+        str(prompt_path),
         "--harness",
         config.harness,
         "--profile",
@@ -250,6 +255,15 @@ def _prompt(task: RunTask, items: list[Stage0Item]) -> str:
         "\"reasoning\":\"...\"}]} with one result per listed item_id. "
         "Do not invent item_ids. Do not skip an item.\n\n" + "\n".join(lines)
     )
+
+
+def _harness_exit_reason(completed: subprocess.CompletedProcess[str]) -> str:
+    """Summarize a non-zero harness exit without keeping a raw log. Implements FR-328."""
+    snippet = redact_pii((completed.stderr or completed.stdout or "").strip())
+    snippet = " ".join(snippet.split())[:240]
+    if snippet:
+        return f"harness exit {completed.returncode}: {snippet}"
+    return f"harness exit {completed.returncode}"
 
 
 def _load_json_object(text: str) -> dict[str, Any]:
@@ -428,8 +442,10 @@ def run_stage0_subscription(
     with tempfile.TemporaryDirectory(prefix="stage0-sub-") as tmp:
         schema_path = Path(tmp) / f"{task}.schema.json"
         schema_path.write_text(json.dumps(schema_for(task), indent=2) + "\n", encoding="utf-8")
+        prompt_path = Path(tmp) / "prompt.txt"
+        prompt_path.write_text(prompt, encoding="utf-8")
         try:
-            command = build_command(prompt, schema_path, cfg)
+            command = build_command(prompt_path, schema_path, cfg)
         except FileNotFoundError as exc:
             live_budget.calls += 1
             elapsed = time.monotonic() - started
@@ -473,7 +489,7 @@ def run_stage0_subscription(
     if completed.returncode != 0:
         return AdapterResult(
             "review", task, [], [item.item_id for item in items],
-            f"harness exit {completed.returncode}", live_budget.calls, elapsed, minutes, None, key, command,
+            _harness_exit_reason(completed), live_budget.calls, elapsed, minutes, None, key, command,
         )
     try:
         envelope = _load_json_object(completed.stdout)

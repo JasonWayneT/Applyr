@@ -79,6 +79,22 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         self.assertEqual(result.missing_item_ids, ["e0", "e1"])
         self.assertIsNone(result.api_cents)
 
+    def test_nonzero_exit_includes_redacted_stderr(self) -> None:
+        def runner(_command, **_kwargs):
+            return subprocess.CompletedProcess(
+                ["npx"], 255, "", "spawn EINVAL\ncontact me at hide@example.com"
+            )
+
+        result = adapter.run_stage0_subscription(
+            "extraction", _items(), config=self._config(), runner=runner
+        )
+        self.assertEqual(result.outcome, "review")
+        self.assertIn("harness exit 255", result.reason or "")
+        self.assertIn("spawn EINVAL", result.reason or "")
+        self.assertNotIn("hide@example.com", result.reason or "")
+        self.assertEqual(result.missing_item_ids, ["e0", "e1"])
+        self.assertIsNone(result.api_cents)
+
     def test_env_enables_adapter(self) -> None:
         os.environ[adapter.ENABLED_ENV] = "1"
         calls: list[list[str]] = []
@@ -115,6 +131,12 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         self.assertIn("--web", captured["command"])
         self.assertIn("off", captured["command"])
         self.assertIn("--output-schema", captured["command"])
+        self.assertIn("--prompt-file", captured["command"])
+        self.assertTrue(
+            any(Path(part).name == "prompt.txt" for part in captured["command"]),
+        )
+        self.assertFalse(any("|" in part for part in captured["command"]))
+        self.assertNotIn("Classify each Stage 0", captured["command"])
         self.assertIs(captured["kwargs"]["shell"], False)
         self.assertGreaterEqual(result.subscription_minutes, 0.0)
         self.assertIsNone(result.api_cents)

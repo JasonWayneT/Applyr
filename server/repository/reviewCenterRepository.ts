@@ -31,6 +31,8 @@ export interface ReviewItem {
   skillKey?: string;
   requirement?: string;
   evidenceExcerpt?: string;
+  decisionBasis?: string;
+  uncertainty?: string;
   evidenceStatus?: 'not_started' | 'incomplete' | 'ready';
   promotionId?: string;
   promotionStatus?: EvidencePromotionStatus;
@@ -59,6 +61,8 @@ type ReviewRow = {
   summary: string;
   requirement: string | null;
   evidence_excerpt: string | null;
+  decision_basis: string | null;
+  uncertainty: string | null;
   opportunity_key: string;
   opportunity_company: string;
   opportunity_title: string;
@@ -163,6 +167,8 @@ function mapGroup(
     skillKey: first.skill_key || undefined,
     requirement: first.requirement || undefined,
     evidenceExcerpt: first.evidence_excerpt || undefined,
+    decisionBasis: first.decision_basis || undefined,
+    uncertainty: first.uncertainty || undefined,
     evidenceStatus,
     promotionId: promotion?.id,
     promotionStatus: promotion?.status,
@@ -211,7 +217,8 @@ export function listReviewItems(
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const rows = database.prepare(`
     SELECT id, review_key, question_type, skill_key, status, title, question,
-           summary, requirement, evidence_excerpt, opportunity_key,
+           summary, requirement, evidence_excerpt, decision_basis, uncertainty,
+           opportunity_key,
            opportunity_company, opportunity_title, opportunity_status, answer,
            answer_details_json, created_at, updated_at, resolved_at
     FROM pending_skill_confirmations
@@ -411,7 +418,7 @@ export function answerReviewItem(
 ): { ok: true; status: ReviewStatus; promotionId?: string } | { ok: false; error: string; notFound?: boolean } {
   const rows = database.prepare(`
     SELECT id, review_key, question_type, skill_key, status, title, question, summary,
-           requirement, evidence_excerpt, opportunity_key, opportunity_company,
+           requirement, evidence_excerpt, decision_basis, uncertainty, opportunity_key, opportunity_company,
            opportunity_title, opportunity_status, answer, answer_details_json,
            created_at, updated_at, resolved_at
     FROM pending_skill_confirmations

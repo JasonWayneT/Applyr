@@ -158,8 +158,37 @@ def _connect(db_path: str | Path | None) -> sqlite3.Connection:
     connection = sqlite3.connect(str(path), timeout=30.0)
     connection.row_factory = sqlite3.Row
     for migration in _MIGRATIONS:
+        # 022 rebuilds pending_skill_confirmations from a fixed column list.
+        # Re-running it after CR-114 columns exist would drop decision_basis
+        # and uncertainty. Skip once those additive columns are present.
+        if migration.name.startswith("022") and _has_review_basis_columns(connection):
+            continue
         connection.executescript(migration.read_text(encoding="utf-8"))
+    _ensure_review_basis_columns(connection)
     return connection
+
+
+def _pending_confirmation_columns(connection: sqlite3.Connection) -> set[str]:
+    """Return current pending_skill_confirmations column names."""
+    return {
+        row[1] for row in connection.execute("PRAGMA table_info(pending_skill_confirmations)")
+    }
+
+
+def _has_review_basis_columns(connection: sqlite3.Connection) -> bool:
+    """True when CR-114 Review Center basis columns already exist."""
+    columns = _pending_confirmation_columns(connection)
+    return "decision_basis" in columns and "uncertainty" in columns
+
+
+def _ensure_review_basis_columns(connection: sqlite3.Connection) -> None:
+    """Add CR-114 review columns without re-running ALTER on later connects."""
+    columns = _pending_confirmation_columns(connection)
+    if "decision_basis" not in columns:
+        connection.execute("ALTER TABLE pending_skill_confirmations ADD COLUMN decision_basis TEXT")
+    if "uncertainty" not in columns:
+        connection.execute("ALTER TABLE pending_skill_confirmations ADD COLUMN uncertainty TEXT")
+    connection.commit()
 
 
 def get_skill_memory(skill_key: str, db_path: str | Path | None = None) -> dict[str, Any] | None:
@@ -194,6 +223,8 @@ def create_skill_confirmation(
     opportunity_title: str,
     opportunity_status: str | None = None,
     evidence_excerpt: str | None = None,
+    decision_basis: str | None = None,
+    uncertainty: str | None = None,
 ) -> ConfirmationResult:
     """Create one idempotent skill-presence occurrence for an opportunity."""
     key = canonical_skill_key(skill_key or display_name)
@@ -223,10 +254,11 @@ def create_skill_confirmation(
                 INSERT INTO pending_skill_confirmations (
                   id, review_key, question_type, skill_key, status, title,
                   question, summary, requirement, evidence_excerpt,
+                  decision_basis, uncertainty,
                   opportunity_key, opportunity_company, opportunity_title,
                   opportunity_status, created_at, updated_at
-                ) VALUES (?, ?, 'skill_presence', ?, 'open', ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, 'skill_presence', ?, 'open', ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid.uuid4()),
@@ -237,6 +269,8 @@ def create_skill_confirmation(
                     "Applyr needs your input before this opportunity can continue.",
                     (requirement or "").strip() or None,
                     (evidence_excerpt or "").strip() or None,
+                    (decision_basis or "").strip() or None,
+                    (uncertainty or "").strip() or None,
                     opportunity,
                     (opportunity_company or "").strip() or "Unknown company",
                     (opportunity_title or "").strip() or "Untitled opportunity",
@@ -259,6 +293,8 @@ def create_hard_gate_review(
     opportunity_company: str,
     opportunity_title: str,
     evidence_excerpt: str | None = None,
+    decision_basis: str | None = None,
+    uncertainty: str | None = None,
 ) -> ConfirmationResult:
     """Create one idempotent hard-gate review for an opportunity and item."""
     opportunity = (opportunity_key or "").strip()
@@ -283,9 +319,10 @@ def create_hard_gate_review(
                 """
                 INSERT INTO pending_skill_confirmations (
                   id, review_key, question_type, status, title, question,
-                  summary, requirement, evidence_excerpt, opportunity_key,
-                  opportunity_company, opportunity_title, created_at, updated_at
-                ) VALUES (?, ?, 'hard_gate_review', 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  summary, requirement, evidence_excerpt, decision_basis,
+                  uncertainty, opportunity_key, opportunity_company,
+                  opportunity_title, created_at, updated_at
+                ) VALUES (?, ?, 'hard_gate_review', 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid.uuid4()),
@@ -295,6 +332,8 @@ def create_hard_gate_review(
                     "Applyr will not disqualify this opportunity without your explicit decision.",
                     (requirement or "").strip() or None,
                     (evidence_excerpt or "").strip() or None,
+                    (decision_basis or "").strip() or None,
+                    (uncertainty or "").strip() or None,
                     opportunity,
                     (opportunity_company or "").strip() or "Unknown company",
                     (opportunity_title or "").strip() or "Untitled opportunity",
@@ -390,6 +429,7 @@ def list_pending_for_opportunity(
             """
             SELECT id, review_key, question_type, skill_key, status, title,
                    question, summary, requirement, evidence_excerpt,
+                   decision_basis, uncertainty,
                    opportunity_key, opportunity_company, opportunity_title,
                    opportunity_status, answer, answer_details_json,
                    created_at, updated_at, resolved_at
@@ -412,6 +452,7 @@ def list_open_confirmations(db_path: str | Path | None = None) -> list[dict[str,
             """
             SELECT id, review_key, question_type, skill_key, status, title,
                    question, summary, requirement, evidence_excerpt,
+                   decision_basis, uncertainty,
                    opportunity_key, opportunity_company, opportunity_title,
                    opportunity_status, answer, answer_details_json,
                    created_at, updated_at, resolved_at

@@ -2,7 +2,7 @@
 
 **Status:** Research deliverable. No production code was changed for this report.
 **Scope:** The Stage 0 fit gate (JD → Tier 1 / Tier 2 / Skip, or an explicit review pause) at ~30-JD batch scale.
-**Prepared:** 2026-09-16. Same-day revision adds Section 17: the learning architecture that supersedes the local-LLM band and the runtime-subscription framing. Inline notes mark the affected passages; Section 17.9 lists every supersession, and Section 17.10 pressure tests the design against external research before commit.
+**Prepared:** 2026-09-16. Section 17 records the first revision and its research pressure test. Jason's 2026-09-17 clarification in Section 18 is the current direction wherever it conflicts with Sections 7-17: improve Stage 0 NLP and matching, while using subscription-harness calls for uncertain runtime cases instead of Groq/Gemini free-tier calls.
 **Method:** Direct read of `scripts/build_stage0_fit_gate.py` (3,651 lines) and `scripts/evidence_scale.py` (983 lines); three exhaustive sub-investigations (gate workers, orchestration, data/specs/calibration) each citing file:line as source of record; external literature review with citations. Nothing here is speculative about the codebase: every claim about current behavior traces to a file and line.
 
 **Evidence tags used throughout:**
@@ -32,6 +32,7 @@
 15. Risks
 16. Implementation Plan
 17. Addendum: Revised Learning Architecture (2026-09-16)
+18. Runtime Harness Fallback and NLP Improvement (2026-09-17)
 
 Appendix A: Source Inventory
 Appendix B: Bibliography
@@ -391,6 +392,8 @@ Explicitly rejected: paying for hosted calls to keep the status quo (converts W1
 
 **Revision 2026-09-16:** the recommendation now reads: Candidate B as the runtime, with the abstain band resolved by an offline subscription-backed tutor instead of a local runtime band (Section 17). The decision rule also changes shape: because the tutor sits off the critical path behind a budget dial, band width is no longer a go/no-go for the runtime flip. The flip is gated on matcher coverage (Sp2) and raw review load (Sp5); the tutor then converts raw review into draft-grading once unblocked.
 
+**Revision 2026-09-17:** Jason clarified that the subscription harness must also be available to resolve uncertain Stage 0 cases during a batch. Section 18 supersedes the runtime-only-deterministic assumption above and in Section 17; the matcher still minimizes calls.
+
 ---
 
 ## 10. LLM Burden-of-Proof Verdict
@@ -510,6 +513,8 @@ Acceptance gates: P3 requires ≥ 1 month or ≥ 60 JDs of shadow runs, false-sk
 
 **Revision 2026-09-16:** P4 is replaced by the offline learner worker (Section 17.8): a subscription-backed tutor queue with a budget dial and no runtime provider change. Its acceptance gate is the claudexor version pin (≥3.12.1; the daemon crash was fixed upstream in 3.12.1, so no external fix is pending) plus harness smokes and a timed agreement replay, not Sp1. P3 is unaffected.
 
+**Revision 2026-09-17:** the staged order and runtime behavior above are superseded by Section 18. Harness fallback is an early Stage 0 workstream, not a P4-only learner feature. The production switch requires the harness path and the NLP/matcher path to pass separate batch-scale gates.
+
 ---
 
 ## 15. Risks
@@ -567,6 +572,8 @@ Story-level plan for the future CR (not executed now). Sizes are `[E]`.
 16. Remove hosted Stage 0 call sites (keep manual cascade import + other features' clients); full docs pass: CHANGELOG, README structure section, spec CR, traceability matrix.
 
 **Out of scope:** Stage 1+ behavior, scout ingest gates, Gmail/interview LLM features, any change to the locked floors without the recalibration evidence from P2.
+
+**Revision 2026-09-17:** Section 18 replaces this phase order. Stage 0 harness fallback must be implemented and tested before depending on it for a batch; offline tutor work may follow later. Stage 1-3 improvements are a future sequence, not part of this Stage 0 change.
 
 ---
 
@@ -649,7 +656,7 @@ Review load, abstention, tutor calls, correction rate, and the blind-versus-seen
 | Correction rate | falling |
 | Metered API calls | zero, always |
 
-### 17.8 The claudexor wire: proven; what remains to build it (updated 2026-09-16)
+### 17.8 The claudexor wire: proven; what remains to build it (updated 2026-09-16, superseded by Section 18)
 
 The spike's daemon crash occurred on claudexor 3.12.0; the exact crashing combination (`agent ... --access readonly --workspace-kind directory --no-review --json --output-schema`, harness `claude`) succeeded on 3.12.1 with schema-conformant structured output `[M]`. That verifies one harness and a toy schema, not the complete learner wire. With metered APIs excluded and local models tested unreliable, this is the **only LLM access path in the proposed architecture**, so real-schema and cross-harness validation is a mandatory P1 workstream, not an optional fallback.
 
@@ -694,6 +701,48 @@ Before committing, the architecture's eight load-bearing claims were checked aga
 One additional minor finding: LLM-as-judge biases (position, verbosity, self-preference; Zheng et al. 2023; and "No Free Labels" 2025, which also found judge grounding matters more than judge strength) recommend two things: randomize ordinal assignment of items inside tutor batch prompts (the exact-text echo binding already protects item identity; order randomization protects against position-driven category skew), and keep the evidence context (grounding) attached to every tutor call, since grounding quality affects tutor accuracy more than model choice.
 
 **Net verdict: the architecture survives in shape; five amendments are folded in before commit.** (1) Validation is load-bearing and threshold-setting, not decorative. (2) Adaptive self-consistency, not uniform double-asking. (3) Consequence-ranked review is a safety property, not a budget optimizer. (4) Evidence-first review display plus blind audits, with the delta on the dashboard and the auto-accept threshold tied to it. (5) Randomized item order in tutor batch prompts. Claims 1, 2, 5, and 6 came out stronger than assumed (direct precedent exists for the whole design); claim 8 was the real finding of the pressure test and produced the amendments most worth building.
+
+---
+
+## 18. Runtime Harness Fallback and NLP Improvement (2026-09-17)
+
+Jason clarified the operating goal: keep Stage 0 accurate through a meaningful batch without exhausting Groq/Gemini free-tier limits or consuming a large share of subscription capacity. Improve the NLP and deterministic matching so the harness handles progressively fewer uncertain cases. Stage 1, then Stage 2, then Stage 3 are later improvement efforts; this plan changes Stage 0 only. This section supersedes Section 17's zero-harness runtime, offline-tutor-only ladder and phase order.
+
+### 18.1 Two existing calls need separate replacements
+
+1. **Extraction:** the default TF-IDF/LogReg classifier buckets JD lines. Lines below its current 0.65 confidence cutoff go to Groq/Gemini (`build_stage0_fit_gate.py`, Section 2.4). Preserve high-confidence NLP decisions; route the uncertain batch through a subscription harness once its schema, latency, and error handling are validated. If it cannot answer, preserve the CR-112 unresolved/review path. Never silently drop a line or guess a bucket.
+2. **Evidence judgment:** the current Groq/Gemini cascade classifies requirement gaps even when extraction succeeds (`stage0_evidence_cascade.py`, Section 2.4). Improve this path with rules, aliases, a case bank, and a calibrated matcher. Only its uncertain remainder goes to the subscription harness. A missing, invalid, or exhausted harness result becomes explicit review, never a terminal PASS or Skip inferred from missing evidence.
+
+The two paths have different prompts, schemas, and quality gates. A successful toy-schema `claude` call in 17.8 proves neither path at production scale. Other Stage 0 hosted calls listed in 2.4 must be inventoried and removed or given a measured deterministic/review path before claiming zero Groq/Gemini calls for Stage 0.
+
+### 18.2 Target batch behavior
+
+```
+JD -> existing hard gates -> NLP extraction
+                     confident -> extracted requirements
+                     uncertain -> cached/deduplicated harness batch -> validated buckets
+                               -> unresolved review if unavailable/invalid
+requirements -> rules + matcher
+                     confident -> grounded levels and gates
+                     uncertain -> cached/deduplicated harness batch -> validated judgments
+                               -> explicit review if unavailable/invalid
+aggregator -> tier or review pause; existing hard-gate safeguards still apply
+```
+
+The harness is a bounded runtime fallback, not a license to send every JD through an agent. Use a pinned, tested `claudexor` version; batch uncertain items; cache by JD, item, evidence, policy, and model versions; set a per-batch call/time budget; and record calls, elapsed `subscription_minutes`, failures, and review deferrals separately from `api_cents`. A cap or outage must yield a resumable review state so the batch does not silently consume an unbounded quota or make an unsupported decision. No metered API fallback is part of this design.
+
+Only human-adjudicated corrections enter classifier or matcher training. Harness labels are proposals until the validation and audit policy is proven; do not feed unreviewed fallback answers into `training_data_feedback.csv` as the current extraction path does (W3). Track extraction abstentions, matcher abstentions, harness calls per 30 JDs, reviewed items, false skips, and errors over comparable batches. Falling harness use is an outcome to measure, not an assumption.
+
+### 18.3 Implementation order and gates
+
+1. **Specify and measure the baseline:** create the change request, label a representative JD and line-level gold set, record current extraction misses, cascade calls, false skips, review load, and 30-JD throughput. Preserve existing floors until replay supports a change.
+2. **Prove the runtime wire:** pin `claudexor@3.12.1` or a later tested version. Smoke the actual extraction and evidence schemas through the intended profiles, inspect warnings, and replay 5-10 archived JDs for latency, agreement, and call count. Then run a timed 30-JD replay with a finite budget. One toy-schema success is not an acceptance gate.
+3. **Replace the free-tier extraction fallback:** use the validated harness for low-confidence NLP lines, with the CR-112 review path on failure. Remove automatic training on unadjudicated fallback mappings. Verify no Groq/Gemini calls from this extraction path and no lost lines.
+4. **Improve the evidence matcher in shadow:** build the rules/alias/case-bank matcher and calibrated abstention; compare with adjudicated gold and current decisions. Measure its raw uncertainty and false skips before giving it authority. Reuse confirmed corrections to improve both extraction and matching.
+5. **Switch evidence judgment with a bounded fallback:** confident matcher outputs resolve locally; uncertain outputs go through the harness; unavailable or invalid outputs go to review. Gate the switch on gold-set error, review load, harness capacity, and a representative shadow run. Retain a rollback that uses explicit review rather than assuming the free-tier cascade can carry a batch.
+6. **Tune and retire:** measure calls and errors across real batches, tighten thresholds only with evidence, then remove the remaining Groq/Gemini Stage 0 call sites. The offline tutor, blind-audit UI, and learning dashboard from Section 17 may be added after the runtime path works; they do not block the first reliable Stage 0 batch.
+
+**Release test:** a representative 30-JD batch must finish or reach explicit, resumable review states within the chosen time and harness budget, with no unreviewed false skips on the adjudicated sample, no silent extraction loss, and no Groq/Gemini Stage 0 calls. Set numeric budget and error thresholds from the baseline and replay; current percentages in Sections 8 and 12 are estimates, not yet release evidence.
 
 ---
 

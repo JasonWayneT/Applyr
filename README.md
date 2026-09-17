@@ -285,7 +285,9 @@ human-reviewed replay report bound to the candidate hash. A Stage 0-only
 subscription adapter (`scripts/stage0_subscription_adapter.py`, pin
 `claudexor@3.12.1`) exists behind `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` and
 stays off; it does not replace Groq/Gemini until actual-schema smoke and an
-adjudicated 30-JD replay pass. Factory is excluded. The current Groq/Gemini
+adjudicated 30-JD replay pass. When the switch is on, uncertain extraction
+batches use the adapter and keep the CR-112 review pause; confident NLP
+routing is unchanged. Factory is excluded. The current Groq/Gemini
 cost authorization and review pause remain in force.
 
 ### Drafting assets

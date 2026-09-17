@@ -1115,11 +1115,11 @@ def _extract_unavailable_message(reason: str) -> str:
 
 
 def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
-    """NLP (TF-IDF + LogReg) section extraction with a Groq/Gemini fallback for anything
-    the classifier isn't confident about. Returns None only when STAGE0_SECTION_MODE=
-    deterministic (caller then uses the regex extractor on purpose, same contract as
-    _extract_sections_llm) or when data/stage0_classifier.pkl doesn't exist yet -- both
-    are "use regex instead" signals, not real failures, so neither raises.
+    """NLP (TF-IDF + LogReg) section extraction with a bounded fallback.
+
+    Confident lines stay on the local classifier. Uncertain lines go to Groq/Gemini
+    unless APPLYR_STAGE0_SUBSCRIPTION_ADAPTER is on, in which case they go to the
+    Stage 0 subscription adapter and never spill into a metered API.
     """
     import pipeline_env
     if pipeline_env.stage0_section_mode() == "deterministic":
@@ -1127,7 +1127,6 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
 
     import joblib
     import warnings
-    from utils import call_llm, extract_json_from_text, resolve_task_providers
 
     model_path = _REPO_ROOT / "data" / "stage0_classifier.pkl"
     if not model_path.exists():
@@ -1200,98 +1199,183 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
                     fallback_queue.append((combo_text, bullet_clean, current_header))
                 else:
                     buckets[pred].append(bullet_clean)
-                    
-    # Active Learning Fallback Loop
-    # CR-112 (2026-09-12, post design review): a bullet the classifier was not
-    # confident about must never be silently defaulted into a bucket just
-    # because no provider answered, the provider's response failed to parse,
-    # or the response only partially mapped the batch -- that is Defect A
-    # (a self-flagged/structurally-unreliable extraction still producing a
-    # terminal PASS or SKIP) and Defect A's silent-loss variant. Every one of
-    # those three cases is instead recorded in `unresolved_for_review` (an
-    # extra key on this same dict, per PIN 3 -- this function still never
-    # raises) so the caller (build_stage0_fit_gate) can run the independent
-    # three-way qualification-risk gate and pause when needed.
-    unresolved_for_review: list[dict] = []
-    if fallback_queue:
-        print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
-        prompt = "Classify these job description bullet points into one of four buckets: 'required', 'preferred', 'responsibilities', or 'culture'. Return ONLY valid JSON as a mapping from the index to the bucket string.\n\n"
-        for i, (combo_text, _, _) in enumerate(fallback_queue):
-            prompt += f"[{i}] {combo_text}\n"
 
-        result = call_llm(
-            system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
-            user_prompt=prompt,
-            # CR-105 (Jason-supplied, 2026-08-30): Groq first (generous free tier, no
-            # training on submitted data), Gemini as the fallback if Groq is unavailable
-            # or rate-limited. User-overridable per Settings > API or Connections > AI
-            # Usage > "Stage 0 fallback" (llm_settings.taskProviderOverrides.stage0_extraction).
-            provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
-        )
-
-        if result:
-            json_str = extract_json_from_text(result)
-            try:
-                import json
-                mapping = json.loads(json_str)
-                resolved_indices: set[int] = set()
-                # Implements FR-327 / AC-425: runtime fallback answers are not training labels.
-                if not isinstance(mapping, dict):
-                    raise ValueError("fallback mapping must be an object")
-                for i_str, bucket in mapping.items():
-                    try:
-                        idx = int(i_str)
-                    except (TypeError, ValueError):
-                        continue
-                    if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
-                        continue
-                    resolved_indices.add(idx)
-                    _, bullet_clean, _ = fallback_queue[idx]
-                    buckets[bucket].append(bullet_clean)
-                # CR-112 (v1/v2/v3 review, "the partial-mapping loss path"): a
-                # partial mapping (fewer indices than fallback_queue, or an
-                # answer naming a bucket string not in `buckets`) must not
-                # silently drop the unmapped items -- they enter the
-                # three-way gate exactly like a no-provider or parse-failure
-                # item.
-                for idx, (combo_text, bullet_clean, header) in enumerate(fallback_queue):
-                    if idx in resolved_indices:
-                        continue
-                    unresolved_for_review.append({
-                        "text": bullet_clean,
-                        "header": header,
-                        "reason": "partial_mapping_unresolved",
-                        "model_call_occurred": True,
-                    })
-            except Exception as e:
-                print(f"    [NLP Error] Failed to parse LLM fallback: {e}", file=sys.stderr)
-                # CR-112: the provider may already have been billed for this
-                # call (model_call_occurred=True) even though the body could
-                # not be parsed -- do not default these into responsibilities.
-                for _, bullet_clean, header in fallback_queue:
-                    unresolved_for_review.append({
-                        "text": bullet_clean,
-                        "header": header,
-                        "reason": "parse_failure",
-                        "model_call_occurred": True,
-                    })
-        else:
-            # CR-112: no eligible provider answered at all (model_call_occurred
-            # =False) -- this is the normal, expected no-cost path, not an edge
-            # case (confirmed real on all 6 measured JDs in the CR-112 design
-            # doc). Do not default these into responsibilities.
-            for _, bullet_clean, header in fallback_queue:
-                unresolved_for_review.append({
-                    "text": bullet_clean,
-                    "header": header,
-                    "reason": "no_provider",
-                    "model_call_occurred": False,
-                })
-
+    unresolved_for_review = _resolve_uncertain_extraction(fallback_queue, buckets)  # Implements FR-328 / AC-426
     _recover_mixed_responsibilities(buckets)
     if unresolved_for_review:
         buckets["unresolved_for_review"] = unresolved_for_review
     return buckets
+
+
+def _subscription_extraction_enabled() -> bool:
+    """Return True only when the CR-114 adapter switch is on. Implements FR-328."""
+    from stage0_subscription_adapter import AdapterConfig, adapter_enabled
+    return adapter_enabled(AdapterConfig())
+
+
+def _record_unresolved(
+    fallback_queue: list[tuple[str, str, str]],
+    reason: str,
+    *,
+    model_call_occurred: bool,
+    indexes: list[int] | None = None,
+) -> list[dict]:
+    """Record unresolved extraction lines without silently bucketing them."""
+    selected = range(len(fallback_queue)) if indexes is None else indexes
+    return [
+        {
+            "text": fallback_queue[idx][1],
+            "header": fallback_queue[idx][2],
+            "reason": reason,
+            "model_call_occurred": model_call_occurred,
+        }
+        for idx in selected
+    ]
+
+
+def _resolve_uncertain_extraction(
+    fallback_queue: list[tuple[str, str, str]],
+    buckets: dict[str, list[str]],
+) -> list[dict]:
+    """Classify low-confidence lines or keep them in CR-112 review. Implements FR-328 / AC-426.
+
+    The subscription adapter, when enabled, replaces Groq/Gemini for this batch only.
+    It never writes training labels and never silently drops a queued line.
+    """
+    if not fallback_queue:
+        return []
+    if _subscription_extraction_enabled():
+        return _resolve_uncertain_extraction_subscription(fallback_queue, buckets)
+    return _resolve_uncertain_extraction_llm(fallback_queue, buckets)
+
+
+def _resolve_uncertain_extraction_subscription(
+    fallback_queue: list[tuple[str, str, str]],
+    buckets: dict[str, list[str]],
+) -> list[dict]:
+    """Use the bounded Stage 0 adapter. Never fall through to Groq or Gemini."""
+    from stage0_subscription_adapter import (
+        AdapterConfig,
+        AdapterBudget,
+        Stage0Item,
+        run_stage0_subscription,
+    )
+
+    print(
+        f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to subscription adapter...",
+        file=sys.stderr,
+    )
+    items = [
+        Stage0Item(f"e{idx}", combo_text)
+        for idx, (combo_text, _bullet, _header) in enumerate(fallback_queue)
+    ]
+    config = AdapterConfig(enabled=True)
+    result = run_stage0_subscription(
+        "extraction", items, config=config, budget=AdapterBudget(config)
+    )
+    print(
+        f"    [NLP] subscription adapter outcome={result.outcome} "
+        f"calls={result.calls} minutes={result.subscription_minutes:.4f} "
+        f"api_cents={result.api_cents} reason={result.reason}",
+        file=sys.stderr,
+    )
+    called = result.outcome != "exhausted" or result.calls > 0
+    resolved: set[int] = set()
+    for row in result.results:
+        item_id = str(row.get("item_id") or "")
+        if not item_id.startswith("e"):
+            continue
+        try:
+            idx = int(item_id[1:])
+        except ValueError:
+            continue
+        bucket = row.get("bucket")
+        if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
+            continue
+        resolved.add(idx)
+        buckets[bucket].append(fallback_queue[idx][1])
+    missing = [
+        idx for idx, _item in enumerate(fallback_queue) if idx not in resolved
+    ]
+    if result.outcome in {"ok", "cache_hit"} and not missing:
+        return []
+    if missing and resolved:
+        return _record_unresolved(
+            fallback_queue,
+            "partial_mapping_unresolved",
+            model_call_occurred=True,
+            indexes=missing,
+        )
+    if result.outcome == "exhausted":
+        return _record_unresolved(
+            fallback_queue, "no_provider", model_call_occurred=bool(result.calls)
+        )
+    if result.outcome == "disabled":
+        return _record_unresolved(
+            fallback_queue, "no_provider", model_call_occurred=False
+        )
+    reason = "parse_failure" if called else "no_provider"
+    return _record_unresolved(fallback_queue, reason, model_call_occurred=called)
+
+
+def _resolve_uncertain_extraction_llm(
+    fallback_queue: list[tuple[str, str, str]],
+    buckets: dict[str, list[str]],
+) -> list[dict]:
+    """Existing Groq/Gemini uncertainty path. Implements CR-112 dump-site rules."""
+    from utils import call_llm, extract_json_from_text, resolve_task_providers
+
+    print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
+    prompt = "Classify these job description bullet points into one of four buckets: 'required', 'preferred', 'responsibilities', or 'culture'. Return ONLY valid JSON as a mapping from the index to the bucket string.\n\n"
+    for i, (combo_text, _, _) in enumerate(fallback_queue):
+        prompt += f"[{i}] {combo_text}\n"
+
+    result = call_llm(
+        system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
+        user_prompt=prompt,
+        # CR-105 (Jason-supplied, 2026-08-30): Groq first (generous free tier, no
+        # training on submitted data), Gemini as the fallback if Groq is unavailable
+        # or rate-limited. User-overridable per Settings > API or Connections > AI
+        # Usage > "Stage 0 fallback" (llm_settings.taskProviderOverrides.stage0_extraction).
+        provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
+    )
+
+    if result:
+        json_str = extract_json_from_text(result)
+        try:
+            import json
+            mapping = json.loads(json_str)
+            resolved_indices: set[int] = set()
+            # Implements FR-327 / AC-425: runtime fallback answers are not training labels.
+            if not isinstance(mapping, dict):
+                raise ValueError("fallback mapping must be an object")
+            for i_str, bucket in mapping.items():
+                try:
+                    idx = int(i_str)
+                except (TypeError, ValueError):
+                    continue
+                if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
+                    continue
+                resolved_indices.add(idx)
+                _, bullet_clean, _ = fallback_queue[idx]
+                buckets[bucket].append(bullet_clean)
+            unresolved_for_review: list[dict] = []
+            for idx, (_combo_text, bullet_clean, header) in enumerate(fallback_queue):
+                if idx in resolved_indices:
+                    continue
+                unresolved_for_review.append({
+                    "text": bullet_clean,
+                    "header": header,
+                    "reason": "partial_mapping_unresolved",
+                    "model_call_occurred": True,
+                })
+            return unresolved_for_review
+        except Exception as e:
+            print(f"    [NLP Error] Failed to parse LLM fallback: {e}", file=sys.stderr)
+            return _record_unresolved(
+                fallback_queue, "parse_failure", model_call_occurred=True
+            )
+    return _record_unresolved(fallback_queue, "no_provider", model_call_occurred=False)
 
 def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     """LLM section extraction pinned to STAGE0_EXTRACT_MODEL.

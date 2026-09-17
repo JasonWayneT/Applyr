@@ -82,5 +82,5 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `TEST-002` | `FR-006` | unit | `evaluate_job_fit` returns score 0 for blocklisted words | verified |
 | `TEST-108A` | `FR-278`–`FR-281`, `AC-358`–`AC-361` | unit/integration | Cascade, response validation, and asymmetric HARD policy preserve the CR-093 gate/source bar | verified offline; release gate pending |
 | `TEST-108B` | `FR-282`–`FR-285`, `AC-362`–`AC-366` | integration/UI | Checkpoint resume, grouped confirmations, hard-gate actions, UI/harness resolution, and attestation boundary pass | verified offline; live UI/release gate pending |
-| `TEST-114A` | `FR-328`, `AC-426` | unit | Adapter mocks cover disable, timeout, malformed JSON, partial ids, cache, ceilings, PII redaction, forbidden/substituted harness, and non-readonly access | in_progress |
+| `TEST-114A` | `FR-328`, `AC-426` | unit | Adapter mocks cover disable, timeout, malformed JSON, partial ids, cache, ceilings, PII redaction, forbidden/substituted harness, and non-readonly access; extraction wiring preserves every uncertain line and never calls Groq/Gemini when the switch is on | in_progress |
 | `TEST-114B` | `FR-327`, `AC-425` | unit | Retrain/extraction tests refuse unverified feedback and keep the live model unchanged | in_progress |

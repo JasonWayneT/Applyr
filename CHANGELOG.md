@@ -1,3 +1,15 @@
+## [Unreleased] - 2026-09-17
+
+### Changed
+- Stage 0 extraction fallback responses no longer write into `training_data_feedback.csv`. Retraining ignores that unverified file and accepts only human-reviewed rows with provenance.
+- Retraining uses a company-held-out set without pre-split feedback duplication, writes a candidate model/report, and requires explicit replay acknowledgment for promotion. The first candidate was not promoted (CR-114).
+
+### Fixed
+- Stage 0 model-flagged confirmations now require a tool flag plus named-tool
+  and JD-grounding checks before creating a Review Center question. Generic
+  traits such as "critical thinking" no longer create binary "have you used
+  it?" cards through the model-only path.
+
 ## [Unreleased] — 2026-09-15
 [DRAFT] CR-112 consolidation maintenance reconciles the current candidate
 after Stories 8.6 through 8.9. Focused offline checks pass. The supervised

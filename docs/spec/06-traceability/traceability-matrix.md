@@ -367,6 +367,14 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | same implementation path as FR-316/FR-317 | in_progress |
 
 
+## CR-114 Stage 0 learning traceability
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-327` / `AC-425` | CR-114 | `scripts/build_stage0_fit_gate.py`, `scripts/retrain_stage0.py` | `scripts/test_retrain_stage0.py`, `scripts/test_cr112_stage0_extraction_review.py` | in_progress |
+| `FR-328` / `AC-426` | CR-114 | Stage 0 harness adapter and both call sites | Schema smoke and bounded 30-JD replay | planned |
+| `FR-329` / `AC-427` | CR-114 | Reviewed matcher, checkpoint, Review Center | Locked adjudicated replay | planned |
+
 ## Coverage checklist
 
 - [x] Every P0 requirement has acceptance criteria.

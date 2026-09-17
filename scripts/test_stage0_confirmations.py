@@ -22,6 +22,7 @@ from stage0_confirmations import (
     create_skill_confirmation,
     get_skill_memory,
     list_pending_for_opportunity,
+    model_flagged_named_skill,
     named_skill_candidates,
     verify_evidence_promotion,
 )
@@ -72,6 +73,23 @@ class TestStage0Confirmations(unittest.TestCase):
             known_terms={"trello"},
         )
         self.assertEqual([candidate.display_name for candidate in candidates], ["Acme Platform"])
+
+    def test_model_flagged_review_requires_grounded_named_tool(self) -> None:
+        self.assertTrue(model_flagged_named_skill(
+            "Acme Platform", "Experience with Acme Platform integrations"
+        ))
+        self.assertFalse(model_flagged_named_skill(
+            "Critical Thinking", "Strong critical thinking and collaboration"
+        ))
+        self.assertFalse(model_flagged_named_skill(
+            "Acme Platform", "Strong critical thinking and collaboration"
+        ))
+        self.assertFalse(model_flagged_named_skill(
+            "Trello", "Experience with Trello"
+        ))
+        self.assertTrue(model_flagged_named_skill(
+            "acme platform", "Experience with Acme Platform integrations"
+        ))
 
     def test_generic_degree_and_field_words_are_not_treated_as_tools(self) -> None:
         """CR-108 cascade testing (2026-09-01): once named_skill_candidates() feeds a
@@ -663,6 +681,57 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                     result.get("decision") == "SKIP" and result.get("skip_reason_code") == "hard_gap"
                 )
                 self.assertEqual(len(calls), 1)
+            finally:
+                os.unlink(db_path)
+
+    def test_model_flagged_soft_skill_does_not_create_review_card(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            folder_path = Path(folder)
+            requirement = "Strong critical thinking and collaboration"
+            (folder_path / "Original_JD.txt").write_text(
+                f"Product Manager\n\nRequirements\n- {requirement}\n",
+                encoding="utf-8",
+            )
+            db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
+            os.close(db_fd)
+            try:
+                sections = {
+                    "required": [requirement],
+                    "preferred": [],
+                    "responsibilities": [],
+                    "culture": [],
+                }
+
+                def provider_response(_system: str, prompt: str, **_kwargs: object) -> str:
+                    import re
+                    item_id = re.search(r"\[(\S+)\] bucket=", prompt).group(1)
+                    return json.dumps({"results": [{
+                        "item_id": item_id,
+                        "gate": "NONE",
+                        "gap_source": "",
+                        "evidence_level": 2,
+                        "confidence": "high",
+                        "reasoning": "General PM competency.",
+                        "needs_user_confirmation": True,
+                        "canonical_skill": "Critical Thinking",
+                        "skill_kind": "skill",
+                    }]})
+
+                with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
+                    with patch("utils.load_llm_settings", return_value={
+                        "stage0_evidence_classification": {
+                            "provider_order": ["groq"],
+                            "models": {"groq": "groq-test"},
+                        }
+                    }):
+                        with patch("utils.call_llm", side_effect=provider_response):
+                            build_stage0_fit_gate(
+                                folder_path,
+                                db_gate_result={"action": "clear"},
+                                prefs={"blocked_companies": []},
+                                confirmation_db_path=db_path,
+                            )
+                self.assertEqual(list_pending_for_opportunity(folder_path.name, db_path), [])
             finally:
                 os.unlink(db_path)
 

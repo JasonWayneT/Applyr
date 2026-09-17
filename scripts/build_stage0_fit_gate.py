@@ -220,6 +220,7 @@ from stage0_confirmations import (  # noqa: E402
     create_skill_confirmation,
     get_hard_gate_decision,
     get_skill_memory,
+    model_flagged_named_skill,
     named_skill_candidates,
 )
 from stage0_checkpoint import (  # noqa: E402
@@ -1125,7 +1126,6 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
         return None
 
     import joblib
-    import csv
     import warnings
     from utils import call_llm, extract_json_from_text, resolve_task_providers
 
@@ -1234,32 +1234,20 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
             try:
                 import json
                 mapping = json.loads(json_str)
-                feedback_csv = _REPO_ROOT / "data" / "training_data_feedback.csv"
-                write_header = not feedback_csv.exists()
-
                 resolved_indices: set[int] = set()
-                with open(feedback_csv, "a", encoding="utf-8", newline="") as f:
-                    writer = csv.DictWriter(f, fieldnames=["text", "label", "company", "source_file"])
-                    if write_header:
-                        writer.writeheader()
-
-                    for i_str, bucket in mapping.items():
-                        try:
-                            idx = int(i_str)
-                        except (TypeError, ValueError):
-                            continue
-                        if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
-                            continue
-                        resolved_indices.add(idx)
-                        combo_text, bullet_clean, _ = fallback_queue[idx]
-                        buckets[bucket].append(bullet_clean)
-
-                        writer.writerow({
-                            "text": bullet_clean,
-                            "label": bucket,
-                            "company": "FeedbackLoop",
-                            "source_file": "fallback_api"
-                        })
+                # Implements FR-327 / AC-425: runtime fallback answers are not training labels.
+                if not isinstance(mapping, dict):
+                    raise ValueError("fallback mapping must be an object")
+                for i_str, bucket in mapping.items():
+                    try:
+                        idx = int(i_str)
+                    except (TypeError, ValueError):
+                        continue
+                    if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
+                        continue
+                    resolved_indices.add(idx)
+                    _, bullet_clean, _ = fallback_queue[idx]
+                    buckets[bucket].append(bullet_clean)
                 # CR-112 (v1/v2/v3 review, "the partial-mapping loss path"): a
                 # partial mapping (fewer indices than fallback_queue, or an
                 # answer naming a bucket string not in `buckets`) must not
@@ -2973,7 +2961,7 @@ def build_stage0_fit_gate(
             cached_results[batch_item.item_id] = result
             if (
                 result.get("needs_user_confirmation")
-                and result.get("skill_kind") in ("tool", "skill")
+                and result.get("skill_kind") == "tool"
                 and result.get("canonical_skill")
             ):
                 model_flagged_skills.append(
@@ -3028,8 +3016,8 @@ def build_stage0_fit_gate(
     pending_skill_reviews: list[dict[str, str]] = []
     for flagged in model_flagged_skills:
         skill_key = canonical_skill_key(flagged["skill_key"])
-        if not skill_key:
-            continue
+        if not model_flagged_named_skill(flagged["skill_key"], flagged["requirement"]):
+            continue  # Implements CR-114: generic traits are not named-tool cards.
         if get_skill_memory(skill_key, checkpoint_db_path):
             continue
         display_name = " ".join(

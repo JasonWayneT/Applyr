@@ -274,6 +274,17 @@ no eligible provider, Stage 0 pauses at `WAITING_FOR_INPUT` /
 certified free route can never fall back into a paid provider in the same
 chain.
 
+**Stage 0 learning (CR-114):** extraction fallback labels are runtime answers,
+not verified training data. `scripts/retrain_stage0.py` ignores the legacy
+`training_data_feedback.csv`, accepts only human-reviewed rows in
+`data/training_data_approved.csv` with reviewer/timestamp/source provenance,
+using columns `text,label,company,source_file,reviewed_by,reviewed_at`,
+and writes a candidate classifier plus company-held-out report. The live model
+is unchanged unless a separate promotion supplies a 30-JD, zero-false-skip
+human-reviewed replay report bound to the candidate hash. The bounded
+subscription-harness and evidence-matcher replacement are still planned;
+the current Groq/Gemini cost authorization and review pause remain in force.
+
 ### Drafting assets
 
 Sync never auto-drafts — after scrape it exports new gate-passed JDs to `data/pending_review/` for later `generate-submission` via `scripts/run_submission.py`. Day-to-day authoring is Claude + ground truth via `.claude/skills/generate-submission/SKILL.md` → `run_submission.py`; there is no other live drafting path (the old "Find New Jobs" page and its `POST /api/evaluate` route were removed 2026-08-19 along with the rest of the old fit-scoring system).

@@ -880,6 +880,17 @@ Design: `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-
 | `NFR-013` | maintainability | P0 | implemented | CR-111 changes no submission behavior, linter rule, threshold, or pipeline code — doc/agent-file edits plus the drift-guard script only (CR-111) |
 | `NFR-015` | cost | P0 | draft | Deterministic/offline is the default; groq/gemini stay unknown until a zero-charge adapter assertion; paid APIs are opt-in with configured provider, budget, and known estimate; unknown cost eligibility fails closed; `api_cents` is omitted or null when `cost_known=false` (CR-112 Epic 7) |
 
+## CR-114 Stage 0 local learning and bounded fallback
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-327` | functional | P0 | in_progress | Unreviewed Stage 0 fallback labels never enter retraining; retraining uses human-reviewed provenance, company-held-out evaluation, candidate artifact, and explicit promotion only | `AC-425` | CR-114 |
+| `AC-425` | acceptance | P0 | in_progress | Fallback extraction writes no training CSV; legacy feedback is ignored; reviewed rows require human identity and timestamp; company and exact-text overlap do not cross holdout; training does not overwrite the live model | `FR-327` | CR-114 |
+| `FR-328` | functional | P0 | planned | Separate extraction and evidence subscription-harness adapters are bounded, validated, cached, and fail to explicit review without metered API spillover | `AC-426` | CR-114 |
+| `AC-426` | acceptance | P0 | planned | Actual schemas pass replay; exhausted, invalid, or unavailable harness never silently buckets or skips; per-batch call/time limits and subscription minutes are reported separately from API cents | `FR-328` | CR-114 |
+| `FR-329` | functional | P0 | planned | Reviewed evidence matcher abstains on uncertain cases and cannot emit terminal HARD or Skip from ungrounded evidence | `AC-427` | CR-114 |
+| `AC-427` | acceptance | P0 | planned | Locked 30-JD replay has no unreviewed false skips, preserves every uncertain item in resumable review, and records coverage, error, and calls against baseline | `FR-329` | CR-114 |
+
 ## Security Requirements
 
 | ID | Type | Priority | Status | Requirement |

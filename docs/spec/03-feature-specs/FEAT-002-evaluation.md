@@ -6,7 +6,7 @@
 - Status: implemented
 - Source artifacts: `BMAD-SRC-005`
 - Related requirements: `FR-006`, `FR-007`, `FR-008`, `FR-009`, `FR-035`, `FR-039`, `FR-109`, `FR-170`, `FR-171`, `FR-172`, `FR-188`, `FR-189`, `FR-190`, `FR-191`, `FR-192`, `FR-242`, `FR-243`, `FR-246`, `FR-247`, `FR-278`–`FR-285`, `NFR-009`–`NFR-012`, `DATA-002`–`DATA-004`
-- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`, `CR-053`, `CR-054`, `CR-108`
+- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`, `CR-053`, `CR-054`, `CR-108`, `CR-114`
 
 ## Problem statement
 
@@ -49,6 +49,9 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `FR-283` | Durable skill confirmation memory | Deduplicated user decisions for unknown tools and skills (`CR-108`, rollout-flagged) |
 | `FR-284` | Attestation versus authoring evidence boundary | User confirmation cannot create unsupported resume claims (`CR-108`, implemented) |
 | `FR-285` | Review / Questions workflow | Standalone UI and harness adapter share one confirmation resolver (`CR-108`, rollout-flagged) |
+| `FR-327` | Reviewed-only Stage 0 learning | Quarantine unverified fallback labels; company-held-out candidate model (`CR-114`) |
+| `FR-328` | Bounded subscription fallback | Separate extraction and evidence schemas; fail to review (`CR-114`, planned) |
+| `FR-329` | Safe local evidence matcher | Reviewed cases and abstention before decision authority (`CR-114`, planned) |
 
 ## Acceptance criteria
 

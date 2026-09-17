@@ -66,6 +66,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_cr112_adversarial.py",
     "scripts/test_stage0_checkpoint_failures.py",
     "scripts/test_stage0_confirmations.py",
+    "scripts/test_retrain_stage0.py",
     "scripts/test_resolve_task_providers.py",
     "scripts/test_observability.py",
     "scripts/test_observability_report.py",
@@ -92,9 +93,17 @@ def get_subprocess_env() -> dict[str, str]:
     return env
 
 
+PYTHON_TEST_TIMEOUTS = {
+    # These Stage 0 suites unload local models between cases and routinely
+    # exceed the default 180s runner limit on this machine.
+    "scripts/test_cr112_stage0_extraction_review.py": 480,
+}
+
+
 def run_python_test(script_path: str, verbose: bool) -> Tuple[bool, float, str]:
     """Run a single python test script and return (passed, duration, output)."""
     start_time = time.time()
+    timeout = PYTHON_TEST_TIMEOUTS.get(script_path, 180)
     try:
         args: List[str] = []
         if "verify_master_claims.py" in script_path:
@@ -105,7 +114,7 @@ def run_python_test(script_path: str, verbose: bool) -> Tuple[bool, float, str]:
             text=True,
             errors="replace",
             env=get_subprocess_env(),
-            timeout=180,
+            timeout=timeout,
         )
         duration = time.time() - start_time
         passed = result.returncode == 0
@@ -113,7 +122,7 @@ def run_python_test(script_path: str, verbose: bool) -> Tuple[bool, float, str]:
         return passed, duration, output
     except subprocess.TimeoutExpired:
         duration = time.time() - start_time
-        return False, duration, "TEST TIMED OUT (180s)"
+        return False, duration, f"TEST TIMED OUT ({int(timeout)}s)"
     except Exception as e:
         duration = time.time() - start_time
         return False, duration, f"ERROR EXECUTING TEST: {e}"

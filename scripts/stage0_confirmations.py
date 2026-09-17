@@ -134,6 +134,23 @@ def named_skill_candidates(
     return candidates
 
 
+def model_flagged_named_skill(skill_name: str, requirement: str) -> bool:
+    """Accept a model's review flag only for a named tool present in the JD."""
+    # Implements CR-114 Story 6 filter: generic traits never become skill cards.
+    key = canonical_skill_key(skill_name)
+    phrase = re.sub(r"\s+", " ", (skill_name or "").replace("_", " ")).strip()
+    if not key or not re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", requirement or "", re.I):
+        return False
+    titled = " ".join(word.capitalize() for word in phrase.split())
+    probes = [f"with {phrase}"]
+    if titled != phrase:
+        probes.append(f"with {titled}")
+    return any(
+        candidate.skill_key == key
+        for candidate in named_skill_candidates(probes)
+    )
+
+
 def _connect(db_path: str | Path | None) -> sqlite3.Connection:
     """Open the shared database and ensure the additive confirmation schema exists."""
     path = Path(db_path) if db_path is not None else _DEFAULT_DB

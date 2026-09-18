@@ -878,6 +878,28 @@ def _normalize_jd_punctuation(text: str) -> str:
     )
 
 
+def _qual_line_items(clean: str) -> list[str]:
+    """Split an overlong paragraph bullet so it is not dropped by the 300-char cap.
+
+    LinkedIn-style Required/Preferred blocks are often one paragraph. Silent drop
+    of those lines is scored-path line loss on the locked 30. Implements FR-330.
+    """
+    if not clean:
+        return []
+    if not (clean[0].isalnum() or clean[0] in "\"'"):
+        return []
+    if 15 <= len(clean) <= 300:
+        return [clean]
+    if len(clean) < 15:
+        return []
+    items: list[str] = []
+    for part in re.split(r"(?<=[.!?])\s+", clean):
+        item = part.strip()
+        if 15 <= len(item) <= 300 and (item[0].isalnum() or item[0] in "\"'"):
+            items.append(item)
+    return items
+
+
 def _extract_sections(jd_text: str) -> dict[str, list[str]]:
     """
     Extract text buckets by section heading.
@@ -951,25 +973,25 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
         if current_bucket is None:
             continue
 
-        # Extract meaningful bullet items (20–300 chars, starts with letter or digit)
+        # Extract meaningful bullet items (15–300 chars, starts with letter or digit)
         clean = line.lstrip("-•*◦▪▸→").strip()
-        if 15 <= len(clean) <= 300 and (clean[0].isalnum() or clean[0] in '"\''):
-            if _is_list_leadin(clean):
-                lead_bucket, _lead_label = classify_jd_header(clean)
+        for item in _qual_line_items(clean):
+            if _is_list_leadin(item):
+                lead_bucket, _lead_label = classify_jd_header(item)
                 if lead_bucket is not None:
                     current_bucket = lead_bucket
                 continue
-            if not _is_boilerplate_item(clean):
+            if not _is_boilerplate_item(item):
                 from stage0_classifier_contract import is_disposition_culture_line
 
                 target_bucket = current_bucket
-                if is_disposition_culture_line(clean):
+                if is_disposition_culture_line(item):
                     target_bucket = "culture"
-                elif current_bucket == "required" and _INLINE_PREFERRED_RE.search(clean):
+                elif current_bucket == "required" and _INLINE_PREFERRED_RE.search(item):
                     target_bucket = "preferred"
-                elif current_bucket == "preferred" and _INLINE_REQUIRED_RE.search(clean):
+                elif current_bucket == "preferred" and _INLINE_REQUIRED_RE.search(item):
                     target_bucket = "required"
-                buckets[target_bucket].append(clean)
+                buckets[target_bucket].append(item)
 
     # Final safety net for items that never rode a header boundary
     for key in buckets:
@@ -1272,13 +1294,13 @@ def _collect_nlp_section_candidates(
             continue
 
         bullet_clean = clean.lstrip("-•*◦▪▸→").strip()
-        if 15 <= len(bullet_clean) <= 300 and (bullet_clean[0].isalnum() or bullet_clean[0] in '"\'\''):
-            if _is_list_leadin(bullet_clean):
-                lead_bucket, lead_label = classify_jd_header(bullet_clean)
+        for item in _qual_line_items(bullet_clean):
+            if _is_list_leadin(item):
+                lead_bucket, lead_label = classify_jd_header(item)
                 if lead_bucket is not None:
-                    current_header = bullet_clean
+                    current_header = item
                 continue
-            if not _is_boilerplate_item(bullet_clean):
+            if not _is_boilerplate_item(item):
                 combo_header = current_header or ""
                 preferred_header = (
                     (classify_jd_header(combo_header)[0] == "preferred")
@@ -1286,18 +1308,18 @@ def _collect_nlp_section_candidates(
                     or "great to have" in combo_header.lower()
                     or "nice to have" in combo_header.lower()
                 )
-                if preferred_header and _INLINE_REQUIRED_RE.search(bullet_clean):
+                if preferred_header and _INLINE_REQUIRED_RE.search(item):
                     combo_header = "required"
-                combo_text = f"[HEADER] {combo_header}: {bullet_clean}" if combo_header else bullet_clean
+                combo_text = f"[HEADER] {combo_header}: {item}" if combo_header else item
 
-                if current_header == "required" and _INLINE_PREFERRED_RE.search(bullet_clean):
-                    buckets["preferred"].append(bullet_clean)
+                if current_header == "required" and _INLINE_PREFERRED_RE.search(item):
+                    buckets["preferred"].append(item)
                     continue
 
                 from stage0_classifier_contract import is_disposition_culture_line
 
-                if is_disposition_culture_line(bullet_clean):
-                    buckets["culture"].append(bullet_clean)
+                if is_disposition_culture_line(item):
+                    buckets["culture"].append(item)
                     continue
 
                 pred = pipeline.predict([combo_text])[0]
@@ -1305,9 +1327,9 @@ def _collect_nlp_section_candidates(
                 conf = proba[classes.index(pred)]
 
                 if conf < 0.65:
-                    fallback_queue.append((combo_text, bullet_clean, combo_header))
+                    fallback_queue.append((combo_text, item, combo_header))
                 else:
-                    buckets[pred].append(bullet_clean)
+                    buckets[pred].append(item)
 
     return buckets, fallback_queue
 

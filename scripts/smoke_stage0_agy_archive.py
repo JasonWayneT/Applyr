@@ -33,6 +33,7 @@ _EXTRACTION_CHUNK = 20
 _EVIDENCE_REQUIRED = 4
 _EVIDENCE_PREFERRED = 2
 _EVIDENCE_EXCERPT_CHARS = 3000
+_EVIDENCE_CHUNK = 3
 
 
 def _parse_url_and_jd(raw_text: str) -> str:
@@ -113,7 +114,7 @@ def _run_task(task: str, items: list, config, budget, session=None) -> dict:
     reasons: list[str] = []
     elapsed = 0.0
     minutes = 0.0
-    chunk_size = _EXTRACTION_CHUNK if task == "extraction" else 6
+    chunk_size = _EXTRACTION_CHUNK if task == "extraction" else _EVIDENCE_CHUNK
     for chunk in _chunks(items, chunk_size):
         result = run_stage0_subscription(
             task, chunk, config=config, budget=budget, session=session
@@ -259,14 +260,17 @@ def main() -> int:
             )
         extract_session.close()
         extract_session = None
-        evidence_session = AgySession("evidence", config)
-        print("Evidence session started", flush=True)
+        print("Evidence sessions start per JD", flush=True)
         for row in prepared:
             if "evidence_items" not in row:
                 continue
-            row["evidence"] = _run_task(
-                "evidence", row["evidence_items"], config, budget, evidence_session
-            )
+            session = AgySession("evidence", config)
+            try:
+                row["evidence"] = _run_task(
+                    "evidence", row["evidence_items"], config, budget, session
+                )
+            finally:
+                session.close()
             print(
                 f"  {row['slug']}: evidence={row['evidence']['outcome']}",
                 flush=True,

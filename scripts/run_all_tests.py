@@ -77,6 +77,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_stage0_confirmations.py",
     "scripts/test_retrain_stage0.py",
     "scripts/test_stage0_subscription_adapter.py",
+    "scripts/test_replay_stage0_locked30.py",
     "scripts/test_stage0_classifier_contract.py",
     "scripts/test_evidence_context.py",
     "scripts/test_stage0_subscription_extraction.py",

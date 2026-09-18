@@ -1822,6 +1822,23 @@ class TestBareRequiredHeader(unittest.TestCase):
         self.assertGreaterEqual(len(sections["required"]), 2)
         self.assertTrue(any("5+ years" in r for r in sections["required"]))
 
+    def test_paragraph_required_block_is_split_not_dropped(self):
+        jd = textwrap.dedent(
+            """
+            Product Manager
+
+            Required:
+            Five or more years of experience in Product Management, Product Ownership, or a related product leadership role within B2B SaaS, healthcare technology, or enterprise software. Demonstrated experience owning product roadmaps and delivering customer-facing software solutions. Strong understanding of product management methodologies, agile development practices, and software delivery processes. Hands-on experience with Jira or similar tools.
+
+            Preferred:
+            Experience in healthcare technology, healthcare analytics, or claims management solutions. Product management certifications such as CSPO.
+            """
+        )
+        sections = _extract_sections(jd)
+        self.assertGreaterEqual(len(sections["required"]), 3)
+        self.assertTrue(any("Jira" in r for r in sections["required"]))
+        self.assertGreaterEqual(len(sections["preferred"]), 1)
+
 
 class TestWorkYoullDoAndRolesHeaders(unittest.TestCase):
     def test_work_youll_do_is_responsibilities(self):

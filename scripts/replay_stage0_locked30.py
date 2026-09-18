@@ -87,6 +87,73 @@ def _file_sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _empty_evidence(reason: str = "no items") -> dict:
+    """Telemetry for a JD with no evidence items or an NLP error."""
+    return {
+        "outcome": "skipped",
+        "reason": reason,
+        "silent_line_loss": False,
+        "calls": 0,
+        "wall_seconds": 0.0,
+    }
+
+
+def run_evidence_per_jd(
+    prepared: list[dict],
+    config: object,
+    budget: object,
+    session_factory: object,
+    run_task: object | None = None,
+) -> None:
+    """Score evidence with one fresh Agy session per JD.
+
+    A single sticky evidence session returned items for the first JD and empty
+    maps for the rest. Harvest in chunks of 3 with a dedicated session worked.
+    Implements FR-328 / AC-426.
+    """
+    from smoke_stage0_agy_archive import _run_task as default_run_task
+
+    task_fn = run_task or default_run_task
+    for row in prepared:
+        if row.get("error") or not row.get("evidence_items"):
+            row["evidence"] = _empty_evidence(str(row.get("error") or "no items"))
+            row["evidence_wall"] = 0.0
+            print(f"  {row.get('slug')}: evidence=skipped", flush=True)
+            continue
+        session = session_factory()
+        try:
+            started = time.monotonic()
+            row["evidence"] = task_fn(
+                "evidence", row["evidence_items"], config, budget, session
+            )
+            missing = list(row["evidence"].get("missing_item_ids") or [])
+            if missing:
+                retry_session = session_factory()
+                try:
+                    retry = task_fn(
+                        "evidence", row["evidence_items"], config, budget, retry_session
+                    )
+                finally:
+                    closer = getattr(retry_session, "close", None)
+                    if callable(closer):
+                        closer()
+                retry_missing = list(retry.get("missing_item_ids") or [])
+                if len(retry_missing) <= len(missing):
+                    retry["calls"] = int(row["evidence"].get("calls") or 0) + int(
+                        retry.get("calls") or 0
+                    )
+                    row["evidence"] = retry
+            row["evidence_wall"] = round(time.monotonic() - started, 3)
+            print(
+                f"  {row.get('slug')}: evidence={row['evidence']['outcome']}",
+                flush=True,
+            )
+        finally:
+            closer = getattr(session, "close", None)
+            if callable(closer):
+                closer()
+
+
 def _prefs_row(slug: str, jd_text: str, mark: str, prefs: dict) -> dict:
     """Compare deterministic prefs to jason's skip/pass mark."""
     company = slug.replace("_", " ")
@@ -114,6 +181,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--candidate", type=Path, default=_CANDIDATE)
     parser.add_argument("--out", type=Path, default=_OUT)
+    parser.add_argument(
+        "--slugs",
+        default="",
+        help="Comma-separated subset for a probe. Full locked 30 is the default.",
+    )
     args = parser.parse_args()
 
     os.environ.pop("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", None)
@@ -125,8 +197,16 @@ def main() -> int:
     from stage0_subscription_adapter import AdapterBudget, AdapterConfig, AgySession, Stage0Item
 
     marks = _load_marks()
+    if args.slugs.strip():
+        wanted = [part.strip() for part in args.slugs.split(",") if part.strip()]
+        by_slug = {row["slug"]: row for row in marks}
+        missing = [slug for slug in wanted if slug not in by_slug]
+        if missing:
+            print(f"unknown slugs: {', '.join(missing)}", file=sys.stderr)
+            return 1
+        marks = [by_slug[slug] for slug in wanted]
     slugs = [row["slug"] for row in marks]
-    if len(slugs) != 30:
+    if not args.slugs.strip() and len(slugs) != 30:
         print(f"locked 30 has {len(slugs)} rows, not 30", file=sys.stderr)
         return 1
 
@@ -142,8 +222,8 @@ def main() -> int:
         profile="agy-default",
         model="gemini-3.8-flash-medium",
         effort="medium",
-        timeout_seconds=120,
-        max_calls=96,
+        timeout_seconds=300,
+        max_calls=160,
         max_wall_seconds=3600,
         cache_dir=_CACHE,
     )
@@ -236,28 +316,12 @@ def main() -> int:
     finally:
         extract_session.close()
 
-    evidence_session = AgySession("evidence", config)
-    try:
-        for row in prepared:
-            if row.get("error"):
-                row["evidence"] = {
-                    "outcome": "skipped",
-                    "silent_line_loss": False,
-                    "calls": 0,
-                    "wall_seconds": 0.0,
-                }
-                continue
-            jd_started = time.monotonic()
-            row["evidence"] = _run_task(
-                "evidence", row["evidence_items"], config, budget, evidence_session
-            )
-            row["evidence_wall"] = round(time.monotonic() - jd_started, 3)
-            print(
-                f"  {row['slug']}: evidence={row['evidence']['outcome']}",
-                flush=True,
-            )
-    finally:
-        evidence_session.close()
+    run_evidence_per_jd(
+        prepared,
+        config,
+        budget,
+        session_factory=lambda: AgySession("evidence", config),
+    )
 
     for row in prepared:
         per_jd.append(

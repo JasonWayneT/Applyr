@@ -16,6 +16,7 @@ import contactsRouter from './routes/contacts.js';
 import gmailSyncRouter from './routes/gmailSync.js';
 import llmUsageRouter from './routes/llmUsage.js';
 import reviewCenterRouter from './routes/reviewCenter.js';
+import pipelineQueueRouter from './routes/pipelineQueue.js';
 import { runSubmissionRouter } from './routes/runSubmission.js';
 import { startGmailSyncScheduler } from './services/gmailSyncScheduler.js';
 import { resetTheirstackCreditsIfNewMonth } from './services/theirstackCreditLedger.js';
@@ -85,6 +86,7 @@ app.use('/', contactsRouter);
 app.use('/', gmailSyncRouter);
 app.use('/', llmUsageRouter);
 app.use('/', reviewCenterRouter);
+app.use('/', pipelineQueueRouter);
 // Implements FR-316 / AC-413: authenticated backend access to the canonical CLI.
 app.use('/', runSubmissionRouter);
 

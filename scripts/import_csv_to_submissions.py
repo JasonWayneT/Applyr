@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""Import applyr_jobs CSVs into data/pending_review/{slug}/Original_JD.txt (no DB finalize).
+"""Legacy CSV → pending_review one-shot. Prefer scripts/ingest_csv_queue.py (CR-119).
 
 # Implements FR-264 / CR-091 — incoming JDs do not land in submissions/.
+# Reduced to a wrapper over csv_ingest.py. Hardcoded Downloads paths removed.
 """
 from __future__ import annotations
 
 import csv
 import re
-import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
 
+from csv_ingest import (
+    existing_urls as _existing_urls,
+    sanitize,
+    unique_slug as _unique_slug,
+    url_to_slug as _url_to_slug,
+    write_jd as _write_jd,
+)
 from stage0_skip_ledger import lookup_skip
 
 # Added 2026-08-18: this script crashed outright on a real run with
@@ -33,68 +40,20 @@ DB = ROOT / "data" / "jobagent.sqlite"
 SKIP_COMPLETE = {"ncontracts", "leaflink", "camunda", "central_bank"}
 
 
-def sanitize(name: str) -> str:
-    return re.sub(r"[\W_]+", "_", name).strip("_").lower()
-
-
 def existing_urls() -> set[str]:
-    return set(url_to_slug().keys())
-
-
-def _scan_jd_urls(root: Path, mapping: dict[str, str]) -> None:
-    """Add URL → slug mappings from Original_JD.txt files under root."""
-    if not root.exists():
-        return
-    for folder in root.iterdir():
-        if not folder.is_dir():
-            continue
-        jd = folder / "Original_JD.txt"
-        if not jd.exists():
-            continue
-        first = jd.read_text(encoding="utf-8", errors="ignore").splitlines()[:1]
-        if first and first[0].lower().startswith("url:"):
-            mapping[first[0].split(":", 1)[1].strip().lower()] = folder.name
+    return _existing_urls(DB, PENDING_REVIEW, SUBMISSIONS)
 
 
 def url_to_slug() -> dict[str, str]:
-    """Map lowercase URL -> slug (pending_review / submissions win over DB-only rows)."""
-    mapping: dict[str, str] = {}
-    if DB.exists():
-        conn = sqlite3.connect(DB)
-        for u, company in conn.execute(
-            "SELECT url, company FROM jobs WHERE url IS NOT NULL"
-        ):
-            if u:
-                mapping[u.strip().lower()] = sanitize(company or "")
-        conn.close()
-    _scan_jd_urls(PENDING_REVIEW, mapping)
-    _scan_jd_urls(SUBMISSIONS, mapping)
-    return mapping
+    return _url_to_slug(DB, PENDING_REVIEW, SUBMISSIONS)
 
 
 def unique_slug(base: str) -> str:
-    slug = base
-    n = 2
-    while (PENDING_REVIEW / slug).exists() or (SUBMISSIONS / slug).exists():
-        slug = f"{base}_{n}"
-        n += 1
-    return slug
+    return _unique_slug(base, PENDING_REVIEW, SUBMISSIONS)
 
 
 def write_jd(slug: str, url: str, position: str, jd: str) -> Path:
-    folder = PENDING_REVIEW / slug
-    folder.mkdir(parents=True, exist_ok=True)
-    parts = []
-    if url:
-        parts.append(f"URL: {url}")
-        parts.append("")
-    if position:
-        parts.append(f"Title: {position}")
-        parts.append("")
-    parts.append(jd.strip())
-    path = folder / "Original_JD.txt"
-    path.write_text("\n".join(parts) + "\n", encoding="utf-8")
-    return path
+    return _write_jd(slug, url, position, jd, dest_root=PENDING_REVIEW)
 
 
 def import_csv(path: Path, known_urls: set[str], url_slugs: dict[str, str]) -> list[str]:
@@ -162,12 +121,14 @@ def import_csv(path: Path, known_urls: set[str], url_slugs: dict[str, str]) -> l
 
 
 def main(argv: list[str]) -> int:
-    paths = [Path(p) for p in argv] or [
-        Path(r"c:\Users\Jason\Downloads\applyr_jobs.csv"),
-        Path(r"c:\Users\Jason\Downloads\applyr_jobs (1).csv"),
-        Path(r"c:\Users\Jason\Downloads\applyr_jobs (2).csv"),
-        Path(r"c:\Users\Jason\Downloads\applyr_jobs (3).csv"),
-    ]
+    if not argv:
+        print(
+            "Usage: python scripts/import_csv_to_submissions.py <csv> [csv...]\n"
+            "Legacy one-shot. Prefer: python scripts/ingest_csv_queue.py",
+            file=sys.stderr,
+        )
+        return 2
+    paths = [Path(p) for p in argv]
     url_slugs = url_to_slug()
     known = set(url_slugs.keys())
     all_slugs: list[str] = []

@@ -1,3 +1,17 @@
+## [Unreleased] - 2026-09-18
+[DRAFT] CSV drop-folder ingest, leased harness packs, and a read-only pipeline panel in Review Center. Drop a jobs CSV in `data/inbox/csv/`, claim a small pack, and resume each job with the same `run_submission.py {slug} --resume` path as before.
+
+### New
+- Drop `applyr_jobs*.csv` into `data/inbox/csv/` and run `python scripts/ingest_csv_queue.py`. Valid rows become queued opportunities plus `pending_review/{slug}/Original_JD.txt`. Bad rows and broken files go to a durable quarantine list instead of disappearing from the terminal (CR-119 / FR-340–FR-342).
+- Claim a pack with `python scripts/queue_claim.py claim --worker <id> --size 8`, then run `python scripts/run_queue_worker.py --worker <id>`. Two harnesses can share one SQLite queue. A killed worker does not leave a second runner on the same slug (CR-119 / FR-343–FR-344).
+- Review Center now shows queue depth, current leases, stuck items, and quarantine file/line/error codes. The panel is read-only (CR-119 / FR-345).
+
+### Changed
+- `scripts/import_csv_to_submissions.py` is a legacy wrapper. It no longer hardcodes Downloads paths and requires explicit CSV arguments. Prefer `ingest_csv_queue.py`.
+
+### Developer
+- CR-119: additive SQLite tables `pipeline_queue`, `csv_ingest_ledger`, `csv_quarantine` (migration 025 + Python `ensure_schema`). Per-slug OS lock at `data/queue_locks/{slug}.lock`. Windows runner children sit in a Job Object with `KILL_ON_JOB_CLOSE`. `run_submission.py` is unchanged and remains the canonical runner.
+
 ## [Unreleased] - 2026-09-17
 
 ### New

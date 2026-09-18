@@ -13,6 +13,7 @@
 | 2 | **Job Search** — criteria + **Run Scout** | `data/candidate_preferences.json` |
 | 3 | Scout pipeline (automatic) | New rows in `jobagent.sqlite`; activity logs |
 | 4 | Review **Sync / Opportunities** | Scores, gate rejects, backlog |
+| 4b | **CSV drop-folder ingest (CR-119)** — put `applyr_jobs*.csv` in `data/inbox/csv/`, then `python scripts/ingest_csv_queue.py`. Claim a pack with `python scripts/queue_claim.py claim --worker <id> --size 8`. Run the pack with `python scripts/run_queue_worker.py --worker <id>`. Each job still uses `python scripts/run_submission.py {slug} --resume` (bare slug). `--resume` and `run_submission.py` are unchanged. | queued rows in `pipeline_queue`; Review Center pipeline panel |
 | 5 | **Stage 0 triage** — run `python scripts/run_submission.py data/pending_review/{slug}` | Skip, or a ready authoring packet |
 | 6 | **Stage 1 authoring** — paste `authoring_prompt.md` into a fresh agent; verification blocks deterministic quality, evidence, specificity, repetition, and provenance-contract defects. If the packet is over budget, author-only omitted-candidate summaries are compacted first because the complete ranking audit remains in `evidence_selection_trace.json`; excerpts and `claim_constraints` stay authoritative. | `Resume.md`, `CoverLetter.md`, `claim_provenance.json` |
 | 7 | **Stage 2 review + Stage 3 finalize** — resume with `--resume`, finalize explicitly with `--finalize` | Verified PDFs and workflow completion |
@@ -54,6 +55,7 @@ outside that panel.
 | Jobs DB | `data/jobagent.sqlite` |
 | Submissions | `data/submissions/`, `data/archive/submissions/` |
 | Stage 0 inbox / skips | `data/pending_review/`, `data/archive/skipped/`, `stage0_skips` in `jobagent.sqlite` |
+| CSV drop queue (CR-119) | `data/inbox/csv/`, `data/queue_locks/`, `pipeline_queue` / `csv_ingest_ledger` / `csv_quarantine` in `jobagent.sqlite` |
 
 ---
 

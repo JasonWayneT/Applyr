@@ -401,6 +401,18 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-338` / `AC-436` | CR-118 | People-gate filters negated-role and other-managers' reports; `network_page` goes to flags | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_industry_semantic.py` | in_progress |
 | `FR-339` / `AC-437` | CR-118 | Preferred `"also great to have"` header; inline `"is required"`; harvest heading_changed; replay reason agreement; `claude_opus_jason_approved` | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_export_stage0_adjudication.py`, `scripts/stage0_cr118_report.py` | in_progress |
 
+## CR-119 CSV drop queue
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-340` / `AC-438` | CR-119 | `scripts/ingest_csv_queue.py`, `scripts/csv_ingest.py`, `csv_ingest_ledger` | `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-341` / `AC-439` / `AC-446` | CR-119 | `validate_row`, `record_quarantine`, closed error codes | `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-342` / `AC-440` / `AC-445` | CR-119 | `write_jd`, `resolve_opportunity`, skip ledger + folder + queue dedup | `scripts/test_csv_ingest.py`, `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-343` / `AC-441` / `NFR-016` | CR-119 | `claim_pack`, heartbeat, release, fencing, `queue_claim.py` | `scripts/test_pipeline_queue.py` | implemented |
+| `FR-344` / `AC-442` / `AC-444` / `AC-447` / `AC-448` | CR-119 | `queue_lock.py`, `run_queue_worker.py`, Job Object / process group, status mirror | `scripts/test_queue_lock.py`, `scripts/test_run_queue_worker.py` | implemented |
+| `FR-345` / `AC-443` | CR-119 | `pipelineQueueRepository.ts`, `/api/pipeline-queue/*`, `PipelineQueuePanel` | `tests/unit/pipelineQueueRepository.test.ts`, `tests/unit/pipelineQueueRoute.test.ts`, `src/lib/pipelineQueue.test.ts` | implemented |
+| `DATA-006` / `SEC-007` | CR-119 | migration `025`, `data/inbox/`, `data/queue_locks/`, no PII in API or logs | `tests/unit/pipelineQueueMigration.test.ts`, `scripts/test_pipeline_queue.py` | implemented |
+
 ## Coverage checklist
 
 - [x] Every P0 requirement has acceptance criteria.

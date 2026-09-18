@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import WorkflowOperator from '../components/WorkflowOperator';
+import PipelineQueuePanel from '../components/PipelineQueuePanel';
 import { hasMinimumEvidence } from '../lib/reviewCenter';
 import type {
   EvidenceDetails,
@@ -642,6 +643,8 @@ const ReviewCenterView: React.FC<ReviewCenterViewProps> = ({
       </div>
 
       <WorkflowOperator />
+
+      <PipelineQueuePanel onOpenJob={onOpenJob} />
 
       {error && (
         <div role="alert" className="bg-error-container text-on-error-container rounded-xl px-4 py-3 flex items-center gap-3">

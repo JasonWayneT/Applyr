@@ -106,6 +106,16 @@ audit_report.md
 data/scouted_jobs_log.txt
 scripts/regeneration_log.txt
 *.csv
+# CSV drop inbox and per-slug queue lock files (CR-119, FR-340, FR-343, DATA-006, SEC-007).
+# The *.csv rule (line 108) already ignores dropped files in data/inbox/csv/; these
+# explicit entries exist so a future narrowing of that rule cannot silently expose
+# real JD content (e.g. non-CSV files that may land in the inbox tree).
+data/inbox/
+!data/inbox/csv/.gitkeep
+!data/inbox/csv/archive/.gitkeep
+!data/inbox/csv/quarantine/.gitkeep
+data/queue_locks/
+!data/queue_locks/.gitkeep
 
 # BMAD planning artifacts (generated output, not source)
 _bmad-output/

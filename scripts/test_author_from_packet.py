@@ -694,6 +694,34 @@ class TestStage1VerifyHistory(unittest.TestCase):
                 (folder / "CoverLetter.md").read_text(encoding="utf-8"),
             )
 
+    def test_snapshot_precedes_verifier_edits(self):
+        from author_from_packet import run_verify_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            original_resume = "Original resume draft.\n"
+            original_letter = "Original letter draft.\n"
+            self._seed_folder(folder, original_resume, original_letter)
+
+            def patch_documents(_folder: Path) -> str:
+                (folder / "Resume.md").write_text("Patched resume.\n", encoding="utf-8")
+                (folder / "CoverLetter.md").write_text("Patched letter.\n", encoding="utf-8")
+                return "PASS [apply_resume_header]: patched"
+
+            with mock.patch(
+                "author_from_packet._apply_resume_header_if_available",
+                side_effect=patch_documents,
+            ):
+                run_verify_only(folder, record_to=folder)
+
+            snap_dir = folder / "stage1_first_draft"
+            self.assertEqual(
+                (snap_dir / "Resume.md").read_text(encoding="utf-8"), original_resume
+            )
+            self.assertEqual(
+                (snap_dir / "CoverLetter.md").read_text(encoding="utf-8"), original_letter
+            )
+
     def test_rerun_on_identical_bytes_does_not_mint_second_attempt(self):
         from author_from_packet import run_verify_only
 

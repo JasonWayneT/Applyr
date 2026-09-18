@@ -1,0 +1,17 @@
+Product Manager, Platform
+
+Atlas Lantern is a fictional B2B SaaS company serving multi-location service teams. Our existing platform combines account configuration, operational data, and customer-facing reporting. We need a Product Manager who can improve the reliability and usefulness of that platform without treating every request as a new feature.
+
+You will own a roadmap that balances data quality, customer impact, and engineering capacity. You will turn recurring support issues into clear requirements, work with engineering and database partners to understand root causes, and coordinate releases with customer-facing teams. We expect decisions to be grounded in evidence and communicated plainly to people who do not share the same technical background.
+
+Required qualifications:
+- At least five years of product management experience on an existing B2B software product.
+- Experience prioritizing platform reliability or data-quality work against customer needs.
+- Experience writing requirements and aligning engineering, customer support, and account management.
+- Ability to use product and operational measures to decide what should ship next.
+
+Preferred qualifications:
+- SQL used for investigation and validation.
+- Experience with analytics instrumentation or customer-facing reporting.
+
+The first six months will focus on reducing avoidable customer escalations and making a small number of platform improvements measurable. This is an individual-contributor role with no direct reports.

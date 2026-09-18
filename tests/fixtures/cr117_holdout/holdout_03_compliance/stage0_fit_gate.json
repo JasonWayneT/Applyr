@@ -1,0 +1,30 @@
+{
+  "company": "Cedar Meridian",
+  "role": "Product Manager, Public Sector Compliance",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 2",
+  "reach_out": false,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "Own a customer-facing software roadmap and write requirements", "gap": false},
+    {"item": "Privacy or compliance product workflows or a credible transferable bridge", "gap": true, "gap_class": "SOFT"},
+    {"item": "Align legal, engineering, and customer-facing teams", "gap": false},
+    {"item": "Careful attribution when product scope is uncertain", "gap": false}
+  ],
+  "preferred": [
+    {"item": "Direct public-sector software experience", "gap": true, "gap_class": "SOFT"},
+    {"item": "Direct ownership of a GDPR or CCPA program", "gap": true, "gap_class": "SOFT"}
+  ],
+  "responsibilities": [
+    "Prioritize audit findings and release changes safely",
+    "Distinguish actual product scope from customer assumptions"
+  ],
+  "culture": [],
+  "flagged_gaps": [
+    {"item": "Privacy or compliance product workflows or a credible transferable bridge", "gap_class": "SOFT", "bridge_used": "Adjacent compliance workflow experience only. Do not claim public-sector or regulatory-program ownership."}
+  ],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-117 fictional holdout. No candidate PII."
+}

@@ -1,0 +1,28 @@
+{
+  "company": "Harbor Finch",
+  "role": "Product Manager",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 1",
+  "reach_out": false,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "Product management on a mature customer-facing software product", "gap": false},
+    {"item": "Cross-functional roadmap ownership and clear requirements writing", "gap": false},
+    {"item": "Improve onboarding or operational workflows", "gap": false},
+    {"item": "Prioritize with customer feedback and measurable outcomes", "gap": false}
+  ],
+  "preferred": [
+    {"item": "Salesforce workflows through hands-on product work", "gap": false},
+    {"item": "Release coordination and customer support feedback loops", "gap": false}
+  ],
+  "responsibilities": [
+    "Choose between automation, interfaces, and process changes",
+    "Show what changed for customers or operating teams"
+  ],
+  "culture": [],
+  "flagged_gaps": [],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-117 fictional holdout. No candidate PII."
+}

@@ -429,7 +429,7 @@ def _record_verify_attempt(
     passed: bool,
     violations: list[dict],
 ) -> None:
-    """Append one verify_history.json entry and snapshot the first draft (CR-097 1.2/1.4)."""
+    """Append one verify_history.json entry (CR-097 1.2/1.4)."""
     dest_dir = folder / "stage1_first_draft"
     dest_dir.mkdir(parents=True, exist_ok=True)
     history_path = dest_dir / "verify_history.json"
@@ -455,13 +455,6 @@ def _record_verify_attempt(
         ):
             return
 
-    snap_resume = dest_dir / "Resume.md"
-    snap_letter = dest_dir / "CoverLetter.md"
-    if resume.exists() and not snap_resume.exists():
-        shutil.copy2(resume, snap_resume)
-    if letter.exists() and not snap_letter.exists():
-        shutil.copy2(letter, snap_letter)
-
     existing.append(
         {
             "attempt": len(existing) + 1,
@@ -478,6 +471,16 @@ def _record_verify_attempt(
         json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+
+
+def _snapshot_first_draft(source: Path, record_to: Path) -> None:
+    """Keep the untouched author output before verification edits it."""
+    dest = record_to / "stage1_first_draft"
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ("Resume.md", "CoverLetter.md"):
+        snapshot = dest / name
+        if not snapshot.exists():
+            shutil.copy2(source / name, snapshot)
 
 
 def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
@@ -497,7 +500,8 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
     ``{record_to}/stage1_first_draft/verify_history.json``. Existing callers
     keep today's signature and bool return. Append is idempotent on the
     (resume_sha256, cover_sha256) pair. On the first recorded attempt only,
-    copy Resume.md and CoverLetter.md into that directory (write-once).
+    copy the untouched Resume.md and CoverLetter.md into that directory
+    before deterministic verification edits (write-once).
 
     Fix-loop protocol: if FAIL, re-edit Resume.md / CoverLetter.md using
     the authoring_prompt.md (packet + digest) only — no additional context files.
@@ -521,6 +525,9 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             print("\n".join(lines))
             print("\nVERIFY RESULT: FAIL")
             return False
+
+        if record_to is not None:
+            _snapshot_first_draft(folder, record_to)
 
         # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
         header_line = _apply_resume_header_if_available(folder)

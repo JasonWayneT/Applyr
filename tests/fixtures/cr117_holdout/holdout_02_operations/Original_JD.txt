@@ -1,0 +1,17 @@
+Product Manager
+
+Harbor Finch is a fictional software company for business operations teams. Its product helps customers manage onboarding, service requests, and recurring account work. The team has a long list of improvement requests from customers and internal partners, but limited room for new features this year. We are hiring a Product Manager to identify the few workflow changes that will make the biggest difference.
+
+The PM will study where work stalls, define practical product requirements, and help engineering choose between automation, clearer interfaces, and process changes. You will partner with customer experience, sales, and account management to understand which problems recur and which requests are one-offs. Success means making a defensible roadmap, shipping improvements reliably, and showing what changed for customers or operating teams.
+
+Required qualifications:
+- Product management experience on a mature customer-facing software product.
+- Evidence of cross-functional roadmap ownership and clear requirements writing.
+- Experience improving onboarding or operational workflows.
+- Ability to prioritize using customer feedback and measurable outcomes.
+
+Preferred qualifications:
+- Familiarity with Salesforce workflows through hands-on product work.
+- Experience with release coordination and customer support feedback loops.
+
+We value concise communication and thoughtful tradeoffs. This is a senior individual-contributor position. It does not include people management, billing ownership, or an expectation to build a new product from scratch.

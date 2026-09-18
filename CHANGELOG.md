@@ -15,8 +15,26 @@
   in production scoring (CR-114).
 
 ### Changed
+- Blocked-company match is exact on the normalized name. `"Remote"` no longer matches `"RemoteHunter"`, and a blank company name no longer matches every blocked entry (CR-118 / FR-337).
+- People-management skip fires only when this role has reports or manages people. Negated-role sentences and coaching other managers' reports do not skip. `network_page` is a flag, not a reject (CR-118 / FR-338).
+- `"Also great to have"` / `"great to have"` are preferred headers. A line that says `"is required"` under a preferred header goes to required. The 30-JD replay records skip-reason agreement, not only skip vs pass (CR-118 / FR-339).
 - Stage 0 extraction fallback responses no longer write into `training_data_feedback.csv`. Retraining ignores that unverified file and accepts only human-reviewed rows with provenance.
 - Retraining uses a company-held-out set without pre-split feedback duplication, writes a candidate model/report, and requires explicit replay acknowledgment for promotion. The first candidate was not promoted (CR-114).
+- Adjudication export (`scripts/export_stage0_adjudication.py`) writes `source=jason` or `source=claude_opus_jason_approved` rows with a non-blank `your_mark`. `source=claude_review` cannot reach `training_data_approved.csv` until rewritten. Claude/Agy/harness names are not human reviewers (CR-114 / CR-118 / FR-327).
+- Years ranges now gate on the low end, the minimum the posting will accept. 3-7 and 5-7 pass; 7-10 and 8-12 still skip; 7+ still skips. Age and company-tenure figures are not experience floors. The years audit flags a winning range-top, age, or history figure instead of blessing self-consistent arithmetic (CR-117 / FR-332).
+- Sitting-1 8-JD review found section headings scoring as required (CR-115). Required/preferred now drop heading, job-board metadata, and truncated-fragment chrome before evidence scoring. Leftover junk semantics stay unchanged. Replay is not a promotion gate until independent QA checks the stories.
+- Evidence retrieval now force-includes corpus-backed distinctive tokens and windows huge inventory chunks so Acquia Jira/Confluence and executive-briefing evidence can reach the scorer. `coverage_ok` is not AI-token-gated (CR-116). Replay is not a promotion gate while that check can fail.
+- Applyr Stage 0 leftover-line rules live in `scripts/stage0_classifier_contract.py`.
+  Tools only transport that packet. Leftover buckets now include `junk` for ATS
+  chrome (visible on the fit gate, never a cover-letter hook). Checkable
+  qualifications with no duty verb are required, not responsibilities.
+  Personality / "you are a person who" lines are culture and are never scored.
+  AI leftover evidence retrieval includes `data/aiProjects.md` when the line is
+  about agents/LLMs (CR-114).
+- Stage 0 leftover-line subscription transport defaults to native Agy
+  print mode (`--json-schema`, `--sandbox`, `--new-project`). The Applyr
+  packet is `prompt.txt` in an isolated temp project, not argv. Denied
+  tool calls fail closed to review. Production switch stays off (CR-114).
 - Review Center cards now store and render why Stage 0 paused (`decision_basis`) and the uncertainty label beside the existing requirement and evidence excerpt (CR-114 / FR-329).
 
 ### Fixed

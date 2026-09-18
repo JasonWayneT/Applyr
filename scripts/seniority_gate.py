@@ -7,6 +7,7 @@ Deterministic seniority gating (CR-019 / FR-109, CR-055).
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 # Role-designation terms block anywhere in the title line.
@@ -41,6 +42,12 @@ _NON_EXPERIENCE_CONTEXT = re.compile(
     re.I,
 )
 
+# Age and company-tenure are never a years-of-experience floor (CR-117 / FR-332).
+_AGE_CONTEXT = re.compile(
+    r"years?\s+of\s+age|years?\s+old|\bmust be\b.{0,24}\b(?:age|eighteen|older)",
+    re.I,
+)
+
 MAX_PLAUSIBLE_YEARS = 25
 
 # Word-number to digit mapping for spelled-out year counts (found 2026-09-03:
@@ -53,6 +60,21 @@ _WORD_NUMBERS: dict[str, int] = {
 }
 _WORD_NUMBER_RE = re.compile(
     r"\b(" + "|".join(_WORD_NUMBERS.keys()) + r")\s*\+?\s*years?",
+    re.I,
+)
+_WORD_RANGE_RE = re.compile(
+    r"\b(" + "|".join(_WORD_NUMBERS.keys()) + r")\s+to\s+("
+    + "|".join(_WORD_NUMBERS.keys()) + r")\s*\+?\s*years?",
+    re.I,
+)
+_YEAR_WORD_ALT = "|".join(_WORD_NUMBERS.keys())
+_TENURE_CONTEXT = re.compile(
+    r"\bwith\s+over\b"
+    r"|\bcustomers\s+for\b"
+    r"|\blong-term\s+client"
+    r"|\bbeen\s+(?:delivering|serving|operating|providing)"
+    r"|\bfor\s+(?:the\s+past\s+)?(?:\d+|" + _YEAR_WORD_ALT + r")\s+years?\b"
+    r"(?!\s+(?:of\s+)?(?:product|professional|management|experience))",
     re.I,
 )
 
@@ -70,9 +92,11 @@ _ANCHORED_YEARS_PATTERNS = [
 # Fixed 2026-09-03: added ['\u2019']? after years? to handle "years' experience"
 # (curly/straight apostrophe, found on sprezzatura JD). Added pattern for
 # "N years in product management" (without "experience" keyword, hale JD).
-_LOOSE_YEARS_PATTERNS = [
-    re.compile(r"(\d+)\s*[-\u2013]\s*(\d+)\s*years?", re.I),
-    re.compile(r"(\d+)\s+to\s+(\d+)\s*years?", re.I),
+_LOOSE_RANGE_PATTERNS = [
+    re.compile(r"(\d+)\s*[-\u2013~]\s*(\d+)\s*\+?\s*years?", re.I),
+    re.compile(r"(\d+)\s+to\s+(\d+)\s*\+?\s*years?", re.I),
+]
+_LOOSE_YEARS_PATTERNS = _LOOSE_RANGE_PATTERNS + [
     re.compile(r"(\d+)\s+years?['\u2019']?\s+(?:of\s+)?(?:product\s+)?(?:management\s+)?experience", re.I),
     re.compile(r"(\d+)\s+years?['\u2019']?\s+of\s+(?:professional\s+)?(?:product\s+)?experience", re.I),
     re.compile(r"(\d+)\s+years?['\u2019']?\s+(?:in\s+)?(?:product\s+)?management", re.I),
@@ -451,7 +475,12 @@ def _context_window(text: str, start: int, end: int, radius: int = 80) -> str:
 
 
 def _plausible_years(value: int, context: str) -> bool:
+    """True when a years figure is a candidate experience floor, not age or tenure."""
     if value > MAX_PLAUSIBLE_YEARS:
+        return False
+    if _AGE_CONTEXT.search(context):
+        return False
+    if _TENURE_CONTEXT.search(context):
         return False
     has_experience_signal = bool(
         re.search(
@@ -465,16 +494,228 @@ def _plausible_years(value: int, context: str) -> bool:
     return True
 
 
-def _collect_from_match(text: str, match: re.Match[str]) -> Optional[int]:
+def _snippet(text: str, start: int, end: int) -> str:
+    """Compact context around a years match for audit output. Implements TEST-114D."""
+    ctx = _context_window(text, start, end)
+    return re.sub(r"\s+", " ", ctx).strip()[:160]
+
+
+@dataclass(frozen=True)
+class YearsHit:
+    """One parsed years figure and how the parser found it. Implements TEST-114D."""
+
+    value: int
+    source: str
+    snippet: str
+    is_range: bool
+    range_low: int | None = None
+    range_high: int | None = None
+
+
+def _hit_from_match(text: str, match: re.Match[str], source: str) -> Optional[YearsHit]:
+    """Build a YearsHit from a numeric regex match, or None if implausible.
+
+    A range gates on its low end, the minimum the posting will accept (CR-117 / FR-332).
+    """
     groups = [g for g in match.groups() if g is not None]
     if not groups:
         return None
     nums = [int(g) for g in groups]
-    value = max(nums)
+    is_range = len(nums) > 1
+    value = min(nums) if is_range else nums[0]
     ctx = _context_window(text, match.start(), match.end())
     if not _plausible_years(value, ctx):
         return None
-    return value
+    return YearsHit(
+        value=value,
+        source=source,
+        snippet=_snippet(text, match.start(), match.end()),
+        is_range=is_range,
+        range_low=min(nums) if is_range else None,
+        range_high=max(nums) if is_range else None,
+    )
+
+
+def collect_years_hits(jd_text: str) -> list[YearsHit]:
+    """Return every plausible years hit the gate would consider. Implements TEST-114D."""
+    if not jd_text:
+        return []
+    jd_text = _normalize_quotes(jd_text)
+    hits: list[YearsHit] = []
+    global_range_spans: list[tuple[int, int]] = []
+    for pat in _LOOSE_RANGE_PATTERNS:
+        for match in pat.finditer(jd_text):
+            global_range_spans.append((match.start(), match.end()))
+
+    def _overlaps_range(start: int, end: int, spans: list[tuple[int, int]]) -> bool:
+        return any(start < span_end and end > span_start for span_start, span_end in spans)
+
+    for pat in _ANCHORED_YEARS_PATTERNS:
+        for match in pat.finditer(jd_text):
+            if _overlaps_range(match.start(), match.end(), global_range_spans):
+                continue
+            hit = _hit_from_match(jd_text, match, source="anchored")
+            if hit is not None:
+                hits.append(hit)
+
+    req_text = _extract_requirements_sections(jd_text)
+    if req_text.strip():
+        loose_source = "loose_requirements"
+        scan_bodies = [req_text]
+    else:
+        loose_source = "loose_full_jd"
+        scan_bodies = [jd_text]
+
+    for body in scan_bodies:
+        numeric_range_spans: list[tuple[int, int]] = []
+        for pat in _LOOSE_RANGE_PATTERNS:
+            for match in pat.finditer(body):
+                hit = _hit_from_match(body, match, source=loose_source)
+                numeric_range_spans.append((match.start(), match.end()))
+                if hit is not None:
+                    hits.append(hit)
+        for pat in _LOOSE_YEARS_PATTERNS[len(_LOOSE_RANGE_PATTERNS):]:
+            for match in pat.finditer(body):
+                if any(
+                    match.start() < span_end and match.end() > span_start
+                    for span_start, span_end in numeric_range_spans
+                ):
+                    continue
+                hit = _hit_from_match(body, match, source=loose_source)
+                if hit is not None:
+                    hits.append(hit)
+
+    range_spans: list[tuple[int, int]] = []
+    for match in _WORD_RANGE_RE.finditer(jd_text):
+        low_word = match.group(1).lower()
+        high_word = match.group(2).lower()
+        low = _WORD_NUMBERS.get(low_word)
+        high = _WORD_NUMBERS.get(high_word)
+        if low is None or high is None:
+            continue
+        range_spans.append((match.start(), match.end()))
+        floor, ceiling = min(low, high), max(low, high)
+        ctx = _context_window(jd_text, match.start(), match.end())
+        if not _plausible_years(floor, ctx):
+            continue
+        hits.append(
+            YearsHit(
+                value=floor,
+                source="word_number",
+                snippet=_snippet(jd_text, match.start(), match.end()),
+                is_range=True,
+                range_low=floor,
+                range_high=ceiling,
+            )
+        )
+
+    def _in_word_range(start: int, end: int) -> bool:
+        return any(start < span_end and end > span_start for span_start, span_end in range_spans)
+
+    seen_values = {hit.value for hit in hits}
+    for match in _WORD_NUMBER_RE.finditer(jd_text):
+        if _in_word_range(match.start(), match.end()):
+            continue
+        word = match.group(1).lower()
+        val = _WORD_NUMBERS.get(word)
+        if val is None or val in seen_values:
+            continue
+        ctx = _context_window(jd_text, match.start(), match.end())
+        if _plausible_years(val, ctx):
+            hits.append(
+                YearsHit(
+                    value=val,
+                    source="word_number",
+                    snippet=_snippet(jd_text, match.start(), match.end()),
+                    is_range=False,
+                )
+            )
+            seen_values.add(val)
+
+    return hits
+
+
+def wrong_number_flags(hit: YearsHit) -> list[str]:
+    """Return range-top, age, or company-history flags for a winning figure.
+
+    The audit asks whether this is the right number, not whether skip arithmetic
+    matches the parser's own output. Implements FR-332 / TEST-114D.
+    """
+    flags: list[str] = []
+    if (
+        hit.is_range
+        and hit.range_high is not None
+        and hit.range_low is not None
+        and hit.range_low != hit.range_high
+        and hit.value == hit.range_high
+    ):
+        flags.append("range_top")
+    if _AGE_CONTEXT.search(hit.snippet):
+        flags.append("age")
+    if _TENURE_CONTEXT.search(hit.snippet):
+        flags.append("company_history")
+    return flags
+
+
+def explain_years_requirement(jd_text: str, prefs: dict | None) -> dict:
+    """Explain the years figure used for the gate and whether it is the right number.
+
+    A range contributes its low end. Age, company history, and tenure are not
+    experience floors. Implements TEST-114D / FR-332.
+    """
+    exp = (prefs or {}).get("experience_range") or {}
+    max_years_raw = exp.get("max")
+    max_years = None if max_years_raw is None else int(max_years_raw)
+    hits = collect_years_hits(jd_text)
+    required = max((hit.value for hit in hits), default=None)
+    gate_passes, reason = check_years_gate(jd_text, prefs or {})
+    winning = [hit for hit in hits if hit.value == required] if required is not None else []
+    winning_sources = sorted({hit.source for hit in winning})
+    flags: list[str] = []
+    for hit in winning:
+        for flag in wrong_number_flags(hit):
+            if flag not in flags:
+                flags.append(flag)
+    inferred_reasons: list[str] = []
+    if required is not None:
+        if not any(hit.source == "anchored" for hit in winning):
+            inferred_reasons.append("winning_not_anchored")
+        if any(hit.source == "loose_full_jd" for hit in winning):
+            inferred_reasons.append("loose_full_jd")
+        if any(hit.source == "word_number" for hit in winning) and not any(
+            hit.source == "anchored" for hit in winning
+        ):
+            inferred_reasons.append("word_number")
+    if max_years is None:
+        arithmetic_ok = True
+    elif required is None:
+        arithmetic_ok = gate_passes
+    elif not gate_passes:
+        arithmetic_ok = required >= max_years
+    else:
+        arithmetic_ok = required < max_years
+    return {
+        "required": required,
+        "candidate_max": max_years,
+        "gate_passes": gate_passes,
+        "reason": reason,
+        "arithmetic_ok": arithmetic_ok,
+        "wrong_number_flags": flags,
+        "inferred": bool(inferred_reasons),
+        "inferred_reasons": inferred_reasons,
+        "winning_sources": winning_sources,
+        "hits": [
+            {
+                "value": hit.value,
+                "source": hit.source,
+                "snippet": hit.snippet,
+                "is_range": hit.is_range,
+                "range_low": hit.range_low,
+                "range_high": hit.range_high,
+            }
+            for hit in hits
+        ],
+    }
 
 
 def _normalize_quotes(text: str) -> str:
@@ -499,40 +740,9 @@ def _normalize_quotes(text: str) -> str:
 
 
 def parse_max_years_required(jd_text: str) -> Optional[int]:
-    """Highest years figure implied as required in JD — requirements-anchored (CR-055)."""
-    if not jd_text:
-        return None
-    jd_text = _normalize_quotes(jd_text)
-    found: list[int] = []
-
-    for pat in _ANCHORED_YEARS_PATTERNS:
-        for m in pat.finditer(jd_text):
-            val = _collect_from_match(jd_text, m)
-            if val is not None:
-                found.append(val)
-
-    req_text = _extract_requirements_sections(jd_text)
-    scan_bodies = [req_text] if req_text.strip() else []
-    if not scan_bodies:
-        scan_bodies = [jd_text]
-
-    for body in scan_bodies:
-        for pat in _LOOSE_YEARS_PATTERNS:
-            for m in pat.finditer(body):
-                val = _collect_from_match(body, m)
-                if val is not None:
-                    found.append(val)
-
-    # Check for spelled-out word numbers (e.g. "Twelve+ years")
-    for m in _WORD_NUMBER_RE.finditer(jd_text):
-        word = m.group(1).lower()
-        val = _WORD_NUMBERS.get(word)
-        if val is not None and val not in found:
-            ctx = _context_window(jd_text, m.start(), m.end())
-            if _plausible_years(val, ctx):
-                found.append(val)
-
-    return max(found) if found else None
+    """Highest experience floor implied as required. A range contributes its low end."""
+    hits = collect_years_hits(jd_text)
+    return max((hit.value for hit in hits), default=None)
 
 
 def check_years_gate(jd_text: str, prefs: dict) -> Tuple[bool, str]:

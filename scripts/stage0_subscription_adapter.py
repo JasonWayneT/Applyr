@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Stage 0-only subscription harness adapter (CR-114 Story 2 / FR-328).
+"""Stage 0-only subscription transport (CR-114 Story 2 / FR-328).
 
-This module shells out to a pinned claudexor CLI. It is not wired into the
-production Groq/Gemini path until Stories 3 and 5 enable it behind a switch.
-Failed, invalid, timed-out, or exhausted calls return explicit review outcomes.
-They never guess a bucket or a HARD/Skip judgment, and they never fall through
-to a metered API.
+Applyr classifier rules live in stage0_classifier_contract. The default tool
+is native Agy print mode. Failed, invalid, timed-out, or exhausted calls
+return explicit review. They never guess a bucket or a HARD/Skip judgment,
+and they never fall through to a metered API.
 """
 
 from __future__ import annotations
@@ -13,96 +12,57 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Literal
 
 from pii_guard import redact_pii
+from stage0_classifier_contract import (
+    EVIDENCE_GATES,
+    EVIDENCE_SOURCES,
+    EXTRACTION_BUCKETS,
+    SCHEMA_VERSION,
+    combined_classifier_prompt,
+    evidence_user_prompt,
+    extraction_user_prompt,
+    schema_for as contract_schema_for,
+)
 
-# Implements FR-328 / AC-426: pin the tested claudexor that survived the
-# readonly + schema smoke. Do not inherit Metis's older default pin.
+# Default tool is native Agy. Claudexor remains available only when harness is
+# not agy. Implements FR-328 / AC-426.
 CLAUDEXOR_PIN = "claudexor@3.12.1"
-SCHEMA_VERSION = "stage0-subscription-v1"
+AGY_TRANSPORT = "agy-print"
+AGY_MODEL_DEFAULT = "gemini-3.8-flash-medium"
+AGY_EFFORT_DEFAULT = "medium"
 TASKS = ("extraction", "evidence")
-EXTRACTION_BUCKETS = ("required", "preferred", "responsibilities", "culture")
-EVIDENCE_GATES = ("HARD", "NONE")
-EVIDENCE_SOURCES = ("", "domain", "tool", "skill", "seniority", "people", "zero_to_one")
 ENABLED_ENV = "APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"
 FORBIDDEN_TARGETS = {"groq", "gemini", "factory", "droid"}
 
 RunTask = Literal["extraction", "evidence"]
 RunOutcome = Literal["ok", "review", "cache_hit", "exhausted", "disabled"]
 
-_EXTRACT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["results"],
-    "properties": {
-        "results": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["item_id", "bucket"],
-                "properties": {
-                    "item_id": {"type": "string", "minLength": 1},
-                    "bucket": {"type": "string", "enum": list(EXTRACTION_BUCKETS)},
-                },
-            },
-        }
-    },
-}
-
-_EVIDENCE_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["results"],
-    "properties": {
-        "results": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": [
-                    "item_id",
-                    "gate",
-                    "gap_source",
-                    "evidence_level",
-                    "confidence",
-                    "reasoning",
-                ],
-                "properties": {
-                    "item_id": {"type": "string", "minLength": 1},
-                    "gate": {"type": "string", "enum": list(EVIDENCE_GATES)},
-                    "gap_source": {"type": "string"},
-                    "evidence_level": {"type": "integer", "minimum": 0, "maximum": 4},
-                    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
-                    "reasoning": {"type": "string", "minLength": 1},
-                    "needs_user_confirmation": {"type": "boolean"},
-                    "canonical_skill": {"type": "string"},
-                    "skill_kind": {"type": "string"},
-                },
-            },
-        }
-    },
-}
-
-
 @dataclass(frozen=True)
 class Stage0Item:
     item_id: str
-    text: str
+    text: str = ""
+    bucket: str = ""
+    requirement: str = ""
+    evidence_excerpt: str = ""
 
 
 @dataclass
 class AdapterConfig:
     enabled: bool = False
-    profile: str = "cursor-default"
-    harness: str = "cursor"
+    profile: str = "agy-default"
+    harness: str = "agy"
+    model: str = AGY_MODEL_DEFAULT
+    effort: str = AGY_EFFORT_DEFAULT
     timeout_seconds: int = 120
     max_calls: int = 8
     max_wall_seconds: int = 600
@@ -133,6 +93,7 @@ class AdapterResult:
             "api_cents": self.api_cents,
             "outcome": self.outcome,
             "reason": self.reason,
+            "transport": AGY_TRANSPORT if (self.command and "agy" in " ".join(self.command).lower()) else CLAUDEXOR_PIN,
             "claudexor_pin": CLAUDEXOR_PIN,
             "schema_version": SCHEMA_VERSION,
         }
@@ -173,19 +134,29 @@ def _forbidden_target(config: AdapterConfig) -> str | None:
 
 
 def schema_for(task: RunTask) -> dict[str, Any]:
+    """Return the Applyr classifier schema. Transport-agnostic."""
     if task not in TASKS:
         raise ValueError(f"unsupported Stage 0 adapter task: {task}")
-    return json.loads(json.dumps(_EXTRACT_SCHEMA if task == "extraction" else _EVIDENCE_SCHEMA))
+    return contract_schema_for(task)
 
 
 def cache_key(task: RunTask, items: list[Stage0Item], *, profile: str, extra: str = "") -> str:
     payload = {
         "task": task,
         "schema_version": SCHEMA_VERSION,
-        "pin": CLAUDEXOR_PIN,
+        "pin": AGY_TRANSPORT if profile.startswith("agy") else CLAUDEXOR_PIN,
         "profile": profile,
         "extra": extra,
-        "items": [{"item_id": item.item_id, "text": item.text} for item in items],
+        "items": [
+            {
+                "item_id": item.item_id,
+                "text": item.text,
+                "bucket": item.bucket,
+                "requirement": item.requirement,
+                "evidence_excerpt": item.evidence_excerpt,
+            }
+            for item in items
+        ],
     }
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
     return f"{task}-{digest}"
@@ -198,16 +169,160 @@ def _npx_cmd() -> str:
     return found
 
 
+def _agy_cmd() -> str:
+    """Resolve the native Agy CLI. Implements FR-328."""
+    found = shutil.which("agy.exe" if os.name == "nt" else "agy") or shutil.which("agy")
+    if not found:
+        raise FileNotFoundError("agy is not available")
+    return found
+
+
+def _readline_timeout(pipe: Any, timeout_seconds: float) -> str:
+    """Read one stdout line with a timeout. Windows pipes do not support select."""
+    lines: queue.Queue[str] = queue.Queue()
+
+    def _reader() -> None:
+        lines.put(pipe.readline())
+
+    worker = threading.Thread(target=_reader, daemon=True)
+    worker.start()
+    try:
+        return lines.get(timeout=timeout_seconds)
+    except queue.Empty as exc:
+        raise subprocess.TimeoutExpired("agy", timeout_seconds) from exc
+
+
+class AgySession:
+    """One long-lived Agy stdin session for a single classifier schema. Implements FR-328."""
+
+    def __init__(self, task: RunTask, config: AdapterConfig) -> None:
+        self.task = task
+        self.config = config
+        self._tmp = tempfile.TemporaryDirectory(prefix=f"stage0-agy-{task}-")
+        self.workspace = Path(self._tmp.name)
+        schema_path = self.workspace / f"{task}.schema.json"
+        schema_path.write_text(json.dumps(schema_for(task), indent=2) + "\n", encoding="utf-8")
+        self.command = [
+            _agy_cmd(),
+            "--input-format",
+            "stream-json",
+            "--output-format",
+            "stream-json",
+            "--json-schema",
+            str(schema_path),
+            "--sandbox",
+            "--disable-slash-commands",
+            "--new-project",
+            "--model",
+            config.model,
+            "--effort",
+            config.effort,
+            "--print-timeout",
+            f"{config.timeout_seconds}s",
+        ]
+        self.proc = subprocess.Popen(
+            self.command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(self.workspace),
+            shell=False,
+            bufsize=1,
+        )
+        self._stderr: list[str] = []
+        threading.Thread(target=self._drain_stderr, daemon=True).start()
+        self._wait_init()
+
+    def _drain_stderr(self) -> None:
+        """Keep stderr from filling the pipe and blocking the session."""
+        if self.proc.stderr is None:
+            return
+        for line in self.proc.stderr:
+            snippet = " ".join(line.split())[:240]
+            if snippet:
+                self._stderr.append(snippet)
+
+    def _wait_init(self) -> None:
+        """Block until Agy emits the stream-json init event."""
+        if self.proc.stdout is None:
+            raise FileNotFoundError("agy stdout is not available")
+        raw = _readline_timeout(self.proc.stdout, float(self.config.timeout_seconds))
+        if not raw:
+            raise FileNotFoundError("agy session produced no init event")
+        event = json.loads(raw)
+        if event.get("event") != "init":
+            raise ValueError("agy session missing init event")
+
+    def classify(self, prompt: str) -> dict[str, Any]:
+        """Send one leftover packet and return the result envelope."""
+        if self.proc.stdin is None or self.proc.stdout is None:
+            raise FileNotFoundError("agy session is closed")
+        if self.proc.poll() is not None:
+            raise FileNotFoundError("agy session exited")
+        payload = {"event": "user", "message": {"content": prompt}}
+        self.proc.stdin.write(json.dumps(payload) + "\n")
+        self.proc.stdin.flush()
+        deadline = time.monotonic() + self.config.timeout_seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(self.command, self.config.timeout_seconds)
+            raw = _readline_timeout(self.proc.stdout, remaining)
+            if not raw:
+                raise ValueError("agy session closed stdout")
+            event = json.loads(raw)
+            if event.get("event") != "result":
+                continue
+            result = event.get("result")
+            if not isinstance(result, dict):
+                raise ValueError("agy session result missing object")
+            return result
+
+    def close(self) -> None:
+        """End the stdin session and drop the temp workspace."""
+        try:
+            if self.proc.stdin is not None:
+                self.proc.stdin.close()
+            self.proc.wait(timeout=15)
+        except Exception:
+            self.proc.kill()
+        self._tmp.cleanup()
+
+
 def build_command(
     prompt_path: Path,
     schema_path: Path,
     config: AdapterConfig,
 ) -> list[str]:
-    """Build the readonly schema-constrained claudexor argv. shell=False only.
+    """Build a schema-constrained argv. shell=False only. Implements FR-328.
 
-    Pass the prompt via --prompt-file. Windows npx.cmd re-parses argv through
-    cmd.exe, so a positional prompt containing `|` was executed as a pipe.
+    One-shot Agy puts the Applyr packet on --print. Batches should reuse
+    AgySession stdin so startup is paid once. Other harness ids still use
+    pinned claudexor.
     """
+    if (config.harness or "").strip().lower() == "agy":
+        prompt = prompt_path.read_text(encoding="utf-8")
+        return [
+            _agy_cmd(),
+            "--output-format",
+            "json",
+            "--json-schema",
+            str(schema_path),
+            "--sandbox",
+            "--disable-slash-commands",
+            "--new-project",
+            "--model",
+            config.model,
+            "--effort",
+            config.effort,
+            "--print-timeout",
+            f"{config.timeout_seconds}s",
+            "--print",
+            prompt,
+        ]
     return [
         _npx_cmd(),
         "-y",
@@ -235,26 +350,39 @@ def build_command(
 
 
 def _redact_items(items: list[Stage0Item]) -> list[Stage0Item]:
-    return [Stage0Item(item.item_id, redact_pii(item.text)) for item in items]
+    """Redact PII in every Applyr-owned text field before a tool sees it."""
+    return [
+        Stage0Item(
+            item.item_id,
+            redact_pii(item.text),
+            redact_pii(item.bucket),
+            redact_pii(item.requirement),
+            redact_pii(item.evidence_excerpt),
+        )
+        for item in items
+    ]
 
 
 def _prompt(task: RunTask, items: list[Stage0Item]) -> str:
+    """Render the Applyr classifier packet for a single-prompt CLI transport."""
     redacted = _redact_items(items)
-    lines = [f"[{item.item_id}] {item.text}" for item in redacted]
     if task == "extraction":
-        return (
-            "Classify each Stage 0 job-description line into exactly one bucket. "
-            "Return JSON {\"results\":[{\"item_id\":\"...\",\"bucket\":\"required|preferred|"
-            "responsibilities|culture\"}]} with one result per listed item_id. "
-            "Do not invent item_ids.\n\n" + "\n".join(lines)
+        user = extraction_user_prompt(
+            [(item.item_id, item.text or item.requirement) for item in redacted]
         )
-    return (
-        "Judge each Stage 0 requirement against the supplied evidence excerpt. "
-        "Return JSON {\"results\":[{\"item_id\":\"...\",\"gate\":\"HARD|NONE\","
-        "\"gap_source\":\"\",\"evidence_level\":0,\"confidence\":\"high|medium|low\","
-        "\"reasoning\":\"...\"}]} with one result per listed item_id. "
-        "Do not invent item_ids. Do not skip an item.\n\n" + "\n".join(lines)
+        return combined_classifier_prompt("extraction", user)
+    user = evidence_user_prompt(
+        [
+            {
+                "item_id": item.item_id,
+                "bucket": item.bucket,
+                "requirement": item.requirement or item.text,
+                "evidence_excerpt": item.evidence_excerpt,
+            }
+            for item in redacted
+        ]
     )
+    return combined_classifier_prompt("evidence", user)
 
 
 def _harness_exit_reason(completed: subprocess.CompletedProcess[str]) -> str:
@@ -291,9 +419,36 @@ def _load_json_object(text: str) -> dict[str, Any]:
     raise ValueError("harness JSON missing object")
 
 
+def _denied_actions(envelope: dict[str, Any]) -> list[str]:
+    """Return tool names the harness tried and could not run."""
+    raw = envelope.get("denied_actions")
+    names: list[str] = []
+    if not isinstance(raw, list):
+        return names
+    for item in raw:
+        if isinstance(item, dict):
+            name = str(item.get("action") or item.get("display_name") or "").strip()
+        else:
+            name = str(item).strip()
+        if name:
+            names.append(name)
+    return names
+
+
 def _results_payload(envelope: dict[str, Any]) -> dict[str, Any]:
+    denied = _denied_actions(envelope)
+    if denied:
+        raise ValueError("harness used tools: " + ", ".join(denied[:8]))
     if "results" in envelope:
         return envelope
+    for key in ("structured_output", "result", "response", "output", "data", "answer"):
+        value = envelope.get(key)
+        if isinstance(value, dict) and "results" in value:
+            return value
+        if isinstance(value, str) and value.strip():
+            parsed = json.loads(value)
+            if isinstance(parsed, dict) and "results" in parsed:
+                return parsed
     primary = envelope.get("primaryOutput")
     if isinstance(primary, dict):
         text = primary.get("text")
@@ -301,18 +456,13 @@ def _results_payload(envelope: dict[str, Any]) -> dict[str, Any]:
             inner = json.loads(text)
             if isinstance(inner, dict):
                 return inner
-    answer = envelope.get("answer")
-    if isinstance(answer, dict):
-        return answer
-    if isinstance(answer, str) and answer.strip():
-        parsed = json.loads(answer)
-        if isinstance(parsed, dict):
-            return parsed
     raise ValueError("harness JSON missing results")
 
 
 def _route_violation(envelope: dict[str, Any], config: AdapterConfig) -> str | None:
-    """Reject substituted harnesses or non-readonly access. Implements FR-328."""
+    """Reject substituted or writable claudexor runs. Agy print mode skips this."""
+    if (config.harness or "").strip().lower() == "agy":
+        return None
     requested = (config.harness or "").strip().lower()
     telemetry = envelope.get("telemetry") if isinstance(envelope.get("telemetry"), dict) else {}
     attempts = telemetry.get("attempts") if isinstance(telemetry.get("attempts"), list) else []
@@ -404,6 +554,7 @@ def run_stage0_subscription(
     config: AdapterConfig | None = None,
     budget: AdapterBudget | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+    session: AgySession | None = None,
 ) -> AdapterResult:
     """Run one bounded Stage 0 harness batch. Implements FR-328 / AC-426."""
     cfg = config or AdapterConfig()
@@ -428,7 +579,12 @@ def run_stage0_subscription(
             "exhausted", task, [], [item.item_id for item in items],
             reason, live_budget.calls, 0.0, 0.0, None, None, empty_command,
         )
-    key = cache_key(task, items, profile=cfg.profile)
+    key = cache_key(
+        task,
+        items,
+        profile=cfg.profile,
+        extra=f"{cfg.model}:{cfg.effort}",
+    )
     cache_path = cfg.cache_dir / f"{key}.json"
     cached = _load_cache(cache_path)
     if cached and cached.get("results") and not cached.get("missing_item_ids"):
@@ -437,6 +593,47 @@ def run_stage0_subscription(
             None, 0, 0.0, 0.0, None, key, empty_command,
         )
     prompt = _prompt(task, items)
+    started = time.monotonic()
+    if session is not None:
+        live_budget.calls += 1
+        try:
+            envelope = session.classify(prompt)
+        except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - started
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in items],
+                "harness timed out", live_budget.calls, elapsed, elapsed / 60.0, None, key,
+                session.command,
+            )
+        except (OSError, FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+            elapsed = time.monotonic() - started
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in items],
+                f"invalid harness output: {exc}", live_budget.calls, elapsed, elapsed / 60.0,
+                None, key, session.command,
+            )
+        elapsed = time.monotonic() - started
+        minutes = elapsed / 60.0
+        try:
+            payload = _results_payload(envelope)
+            results, missing = _validate(task, payload, items)
+        except (ValueError, json.JSONDecodeError) as exc:
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in items],
+                f"invalid harness output: {exc}", live_budget.calls, elapsed, minutes,
+                None, key, session.command,
+            )
+        if missing:
+            return AdapterResult(
+                "review", task, results, missing,
+                "harness omitted item_ids", live_budget.calls, elapsed, minutes,
+                None, key, session.command,
+            )
+        _write_cache(cache_path, {"results": results, "missing_item_ids": []})
+        return AdapterResult(
+            "ok", task, results, [], None, live_budget.calls, elapsed, minutes, None, key,
+            session.command,
+        )
     execute = runner or subprocess.run
     started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="stage0-sub-") as tmp:
@@ -454,7 +651,9 @@ def run_stage0_subscription(
                 f"harness unavailable: {exc}", live_budget.calls, elapsed, elapsed / 60.0,
                 None, key, empty_command,
             )
-        if any(any(token in part.lower() for token in FORBIDDEN_TARGETS) for part in command):
+        if (cfg.harness or "").strip().lower() != "agy" and any(
+            any(token in part.lower() for token in FORBIDDEN_TARGETS) for part in command
+        ):
             return AdapterResult(
                 "review", task, [], [item.item_id for item in items],
                 "forbidden harness target in command", live_budget.calls, 0.0, 0.0,

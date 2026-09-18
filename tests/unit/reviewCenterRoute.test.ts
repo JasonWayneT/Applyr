@@ -12,6 +12,7 @@ const migrations = [
   '020_add_review_answer_history.sql',
   '021_add_evidence_promotion_proposals.sql',
   '022_add_bad_data_answer.sql',
+  '024_add_review_decision_basis.sql',
 ].map(file => readFileSync(path.join(process.cwd(), 'server', 'migrations', file), 'utf8')).join('\n');
 
 const databases: Database.Database[] = [];

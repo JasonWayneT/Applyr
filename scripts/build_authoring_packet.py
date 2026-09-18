@@ -1466,7 +1466,8 @@ def _build_jd_buckets(stage0: dict) -> dict:
     from evidence_map — populating both duplicated the same JD requirement text twice in
     the serialized prompt (author_from_packet.py dumps the whole packet as JSON), measured
     at ~8% of a real packet. Only `culture` has no evidence_map counterpart (culture items
-    are never scored/mapped), so it's the only bucket still populated. Keys are kept for
+    are never scored/mapped), so it's the only bucket still populated. Stage 0 `junk`
+    (ATS chrome) is never a cover-letter hook and is omitted here. Keys are kept for
     all four so authoring_packet_schema.json's required-keys check still passes.
     """
     culture = [

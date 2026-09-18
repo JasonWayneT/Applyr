@@ -21,7 +21,7 @@ QUEUE = [
 
 
 def _buckets() -> dict[str, list[str]]:
-    return {"required": [], "preferred": [], "responsibilities": [], "culture": []}
+    return fit_gate._empty_extraction_buckets()
 
 
 class SubscriptionExtractionTests(unittest.TestCase):
@@ -120,6 +120,59 @@ class SubscriptionExtractionTests(unittest.TestCase):
             unresolved = fit_gate._resolve_uncertain_extraction(QUEUE, buckets)
         self.assertEqual(unresolved, [])
         self.assertEqual(buckets["culture"], ["Must have SQL"])
+        llm.assert_not_called()
+
+    def test_junk_label_lands_in_junk_not_culture(self) -> None:
+        os.environ[adapter.ENABLED_ENV] = "1"
+        result = adapter.AdapterResult(
+            "ok", "extraction",
+            [
+                {"item_id": "e0", "bucket": "junk"},
+                {"item_id": "e1", "bucket": "required"},
+            ],
+            [], None, 1, 0.2, 0.003, None, "k", ["npx"],
+        )
+        buckets = _buckets()
+        with patch.object(adapter, "run_stage0_subscription", return_value=result), patch(
+            "utils.call_llm"
+        ) as llm:
+            unresolved = fit_gate._resolve_uncertain_extraction(QUEUE, buckets)
+        self.assertEqual(unresolved, [])
+        self.assertEqual(buckets["junk"], ["Must have SQL"])
+        self.assertEqual(buckets["required"], ["Nice Jira experience"])
+        self.assertEqual(buckets["culture"], [])
+        llm.assert_not_called()
+
+    def test_disposition_agy_required_is_forced_to_culture(self) -> None:
+        os.environ[adapter.ENABLED_ENV] = "1"
+        queue = [
+            (
+                "[HEADER] The Role: You are excited to work in a startup environment",
+                "You are excited to work in a startup environment",
+                "The Role",
+            ),
+            (
+                "[HEADER] The Role: Has shipped AI-enabled products into production.",
+                "Has shipped AI-enabled products into production.",
+                "The Role",
+            ),
+        ]
+        result = adapter.AdapterResult(
+            "ok", "extraction",
+            [
+                {"item_id": "e0", "bucket": "required"},
+                {"item_id": "e1", "bucket": "required"},
+            ],
+            [], None, 1, 0.2, 0.003, None, "k", ["npx"],
+        )
+        buckets = _buckets()
+        with patch.object(adapter, "run_stage0_subscription", return_value=result), patch(
+            "utils.call_llm"
+        ) as llm:
+            unresolved = fit_gate._resolve_uncertain_extraction(queue, buckets)
+        self.assertEqual(unresolved, [])
+        self.assertEqual(buckets["culture"], ["You are excited to work in a startup environment"])
+        self.assertEqual(buckets["required"], ["Has shipped AI-enabled products into production."])
         llm.assert_not_called()
 
     def test_malformed_adapter_result_does_not_lose_lines(self) -> None:

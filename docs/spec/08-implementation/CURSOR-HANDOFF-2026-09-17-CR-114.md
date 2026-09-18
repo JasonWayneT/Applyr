@@ -34,15 +34,18 @@ No model was promoted. `data/stage0_classifier.pkl` is tracked and unchanged. Ge
 4. **Build the local evidence matcher in shadow (Story 4), then connect uncertain evidence to the bounded adapter (Story 5).** Use only reviewed aliases/cases. Matchers abstain on uncertainty and cannot issue a terminal HARD/Skip without the existing safety policy. Preserve Stage 0 checkpoint/resume. Compare to adjudicated gold before granting any new authority.
 5. **Review Center and release evidence (Stories 6-7).** Expose decision basis, JD/evidence excerpt, uncertainty, and correction action without making generic traits into cards. Inventory all other Stage 0 hosted calls. Run 5-10 archived JD actual-schema smoke, then a timed, redacted, adjudicated 30-JD replay. Measure extraction/evidence errors, false skips, abstentions, review load, calls, time, and both cost units. Set numeric caps from evidence. Keep the production switch off until the gates pass.
 
-## Current blocker (2026-09-17, later pass)
+## Current blocker (2026-09-17, after 8-JD Agy smoke)
 
 Stories 5 and 6 are implemented behind the off switch and in Review Center. Independent QA has not checked them.
 
+Jason locked native Agy as the durable leftover-line transport. Claudexor is optional, not the login path.
+
 Stage 0 is **not ready** to enable `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER`.
 
-1. Install or PATH `cursor-agent` (`CLAUDEXOR_CURSOR_BIN`), **or** wait for Codex headroom to reset (`2026-09-17T22:04:03.000Z`) and rerun a 1-item Python argv `--prompt-file` smoke. Do not use Claude or Agy for this smoke.
-2. After a working profile returns a valid extraction **and** evidence schema body, run 5-10 archived JD smokes, then a locked adjudicated 30-JD replay. `data/training_data_approved.csv` does not exist; do not manufacture gold labels.
-3. Keep the production switch off until those gates pass.
+1. Same 8 archived JDs reran on leftover contract v2 (Flash medium, sticky session): **182s**, 8/8 extract ok, 8/8 evidence ok, silent line loss false. Culture leftover fell from 39 to 6; junk took 24 chrome lines. ActBlue expert-trait line is required. Acquia AI preferred is evidence level 3, not 0. Built In summary never reached leftover. That is a targeted accuracy check, not a release.
+2. Keep-in-mind visa/onsite/travel stays a later Settings-backed lane. Story 8 is implemented locally; independent QA remains.
+3. A locked adjudicated 30-JD replay has not run. `data/training_data_approved.csv` does not exist; do not manufacture gold labels. The 30 is skip-dense on purpose (8 Pass + 22 skip-weighted) and is not a representative pipeline sample. `years_ceiling` is asserted across the full skip class, not by extra hand-marks.
+4. Keep the production switch off. Independent QA, then security, then the final gate still own the story boxes.
 
 ## Commit And Exit Contract
 

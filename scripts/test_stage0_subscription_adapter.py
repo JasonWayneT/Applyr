@@ -53,6 +53,9 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         self._npx = patch.object(adapter, "_npx_cmd", return_value="npx.cmd")
         self._npx.start()
         self.addCleanup(self._npx.stop)
+        self._agy = patch.object(adapter, "_agy_cmd", return_value="agy.exe")
+        self._agy.start()
+        self.addCleanup(self._agy.stop)
 
     def tearDown(self) -> None:
         if self._env is None:
@@ -123,25 +126,28 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         self.assertEqual(result.outcome, "ok")
         self.assertEqual([row["item_id"] for row in result.results], ["e0", "e1"])
         self.assertFalse(result.missing_item_ids)
-        self.assertIn("claudexor@3.12.1", captured["command"])
-        self.assertIn("--access", captured["command"])
-        self.assertIn("readonly", captured["command"])
-        self.assertIn("--no-review", captured["command"])
-        self.assertIn("--json", captured["command"])
-        self.assertIn("--web", captured["command"])
-        self.assertIn("off", captured["command"])
-        self.assertIn("--output-schema", captured["command"])
-        self.assertIn("--prompt-file", captured["command"])
-        self.assertTrue(
-            any(Path(part).name == "prompt.txt" for part in captured["command"]),
+        self.assertEqual(captured["command"][0], "agy.exe")
+        self.assertIn("--json-schema", captured["command"])
+        self.assertIn("--sandbox", captured["command"])
+        self.assertIn("--model", captured["command"])
+        self.assertEqual(
+            captured["command"][captured["command"].index("--model") + 1],
+            adapter.AGY_MODEL_DEFAULT,
         )
-        self.assertFalse(any("|" in part for part in captured["command"]))
-        self.assertNotIn("Classify each Stage 0", captured["command"])
+        self.assertIn("--effort", captured["command"])
+        self.assertEqual(
+            captured["command"][captured["command"].index("--effort") + 1],
+            adapter.AGY_EFFORT_DEFAULT,
+        )
+        self.assertIn("--print", captured["command"])
+        print_at = captured["command"].index("--print")
+        self.assertGreater(len(captured["command"]), print_at + 1)
+        self.assertIn("Do not invent item_ids", captured["command"][print_at + 1])
+        self.assertNotEqual(captured["command"][print_at + 1], "--output-format")
         self.assertIs(captured["kwargs"]["shell"], False)
+        self.assertNotIn("input", captured["kwargs"])
         self.assertGreaterEqual(result.subscription_minutes, 0.0)
         self.assertIsNone(result.api_cents)
-        self.assertNotIn("groq", " ".join(captured["command"]).lower())
-        self.assertNotIn("gemini", " ".join(captured["command"]).lower())
         telemetry = result.to_telemetry()
         self.assertIn("subscription_minutes", telemetry)
         self.assertIsNone(telemetry["api_cents"])
@@ -282,8 +288,8 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         self.assertIn("forbidden", result.reason or "")
         self.assertEqual(spawned["n"], 0)
 
-    def test_npx_missing_goes_to_review(self) -> None:
-        with patch.object(adapter, "_npx_cmd", side_effect=FileNotFoundError("npx is not available")):
+    def test_agy_missing_goes_to_review(self) -> None:
+        with patch.object(adapter, "_agy_cmd", side_effect=FileNotFoundError("agy is not available")):
             result = adapter.run_stage0_subscription(
                 "extraction", _items(), config=self._config(), runner=lambda *a, **k: _ok_extract()
             )
@@ -299,6 +305,84 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         )
         self.assertEqual(result.outcome, "review")
         self.assertEqual(result.missing_item_ids, ["e0", "e1"])
+
+    def test_agy_structured_output_is_accepted(self) -> None:
+        envelope = {
+            "status": "SUCCESS",
+            "response": "",
+            "structured_output": {
+                "results": [
+                    {"item_id": "e0", "bucket": "required"},
+                    {"item_id": "e1", "bucket": "culture"},
+                ]
+            },
+            "denied_actions": [],
+        }
+        result = adapter.run_stage0_subscription(
+            "extraction",
+            _items(),
+            config=self._config(),
+            runner=lambda *a, **k: subprocess.CompletedProcess(
+                ["agy.exe"], 0, json.dumps(envelope), ""
+            ),
+        )
+        self.assertEqual(result.outcome, "ok")
+        self.assertEqual(result.results[1]["bucket"], "culture")
+
+    def test_agy_denied_tools_go_to_review(self) -> None:
+        envelope = {
+            "status": "SUCCESS",
+            "response": "",
+            "denied_actions": [{"action": "read_file", "display_name": "ViewFile"}],
+            "json_schema": {"type": "object"},
+        }
+        result = adapter.run_stage0_subscription(
+            "evidence",
+            [adapter.Stage0Item("e0", "Experience with Jira")],
+            config=self._config(),
+            runner=lambda *a, **k: subprocess.CompletedProcess(
+                ["agy.exe"], 0, json.dumps(envelope), ""
+            ),
+        )
+        self.assertEqual(result.outcome, "review")
+        self.assertIn("harness used tools: read_file", result.reason or "")
+        self.assertEqual(result.missing_item_ids, ["e0"])
+
+    def test_session_classify_skips_subprocess_runner(self) -> None:
+        class _FakeSession:
+            command = ["agy.exe", "--input-format", "stream-json"]
+
+            def classify(self, prompt: str) -> dict:
+                self.prompt = prompt
+                return {
+                    "status": "SUCCESS",
+                    "structured_output": {
+                        "results": [
+                            {"item_id": "e0", "bucket": "required"},
+                            {"item_id": "e1", "bucket": "culture"},
+                        ]
+                    },
+                    "denied_actions": [],
+                }
+
+        fake = _FakeSession()
+        calls = {"n": 0}
+
+        def runner(*_a, **_k):
+            calls["n"] += 1
+            return _ok_extract()
+
+        result = adapter.run_stage0_subscription(
+            "extraction",
+            _items(),
+            config=self._config(),
+            runner=runner,
+            session=fake,
+        )
+        self.assertEqual(result.outcome, "ok")
+        self.assertEqual(result.results[1]["bucket"], "culture")
+        self.assertEqual(calls["n"], 0)
+        self.assertIn("Do not invent item_ids", fake.prompt)
 
     def test_wrapped_answer_json_is_accepted(self) -> None:
         wrapped = json.dumps({
@@ -351,7 +435,7 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         result = adapter.run_stage0_subscription(
             "extraction",
             _items(),
-            config=self._config(),
+            config=self._config(harness="cursor", profile="cursor-default"),
             runner=lambda *a, **k: subprocess.CompletedProcess(["npx"], 0, json.dumps(envelope), ""),
         )
         self.assertEqual(result.outcome, "review")
@@ -370,7 +454,7 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         result = adapter.run_stage0_subscription(
             "extraction",
             _items(),
-            config=self._config(),
+            config=self._config(harness="cursor", profile="cursor-default"),
             runner=lambda *a, **k: subprocess.CompletedProcess(["npx"], 0, json.dumps(envelope), ""),
         )
         self.assertEqual(result.outcome, "review")

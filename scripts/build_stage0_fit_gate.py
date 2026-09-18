@@ -296,7 +296,8 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
     ("preferred", re.compile(
         r"^(?:#+\s*)?"
         r"(?:preferred\s+(?:qualifications?|skills?|experience|requirements?)|"
-        r"nice\s+to\s+have|bonus\s+(?:points?|if|qualifications?)|"
+        r"nice\s+to\s+have|also\s+great\s+to\s+have|great\s+to\s+have|"
+        r"bonus\s+(?:points?|if|qualifications?)|"
         r"additional\s+qualifications?|plus(?:es?)?|"
         r"preferred|ideally\s+you|you\s+may\s+also\s+have|"
         # CR-086: Thermo-class preferred lead-in headers ("Key Capabilities for Success:")
@@ -632,13 +633,47 @@ _BOILERPLATE_ITEM_RE = re.compile(
     r"sales\s+commission\s+plan|"
     r"offer\s+a\s+competitive\s+salary\s+and\s+comprehensive\s+benefits|"
     r"flexible\s+and\s+balanced\s+environment|"
-    r"opportunity\s+to\s+work\s+remotely"
+    r"opportunity\s+to\s+work\s+remotely|"
+    r"summary\s+generated\s+by\s+built\s+in|"
+    r"generated\s+by\s+built\s+in"
     r")"
 )
 
 # A line that, once trimmed, is nothing but a bare URL is never real hire criteria —
 # belt-and-suspenders for apply-link lines regardless of the lead-in phrasing above.
 _BARE_URL_ITEM_RE = re.compile(r"^https?://\S+$", re.I)
+
+# Used by orphan-header colon fallback and CR-115 chrome drop. A heading with
+# a real requirement verb is not chrome.
+_REQUIREMENT_VERB_RE = re.compile(
+    r"\b(?:own|run|write|develop|lead|partner|build|manage|require|must|"
+    r"need|deliver|ship|define|create|ensure|identify)\b",
+    re.I,
+)
+
+# CR-115: scored-path chrome leftover already junks when confidence is low.
+_JOB_BOARD_CHROME_RE = re.compile(
+    r"(?i)^(?:#+\s*)?(?:"
+    r"mid(?:dle)?\s+and\s+senior\s+level|"
+    r"senior\s+level|"
+    r"job\s+type|"
+    r"employment\s+type|"
+    r"experience\s+level|"
+    r"job\s+category"
+    r")\s*:?\s*$"
+)
+_SECTION_HEADING_CHROME_RE = re.compile(
+    r"(?i)^(?:#+\s*)?(?:"
+    r"education(?:\s+and\s+credentials?)?|"
+    r"credentials?|"
+    r"additional\s+details|"
+    r"company\s+summary|"
+    r"expectations?\s+of\s+the\s+role"
+    r")\s*:?\s*$"
+)
+_TRUNCATED_FRAGMENT_RE = re.compile(
+    r"(?i)^(?:experiences?|skills?|knowledge|background)\s+that\b"
+)
 
 
 # Known orphan section labels that sometimes appear as bullets when header routing
@@ -658,6 +693,8 @@ _ORPHAN_HEADER_LABEL_RE = re.compile(
     r"what\s+we\s+offer|"
     r"what\s+you\s+can\s+expect(?:\s+from\s+us)?|"
     r"your\s+qualifications?|"
+    r"skills?\s*(?:and|&)\s*qualifications?|"
+    r"core\s+competencies|"
     r"how\s+(?:will\s+you|you(?:'|')ll?\s+)\s*make\s+an?\s+impact|"
     r"ways\s+of\s+working|"
     r"anticipated\s+position\s+close\s+date|"
@@ -693,6 +730,22 @@ def _is_orphan_header_item(text: str) -> bool:
     return False
 
 
+def _empty_extraction_buckets() -> dict[str, list[str]]:
+    """Live leftover buckets, including junk. Implements FR-328 / AC-426."""
+    from stage0_classifier_contract import EXTRACTION_BUCKETS
+
+    return {name: [] for name in EXTRACTION_BUCKETS}
+
+
+def _leftover_bucket(bucket: str, text: str) -> str:
+    """Force disposition lines into culture so they are never scored. Implements FR-328."""
+    from stage0_classifier_contract import is_disposition_culture_line
+
+    if is_disposition_culture_line(text):
+        return "culture"
+    return bucket
+
+
 def _is_boilerplate_item(text: str) -> bool:
     """True when an extracted bullet is ATS/policy boilerplate, not a hire criterion."""
     clean = (text or "").strip()
@@ -712,6 +765,43 @@ def _is_boilerplate_item(text: str) -> bool:
     if _is_orphan_header_item(clean):
         return True
     return False
+
+
+def _is_unscored_chrome_item(text: str) -> bool:
+    """True when a required/preferred line is heading, board, or fragment chrome.
+
+    Implements FR-330 / AC-428. Leftover junk semantics are unchanged.
+    """
+    clean = (text or "").strip().lstrip("-•*◦▪▸→").strip()
+    if not clean:
+        return False
+    if _is_boilerplate_item(clean):
+        return True
+    if _JOB_BOARD_CHROME_RE.match(clean):
+        return True
+    if _SECTION_HEADING_CHROME_RE.match(clean):
+        return True
+    if _TRUNCATED_FRAGMENT_RE.match(clean):
+        return True
+    return False
+
+
+def _divert_scored_chrome(sections: dict) -> dict:
+    """Move heading/fragment chrome out of required/preferred before scoring.
+
+    Implements FR-330 / AC-428. Does not reclassify leftover junk or culture.
+    """
+    junk = list(sections.get("junk") or [])
+    for key in ("required", "preferred"):
+        kept: list[str] = []
+        for item in sections.get(key) or []:
+            if _is_unscored_chrome_item(item):
+                junk.append(item)
+            else:
+                kept.append(item)
+        sections[key] = kept
+    sections["junk"] = junk
+    return sections
 
 
 # 2026-08-28 (Jason-supplied): best-effort salary-range capture from the raw JD
@@ -770,6 +860,7 @@ _INLINE_PREFERRED_RE = re.compile(
     r")",
     re.I,
 )
+_INLINE_REQUIRED_RE = re.compile(r"\bis required\b", re.I)
 
 
 def _normalize_jd_punctuation(text: str) -> str:
@@ -791,19 +882,14 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
     """
     Extract text buckets by section heading.
 
-    Returns dict with keys: required, preferred, responsibilities, culture.
+    Returns dict with keys: required, preferred, responsibilities, culture, junk.
     Each value is a list of bullet-like strings extracted from that section.
 
     Trailing ATS boilerplate (relocation / EEO / salary / #LI-…) is excluded:
     matching ignore headers ends the current quals bucket, and any remaining
     boilerplate strings are stripped via `_is_boilerplate_item`.
     """
-    buckets: dict[str, list[str]] = {
-        "required": [],
-        "preferred": [],
-        "responsibilities": [],
-        "culture": [],
-    }
+    buckets: dict[str, list[str]] = _empty_extraction_buckets()
 
     lines = _normalize_jd_punctuation(jd_text).splitlines()
     current_bucket: str | None = None
@@ -869,11 +955,20 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
         clean = line.lstrip("-•*◦▪▸→").strip()
         if 15 <= len(clean) <= 300 and (clean[0].isalnum() or clean[0] in '"\''):
             if _is_list_leadin(clean):
+                lead_bucket, _lead_label = classify_jd_header(clean)
+                if lead_bucket is not None:
+                    current_bucket = lead_bucket
                 continue
             if not _is_boilerplate_item(clean):
+                from stage0_classifier_contract import is_disposition_culture_line
+
                 target_bucket = current_bucket
-                if current_bucket == "required" and _INLINE_PREFERRED_RE.search(clean):
+                if is_disposition_culture_line(clean):
+                    target_bucket = "culture"
+                elif current_bucket == "required" and _INLINE_PREFERRED_RE.search(clean):
                     target_bucket = "preferred"
+                elif current_bucket == "preferred" and _INLINE_REQUIRED_RE.search(clean):
+                    target_bucket = "required"
                 buckets[target_bucket].append(clean)
 
     # Final safety net for items that never rode a header boundary
@@ -1114,12 +1209,13 @@ def _extract_unavailable_message(reason: str) -> str:
 
 
 
-def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
-    """NLP (TF-IDF + LogReg) section extraction with a bounded fallback.
+def _collect_nlp_section_candidates(
+    jd_text: str,
+) -> tuple[dict[str, list[str]], list[tuple[str, str, str]]] | None:
+    """Return confident NLP buckets and leftover lines without calling a hosted tool.
 
-    Confident lines stay on the local classifier. Uncertain lines go to Groq/Gemini
-    unless APPLYR_STAGE0_SUBSCRIPTION_ADAPTER is on, in which case they go to the
-    Stage 0 subscription adapter and never spill into a metered API.
+    Used by production extraction and by the CR-114 Agy archive smoke so leftovers
+    can be inspected without Groq/Gemini. Implements FR-328 / AC-426.
     """
     import pipeline_env
     if pipeline_env.stage0_section_mode() == "deterministic":
@@ -1143,15 +1239,10 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
 
     lines = _normalize_jd_punctuation(jd_text).splitlines()
 
-    buckets = {
-        "required": [],
-        "preferred": [],
-        "responsibilities": [],
-        "culture": [],
-    }
+    buckets = _empty_extraction_buckets()
 
     current_header = ""
-    fallback_queue = []
+    fallback_queue: list[tuple[str, str, str]] = []
 
     for line in lines:
         clean = line.strip()
@@ -1172,34 +1263,66 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
             current_header = clean
             if is_label:
                 continue
-                
+
         if _IGNORE_SECTION_HEADERS.match(clean) or _TRACKING_TAG_RE.match(clean):
             current_header = "IGNORE"
             continue
-            
+
         if current_header == "IGNORE":
             continue
-            
+
         bullet_clean = clean.lstrip("-•*◦▪▸→").strip()
         if 15 <= len(bullet_clean) <= 300 and (bullet_clean[0].isalnum() or bullet_clean[0] in '"\'\''):
             if _is_list_leadin(bullet_clean):
+                lead_bucket, lead_label = classify_jd_header(bullet_clean)
+                if lead_bucket is not None:
+                    current_header = bullet_clean
                 continue
             if not _is_boilerplate_item(bullet_clean):
-                combo_text = f"[HEADER] {current_header}: {bullet_clean}" if current_header else bullet_clean
-                
+                combo_header = current_header or ""
+                preferred_header = (
+                    (classify_jd_header(combo_header)[0] == "preferred")
+                    or "preferred" in combo_header.lower()
+                    or "great to have" in combo_header.lower()
+                    or "nice to have" in combo_header.lower()
+                )
+                if preferred_header and _INLINE_REQUIRED_RE.search(bullet_clean):
+                    combo_header = "required"
+                combo_text = f"[HEADER] {combo_header}: {bullet_clean}" if combo_header else bullet_clean
+
                 if current_header == "required" and _INLINE_PREFERRED_RE.search(bullet_clean):
                     buckets["preferred"].append(bullet_clean)
                     continue
-                    
+
+                from stage0_classifier_contract import is_disposition_culture_line
+
+                if is_disposition_culture_line(bullet_clean):
+                    buckets["culture"].append(bullet_clean)
+                    continue
+
                 pred = pipeline.predict([combo_text])[0]
                 proba = pipeline.predict_proba([combo_text])[0]
                 conf = proba[classes.index(pred)]
-                
+
                 if conf < 0.65:
-                    fallback_queue.append((combo_text, bullet_clean, current_header))
+                    fallback_queue.append((combo_text, bullet_clean, combo_header))
                 else:
                     buckets[pred].append(bullet_clean)
 
+    return buckets, fallback_queue
+
+
+def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
+    """NLP (TF-IDF + LogReg) section extraction with a bounded fallback.
+
+    Confident lines stay on the local classifier. Uncertain lines go to Groq/Gemini
+    unless APPLYR_STAGE0_SUBSCRIPTION_ADAPTER is on, in which case they go to the
+    Stage 0 subscription adapter and never spill into a metered API.
+    """
+    collected = _collect_nlp_section_candidates(jd_text)
+    if collected is None:
+        return None
+    buckets, fallback_queue = collected
     unresolved_for_review = _resolve_uncertain_extraction(fallback_queue, buckets)  # Implements FR-328 / AC-426
     _recover_mixed_responsibilities(buckets)
     if unresolved_for_review:
@@ -1293,7 +1416,8 @@ def _resolve_uncertain_extraction_subscription(
         if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
             continue
         resolved.add(idx)
-        buckets[bucket].append(fallback_queue[idx][1])
+        line = fallback_queue[idx][1]
+        buckets[_leftover_bucket(str(bucket), line)].append(line)
     missing = [
         idx for idx, _item in enumerate(fallback_queue) if idx not in resolved
     ]
@@ -1322,21 +1446,24 @@ def _resolve_uncertain_extraction_llm(
     fallback_queue: list[tuple[str, str, str]],
     buckets: dict[str, list[str]],
 ) -> list[dict]:
-    """Existing Groq/Gemini uncertainty path. Implements CR-112 dump-site rules."""
+    """Hosted-tool uncertainty path for leftover JD lines. Implements CR-112 dump-site rules."""
+    from stage0_classifier_contract import (
+        EXTRACTION_SYSTEM,
+        extraction_user_prompt,
+        parse_extraction_mapping,
+    )
     from utils import call_llm, extract_json_from_text, resolve_task_providers
 
     print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
-    prompt = "Classify these job description bullet points into one of four buckets: 'required', 'preferred', 'responsibilities', or 'culture'. Return ONLY valid JSON as a mapping from the index to the bucket string.\n\n"
-    for i, (combo_text, _, _) in enumerate(fallback_queue):
-        prompt += f"[{i}] {combo_text}\n"
+    ids = [str(i) for i in range(len(fallback_queue))]
+    user_prompt = extraction_user_prompt(
+        [(item_id, combo_text) for item_id, (combo_text, _, _) in zip(ids, fallback_queue)]
+    )
 
     result = call_llm(
-        system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
-        user_prompt=prompt,
-        # CR-105 (Jason-supplied, 2026-08-30): Groq first (generous free tier, no
-        # training on submitted data), Gemini as the fallback if Groq is unavailable
-        # or rate-limited. User-overridable per Settings > API or Connections > AI
-        # Usage > "Stage 0 fallback" (llm_settings.taskProviderOverrides.stage0_extraction).
+        system_prompt=EXTRACTION_SYSTEM,
+        user_prompt=user_prompt,
+        # Tool order is user-configurable. Default list is not Applyr behavior.
         provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
     )
 
@@ -1344,21 +1471,20 @@ def _resolve_uncertain_extraction_llm(
         json_str = extract_json_from_text(result)
         try:
             import json
-            mapping = json.loads(json_str)
+            payload = json.loads(json_str)
+            mapping = parse_extraction_mapping(payload, ids)
             resolved_indices: set[int] = set()
             # Implements FR-327 / AC-425: runtime fallback answers are not training labels.
-            if not isinstance(mapping, dict):
-                raise ValueError("fallback mapping must be an object")
-            for i_str, bucket in mapping.items():
+            for item_id, bucket in mapping.items():
                 try:
-                    idx = int(i_str)
+                    idx = int(item_id)
                 except (TypeError, ValueError):
                     continue
                 if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
                     continue
                 resolved_indices.add(idx)
                 _, bullet_clean, _ = fallback_queue[idx]
-                buckets[bucket].append(bullet_clean)
+                buckets[_leftover_bucket(bucket, bullet_clean)].append(bullet_clean)
             unresolved_for_review: list[dict] = []
             for idx, (_combo_text, bullet_clean, header) in enumerate(fallback_queue):
                 if idx in resolved_indices:
@@ -1539,9 +1665,14 @@ def _recover_mixed_responsibilities(buckets: dict[str, list[str]]) -> None:
         return
 
     kept_resp: list[str] = []
+    from stage0_classifier_contract import is_disposition_culture_line
+
     for item in buckets["responsibilities"]:
         if _INLINE_PREFERRED_RE.search(item):
             buckets["preferred"].append(item)
+            continue
+        if is_disposition_culture_line(item):
+            buckets["culture"].append(item)
             continue
         if _looks_like_qualification(item) and not _looks_like_duty(item):
             buckets["required"].append(item)
@@ -2592,6 +2723,8 @@ def build_stage0_fit_gate(
     if sections is None:
         sections = _extract_sections(jd_text)
         extraction_source = "deterministic"
+    for name in _empty_extraction_buckets():
+        sections.setdefault(name, [])
 
     # --- Step 3.5: three-way qualification-risk gate (CR-112) ---
     # PIN 4: spliced in right after sections = ..., before
@@ -2676,10 +2809,15 @@ def build_stage0_fit_gate(
         ]
         requirement_extraction_review["queue"] = gate_items
 
+    sections = _divert_scored_chrome(sections)
     required_raw = sections["required"]
     preferred_raw = sections["preferred"]
     responsibilities = sections["responsibilities"]
-    culture = sections["culture"]
+    culture = [
+        line for line in sections.get("culture", [])
+        if line and not _is_boilerplate_item(line)
+    ]
+    junk = [line for line in sections.get("junk", []) if line]
     # Only present when extraction_source == "llm" -- the regex fallback
     # path (_extract_sections) has no model reading the whole JD to notice
     # a company's own product/platform names, so it never populates this.
@@ -3385,6 +3523,7 @@ def build_stage0_fit_gate(
         "preferred": classified_preferred,
         "responsibilities": responsibilities[:8],
         "culture": culture[:4],
+        "junk": junk[:20],
         "flagged_gaps": flagged_gaps,
         "zero_anchor_required_items": zero_anchor_required,
         "exclusion_zone_check": exclusion_check,

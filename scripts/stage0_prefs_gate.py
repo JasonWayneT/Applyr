@@ -107,15 +107,48 @@ _PEOPLE_MGT_NEGATIVE_RE = re.compile(
     r"\b(manage\s+stakeholders?|manage\s+(?:up|vendors?|projects?|products?|priorities|expectations|timelines?|relationships?|roadmaps?))\b",
     re.I,
 )
+_PEOPLE_MGT_NEGATED_ROLE_RE = re.compile(
+    r"\b(?:no|not|without|never)\b.{0,48}\b(?:direct\s+reports?|people[- ]management)"
+    r"|\b(?:direct\s+reports?|people[- ]management).{0,48}\b(?:no|not)\b",
+    re.I,
+)
+_OTHER_MANAGERS_REPORTS_RE = re.compile(
+    r"\b(?:their|his|her|the\s+manager'?s)\s+direct\s+reports?\b",
+    re.I,
+)
+_COACHING_NOT_MANAGING_RE = re.compile(
+    r"\b(?:coach(?:ing)?|mentor(?:ing)?)\b",
+    re.I,
+)
+
+
+def _people_line_is_not_role_management(line: str) -> bool:
+    """True when a line mentions reports or management that is not this role's.
+
+    Implements FR-338.
+    """
+    if _PEOPLE_MGT_NEGATIVE_RE.search(line):
+        return True
+    if _PEOPLE_MGT_NEGATED_ROLE_RE.search(line):
+        return True
+    if _OTHER_MANAGERS_REPORTS_RE.search(line):
+        return True
+    if _COACHING_NOT_MANAGING_RE.search(line) and not re.search(
+        r"\b(?:you will|this role|the role)\b.{0,60}\b(?:manage|direct reports?)",
+        line,
+        re.I,
+    ):
+        return True
+    return False
 
 
 def _check_people_management(jd_text: str) -> list[dict]:
+    """Skip only when this role has reports or manages people. Implements FR-338."""
     if not jd_text:
         return []
-    # Remove negative-context lines first
     filtered = "\n".join(
         line for line in jd_text.splitlines()
-        if not _PEOPLE_MGT_NEGATIVE_RE.search(line)
+        if not _people_line_is_not_role_management(line)
     )
     if _PEOPLE_MGT_REQUIRED_RE.search(filtered):
         return [{
@@ -242,15 +275,28 @@ def _check_ai_ml_ownership(jd_text: str) -> list[dict]:
 # Blocked company
 # ---------------------------------------------------------------------------
 
+def _normalize_company_name(name: str) -> str:
+    """Collapse a company string for exact blocked-list matching. Implements FR-337."""
+    return re.sub(r"\s+", " ", (name or "").strip().casefold())
+
+
 def _check_blocked_company(company: str, prefs: dict) -> list[dict]:
+    """Reject only when the whole normalized company name equals a blocked entry.
+
+    Substring checks made "Remote" match "RemoteHunter" and a blank company
+    match every entry because ``"" in "remotehunter"`` is True. Implements FR-337.
+    """
     blocked = (prefs or {}).get("blocked_companies") or []
     if not isinstance(blocked, list):
         return []
-    company_lower = (company or "").lower().strip()
+    company_key = _normalize_company_name(company)
+    if not company_key:
+        return []
     for entry in blocked:
-        if not entry:
+        entry_key = _normalize_company_name(str(entry or ""))
+        if not entry_key:
             continue
-        if entry.lower().strip() in company_lower or company_lower in entry.lower().strip():
+        if company_key == entry_key:
             return [{
                 "code": "blocked_company",
                 "reason": f"Company '{company}' matches blocked_companies entry '{entry}'",
@@ -364,10 +410,14 @@ def run_prefs_gate(
     rejects.extend(_check_revenue_billing(jd_text))
     rejects.extend(_check_ai_ml_ownership(jd_text))
 
-    # 9. JD content validation (CR-110 Gap B)
+    # 9. JD content validation (CR-110 Gap B). network_page is a flag, not a skip.
     from jd_content_validation import check_jd_placeholders, check_network_page
     rejects.extend(check_jd_placeholders(jd_text))
-    rejects.extend(check_network_page(jd_text))
+    for item in check_network_page(jd_text):
+        flags.append({
+            "code": item.get("code", "network_page"),
+            "note": item.get("reason") or "Hidden employer / talent-network page",
+        })
 
     # Deduplicate rejects by code (keep first)
     seen_codes: set[str] = set()

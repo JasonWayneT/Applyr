@@ -889,7 +889,40 @@ Design: `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-
 | `FR-328` | functional | P0 | in_progress | Separate extraction and evidence subscription-harness adapters are bounded, validated, cached, and fail to explicit review without metered API spillover | `AC-426` | CR-114 |
 | `AC-426` | acceptance | P0 | in_progress | Actual schemas pass replay; exhausted, invalid, or unavailable harness never silently buckets or skips; per-batch call/time limits and subscription minutes are reported separately from API cents | `FR-328` | CR-114 |
 | `FR-329` | functional | P0 | in_progress | Reviewed evidence matcher abstains on uncertain cases and cannot emit terminal HARD or Skip from ungrounded evidence | `AC-427` | CR-114 |
-| `AC-427` | acceptance | P0 | in_progress | Locked 30-JD replay has no unreviewed false skips, preserves every uncertain item in resumable review, and records coverage, error, and calls against baseline | `FR-329` | CR-114 |
+| `AC-427` | acceptance | P0 | in_progress | Locked 30-JD replay has no unreviewed false skips, preserves every uncertain item in resumable review, and records coverage, error, and calls against baseline. The 30 is skip-dense on purpose and is not a representative pipeline sample | `FR-329` | CR-114 |
+
+## CR-115 Scored-path heading and fragment leak
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-330` | functional | P0 | in_progress | Required/preferred evidence scoring must drop JD section headings, job-board metadata, and truncated fragments of the same chrome class leftover already junks | `AC-428` | CR-115 |
+| `AC-428` | acceptance | P0 | in_progress | Accuity "Education and Credentials" is not scored as a requirement; the degree line remains the scored credential; 1uphealth "Mid and Senior level" and truncated fragments do not move fit; leftover junk semantics stay unchanged | `FR-330` | CR-115 |
+
+## CR-116 Retrieval coverage is not AI-token-gated
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-331` | functional | P0 | in_progress | Evidence retrieval must put corpus-backed distinctive requirement tokens into the excerpt; coverage is not gated on AI/LLM/agentic tokens | `AC-429` | CR-116 |
+| `AC-429` | acceptance | P0 | in_progress | Acquia Jira/Confluence excerpt contains Jira and Confluence; executive-briefing excerpt contains the 200-300 / presented-roadmap evidence; `coverage_ok` is False when those WE tokens never reach the excerpt | `FR-331` | CR-116 |
+
+## CR-117 Years range low end
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-332` | functional | P0 | in_progress | Years range gates on the low end; age, company history, and tenure are not experience floors | `AC-430`, `AC-431` | CR-117 |
+| `AC-430` | acceptance | P0 | in_progress | 3-7 years parses as 3 and passes; 7-10 parses as 7 and skips; eighteen years of age is not a hit | `FR-332` | CR-117 |
+| `AC-431` | acceptance | P0 | in_progress | Remaining archived years_ceiling skips are not won by a range top, an age, or company history | `FR-332` | CR-117 |
+
+## CR-118 False skips, skip-reason agreement, preferred-header harvest
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-337` | functional | P0 | in_progress | Blocked-company match is exact on the normalized name; a blank company never matches | `AC-435` | CR-118 |
+| `AC-435` | acceptance | P0 | in_progress | `"Remote"` does not match `"RemoteHunter"`; blank matches nothing; exact `"Unity"` still blocks | `FR-337` | CR-118 |
+| `FR-338` | functional | P0 | in_progress | People-management skip only when this role has reports; `network_page` is a flag | `AC-436` | CR-118 |
+| `AC-436` | acceptance | P0 | in_progress | Negated-reports and other-managers'-reports sentences do not skip; talent-network pages flag | `FR-338` | CR-118 |
+| `FR-339` | functional | P0 | in_progress | Preferred lead-in headers, inline `"is required"`, reason-agreed 30-JD replay, and `claude_opus_jason_approved` export | `AC-437` | CR-118 |
+| `AC-437` | acceptance | P0 | in_progress | `"Also great to have:"` is preferred; `"is required"` under Preferred is required; replay records reason agreement; filled Claude marks rewrite | `FR-339` | CR-118 |
 
 ## Security Requirements
 

@@ -11,7 +11,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PII_PATTERNS = [
     ("email", re.compile(r"[a-zA-Z0-9_.+-]+@gmail\.com", re.I)),
-    ("phone", re.compile(r"REDACTED_PHONE|\(760\)\s*317-8264")),
+    ("phone", re.compile(r"\(760\)\s*317-8264")),
     ("linkedin", re.compile(r"linkedin\.com/in/redacted-linkedin-slug", re.I)),
     ("openai_key", re.compile(r"sk-[A-Za-z0-9]{20,}")),
     ("gemini_key", re.compile(r"AIzaSy[A-Za-z0-9_-]{30,}")),

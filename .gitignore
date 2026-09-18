@@ -143,6 +143,13 @@ data/stage0_classifier.candidate.pkl
 data/stage0_classifier.candidate.report.json
 data/stage0_classifier.previous.pkl
 data/stage0_subscription_cache/
+data/stage0_agy_archive_smoke.json
+data/stage0_agy_archive_smoke_medium.json
+data/stage0_agy_archive_smoke_cache/
+data/stage0_agy_archive_smoke_cache_medium/
+data/stage0_agy_locked30_cache/
+data/stage0_agy_pass5_evidence_cache/
+data/stage0_locked30_replay.json
 # CR-097: curated Stage 1 example bank (empty until Epic 4 seeds it). Not
 # candidate PII — tracked so a promotion is a reviewable git event.
 !data/authoring_example_bank.json

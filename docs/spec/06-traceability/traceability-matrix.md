@@ -372,8 +372,34 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-327` / `AC-425` | CR-114 | `scripts/build_stage0_fit_gate.py`, `scripts/retrain_stage0.py` | `scripts/test_retrain_stage0.py`, `scripts/test_cr112_stage0_extraction_review.py` | in_progress |
-| `FR-328` / `AC-426` | CR-114 | `scripts/stage0_subscription_adapter.py`; extraction and evidence call sites behind `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` (default off) | `scripts/test_stage0_subscription_adapter.py`, `scripts/test_stage0_subscription_extraction.py`, `scripts/test_stage0_subscription_evidence.py`; Cursor CLI missing, Codex over quota; schema body not yet returned | in_progress |
-| `FR-329` / `AC-427` | CR-114 | `scripts/stage0_evidence_matcher.py` (shadow); Review Center `decision_basis`/`uncertainty`; cascade adapter behind off switch | `scripts/test_stage0_evidence_matcher.py`, `scripts/test_stage0_subscription_evidence.py`, `scripts/test_stage0_confirmations.py`, `src/lib/reviewCenter.test.ts`; 30-JD replay not run | in_progress |
+| `FR-328` / `AC-426` | CR-114 | Applyr classifier contract v2: leftover buckets include visible `junk` (never culture hook); trait-without-duty → required; AI leftover retrieval includes `aiProjects.md`; default transport native Agy print+schema; extraction and evidence call sites behind `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` (default off) | `scripts/test_stage0_classifier_contract.py`, `scripts/test_stage0_subscription_adapter.py`, `scripts/test_stage0_subscription_extraction.py`, `scripts/test_evidence_context.py`; 8-JD archived Agy schema smoke 2026-09-17 (switch off, no silent line loss; timeouts/exhaustion fail-closed); 30-JD replay not run | in_progress |
+| `FR-329` / `AC-427` | CR-114 | `scripts/stage0_evidence_matcher.py` (shadow); Review Center `decision_basis`/`uncertainty`; cascade adapter behind off switch | `scripts/test_stage0_evidence_matcher.py`, `scripts/test_stage0_subscription_evidence.py`, `scripts/test_stage0_confirmations.py`, `src/lib/reviewCenter.test.ts`; sitting-1 8 PASS; sittings 2–3 harvested, skip-dense 30 not representative; 30-JD replay not run | in_progress |
+
+## CR-117 Years range low end
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-332` / `AC-430` / `AC-431` | CR-117 | `scripts/seniority_gate.py` range low-end; age/tenure rejection; `scripts/audit_years_ceiling.py` flags wrong numbers | `scripts/test_seniority_years_gate.py`, `scripts/test_audit_years_ceiling.py` | in_progress |
+
+## CR-115 Scored-path heading leak
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-330` / `AC-428` | CR-115 | `_divert_scored_chrome` drops heading/fragment/board chrome from required/preferred before scoring. Leftover junk semantics unchanged. Independent QA has not checked stories. | `scripts/test_build_stage0_fit_gate.py::TestCR115ScoredChrome`; sitting-1 Accuity/1uphealth fixtures | in_progress |
+
+## CR-116 Retrieval coverage
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-331` / `AC-429` | CR-116 | `build_evidence_context` force-includes corpus-backed distinctive tokens and windows huge inventory chunks; `retrieval_coverage` is not AI-token-gated. Independent QA has not checked stories. Replay is not a promotion gate while Acquia Jira/exec can starve. | `scripts/test_evidence_context.py::RetrievalCoverageTests` | in_progress |
+
+## CR-118 False skips and heading harvest
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-337` / `AC-435` | CR-118 | Exact normalized company match in `stage0_prefs_gate._check_blocked_company` and `batch_pipeline.passes_jd_keyword_gate`; blank never matches | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_blocked_companies.py` | in_progress |
+| `FR-338` / `AC-436` | CR-118 | People-gate filters negated-role and other-managers' reports; `network_page` goes to flags | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_industry_semantic.py` | in_progress |
+| `FR-339` / `AC-437` | CR-118 | Preferred `"also great to have"` header; inline `"is required"`; harvest heading_changed; replay reason agreement; `claude_opus_jason_approved` | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_export_stage0_adjudication.py`, `scripts/stage0_cr118_report.py` | in_progress |
 
 ## Coverage checklist
 

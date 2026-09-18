@@ -20,13 +20,25 @@ from sklearn.model_selection import GroupShuffleSplit
 from sklearn.pipeline import Pipeline
 
 # Implements FR-327 / AC-425: unreviewed fallback labels never enter retraining.
+FORBIDDEN_REVIEWERS = {
+    "model",
+    "llm",
+    "harness",
+    "fallback_api",
+    "feedbackloop",
+    "claude",
+    "claude_review",
+    "agy",
+    "cursor",
+    "xochitl",
+}
 _ROOT = Path(__file__).resolve().parent.parent
 _BASE = _ROOT / "data" / "training_data_clean.csv"
 _REVIEWED = _ROOT / "data" / "training_data_approved.csv"
 _LIVE = _ROOT / "data" / "stage0_classifier.pkl"
 _CANDIDATE = _ROOT / "data" / "stage0_classifier.candidate.pkl"
 _REPORT = _ROOT / "data" / "stage0_classifier.candidate.report.json"
-LABELS = {"required", "preferred", "responsibilities", "culture"}
+LABELS = {"required", "preferred", "responsibilities", "culture", "junk"}
 
 
 def load_rows(path: Path, *, reviewed: bool = False) -> list[dict[str, str]]:
@@ -40,7 +52,7 @@ def load_rows(path: Path, *, reviewed: bool = False) -> list[dict[str, str]]:
         if reviewed:
             if not all(row.get(key, "").strip() for key in ("company", "source_file", "reviewed_by", "reviewed_at")):
                 raise ValueError("Approved feedback requires company, source_file, reviewed_by, and reviewed_at")
-            if row["reviewed_by"].strip().casefold() in {"model", "llm", "harness", "fallback_api", "feedbackloop"}:
+            if row["reviewed_by"].strip().casefold() in FORBIDDEN_REVIEWERS:
                 raise ValueError("Approved feedback requires a human reviewer")
             try:
                 stamp = datetime.fromisoformat(row["reviewed_at"].replace("Z", "+00:00"))
@@ -123,7 +135,7 @@ def validate_replay_report(path: Path, candidate_path: Path) -> None:
     reviewer = report.get("reviewed_by")
     if not isinstance(reviewer, str) or not reviewer.strip():
         raise ValueError("Replay report requires a human reviewer")
-    if reviewer.strip().casefold() in {"model", "llm", "harness", "fallback_api", "feedbackloop"}:
+    if reviewer.strip().casefold() in FORBIDDEN_REVIEWERS:
         raise ValueError("Replay report requires a human reviewer")
     try:
         reviewed_at = datetime.fromisoformat(report["reviewed_at"].replace("Z", "+00:00"))

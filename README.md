@@ -281,16 +281,22 @@ not verified training data. `scripts/retrain_stage0.py` ignores the legacy
 using columns `text,label,company,source_file,reviewed_by,reviewed_at`,
 and writes a candidate classifier plus company-held-out report. The live model
 is unchanged unless a separate promotion supplies a 30-JD, zero-false-skip
-human-reviewed replay report bound to the candidate hash. A Stage 0-only
-subscription adapter (`scripts/stage0_subscription_adapter.py`, pin
-`claudexor@3.12.1`) exists behind `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` and
-stays off; it does not replace Groq/Gemini until actual-schema smoke and an
-adjudicated 30-JD replay pass. When the switch is on, uncertain extraction
-and uncertain evidence batches use the adapter and keep the CR-112 review
-pause; confident NLP routing is unchanged. The adapter passes the prompt
-through `--prompt-file` so Windows `npx.cmd` cannot treat `|` in the prompt
-as a pipe. Factory is excluded. The current Groq/Gemini
-cost authorization and review pause remain in force.
+human-reviewed replay report bound to the candidate hash. Applyr Stage 0
+classifier rules (buckets including leftover `junk`, checkable vs disposition
+culture split, evidence 0-4, HARD policy, item ids, fail-closed
+JSON) live in `scripts/stage0_classifier_contract.py`. Tools (Cursor, Claude,
+Codex, Agy, Groq, Gemini, local) only transport that packet. A leftover `junk`
+label is ATS chrome only and never becomes a culture hook. AI leftover evidence
+retrieval includes `data/aiProjects.md` when the line is about agents or LLMs.
+A subscription transport (`scripts/stage0_subscription_adapter.py`) defaults to
+native Agy print mode (`agy --print --json-schema --sandbox --new-project`) behind
+`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` and stays off until 5-10 JD actual-schema
+smoke and an adjudicated 30-JD replay pass.
+When the switch is on, leftover extraction and evidence batches use that
+transport and keep the CR-112 review pause; confident NLP routing is
+unchanged. Agy print mode reads the Applyr packet from `prompt.txt` in an
+isolated temp project, not the Applyr repo. Factory is
+excluded. Hosted-tool cost authorization and review pause remain in force.
 
 ### Drafting assets
 

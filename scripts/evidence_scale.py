@@ -101,6 +101,43 @@ _HEADING_SPLIT_RE = re.compile(r"(?m)^(#{1,4}\s+.*)$")
 # from the retrieval candidate pool outright rather than ever being sent to
 # the model, even a local one. See workExperience.md Section 1.0/1.0a.
 _EXCLUDED_HEADING_SUBSTRINGS = ("contact information", "professional references")
+_AI_PROJECTS_PATH = os.path.join(_ROOT, "data", "aiProjects.md")
+# CR-114 / FR-328: ACC-401 and related AI tooling live in aiProjects.md, not
+# workExperience.md. Stage 0 used to retrieve WE chunks only, so an AI-agent
+# leftover could score 0 because the excerpt window never contained that corpus.
+_AI_QUERY_RE = re.compile(
+    r"\b(?:ai|a\.i\.|llm|gpt|agentic|mcp|langgraph|langchain|"
+    r"copilot|claude\b|cursor\b|openai|generative)\b",
+    re.I,
+)
+# Retrieval-only expansions. JD "brief an executive" is WE "presenting" /
+# "presented" (ACC-109, §2.2). Do not treat this as authoring language.
+_QUERY_SYNONYMS: dict[str, frozenset[str]] = {
+    "brief": frozenset({"present", "presented", "presenting", "briefing"}),
+    "briefing": frozenset({"present", "presented", "presenting", "brief"}),
+}
+# Too common to force-include. Distinctive tools / ACC tokens stay eligible.
+_COVERAGE_GENERIC = frozenset({
+    "product", "management", "tools", "data", "experience", "years", "work",
+    "team", "role", "including", "such", "ability", "strong", "using", "plus",
+    "must", "have", "your", "our", "you", "will", "can", "from", "into",
+    "about", "their", "them", "this", "that", "with", "and", "the", "for",
+    "operational", "delivery", "generally", "proficiency", "room", "move",
+    "decision", "verbal", "communication", "communicate", "upward",
+    "preferred", "required", "proven", "position", "platforms", "tooling",
+    "builder", "building", "only", "makes", "hands", "technology",
+    "analytics", "business", "verification", "consumer", "digital",
+    "products", "ideally", "related", "field", "bachelor", "sponsorship",
+    "employment", "eligibility", "unable", "visa", "sponsor", "full",
+    "time", "remote", "marketplace", "commerce", "direct", "regulated",
+    "industries", "identity", "enrichment", "providers", "email", "phone",
+    "device", "address", "validation", "cloud", "computing", "enterprise",
+    "content", "developer", "applications", "observer", "shipping",
+    "understanding", "authentication", "protocols", "developer",
+    "ecosystem", "what", "restful",
+})
+_MAX_COVERAGE_DF = 8
+_MAX_FOCUSED_BODY = 4000
 
 
 def _tokenize(text: str) -> set[str]:
@@ -108,6 +145,101 @@ def _tokenize(text: str) -> set[str]:
         t for t in _TOKEN_RE.findall((text or "").lower())
         if t not in _STOPWORDS and len(t) > 2
     }
+
+
+def _expanded_query_tokens(item: str) -> set[str]:
+    """Query tokens plus retrieval synonyms. Implements FR-331."""
+    tokens = _tokenize(item)
+    extra: set[str] = set()
+    for token in tokens:
+        extra |= _QUERY_SYNONYMS.get(token, frozenset())
+    return tokens | extra
+
+
+def _chunk_df(chunks: list[tuple[str, str]]) -> dict[str, int]:
+    """Document frequency of tokens across heading chunks."""
+    df: dict[str, int] = {}
+    for heading, body in chunks:
+        for token in _tokenize(heading) | _tokenize(body):
+            df[token] = df.get(token, 0) + 1
+    return df
+
+
+def _coverage_tokens(query_tokens: set[str], df: dict[str, int]) -> list[str]:
+    """Corpus-backed distinctive query tokens. Not AI-token-gated. FR-331."""
+    ranked: list[tuple[int, str]] = []
+    for token in query_tokens:
+        if token in _COVERAGE_GENERIC or token in _STOPWORDS:
+            continue
+        count = df.get(token, 0)
+        if count <= 0 or count > _MAX_COVERAGE_DF:
+            continue
+        if len(token) < 4:
+            continue
+        ranked.append((count, token))
+    ranked.sort()
+    return [token for _count, token in ranked]
+
+
+def _window_around_token(heading: str, body: str, token: str, max_chars: int) -> str:
+    """Keep a window around token so a 70k inventory chunk cannot starve ACC ids."""
+    body = (body or "").strip()
+    piece_budget = max(800, max_chars)
+    if len(body) <= _MAX_FOCUSED_BODY:
+        piece = f"{heading}\n{body}"
+        return piece[:piece_budget]
+    hay = body.lower()
+    idx = hay.find(token)
+    if idx < 0:
+        piece = f"{heading}\n{body}"
+        return piece[:piece_budget]
+    radius = max(400, (piece_budget - len(heading) - 2) // 2)
+    start = max(0, idx - radius)
+    end = min(len(body), idx + len(token) + radius)
+    return f"{heading}\n{body[start:end].strip()}"[:piece_budget]
+
+
+def _focus_chunk(heading: str, body: str, query_tokens: set[str], max_chars: int) -> str:
+    """Trim huge chunks to the distinctive overlap, not the heading prefix."""
+    body = (body or "").strip()
+    overlap = sorted(
+        (_tokenize(heading) | _tokenize(body)) & query_tokens,
+        key=len,
+        reverse=True,
+    )
+    token = overlap[0] if overlap else ""
+    return _window_around_token(heading, body, token, max_chars)
+
+
+def _token_in_text(token: str, text: str) -> bool:
+    """True when token is a WE/excerpt hit, including plural stems (executives)."""
+    if not token:
+        return False
+    if token in _tokenize(text):
+        return True
+    return token in (text or "").lower()
+
+
+def retrieval_coverage(
+    item: str,
+    excerpt: str,
+    full_work_exp: str,
+    extra_corpus: str = "",
+) -> tuple[bool, tuple[str, ...]]:
+    """True when every corpus-backed distinctive query token is in excerpt.
+
+    window_ok only fires on AI/LLM/agentic tokens, so Jira/Confluence and
+    executive-briefing starvation were invisible. Implements FR-331 / AC-429.
+    """
+    chunks = _chunk_work_exp(full_work_exp) + _chunk_work_exp(extra_corpus or "")
+    if not chunks:
+        corpus_tokens = _tokenize(full_work_exp) | _tokenize(extra_corpus or "")
+        df = {token: 1 for token in corpus_tokens}
+    else:
+        df = _chunk_df(chunks)
+    needed = _coverage_tokens(_expanded_query_tokens(item), df)
+    missing = tuple(token for token in needed if not _token_in_text(token, excerpt))
+    return (not missing, missing)
 
 
 def _chunk_work_exp(full_text: str) -> list[tuple[str, str]]:
@@ -130,7 +262,27 @@ def _chunk_work_exp(full_text: str) -> list[tuple[str, str]]:
     return chunks
 
 
-def build_evidence_context(item: str, full_work_exp: str, k: int = 6, max_chars: int = 12000) -> str:
+def _load_ai_projects_corpus() -> str:
+    """Return data/aiProjects.md when present, else empty. Implements FR-328."""
+    try:
+        with open(_AI_PROJECTS_PATH, encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return ""
+
+
+def _should_include_ai_corpus(item: str) -> bool:
+    """True when the requirement line is about AI/agent/LLM tooling. Implements FR-328."""
+    return bool(_AI_QUERY_RE.search(item or ""))
+
+
+def build_evidence_context(
+    item: str,
+    full_work_exp: str,
+    k: int = 6,
+    max_chars: int = 12000,
+    extra_corpus: str | None = None,
+) -> str:
     """Top-k most relevant workExperience.md chunks for *item*, ranked by
     token-overlap (Jaccard) with the requirement line -- same retrieval
     pattern as fit_rubric_examples.retrieve_examples(). Falls back to a
@@ -145,16 +297,32 @@ def build_evidence_context(item: str, full_work_exp: str, k: int = 6, max_chars:
     jd_tailoring.py (same fix as Stage 1 improvement #1). Also increases k
     from 6 to 8 for larger WE documents (>50K chars) so more relevant chunks
     are surfaced when the document is large.
+
+    2026-09-17 CR-114: AI-agent leftover lines also retrieve `data/aiProjects.md`
+    (ACC-401). Pass extra_corpus="" in tests to isolate WE-only ranking.
+
+    2026-09-17 CR-116: Jaccard on a 70k+ inventory chunk dilutes Jira/Confluence
+    and ACC-109. Force-include the smallest chunk that holds each corpus-backed
+    distinctive query token, and window huge bodies around that token so the
+    excerpt prefix cannot starve the scorer. Implements FR-331 / AC-429.
     """
-    chunks = _chunk_work_exp(full_work_exp)
+    extra = extra_corpus
+    if extra is None:
+        extra = _load_ai_projects_corpus() if _should_include_ai_corpus(item) else ""
+    chunks = _chunk_work_exp(full_work_exp) + _chunk_work_exp(extra)
     if not chunks:
-        return (full_work_exp or "")[:max_chars]
+        combined = full_work_exp or ""
+        if extra:
+            combined = f"{combined}\n\n{extra}" if combined else extra
+        return combined[:max_chars]
 
     # Improvement #6: increase k for larger WE documents.
     if k == 6 and len(full_work_exp) > 50000:
         k = 8
 
-    query_tokens = _tokenize(item)
+    query_tokens = _expanded_query_tokens(item)
+    df = _chunk_df(chunks)
+    needed = _coverage_tokens(query_tokens, df)
 
     # Improvement #6: load rarity weights for TF-IDF scoring.
     rarity_weight = _get_rarity_weight_fn()
@@ -183,12 +351,41 @@ def build_evidence_context(item: str, full_work_exp: str, k: int = 6, max_chars:
     scored.sort(key=lambda row: row[0], reverse=True)
 
     selected: list[str] = []
-    budget = max_chars
+    used_headings: set[str] = set()
+    per_token = max(1000, max_chars // max(len(needed), 1)) if needed else max_chars
+    for token in needed:
+        if _token_in_text(token, "\n\n".join(selected)):
+            continue
+        candidates = [
+            (len(body), heading, body)
+            for heading, body in chunks
+            if token in (_tokenize(heading) | _tokenize(body))
+        ]
+        if not candidates:
+            continue
+        _size, heading, body = min(candidates)
+        used = sum(len(block) for block in selected) + 2 * max(0, len(selected) - 1)
+        remain = max_chars - used
+        if remain < 400:
+            break
+        piece = _window_around_token(
+            heading, body, token, min(per_token, remain, _MAX_FOCUSED_BODY)
+        )
+        selected.append(piece)
+        used_headings.add(heading)
+
+    used = sum(len(block) for block in selected) + 2 * max(0, len(selected) - 1)
+    budget = max_chars - used
     for _, heading, body in scored[:k]:
-        piece = f"{heading}\n{body.strip()}"
+        if budget <= 0:
+            break
+        if heading in used_headings:
+            continue
+        piece = _focus_chunk(heading, body, query_tokens, min(budget, max_chars))
         if len(piece) > budget:
             piece = piece[:budget]
         selected.append(piece)
+        used_headings.add(heading)
         budget -= len(piece)
         if budget <= 0:
             break

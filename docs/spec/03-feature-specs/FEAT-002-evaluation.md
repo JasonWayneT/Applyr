@@ -6,7 +6,7 @@
 - Status: implemented
 - Source artifacts: `BMAD-SRC-005`
 - Related requirements: `FR-006`, `FR-007`, `FR-008`, `FR-009`, `FR-035`, `FR-039`, `FR-109`, `FR-170`, `FR-171`, `FR-172`, `FR-188`, `FR-189`, `FR-190`, `FR-191`, `FR-192`, `FR-242`, `FR-243`, `FR-246`, `FR-247`, `FR-278`–`FR-285`, `NFR-009`–`NFR-012`, `DATA-002`–`DATA-004`
-- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`, `CR-053`, `CR-054`, `CR-108`, `CR-114`
+- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`, `CR-053`, `CR-054`, `CR-108`, `CR-114`, `CR-115`, `CR-116`, `CR-117`, `CR-118`
 
 ## Problem statement
 
@@ -50,8 +50,14 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `FR-284` | Attestation versus authoring evidence boundary | User confirmation cannot create unsupported resume claims (`CR-108`, implemented) |
 | `FR-285` | Review / Questions workflow | Standalone UI and harness adapter share one confirmation resolver (`CR-108`, rollout-flagged) |
 | `FR-327` | Reviewed-only Stage 0 learning | Quarantine unverified fallback labels; company-held-out candidate model (`CR-114`) |
-| `FR-328` | Bounded subscription fallback | Separate extraction and evidence schemas; fail to review (`CR-114`, in progress, production switch off) |
+| `FR-328` | Bounded subscription fallback | Separate extraction and evidence schemas; leftover `junk` is chrome only; AI leftover retrieval includes `aiProjects.md` (`CR-114`, in progress, production switch off) |
 | `FR-329` | Safe local evidence matcher | Reviewed cases and abstention before decision authority (`CR-114`, in progress, shadow only) |
+| `FR-330` | Scored-path heading/fragment drop | Required/preferred must not score leftover-junk chrome (`CR-115`, in progress, before 30-JD replay) |
+| `FR-331` | Non-AI retrieval coverage | Distinctive WE tokens must reach the evidence excerpt (`CR-116`, in progress, before 30-JD replay) |
+| `FR-332` | Years range low end | A years range gates on the minimum the posting will accept; age and company tenure are not floors (`CR-117`) |
+| `FR-337` | Exact blocked-company match | Whole normalized company name only; blank never matches (`CR-118`) |
+| `FR-338` | Role-owned people skip; network_page flag | People-management skip only when this role has reports; `network_page` is a flag (`CR-118`) |
+| `FR-339` | Preferred lead-in headers and reason-agreed replay | `"Also great to have"` is preferred; `"is required"` under preferred is required; replay records skip-reason agreement; Claude leftover marks export as `claude_opus_jason_approved` (`CR-118`) |
 
 ## Acceptance criteria
 
@@ -74,6 +80,13 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `AC-425` | `FR-327` | An extraction fallback answers an uncertain line | Stage 0 stores the runtime answer | No training CSV is written; retraining ignores legacy feedback |
 | `AC-426` | `FR-328` | The subscription adapter is enabled for an uncertain batch | The harness times out, substitutes a different lane, or returns invalid JSON | Every item enters explicit review; `subscription_minutes` is recorded and `api_cents` stays null |
 | `AC-427` | `FR-329` | A local evidence matcher sees an unreviewed or uncertain phrase | Shadow matching runs | The matcher abstains and cannot emit terminal HARD or Skip |
+| `AC-428` | `FR-330` | NLP confidently labels a section heading or truncated fragment as required | Evidence scoring runs | The heading/fragment is not scored; leftover junk semantics stay unchanged |
+| `AC-429` | `FR-331` | A non-AI requirement has distinctive tokens in workExperience.md | Evidence retrieval builds the excerpt | Those tokens are in the excerpt; `coverage_ok` is False if they are not |
+| `AC-430` | `FR-332` | JD states 3-7 years of product management experience | Years gate runs with max=7 | Parsed floor is 3 and the JD passes |
+| `AC-431` | `FR-332` | An archived years skip's winning figure is a range top, an age, or company history | Years audit runs | The row is flagged as a wrong number, not blessed |
+| `AC-435` | `FR-337` | Company is `"Remote"` and the blocklist contains `"RemoteHunter"` | Blocked-company gate runs | No skip. A blank company name also does not skip |
+| `AC-436` | `FR-338` | JD says the role is not people-management / coaches others' reports, or is a talent-network page | Prefs gate runs | SmartLight and ESO do not skip on people-management; `network_page` is a flag |
+| `AC-437` | `FR-339` | ESO `"Also great to have:"` and CSI `"is required"` under Preferred; jason skip marks on the 22 | Harvest and 30-JD replay run | Preferred header is inherited; required inline wins; replay records outcome and reason agreement |
 
 ## Verification plan
 
@@ -82,6 +95,10 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `TEST-002` | `FR-006` | unit | `evaluate_job_fit` returns score 0 for blocklisted words | verified |
 | `TEST-108A` | `FR-278`–`FR-281`, `AC-358`–`AC-361` | unit/integration | Cascade, response validation, and asymmetric HARD policy preserve the CR-093 gate/source bar | verified offline; release gate pending |
 | `TEST-108B` | `FR-282`–`FR-285`, `AC-362`–`AC-366` | integration/UI | Checkpoint resume, grouped confirmations, hard-gate actions, UI/harness resolution, and attestation boundary pass | verified offline; live UI/release gate pending |
-| `TEST-114A` | `FR-328`, `AC-426` | unit | Adapter mocks cover disable, timeout, malformed JSON, partial ids, cache, ceilings, PII redaction, forbidden/substituted harness, non-readonly access, and `--prompt-file`; extraction and evidence wiring preserve every uncertain line and never call Groq/Gemini when the switch is on | in_progress |
+| `TEST-114A` | `FR-328`, `AC-426` | unit | Adapter mocks cover disable, timeout, malformed JSON, partial ids, cache, ceilings, PII redaction, forbidden/substituted harness, non-readonly access, and `--prompt-file`; extraction and evidence wiring preserve every uncertain line and never call Groq/Gemini when the switch is on; leftover `junk` is not culture; AI leftover retrieval can include `aiProjects.md` | in_progress |
 | `TEST-114B` | `FR-327`, `AC-425` | unit | Retrain/extraction tests refuse unverified feedback and keep the live model unchanged | in_progress |
 | `TEST-114C` | `FR-329`, `AC-427` | unit | Shadow matcher matches reviewed tool aliases, abstains otherwise, and never emits HARD or Skip | in_progress |
+| `TEST-114D` | `FR-332`, `AC-430`, `AC-431` | unit/archive | Range gates on the low end; age and company tenure are not hits; remaining years skips are not range-top, age, or history | in_progress |
+| `TEST-118A` | `FR-337`, `FR-338`, `FR-339`, `AC-435`, `AC-436`, `AC-437` | unit/archive | Exact company match; people-gate negation; network_page flag; preferred lead-in; 30-JD replay records reason agreement | in_progress |
+| `TEST-115A` | `FR-330`, `AC-428` | unit | Heading/fragment strings cannot receive a scored evidence level that moves fit; Accuity heading vs degree pair and 1uphealth metadata/fragment are fixtures | in_progress |
+| `TEST-116A` | `FR-331`, `AC-429` | unit | Acquia Jira/Confluence and executive-briefing excerpts contain the WE evidence; `coverage_ok` fails when those tokens are starved | in_progress |

@@ -28,6 +28,10 @@ const migrations = [
     path.join(process.cwd(), 'server', 'migrations', '022_add_bad_data_answer.sql'),
     'utf8',
   ),
+  readFileSync(
+    path.join(process.cwd(), 'server', 'migrations', '024_add_review_decision_basis.sql'),
+    'utf8',
+  ),
 ].join('\n');
 
 describe('review center repository', () => {

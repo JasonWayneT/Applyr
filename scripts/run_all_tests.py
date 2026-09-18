@@ -45,6 +45,9 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_location_gate.py",
     "scripts/test_resume_conversion_eval.py",
     "scripts/test_seniority_years_gate.py",
+    "scripts/test_audit_years_ceiling.py",
+    "scripts/test_cr118_gate_false_skips.py",
+    "scripts/test_export_stage0_adjudication.py",
     "scripts/test_template_lint_sources.py",
     "scripts/test_title_blocklist.py",
     "scripts/test_smoke_regression.py",
@@ -68,6 +71,8 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_stage0_confirmations.py",
     "scripts/test_retrain_stage0.py",
     "scripts/test_stage0_subscription_adapter.py",
+    "scripts/test_stage0_classifier_contract.py",
+    "scripts/test_evidence_context.py",
     "scripts/test_stage0_subscription_extraction.py",
     "scripts/test_stage0_evidence_matcher.py",
     "scripts/test_stage0_subscription_evidence.py",
@@ -101,6 +106,7 @@ PYTHON_TEST_TIMEOUTS = {
     # These Stage 0 suites unload local models between cases and routinely
     # exceed the default 180s runner limit on this machine.
     "scripts/test_cr112_stage0_extraction_review.py": 480,
+    "scripts/test_audit_years_ceiling.py": 480,
 }
 
 
@@ -167,6 +173,10 @@ def main() -> int:
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(project_root)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     # Bootstrap data files if missing (required in fresh clones like CI)
     sys.path.insert(0, os.path.join(project_root, "scripts"))

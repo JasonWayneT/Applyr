@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any, Callable
 
 
+from stage0_classifier_contract import (
+    EVIDENCE_SYSTEM,
+    evidence_user_prompt,
+)
+
 MAX_BATCH_ITEMS = 24
 
 # CR-108 Epic 7.5 (2026-09-09): proactive batch sizing. When the estimated
@@ -131,7 +136,9 @@ def _classify_requirements_subscription(
     payload = [
         Stage0Item(
             item.item_id,
-            f"requirement={item.requirement}\nevidence={item.evidence_excerpt}",
+            bucket=item.bucket,
+            requirement=item.requirement,
+            evidence_excerpt=item.evidence_excerpt,
         )
         for item in items
     ]
@@ -850,37 +857,27 @@ def _estimate_output_tokens(items: list[BatchItem]) -> int:
 
 
 def _build_batch_prompt(items: list[BatchItem]) -> str:
-    """Build a redaction-safe batch prompt from requirement and retrieved evidence text.
-
-    2026-09-01 Improvement #1: now includes k=2 few-shot examples retrieved from
-    data/fit_rubric_golden_set.json (via fit_rubric_examples.retrieve_examples)
-    before the items, aligning the batch path with the single-item path's
-    few-shot support. Falls back to no examples if the golden set is missing
-    (same skip-not-fail posture as the single-item path).
-    """
-    lines = ["Classify every item exactly once. Return JSON only.", ""]
-
-    # Improvement #1: retrieve k=2 few-shot examples for the batch.
+    """Build the Applyr evidence user packet, including retrieved few-shot examples."""
     few_shot_block = ""
     try:
         from fit_rubric_examples import retrieve_examples, format_evidence_examples_for_prompt
-        # Use the first item's requirement as the query for retrieval ranking.
         query = items[0].requirement if items else ""
         examples = retrieve_examples(query, None, k=2)
         few_shot_block = format_evidence_examples_for_prompt(examples)
     except Exception:
         pass
-    if few_shot_block:
-        lines.append(few_shot_block)
-        lines.append("")
-
-    for item in items:
-        lines.append(f"[{item.item_id}] bucket={item.bucket}")
-        lines.append(f"requirement={item.requirement}")
-        if item.evidence_excerpt:
-            lines.append(f"evidence={item.evidence_excerpt}")
-        lines.append("")
-    return "\n".join(lines)
+    return evidence_user_prompt(
+        [
+            {
+                "item_id": item.item_id,
+                "bucket": item.bucket,
+                "requirement": item.requirement,
+                "evidence_excerpt": item.evidence_excerpt,
+            }
+            for item in items
+        ],
+        few_shot=few_shot_block,
+    )
 
 
 def _repair_truncated_json(raw: str) -> dict[str, Any] | None:
@@ -978,52 +975,7 @@ def _clean_provider_order(values: list[Any]) -> list[str]:
     return result
 
 
-_SYSTEM_PROMPT = """You classify job requirements against supplied candidate evidence.
-Return {"results":[...]} with one result per item_id.
-
-RESPONSE FORMAT — every result object MUST include ALL of these fields:
-  "item_id": the item's id string
-  "gate": "HARD" or "NONE" (use "NONE" for any non-disqualifying line)
-  "evidence_level": integer 0-4
-  "confidence": "high" or "medium" or "low"
-  "reasoning": a non-empty string citing the requirement's vocabulary and the evidence
-  "gap_source": "degree" or "domain" or "role_exclusion" or "certification" (only when gate="HARD"; empty string otherwise)
-
-Example: {"item_id":"req-001","gate":"NONE","evidence_level":3,"confidence":"high","reasoning":"The requirement asks for roadmap ownership and the candidate led the C3 platform roadmap for 4 years.","gap_source":""}
-
-EVIDENCE SCALE (0-4) -- rate how much of the requirement the candidate's documented \
-experience actually satisfies:
-0 = No documented evidence. Nothing in the candidate profile addresses this.
-1 = Adjacent evidence. Candidate did work sharing the underlying capability, not the requested work itself.
-2 = Partial direct evidence. Candidate did meaningful parts of it, but scope/tooling/context/ownership differs.
-3 = Direct evidence. Candidate clearly did substantially equivalent work, comparable scope.
-4 = Strong direct evidence. Substantially equivalent work with comparable-or-greater ownership, scope, or outcome.
-
-OR-ALTERNATIVE LINES -- when a line offers multiple alternatives joined by "or", \
-rate evidence_level against whichever single alternative the candidate matches BEST, \
-not the worst. The line is satisfied if ANY listed alternative is well-documented.
-
-FORBIDDEN AS EVIDENCE (score 0 if this is the only basis): a title alone, an employer \
-name alone, company size, a merely-adjacent industry, an implied department interaction, \
-a tool the candidate "probably" touched, seniority implying a capability, or trainability. \
-Potential is not evidence of demonstrated experience.
-
-HARD GATES -- gate="HARD" ends scoring for this line outright (disqualifying). \
-A line from the PREFERRED bucket NEVER gates. Gating is possible ONLY for a REQUIRED-bucket \
-line, and only in these four categories:
-- degree: a required advanced degree (Master's/MBA/PhD/JD/MD) with NO Bachelor's alternative.
-- domain: a required regulated/specialized domain paired with its OWN years-of-experience threshold.
-- role_exclusion: a role category incompatible with the candidate's background (people management, \
-AI/ML ownership, revenue/billing ownership, title above Senior IC, or building from nothing).
-- certification: a required professional certification/license (PMP, CPA, PE, RN license, etc.).
-Tools never gate. Bare years-of-experience never gates. If gate="HARD", gap_source MUST be \
-exactly one of "degree", "domain", "role_exclusion", or "certification".
-
-CONFIDENCE -- "high" when both line and evidence are unambiguous; "medium" when real \
-interpretation was needed; "low" when the JD line is vague or evidence is thin.
-
-Reasoning must cite the requirement's own vocabulary and the specific evidence that \
-supports your rating. Do not invent facts or use evidence outside the supplied excerpts."""
+_SYSTEM_PROMPT = EVIDENCE_SYSTEM
 
 
 def _tokens(value: str) -> set[str]:

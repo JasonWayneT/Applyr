@@ -85,6 +85,24 @@ class RetrainStage0Tests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "human reviewer"):
                 retrain_stage0.load_rows(path, reviewed=True)
 
+    def test_reviewed_rows_reject_claude_review_as_reviewer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "approved.csv"
+            _write(path, [{"text": "Must have SQL", "label": "required", "company": "Acme",
+                           "source_file": "jd1", "reviewed_by": "claude_review",
+                           "reviewed_at": "2026-09-17T12:00:00Z"}])
+            with self.assertRaisesRegex(ValueError, "human reviewer"):
+                retrain_stage0.load_rows(path, reviewed=True)
+
+    def test_reviewed_junk_rows_are_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "approved.csv"
+            _write(path, [{"text": "Equal Opportunity Employer", "label": "junk", "company": "Acme",
+                           "source_file": "jd1", "reviewed_by": "jason",
+                           "reviewed_at": "2026-09-17T12:00:00+00:00"}])
+            rows = retrain_stage0.load_rows(path, reviewed=True)
+            self.assertEqual(rows[0]["label"], "junk")
+
     def test_promotion_report_binds_candidate_and_replay_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

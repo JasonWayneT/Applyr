@@ -63,7 +63,7 @@ class TestHeaderPlaceholders(unittest.TestCase):
 
     def test_clean_header_passes(self):
         self._write_resume(
-            "San Diego, CA | 760-317-8264 | email@test.com | linkedin.com/in/test"
+            "San Diego, CA | 555-010-0100 | email@test.com | linkedin.com/in/test"
         )
         result = _check_header_placeholders(self.folder)
         self.assertTrue(result["ok"])

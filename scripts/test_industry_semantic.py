@@ -237,15 +237,16 @@ class TestPrefsGateIntegration(unittest.TestCase):
         codes = [r["code"] for r in result["rejects"]]
         self.assertIn("jd_placeholder", codes)
 
-    def test_network_page_blocks_in_prefs_gate(self):
-        """run_prefs_gate rejects a talent-matching network page."""
+    def test_network_page_is_flag_not_skip_in_prefs_gate(self):
+        """run_prefs_gate flags a talent-matching network page and does not skip."""
         from stage0_prefs_gate import run_prefs_gate
 
         jd = "Apply once and get matched with employers. Join our talent network."
         result = run_prefs_gate("Acme", jd, self._mock_prefs())
-        self.assertFalse(result["passed"])
         codes = [r["code"] for r in result["rejects"]]
-        self.assertIn("network_page", codes)
+        self.assertNotIn("network_page", codes)
+        flag_codes = [r["code"] for r in result["flags"]]
+        self.assertIn("network_page", flag_codes)
 
     def test_llm_industry_blocks_when_keyword_misses(self):
         """LLM semantic gate blocks when the keyword gate does not."""

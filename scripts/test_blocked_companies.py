@@ -29,6 +29,18 @@ def main() -> int:
         print("  [FAIL] unrelated company should pass title/years gates")
         return 1
     print("  [PASS] non-blocked company passes")
+    substring_prefs = {
+        **prefs,
+        "blocked_companies": ["RemoteHunter", "Unity"],
+    }
+    if not passes_jd_keyword_gate(JD_SAFE, substring_prefs, company_name="Remote"):
+        print("  [FAIL] Remote must not match RemoteHunter")
+        return 1
+    print("  [PASS] Remote does not match RemoteHunter")
+    if not passes_jd_keyword_gate(JD_SAFE, substring_prefs, company_name=""):
+        print("  [FAIL] blank company must not match blocked entries")
+        return 1
+    print("  [PASS] blank company is not blocked")
     return 0
 
 

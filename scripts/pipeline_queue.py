@@ -545,8 +545,16 @@ def _paused_should_promote(
 
 
 def _promotable_paused_slugs(conn: sqlite3.Connection, data_root: Path) -> list[str]:
+    rows = list_rows(conn, status="paused")
+    rows.sort(
+        key=lambda row: (
+            _parse_paused_at(row.get("paused_at")) is None,
+            _parse_paused_at(row.get("paused_at")) or datetime.min.replace(tzinfo=timezone.utc),
+            int(row["id"]),
+        )
+    )
     slugs: list[str] = []
-    for row in list_rows(conn, status="paused"):
+    for row in rows:
         folder = _resolve_row_folder(row, data_root)
         if folder is None:
             continue
@@ -578,24 +586,12 @@ def claim_pack(
         conn.isolation_level = None
         conn.execute("BEGIN IMMEDIATE")
         try:
-            already = conn.execute(
-                """
-                SELECT COUNT(*) FROM pipeline_queue
-                WHERE status = 'queued'
-                   OR (
-                     lease_expires_at IS NOT NULL
-                     AND lease_expires_at <= ?
-                     AND status IN ('leased', 'in_progress')
-                   )
-                """,
-                (now,),
-            ).fetchone()[0]
-            promote_budget = max(0, size - int(already or 0))
-            for slug in promotable[:promote_budget]:
+            claimed: list[dict[str, Any]] = []
+            for slug in promotable[:size]:
                 row = get_row(conn, slug)
                 if not row or row["status"] != "paused":
                     continue
-                transition(
+                queued_row = transition(
                     slug,
                     "queued",
                     worker=row["locked_by"] or "",
@@ -603,43 +599,65 @@ def claim_pack(
                     conn=conn,
                     commit=False,
                 )
-            candidates = conn.execute(
-                """
-                SELECT * FROM pipeline_queue
-                WHERE status = 'queued'
-                   OR (
-                     lease_expires_at IS NOT NULL
-                     AND lease_expires_at <= ?
-                     AND status IN ('leased', 'in_progress')
-                   )
-                ORDER BY queued_at, id
-                LIMIT ?
-                """,
-                (now, size),
-            ).fetchall()
-            claimed: list[dict[str, Any]] = []
-            for raw in candidates:
-                row = dict(raw)
-                if row["status"] != "queued":
-                    row = transition(
-                        row["slug"],
-                        "queued",
-                        worker=row["locked_by"] or worker,
-                        token=row["fencing_token"],
-                        conn=conn,
-                        commit=False,
-                    )
                 claimed.append(
                     transition(
-                        row["slug"],
+                        queued_row["slug"],
                         "leased",
                         worker=worker,
-                        token=row["fencing_token"],
+                        token=queued_row["fencing_token"],
                         conn=conn,
                         lease_minutes=lease_minutes,
                         commit=False,
                     )
                 )
+            remaining = size - len(claimed)
+            if remaining > 0:
+                exclude = [row["slug"] for row in claimed]
+                where_sql = """
+                    status = 'queued'
+                    OR (
+                      lease_expires_at IS NOT NULL
+                      AND lease_expires_at <= ?
+                      AND status IN ('leased', 'in_progress')
+                    )
+                """
+                params: list[Any] = [now]
+                if exclude:
+                    placeholders = ",".join("?" * len(exclude))
+                    where_sql = f"({where_sql}) AND slug NOT IN ({placeholders})"
+                    params.extend(exclude)
+                params.append(remaining)
+                candidates = conn.execute(
+                    f"""
+                    SELECT * FROM pipeline_queue
+                    WHERE {where_sql}
+                    ORDER BY queued_at, id
+                    LIMIT ?
+                    """,
+                    params,
+                ).fetchall()
+                for raw in candidates:
+                    row = dict(raw)
+                    if row["status"] != "queued":
+                        row = transition(
+                            row["slug"],
+                            "queued",
+                            worker=row["locked_by"] or worker,
+                            token=row["fencing_token"],
+                            conn=conn,
+                            commit=False,
+                        )
+                    claimed.append(
+                        transition(
+                            row["slug"],
+                            "leased",
+                            worker=worker,
+                            token=row["fencing_token"],
+                            conn=conn,
+                            lease_minutes=lease_minutes,
+                            commit=False,
+                        )
+                    )
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")

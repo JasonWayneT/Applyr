@@ -43,6 +43,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
 - [x] **8. Trustworthy quota numbers.** Tracker copies Agy's final `result.usage` faithfully. `rentana_stage1_03` was 58 internal agent steps whose inputs sum to 419,638 (cache-read sum 4,154,618). A clean one-step author (`stage1-02`) was 38,961 input, 0 cache, 1 five-hour point. Cache-read did not move the five-hour window 1:1 with input. Size batches from five-hour drops (~1pp per clean author call, 3pp for a tool-loop). Tracker now logs `agent_steps` and `cache_read`.
 
 - [ ] **9. Incoming from testing**, in the order Codex ranks it.
+  - [x] **9a.** Ready paused jobs are claimed before queued backlog. Oldest `paused_at` first, up to pack size, then oldest queued. Promotion rules from item 1 unchanged.
 
 - [ ] **10. Stage 1 split (CR-117 plus RESEARCH-2026-09-18-stage1-authoring-shape.md).** Give CR-117 a free CR number first (ID collision). Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen CR-117 cases.
 
@@ -51,6 +52,12 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
 ## Incoming from testing
 
 Ranked findings not already covered by items 1-8:
+
+### P0 - Ready paused jobs starve behind any queued backlog
+
+Landed in item 9a. `claim_pack` now leases promotable paused rows first
+(oldest `paused_at`), up to pack size, then fills from the oldest queued
+rows. Change-detection rules from item 1 are unchanged.
 
 ### P0 - Capture Agy quota for every stage, not only Stage 1 authoring
 

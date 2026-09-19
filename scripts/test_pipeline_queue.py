@@ -371,6 +371,55 @@ class TestClaimPack(QueueHarness):
         other = "ready_b" if claimed == "ready_a" else "ready_a"
         self.assertEqual(pq.get_row(self.conn, other)["status"], "paused")
 
+    def _ready_waiting_for_llm(self, slug: str, paused_at: str | None = None) -> None:
+        _seed(self.conn, slug)
+        _set_paused(self.conn, slug, paused_at=paused_at)
+        folder = self.data / "pending_review" / slug
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "WAITING_FOR_LLM", "active_stage": "stage1"}),
+            encoding="utf-8",
+        )
+
+    def test_claim_pack_takes_ready_paused_before_queued_backlog(self) -> None:
+        for index in range(38):
+            _seed(self.conn, f"backlog_{index:02d}")
+        self._ready_waiting_for_llm("rentana_ready")
+        rows = pq.claim_pack("w1", size=3, conn=self.conn, data_root=self.data)
+        slugs = [row["slug"] for row in rows]
+        self.assertEqual(len(slugs), 3)
+        self.assertEqual(slugs[0], "rentana_ready")
+        self.assertEqual(slugs[1:], ["backlog_00", "backlog_01"])
+        self.assertEqual(pq.get_row(self.conn, "backlog_02")["status"], "queued")
+
+    def test_claim_pack_fills_from_oldest_paused_before_any_queued(self) -> None:
+        for index in range(4):
+            _seed(self.conn, f"fresh_{index}")
+        base = datetime.now(timezone.utc)
+        order = ["pause_old", "pause_mid", "pause_new", "pause_newer", "pause_newest"]
+        for index, slug in enumerate(order):
+            paused_at = (base - timedelta(minutes=50 - index)).replace(microsecond=0).isoformat()
+            self._ready_waiting_for_llm(slug, paused_at=paused_at)
+        rows = pq.claim_pack("w1", size=3, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in rows], ["pause_old", "pause_mid", "pause_new"])
+        self.assertEqual(pq.get_row(self.conn, "pause_newer")["status"], "paused")
+        self.assertEqual(pq.get_row(self.conn, "pause_newest")["status"], "paused")
+        self.assertEqual(pq.get_row(self.conn, "fresh_0")["status"], "queued")
+
+    def test_untriggered_paused_never_claimed_with_backlog(self) -> None:
+        _seed(self.conn, "queued_one")
+        _seed(self.conn, "blocked_pause")
+        _set_paused(self.conn, "blocked_pause")
+        folder = self.data / "pending_review" / "blocked_pause"
+        _stage1_ready(folder, files=("Resume.md", "CoverLetter.md"))
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "WAITING_FOR_LLM", "active_stage": "stage1"}),
+            encoding="utf-8",
+        )
+        rows = pq.claim_pack("w1", size=3, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in rows], ["queued_one"])
+        self.assertEqual(pq.get_row(self.conn, "blocked_pause")["status"], "paused")
+
 
 class TestHeartbeatReleaseExpiry(QueueHarness):
     def test_heartbeat_extends_and_release_returns_leased(self) -> None:

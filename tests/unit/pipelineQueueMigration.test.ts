@@ -302,3 +302,28 @@ describe('027_add_pipeline_queue_paused_reason migration', () => {
     expect(col!.notnull).toBe(0);
   });
 });
+
+describe('028_add_pipeline_queue_requeue_audit migration', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(':memory:');
+    db.exec(readFileSync(SQL_PATH, 'utf-8'));
+    db.exec(readFileSync(path.resolve('server/migrations/026_add_pipeline_queue_paused_at.sql'), 'utf-8'));
+    db.exec(readFileSync(path.resolve('server/migrations/027_add_pipeline_queue_paused_reason.sql'), 'utf-8'));
+    db.exec(readFileSync(path.resolve('server/migrations/028_add_pipeline_queue_requeue_audit.sql'), 'utf-8'));
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('adds nullable requeue audit columns', () => {
+    const cols = getColumns(db, 'pipeline_queue');
+    for (const name of ['requeued_by', 'requeue_reason', 'requeued_at']) {
+      const col = cols.find((c) => c.name === name);
+      expect(col).toBeDefined();
+      expect(col!.notnull).toBe(0);
+    }
+  });
+});

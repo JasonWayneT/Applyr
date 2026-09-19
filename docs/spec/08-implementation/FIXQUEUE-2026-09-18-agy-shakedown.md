@@ -57,6 +57,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **9i.** Geography only when the JD asks. Digest §10/§11 + `_PREAMBLE`. `LW-039` WARNs when a resume or cover letter names countries / global / distributed / worldwide / time zones and Original_JD.txt does not ask. Rentana CoverLetter.md line 12 fires; a JD with "global teams" does not. Fed to the repair loop with line + offending text.
   - [x] **9j.** Repair prompt includes the full current Resume.md and CoverLetter.md, ranked findings, relevant digest, and cited-claim excerpts. No full authoring prompt or packet. Target under 16KB. Model returns full docs; `claim_provenance.json` is optional and the existing file is kept if omitted. Raw output always saved to `stage1_repair_attempts/{n}.txt`. Validator requires both documents nonempty and structurally sane. Event cap counts tool/non-text steps, not `agent_response` deltas. Live: healthstream 13.11KB / 23.3s / 1 event / artifacts accepted; binance 10.25KB / 28.4s / 1 event / artifacts accepted. Both omitted provenance (old file kept). Stage 1 verify did not fully clear: remaining findings are uncited rewritten sentences (healthstream) plus LR-026 Agile (binance), which the next repair round is supposed to see.
   - [x] **9k.** casper_studios 00:59 pause was `subscription_review:harness omitted item_ids`, not unanswered Review Center questions (those completed 00:54). Latest Agy stream was deleted by `clean_spool` on that pause, so dropped IDs could not be read from disk. The 00:59 run had 6 cascade items, 2 provider calls, 0 judgments, and a new `evidence_index_hash` (`908cae66` vs prior `7056c5c9`), so item 5's cache keys missed. Empty first-chunk results skip adapter retry; the old chunk loop then aborted, so the remaining 3 items were never asked. Fix: keep `.stage0_spool` on omitted-ID pause, stamp `missing_item_ids` on the receipt/reason/run metadata, and keep classifying later chunks. Tests: later chunks still run; two-doc spool survives; missing IDs are on the pause.
+  - [x] **9l.** `python scripts/queue_claim.py requeue --slug SLUG --reason TEXT` is the only hand requeue. Eligible: paused FAILED, or paused subscription_review. Refused: leased, in_progress, done, ready_to_finalize. Records reason + who via fenced `transition()`. Tests for allowed and refused states. Documented in generate-submission SKILL.md CSV section.
   - [ ] **9f.** P2 live quarantine-panel check stays a Codex preflight.
 
 - [ ] **10. Stage 1 split (CR-120 reserved: `FR-348`–`FR-352`, `AC-451`–`AC-455`; docs renamed from colliding CR-117).** Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen cases in `data/eval/cr117/`.
@@ -166,7 +167,9 @@ this existing paused row. **How often:** 1/1 Casper row in pack 6.
 Landed in item 9k. Omitted-ID pauses now keep `.stage0_spool`, put
 `missing_item_ids` on the Stage 0 receipt, and continue later 3-item
 chunks. The 00:59 Casper stream itself is gone; a requeue after this
-fix is what makes the next miss inspectable.
+fix is what makes the next miss inspectable. Hand requeue is
+`python scripts/queue_claim.py requeue --slug casper_studios --reason TEXT`
+(item 9l).
 
 ### P1 - Repair builder requeues before repaired files exist
 

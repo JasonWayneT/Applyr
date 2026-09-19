@@ -171,4 +171,17 @@ describe('runMigrations', () => {
       .get('027_add_pipeline_queue_paused_reason.sql');
     expect(row).toBeDefined();
   });
+
+  it('records 028 without ALTER when requeued_by already exists', () => {
+    db.exec(`CREATE TABLE pipeline_queue (id INTEGER PRIMARY KEY, requeued_by TEXT)`);
+    writeFileSync(
+      path.join(migrationsDir, '028_add_pipeline_queue_requeue_audit.sql'),
+      `ALTER TABLE pipeline_queue ADD COLUMN requeued_by TEXT;`,
+    );
+    expect(() => runMigrations(db, migrationsDir)).not.toThrow();
+    const row = db
+      .prepare(`SELECT id FROM schema_migrations WHERE id = ?`)
+      .get('028_add_pipeline_queue_requeue_audit.sql');
+    expect(row).toBeDefined();
+  });
 });

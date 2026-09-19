@@ -20,7 +20,8 @@ DEFAULT_DB = _REPO_ROOT / "data" / "jobagent.sqlite"
 
 # Semantically identical to server/migrations/025_add_pipeline_queue.sql
 # plus 026_add_pipeline_queue_paused_at.sql (paused_at)
-# plus 027_add_pipeline_queue_paused_reason.sql (paused_reason).
+# plus 027_add_pipeline_queue_paused_reason.sql (paused_reason)
+# plus 028_add_pipeline_queue_requeue_audit.sql (requeued_by / requeue_reason / requeued_at).
 # Story 1.3 anti-drift test dumps sqlite_master from both copies.
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS pipeline_queue (
@@ -56,7 +57,10 @@ CREATE TABLE IF NOT EXISTS pipeline_queue (
   last_workflow_status TEXT,
   last_stage           TEXT,
   paused_at            TEXT,
-  paused_reason        TEXT
+  paused_reason        TEXT,
+  requeued_by          TEXT,
+  requeue_reason       TEXT,
+  requeued_at          TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pipeline_queue_url_key
@@ -110,11 +114,20 @@ def _ensure_paused_reason_column(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE pipeline_queue ADD COLUMN paused_reason TEXT")
 
 
+def _ensure_requeue_columns(conn: sqlite3.Connection) -> None:
+    """Add manual-requeue audit columns on DBs that ran 025-027 without 028."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+    for name in ("requeued_by", "requeue_reason", "requeued_at"):
+        if name not in cols:
+            conn.execute(f"ALTER TABLE pipeline_queue ADD COLUMN {name} TEXT")
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
     """Create the three CR-119 tables if missing. Idempotent."""
     conn.executescript(_SCHEMA_SQL)
     _ensure_paused_at_column(conn)
     _ensure_paused_reason_column(conn)
+    _ensure_requeue_columns(conn)
     conn.commit()
 
 
@@ -316,6 +329,10 @@ class PackSizeError(ValueError):
     """--size outside 1..10."""
 
 
+class RequeueRefused(ValueError):
+    """Manual requeue is not allowed for this row's current state."""
+
+
 def list_rows(
     conn: sqlite3.Connection,
     status: str | None = None,
@@ -356,6 +373,8 @@ def transition(
     folder_root: str | None = None,
     new_slug: str | None = None,
     paused_reason: str | None = None,
+    requeued_by: str | None = None,
+    requeue_reason: str | None = None,
     commit: bool = True,
 ) -> dict[str, Any]:
     """Sole writer of pipeline_queue.status. Fenced; rowcount must be 1."""
@@ -399,6 +418,14 @@ def transition(
             args.append(paused_reason)
         elif to_status in ("queued", "done"):
             sets.append("paused_reason = NULL")
+    if requeued_by is not None:
+        sets.append("requeued_by = ?")
+        args.append(requeued_by)
+    if requeue_reason is not None:
+        sets.append("requeue_reason = ?")
+        args.append(requeue_reason)
+        sets.append("requeued_at = ?")
+        args.append(now)
     if last_workflow_status is not None:
         sets.append("last_workflow_status = ?")
         args.append(last_workflow_status)
@@ -468,6 +495,64 @@ def requeue_paused_for_repair(
         return stored["status"]
     except (IllegalTransition, FenceRejected):
         return None
+    finally:
+        if close_after:
+            conn.close()
+
+
+def requeue_paused(
+    slug: str,
+    *,
+    reason: str,
+    worker: str = "manual",
+    conn: sqlite3.Connection | None = None,
+    db_path: Path | str | None = None,
+    data_root: Path | None = None,
+) -> dict[str, Any]:
+    """Move an eligible paused row back to queued through transition().
+
+    Allowed: paused FAILED, or paused subscription_review evidence.
+    Refused: leased, in_progress, done, ready_to_finalize, and any other pause.
+    """
+    note = (reason or "").strip()
+    who = (worker or "manual").strip() or "manual"
+    if not note:
+        raise RequeueRefused("refused: reason is required")
+    close_after = False
+    if conn is None:
+        conn = connect(db_path)
+        close_after = True
+    try:
+        row = get_row(conn, slug)
+        if row is None:
+            raise RequeueRefused(f"refused: no pipeline_queue row for {slug}")
+        status = row["status"]
+        if status != "paused":
+            raise RequeueRefused(f"refused: status={status}")
+        if (
+            row.get("paused_reason") == PAUSED_REASON_READY_TO_FINALIZE
+            or row.get("last_workflow_status") == MIRROR_READY_TO_FINALIZE
+        ):
+            raise RequeueRefused("refused: ready_to_finalize")
+        failed = row.get("last_workflow_status") == "FAILED"
+        folder = _resolve_row_folder(row, (data_root or DATA_ROOT).resolve())
+        review = bool(folder) and _pause_kind(folder) == "subscription_review"
+        if not failed and not review:
+            raise RequeueRefused("refused: not FAILED or subscription_review")
+        try:
+            return transition(
+                slug,
+                "queued",
+                worker=row["locked_by"] or "",
+                token=int(row["fencing_token"] or 0),
+                conn=conn,
+                last_workflow_status=row.get("last_workflow_status"),
+                last_stage=row.get("last_stage"),
+                requeued_by=who,
+                requeue_reason=note,
+            )
+        except FenceRejected as err:
+            raise RequeueRefused(f"refused: fence rejected for {slug}") from err
     finally:
         if close_after:
             conn.close()

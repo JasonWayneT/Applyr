@@ -24,6 +24,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _MIGRATION_SQL = _REPO_ROOT / "server" / "migrations" / "025_add_pipeline_queue.sql"
 _MIGRATION_026 = _REPO_ROOT / "server" / "migrations" / "026_add_pipeline_queue_paused_at.sql"
 _MIGRATION_027 = _REPO_ROOT / "server" / "migrations" / "027_add_pipeline_queue_paused_reason.sql"
+_MIGRATION_028 = _REPO_ROOT / "server" / "migrations" / "028_add_pipeline_queue_requeue_audit.sql"
 
 
 def _table_info(conn: sqlite3.Connection, table: str) -> list[tuple[str, str, int, object, int]]:
@@ -48,6 +49,8 @@ class TestSchemaAntiDrift(unittest.TestCase):
             + _MIGRATION_026.read_text(encoding="utf-8")
             + "\n"
             + _MIGRATION_027.read_text(encoding="utf-8")
+            + "\n"
+            + _MIGRATION_028.read_text(encoding="utf-8")
         )
         from_file = sqlite3.connect(":memory:")
         from_file.executescript(sql_text)
@@ -77,6 +80,18 @@ class TestSchemaAntiDrift(unittest.TestCase):
         pq.ensure_schema(conn)
         cols_after = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
         self.assertIn("paused_reason", cols_after)
+        conn.close()
+
+    def test_ensure_schema_adds_requeue_columns_on_025_table(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(_MIGRATION_SQL.read_text(encoding="utf-8"))
+        cols_before = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+        self.assertNotIn("requeued_by", cols_before)
+        pq.ensure_schema(conn)
+        cols_after = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+        self.assertIn("requeued_by", cols_after)
+        self.assertIn("requeue_reason", cols_after)
+        self.assertIn("requeued_at", cols_after)
         conn.close()
 
     def test_connect_sets_row_factory_and_busy_timeout(self) -> None:
@@ -595,6 +610,174 @@ class TestQueueClaimCli(QueueHarness):
         self.assertNotIn("SECRET_CONTACT_DO_NOT_PRINT", buf2.getvalue())
         rc = main(["--db", str(self.db), "claim", "--worker", "harness-1", "--size", "11"])
         self.assertEqual(rc, 2)
+
+
+class TestManualRequeue(QueueHarness):
+    def _paused_failed(self, slug: str) -> None:
+        _seed(self.conn, slug)
+        _set_paused(self.conn, slug)
+        self.conn.execute(
+            "UPDATE pipeline_queue SET last_workflow_status = 'FAILED', "
+            "last_stage = 'stage1' WHERE slug = ?",
+            (slug,),
+        )
+        self.conn.commit()
+
+    def _paused_subscription_review(self, slug: str) -> None:
+        _seed(self.conn, slug)
+        _set_paused(self.conn, slug)
+        self.conn.execute(
+            "UPDATE pipeline_queue SET last_workflow_status = 'WAITING_FOR_INPUT', "
+            "last_stage = 'stage0' WHERE slug = ?",
+            (slug,),
+        )
+        self.conn.commit()
+        folder = self.data / "pending_review" / slug
+        receipts = folder / "stage_receipts"
+        receipts.mkdir(parents=True)
+        (receipts / "stage0.json").write_text(
+            json.dumps({"result": {"pause_kind": "subscription_review"}}),
+            encoding="utf-8",
+        )
+
+    def test_requeue_allows_paused_failed(self) -> None:
+        self._paused_failed("healthstream")
+        row = pq.requeue_paused(
+            "healthstream",
+            reason="retry Stage 1 after repair",
+            worker="cursor",
+            conn=self.conn,
+            data_root=self.data,
+        )
+        self.assertEqual(row["status"], "queued")
+        self.assertEqual(row["requeued_by"], "cursor")
+        self.assertEqual(row["requeue_reason"], "retry Stage 1 after repair")
+        self.assertIsNotNone(row["requeued_at"])
+        self.assertIsNone(row["locked_by"])
+        self.assertEqual(row["last_workflow_status"], "FAILED")
+
+    def test_requeue_allows_subscription_review_pause(self) -> None:
+        self._paused_subscription_review("casper_studios")
+        row = pq.requeue_paused(
+            "casper_studios",
+            reason="retry omitted evidence ids",
+            worker="cursor",
+            conn=self.conn,
+            data_root=self.data,
+        )
+        self.assertEqual(row["status"], "queued")
+        self.assertEqual(row["requeued_by"], "cursor")
+        self.assertEqual(row["requeue_reason"], "retry omitted evidence ids")
+
+    def test_requeue_refuses_leased_in_progress_done_and_ready_to_finalize(self) -> None:
+        _seed(self.conn, "leased_job")
+        pq.transition("leased_job", "leased", worker="w1", token=0, conn=self.conn)
+        with self.assertRaises(pq.RequeueRefused) as leased:
+            pq.requeue_paused(
+                "leased_job",
+                reason="no",
+                conn=self.conn,
+                data_root=self.data,
+            )
+        self.assertIn("status=leased", str(leased.exception))
+
+        _seed(self.conn, "running_job")
+        pq.transition("running_job", "leased", worker="w1", token=0, conn=self.conn)
+        running = pq.transition(
+            "running_job", "in_progress", worker="w1", token=1, conn=self.conn
+        )
+        with self.assertRaises(pq.RequeueRefused) as running_err:
+            pq.requeue_paused(
+                "running_job",
+                reason="no",
+                conn=self.conn,
+                data_root=self.data,
+            )
+        self.assertIn("status=in_progress", str(running_err.exception))
+        self.assertEqual(pq.get_row(self.conn, "running_job")["status"], "in_progress")
+        self.assertEqual(
+            int(running["fencing_token"]),
+            int(pq.get_row(self.conn, "running_job")["fencing_token"]),
+        )
+
+        _seed(self.conn, "done_job")
+        pq.transition("done_job", "leased", worker="w1", token=0, conn=self.conn)
+        pq.transition("done_job", "in_progress", worker="w1", token=1, conn=self.conn)
+        pq.transition("done_job", "done", worker="w1", token=1, conn=self.conn)
+        with self.assertRaises(pq.RequeueRefused) as done:
+            pq.requeue_paused(
+                "done_job",
+                reason="no",
+                conn=self.conn,
+                data_root=self.data,
+            )
+        self.assertIn("status=done", str(done.exception))
+
+        _seed(self.conn, "finalize_job")
+        _set_paused(self.conn, "finalize_job")
+        self.conn.execute(
+            "UPDATE pipeline_queue SET paused_reason = ?, last_workflow_status = ? "
+            "WHERE slug = ?",
+            (pq.PAUSED_REASON_READY_TO_FINALIZE, pq.MIRROR_READY_TO_FINALIZE, "finalize_job"),
+        )
+        self.conn.commit()
+        with self.assertRaises(pq.RequeueRefused) as ready:
+            pq.requeue_paused(
+                "finalize_job",
+                reason="no",
+                conn=self.conn,
+                data_root=self.data,
+            )
+        self.assertIn("ready_to_finalize", str(ready.exception))
+        self.assertEqual(pq.get_row(self.conn, "finalize_job")["status"], "paused")
+
+    def test_cli_requeue_allowed_and_refused(self) -> None:
+        from queue_claim import main
+
+        self._paused_failed("binance")
+        self.conn.close()
+        buf = __import__("io").StringIO()
+        err = __import__("io").StringIO()
+        with mock.patch("sys.stdout", buf), mock.patch("sys.stderr", err):
+            rc = main(
+                [
+                    "--db",
+                    str(self.db),
+                    "requeue",
+                    "--slug",
+                    "binance",
+                    "--reason",
+                    "retry after repair",
+                    "--worker",
+                    "cursor",
+                    "--data-root",
+                    str(self.data),
+                ]
+            )
+        self.assertEqual(rc, 0)
+        self.assertIn("requeued=1", buf.getvalue())
+        self.assertIn("by=cursor", buf.getvalue())
+
+        conn = pq.connect(self.db)
+        pq.transition("binance", "leased", worker="w1", token=0, conn=conn)
+        conn.close()
+        err2 = __import__("io").StringIO()
+        with mock.patch("sys.stderr", err2):
+            rc = main(
+                [
+                    "--db",
+                    str(self.db),
+                    "requeue",
+                    "--slug",
+                    "binance",
+                    "--reason",
+                    "no",
+                    "--data-root",
+                    str(self.data),
+                ]
+            )
+        self.assertEqual(rc, 2)
+        self.assertIn("status=leased", err2.getvalue())
 
 
 if __name__ == "__main__":

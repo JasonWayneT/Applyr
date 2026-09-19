@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CR-119 claim/heartbeat/release CLI. Thin argparse over pipeline_queue.
+"""CR-119 claim/heartbeat/release/requeue CLI. Thin argparse over pipeline_queue.
 
 # Implements FR-343 / NFR-016 / SEC-007
 """
@@ -23,6 +23,10 @@ _SAFE_STATUS_COLUMNS = (
     "last_workflow_status",
     "last_stage",
     "folder_root",
+    "paused_reason",
+    "requeued_by",
+    "requeue_reason",
+    "requeued_at",
 )
 
 
@@ -50,6 +54,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("status")
 
+    requeue = sub.add_parser("requeue")
+    requeue.add_argument("--slug", required=True)
+    requeue.add_argument("--reason", required=True)
+    requeue.add_argument("--worker", default="manual")
+    requeue.add_argument("--data-root", default=str(pq.DATA_ROOT))
+
     args = parser.parse_args(argv)
     db_path = Path(args.db)
     if args.cmd == "claim":
@@ -60,8 +70,8 @@ def main(argv: list[str] | None = None) -> int:
                 lease_minutes=args.lease_minutes,
                 db_path=db_path,
             )
-        except pq.PackSizeError as exc:
-            print(str(exc), file=sys.stderr)
+        except pq.PackSizeError as err:
+            print(str(err), file=sys.stderr)
             return 2
         print(f"claimed={len(rows)}")
         for row in rows:
@@ -76,6 +86,24 @@ def main(argv: list[str] | None = None) -> int:
         print(f"released={len(rows)}")
         for row in rows:
             _print_row(row)
+        return 0
+    if args.cmd == "requeue":
+        try:
+            row = pq.requeue_paused(
+                args.slug,
+                reason=args.reason,
+                worker=args.worker,
+                db_path=db_path,
+                data_root=Path(args.data_root),
+            )
+        except pq.RequeueRefused as err:
+            print(str(err), file=sys.stderr)
+            return 2
+        print(
+            f"requeued=1 slug={row['slug']} status={row['status']} "
+            f"by={row.get('requeued_by')} reason={row.get('requeue_reason')}"
+        )
+        _print_row(row)
         return 0
     conn = pq.connect(db_path)
     try:

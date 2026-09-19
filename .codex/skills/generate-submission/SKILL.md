@@ -23,7 +23,15 @@ python scripts/ingest_csv_queue.py
 python scripts/run_queue_worker.py --worker <your-harness-id> --once
 ```
 
-The worker claims a pack (default 8), holds the lease and per-slug lock, and calls `run_submission.py {slug}` for each job. It's the same orchestrator described below. Don't pre-claim with `queue_claim.py`, which is for inspection only. Never run `run_submission.py` by hand on a queued slug, including `--resume`. After a Stage 1 paste or writing dispositions, run the worker again. Bad rows land in quarantine and show in Review Center's pipeline panel. Scout-exported JDs aren't queued yet (Phase B) and still use the direct path below.
+The worker claims a pack (default 8), holds the lease and per-slug lock, and calls `run_submission.py {slug}` for each job. It's the same orchestrator described below. Don't pre-claim with `queue_claim.py claim`, which is for inspection only. Never run `run_submission.py` by hand on a queued slug, including `--resume`. After a Stage 1 paste or writing dispositions, run the worker again. Bad rows land in quarantine and show in Review Center's pipeline panel. Scout-exported JDs aren't queued yet (Phase B) and still use the direct path below.
+
+The only supported way to requeue a paused job by hand is:
+
+```bash
+python scripts/queue_claim.py requeue --slug SLUG --reason TEXT
+```
+
+Eligible rows are `paused` with `last_workflow_status=FAILED`, or a Stage 0 `subscription_review` evidence pause. It is refused for `leased`, `in_progress`, `done`, and `ready_to_finalize`. The reason and who requeued it are recorded on the row. Then run the worker again. Do not invent another requeue path.
 
 ### Default token-conscious path (CR-074 + CR-076-084) — use this unless Jason asks otherwise
 

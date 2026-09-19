@@ -972,6 +972,74 @@ class TestSentenceLevelProvenance(unittest.TestCase):
             self.assertTrue(ok, lines)
             self.assertIn("legacy packet", lines[0])
 
+    def test_bulleted_core_competencies_are_not_treated_as_uncited_bullets(self):
+        # Found 2026-09-19 on a fresh healthstream draft: nothing in the digest
+        # requires Core Competencies to be a single comma-separated line, and
+        # a bulleted rendering ("* Product Strategy & Roadmap Planning") was
+        # flagged as 5 uncited resume bullets -- they are skill/category
+        # labels, not factual accomplishment claims, and need no citation.
+        from author_from_packet import _check_sentence_level_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps({**_READY_PACKET, "provenance_contract": {"version": 2}}),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text(
+                "## CORE COMPETENCIES\n"
+                "* Product Strategy & Roadmap Planning\n"
+                "* Agile Development & Cross-Functional Alignment\n\n"
+                "## PROFESSIONAL EXPERIENCE\n"
+                "* Built a verified workflow with engineering.\n",
+                encoding="utf-8",
+            )
+            (folder / "CoverLetter.md").write_text(
+                "Dear Hiring Manager,\n\nBody.\n\nBest regards,\n\nJason\n",
+                encoding="utf-8",
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({
+                    "resume_claims": [{
+                        "bullet": "Built a verified workflow with engineering.",
+                        "claim_ids": ["ACC-101"],
+                    }],
+                    "cover_letter_claims": [],
+                }),
+                encoding="utf-8",
+            )
+            ok, lines = _check_sentence_level_provenance(folder)
+            self.assertTrue(ok, lines)
+            self.assertFalse(any("Roadmap Planning" in line for line in lines), lines)
+
+    def test_experience_bullets_still_require_citation(self):
+        # Regression guard: scoping to PROFESSIONAL EXPERIENCE must not stop
+        # catching a genuinely uncited experience bullet.
+        from author_from_packet import _check_sentence_level_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps({**_READY_PACKET, "provenance_contract": {"version": 2}}),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text(
+                "## PROFESSIONAL EXPERIENCE\n"
+                "* An uncited accomplishment with no matching claim.\n",
+                encoding="utf-8",
+            )
+            (folder / "CoverLetter.md").write_text(
+                "Dear Hiring Manager,\n\nBody.\n\nBest regards,\n\nJason\n",
+                encoding="utf-8",
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_sentence_level_provenance(folder)
+            self.assertFalse(ok)
+            self.assertTrue(any("uncited bullet" in line for line in lines), lines)
+
 
 class TestAuthoringExamplePriority(unittest.TestCase):
     def test_later_relevant_category_can_enter_three_example_budget(self):

@@ -821,6 +821,32 @@ def _normalize_provenance_unit(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip().rstrip(".!?").lower()
 
 
+def _professional_experience_bullets(resume_text: str) -> list[str]:
+    """Return only PROFESSIONAL EXPERIENCE bullet lines.
+
+    Found 2026-09-19 on a fresh healthstream draft: `## CORE COMPETENCIES`
+    rendered as a bulleted list ("* Product Strategy & Roadmap Planning")
+    rather than the comma-separated inline form other drafts happened to use.
+    Nothing in the digest requires either format. The old blanket "any line
+    starting with '* '/'- ' in the whole document" extraction treated those
+    skill/category labels as factual accomplishment bullets needing a
+    citation, which they are not -- they are not claims, the same way an ATS
+    skills row isn't. Only PROFESSIONAL EXPERIENCE bullets need sentence-level
+    provenance; EDUCATION and PROFESSIONAL SUMMARY use no bullets at all.
+    """
+    lines = resume_text.splitlines()
+    in_experience = False
+    bullets: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_experience = stripped[3:].strip().casefold() == "professional experience"
+            continue
+        if in_experience and stripped.startswith(("* ", "- ")):
+            bullets.append(stripped[2:].strip())
+    return bullets
+
+
 def _cover_factual_sentences(text: str) -> list[str]:
     """Return candidate-fact sentences, excluding JD framing and the close."""
     body = (text or "").split("Dear Hiring Manager,", 1)[-1]
@@ -891,11 +917,7 @@ def _check_sentence_level_provenance(folder: Path) -> tuple[bool, list[str]]:
                 covered.add(_normalize_provenance_unit(value))
         return covered
 
-    resume_units = [
-        line.strip()[2:].strip()
-        for line in resume_text.splitlines()
-        if line.strip().startswith(("* ", "- "))
-    ]
+    resume_units = _professional_experience_bullets(resume_text)
     cover_units = _cover_factual_sentences(letter_text)
     covered_resume = _covered("resume_claims", "bullet")
     covered_cover = _covered("cover_letter_claims", "sentence")

@@ -449,6 +449,27 @@ _NON_CLAIMABLE_BRIDGE_LOGISTICS = (
     "Not a skill claim (employment/contract logistics) -- no evidence required."
 )
 
+_NON_CLAIMABLE_BRIDGE_TRAVEL = (
+    "Not a skill claim (travel-percentage disclosure) -- already handled by "
+    "Stage 0's deterministic travel-ceiling gate, no accomplishment evidence required."
+)
+
+# Found 2026-09-19 on healthstream: "Travel of approximately 10-15% may be
+# required to support partner and customer relationships and attend industry
+# events" was scored `required` and matched claim_ids purely because it
+# contains the word "support" as a verb ("to support ... relationships"), not
+# a request for customer-support accomplishment evidence. Travel-percentage
+# disclosure is administratively satisfied by the separate travel-ceiling
+# gate (stage0_prefs_gate._check_travel) the same way education is
+# administratively satisfied by the degree-line check above -- neither is a
+# skill claim needing a resume bridge.
+_TRAVEL_LOGISTICS_RE = re.compile(
+    r"travel\s+of\s+approximately\s+\d{1,3}\s*[-–]\s*\d{1,3}\s*%|"
+    r"\b\d{1,3}\s*[-–]\s*\d{1,3}\s*%\s+travel|"
+    r"travel\s+(?:of\s+)?(?:up\s+to\s+)?\d{1,3}\s*%\s+(?:may\s+be\s+)?required",
+    re.I,
+)
+
 # Found 2026-09-19 on binance: a JD line stating contract length/type and location
 # flexibility ("fixed-term (12 months)... may be located anywhere across APAC time
 # zones") was scored as a `required` item and matched ACC-220-CLOUDERAEXIT purely on
@@ -488,6 +509,11 @@ def _is_employment_logistics_non_claimable(item_text: str) -> bool:
     return bool(_EMPLOYMENT_LOGISTICS_RE.search(item_text or ""))
 
 
+def _is_travel_logistics_non_claimable(item_text: str) -> bool:
+    """A travel-percentage disclosure is administratively satisfied, not a skill claim."""
+    return bool(_TRAVEL_LOGISTICS_RE.search(item_text or ""))
+
+
 def _item_names_hard_blocked_tool(item_text: str) -> bool:
     """True when the JD line names a Stage-0 hard-blocked tool Jason must not claim."""
     if not (item_text or "").strip():
@@ -508,6 +534,8 @@ def _force_empty_claim_scoring(item_text: str) -> str | None:
         return _NON_CLAIMABLE_BRIDGE_PRODUCTIVITY
     if _is_employment_logistics_non_claimable(item_text):
         return _NON_CLAIMABLE_BRIDGE_LOGISTICS
+    if _is_travel_logistics_non_claimable(item_text):
+        return _NON_CLAIMABLE_BRIDGE_TRAVEL
     if _item_names_hard_blocked_tool(item_text):
         return _HARD_TOOL_EVIDENCE_BRIDGE
     return None

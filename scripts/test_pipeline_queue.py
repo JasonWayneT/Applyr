@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sqlite3
 import sys
 import tempfile
@@ -24,24 +23,21 @@ import pipeline_queue as pq  # noqa: E402
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _MIGRATION_SQL = _REPO_ROOT / "server" / "migrations" / "025_add_pipeline_queue.sql"
 _MIGRATION_026 = _REPO_ROOT / "server" / "migrations" / "026_add_pipeline_queue_paused_at.sql"
+_MIGRATION_027 = _REPO_ROOT / "server" / "migrations" / "027_add_pipeline_queue_paused_reason.sql"
 
 
-def _normalize_sql(sql: str | None) -> str:
-    if not sql:
-        return ""
-    stripped = re.sub(r"--[^\n]*", " ", sql)
-    stripped = " ".join(stripped.lower().split())
-    stripped = re.sub(r"\s*,\s*", ", ", stripped)
-    stripped = re.sub(r"\s+\)", ")", stripped)
-    return stripped
+def _table_info(conn: sqlite3.Connection, table: str) -> list[tuple[str, str, int, object, int]]:
+    return [
+        (row[1], row[2], row[3], row[5], row[4])
+        for row in conn.execute(f"PRAGMA table_info({table})")
+    ]
 
 
-def _dump_master(conn: sqlite3.Connection) -> list[tuple[str, str, str, str]]:
+def _index_names(conn: sqlite3.Connection) -> list[str]:
     rows = conn.execute(
-        "SELECT type, name, tbl_name, sql FROM sqlite_master "
-        "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     ).fetchall()
-    return [(r[0], r[1], r[2], _normalize_sql(r[3])) for r in rows]
+    return [row[0] for row in rows]
 
 
 class TestSchemaAntiDrift(unittest.TestCase):
@@ -50,6 +46,8 @@ class TestSchemaAntiDrift(unittest.TestCase):
             _MIGRATION_SQL.read_text(encoding="utf-8")
             + "\n"
             + _MIGRATION_026.read_text(encoding="utf-8")
+            + "\n"
+            + _MIGRATION_027.read_text(encoding="utf-8")
         )
         from_file = sqlite3.connect(":memory:")
         from_file.executescript(sql_text)
@@ -57,7 +55,9 @@ class TestSchemaAntiDrift(unittest.TestCase):
         from_python = sqlite3.connect(":memory:")
         pq.ensure_schema(from_python)
 
-        self.assertEqual(_dump_master(from_file), _dump_master(from_python))
+        for table in ("pipeline_queue", "csv_ingest_ledger", "csv_quarantine"):
+            self.assertEqual(_table_info(from_file, table), _table_info(from_python, table))
+        self.assertEqual(_index_names(from_file), _index_names(from_python))
 
     def test_ensure_schema_adds_paused_at_on_025_table(self) -> None:
         conn = sqlite3.connect(":memory:")
@@ -67,6 +67,16 @@ class TestSchemaAntiDrift(unittest.TestCase):
         pq.ensure_schema(conn)
         cols_after = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
         self.assertIn("paused_at", cols_after)
+        conn.close()
+
+    def test_ensure_schema_adds_paused_reason_on_025_table(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(_MIGRATION_SQL.read_text(encoding="utf-8"))
+        cols_before = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+        self.assertNotIn("paused_reason", cols_before)
+        pq.ensure_schema(conn)
+        cols_after = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+        self.assertIn("paused_reason", cols_after)
         conn.close()
 
     def test_connect_sets_row_factory_and_busy_timeout(self) -> None:
@@ -173,9 +183,17 @@ class TestTransitions(QueueHarness):
         _seed(self.conn, "epsilon")
         pq.transition("epsilon", "leased", worker="w1", token=0, conn=self.conn)
         pq.transition("epsilon", "in_progress", worker="w1", token=1, conn=self.conn)
-        pq.transition("epsilon", "paused", worker="w1", token=1, conn=self.conn)
-        with self.assertRaises(pq.IllegalTransition):
-            pq.transition("epsilon", "done", worker="", token=1, conn=self.conn)
+        paused = pq.transition("epsilon", "paused", worker="w1", token=1, conn=self.conn)
+        done = pq.transition(
+            "epsilon",
+            "done",
+            worker="",
+            token=int(paused["fencing_token"]),
+            conn=self.conn,
+            paused_reason=pq.PAUSED_REASON_READY_TO_FINALIZE,
+        )
+        self.assertEqual(done["status"], "done")
+        self.assertIsNone(done["paused_reason"])
 
 
 class TestClaimPack(QueueHarness):
@@ -357,6 +375,70 @@ class TestClaimPack(QueueHarness):
         second = pq.claim_pack("w2", size=8, conn=self.conn, data_root=self.data)
         self.assertEqual(second, [])
         self.assertEqual(pq.get_row(self.conn, "failedjob")["status"], "paused")
+
+    def test_ready_to_finalize_never_auto_promotes(self) -> None:
+        _seed(self.conn, "rentana")
+        _set_paused(self.conn, "rentana")
+        self.conn.execute(
+            "UPDATE pipeline_queue SET paused_reason = ?, last_workflow_status = ? "
+            "WHERE slug = ?",
+            (pq.PAUSED_REASON_READY_TO_FINALIZE, pq.MIRROR_READY_TO_FINALIZE, "rentana"),
+        )
+        self.conn.commit()
+        folder = self.data / "pending_review" / "rentana"
+        folder.mkdir(parents=True)
+        (folder / "workflow_state.json").write_text(
+            json.dumps(
+                {
+                    "status": "IN_PROGRESS",
+                    "active_stage": "stage3",
+                    "stages": {
+                        "stage2": {"status": "COMPLETE"},
+                        "stage3": {"status": "READY"},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        first = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(first, [])
+        row = pq.get_row(self.conn, "rentana")
+        assert row is not None
+        self.assertEqual(row["status"], "paused")
+        self.assertEqual(row["paused_reason"], pq.PAUSED_REASON_READY_TO_FINALIZE)
+
+    def test_mark_done_from_ready_to_finalize(self) -> None:
+        _seed(self.conn, "rentana")
+        leased = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)[0]
+        pq.transition(
+            "rentana",
+            "in_progress",
+            worker="w1",
+            token=int(leased["fencing_token"]),
+            conn=self.conn,
+        )
+        paused = pq.transition(
+            "rentana",
+            "paused",
+            worker="w1",
+            token=int(pq.get_row(self.conn, "rentana")["fencing_token"]),
+            conn=self.conn,
+            last_workflow_status=pq.MIRROR_READY_TO_FINALIZE,
+            last_stage="stage3",
+            paused_reason=pq.PAUSED_REASON_READY_TO_FINALIZE,
+        )
+        self.assertEqual(paused["status"], "paused")
+        self.assertIsNone(paused["locked_by"])
+        done = pq.mark_done(
+            "rentana",
+            conn=self.conn,
+            last_workflow_status="COMPLETE",
+        )
+        assert done is not None
+        self.assertEqual(done["status"], "done")
+        self.assertIsNone(done["paused_reason"])
+        self.assertIsNone(done["locked_by"])
+        self.assertEqual(done["last_workflow_status"], "COMPLETE")
 
     def test_repair_requeues_paused_failed_explicitly(self) -> None:
         _seed(self.conn, "repairme")

@@ -222,12 +222,40 @@ def build_runner_command(
     return cmd
 
 
+def is_ready_to_finalize(state: dict[str, Any]) -> bool:
+    """Stage 2 COMPLETE / Stage 3 READY: waiting for Jason's --finalize, not stuck."""
+    if not isinstance(state, dict):
+        return False
+    stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
+    s2 = stages.get("stage2") if isinstance(stages.get("stage2"), dict) else {}
+    s3 = stages.get("stage3") if isinstance(stages.get("stage3"), dict) else {}
+    return (
+        state.get("status") == "IN_PROGRESS"
+        and state.get("active_stage") == "stage3"
+        and s2.get("status") == "COMPLETE"
+        and s3.get("status") == "READY"
+    )
+
+
 def map_workflow_status(workflow_status: str | None) -> str | None:
     if workflow_status in PAUSE_WORKFLOW:
         return "paused"
     if workflow_status in DONE_WORKFLOW:
         return "done"
     return None
+
+
+def map_run_result(state: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    """Return (queue_status, paused_reason, last_workflow_status)."""
+    if is_ready_to_finalize(state):
+        return (
+            "paused",
+            pq.PAUSED_REASON_READY_TO_FINALIZE,
+            pq.MIRROR_READY_TO_FINALIZE,
+        )
+    wf_status = state.get("status") if isinstance(state.get("status"), str) else None
+    mapped = map_workflow_status(wf_status)
+    return mapped, None, wf_status
 
 
 def read_workflow_state(folder: Path | None) -> dict[str, Any]:
@@ -289,7 +317,7 @@ def apply_run_result(
     wf_status = state.get("status") if isinstance(state.get("status"), str) else None
     last_stage = state.get("active_stage") if isinstance(state.get("active_stage"), str) else None
     folder_root = folder_root_label(folder, data_root) if folder is not None else None
-    mapped = map_workflow_status(wf_status)
+    mapped, paused_reason, mirror_status = map_run_result(state)
     if mapped is None:
         update_mirror(
             conn,
@@ -305,9 +333,10 @@ def apply_run_result(
         worker=worker,
         token=token,
         conn=conn,
-        last_workflow_status=wf_status,
+        last_workflow_status=mirror_status,
         last_stage=last_stage,
         folder_root=folder_root,
+        paused_reason=paused_reason,
     )
 
 

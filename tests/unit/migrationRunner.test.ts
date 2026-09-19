@@ -158,4 +158,17 @@ describe('runMigrations', () => {
       .get('026_add_pipeline_queue_paused_at.sql');
     expect(row).toBeDefined();
   });
+
+  it('records 027 without ALTER when paused_reason already exists', () => {
+    db.exec(`CREATE TABLE pipeline_queue (id INTEGER PRIMARY KEY, paused_reason TEXT)`);
+    writeFileSync(
+      path.join(migrationsDir, '027_add_pipeline_queue_paused_reason.sql'),
+      `ALTER TABLE pipeline_queue ADD COLUMN paused_reason TEXT;`,
+    );
+    expect(() => runMigrations(db, migrationsDir)).not.toThrow();
+    const row = db
+      .prepare(`SELECT id FROM schema_migrations WHERE id = ?`)
+      .get('027_add_pipeline_queue_paused_reason.sql');
+    expect(row).toBeDefined();
+  });
 });

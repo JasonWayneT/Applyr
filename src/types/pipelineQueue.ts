@@ -5,6 +5,7 @@ export interface PipelineQueueCounts {
   leased: number;
   in_progress: number;
   paused: number;
+  ready_to_finalize: number;
   done: number;
   quarantined: number;
 }

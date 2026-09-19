@@ -4,7 +4,7 @@ import { normalizePipelineStats, normalizeQuarantineRows, normalizeUploadResult 
 describe('pipeline queue client normalize', () => {
   it('keeps counts, leases, and stuck rows and drops unexpected PII fields', () => {
     const stats = normalizePipelineStats({
-      counts: { queued: 2, leased: 1, in_progress: 0, paused: 1, done: 3, quarantined: 4 },
+      counts: { queued: 2, leased: 1, in_progress: 0, paused: 1, ready_to_finalize: 2, done: 3, quarantined: 4 },
       leases: [{
         slug: 'acme',
         company: 'Acme',
@@ -22,6 +22,8 @@ describe('pipeline queue client normalize', () => {
       }],
     });
     expect(stats.counts.queued).toBe(2);
+    expect(stats.counts.ready_to_finalize).toBe(2);
+    expect(stats.counts.paused).toBe(1);
     expect(stats.leases[0].lockedBy).toBe('harness-1');
     expect(JSON.stringify(stats)).not.toContain('SECRET');
     expect(stats.stuck[0].reason).toBe('expired_lease');

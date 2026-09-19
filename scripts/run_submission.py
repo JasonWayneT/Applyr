@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import sys
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -69,6 +70,25 @@ def _print_console_summary(folder: str, before_count: int) -> None:
         line = f"Stage {stage:<14} {kind:<17} {dur:>6}  {detail}".rstrip()
         enc = sys.stdout.encoding or "utf-8"
         print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
+def _queue_mark_done(folder: str, status: str | None) -> None:
+    """Release a ready_to_finalize (or leftover in_progress) queue row after --finalize."""
+    if status not in ("COMPLETE", "COMPLETE_WITH_OVERRIDE", "PRACTICE_COMPLETE"):
+        return
+    slug = os.path.basename(os.path.abspath(folder))
+    try:
+        import pipeline_queue as pq
+    except ImportError:
+        return
+    try:
+        conn = pq.connect()
+        try:
+            pq.mark_done(slug, conn=conn, last_workflow_status=status)
+        finally:
+            conn.close()
+    except (pq.FenceRejected, pq.IllegalTransition, OSError, sqlite3.Error):
+        return
 
 
 def _print_status(folder: str) -> int:
@@ -230,6 +250,7 @@ def main() -> None:
                     "COMPLETE_WITH_OVERRIDE",
                     "PRACTICE_COMPLETE",
                 ):
+                    _queue_mark_done(folder, st.get("status"))
                     print(f"WORKFLOW already terminal status={st.get('status')}")
                     sys.exit(0)
                 reach = True if args.finalize_reach_out else None
@@ -406,12 +427,15 @@ def main() -> None:
         if status == "FAILED":
             sys.exit(1)
         if status == "COMPLETE":
+            _queue_mark_done(_folder_for_events, status)
             print("WORKFLOW COMPLETE — check_workflow_complete should be YES.")
             sys.exit(0)
         if status == "COMPLETE_WITH_OVERRIDE":
+            _queue_mark_done(_folder_for_events, status)
             print("WORKFLOW COMPLETE_WITH_OVERRIDE — integrity OVERRIDDEN somewhere in the chain.")
             sys.exit(0)
         if status == "PRACTICE_COMPLETE":
+            _queue_mark_done(_folder_for_events, status)
             print("PRACTICE_COMPLETE — no DB write; not production DONE.")
             sys.exit(0)
         s2 = (state.get("stages") or {}).get("stage2") or {}

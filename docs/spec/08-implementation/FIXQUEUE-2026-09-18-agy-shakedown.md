@@ -51,6 +51,9 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **9d (pack 3).** Small repair prompts: rule/file/line/offending text/suggestion, local context, relevant digest, mentioned excerpts. Rentana LR-013 case stays under 10KB.
   - [x] **9e (pack 3).** Stage 1 validation failure maps to `paused` with `last_workflow_status=FAILED`, lease released, never auto-promoted. Repair requeues explicitly.
   - [x] **9g.** Rebuilt packet/prompt refreshes the Stage 1 `WAITING_FOR_LLM` receipt hashes. Resume no longer prints `STALE: stage1` for a WAITING receipt.
+  - [x] **9f (pack 4).** Stage 2 COMPLETE / Stage 3 READY maps to `paused` `ready_to_finalize`, lease released, Review Center panel count separate, never auto-promoted. `--finalize` maps to `done`.
+  - [ ] **9g (pack 4).** Repair calls are single-shot sandboxed text in/out with a wall-time and event cap.
+  - [ ] **9h (pack 4).** Requeue a FAILED repair only after valid artifacts are written.
   - [ ] **9f.** P2 live quarantine-panel check stays a Codex preflight.
 
 - [ ] **10. Stage 1 split (CR-120 reserved: `FR-348`–`FR-352`, `AC-451`–`AC-455`; docs renamed from colliding CR-117).** Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen cases in `data/eval/cr117/`.
@@ -60,6 +63,67 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
 ## Incoming from testing
 
 Ranked findings not already covered by items 1-8:
+
+### P0 - Stage 2 complete remains leased in_progress instead of finalize-ready
+
+**Evidence:** On pack 4 start commit
+`63d7100095686c450136aad344d93ad22f5f3f77`, the worker completed
+Rentana's Truth, ATS, HM, Mech, and Policy phases. Its output said
+`Stage 2 COMPLETE` and `Stage 3 READY`; `workflow_state.json` has stage2
+`COMPLETE`, stage3 `READY`, and top-level `IN_PROGRESS` at stage3. The worker
+returned `claimed=1 results=ran`, but `pipeline_queue` stayed `in_progress`,
+`last_workflow_status=IN_PROGRESS`, with a 20-minute lease. Both PDFs were
+1 page and `verification_receipt.json` said `mechanically_verified=true`.
+**How often:** 1/1 jobs reaching Stage 3 READY in this supervised run.
+
+**Suggested fix:** Map the precise `(active_stage=stage3, stage2=COMPLETE,
+stage3=READY)` state to a distinct `waiting_to_finalize` paused/terminal queue
+status and release the lease. Do not infer completion from generic
+`IN_PROGRESS`; other stages genuinely use it. Add a worker regression test
+and make the Review Center panel display this as ready for Jason, not stuck.
+
+### P1 - Compact repair prompt still triggers a long Agy tool loop
+
+**Evidence:** HealthStream's first repair prompt was 8,022 bytes (7.83 KiB)
+for three Stage 1 finding categories, below the 10 KiB target. A fresh
+Gemini 3.8 Flash Medium session emitted 177 `step_update` events over more
+than five minutes and wrote none of the three required files. The call was
+interrupted under the agreed quota-burning stop rule. `agy_quota_tracker.py
+after` failed closed on the truncated stream, so final model usage is
+unavailable; account allowance snapshots moved from 67%/89% to 65%/84%
+(weekly/five-hour), which may include concurrent work. Stream preserved at
+`data/eval/cr119_supervised/healthstream_repair01_interrupted_stream.jsonl`.
+**How often:** 1/1 compact repair call tested; no usable output.
+
+**Suggested fix:** Put a hard wall-time/internal-step budget on isolated
+repair calls and fail when required artifacts are absent. Disable tool and
+slash-command exploration for prompt-only repairs. Record an interrupted
+call's allowance delta separately even without a final Agy result event.
+
+### P1 - Repair builder requeues before repaired files exist
+
+**Evidence:** HealthStream failed Stage 1 and correctly paused at `FAILED`
+with no lease. `build_stage1_repair_prompt.py` wrote the 7.83 KiB prompt and
+immediately changed the row to `queued`. The following Agy repair was
+interrupted without output, leaving the row queued with the old failed
+draft files and `last_workflow_status=FAILED`. A worker claim now would
+repeat validation without any changed content. **How often:** 1/1 live
+repair-builder invocation with failed external authoring.
+
+**Suggested fix:** Keep `FAILED` paused while only a repair prompt exists.
+Promote only when complete, changed Stage 1 artifacts are present, or add a
+distinct repair-pending queue status that the worker cannot claim.
+
+### P2 - Coverage finding IDs collide across claim variants
+
+**Evidence:** Rentana Truth emitted two distinct coverage WARNs for
+`ACC-110-LEADERSHIP` and `ACC-110-OPS`, both with the id
+`truth.coverage.unused.ACC-110`. `dispositions.json` therefore has one slot
+for two findings; one disposition silently settles both. **How often:** 2
+findings sharing 1 ID in the first Stage 2 Truth review.
+
+**Suggested fix:** Use the full claim ID in each finding ID and test
+multiple variants under one project ID. Preserve separate dispositions.
 
 ### P0 - Ready paused jobs starve behind any queued backlog
 

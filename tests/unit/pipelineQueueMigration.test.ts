@@ -280,3 +280,25 @@ describe('026_add_pipeline_queue_paused_at migration', () => {
     expect(col!.notnull).toBe(0);
   });
 });
+
+describe('027_add_pipeline_queue_paused_reason migration', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(':memory:');
+    db.exec(readFileSync(SQL_PATH, 'utf-8'));
+    db.exec(readFileSync(path.resolve('server/migrations/026_add_pipeline_queue_paused_at.sql'), 'utf-8'));
+    db.exec(readFileSync(path.resolve('server/migrations/027_add_pipeline_queue_paused_reason.sql'), 'utf-8'));
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('adds nullable paused_reason', () => {
+    const cols = getColumns(db, 'pipeline_queue');
+    const col = cols.find((c) => c.name === 'paused_reason');
+    expect(col).toBeDefined();
+    expect(col!.notnull).toBe(0);
+  });
+});

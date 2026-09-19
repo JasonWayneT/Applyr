@@ -8,6 +8,7 @@ export interface QueueCounts {
   leased: number;
   in_progress: number;
   paused: number;
+  ready_to_finalize: number;
   done: number;
   quarantined: number;
 }
@@ -38,7 +39,7 @@ export interface QuarantineRow {
   quarantineReason: string;
 }
 
-type CountRow = { status: string; n: number };
+type CountRow = { status: string; paused_reason: string | null; n: number };
 type LeaseRow = {
   slug: string;
   company: string;
@@ -47,6 +48,7 @@ type LeaseRow = {
   claimed_at: string | null;
   updated_at: string | null;
   status: string;
+  paused_reason?: string | null;
 };
 type QuarantineDbRow = {
   id: number;
@@ -63,24 +65,47 @@ function minutesSince(iso: string | null, nowMs: number): number {
   return Math.max(0, Math.round((nowMs - then) / 60000));
 }
 
+function tableHasColumn(
+  database: Database.Database,
+  table: string,
+  column: string,
+): boolean {
+  const rows = database.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === column);
+}
+
 export function queueCounts(database: Database.Database = db): QueueCounts {
-  const rows = database.prepare(
-    "SELECT status, COUNT(*) AS n FROM pipeline_queue GROUP BY status",
-  ).all() as CountRow[];
+  const hasReason = tableHasColumn(database, 'pipeline_queue', 'paused_reason');
+  const rows = (
+    hasReason
+      ? database.prepare(
+          `SELECT status, paused_reason, COUNT(*) AS n
+           FROM pipeline_queue
+           GROUP BY status, paused_reason`,
+        ).all()
+      : database.prepare(
+          `SELECT status, NULL AS paused_reason, COUNT(*) AS n
+           FROM pipeline_queue
+           GROUP BY status`,
+        ).all()
+  ) as CountRow[];
   const counts: QueueCounts = {
     queued: 0,
     leased: 0,
     in_progress: 0,
     paused: 0,
+    ready_to_finalize: 0,
     done: 0,
     quarantined: 0,
   };
   for (const row of rows) {
-    if (row.status === 'queued') counts.queued = row.n;
-    else if (row.status === 'leased') counts.leased = row.n;
-    else if (row.status === 'in_progress') counts.in_progress = row.n;
-    else if (row.status === 'paused') counts.paused = row.n;
-    else if (row.status === 'done') counts.done = row.n;
+    if (row.status === 'queued') counts.queued += row.n;
+    else if (row.status === 'leased') counts.leased += row.n;
+    else if (row.status === 'in_progress') counts.in_progress += row.n;
+    else if (row.status === 'paused' && row.paused_reason === 'ready_to_finalize') {
+      counts.ready_to_finalize += row.n;
+    } else if (row.status === 'paused') counts.paused += row.n;
+    else if (row.status === 'done') counts.done += row.n;
   }
   const quarantined = database.prepare(
     'SELECT COUNT(*) AS n FROM csv_quarantine',
@@ -112,13 +137,16 @@ export function stuckItems(
 ): StuckItem[] {
   const now = Date.now();
   const staleMs = staleMinutes * 60_000;
+  const hasReason = tableHasColumn(database, 'pipeline_queue', 'paused_reason');
+  const reasonSelect = hasReason ? ', paused_reason' : '';
   const rows = database.prepare(
-    `SELECT slug, company, locked_by, lease_expires_at, claimed_at, updated_at, status
+    `SELECT slug, company, locked_by, lease_expires_at, claimed_at, updated_at, status${reasonSelect}
      FROM pipeline_queue
      WHERE status IN ('leased', 'in_progress', 'paused')`,
   ).all() as LeaseRow[];
   const items: StuckItem[] = [];
   for (const row of rows) {
+    if (row.paused_reason === 'ready_to_finalize') continue;
     const expired = Boolean(
       row.lease_expires_at && Date.parse(row.lease_expires_at) <= now
       && (row.status === 'leased' || row.status === 'in_progress'),

@@ -144,11 +144,12 @@ export default function PipelineQueuePanel({ onOpenJob }: PipelineQueuePanelProp
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 mb-4">
         <CountChip label="Queued" value={counts?.queued ?? 0} />
         <CountChip label="Leased" value={counts?.leased ?? 0} />
         <CountChip label="In progress" value={counts?.in_progress ?? 0} />
         <CountChip label="Paused" value={counts?.paused ?? 0} />
+        <CountChip label="Ready to finalize" value={counts?.ready_to_finalize ?? 0} />
         <CountChip label="Done" value={counts?.done ?? 0} />
         <CountChip label="Quarantined" value={counts?.quarantined ?? 0} />
       </div>

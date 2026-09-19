@@ -19,7 +19,8 @@ _REPO_ROOT = _SCRIPT_DIR.parent
 DEFAULT_DB = _REPO_ROOT / "data" / "jobagent.sqlite"
 
 # Semantically identical to server/migrations/025_add_pipeline_queue.sql
-# plus 026_add_pipeline_queue_paused_at.sql (paused_at).
+# plus 026_add_pipeline_queue_paused_at.sql (paused_at)
+# plus 027_add_pipeline_queue_paused_reason.sql (paused_reason).
 # Story 1.3 anti-drift test dumps sqlite_master from both copies.
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS pipeline_queue (
@@ -54,7 +55,8 @@ CREATE TABLE IF NOT EXISTS pipeline_queue (
 
   last_workflow_status TEXT,
   last_stage           TEXT,
-  paused_at            TEXT
+  paused_at            TEXT,
+  paused_reason        TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pipeline_queue_url_key
@@ -101,10 +103,18 @@ def _ensure_paused_at_column(conn: sqlite3.Connection) -> None:
     )
 
 
+def _ensure_paused_reason_column(conn: sqlite3.Connection) -> None:
+    """Add paused_reason on DBs that already ran 025/026 without 027."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+    if "paused_reason" not in cols:
+        conn.execute("ALTER TABLE pipeline_queue ADD COLUMN paused_reason TEXT")
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
     """Create the three CR-119 tables if missing. Idempotent."""
     conn.executescript(_SCHEMA_SQL)
     _ensure_paused_at_column(conn)
+    _ensure_paused_reason_column(conn)
     conn.commit()
 
 
@@ -252,6 +262,7 @@ LEGAL_TRANSITIONS = frozenset(
         ("leased", "in_progress"),
         ("in_progress", "paused"),
         ("paused", "queued"),
+        ("paused", "done"),
         ("in_progress", "done"),
         ("leased", "queued"),
         # Expiry reclaim: an expired in_progress row becomes claimable (Story 3.3).
@@ -262,6 +273,34 @@ LEGAL_TRANSITIONS = frozenset(
 MAX_PACK_SIZE = 10
 DEFAULT_PACK_SIZE = 8
 DEFAULT_LEASE_MINUTES = 20
+PAUSED_REASON_READY_TO_FINALIZE = "ready_to_finalize"
+MIRROR_READY_TO_FINALIZE = "READY_TO_FINALIZE"
+
+
+def mark_done(
+    slug: str,
+    *,
+    conn: sqlite3.Connection,
+    last_workflow_status: str = "COMPLETE",
+    last_stage: str | None = "stage3",
+) -> dict[str, Any] | None:
+    """Move a paused or in_progress queue row to done after --finalize."""
+    row = get_row(conn, slug)
+    if row is None or row["status"] == "done":
+        return row
+    if row["status"] not in ("paused", "in_progress"):
+        return row
+    return transition(
+        slug,
+        "done",
+        worker=row["locked_by"] or "",
+        token=int(row["fencing_token"] or 0),
+        conn=conn,
+        last_workflow_status=last_workflow_status,
+        last_stage=last_stage or row.get("last_stage"),
+    )
+
+
 DATA_ROOT = _REPO_ROOT / "data"
 
 
@@ -316,6 +355,7 @@ def transition(
     last_stage: str | None = None,
     folder_root: str | None = None,
     new_slug: str | None = None,
+    paused_reason: str | None = None,
     commit: bool = True,
 ) -> dict[str, Any]:
     """Sole writer of pipeline_queue.status. Fenced; rowcount must be 1."""
@@ -355,6 +395,10 @@ def transition(
         if to_status == "paused":
             sets.append("paused_at = ?")
             args.append(now)
+            sets.append("paused_reason = ?")
+            args.append(paused_reason)
+        elif to_status in ("queued", "done"):
+            sets.append("paused_reason = NULL")
     if last_workflow_status is not None:
         sets.append("last_workflow_status = ?")
         args.append(last_workflow_status)
@@ -568,6 +612,10 @@ def _paused_should_promote(
     row: dict[str, Any] | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> bool:
+    if (row or {}).get("paused_reason") == PAUSED_REASON_READY_TO_FINALIZE:
+        return False
+    if (row or {}).get("last_workflow_status") == MIRROR_READY_TO_FINALIZE:
+        return False
     status = _workflow_status(folder)
     if status == "NEEDS_DISPOSITION":
         paused_at = _parse_paused_at((row or {}).get("paused_at"))

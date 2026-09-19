@@ -14,12 +14,22 @@ const migration = readFileSync(
   path.join(process.cwd(), 'server', 'migrations', '025_add_pipeline_queue.sql'),
   'utf8',
 );
+const migration026 = readFileSync(
+  path.join(process.cwd(), 'server', 'migrations', '026_add_pipeline_queue_paused_at.sql'),
+  'utf8',
+);
+const migration027 = readFileSync(
+  path.join(process.cwd(), 'server', 'migrations', '027_add_pipeline_queue_paused_reason.sql'),
+  'utf8',
+);
 
 const databases: Database.Database[] = [];
 
 function createDatabase(): Database.Database {
   const database = new Database(':memory:');
   database.exec(migration);
+  database.exec(migration026);
+  database.exec(migration027);
   databases.push(database);
   return database;
 }
@@ -38,13 +48,15 @@ function insertQueue(
     claimedAt?: string | null;
     updatedAt?: string | null;
     contacts?: string | null;
+    pausedReason?: string | null;
   },
 ) {
   database.prepare(
     `INSERT INTO pipeline_queue (
        slug, company, title, posting_key, folder_root, status, fencing_token,
-       queued_at, locked_by, lease_expires_at, claimed_at, updated_at, networking_contacts_raw
-     ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
+       queued_at, locked_by, lease_expires_at, claimed_at, updated_at,
+       networking_contacts_raw, paused_reason
+     ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     values.slug,
     values.slug,
@@ -58,11 +70,12 @@ function insertQueue(
     values.claimedAt ?? null,
     values.updatedAt ?? '2026-09-18T12:00:00+00:00',
     values.contacts ?? 'SECRET_CONTACT',
+    values.pausedReason ?? null,
   );
 }
 
 describe('pipelineQueueRepository', () => {
-  it('returns six counts and omits PII columns from leases and quarantine', () => {
+  it('returns seven counts and omits PII columns from leases and quarantine', () => {
     const database = createDatabase();
     insertQueue(database, { slug: 'queued_one', status: 'queued' });
     insertQueue(database, {
@@ -83,6 +96,7 @@ describe('pipelineQueueRepository', () => {
       leased: 1,
       in_progress: 0,
       paused: 0,
+      ready_to_finalize: 0,
       done: 0,
       quarantined: 1,
     });
@@ -130,5 +144,26 @@ describe('pipelineQueueRepository', () => {
     expect(slugs).toEqual(['expired_one', 'stale_one']);
     expect(stuck.find(row => row.slug === 'expired_one')?.reason).toBe('expired_lease');
     expect(stuck.find(row => row.slug === 'stale_one')?.reason).toBe('stale_receipt');
+  });
+
+  it('counts ready_to_finalize separately from paused and does not mark it stuck', () => {
+    const database = createDatabase();
+    insertQueue(database, { slug: 'needs_human', status: 'paused' });
+    insertQueue(database, {
+      slug: 'rentana',
+      status: 'paused',
+      pausedReason: 'ready_to_finalize',
+      updatedAt: new Date(Date.now() - 3 * 60 * 60_000).toISOString(),
+    });
+    expect(queueCounts(database)).toEqual({
+      queued: 0,
+      leased: 0,
+      in_progress: 0,
+      paused: 1,
+      ready_to_finalize: 1,
+      done: 0,
+      quarantined: 0,
+    });
+    expect(stuckItems(120, database).map(row => row.slug)).toEqual(['needs_human']);
   });
 });

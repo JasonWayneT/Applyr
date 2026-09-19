@@ -20,6 +20,7 @@
 - Before any Agy Stage 1 repair, mechanical lint findings are auto-fixed in place: wrong years figures become 7/seven, and a single semicolon, em dash, or colon-as-dash is split into two sentences. Unsafe punctuation is skipped. Auto-fixes are logged in `stage1_repair_state.json`. Agy is only called for what remains.
 - Stage 1 repair prompts carry ranked rule/file/line/offending/suggestion rows, local draft context, the matching digest sections, and packet excerpts for cited claims. They no longer re-send the full authoring prompt or both drafts. A Rentana LR-013-only prompt stays under 10KB.
 - Stage 1 validation failure writes workflow `FAILED`. The worker maps that to `paused`, releases the lease, and never auto-promotes it. `build_stage1_repair_prompt.py` requeues the paused row explicitly.
+- Stage 2 COMPLETE / Stage 3 READY maps to `paused` with `paused_reason=ready_to_finalize`. The lease is released. Review Center counts it separately from other paused jobs and never auto-promotes it. `--finalize` maps the row to `done`.
 - A rebuilt `authoring_packet.json` / `authoring_prompt.md` refreshes the Stage 1 `WAITING_FOR_LLM` receipt hashes instead of leaving `STALE: stage1` on resume.
 - Evidence-first Stage 1 authoring is reserved as CR-120 (`FR-348`–`FR-352`). Years-range keeps CR-117. The production Stage 1 default is unchanged.
 - Stage 0 Agy evidence uses 3-item chunks and retries omitted IDs once. An incomplete Agy evidence batch pauses as `subscription_review`, not cost authorization. Queue `WAITING_FOR_INPUT` and `FAILED` map to `paused` so the lease clears.
@@ -27,7 +28,7 @@
 - CSV ingest strips a role title that was appended to the Company cell (bookmarklet first-line company on LinkedIn). `ESO Product Manager` with Position `Product Manager` slugs as `eso`, so cooldown and skip-ledger match. Punctuation-stripped title suffixes (`Product Manager (Remote)`) also strip. False-skip rows from the Agy shakedown were cleared and re-queued (omnissa, optum, origami_risk, goodrx, businessolver, eso, velera, employers, ss_c_technologies).
 
 ### Developer
-- CR-119: additive SQLite tables `pipeline_queue`, `csv_ingest_ledger`, `csv_quarantine` (migration 025 + Python `ensure_schema`). `paused_at` on `pipeline_queue` (migration 026). Per-slug OS lock at `data/queue_locks/{slug}.lock`. Windows runner children sit in a Job Object with `KILL_ON_JOB_CLOSE`. `POST /api/pipeline-queue/upload` writes a server-chosen `.csv` under `data/inbox/csv/` then runs ingest. `run_submission.py` is unchanged and remains the canonical runner.
+- CR-119: additive SQLite tables `pipeline_queue`, `csv_ingest_ledger`, `csv_quarantine` (migration 025 + Python `ensure_schema`). `paused_at` on `pipeline_queue` (migration 026). `paused_reason` on `pipeline_queue` (migration 027, `ready_to_finalize`). Per-slug OS lock at `data/queue_locks/{slug}.lock`. Windows runner children sit in a Job Object with `KILL_ON_JOB_CLOSE`. `POST /api/pipeline-queue/upload` writes a server-chosen `.csv` under `data/inbox/csv/` then runs ingest. `run_submission.py` remains the canonical runner and marks a `ready_to_finalize` queue row `done` after `--finalize`.
 
 ## [Unreleased] - 2026-09-17
 

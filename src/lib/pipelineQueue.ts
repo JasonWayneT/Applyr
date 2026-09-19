@@ -34,6 +34,7 @@ function normalizeCounts(value: unknown): PipelineQueueCounts {
     leased: numberValue(source.leased),
     in_progress: numberValue(source.in_progress),
     paused: numberValue(source.paused),
+    ready_to_finalize: numberValue(source.ready_to_finalize),
     done: numberValue(source.done),
     quarantined: numberValue(source.quarantined),
   };

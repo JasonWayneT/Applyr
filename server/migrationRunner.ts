@@ -37,6 +37,11 @@ export function runMigrations(db: Database.Database, migrationsDir: string): voi
         .run(file, new Date().toISOString());
       continue;
     }
+    if (file === '027_add_pipeline_queue_paused_reason.sql' && columnExists(db, 'pipeline_queue', 'paused_reason')) {
+      db.prepare(`INSERT INTO schema_migrations (id, applied_at) VALUES (?, ?)`)
+        .run(file, new Date().toISOString());
+      continue;
+    }
 
     const sql = readFileSync(path.join(migrationsDir, file), 'utf-8');
     // Wrap in a transaction so a mid-migration failure rolls back all changes,

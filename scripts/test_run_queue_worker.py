@@ -178,6 +178,57 @@ class TestMapping(WorkerHarness):
         self.assertEqual(row["last_workflow_status"], "FAILED")
         self.assertTrue(self.cmds[0][-1] == "--resume")
 
+    def test_stage2_complete_stage3_ready_maps_to_ready_to_finalize(self) -> None:
+        _seed(self.conn, "rentana")
+        folder = self.pending / "rentana"
+        folder.mkdir(parents=True)
+        (folder / "workflow_state.json").write_text(
+            json.dumps(
+                {
+                    "status": "IN_PROGRESS",
+                    "active_stage": "stage3",
+                    "stages": {
+                        "stage2": {"status": "COMPLETE"},
+                        "stage3": {"status": "READY"},
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        row = pq.get_row(self.conn, "rentana")
+        assert row is not None
+        self.assertEqual(row["status"], "paused")
+        self.assertEqual(row["paused_reason"], pq.PAUSED_REASON_READY_TO_FINALIZE)
+        self.assertIsNone(row["locked_by"])
+        self.assertIsNone(row["lease_expires_at"])
+        self.assertEqual(row["last_workflow_status"], pq.MIRROR_READY_TO_FINALIZE)
+        self.assertEqual(row["last_stage"], "stage3")
+
+    def test_generic_in_progress_does_not_map_to_paused(self) -> None:
+        _seed(self.conn, "midco")
+        self._write_state("midco", "IN_PROGRESS", "stage2")
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        row = pq.get_row(self.conn, "midco")
+        assert row is not None
+        self.assertEqual(row["status"], "in_progress")
+        self.assertIsNotNone(row["locked_by"])
+        self.assertIsNone(row["paused_reason"])
+
     def test_first_run_omits_resume(self) -> None:
         _seed(self.conn, "freshco")
         (self.pending / "freshco").mkdir()

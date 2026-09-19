@@ -755,6 +755,19 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             if recovery.get("applied"):
                 verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
         if not verify_ok:
+            from stage1_prerepair import apply_mechanical_fixes
+
+            auto = apply_mechanical_fixes(Path(folder))
+            if auto.get("changed"):
+                from build_stage1_repair_prompt import load_repair_state, save_repair_state
+
+                state_payload = load_repair_state(Path(folder))
+                state_payload["auto_fixes"] = auto.get("applied") or []
+                state_payload["auto_fix_skipped"] = auto.get("skipped") or []
+                state_payload["last_outcome"] = "auto_fixed"
+                save_repair_state(Path(folder), state_payload)
+                verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+        if not verify_ok:
             append_event(
                 folder,
                 _run_id,

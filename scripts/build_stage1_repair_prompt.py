@@ -59,6 +59,8 @@ def load_repair_state(folder: Path) -> dict:
         "last_outcome": "",
         "blocking": [],
         "forwarded": [],
+        "auto_fixes": [],
+        "auto_fix_skipped": [],
     }
     if not path.is_file():
         return default
@@ -79,6 +81,8 @@ def load_repair_state(folder: Path) -> dict:
             "last_outcome": str(payload.get("last_outcome") or ""),
             "blocking": list(payload.get("blocking") or []),
             "forwarded": list(payload.get("forwarded") or []),
+            "auto_fixes": list(payload.get("auto_fixes") or []),
+            "auto_fix_skipped": list(payload.get("auto_fix_skipped") or []),
         }
     )
     return default
@@ -217,10 +221,22 @@ def build_for_folder(
         return 1, "missing required files: " + ", ".join(missing)
 
     findings = collect_findings(folder, findings_text)
+    from stage1_prerepair import apply_mechanical_fixes
+
+    auto = apply_mechanical_fixes(folder)
+    state = load_repair_state(folder)
+    state["auto_fixes"] = auto.get("applied") or []
+    state["auto_fix_skipped"] = auto.get("skipped") or []
+    if auto.get("changed") and findings_text is None:
+        findings = collect_findings(folder, None)
+        if not findings:
+            state["last_outcome"] = "auto_fixed"
+            state["blocking"] = []
+            save_repair_state(folder, state)
+            return 0, "AUTO_FIXED — mechanical findings cleared without Agy"
     if not findings:
         return 0, "no repair needed — verify produced no findings"
 
-    state = load_repair_state(folder)
     fingerprint = findings_fingerprint(findings)
     blocking, forwarded = classify_findings(findings)
     if state["attempts"] > 0 and fingerprint and fingerprint == state["previous_findings_hash"]:
@@ -255,6 +271,8 @@ def build_for_folder(
             "last_outcome": "wrote",
             "blocking": blocking,
             "forwarded": forwarded,
+            "auto_fixes": state.get("auto_fixes") or [],
+            "auto_fix_skipped": state.get("auto_fix_skipped") or [],
         },
     )
     return 0, (

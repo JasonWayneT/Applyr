@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -109,6 +110,31 @@ class TestStage1RepairPrompt(unittest.TestCase):
         )
         self.assertEqual(code, 1)
         self.assertIn("claim_provenance.json", message)
+
+    def test_six_years_auto_fixed_without_agy_prompt(self) -> None:
+        (self.folder / "Resume.md").write_text(
+            "Product Manager with six years of experience in B2B platforms.\n",
+            encoding="utf-8",
+        )
+        with mock.patch.object(
+            repair,
+            "collect_findings",
+            side_effect=[
+                "FAIL [lint/Resume.md]: 1 hard block(s)\n  [LR-013] six years",
+                "",
+            ],
+        ):
+            code, message = repair.build_for_folder(self.folder)
+        self.assertEqual(code, 0)
+        self.assertIn("AUTO_FIXED", message)
+        self.assertFalse((self.folder / repair.REPAIR_PROMPT_NAME).is_file())
+        state = json.loads((self.folder / repair.REPAIR_STATE_NAME).read_text(encoding="utf-8"))
+        self.assertEqual(state["last_outcome"], "auto_fixed")
+        self.assertTrue(any(row.get("rule_id") == "LR-013" for row in state["auto_fixes"]))
+        self.assertIn(
+            "seven years of experience",
+            (self.folder / "Resume.md").read_text(encoding="utf-8"),
+        )
 
 
 if __name__ == "__main__":

@@ -641,6 +641,23 @@ def _verify_attempt_count(folder: str) -> int | None:
         return None
 
 
+def _persist_stage1_failed(folder: str, state: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Queue mapping reads workflow status. Stage 1 verify/ready failures must be FAILED."""
+    state = dict(state)
+    stages = dict(state.get("stages") or {})
+    s1_failed = dict(stages.get("stage1") or {})
+    s1_failed["status"] = "FAILED"
+    stages["stage1"] = s1_failed
+    state["stages"] = stages
+    state["status"] = "FAILED"
+    state["active_stage"] = "stage1"
+    meta = dict(state.get("metadata") or {})
+    meta["stage1_fail_reason"] = reason[:500]
+    state["metadata"] = meta
+    write_state(folder, state)
+    return state
+
+
 def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-077: after LLM compose, run verify-only and write Stage 1 COMPLETE receipt."""
     _run_id = new_run_id()
@@ -648,7 +665,7 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     append_event(folder, _run_id, "stage1.validate", "start")
     state = reconcile(folder, state)
     s1 = (state.get("stages") or {}).get("stage1") or {}
-    if s1.get("status") == "STALE":
+    if s1.get("status") in ("STALE", "FAILED"):
         # Re-validate is allowed — treat as READY for validate path
         state["stages"]["stage1"]["status"] = "READY"
         state["status"] = "IN_PROGRESS"
@@ -662,9 +679,9 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     # CR-075 safety: packet_status ready + docs (no force)
     ok, errors = contracts.check_stage1_ready(folder)
     if not ok:
-        raise WorkflowError(
-            "check_stage1_ready failed:\n  - " + "\n  - ".join(errors)
-        )
+        reason = "check_stage1_ready failed:\n  - " + "\n  - ".join(errors)
+        _persist_stage1_failed(folder, state, reason)
+        raise WorkflowError(reason)
 
     # Prior: Stage 0 must still be COMPLETE + fresh
     r0 = load_receipt(folder, "stage0")
@@ -776,9 +793,9 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
                 duration_seconds=round(time.time() - _t0, 3),
                 attempt=_verify_attempt_count(folder),
             )
-            raise WorkflowError(
-                "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
-            )
+            reason = "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
+            _persist_stage1_failed(folder, state, reason)
+            raise WorkflowError(reason)
 
     mode = state.get("mode") or "production"
     out_files = [

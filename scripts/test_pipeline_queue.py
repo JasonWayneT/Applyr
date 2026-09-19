@@ -358,6 +358,34 @@ class TestClaimPack(QueueHarness):
         self.assertEqual(second, [])
         self.assertEqual(pq.get_row(self.conn, "failedjob")["status"], "paused")
 
+    def test_repair_requeues_paused_failed_explicitly(self) -> None:
+        _seed(self.conn, "repairme")
+        _set_paused(self.conn, "repairme")
+        self.conn.execute(
+            "UPDATE pipeline_queue SET last_workflow_status = 'FAILED', "
+            "last_stage = 'stage1' WHERE slug = 'repairme'"
+        )
+        self.conn.commit()
+        folder = self.data / "pending_review" / "repairme"
+        folder.mkdir(parents=True)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "FAILED", "active_stage": "stage1"}),
+            encoding="utf-8",
+        )
+        self.assertEqual(
+            pq.requeue_paused_for_repair(folder, conn=self.conn, data_root=self.data),
+            "queued",
+        )
+        row = pq.get_row(self.conn, "repairme")
+        assert row is not None
+        self.assertEqual(row["status"], "queued")
+        self.assertEqual(row["last_workflow_status"], "FAILED")
+        self.assertIsNone(row["locked_by"])
+        self.assertEqual(
+            pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)[0]["slug"],
+            "repairme",
+        )
+
     def test_claim_size_does_not_promote_extra_paused_rows(self) -> None:
         for slug in ("ready_a", "ready_b"):
             _seed(self.conn, slug)

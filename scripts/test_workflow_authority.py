@@ -678,6 +678,9 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
                 run_stage1_validate(str(self.folder), load_state(str(self.folder)))
         r1 = load_receipt(str(self.folder), "stage1")
         self.assertEqual(r1["status"], "WAITING_FOR_LLM")
+        failed = load_state(str(self.folder))
+        self.assertEqual(failed["status"], "FAILED")
+        self.assertEqual(failed["stages"]["stage1"]["status"], "FAILED")
 
 
 class TruthReviewTests(unittest.TestCase):

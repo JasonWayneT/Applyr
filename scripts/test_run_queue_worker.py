@@ -160,6 +160,24 @@ class TestMapping(WorkerHarness):
         self.assertIsNone(row["locked_by"])
         self.assertEqual(row["last_workflow_status"], "WAITING_FOR_INPUT")
 
+    def test_failed_maps_to_paused_and_releases_lease(self) -> None:
+        _seed(self.conn, "failco")
+        self._write_state("failco", "FAILED", "stage1")
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        row = pq.get_row(self.conn, "failco")
+        assert row is not None
+        self.assertEqual(row["status"], "paused")
+        self.assertIsNone(row["locked_by"])
+        self.assertEqual(row["last_workflow_status"], "FAILED")
+        self.assertTrue(self.cmds[0][-1] == "--resume")
+
     def test_first_run_omits_resume(self) -> None:
         _seed(self.conn, "freshco")
         (self.pending / "freshco").mkdir()

@@ -255,6 +255,17 @@ def _merge_forwarded(folder: Path, forwarded: list[str]) -> None:
     path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
 
+def _maybe_requeue_repair(
+    folder: Path,
+    *,
+    queue_conn: object | None = None,
+    data_root: Path | None = None,
+) -> None:
+    from pipeline_queue import requeue_paused_for_repair
+
+    requeue_paused_for_repair(folder, conn=queue_conn, data_root=data_root)
+
+
 def _is_lint_summary(line: str) -> bool:
     stripped = line.strip()
     if not stripped.startswith(("FAIL [lint/", "WARN [lint/")):
@@ -551,6 +562,8 @@ def build_for_folder(
     folder: Path,
     *,
     findings_text: str | None = None,
+    queue_conn: object | None = None,
+    data_root: Path | None = None,
 ) -> tuple[int, str]:
     folder = folder.resolve()
     missing = [name for name in REQUIRED_FILES if not (folder / name).is_file()]
@@ -570,6 +583,7 @@ def build_for_folder(
             state["last_outcome"] = "auto_fixed"
             state["blocking"] = []
             save_repair_state(folder, state)
+            _maybe_requeue_repair(folder, queue_conn=queue_conn, data_root=data_root)
             return 0, "AUTO_FIXED — mechanical findings cleared without Agy"
     if not findings:
         return 0, "no repair needed — verify produced no findings"
@@ -614,6 +628,7 @@ def build_for_folder(
             "auto_fix_skipped": state.get("auto_fix_skipped") or [],
         },
     )
+    _maybe_requeue_repair(folder, queue_conn=queue_conn, data_root=data_root)
     return 0, (
         f"WROTE {REPAIR_PROMPT_NAME} — repair round {attempts}. "
         "Paste that file only into a fresh Agy session. Loop until verify "

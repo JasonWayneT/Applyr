@@ -380,6 +380,55 @@ def transition(
     return stored
 
 
+def requeue_paused_for_repair(
+    folder: Path,
+    *,
+    conn: sqlite3.Connection | None = None,
+    data_root: Path | None = None,
+) -> str | None:
+    """Move a paused FAILED queue row back to queued. No auto-promote.
+
+    Only touches rows whose folder is under pending_review/ or submissions/.
+    Temp test folders are ignored. Missing rows are a no-op.
+    """
+    folder = folder.resolve()
+    root = (data_root or DATA_ROOT).resolve()
+    under_queue_tree = False
+    for name in ("pending_review", "submissions"):
+        try:
+            folder.relative_to(root / name)
+            under_queue_tree = True
+            break
+        except ValueError:
+            continue
+    if not under_queue_tree:
+        return None
+    slug = folder.name
+    close_after = False
+    if conn is None:
+        conn = connect()
+        close_after = True
+    try:
+        row = get_row(conn, slug)
+        if not row or row["status"] != "paused":
+            return None
+        stored = transition(
+            slug,
+            "queued",
+            worker=row["locked_by"] or "",
+            token=int(row["fencing_token"] or 0),
+            conn=conn,
+            last_workflow_status=row.get("last_workflow_status") or "FAILED",
+            last_stage=row.get("last_stage") or "stage1",
+        )
+        return stored["status"]
+    except (IllegalTransition, FenceRejected):
+        return None
+    finally:
+        if close_after:
+            conn.close()
+
+
 def _resolve_row_folder(row: dict[str, Any], data_root: Path) -> Path | None:
     slug = row["slug"]
     roots = {

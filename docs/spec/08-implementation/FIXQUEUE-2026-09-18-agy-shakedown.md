@@ -49,7 +49,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **9b (pack 3).** Packet `hard_constraints` and digest self-check include total PM experience from `workExperience.md` §1.0 (7 / seven; never 4, 5, or 6). Not hardcoded.
   - [x] **9c (pack 3).** Deterministic pre-repair for mechanical findings (years, LR-014/LR-006/LR-015) before any Agy call. `scripts/stage1_prerepair.py` logs `auto_fixes` on `stage1_repair_state.json`. Tests: six years fixed with no Agy prompt; clean draft byte-identical.
   - [x] **9d (pack 3).** Small repair prompts: rule/file/line/offending text/suggestion, local context, relevant digest, mentioned excerpts. Rentana LR-013 case stays under 10KB.
-  - [ ] **9e (pack 3).** Stage 1 validation failure maps to `paused` with `last_workflow_status=FAILED`, lease released, never auto-promoted. Repair requeues explicitly.
+  - [x] **9e (pack 3).** Stage 1 validation failure maps to `paused` with `last_workflow_status=FAILED`, lease released, never auto-promoted. Repair requeues explicitly.
   - [ ] **9f.** P2 live quarantine-panel check stays a Codex preflight.
 
 - [ ] **10. Stage 1 split (CR-120 reserved: `FR-348`–`FR-352`, `AC-451`–`AC-455`; docs renamed from colliding CR-117).** Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen cases in `data/eval/cr117/`.
@@ -81,42 +81,20 @@ jobs stay `WAITING_FOR_LLM`.
 
 ### P1 - Claiming a small pack mutates more paused rows than the claim size
 
-**Evidence:** `_promotable_paused_slugs` promotes all eligible paused rows before
-`claim_pack` applies `LIMIT`. During a `--size 1` Rentana validation run,
-`casper_studios` changed from `paused` to `queued` without being claimed.
-
-**Suggested fix:** Select and promote at most the remaining claim capacity in
-the same transaction. Rows outside the claimed pack must remain unchanged.
+Landed in item 9a. Extra paused rows stay paused.
 
 ### P1 - Stage 1 validation failures are lost from workflow and queue state
 
-**Evidence:** Rentana produced three `stage1.validate` / `verify_failed` events,
-but `workflow_state.json` and queue `last_workflow_status` remained
-`WAITING_FOR_LLM`.
-Reproduced after item 9a on commit
-`adbd8a2628619d08c87cfc4592b95c7d4d9c7ce2`: the worker validated
-Rentana, printed `VERIFY RESULT: FAIL`, exited with `claimed=1 results=ran`,
-and left the queue row `in_progress`, workflow `IN_PROGRESS`, with a
-20-minute lease. **How often:** 1/1 post-9a failed worker validation.
-
-**Suggested fix:** Persist a structured Stage 1 repair-needed state with the
-validation result path and attempt count. Map it to queue `paused`.
+Landed in item 9e. Stage 1 verify/ready failure writes workflow `FAILED`.
+The worker maps that to `paused` and releases the lease. `FAILED` never
+auto-promotes. `build_stage1_repair_prompt.py` requeues the paused row
+when it writes a prompt or auto-fixes.
 
 ### P1 - A one-finding Gemini repair can burn quota without progress
 
-**Evidence:** Rentana's generated repair prompt reached one remaining truth
-block, `LR-013`. Three Gemini Flash Medium repair passes had cleared other
-findings. A fourth pass at Gemini Flash High took 46 internal agent steps,
-573,283 input tokens plus 4,159,585 cache-read tokens, and 6 five-hour
-quota points, yet validation still reported `LR-013`. The repair script then
-returned `NO_PROGRESS` with `last_outcome: no_progress_blocking`.
-**How often:** 1/1 high-effort single-finding repair tested; four total
-repair rounds on Rentana, none passing.
-
-**Suggested fix:** Give Agy an explicit step/time budget for a repair and
-stop tool loops once the requested files are written. Preserve the blocking
-truth finding on no progress; surface the exact rule ID and failed draft
-artifact to Cursor for diagnosis rather than resampling or silently passing.
+Landed in items 9b–9d. Years figure is in the packet. Mechanical findings
+auto-fix before Agy. Remaining repair prompts are compact (rule/line/
+offending/suggestion + local context), under 10KB for Rentana LR-013.
 
 ### P1 - Rebuilt Stage 1 packet leaves old receipt hashes stale
 
@@ -133,9 +111,8 @@ recreate the receipt before resume. Test Stage 2 transition after a rebuild.
 
 ### P1 - Validation mutates failed drafts before the repair step can consume them
 
-**Evidence:** `author_from_packet.run_verify_only` applied header repairs before
-returning failure. Preserve immutable author-output artifacts before verifier
-mutation.
+Landed in item 3d. Verify snapshots author output into `stage1_author_output/`
+before header injection.
 
 ### P2 - Stage 0 cache provenance is not available in the durable receipt
 

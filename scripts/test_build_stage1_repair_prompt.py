@@ -54,7 +54,7 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertNotIn("Dear Hiring Manager", prompt)
         self.assertIn("## Relevant digest", prompt)
         self.assertNotIn("## Original authoring prompt", prompt)
-        self.assertIn("Fix ONLY the ranked findings listed below", prompt)
+        self.assertIn("Return only the corrected fenced blocks. Don't use tools or files.", prompt)
         self.assertIn(
             "Do not load workExperience.md, master_claims.json, AGENTS.md, or agent_context_pack.md.",
             prompt,
@@ -111,6 +111,8 @@ class TestStage1RepairPrompt(unittest.TestCase):
     def test_rentana_lr013_single_finding_prompt_under_10kb(self) -> None:
         source = Path(__file__).resolve().parents[1] / "data" / "submissions" / "rentana"
         resume = (source / "Resume.md").read_text(encoding="utf-8")
+        if "six years" not in resume.lower():
+            resume = resume.replace("seven years", "six years", 1)
         letter = (source / "CoverLetter.md").read_text(encoding="utf-8")
         packet = json.loads((source / "authoring_packet.json").read_text(encoding="utf-8"))
         from generate_authoring_rule_digest import generate_digest

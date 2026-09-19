@@ -31,6 +31,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_ingest_csv_queue.py",
     "scripts/test_queue_lock.py",
     "scripts/test_run_queue_worker.py",
+    "scripts/test_run_stage1_repair.py",
 
     "scripts/test_build_authoring_packet.py",
     "scripts/test_playwright_env.py",

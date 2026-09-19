@@ -58,18 +58,53 @@ def append_event(path: Path, event: dict) -> None:
 
 
 def result_usage(path: Path) -> dict | None:
+    """Return Agy's final result usage plus per-step sums from the stream.
+
+    Agy's top-level result.usage is the sum of DONE agent_response steps in that
+    process, not a single prompt-sized call. Cache-read tokens are reported
+    separately and must not be treated as five-hour quota 1:1 with input.
+    """
     if not path.exists():
         return None
     result = None
+    step_sum = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "thinking_tokens": 0,
+        "cache_read_tokens": 0,
+    }
+    agent_steps = 0
     with path.open(encoding="utf-8") as source:
         for line in source:
+            if not line.strip():
+                continue
             item = json.loads(line)
             if item.get("event") == "result":
                 result = item
-    if result is None:
+            step = item.get("step_update") if item.get("event") == "step_update" else None
+            usage = step.get("usage") if isinstance(step, dict) else None
+            if (
+                isinstance(step, dict)
+                and step.get("state") == "DONE"
+                and isinstance(usage, dict)
+            ):
+                agent_steps += 1
+                for key in step_sum:
+                    try:
+                        step_sum[key] += int(usage.get(key) or 0)
+                    except (TypeError, ValueError):
+                        continue
+    if result is None and agent_steps == 0:
         return None
-    payload = result.get("result", {})
-    return {"status": payload.get("status"), "usage": payload.get("usage")}
+    payload = result.get("result", {}) if isinstance(result, dict) else {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return {
+        "status": payload.get("status"),
+        "usage": payload.get("usage"),
+        "agent_steps_with_usage": agent_steps,
+        "step_sum": step_sum,
+    }
 
 
 def deltas(before: dict, after: dict) -> dict[str, int | None]:
@@ -141,9 +176,20 @@ def finish(args: argparse.Namespace) -> int:
         "type": "after", "run_id": args.run_id, "quota": quota,
         "quota_drop_points": changes, "agy_result": stream,
     })
+    usage = (stream or {}).get("usage") or {}
+    steps = (stream or {}).get("agent_steps_with_usage")
     print(f"RECORDED {args.run_id}: weekly drop {changes[WINDOWS[0]]}, "
           f"five-hour drop {changes[WINDOWS[1]]} percentage points; "
-          f"Agy result {stream['status'] if stream else 'missing'}.")
+          f"Agy result {stream['status'] if stream else 'missing'}; "
+          f"input={usage.get('input_tokens', '?')} "
+          f"cache_read={usage.get('cache_read_tokens', '?')} "
+          f"agent_steps={steps if steps is not None else '?'}.")
+    if isinstance(steps, int) and steps > 1:
+        print(
+            "NOTE: result.usage is the sum of internal agent steps in this "
+            "process, not one prompt-sized call. Size batches from five-hour "
+            "percentage-point drops. Cache-read tokens are not 1:1 with those drops."
+        )
     return 0
 
 
@@ -159,9 +205,12 @@ def status(args: argparse.Namespace) -> int:
         before = runs[item["run_id"]]
         drops = item["quota_drop_points"]
         usage = (item["agy_result"] or {}).get("usage") or {}
+        steps = (item["agy_result"] or {}).get("agent_steps_with_usage")
         print(f"{item['run_id']} [{before['model']}] prompt~{before['prompt_estimated_tokens']} tokens; "
               f"input={usage.get('input_tokens', '?')} output={usage.get('output_tokens', '?')} "
-              f"thinking={usage.get('thinking_tokens', '?')}; "
+              f"thinking={usage.get('thinking_tokens', '?')} "
+              f"cache_read={usage.get('cache_read_tokens', '?')} "
+              f"agent_steps={steps if steps is not None else '?'}; "
               f"weekly={drops[WINDOWS[0]]}pp five-hour={drops[WINDOWS[1]]}pp")
     for run_id in runs:
         if not any(item["type"] == "after" and item["run_id"] == run_id for item in history):
@@ -179,7 +228,9 @@ def status(args: argparse.Namespace) -> int:
               f"(planning cushions {cushions[WINDOWS[0]]}pp weekly and "
               f"{cushions[WINDOWS[1]]}pp five-hour per call; not a guarantee).")
     print("Quota is rounded and work-based. A 0pp change does not mean a free call; "
-          "resets make cross-window deltas unavailable.")
+          "resets make cross-window deltas unavailable. Size batches from five-hour "
+          "percentage-point drops. Cache-read tokens occupy context but did not move "
+          "the five-hour window 1:1 with input on the 2026-09-18 shakedown.")
     return 0
 
 

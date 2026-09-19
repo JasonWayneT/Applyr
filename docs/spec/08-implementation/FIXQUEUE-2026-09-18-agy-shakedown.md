@@ -1,6 +1,7 @@
 # FIXQUEUE — Agy whole-workflow shakedown (2026-09-18)
 
 Items 1-4 landed: YES
+Runtime hold: NO
 
 PLAN-2026-09-18 Task 3. Gemini and Groq free tiers are off. Agy is the only LLM path (`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1` for Stage 0, Agy for Stage 1). Codex runs tests and does not edit code. Cursor fixes. Agy quota is the binding budget. Each fresh Agy call carries about 22k tokens of harness overhead.
 
@@ -39,7 +40,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
 
 - [ ] **7. Company field polluted with titles.** Fix at ingest where CSV or bookmarklet appends the title.
 
-- [ ] **8. Trustworthy quota numbers.** Investigate `rentana_stage1_03_stream.jsonl` (419,638 input / 4,154,618 cache-read, 3 five-hour points vs 1 for a ~39k call). Does `agy_quota_tracker` misread, or did Agy use that, and do cache reads count?
+- [x] **8. Trustworthy quota numbers.** Tracker copies Agy's final `result.usage` faithfully. `rentana_stage1_03` was 58 internal agent steps whose inputs sum to 419,638 (cache-read sum 4,154,618). A clean one-step author (`stage1-02`) was 38,961 input, 0 cache, 1 five-hour point. Cache-read did not move the five-hour window 1:1 with input. Size batches from five-hour drops (~1pp per clean author call, 3pp for a tool-loop). Tracker now logs `agent_steps` and `cache_read`.
 
 - [ ] **9. Incoming from testing**, in the order Codex ranks it.
 

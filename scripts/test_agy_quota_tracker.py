@@ -83,6 +83,38 @@ class AgyQuotaTrackerTests(unittest.TestCase):
             self.assertEqual(after["agy_result"]["usage"]["input_tokens"], 123)
             self.assertIsNone(after["quota_drop_points"][tracker.WINDOWS[0]])
 
+    def test_result_usage_sums_done_agent_steps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stream = Path(directory) / "stream.jsonl"
+            lines = [
+                json.dumps({"event": "step_update", "step_update": {
+                    "step_index": 1, "state": "DONE", "step_type": "agent_response",
+                    "usage": {"input_tokens": 38967, "output_tokens": 487,
+                              "thinking_tokens": 416, "cache_read_tokens": 0},
+                }}),
+                json.dumps({"event": "step_update", "step_update": {
+                    "step_index": 3, "state": "DONE", "step_type": "agent_response",
+                    "usage": {"input_tokens": 2612, "output_tokens": 343,
+                              "thinking_tokens": 169, "cache_read_tokens": 36949},
+                }}),
+                json.dumps({"event": "step_update", "step_update": {
+                    "step_index": 2, "state": "ACTIVE", "step_type": "agent_response",
+                    "text_delta": "ignored",
+                }}),
+                json.dumps({"event": "result", "result": {
+                    "status": "SUCCESS",
+                    "usage": {"input_tokens": 41579, "output_tokens": 830,
+                              "thinking_tokens": 585, "cache_read_tokens": 36949},
+                }}),
+            ]
+            stream.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            parsed = tracker.result_usage(stream)
+            self.assertEqual(parsed["status"], "SUCCESS")
+            self.assertEqual(parsed["usage"]["input_tokens"], 41579)
+            self.assertEqual(parsed["agent_steps_with_usage"], 2)
+            self.assertEqual(parsed["step_sum"]["input_tokens"], 41579)
+            self.assertEqual(parsed["step_sum"]["cache_read_tokens"], 36949)
+
 
 if __name__ == "__main__":
     unittest.main()

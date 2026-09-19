@@ -14,6 +14,7 @@
 - Stage 1 verify failures use a repair prompt (`scripts/build_stage1_repair_prompt.py`) instead of a full fresh authoring resample. Loop until verify passes or a round makes no progress. Truth/format blocks stay blocking; other findings forward to Stage 2.
 - A job paused at `NEEDS_DISPOSITION` stays paused across claims until `reviews/dispositions.json` is newer than `paused_at`. `WAITING_FOR_INPUT` stays paused until Review Center questions for that slug are all completed, or a cascade/extraction-review import is newer than `paused_at`. `WAITING_FOR_LLM` still promotes when Stage 1 files are ready. `FAILED` never auto-promotes (CR-119 / FR-346). `claim_pack` promotes at most remaining claim capacity, so extra paused rows stay paused. `WAITING_FOR_INPUT` without new input returns the last Stage 0 receipt instead of re-running Agy.
 - Unused high-priority packet claims are forwarded in `stage1_forwarded_findings.json` instead of failing Stage 1. Cover letters argue 1-2 stories that each cover several top requirements, not one story per requirement.
+- `agy_quota_tracker` now records agent-step count and cache-read tokens. Agy's final `result.usage` is the sum of internal agent steps, not a misread field. Size batches from five-hour percentage-point drops; cache-read is not 1:1 with those drops.
 - Stage 0 Agy evidence uses 3-item chunks and retries omitted IDs once. An incomplete Agy evidence batch pauses as `subscription_review`, not cost authorization. Queue `WAITING_FOR_INPUT` and `FAILED` map to `paused` so the lease clears.
 
 ### Developer

@@ -85,11 +85,13 @@ def load_repair_state(folder: Path) -> dict:
     default = {
         "attempts": 0,
         "previous_findings_hash": "",
+        "pending_findings_hash": "",
         "last_outcome": "",
         "blocking": [],
         "forwarded": [],
         "auto_fixes": [],
         "auto_fix_skipped": [],
+        "no_progress_streak": 0,
     }
     if not path.is_file():
         return default
@@ -103,15 +105,21 @@ def load_repair_state(folder: Path) -> dict:
         attempts = int(payload.get("attempts") or 0)
     except (TypeError, ValueError):
         attempts = 0
+    try:
+        streak = int(payload.get("no_progress_streak") or 0)
+    except (TypeError, ValueError):
+        streak = 0
     default.update(
         {
             "attempts": max(0, attempts),
             "previous_findings_hash": str(payload.get("previous_findings_hash") or ""),
+            "pending_findings_hash": str(payload.get("pending_findings_hash") or ""),
             "last_outcome": str(payload.get("last_outcome") or ""),
             "blocking": list(payload.get("blocking") or []),
             "forwarded": list(payload.get("forwarded") or []),
             "auto_fixes": list(payload.get("auto_fixes") or []),
             "auto_fix_skipped": list(payload.get("auto_fix_skipped") or []),
+            "no_progress_streak": max(0, streak),
         }
     )
     return default
@@ -592,6 +600,15 @@ def build_for_folder(
     findings = expand_lint_findings(findings, drafts)
     fingerprint = findings_fingerprint(findings)
     blocking, forwarded = classify_findings(findings)
+    if (
+        state.get("last_outcome") == "wrote"
+        and fingerprint
+        and fingerprint == str(state.get("pending_findings_hash") or "")
+    ):
+        return 0, (
+            f"WROTE {REPAIR_PROMPT_NAME} — already waiting for sandboxed repair. "
+            "Run python scripts/run_stage1_repair.py. Do not requeue until artifacts exist."
+        )
     if state["attempts"] > 0 and fingerprint and fingerprint == state["previous_findings_hash"]:
         _merge_forwarded(folder, forwarded)
         state["last_outcome"] = "no_progress_blocking" if blocking else "no_progress_forward"
@@ -619,20 +636,18 @@ def build_for_folder(
     save_repair_state(
         folder,
         {
+            **state,
             "attempts": attempts,
-            "previous_findings_hash": fingerprint,
+            "pending_findings_hash": fingerprint,
             "last_outcome": "wrote",
             "blocking": blocking,
             "forwarded": forwarded,
-            "auto_fixes": state.get("auto_fixes") or [],
-            "auto_fix_skipped": state.get("auto_fix_skipped") or [],
         },
     )
-    _maybe_requeue_repair(folder, queue_conn=queue_conn, data_root=data_root)
     return 0, (
         f"WROTE {REPAIR_PROMPT_NAME} — repair round {attempts}. "
-        "Paste that file only into a fresh Agy session. Loop until verify "
-        "passes or a round makes no progress."
+        "Run python scripts/run_stage1_repair.py. Requeue only after valid "
+        "repaired files are written."
     )
 
 

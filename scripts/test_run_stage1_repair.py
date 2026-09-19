@@ -242,6 +242,137 @@ class TestRepairStreamCaps(unittest.TestCase):
             )
             self.assertEqual(state["last_outcome"], "repair_timeout")
             self.assertEqual(state["last_repair_reason"], "event_count")
+            self.assertEqual(state["no_progress_streak"], 1)
+            self.assertFalse(result.get("wrote_files"))
+
+    def test_valid_artifacts_are_written_then_requeued(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory) / "data"
+            folder = data / "pending_review" / "healthstream"
+            folder.mkdir(parents=True)
+            (folder / "Resume.md").write_text("OLD RESUME\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("OLD LETTER\n", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text("{}\n", encoding="utf-8")
+            (folder / "stage1_repair_prompt.md").write_text("# Stage 1 repair\n", encoding="utf-8")
+            import pipeline_queue as pq
+
+            conn = pq.connect(Path(directory) / "jobagent.sqlite")
+            try:
+                pq.upsert_queued(
+                    conn,
+                    slug="healthstream",
+                    company="HealthStream",
+                    title="PM",
+                    url=None,
+                    url_key=None,
+                    posting_key="healthstream||pm",
+                    networking_contacts_raw=None,
+                    source_sha256=None,
+                    source_line=None,
+                    folder_root="pending_review",
+                )
+                leased = pq.claim_pack("w1", size=1, conn=conn, data_root=data)[0]
+                pq.transition(
+                    "healthstream",
+                    "in_progress",
+                    worker="w1",
+                    token=int(leased["fencing_token"]),
+                    conn=conn,
+                )
+                pq.transition(
+                    "healthstream",
+                    "paused",
+                    worker="w1",
+                    token=int(pq.get_row(conn, "healthstream")["fencing_token"]),
+                    conn=conn,
+                    last_workflow_status="FAILED",
+                )
+                text = (
+                    "```Resume.md\n# Name\nRepaired resume body\n```\n"
+                    "```CoverLetter.md\nDear Hiring Manager,\nRepaired letter body\n```\n"
+                    "```claim_provenance.json\n"
+                    '{"company": "HealthStream", "resume_claims": [{"bullet": "x", "claim_ids": ["ACC-101"]}]}\n'
+                    "```\n"
+                )
+                result = repair.apply_repair_result(
+                    folder,
+                    {"outcome": "ok", "reason": None, "event_count": 2, "wall_seconds": 1, "text": text},
+                    queue_conn=conn,
+                    data_root=data,
+                )
+                self.assertEqual(result["outcome"], "ok")
+                self.assertTrue(result["wrote_files"])
+                self.assertIn("Repaired resume body", (folder / "Resume.md").read_text(encoding="utf-8"))
+                row = pq.get_row(conn, "healthstream")
+                assert row is not None
+                self.assertEqual(row["status"], "queued")
+            finally:
+                conn.close()
+
+    def test_timeout_does_not_requeue_or_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            data = Path(directory) / "data"
+            folder = data / "pending_review" / "healthstream"
+            folder.mkdir(parents=True)
+            (folder / "Resume.md").write_text("OLD RESUME\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("OLD LETTER\n", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text("{}\n", encoding="utf-8")
+            import pipeline_queue as pq
+
+            conn = pq.connect(Path(directory) / "jobagent.sqlite")
+            try:
+                pq.upsert_queued(
+                    conn,
+                    slug="healthstream",
+                    company="HealthStream",
+                    title="PM",
+                    url=None,
+                    url_key=None,
+                    posting_key="healthstream||pm",
+                    networking_contacts_raw=None,
+                    source_sha256=None,
+                    source_line=None,
+                    folder_root="pending_review",
+                )
+                leased = pq.claim_pack("w1", size=1, conn=conn, data_root=data)[0]
+                pq.transition(
+                    "healthstream",
+                    "in_progress",
+                    worker="w1",
+                    token=int(leased["fencing_token"]),
+                    conn=conn,
+                )
+                pq.transition(
+                    "healthstream",
+                    "paused",
+                    worker="w1",
+                    token=int(pq.get_row(conn, "healthstream")["fencing_token"]),
+                    conn=conn,
+                    last_workflow_status="FAILED",
+                )
+                result = repair.apply_repair_result(
+                    folder,
+                    {
+                        "outcome": "repair_timeout",
+                        "reason": "wall_time",
+                        "event_count": 12,
+                        "wall_seconds": 180,
+                        "text": "",
+                    },
+                    queue_conn=conn,
+                    data_root=data,
+                )
+                self.assertEqual(result["outcome"], "repair_timeout")
+                self.assertFalse(result["wrote_files"])
+                self.assertEqual((folder / "Resume.md").read_text(encoding="utf-8"), "OLD RESUME\n")
+                row = pq.get_row(conn, "healthstream")
+                assert row is not None
+                self.assertEqual(row["status"], "paused")
+                self.assertEqual(row["last_workflow_status"], "FAILED")
+                state = json.loads((folder / "stage1_repair_state.json").read_text(encoding="utf-8"))
+                self.assertEqual(state["no_progress_streak"], 1)
+            finally:
+                conn.close()
 
 
 if __name__ == "__main__":

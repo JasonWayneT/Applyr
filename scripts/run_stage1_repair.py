@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -16,9 +17,11 @@ from typing import Any, Callable, Iterable, TextIO
 DEFAULT_WALL_SECONDS = 180
 DEFAULT_MAX_EVENTS = 20
 DEFAULT_MODEL = "gemini-3.8-flash-medium"
+ARTIFACT_NAMES = ("Resume.md", "CoverLetter.md", "claim_provenance.json")
 SANDBOX_INSTRUCTION = (
     "Return only the corrected fenced blocks. Don't use tools or files."
 )
+_FENCE_RE = re.compile(r"```([^\n]*)\n(.*?)```", re.DOTALL)
 TOOL_STEP_TYPES = frozenset(
     {"tool", "tool_use", "tool_request", "permission", "ask_permission"}
 )
@@ -242,16 +245,93 @@ def run_repair_process(
         tmp.cleanup()
 
 
-def record_repair_call(folder: Path, result: dict[str, Any]) -> dict[str, Any]:
-    from build_stage1_repair_prompt import load_repair_state, save_repair_state
+def extract_fenced_artifacts(text: str) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for header, body in _FENCE_RE.findall(text or ""):
+        tokens = [part.strip().strip("`") for part in header.replace(":", " ").split()]
+        label = ""
+        for token in tokens:
+            for name in ARTIFACT_NAMES:
+                if token.lower() == name.lower():
+                    label = name
+                    break
+            if label:
+                break
+        if not label:
+            first = (body.lstrip().splitlines() or [""])[0].strip().lstrip("#").strip()
+            for name in ARTIFACT_NAMES:
+                if first.lower() == name.lower():
+                    label = name
+                    body = "\n".join(body.lstrip().splitlines()[1:])
+                    break
+        if label:
+            found[label] = body.strip() + "\n"
+    return found
+
+
+def artifacts_are_valid(found: dict[str, str]) -> bool:
+    if set(found.keys()) != set(ARTIFACT_NAMES):
+        return False
+    if not found["Resume.md"].strip() or not found["CoverLetter.md"].strip():
+        return False
+    try:
+        payload = json.loads(found["claim_provenance.json"])
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, dict) and bool(payload)
+
+
+def write_repair_artifacts(folder: Path, found: dict[str, str]) -> None:
+    for name, body in found.items():
+        (folder / name).write_text(body, encoding="utf-8")
+
+
+def apply_repair_result(
+    folder: Path,
+    result: dict[str, Any],
+    *,
+    queue_conn: object | None = None,
+    data_root: Path | None = None,
+) -> dict[str, Any]:
+    from build_stage1_repair_prompt import (
+        _maybe_requeue_repair,
+        load_repair_state,
+        save_repair_state,
+    )
 
     state = load_repair_state(folder)
-    state["last_outcome"] = result.get("outcome")
-    state["last_repair_reason"] = result.get("reason")
-    state["last_event_count"] = result.get("event_count")
-    state["last_wall_seconds"] = result.get("wall_seconds")
+    pending = str(state.get("pending_findings_hash") or state.get("previous_findings_hash") or "")
+    payload = dict(result)
+    if payload.get("outcome") == "ok":
+        found = extract_fenced_artifacts(str(payload.get("text") or ""))
+        if artifacts_are_valid(found):
+            write_repair_artifacts(folder, found)
+            payload["wrote_files"] = True
+            state["previous_findings_hash"] = pending
+            state["last_outcome"] = "repaired"
+            state["last_repair_reason"] = None
+            state["no_progress_streak"] = 0
+            state["last_event_count"] = payload.get("event_count")
+            state["last_wall_seconds"] = payload.get("wall_seconds")
+            save_repair_state(folder, state)
+            _maybe_requeue_repair(folder, queue_conn=queue_conn, data_root=data_root)
+            return payload
+        payload["outcome"] = "repair_failed"
+        payload["reason"] = "invalid_artifacts"
+    state["previous_findings_hash"] = pending
+    state["last_outcome"] = payload.get("outcome")
+    state["last_repair_reason"] = payload.get("reason")
+    state["last_event_count"] = payload.get("event_count")
+    state["last_wall_seconds"] = payload.get("wall_seconds")
+    state["no_progress_streak"] = int(state.get("no_progress_streak") or 0) + 1
+    payload["wrote_files"] = False
     save_repair_state(folder, state)
-    return state
+    return payload
+
+
+def record_repair_call(folder: Path, result: dict[str, Any]) -> dict[str, Any]:
+    apply_repair_result(folder, result)
+    return result
 
 
 def run_for_folder(
@@ -285,8 +365,7 @@ def run_for_folder(
         max_events=max_events,
         spawn=spawn,
     )
-    record_repair_call(folder, result)
-    return result
+    return apply_repair_result(folder, result)
 
 
 def main(argv: list[str] | None = None) -> int:

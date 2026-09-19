@@ -63,10 +63,22 @@ class TestStage1RepairPrompt(unittest.TestCase):
 
     def test_same_findings_no_progress_keeps_blocking(self) -> None:
         findings = "FAIL [lint]: LR-014 semicolon"
-
-    def test_same_findings_no_progress_keeps_blocking(self) -> None:
-        findings = "FAIL [lint]: LR-014 semicolon"
         self.assertEqual(repair.build_for_folder(self.folder, findings_text=findings)[0], 0)
+        code, message = repair.build_for_folder(self.folder, findings_text=findings)
+        self.assertEqual(code, 0)
+        self.assertIn("already waiting", message)
+        import run_stage1_repair as runner
+
+        runner.apply_repair_result(
+            self.folder,
+            {
+                "outcome": "repair_timeout",
+                "reason": "event_count",
+                "event_count": 6,
+                "wall_seconds": 1.2,
+                "text": "",
+            },
+        )
         code, message = repair.build_for_folder(self.folder, findings_text=findings)
         self.assertEqual(code, 2)
         self.assertIn("NO_PROGRESS", message)
@@ -74,10 +86,33 @@ class TestStage1RepairPrompt(unittest.TestCase):
         state = json.loads((self.folder / repair.REPAIR_STATE_NAME).read_text(encoding="utf-8"))
         self.assertEqual(state["attempts"], 1)
         self.assertEqual(state["last_outcome"], "no_progress_blocking")
+        self.assertEqual(state["no_progress_streak"], 1)
+
+    def test_wrote_prompt_does_not_requeue(self) -> None:
+        with mock.patch.object(repair, "_maybe_requeue_repair") as requeue:
+            code, message = repair.build_for_folder(
+                self.folder, findings_text="FAIL [lint]: LR-014 semicolon"
+            )
+        self.assertEqual(code, 0)
+        self.assertIn("WROTE", message)
+        requeue.assert_not_called()
+        self.assertFalse((self.folder / "Resume.md").read_text(encoding="utf-8") == "")
 
     def test_same_warn_findings_forward_to_stage2(self) -> None:
         findings = "WARN [evidence_utilization]: unused high-priority claims forwarded: ACC-106"
         self.assertEqual(repair.build_for_folder(self.folder, findings_text=findings)[0], 0)
+        import run_stage1_repair as runner
+
+        runner.apply_repair_result(
+            self.folder,
+            {
+                "outcome": "repair_failed",
+                "reason": "tool_or_permission",
+                "event_count": 2,
+                "wall_seconds": 0.4,
+                "text": "",
+            },
+        )
         code, message = repair.build_for_folder(self.folder, findings_text=findings)
         self.assertEqual(code, 0)
         self.assertIn("NO_PROGRESS", message)

@@ -609,6 +609,24 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
         ok, _ = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)  # Stage 2+ not yet complete
 
+    def test_rebuilt_packet_refreshes_waiting_receipt_hashes(self):
+        self._reach_waiting()
+        r1 = load_receipt(str(self.folder), "stage1")
+        self.assertEqual(r1["status"], "WAITING_FOR_LLM")
+        packet_path = self.folder / "authoring_packet.json"
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        packet["hard_constraints"] = ["rebuilt"]
+        packet_path.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
+        from workflow.runner import _refresh_waiting_stage1_receipt, hashes_match
+
+        state = _refresh_waiting_stage1_receipt(str(self.folder), load_state(str(self.folder)))
+        refreshed = load_receipt(str(self.folder), "stage1")
+        self.assertEqual(refreshed["status"], "WAITING_FOR_LLM")
+        self.assertTrue(refreshed.get("result", {}).get("refreshed_hashes"))
+        ok, errs = hashes_match(str(self.folder), refreshed.get("output_hashes") or {})
+        self.assertTrue(ok, errs)
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+
     def test_edit_resume_marks_stage1_stale_locks_stage2(self):
         self._reach_waiting()
         _write(self.folder, "Resume.md", "# Name\nv1\n")

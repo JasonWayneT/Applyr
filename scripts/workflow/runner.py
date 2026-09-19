@@ -511,6 +511,46 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     return state
 
 
+_STAGE1_WAITING_OUTPUTS = (
+    "authoring_packet.json",
+    "authoring_prompt.md",
+    "authoring_prompt_meta.json",
+)
+
+
+def _refresh_waiting_stage1_receipt(folder: str, state: dict[str, Any]) -> dict[str, Any]:
+    """Keep a WAITING_FOR_LLM receipt aligned with rebuilt packet/prompt files."""
+    r1 = load_receipt(folder, "stage1")
+    if not r1 or r1.get("status") != "WAITING_FOR_LLM":
+        return state
+    packet_path = os.path.join(folder, "authoring_packet.json")
+    prompt_path = os.path.join(folder, "authoring_prompt.md")
+    if not os.path.exists(packet_path) or not os.path.exists(prompt_path):
+        return state
+    names = [name for name in _STAGE1_WAITING_OUTPUTS if os.path.exists(os.path.join(folder, name))]
+    current = file_hash_map(folder, names)
+    if current == (r1.get("output_hashes") or {}):
+        return state
+    r0 = load_receipt(folder, "stage0")
+    receipt = build_receipt(
+        stage="stage1",
+        status="WAITING_FOR_LLM",
+        mode=state.get("mode") or "production",
+        input_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
+        output_hashes=current,
+        result={**(r1.get("result") or {}), "refreshed_hashes": True},
+        checks=r1.get("checks") or {"packet_status_ready": True},
+        prior_receipt_id=(r0 or {}).get("receipt_id") or r1.get("prior_receipt_id"),
+    )
+    return commit_stage(
+        folder,
+        state,
+        receipt,
+        workflow_status="WAITING_FOR_LLM",
+        active_stage="stage1",
+    )
+
+
 def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = True) -> dict[str, Any]:
     """Build packet + authoring prompt; stop at WAITING_FOR_LLM.
 
@@ -663,6 +703,7 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     _run_id = new_run_id()
     _t0 = time.time()
     append_event(folder, _run_id, "stage1.validate", "start")
+    state = _refresh_waiting_stage1_receipt(folder, state)
     state = reconcile(folder, state)
     s1 = (state.get("stages") or {}).get("stage1") or {}
     if s1.get("status") in ("STALE", "FAILED"):
@@ -2000,6 +2041,7 @@ def run_until_stage1_complete(
         state = _ensure_caller_mode(folder, state, mode, force=force)
         write_state(folder, state)
 
+    state = _refresh_waiting_stage1_receipt(folder, state)
     state = reconcile(folder, state)
 
     if state.get("status") == "SKIPPED":

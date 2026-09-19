@@ -50,6 +50,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **9c (pack 3).** Deterministic pre-repair for mechanical findings (years, LR-014/LR-006/LR-015) before any Agy call. `scripts/stage1_prerepair.py` logs `auto_fixes` on `stage1_repair_state.json`. Tests: six years fixed with no Agy prompt; clean draft byte-identical.
   - [x] **9d (pack 3).** Small repair prompts: rule/file/line/offending text/suggestion, local context, relevant digest, mentioned excerpts. Rentana LR-013 case stays under 10KB.
   - [x] **9e (pack 3).** Stage 1 validation failure maps to `paused` with `last_workflow_status=FAILED`, lease released, never auto-promoted. Repair requeues explicitly.
+  - [x] **9g.** Rebuilt packet/prompt refreshes the Stage 1 `WAITING_FOR_LLM` receipt hashes. Resume no longer prints `STALE: stage1` for a WAITING receipt.
   - [ ] **9f.** P2 live quarantine-panel check stays a Codex preflight.
 
 - [ ] **10. Stage 1 split (CR-120 reserved: `FR-348`–`FR-352`, `AC-451`–`AC-455`; docs renamed from colliding CR-117).** Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen cases in `data/eval/cr117/`.
@@ -98,16 +99,9 @@ offending/suggestion + local context), under 10KB for Rentana LR-013.
 
 ### P1 - Rebuilt Stage 1 packet leaves old receipt hashes stale
 
-**Evidence:** The first post-item-4b Rentana worker run printed three
-`STALE: stage1` hash mismatches for `authoring_packet.json`,
-`authoring_prompt.md`, and `authoring_prompt_meta.json` before validation.
-Item 4b rebuilt those files; the Stage 1 receipt still reflected the old
-versions. **How often:** 1/1 rebuilt-packet job tested. Later-stage impact
-is unknown because validation failed.
-
-**Suggested fix:** Have the orchestrator issue a matching Stage 1 receipt
-when it rebuilds the packet/prompt, or make the rebuild path invalidate and
-recreate the receipt before resume. Test Stage 2 transition after a rebuild.
+Landed in item 9g. A WAITING_FOR_LLM Stage 1 receipt is rewritten to match
+the current packet/prompt hashes before reconcile. COMPLETE receipts still
+go STALE if those files change after validation.
 
 ### P1 - Validation mutates failed drafts before the repair step can consume them
 

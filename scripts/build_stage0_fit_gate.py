@@ -109,6 +109,7 @@ class Stage0CostAuthorizationNeeded(RuntimeError):
         reason: str = "no_eligible_provider",
         cost_receipt: dict | None = None,
         next_paths: list[str] | None = None,
+        missing_item_ids: list[str] | None = None,
     ) -> None:
         super().__init__(
             "Stage 0 paused: no eligible classifier. No model API call occurred."
@@ -118,6 +119,7 @@ class Stage0CostAuthorizationNeeded(RuntimeError):
         self.model_call_occurred = model_call_occurred
         self.reason = reason
         self.cost_receipt = cost_receipt or {}
+        self.missing_item_ids = list(missing_item_ids or [])
         self.next_paths = next_paths or [
             "import_cascade_json",
             "certify_zero_charge",
@@ -3170,12 +3172,15 @@ def build_stage0_fit_gate(
             clean_spool(folder)
             raise _pause_for_cost(exc) from exc
         except CascadeReviewNeeded as exc:
-            clean_spool(folder)
+            dropped = list(exc.missing_item_ids)
+            cascade_telemetry["missing_item_ids"] = dropped
+            suffix = f" {dropped}" if dropped else ""
             raise _pause_for_cost(
                 Stage0CostAuthorizationNeeded(
-                    reason=f"subscription_review:{exc}",
+                    reason=f"subscription_review:{exc}{suffix}",
                     authorization_mode="manual_paste",
                     model_call_occurred=True,
+                    missing_item_ids=dropped,
                 )
             ) from exc
         except CascadeValidationError as exc:

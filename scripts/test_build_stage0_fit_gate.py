@@ -44,6 +44,7 @@ os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
 from build_stage0_fit_gate import (
     STAGE0_EXTRACT_MODEL,
+    Stage0CostAuthorizationNeeded,
     Stage0ExtractError,
     _parse_url_and_jd,
     _detect_thin_jd,
@@ -3006,6 +3007,39 @@ class TestCR115ScoredChrome(unittest.TestCase):
         )
         self.assertNotIn("Additional Details", out["required"])
         self.assertNotIn("Additional Details", out["culture"])
+
+
+class TestSubscriptionReviewKeepsSpool(unittest.TestCase):
+    def test_omitted_ids_leave_spool_and_pause_ids(self) -> None:
+        from stage0_evidence_cascade import CascadeReviewNeeded
+
+        folder = _make_submission_folder(_CLEAN_PM_JD)
+
+        def fake_batch(items, **_kwargs):
+            spool = folder / ".stage0_spool"
+            spool.mkdir(exist_ok=True)
+            marker = spool / "response.json"
+            marker.write_text("{}", encoding="utf-8")
+            raise CascadeReviewNeeded(
+                "harness omitted item_ids",
+                [item.item_id for item in items[:2]],
+            )
+
+        with patch(
+            "stage0_evidence_cascade.classify_requirements_batch",
+            side_effect=fake_batch,
+        ):
+            with self.assertRaises(Stage0CostAuthorizationNeeded) as ctx:
+                build_stage0_fit_gate(
+                    folder,
+                    db_gate_result=_DB_CLEAR,
+                    prefs=_PREFS_MINIMAL,
+                )
+        self.assertTrue((folder / ".stage0_spool" / "response.json").exists())
+        self.assertTrue(ctx.exception.missing_item_ids)
+        self.assertIn("required:", ctx.exception.missing_item_ids[0])
+        self.assertIn("subscription_review:", ctx.exception.reason)
+        self.assertEqual(ctx.exception.pause_kind(), "subscription_review")
 
 
 # ---------------------------------------------------------------------------

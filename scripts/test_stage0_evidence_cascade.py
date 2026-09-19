@@ -966,6 +966,26 @@ class TestSubscriptionEvidenceLiveFixes(unittest.TestCase):
         self.assertEqual(calls, [["req:0", "req:1"], ["req:1"]])
         self.assertEqual(set(result.keys()), {"req:0", "req:1"})
 
+    def test_later_chunks_still_run_when_first_chunk_omits(self) -> None:
+        from stage0_evidence_cascade import CascadeReviewNeeded, classify_requirements_batch
+
+        calls: list[list[str]] = []
+
+        def fake(_task, items, **_kwargs):
+            ids = [item.item_id for item in items]
+            calls.append(ids)
+            if ids and ids[0] == "req:0":
+                return self._result([], missing=ids, outcome="review")
+            return self._result(ids)
+
+        with patch("stage0_evidence_cascade._subscription_evidence_enabled", return_value=True):
+            with patch("stage0_subscription_adapter.run_stage0_subscription", side_effect=fake):
+                with self.assertRaises(CascadeReviewNeeded) as ctx:
+                    classify_requirements_batch(self._items(6))
+        self.assertEqual(ctx.exception.missing_item_ids, ["req:0", "req:1", "req:2"])
+        self.assertEqual(calls[0], ["req:0", "req:1", "req:2"])
+        self.assertEqual(calls[-1], ["req:3", "req:4", "req:5"])
+
     def test_subscription_review_pause_kind_is_not_cost_authorization(self) -> None:
         from build_stage0_fit_gate import Stage0CostAuthorizationNeeded
 
@@ -973,9 +993,11 @@ class TestSubscriptionEvidenceLiveFixes(unittest.TestCase):
         review = Stage0CostAuthorizationNeeded(
             reason="subscription_review:harness omitted item_ids",
             model_call_occurred=True,
+            missing_item_ids=["required:0:abc"],
         )
         self.assertEqual(cost.pause_kind(), "cost_authorization")
         self.assertEqual(review.pause_kind(), "subscription_review")
+        self.assertEqual(review.missing_item_ids, ["required:0:abc"])
 
 
 if __name__ == "__main__":

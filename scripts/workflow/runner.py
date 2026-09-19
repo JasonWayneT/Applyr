@@ -375,6 +375,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
                 "cost_known": False,
                 "cost_confidence": "unknown",
                 "reason": exc.reason,
+                "missing_item_ids": list(getattr(exc, "missing_item_ids", []) or []),
                 "next_paths": exc.next_paths,
                 "resume_command": f"python scripts/run_submission.py {folder} --resume",
                 "import_path": os.path.join(folder, "stage0_cascade_import.json"),

@@ -94,6 +94,10 @@ class CascadeValidationError(ValueError):
 class CascadeReviewNeeded(CascadeValidationError):
     """Subscription adapter failed closed and the batch must pause for review."""
 
+    def __init__(self, reason: str, missing_item_ids: list[str] | None = None) -> None:
+        super().__init__(reason)
+        self.missing_item_ids = list(missing_item_ids or [])
+
 
 class CascadeUnavailable(RuntimeError):
     """No configured Stage 0 provider returned a usable response."""
@@ -187,11 +191,13 @@ def _classify_requirements_subscription(
         if not missing_items:
             return validate_batch_response({"results": kept}, items, exact_ids=True)
         raise CascadeReviewNeeded(
-            retry.reason or result.reason or "harness omitted item_ids"
+            retry.reason or result.reason or "harness omitted item_ids",
+            [item.item_id for item in missing_items],
         )
     if result.outcome not in {"ok", "cache_hit"} or missing_items:
         raise CascadeReviewNeeded(
-            result.reason or "subscription adapter required review"
+            result.reason or "subscription adapter required review",
+            [item.item_id for item in missing_items] or [item.item_id for item in items],
         )
     return validate_batch_response({"results": kept}, items, exact_ids=True)
 
@@ -435,19 +441,28 @@ def classify_requirements_batch(
     if _subscription_evidence_enabled():
         if len(items) > SUBSCRIPTION_EVIDENCE_CHUNK:
             merged: dict[str, dict[str, Any]] = {}
+            missing_ids: list[str] = []
+            last_reason = "harness omitted item_ids"
             for start in range(0, len(items), SUBSCRIPTION_EVIDENCE_CHUNK):
                 chunk = items[start : start + SUBSCRIPTION_EVIDENCE_CHUNK]
-                merged.update(
-                    classify_requirements_batch(
-                        chunk,
-                        settings=settings,
-                        raw_response_callback=raw_response_callback,
-                        provider_event_callback=provider_event_callback,
-                        folder=folder,
-                        cost_ledger=cost_ledger,
-                        allow_import=False,
+                try:
+                    merged.update(
+                        classify_requirements_batch(
+                            chunk,
+                            settings=settings,
+                            raw_response_callback=raw_response_callback,
+                            provider_event_callback=provider_event_callback,
+                            folder=folder,
+                            cost_ledger=cost_ledger,
+                            allow_import=False,
+                        )
                     )
-                )
+                except CascadeReviewNeeded as exc:
+                    last_reason = str(exc)
+                    dropped = list(exc.missing_item_ids) or [item.item_id for item in chunk]
+                    missing_ids.extend(dropped)
+            if missing_ids:
+                raise CascadeReviewNeeded(last_reason, missing_ids)
             return merged
         return _classify_requirements_subscription(
             items,

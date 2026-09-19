@@ -82,9 +82,10 @@ class SubscriptionEvidenceTests(unittest.TestCase):
         with patch.object(adapter, "run_stage0_subscription", return_value=result), patch(
             "utils.call_llm"
         ) as llm:
-            with self.assertRaises(CascadeReviewNeeded):
+            with self.assertRaises(CascadeReviewNeeded) as ctx:
                 classify_requirements_batch(ITEMS)
         llm.assert_not_called()
+        self.assertEqual(ctx.exception.missing_item_ids, ["required:0:abc"])
 
     def test_unsafe_hard_is_held_not_skipped(self) -> None:
         os.environ[adapter.ENABLED_ENV] = "1"

@@ -36,10 +36,51 @@ JD_MIN_CHARS = 200
 STABLE_SIZE_SLEEP_S = 0.25
 
 _REQUIRED_HEADERS = frozenset({"Company", "Job Description"})
+_COMPANY_TITLE_SEPS = (" - ", " – ", " — ", " | ", ": ", " / ")
 
 
 def sanitize(name: str) -> str:
     return re.sub(r"[\W_]+", "_", name).strip("_").lower()
+
+
+def clean_company_field(company: str, title: str = "") -> str:
+    """Strip a trailing or prefixed role title from the Company cell.
+
+    Bookmarklet and some CSV exports put "ESO Product Manager" (or
+    "Product Manager at ESO") in Company while Position already holds the
+    title. That made a second slug (`eso_product_manager`) and missed the
+    ESO cooldown / skip-ledger row.
+    """
+    company = re.sub(r"\s+", " ", (company or "").replace("\u00a0", " ")).strip()
+    title = re.sub(r"\s+", " ", (title or "").replace("\u00a0", " ")).strip()
+    if not company:
+        return ""
+    if not title:
+        return company
+    lowered_c = company.lower()
+    lowered_t = title.lower()
+    if lowered_c == lowered_t:
+        return ""
+    for suffix in (lowered_t, *(f"{sep}{lowered_t}" for sep in _COMPANY_TITLE_SEPS)):
+        if lowered_c.endswith(suffix) and len(company) > len(suffix):
+            remainder = company[: len(company) - len(suffix)].rstrip(" -–—|:/")
+            if remainder and remainder.lower() != lowered_t:
+                return remainder.strip()
+    prefix = f"{lowered_t} at "
+    if lowered_c.startswith(prefix):
+        remainder = company[len(prefix) :].strip(" -–—|:/")
+        if remainder and remainder.lower() != lowered_t:
+            return remainder
+    return company
+
+
+def normalize_ingest_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy with Company cleaned against Position."""
+    out = dict(row)
+    title = (out.get("Position") or "").strip()
+    out["Position"] = title
+    out["Company"] = clean_company_field(out.get("Company") or "", title)
+    return out
 
 
 def _scan_jd_urls(root: Path, mapping: dict[str, str]) -> None:
@@ -132,6 +173,7 @@ def write_jd(
 
 def validate_row(row: dict[str, Any]) -> tuple[bool, str | None]:
     """Return (ok, error_code). Checks run in FR-341 order."""
+    row = normalize_ingest_row(row)
     company = (row.get("Company") or "").strip()
     if not company:
         return False, EMPTY_COMPANY

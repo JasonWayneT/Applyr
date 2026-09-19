@@ -21,6 +21,9 @@ from csv_ingest import (  # noqa: E402
     FILE_UNPARSEABLE,
     JD_TOO_SHORT,
     NO_DEDUP_KEY,
+    clean_company_field,
+    sanitize,
+    validate_row,
     write_jd,
 )
 
@@ -65,6 +68,46 @@ class TestWriteJdFormat(unittest.TestCase):
             },
         )
         self.assertEqual(NO_DEDUP_KEY, "NO_DEDUP_KEY")
+
+
+class TestCleanCompanyField(unittest.TestCase):
+    def test_strips_trailing_title(self) -> None:
+        self.assertEqual(
+            clean_company_field("ESO Product Manager", "Product Manager"),
+            "ESO",
+        )
+        self.assertEqual(sanitize("ESO"), "eso")
+        self.assertEqual(
+            sanitize(clean_company_field("ESO Product Manager", "Product Manager")),
+            "eso",
+        )
+        self.assertNotEqual(sanitize("ESO Product Manager"), "eso")
+
+    def test_strips_separated_and_at_forms(self) -> None:
+        self.assertEqual(clean_company_field("ESO - Product Manager", "Product Manager"), "ESO")
+        self.assertEqual(clean_company_field("ESO | Product Manager", "Product Manager"), "ESO")
+        self.assertEqual(clean_company_field("Product Manager at ESO", "Product Manager"), "ESO")
+        self.assertEqual(
+            clean_company_field("ESO\nProduct Manager", "Product Manager"),
+            "ESO",
+        )
+
+    def test_leaves_clean_company_alone(self) -> None:
+        self.assertEqual(clean_company_field("ESO", "Product Manager"), "ESO")
+        self.assertEqual(clean_company_field("Product Management Inc", "Product Manager"), "Product Management Inc")
+
+    def test_title_only_company_is_empty(self) -> None:
+        self.assertEqual(clean_company_field("Product Manager", "Product Manager"), "")
+        ok, code = validate_row(
+            {
+                "Company": "Product Manager",
+                "Position": "Product Manager",
+                "URL": "https://example.test/eso",
+                "Job Description": "Owns the platform roadmap for a B2B product used by enterprise teams. " * 8,
+            }
+        )
+        self.assertFalse(ok)
+        self.assertEqual(code, EMPTY_COMPANY)
 
 
 if __name__ == "__main__":

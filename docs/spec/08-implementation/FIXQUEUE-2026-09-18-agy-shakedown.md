@@ -38,7 +38,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
 
 - [ ] **6. Re-run the wrong skips (after 4).** Back up the DB, delete these `stage0_skips` rows, re-queue via a new CSV in `data/inbox/csv/` pulled from archive by URL. Slugs: omnissa, optum, origami_risk, goodrx_product_manager, businessolver_product_manager_remote, cordance, binance_product_manager_social_features_content, eso (drop `eso_product_manager`), velera_product_manager_shared_branch, employers, ss_c_technologies. Cordance and Binance only need the ledger row cleared. Velera and Employers get a fresh Stage 0. Leave legitimate: Associate x3, Sartorius, Infojini, Urrly, Alinea, Imagine Learning, Salas O'Brien, Solace, Ulteig, Helix.
 
-- [ ] **7. Company field polluted with titles.** Fix at ingest where CSV or bookmarklet appends the title.
+- [x] **7. Company field polluted with titles.** Ingest strips a trailing/prefixed Position from Company (`ESO Product Manager` → `ESO`, slug `eso`). LinkedIn grab uses the first line of the company link. Title-only Company cells quarantine as EMPTY_COMPANY.
 
 - [x] **8. Trustworthy quota numbers.** Tracker copies Agy's final `result.usage` faithfully. `rentana_stage1_03` was 58 internal agent steps whose inputs sum to 419,638 (cache-read sum 4,154,618). A clean one-step author (`stage1-02`) was 38,961 input, 0 cache, 1 five-hour point. Cache-read did not move the five-hour window 1:1 with input. Size batches from five-hour drops (~1pp per clean author call, 3pp for a tool-loop). Tracker now logs `agent_steps` and `cache_read`.
 

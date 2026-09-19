@@ -189,6 +189,31 @@ class TestRowQuarantine(IngestHarness):
         self.assertFalse((self.pending / "shortco").exists())
         self.assertFalse((self.pending / "nokeyco").exists())
 
+    def test_title_appended_to_company_uses_company_slug(self) -> None:
+        self._write_csv(
+            "eso.csv",
+            [
+                {
+                    "Company": "ESO Product Manager",
+                    "Position": "Product Manager",
+                    "URL": "https://example.test/eso",
+                    "Job Description": _jd(),
+                }
+            ],
+        )
+        counts = self._ingest()
+        self.assertEqual(counts["queued"], 1)
+        conn = self._conn()
+        try:
+            row = conn.execute("SELECT slug, company, title FROM pipeline_queue").fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row["slug"], "eso")
+        self.assertEqual(row["company"], "ESO")
+        self.assertEqual(row["title"], "Product Manager")
+        self.assertTrue((self.pending / "eso" / "Original_JD.txt").exists())
+        self.assertFalse((self.pending / "eso_product_manager").exists())
+
 
 class TestDedupResolver(IngestHarness):
     def test_url_less_same_company_title_one_row(self) -> None:

@@ -124,6 +124,7 @@ def ingest_inbox(
             queued_here = 0
             line_number = 1
             for line_number, row in enumerate(rows or [], start=2):
+                row = ingest.normalize_ingest_row(row)
                 ok, error_code = ingest.validate_row(row)
                 if not ok and error_code:
                     row_quarantine += 1

@@ -71,6 +71,24 @@ def clean_company_field(company: str, title: str = "") -> str:
         remainder = company[len(prefix) :].strip(" -–—|:/")
         if remainder and remainder.lower() != lowered_t:
             return remainder
+    company_words = re.findall(r"[a-z0-9]+", lowered_c)
+    title_words = re.findall(r"[a-z0-9]+", lowered_t)
+    if (
+        title_words
+        and len(company_words) > len(title_words)
+        and company_words[-len(title_words) :] == title_words
+    ):
+        drop = len(title_words)
+        index = len(company)
+        while drop > 0 and index > 0:
+            while index > 0 and not company[index - 1].isalnum():
+                index -= 1
+            while index > 0 and company[index - 1].isalnum():
+                index -= 1
+            drop -= 1
+        remainder = company[:index].rstrip(" -–—|:/")
+        if remainder and remainder.lower() != lowered_t:
+            return remainder
     return company
 
 

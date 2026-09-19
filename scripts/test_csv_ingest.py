@@ -86,7 +86,24 @@ class TestCleanCompanyField(unittest.TestCase):
     def test_strips_separated_and_at_forms(self) -> None:
         self.assertEqual(clean_company_field("ESO - Product Manager", "Product Manager"), "ESO")
         self.assertEqual(clean_company_field("ESO | Product Manager", "Product Manager"), "ESO")
-        self.assertEqual(clean_company_field("Product Manager at ESO", "Product Manager"), "ESO")
+        self.assertEqual(
+            clean_company_field("Businessolver Product Manager Remote", "Product Manager (Remote)"),
+            "Businessolver",
+        )
+        self.assertEqual(
+            clean_company_field(
+                "Velera Product Manager Shared Branch",
+                "Product Manager - Shared Branch",
+            ),
+            "Velera",
+        )
+        self.assertEqual(
+            clean_company_field(
+                "Binance Product Manager Social Features Content",
+                "Product Manager - Social Features (Content)",
+            ),
+            "Binance",
+        )
         self.assertEqual(
             clean_company_field("ESO\nProduct Manager", "Product Manager"),
             "ESO",

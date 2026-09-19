@@ -84,7 +84,7 @@ def _agy_levels(rows: list[dict], work_exp: str) -> dict[str, dict]:
         profile="agy-default",
         model="gemini-3.8-flash-medium",
         effort="medium",
-        timeout_seconds=120,
+        timeout_seconds=300,
         max_calls=40,
         max_wall_seconds=1800,
         cache_dir=_CACHE,
@@ -93,7 +93,7 @@ def _agy_levels(rows: list[dict], work_exp: str) -> dict[str, dict]:
     by_id: dict[str, dict] = {}
     session = AgySession("evidence", config)
     try:
-        for chunk in _chunks(items, 6):
+        for chunk in _chunks(items, 3):
             result = run_stage0_subscription(
                 "evidence", chunk, config=config, budget=budget, session=session
             )

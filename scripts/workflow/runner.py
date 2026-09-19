@@ -83,6 +83,26 @@ def _load_json(path: str) -> dict[str, Any]:
     return data
 
 
+def _waiting_for_input_has_new_work(folder: str) -> bool:
+    """True when a WAITING_FOR_INPUT pause has new input and should resume Stage 0.
+
+    No new input means return the existing receipt and do not re-run Agy.
+    """
+    receipt = load_receipt(folder, "stage0") or {}
+    kind = ((receipt.get("result") or {}) if isinstance(receipt, dict) else {}).get(
+        "pause_kind"
+    )
+    if kind == "subscription_review":
+        return os.path.isfile(os.path.join(folder, "stage0_cascade_import.json"))
+    if kind == "requirement_extraction_review":
+        return os.path.isfile(
+            os.path.join(folder, "stage0_requirement_extraction_review.json")
+        )
+    if kind == "cost_authorization":
+        return False
+    return True
+
+
 def _place_after_stage0(folder: str, state: dict[str, Any]) -> str:
     """Move Skip folders out of submissions/pending_review; promote PASS from pending.
 
@@ -334,6 +354,8 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     except Stage0CostAuthorizationNeeded as exc:
         mode = state.get("mode") or "production"
         _duration = round(time.time() - _t0, 3)
+        pause_kind = exc.pause_kind()
+        model_call = bool(exc.model_call_occurred) if pause_kind == "subscription_review" else False
         receipt = build_receipt(
             stage="stage0",
             status="WAITING_FOR_INPUT",
@@ -343,12 +365,12 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             ),
             output_hashes={},
             result={
-                "pause_kind": "cost_authorization",
+                "pause_kind": pause_kind,
                 "stage": "stage0",
                 "attempted_operation": "evidence_classification",
                 "authorization_mode": exc.authorization_mode,
                 "ineligible_providers": exc.ineligible_providers,
-                "model_call_occurred": False,
+                "model_call_occurred": model_call,
                 "cost_applicable": False,
                 "cost_known": False,
                 "cost_confidence": "unknown",
@@ -360,8 +382,8 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
                 "cost_receipt": exc.cost_receipt,
             },
             checks={
-                "cost_authorization_required": True,
-                "model_call_occurred": False,
+                "cost_authorization_required": pause_kind == "cost_authorization",
+                "model_call_occurred": model_call,
             },
         )
         result_state = commit_stage(
@@ -377,7 +399,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             "stage0",
             "waiting_for_input",
             duration_seconds=_duration,
-            pause_kind="cost_authorization",
+            pause_kind=pause_kind,
             reason=exc.reason,
         )
         return result_state
@@ -2212,6 +2234,10 @@ def run_until_waiting_for_llm(
     # before run_stage0 has a chance to rebuild the gate.
     if state.get("status") == "SKIPPED" and not force:
         return state
+
+    if state.get("status") == "WAITING_FOR_INPUT" and not force:
+        if not _waiting_for_input_has_new_work(folder):
+            return state
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
     if force or s0.get("status") == "STALE" or s0.get("status") not in ("COMPLETE", "SKIPPED"):

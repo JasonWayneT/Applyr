@@ -836,6 +836,14 @@ def waiting_for_input_message(folder: str) -> str:
             f"Then: python scripts/run_submission.py {folder} --resume. "
             "Do not paste authoring_prompt.md. Stage 0 is not finished."
         )
+    if kind == "subscription_review":
+        return (
+            "workflow WAITING_FOR_INPUT — Stage 0 Agy evidence review. "
+            "The subscription adapter ran and did not return a complete evidence "
+            "batch. This is not a cost-authorization pause. "
+            f"Then: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md. Stage 0 is not finished."
+        )
     return (
         "workflow WAITING_FOR_INPUT — resolve Review Center confirmations then --resume"
     )

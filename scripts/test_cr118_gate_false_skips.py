@@ -55,6 +55,14 @@ class TestPeopleManagementNegation(unittest.TestCase):
     def test_eso_coaching_other_managers_reports(self) -> None:
         self.assertEqual(_check_people_management(ESO), [])
 
+    def test_eso_mentoring_junior_talent_does_not_skip(self) -> None:
+        jd = (
+            ESO
+            + " Mentoring junior talent and coaching to all levels of management "
+            "as they help their direct reports."
+        )
+        self.assertEqual(_check_people_management(jd), [])
+
     def test_role_with_direct_reports_still_skips(self) -> None:
         jd = "You will have 3 direct reports and manage a team of engineers."
         codes = {row["code"] for row in _check_people_management(jd)}

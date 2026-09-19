@@ -40,3 +40,9 @@ export interface PipelineQueueStats {
   leases: PipelineLease[];
   stuck: PipelineStuckItem[];
 }
+
+export interface PipelineUploadResult {
+  queued: number;
+  duplicate: number;
+  quarantined: number;
+}

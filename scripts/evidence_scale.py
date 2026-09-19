@@ -638,7 +638,7 @@ product-management-experience alternative offered anywhere in the line and no he
 candidate's real background (see candidate profile) -- e.g. people management/direct \
 reports (including "mentor/guide/lead other product managers or product owners" -- managing \
 or mentoring PEERS in the same discipline is people management even without the word \
-"manager" in the title), AI/ML model ownership, revenue/billing ownership, a title above \
+"manager" in the title), AI/ML model training, fine-tuning, or ML engineering, revenue/billing ownership, a title above \
 Senior IC, or building a product area from nothing -- solo/founding 0-to-1 ownership with no \
 existing foundation, roadmap, or process to build on (e.g. "own the zero to one build of...", \
 "shaping or maturing an early-stage product area... where none previously existed").

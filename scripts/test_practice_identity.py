@@ -144,6 +144,71 @@ class TestApplyResumeHeaderIdentity(unittest.TestCase):
         self.assertIn("San Diego, CA | 555-010-1234 | alex.example@example.com", text)
         self.assertNotIn("Location | Email | Phone | LinkedIn", text)
 
+    def test_invented_education_institution_is_overwritten(self):
+        from apply_resume_header import patch_file
+
+        header = dict(_FAKE_WE_HEADER)
+        self.folder.joinpath("Resume.md").write_text(
+            "# Alex Example\n"
+            "San Diego, CA | 555-010-1234 | alex.example@example.com | linkedin.com/in/alexexample\n\n"
+            "## PROFESSIONAL SUMMARY\n"
+            "A product manager.\n\n"
+            "## EDUCATION\n"
+            "B.S. Computer Science, Made-Up Institute of Technology, 2018\n",
+            encoding="utf-8",
+        )
+        result = patch_file(str(self.folder / "Resume.md"), header)
+        text = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn("education", result)
+        self.assertIn(header["education_line"], text)
+        self.assertNotIn("Made-Up Institute of Technology", text)
+
+    def test_wrong_role_date_is_overwritten(self):
+        from apply_resume_header import patch_file
+
+        header = dict(_FAKE_WE_HEADER)
+        self.folder.joinpath("Resume.md").write_text(
+            "# Alex Example\n"
+            "San Diego, CA | 555-010-1234 | alex.example@example.com | linkedin.com/in/alexexample\n\n"
+            "## PROFESSIONAL EXPERIENCE\n"
+            "### Product Manager | Cision | January 2018 - Present\n"
+            "Remote\n"
+            "* Shipped a thing.\n",
+            encoding="utf-8",
+        )
+        result = patch_file(str(self.folder / "Resume.md"), header)
+        text = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn("role heading Cision", result)
+        self.assertIn(
+            "### Product Manager | Cision | September 2021 - January 2026",
+            text,
+        )
+        self.assertNotIn("January 2018 - Present", text)
+        self.assertIn("San Diego, CA\n* Shipped a thing.", text.replace("\r\n", "\n"))
+
+    def test_missing_signoff_is_injected(self):
+        from apply_resume_header import patch_file
+
+        header = dict(_FAKE_WE_HEADER)
+        self.folder.joinpath("CoverLetter.md").write_text(
+            "# Wrong Name\n"
+            "Austin, TX | 000 | wrong@example.com | linkedin.com/in/wrong\n\n"
+            "Hello team,\n\n"
+            "Body of the letter.\n",
+            encoding="utf-8",
+        )
+        result = patch_file(str(self.folder / "CoverLetter.md"), header)
+        text = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn("header", result)
+        self.assertIn("greeting", result)
+        self.assertIn("signoff", result)
+        self.assertTrue(text.startswith("# Alex Example\n"))
+        self.assertIn("Dear Hiring Manager,", text)
+        self.assertIn("Best regards,", text)
+        self.assertTrue(text.rstrip().endswith("Alex Example"))
+        self.assertNotIn("Hello team,", text)
+        self.assertNotIn("Wrong Name", text)
+
     def test_stacked_real_and_placeholder_header_is_stripped(self):
         from apply_resume_header import patch_file
 

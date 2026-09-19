@@ -172,6 +172,35 @@ def is_different_role(query_role: str, row_title: str) -> bool:
 # Row classifier
 # ---------------------------------------------------------------------------
 
+def _parse_job_datetime(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _cooldown_anchor(row: dict) -> tuple[object, str]:
+    """Prefer status_changed_at, then applied_at, then created_at."""
+    for key in ("status_changed_at", "applied_at", "created_at"):
+        raw = row.get(key)
+        if raw not in (None, ""):
+            return raw, key
+    return None, "none"
+
+
 def classify_rejection_row(
     row: dict,
     now: datetime | None = None,
@@ -196,7 +225,6 @@ def classify_rejection_row(
     status = (row.get("status") or "").strip()
     rejection_type = (row.get("rejection_type") or "").strip()
     outcome_notes = (row.get("outcome_notes") or "").strip()
-    changed_at_raw = row.get("status_changed_at")
     title = row.get("title") or ""
 
     # --- Self-Rejected ---
@@ -243,30 +271,26 @@ def classify_rejection_row(
         }
 
     # --- Compute within_cooldown ---
+    changed_at_raw, anchor_field = _cooldown_anchor(row)
     if changed_at_raw is None:
-        # NULL status_changed_at — conservative: treat as still within cooldown
         within_cooldown = True
         reason_detail = (
-            f"{category} | NULL status_changed_at → treated as within {cooldown_days}d cooldown"
+            f"{category} | NULL status_changed_at/applied_at/created_at "
+            f"→ treated as within {cooldown_days}d cooldown"
         )
     else:
-        try:
-            if isinstance(changed_at_raw, str):
-                changed_at = datetime.fromisoformat(changed_at_raw.replace("Z", "+00:00"))
-            else:
-                changed_at = changed_at_raw
-            if changed_at.tzinfo is None:
-                changed_at = changed_at.replace(tzinfo=timezone.utc)
+        changed_at = _parse_job_datetime(changed_at_raw)
+        if changed_at is None:
+            within_cooldown = True
+            reason_detail = (
+                f"{category} | unparseable {anchor_field} → treated as within cooldown"
+            )
+        else:
             elapsed = now - changed_at
             within_cooldown = elapsed < timedelta(days=cooldown_days)
             reason_detail = (
-                f"{category} | {elapsed.days}d elapsed vs {cooldown_days}d cooldown"
-            )
-        except (ValueError, TypeError):
-            # Unparseable date — be conservative
-            within_cooldown = True
-            reason_detail = (
-                f"{category} | unparseable status_changed_at → treated as within cooldown"
+                f"{category} | {elapsed.days}d elapsed vs {cooldown_days}d cooldown "
+                f"(from {anchor_field})"
             )
 
     return {
@@ -360,7 +384,8 @@ def _evaluate_db_gate_core(
     try:
         cur = conn.execute(
             """
-            SELECT status, rejection_type, status_changed_at, company, outcome_notes, title
+            SELECT status, rejection_type, status_changed_at, applied_at, created_at,
+                   company, outcome_notes, title
             FROM jobs
             WHERE lower(company) LIKE ?
             """,

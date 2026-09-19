@@ -18,7 +18,8 @@ _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
 DEFAULT_DB = _REPO_ROOT / "data" / "jobagent.sqlite"
 
-# Semantically identical to server/migrations/025_add_pipeline_queue.sql.
+# Semantically identical to server/migrations/025_add_pipeline_queue.sql
+# plus 026_add_pipeline_queue_paused_at.sql (paused_at).
 # Story 1.3 anti-drift test dumps sqlite_master from both copies.
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS pipeline_queue (
@@ -52,7 +53,8 @@ CREATE TABLE IF NOT EXISTS pipeline_queue (
   updated_at           TEXT,
 
   last_workflow_status TEXT,
-  last_stage           TEXT
+  last_stage           TEXT,
+  paused_at            TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pipeline_queue_url_key
@@ -83,9 +85,26 @@ CREATE TABLE IF NOT EXISTS csv_quarantine (
 """
 
 
+def _ensure_paused_at_column(conn: sqlite3.Connection) -> None:
+    """Add paused_at on DBs that already ran 025 without 026 (FR-346)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+    if "paused_at" not in cols:
+        conn.execute("ALTER TABLE pipeline_queue ADD COLUMN paused_at TEXT")
+    conn.execute(
+        """
+        UPDATE pipeline_queue
+           SET paused_at = updated_at
+         WHERE status = 'paused'
+           AND paused_at IS NULL
+           AND updated_at IS NOT NULL
+        """
+    )
+
+
 def ensure_schema(conn: sqlite3.Connection) -> None:
     """Create the three CR-119 tables if missing. Idempotent."""
     conn.executescript(_SCHEMA_SQL)
+    _ensure_paused_at_column(conn)
     conn.commit()
 
 
@@ -333,6 +352,9 @@ def transition(
     elif to_status in ("queued", "paused", "done") and from_status != "queued":
         if to_status in ("queued", "paused", "done"):
             sets.extend(["locked_by = NULL", "lease_expires_at = NULL"])
+        if to_status == "paused":
+            sets.append("paused_at = ?")
+            args.append(now)
     if last_workflow_status is not None:
         sets.append("last_workflow_status = ?")
         args.append(last_workflow_status)
@@ -387,24 +409,138 @@ def _workflow_status(folder: Path) -> str | None:
     return status if isinstance(status, str) else None
 
 
-def _paused_should_promote(folder: Path) -> bool:
-    from contracts import check_stage1_ready
+def _parse_paused_at(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
-    ready, _ = check_stage1_ready(str(folder))
-    if ready:
-        return True
+
+def _dispositions_mtime(folder: Path) -> datetime | None:
+    path = folder / "reviews" / "dispositions.json"
+    if not path.is_file():
+        return None
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return None
+
+
+def _file_mtime(path: Path) -> datetime | None:
+    if not path.is_file():
+        return None
+    try:
+        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    except OSError:
+        return None
+
+
+def _newer_than_paused(path: Path, paused_at: datetime | None) -> bool:
+    if paused_at is None:
+        return False
+    stamp = _file_mtime(path)
+    return stamp is not None and stamp > paused_at
+
+
+def _pause_kind(folder: Path) -> str | None:
+    receipt = folder / "stage_receipts" / "stage0.json"
+    if not receipt.is_file():
+        return None
+    try:
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    kind = ((payload or {}).get("result") or {}).get("pause_kind")
+    return kind if isinstance(kind, str) and kind.strip() else None
+
+
+def _review_center_should_promote(
+    conn: sqlite3.Connection | None,
+    slug: str,
+    paused_at: datetime | None,
+) -> bool:
+    """Promote only when this slug has no open Review Center questions and a
+    completion newer than paused_at. Missing table or paused_at stays paused.
+    """
+    if conn is None or paused_at is None or not slug:
+        return False
+    try:
+        open_n = conn.execute(
+            "SELECT COUNT(*) FROM pending_skill_confirmations "
+            "WHERE opportunity_key = ? AND status = 'open'",
+            (slug,),
+        ).fetchone()[0]
+        if int(open_n) > 0:
+            return False
+        rows = conn.execute(
+            "SELECT resolved_at, updated_at FROM pending_skill_confirmations "
+            "WHERE opportunity_key = ? AND status = 'completed'",
+            (slug,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return False
+    for row in rows:
+        stamp = _parse_paused_at(row[0] or row[1])
+        if stamp is not None and stamp > paused_at:
+            return True
+    return False
+
+
+def _waiting_for_input_should_promote(
+    folder: Path,
+    row: dict[str, Any] | None,
+    conn: sqlite3.Connection | None,
+) -> bool:
+    paused_at = _parse_paused_at((row or {}).get("paused_at"))
+    kind = _pause_kind(folder)
+    if kind == "subscription_review":
+        return _newer_than_paused(folder / "stage0_cascade_import.json", paused_at)
+    if kind == "requirement_extraction_review":
+        return _newer_than_paused(
+            folder / "stage0_requirement_extraction_review.json", paused_at
+        )
+    if kind == "cost_authorization":
+        return False
+    return _review_center_should_promote(
+        conn, str((row or {}).get("slug") or folder.name), paused_at
+    )
+
+
+def _paused_should_promote(
+    folder: Path,
+    row: dict[str, Any] | None = None,
+    conn: sqlite3.Connection | None = None,
+) -> bool:
     status = _workflow_status(folder)
+    if status == "NEEDS_DISPOSITION":
+        paused_at = _parse_paused_at((row or {}).get("paused_at"))
+        dispositions_at = _dispositions_mtime(folder)
+        if paused_at is None or dispositions_at is None:
+            return False
+        return dispositions_at > paused_at
+    if status == "WAITING_FOR_INPUT":
+        return _waiting_for_input_should_promote(folder, row, conn)
     if status in (
-        None,
-        "",
-        "WAITING_FOR_LLM",
-        "NEEDS_DISPOSITION",
         "COMPLETE",
         "COMPLETE_WITH_OVERRIDE",
         "PRACTICE_COMPLETE",
         "SKIPPED",
+        "FAILED",
     ):
         return False
+    from contracts import check_stage1_ready
+
+    ready, _ = check_stage1_ready(str(folder))
+    if status in (None, "", "WAITING_FOR_LLM"):
+        return ready
     return True
 
 
@@ -414,7 +550,7 @@ def _promotable_paused_slugs(conn: sqlite3.Connection, data_root: Path) -> list[
         folder = _resolve_row_folder(row, data_root)
         if folder is None:
             continue
-        if _paused_should_promote(folder):
+        if _paused_should_promote(folder, row, conn):
             slugs.append(row["slug"])
     return slugs
 
@@ -442,7 +578,20 @@ def claim_pack(
         conn.isolation_level = None
         conn.execute("BEGIN IMMEDIATE")
         try:
-            for slug in promotable:
+            already = conn.execute(
+                """
+                SELECT COUNT(*) FROM pipeline_queue
+                WHERE status = 'queued'
+                   OR (
+                     lease_expires_at IS NOT NULL
+                     AND lease_expires_at <= ?
+                     AND status IN ('leased', 'in_progress')
+                   )
+                """,
+                (now,),
+            ).fetchone()[0]
+            promote_budget = max(0, size - int(already or 0))
+            for slug in promotable[:promote_budget]:
                 row = get_row(conn, slug)
                 if not row or row["status"] != "paused":
                     continue

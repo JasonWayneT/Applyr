@@ -134,7 +134,7 @@ line, and only in these four categories:
 - degree: a required advanced degree (Master's/MBA/PhD/JD/MD) with NO Bachelor's alternative.
 - domain: a required regulated/specialized domain paired with its OWN years-of-experience threshold.
 - role_exclusion: a role category incompatible with the candidate's background (people management, \
-AI/ML ownership, revenue/billing ownership, title above Senior IC, or building from nothing).
+AI/ML model training, fine-tuning, or ML engineering, revenue/billing ownership, title above Senior IC, or building from nothing).
 - certification: a required professional certification/license (PMP, CPA, PE, RN license, etc.).
 Tools never gate. Bare years-of-experience never gates. If gate="HARD", gap_source MUST be \
 exactly one of "degree", "domain", "role_exclusion", or "certification".

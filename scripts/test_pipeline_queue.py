@@ -23,13 +23,17 @@ import pipeline_queue as pq  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _MIGRATION_SQL = _REPO_ROOT / "server" / "migrations" / "025_add_pipeline_queue.sql"
+_MIGRATION_026 = _REPO_ROOT / "server" / "migrations" / "026_add_pipeline_queue_paused_at.sql"
 
 
 def _normalize_sql(sql: str | None) -> str:
     if not sql:
         return ""
     stripped = re.sub(r"--[^\n]*", " ", sql)
-    return " ".join(stripped.lower().split())
+    stripped = " ".join(stripped.lower().split())
+    stripped = re.sub(r"\s*,\s*", ", ", stripped)
+    stripped = re.sub(r"\s+\)", ")", stripped)
+    return stripped
 
 
 def _dump_master(conn: sqlite3.Connection) -> list[tuple[str, str, str, str]]:
@@ -42,7 +46,11 @@ def _dump_master(conn: sqlite3.Connection) -> list[tuple[str, str, str, str]]:
 
 class TestSchemaAntiDrift(unittest.TestCase):
     def test_sql_file_and_ensure_schema_sqlite_master_match(self) -> None:
-        sql_text = _MIGRATION_SQL.read_text(encoding="utf-8")
+        sql_text = (
+            _MIGRATION_SQL.read_text(encoding="utf-8")
+            + "\n"
+            + _MIGRATION_026.read_text(encoding="utf-8")
+        )
         from_file = sqlite3.connect(":memory:")
         from_file.executescript(sql_text)
 
@@ -50,6 +58,16 @@ class TestSchemaAntiDrift(unittest.TestCase):
         pq.ensure_schema(from_python)
 
         self.assertEqual(_dump_master(from_file), _dump_master(from_python))
+
+    def test_ensure_schema_adds_paused_at_on_025_table(self) -> None:
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(_MIGRATION_SQL.read_text(encoding="utf-8"))
+        cols_before = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+        self.assertNotIn("paused_at", cols_before)
+        pq.ensure_schema(conn)
+        cols_after = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_queue)")}
+        self.assertIn("paused_at", cols_after)
+        conn.close()
 
     def test_connect_sets_row_factory_and_busy_timeout(self) -> None:
         conn = sqlite3.connect(":memory:")
@@ -80,10 +98,12 @@ def _seed(conn: sqlite3.Connection, slug: str, title: str = "PM") -> dict:
     )
 
 
-def _set_paused(conn: sqlite3.Connection, slug: str) -> None:
+def _set_paused(conn: sqlite3.Connection, slug: str, paused_at: str | None = None) -> None:
+    ts = paused_at if paused_at is not None else pq.utc_now()
     conn.execute(
-        "UPDATE pipeline_queue SET status = 'paused', locked_by = NULL, lease_expires_at = NULL WHERE slug = ?",
-        (slug,),
+        "UPDATE pipeline_queue SET status = 'paused', locked_by = NULL, "
+        "lease_expires_at = NULL, paused_at = ? WHERE slug = ?",
+        (ts, slug),
     )
     conn.commit()
 
@@ -127,6 +147,7 @@ class TestTransitions(QueueHarness):
         paused = pq.transition("alpha", "paused", worker="w1", token=1, conn=self.conn)
         self.assertEqual(paused["status"], "paused")
         self.assertIsNone(paused["locked_by"])
+        self.assertIsNotNone(paused["paused_at"])
         queued = pq.transition("alpha", "queued", worker="", token=1, conn=self.conn)
         self.assertEqual(queued["status"], "queued")
 
@@ -195,11 +216,160 @@ class TestClaimPack(QueueHarness):
     def test_paused_promotes_when_stage1_ready(self) -> None:
         _seed(self.conn, "authored")
         _set_paused(self.conn, "authored")
-        _stage1_ready(self.data / "pending_review" / "authored")
+        folder = self.data / "pending_review" / "authored"
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "WAITING_FOR_LLM", "active_stage": "stage1"}),
+            encoding="utf-8",
+        )
         rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["slug"], "authored")
         self.assertEqual(rows[0]["status"], "leased")
+
+    def test_ac449_needs_disposition_stays_paused_without_newer_dispositions(self) -> None:
+        _seed(self.conn, "needsdisp")
+        paused_at = (
+            datetime.now(timezone.utc) - timedelta(minutes=5)
+        ).replace(microsecond=0).isoformat()
+        _set_paused(self.conn, "needsdisp", paused_at=paused_at)
+        folder = self.data / "pending_review" / "needsdisp"
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "NEEDS_DISPOSITION", "active_stage": "stage2"}),
+            encoding="utf-8",
+        )
+        first = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(first, [])
+        self.assertEqual(pq.get_row(self.conn, "needsdisp")["status"], "paused")
+        second = pq.claim_pack("w2", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(second, [])
+        self.assertEqual(pq.get_row(self.conn, "needsdisp")["status"], "paused")
+
+    def test_needs_disposition_promotes_when_dispositions_newer_than_paused_at(self) -> None:
+        _seed(self.conn, "disposed")
+        paused_at = (
+            datetime.now(timezone.utc) - timedelta(minutes=5)
+        ).replace(microsecond=0).isoformat()
+        _set_paused(self.conn, "disposed", paused_at=paused_at)
+        folder = self.data / "pending_review" / "disposed"
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "NEEDS_DISPOSITION", "active_stage": "stage2"}),
+            encoding="utf-8",
+        )
+        reviews = folder / "reviews"
+        reviews.mkdir()
+        dispositions = reviews / "dispositions.json"
+        dispositions.write_text("{}", encoding="utf-8")
+        later = datetime.now(timezone.utc).timestamp()
+        os.utime(dispositions, (later, later))
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["slug"], "disposed")
+        self.assertEqual(rows[0]["status"], "leased")
+
+    def _write_waiting_for_input(self, slug: str, pause_kind: str) -> Path:
+        folder = self.data / "pending_review" / slug
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "WAITING_FOR_INPUT", "active_stage": "stage0"}),
+            encoding="utf-8",
+        )
+        receipts = folder / "stage_receipts"
+        receipts.mkdir(exist_ok=True)
+        (receipts / "stage0.json").write_text(
+            json.dumps({"status": "WAITING_FOR_INPUT", "result": {"pause_kind": pause_kind}}),
+            encoding="utf-8",
+        )
+        return folder
+
+    def test_waiting_for_input_subscription_review_stays_paused_without_import(self) -> None:
+        _seed(self.conn, "rentana")
+        _set_paused(self.conn, "rentana")
+        self._write_waiting_for_input("rentana", "subscription_review")
+        first = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(first, [])
+        self.assertEqual(pq.get_row(self.conn, "rentana")["status"], "paused")
+        second = pq.claim_pack("w2", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(second, [])
+        self.assertEqual(pq.get_row(self.conn, "rentana")["status"], "paused")
+
+    def test_waiting_for_input_review_center_stays_paused_while_questions_open(self) -> None:
+        _seed(self.conn, "casper_studios")
+        _set_paused(self.conn, "casper_studios")
+        self._write_waiting_for_input("casper_studios", "review_center")
+        self.conn.execute(
+            "CREATE TABLE pending_skill_confirmations ("
+            "id TEXT PRIMARY KEY, opportunity_key TEXT, status TEXT, "
+            "resolved_at TEXT, updated_at TEXT)"
+        )
+        self.conn.execute(
+            "INSERT INTO pending_skill_confirmations "
+            "(id, opportunity_key, status, resolved_at, updated_at) "
+            "VALUES ('q1', 'casper_studios', 'open', NULL, NULL)"
+        )
+        self.conn.commit()
+        rows = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(rows, [])
+        self.assertEqual(pq.get_row(self.conn, "casper_studios")["status"], "paused")
+
+    def test_waiting_for_input_review_center_promotes_when_questions_completed(self) -> None:
+        _seed(self.conn, "raya")
+        paused_at = (
+            datetime.now(timezone.utc) - timedelta(minutes=5)
+        ).replace(microsecond=0).isoformat()
+        _set_paused(self.conn, "raya", paused_at=paused_at)
+        self._write_waiting_for_input("raya", "review_center")
+        self.conn.execute(
+            "CREATE TABLE pending_skill_confirmations ("
+            "id TEXT PRIMARY KEY, opportunity_key TEXT, status TEXT, "
+            "resolved_at TEXT, updated_at TEXT)"
+        )
+        answered = datetime.now(timezone.utc).isoformat()
+        self.conn.execute(
+            "INSERT INTO pending_skill_confirmations "
+            "(id, opportunity_key, status, resolved_at, updated_at) "
+            "VALUES ('q1', 'raya', 'completed', ?, ?)",
+            (answered, answered),
+        )
+        self.conn.commit()
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["slug"], "raya")
+        self.assertEqual(rows[0]["status"], "leased")
+
+    def test_failed_never_auto_promotes(self) -> None:
+        _seed(self.conn, "failedjob")
+        _set_paused(self.conn, "failedjob")
+        folder = self.data / "pending_review" / "failedjob"
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "FAILED", "active_stage": "stage0"}),
+            encoding="utf-8",
+        )
+        first = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(first, [])
+        self.assertEqual(pq.get_row(self.conn, "failedjob")["status"], "paused")
+        second = pq.claim_pack("w2", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(second, [])
+        self.assertEqual(pq.get_row(self.conn, "failedjob")["status"], "paused")
+
+    def test_claim_size_does_not_promote_extra_paused_rows(self) -> None:
+        for slug in ("ready_a", "ready_b"):
+            _seed(self.conn, slug)
+            _set_paused(self.conn, slug)
+            folder = self.data / "pending_review" / slug
+            _stage1_ready(folder)
+            (folder / "workflow_state.json").write_text(
+                json.dumps({"status": "WAITING_FOR_LLM", "active_stage": "stage1"}),
+                encoding="utf-8",
+            )
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(len(rows), 1)
+        claimed = rows[0]["slug"]
+        other = "ready_b" if claimed == "ready_a" else "ready_a"
+        self.assertEqual(pq.get_row(self.conn, other)["status"], "paused")
 
 
 class TestHeartbeatReleaseExpiry(QueueHarness):

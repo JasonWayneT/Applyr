@@ -26,9 +26,8 @@ Usage:
     python scripts/apply_resume_header.py data/submissions/{company} [...]
         Replaces a placeholder header (first two lines matching the known bracket patterns) and a
         placeholder ## EDUCATION line with the real ones in Resume.md (CoverLetter.md gets the header
-        patch only -- it has no education section). Idempotent: content that already looks real (no
-        bracket placeholder) is left untouched -- this script only ever replaces a confirmed
-        placeholder, never guesses whether existing content is "wrong."
+        patch only -- it has no education section).         The ## EDUCATION line is never JD-tailored, so it is always overwritten from
+        workExperience.md even when the model invented a real-looking institution.
 """
 from __future__ import annotations
 
@@ -52,7 +51,6 @@ _UNBRACKETED_NAME_PLACEHOLDER = re.compile(
     re.I,
 )
 _EDUCATION_HEADING = re.compile(r"^##\s*EDUCATION\s*$")
-_PLACEHOLDER_EDU_LINE = re.compile(r"\[")  # any bracket on the line right after the heading
 # ### [Title] | {Company} | [Start Date] - [End Date]
 # CORRECTED 2026-08-07 (Jason-supplied): titles here are NOT a per-JD judgment call. That was a
 # real conflation on the first pass -- CLAUDE.md's title-mirroring rule governs the resume
@@ -173,6 +171,191 @@ def _strip_stacked_placeholder_header(lines: list[str], h: dict) -> tuple[list[s
     return lines, False
 
 
+def _canonical_role_heading(company: str) -> str:
+    return f"### {_ROLE_TITLES[company]} | {company} | {_ROLE_DATES[company]}"
+
+
+def _ensure_header(lines: list[str], h: dict, actions: list[str]) -> list[str]:
+    new1, new2 = real_header_lines(h)
+    if not lines:
+        actions.append("header")
+        return [new1 + "\n", new2 + "\n"]
+    first = lines[0].rstrip("\n")
+    first_stripped = first.lstrip()
+    if first_stripped.startswith("Dear ") or first_stripped.startswith("## "):
+        actions.append("header")
+        return [new1 + "\n", new2 + "\n", "\n"] + lines
+    has_name = first.startswith("# ") and not first.startswith("## ")
+    if not has_name:
+        actions.append("header")
+        return [new1 + "\n", new2 + "\n", "\n"] + lines
+    if len(lines) == 1:
+        lines.append("\n")
+    second = lines[1].rstrip("\n")
+    if (
+        second.startswith("#")
+        or second.startswith("Dear")
+        or second.lstrip().startswith("*")
+    ):
+        lines[0] = new1 + "\n"
+        lines.insert(1, new2 + "\n")
+        actions.append("header")
+        return lines
+    if first != new1 or second != new2:
+        lines[0] = new1 + "\n"
+        lines[1] = new2 + "\n"
+        actions.append("header")
+    return lines
+
+
+def _ensure_education(lines: list[str], h: dict, actions: list[str]) -> list[str]:
+    edu = h["education_line"]
+    for i, line in enumerate(lines):
+        if not _EDUCATION_HEADING.match(line.rstrip("\n")):
+            continue
+        replaced = False
+        for j in (i + 1, i + 2):
+            if j >= len(lines):
+                lines.append(edu + "\n")
+                actions.append("education")
+                return lines
+            if not lines[j].strip():
+                continue
+            if lines[j].rstrip("\n") != edu:
+                lines[j] = edu + "\n"
+                actions.append("education")
+            replaced = True
+            break
+        if not replaced:
+            lines.insert(i + 1, edu + "\n")
+            actions.append("education")
+        return lines
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    lines.append("\n")
+    lines.append("## EDUCATION\n")
+    lines.append(edu + "\n")
+    actions.append("education")
+    return lines
+
+
+def _ensure_role_blocks(lines: list[str], h: dict, actions: list[str]) -> list[str]:
+    role_line_idx = 0
+    i = 0
+    while i < len(lines):
+        if not lines[i].startswith("### "):
+            i += 1
+            continue
+        company = next((c for c in _ROLE_TITLES if c in lines[i]), None)
+        if company is None and role_line_idx < len(_ROLE_ORDER):
+            if (
+                _PLACEHOLDER_COMPANY.search(lines[i])
+                or _PLACEHOLDER_TITLE.match(lines[i])
+                or _PLACEHOLDER_DATE_SPAN.search(lines[i])
+            ):
+                company = _ROLE_ORDER[role_line_idx]
+        role_line_idx += 1
+        if company is None:
+            i += 1
+            continue
+        heading = _canonical_role_heading(company)
+        if lines[i].rstrip("\n") != heading:
+            lines[i] = heading + "\n"
+            actions.append(f"role heading {company}")
+        loc = h["location"]
+        j = i + 1
+        while j < len(lines) and not lines[j].strip():
+            j += 1
+        if j >= len(lines) or lines[j].lstrip().startswith("*") or lines[j].startswith("#"):
+            lines.insert(i + 1, loc + "\n")
+            actions.append(f"role location {company}")
+        elif lines[j].rstrip("\n") != loc:
+            lines[j] = loc + "\n"
+            actions.append(f"role location {company}")
+        i += 1
+    return lines
+
+
+_LETTER_SIGNOFF_RE = re.compile(
+    r"^(Best regards|Sincerely|Regards|Best|Thank you),?\s*$",
+    re.I,
+)
+
+
+def _ensure_letter_frame(lines: list[str], h: dict, actions: list[str]) -> list[str]:
+    greeting = "Dear Hiring Manager,"
+    insert_at = 2 if len(lines) >= 2 else len(lines)
+    k = insert_at
+    while k < len(lines) and not lines[k].strip():
+        k += 1
+    current = lines[k].rstrip("\n").strip() if k < len(lines) else ""
+    if not re.match(r"^Dear Hiring Manager,\s*$", current):
+        salutation_like = bool(
+            current
+            and len(current) <= 40
+            and "." not in current
+            and re.match(r"^(Dear|Hello|Hi|Greetings|Hey)\b", current, re.I)
+        )
+        if k < len(lines) and salutation_like:
+            lines[k] = greeting + "\n"
+        else:
+            lines.insert(insert_at, "\n")
+            lines.insert(insert_at + 1, greeting + "\n")
+        actions.append("greeting")
+
+    name = h["name"]
+    signoff_i = None
+    name_i = None
+    for idx in range(len(lines) - 1, 1, -1):
+        stripped = lines[idx].rstrip("\n").strip()
+        if not stripped:
+            continue
+        if _LETTER_SIGNOFF_RE.match(stripped):
+            signoff_i = idx
+            break
+        if name_i is None and (
+            stripped == name
+            or _PLACEHOLDER_SIGNOFF.match(stripped)
+            or stripped.lower() in {"name", "full name"}
+        ):
+            name_i = idx
+            continue
+        break
+
+    if signoff_i is not None:
+        if lines[signoff_i].rstrip("\n") != "Best regards,":
+            lines[signoff_i] = "Best regards,\n"
+            actions.append("signoff")
+        j = signoff_i + 1
+        while j < len(lines) and not lines[j].strip():
+            j += 1
+        if j >= len(lines):
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+            lines.append("\n")
+            lines.append(name + "\n")
+            actions.append("signoff name")
+        elif lines[j].rstrip("\n").strip() != name:
+            lines[j] = name + "\n"
+            actions.append("signoff name")
+        return lines
+
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    if name_i is not None:
+        lines[name_i] = name + "\n"
+        lines.insert(name_i, "\n")
+        lines.insert(name_i, "Best regards,\n")
+        lines.insert(name_i, "\n")
+    else:
+        lines.append("\n")
+        lines.append("Best regards,\n")
+        lines.append("\n")
+        lines.append(name + "\n")
+    actions.append("signoff")
+    return lines
+
+
 def patch_file(path: str, h: dict) -> str:
     """Returns a comma-joined summary of what was patched, or 'skipped (...)' reasons."""
     if not os.path.exists(path):
@@ -180,100 +363,23 @@ def patch_file(path: str, h: dict) -> str:
     with open(path, encoding="utf-8") as f:
         lines = f.readlines()
 
-    actions = []
+    actions: list[str] = []
+    basename = os.path.basename(path).lower()
+    is_letter = basename.startswith("cover")
+    is_resume = basename.startswith("resume")
 
-    if len(lines) >= 2:
-        l1, l2 = lines[0].rstrip("\n"), lines[1].rstrip("\n")
-        new1, new2 = real_header_lines(h)
-        header_changed = False
-        # Line 1: replace if it's a [Name]/[Full Name] placeholder
-        unbracketed_contact_placeholder = _is_unbracketed_contact_placeholder(l2)
-        if _PLACEHOLDER_LINE1.match(l1) or unbracketed_contact_placeholder:
-            lines[0] = new1 + "\n"
-            header_changed = True
-        # Line 2: replace if it contains any bracket placeholder OR is blank.
-        # Found 2026-09-03: compose runs produce mixed headers where line 1
-        # is already the real name but line 2 has [phone]/[email]/[LinkedIn]
-        # brackets (the model can infer name/location but not PII it doesn't
-        # have). Also found: tenth_revolution_group had a blank line 2.
-        # The old code required BOTH lines to be fully bracketed, so it
-        # skipped these cases and left literal brackets in the compiled PDF.
-        if (
-            _PLACEHOLDER_LINE2.match(l2)
-            or unbracketed_contact_placeholder
-            or ("[" in l2 and "]" in l2)
-            or not l2.strip()
-        ):
-            lines[1] = new2 + "\n"
-            header_changed = True
-        if header_changed:
-            actions.append("header")
-
+    lines = _ensure_header(lines, h, actions)
     lines, stripped_stacked = _strip_stacked_placeholder_header(lines, h)
     if stripped_stacked:
         actions.append("stripped stacked placeholder header")
-
-    for i, line in enumerate(lines):
-        if _EDUCATION_HEADING.match(line.rstrip("\n")):
-            # Real line is usually right after the heading, possibly with one blank line between.
-            for j in (i + 1, i + 2):
-                if j < len(lines) and _PLACEHOLDER_EDU_LINE.search(lines[j]):
-                    lines[j] = h["education_line"] + "\n"
-                    actions.append("education")
-                    break
-            break
-
-    titles_patched = 0
-    companies_patched = 0
-    dates_patched = 0
-    role_line_idx = 0
-    for i, line in enumerate(lines):
-        if not line.startswith("### "):
-            continue
-        company = None
-        for c in _ROLE_TITLES:
-            if c in line:
-                company = c
-                break
-        if company is None and _PLACEHOLDER_COMPANY.search(line) and role_line_idx < len(_ROLE_ORDER):
-            # Positional fallback: this is the Nth role header and no company name is present
-            # as text, so trust CLAUDE.md's fixed Cision/Sterkly/Zero-To-Sixty ordering.
-            company = _ROLE_ORDER[role_line_idx]
-            lines[i] = _PLACEHOLDER_COMPANY.sub(company, lines[i])
-            companies_patched += 1
-        role_line_idx += 1
-        if company is None:
-            continue
-        if _PLACEHOLDER_TITLE.match(lines[i]):
-            lines[i] = _PLACEHOLDER_TITLE.sub(f"### {_ROLE_TITLES[company]} |", lines[i])
-            titles_patched += 1
-        if _PLACEHOLDER_DATE_SPAN.search(lines[i]):
-            lines[i] = _PLACEHOLDER_DATE_SPAN.sub(_ROLE_DATES[company], lines[i])
-            dates_patched += 1
-    if titles_patched:
-        actions.append(f"titles x{titles_patched}")
-    if companies_patched:
-        actions.append(f"companies x{companies_patched}")
-    if dates_patched:
-        actions.append(f"dates x{dates_patched}")
-
-    loc_removed = sum(1 for l in lines if _PLACEHOLDER_ROLE_LOCATION.match(l.rstrip("\n")))
-    if loc_removed:
-        lines = [l for l in lines if not _PLACEHOLDER_ROLE_LOCATION.match(l.rstrip("\n"))]
-        actions.append(f"stripped [Location] x{loc_removed}")
-
-    # Cover-letter sign-off: last non-blank line, if it's still a bare name placeholder.
-    for i in range(len(lines) - 1, -1, -1):
-        stripped = lines[i].rstrip("\n").strip()
-        if not stripped:
-            continue
-        if _PLACEHOLDER_SIGNOFF.match(stripped):
-            lines[i] = h["name"] + "\n"
-            actions.append("signoff")
-        break
+    if is_resume:
+        lines = _ensure_education(lines, h, actions)
+        lines = _ensure_role_blocks(lines, h, actions)
+    if is_letter:
+        lines = _ensure_letter_frame(lines, h, actions)
 
     if not actions:
-        return "skipped (no placeholder found)"
+        return "skipped (already injected)"
     with open(path, "w", encoding="utf-8") as f:
         f.writelines(lines)
     return "patched (" + ", ".join(actions) + ")"

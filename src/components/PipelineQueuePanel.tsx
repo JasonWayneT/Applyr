@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { usePipelineQueue } from '../hooks/usePipelineQueue';
+import { uploadPipelineCsv } from '../lib/pipelineQueue';
 import type { PipelineLease, PipelineStuckItem } from '../types/pipelineQueue';
 
 interface PipelineQueuePanelProps {
@@ -60,7 +61,31 @@ function StuckRow({
 export default function PipelineQueuePanel({ onOpenJob }: PipelineQueuePanelProps) {
   const { items, quarantine, isLoading, error, refresh } = usePipelineQueue();
   const [showQuarantine, setShowQuarantine] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const counts = items?.counts;
+
+  async function handleCsvFile(file: File) {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setUploadMessage('CSV only.');
+      return;
+    }
+    setUploading(true);
+    setUploadMessage(null);
+    try {
+      const result = await uploadPipelineCsv(file);
+      setUploadMessage(
+        `Queued ${result.queued}, duplicate ${result.duplicate}, quarantined ${result.quarantined}.`,
+      );
+      await refresh();
+    } catch (err) {
+      setUploadMessage(err instanceof Error ? err.message : 'CSV upload failed.');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
 
   return (
     <section
@@ -71,19 +96,47 @@ export default function PipelineQueuePanel({ onOpenJob }: PipelineQueuePanelProp
         <div>
           <p className="text-sm font-bold text-on-surface">Pipeline queue</p>
           <p className="text-xs text-on-surface-variant mt-1">
-            Drop-folder depth, leases, stuck work, and quarantine. Read-only.
+            CSV upload lands in data/inbox/csv/, same as a harness drop.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => { void refresh(); }}
-          className="btn-secondary min-h-10 px-3 rounded-xl text-xs flex items-center gap-2"
-          disabled={isLoading}
-        >
-          <span className={`material-symbols-outlined text-base ${isLoading ? 'animate-spin' : ''}`}>refresh</span>
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="sr-only"
+            aria-label="Upload jobs CSV"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleCsvFile(file);
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="btn-secondary min-h-10 px-3 rounded-xl text-xs flex items-center gap-2"
+            disabled={isLoading || uploading}
+          >
+            <span className="material-symbols-outlined text-base">upload</span>
+            {uploading ? 'Uploading' : 'Upload CSV'}
+          </button>
+          <button
+            type="button"
+            onClick={() => { void refresh(); }}
+            className="btn-secondary min-h-10 px-3 rounded-xl text-xs flex items-center gap-2"
+            disabled={isLoading || uploading}
+          >
+            <span className={`material-symbols-outlined text-base ${isLoading ? 'animate-spin' : ''}`}>refresh</span>
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {uploadMessage && (
+        <div className="bg-surface-container-lowest rounded-xl px-4 py-3 mb-4 text-sm text-on-surface" role="status">
+          {uploadMessage}
+        </div>
+      )}
 
       {error && (
         <div role="alert" className="bg-error-container text-on-error-container rounded-xl px-4 py-3 mb-4 text-sm">

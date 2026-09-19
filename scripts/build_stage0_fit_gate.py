@@ -124,6 +124,11 @@ class Stage0CostAuthorizationNeeded(RuntimeError):
             "paid_allowlist_budget",
         ]
 
+    def pause_kind(self) -> str:
+        if str(self.reason or "").startswith("subscription_review"):
+            return "subscription_review"
+        return "cost_authorization"
+
 
 def stage0_cost_pause_from_error(exc: BaseException) -> Stage0CostAuthorizationNeeded:
     """Map a helper CostPauseError onto the Stage 0 pause type. No receipts."""

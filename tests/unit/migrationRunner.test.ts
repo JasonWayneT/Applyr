@@ -145,4 +145,17 @@ describe('runMigrations', () => {
       .get('001_partial.sql');
     expect(row).toBeUndefined();
   });
+
+  it('records 026 without ALTER when paused_at already exists', () => {
+    db.exec(`CREATE TABLE pipeline_queue (id INTEGER PRIMARY KEY, paused_at TEXT)`);
+    writeFileSync(
+      path.join(migrationsDir, '026_add_pipeline_queue_paused_at.sql'),
+      `ALTER TABLE pipeline_queue ADD COLUMN paused_at TEXT;`,
+    );
+    expect(() => runMigrations(db, migrationsDir)).not.toThrow();
+    const row = db
+      .prepare(`SELECT id FROM schema_migrations WHERE id = ?`)
+      .get('026_add_pipeline_queue_paused_at.sql');
+    expect(row).toBeDefined();
+  });
 });

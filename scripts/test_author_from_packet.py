@@ -489,7 +489,7 @@ class TestOptimizationBarSoftGapHonesty(unittest.TestCase):
 class TestPacketEvidenceUtilization(unittest.TestCase):
     """Repeated high-value packet evidence must be used, not merely retrieved."""
 
-    def test_repeated_responsibility_claim_fails_when_unused(self):
+    def test_repeated_responsibility_claim_is_forwarded_when_unused(self):
         from author_from_packet import _check_packet_evidence_utilization
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -507,8 +507,11 @@ class TestPacketEvidenceUtilization(unittest.TestCase):
                 encoding="utf-8",
             )
             ok, lines = _check_packet_evidence_utilization(folder)
-            self.assertFalse(ok)
+            self.assertTrue(ok)
+            self.assertTrue(any("WARN [evidence_utilization]" in ln for ln in lines))
             self.assertIn("ACC-106-DATA", lines[0])
+            notes = json.loads((folder / "stage1_forwarded_findings.json").read_text(encoding="utf-8"))
+            self.assertIn("ACC-106-DATA", notes["unused_high_priority_claims"])
 
     def test_base_claim_variant_counts_as_used(self):
         from author_from_packet import _check_packet_evidence_utilization
@@ -687,11 +690,16 @@ class TestStage1VerifyHistory(unittest.TestCase):
             snap_dir = folder / "stage1_first_draft"
             self.assertEqual(
                 (snap_dir / "Resume.md").read_text(encoding="utf-8"),
-                (folder / "Resume.md").read_text(encoding="utf-8"),
+                resume,
             )
             self.assertEqual(
                 (snap_dir / "CoverLetter.md").read_text(encoding="utf-8"),
-                (folder / "CoverLetter.md").read_text(encoding="utf-8"),
+                letter,
+            )
+            self.assertTrue((folder / "stage1_author_output" / "Resume.md").exists())
+            self.assertEqual(
+                (folder / "stage1_author_output" / "Resume.md").read_text(encoding="utf-8"),
+                resume,
             )
 
     def test_snapshot_precedes_verifier_edits(self):
@@ -864,6 +872,10 @@ class TestCoverVoiceKickerLint(unittest.TestCase):
         from author_from_packet import _PREAMBLE
         self.assertIn("Never open by calling the role interesting, compelling, or exciting", _PREAMBLE)
         self.assertIn("concrete company action, product, or operating problem instead", _PREAMBLE)
+        self.assertIn("FIXED CHROME", _PREAMBLE)
+        self.assertIn("A later injector overwrites", _PREAMBLE)
+        self.assertIn("COVER LETTER SHAPE", _PREAMBLE)
+        self.assertIn("1-2 strongest stories", _PREAMBLE)
 
     def test_lw036_warns_on_closed_lost(self):
         from submission_linter import lint_document

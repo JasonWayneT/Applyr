@@ -571,6 +571,26 @@ OQ-TL-1 resolved 2026-09-18: `STUCK_STALE_MINUTES = 120` as a named constant. St
 
 ---
 
+## Addendum 2026-09-18 — promotion loop and UI upload
+
+Jason-directed. Same CR. Implement in this order.
+
+- [x] **Story A.1 — `paused_at` plus NEEDS_DISPOSITION promotion.** (FR-346, AC-449)
+  Additive `paused_at TEXT` on `pipeline_queue` (`026_add_pipeline_queue_paused_at.sql` and
+  `ensure_schema`). Set it when transitioning to `paused`. `WAITING_FOR_LLM` still promotes on
+  `check_stage1_ready`. `NEEDS_DISPOSITION` promotes only when `reviews/dispositions.json` mtime
+  is later than `paused_at`. Test: Stage 1 files present, `NEEDS_DISPOSITION`, no newer
+  dispositions, stays paused across two `claim_pack` calls.
+
+- [x] **Story A.2 — Inbox upload API and panel control.** (FR-347, AC-450, SEC-007)
+  `POST /api/pipeline-queue/upload`: `.csv` only, 10 MiB cap, server-chosen filename, write only
+  under `data/inbox/csv/`, then the same ingest as `ingest_csv_queue.py`, return
+  `{ queued, duplicate, quarantined }`. Token-gated. Wire an upload control into
+  `PipelineQueuePanel`. Delete unused `src/components/BulkUploadForm.tsx`. Update AGENTS.md,
+  generate-submission, ACTIVE_WORKFLOW, CHANGELOG, and PRODUCT_CAPABILITIES.md.
+
+---
+
 ## Rollout priority
 
 If only part of this ships, ship it in this order.

@@ -1476,6 +1476,22 @@ class TestAiMlOwnership(unittest.TestCase):
         rejects = _check_ai_ml_ownership(tooling_jd)
         self.assertEqual(rejects, [], "AI tooling language must NOT trigger exclusion zone")
 
+    def test_ssc_product_deploy_ai_models_does_not_skip(self):
+        jd = textwrap.dedent("""
+            SS&C Technologies
+            Our platform deploys AI models that power investment operations.
+            Product Manager
+            Requirements
+            - 5+ years of product management
+            - Experience shipping AI features on a multi-cloud gateway
+        """)
+        self.assertEqual(_check_ai_ml_ownership(jd), [])
+
+    def test_training_and_finetuning_llms_still_skips(self):
+        jd = "Experience training and fine-tuning LLMs required"
+        codes = {row["code"] for row in _check_ai_ml_ownership(jd)}
+        self.assertIn("exclusion_zone_ai_ml_ownership", codes)
+
 
 # ---------------------------------------------------------------------------
 # Test: Prefs gate — travel ceiling

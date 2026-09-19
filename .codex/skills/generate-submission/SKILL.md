@@ -14,6 +14,17 @@ This replaces an earlier version of this file that still called `draft_compiler.
 
 **2026-08-09 — `run_submission.py` is now the entry point, not one option among several.** It doesn't replace the reasoning below (Stage 0's triage logic, Stage 1's authoring judgment, Stage 2's review checklist) — it replaces the *bookkeeping* of deciding which stage a submission is in and whether a stage genuinely finished, which used to be self-reported. Start Stage 0 with `python scripts/run_submission.py data/pending_review/{slug}`, then use the promoted `data/submissions/{slug}` path with `--resume` after each disposition round; everything below still tells you *what to think about* at each stage, just no longer *how to track whether it's done*. The individual scripts (`build_stage0_fit_gate.py`, `author_from_packet.py`, `verify_submission.py`, `finalize_submission_job.py`) are unchanged and still directly runnable for debugging one stage in isolation — the orchestrator calls them, it doesn't wrap new logic around them. Full design + every CR independently verified against real data: `harness-bridge/shared-sessions/session-006-applyr-workflow-authority.md`.
 
+### CSV jobs: queue first (CR-119)
+
+If the JDs come from a CSV (a file Jason hands you, the bookmarklet export, or Review Center **Upload CSV**), don't parse it and don't create folders yourself. A harness drop or a UI upload both land in `data/inbox/csv/`. UI upload already runs ingest. For a file Jason hands you, copy it there and run:
+
+```bash
+python scripts/ingest_csv_queue.py
+python scripts/run_queue_worker.py --worker <your-harness-id> --once
+```
+
+The worker claims a pack (default 8), holds the lease and per-slug lock, and calls `run_submission.py {slug}` for each job. It's the same orchestrator described below. Don't pre-claim with `queue_claim.py`, which is for inspection only. Never run `run_submission.py` by hand on a queued slug, including `--resume`. After a Stage 1 paste or writing dispositions, run the worker again. Bad rows land in quarantine and show in Review Center's pipeline panel. Scout-exported JDs aren't queued yet (Phase B) and still use the direct path below.
+
 ### Default token-conscious path (CR-074 + CR-076-084) — use this unless Jason asks otherwise
 
 ```bash
@@ -124,6 +135,10 @@ One reporting pass per JD. The numbered steps below are how to read the gate and
 *`run_submission.py` gets you to `WAITING_FOR_LLM` and hands you `authoring_prompt.md` — everything below is what you do with it before pasting the composed docs back and running `--resume`. The orchestrator sequences and gates this stage; it doesn't author for you.*
 
 **Author session load (CR-112, hard):** paste `authoring_prompt.md` only (SYSTEM = digest, USER = packet). Forbidden in that author session: `agent_context_pack.md`, `workExperience.md`, `master_claims.json`, full `AGENTS.md`. Do not Task/Agent-spawn extra reviewers to write the draft.
+
+**Repair after a failed verify (quota, 2026-09-18):** do not start a second full authoring session from `authoring_prompt.md` alone. Verify snapshots the author's `Resume.md` / `CoverLetter.md` / `claim_provenance.json` into `stage1_author_output/` before header injection. Run `python scripts/build_stage1_repair_prompt.py data/submissions/{slug}` (or the `pending_review` path). It writes `stage1_repair_prompt.md` from the original prompt, those drafts, and a ranked findings list. Paste that file only into a fresh Agy session and fix only what the findings name. Same forbidden-load list as the first author session. Loop: verify → repair prompt → Agy → verify, until it passes or a round returns the same findings as the previous round (`NO_PROGRESS`). On no progress, fabrication, wrong attribution, forbidden punctuation, page count, and a required item with no evidence stay blocking. Everything else is written to `stage1_forwarded_findings.json` for Stage 2. Do not resample from scratch.
+
+**Cover letter shape:** depth on 1-2 stories that each cover several of the role's top requirements, with context the resume cannot carry. Never restate bullets. No T-letter / requirement list. Unused high-priority claims are forwarded notes, not resume padding.
 
 **Optimization bar (hard — Round 4, every run):** Done is not "clears rubric 70/65." Done is every soft_gap / domain soft stretch using the packet's mapped `claim_ids` (strongest honest bridge), hard gaps never claimed as owned, and no weaker proxy substituted when the bridge excerpt is present. Rubric 70/65 is a floor check afterward. Mechanically enforced: `author_from_packet.py --verify-only` fails if soft_gap or required evidence_map claim_ids are unused in `claim_provenance.json`. Authors load packet + `authoring_rule_digest.md` only — the digest carries this same bar.
 

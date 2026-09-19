@@ -78,6 +78,15 @@ Do not invent any metric, tool, company, team name, or date not present in the p
 Do not load any external file. Do not call any tool (tools are not needed for v1).
 Obey claim_constraints: never round CONTRIBUTED into OWNED; never use a Prohibited line as a story.
 
+FIXED CHROME: Do not invent name, contact, education, role titles, dates,
+locations, the greeting, or the sign-off. Write the Professional Summary,
+optional Core Competencies, experience bullets, and cover-letter body.
+Keep `## PROFESSIONAL SUMMARY`, optional `## CORE COMPETENCIES`,
+`## PROFESSIONAL EXPERIENCE`, `## EDUCATION`, and three `###` role markers
+in order (Cision, Sterkly, Zero To Sixty). A later injector overwrites
+header, role headings, location lines, education, greeting, and sign-off
+from workExperience.md.
+
 The packet field `packet_status` MUST be "ready" before you proceed.
 If it is not "ready", stop and print the incomplete_reasons — do not draft.
 
@@ -100,6 +109,13 @@ may be present to satisfy the 3-role resume rule but may not map to any JD item.
 Use these only if a role section needs a bullet and no JD-mapped claim is available
 for that employer. Do not force a low-relevance claim into a bullet over a
 higher-relevance claim from the same employer.
+
+COVER LETTER SHAPE: Build the letter around 1-2 strongest stories. Choose each
+because it covers several of the role's top requirements at once, not one story
+per requirement. Tell them with context the resume bullets cannot carry. Never
+restate resume bullets. Optionally one plain sentence bridging a soft gap.
+Never list requirements. No T-letter format. A forwarded unused high-priority
+claim goes in only if it is one of those strongest stories.
 
 COVER LETTER VOICE: end the letter on the last concrete fact. Do not add a recap
 kicker that labels the paragraph ("That's genuine...", "That's how I treated...",
@@ -258,13 +274,14 @@ def build_authoring_prompt(
     priority_instruction = ""
     if priority_claims:
         priority_instruction = (
-            "\n\nEVIDENCE PRIORITY: The following packet claims each support multiple "
-            "important JD items. Use every one in a resume bullet or cover-letter proof "
-            "point, and cite it in claim_provenance.json: "
+            "\n\nEVIDENCE PRIORITY: These packet claims each support multiple "
+            "important JD items: "
             + ", ".join(priority_claims)
-            + ". Place the highest-priority claims in the most JD-relevant resume bullets "
-            "(first bullet in the role section, not buried at the bottom). "
-            "Do not add unsupported content simply to make room."
+            + ". Do not force every one into the resume. For each required JD item, "
+            "use the strongest mapped claim as the lead bullet in the matching role. "
+            "Unused high-priority claims are forwarded for the letter and Stage 2. "
+            "A forwarded claim belongs in the letter only if it is one of the 1-2 "
+            "strongest stories."
         )
     ats_terms = [
         row["term"]
@@ -473,6 +490,16 @@ def _record_verify_attempt(
     )
 
 
+def _snapshot_author_output(folder: Path) -> None:
+    """Copy author artifacts before verifier mutation so repair can read them."""
+    dest = folder / "stage1_author_output"
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ("Resume.md", "CoverLetter.md", "claim_provenance.json"):
+        src = folder / name
+        if src.exists():
+            shutil.copy2(src, dest / name)
+
+
 def _snapshot_first_draft(source: Path, record_to: Path) -> None:
     """Keep the untouched author output before verification edits it."""
     dest = record_to / "stage1_first_draft"
@@ -503,9 +530,14 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
     copy the untouched Resume.md and CoverLetter.md into that directory
     before deterministic verification edits (write-once).
 
-    Fix-loop protocol: if FAIL, re-edit Resume.md / CoverLetter.md using
-    the authoring_prompt.md (packet + digest) only — no additional context files.
-    Maximum 2 fix rounds before escalating to Jason.
+    Always copies Resume.md / CoverLetter.md / claim_provenance.json into
+    ``{folder}/stage1_author_output/`` before header injection or quality
+    repair, so a Stage 1 repair pass can consume the author's bytes.
+
+    Fix-loop protocol: if FAIL, run build_stage1_repair_prompt.py and paste
+    that prompt into a fresh Agy session. Loop until verify passes or a round
+    makes no progress. Do not load workExperience.md, claims, AGENTS.md, or
+    the context pack.
     """
     passed = True
     lines: list[str] = []
@@ -528,6 +560,7 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
 
         if record_to is not None:
             _snapshot_first_draft(folder, record_to)
+        _snapshot_author_output(folder)
 
         # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
         header_line = _apply_resume_header_if_available(folder)
@@ -947,9 +980,10 @@ def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
 
 
 def _check_packet_evidence_utilization(folder: Path) -> tuple[bool, list[str]]:
-    """Fail closed when a repeatedly mapped, high-priority packet claim is unused."""
+    """Forward unused high-priority claims; do not block Stage 1 or pad the resume."""
     packet_path = folder / "authoring_packet.json"
     prov_path = folder / "claim_provenance.json"
+    notes_path = folder / "stage1_forwarded_findings.json"
     if not packet_path.exists() or not prov_path.exists():
         return True, ["SKIP [evidence_utilization]: packet or provenance missing"]
     try:
@@ -961,9 +995,20 @@ def _check_packet_evidence_utilization(folder: Path) -> tuple[bool, list[str]]:
         return False, [f"FAIL [evidence_utilization]: could not parse input: {exc}"]
 
     unused = report["high_priority_unused"]
+    payload = {
+        "schema": "stage1_forwarded_findings/v1",
+        "source": "evidence_utilization",
+        "unused_high_priority_claims": unused,
+        "high_priority_score": report["high_priority_score"],
+        "note": (
+            "Do not force these into the resume. The cover letter may use one "
+            "only if it is among the 1-2 strongest stories."
+        ),
+    }
+    notes_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     if unused:
-        return False, [
-            "FAIL [evidence_utilization]: high-priority packet evidence unused "
+        return True, [
+            "WARN [evidence_utilization]: unused high-priority claims forwarded "
             f"(score >= {report['high_priority_score']}): {', '.join(unused)}"
         ]
     return True, [

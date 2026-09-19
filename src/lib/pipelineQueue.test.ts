@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePipelineStats, normalizeQuarantineRows } from './pipelineQueue';
+import { normalizePipelineStats, normalizeQuarantineRows, normalizeUploadResult } from './pipelineQueue';
 
 describe('pipeline queue client normalize', () => {
   it('keeps counts, leases, and stuck rows and drops unexpected PII fields', () => {
@@ -46,5 +46,16 @@ describe('pipeline queue client normalize', () => {
       quarantineReason: 'no key',
     }]);
     expect(JSON.stringify(rows)).not.toContain('JD_TEXT_MUST_NOT_RENDER');
+  });
+
+  it('normalizes upload counts and drops extra fields', () => {
+    const result = normalizeUploadResult({
+      queued: 4,
+      duplicate: 1,
+      quarantined: 2,
+      raw_payload: 'JD_TEXT_MUST_NOT_RENDER',
+    });
+    expect(result).toEqual({ queued: 4, duplicate: 1, quarantined: 2 });
+    expect(JSON.stringify(result)).not.toContain('JD_TEXT_MUST_NOT_RENDER');
   });
 });

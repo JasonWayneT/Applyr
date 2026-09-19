@@ -234,15 +234,19 @@ def _check_revenue_billing(jd_text: str) -> list[dict]:
 # Exclusion zones — AI/ML model ownership (not tooling fluency)
 # ---------------------------------------------------------------------------
 
-# These patterns catch "build/train/own ML models" without false-positiving
-# on ACC-401 language ("use AI tools", "prompt engineering", "Claude/Gemini").
+# Hard-skip only when the JD requires the candidate to train, fine-tune, or
+# build models, or requires an ML engineering / data science background.
+# "Deploy AI models" in a product description, and "shipped AI features",
+# are not exclusion-zone hits (ACC-401 / ACC-120 / ACC-179 soft-gap path).
 _AI_MODEL_OWN_RE = re.compile(
     r"\b("
-    r"(?:build|train|develop|design|own|architect|deploy)\s+(?:and\s+)?(?:ml|ai|machine\s+learning|deep\s+learning|llm|neural\s+network)\s+models?|"
-    r"(?:ml|ai|machine\s+learning)\s+model\s+(?:development|ownership|engineering)|"
-    r"own\s+(?:the\s+)?(?:ai|ml|machine\s+learning)\s+(?:model|platform|pipeline)|"
-    r"train\s+(?:and\s+)?(?:fine.?tune\s+)?(?:large\s+)?language\s+models?|"
-    r"responsible\s+for\s+(?:training|building|designing)\s+(?:ai|ml|machine\s+learning)\s+models?"
+    r"(?:train(?:ing)?|fine.?tun(?:e|ing)|build(?:ing)?)\s+"
+    r"(?:and\s+(?:fine.?tun(?:e|ing)|deploying)\s+)?"
+    r"(?:ml|ai|machine\s+learning|deep\s+learning|llm|neural\s+network|language)\s+models?|"
+    r"train(?:ing)?\s+and\s+fine.?tun(?:e|ing)\s+(?:llms?|large\s+language\s+models?)|"
+    r"(?:ml|machine\s+learning)\s+engineering\s+background|"
+    r"data\s+science\s+background|"
+    r"responsible\s+for\s+(?:training|fine.?tuning|building)\s+(?:ai|ml|machine\s+learning)\s+models?"
     r")\b",
     re.I,
 )

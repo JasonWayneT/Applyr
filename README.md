@@ -399,7 +399,7 @@ scripts/
     build_stage0_fit_gate.py — deterministic Stage 0 fit gate (orchestrator calls this)
     stage0_skip_ledger.py / stage0_placement.py — skip memory (URL then company+title) + pending_review/submissions/skipped folder moves (CR-091)
     import_csv_to_submissions.py — legacy CSV → pending_review wrapper (explicit paths only)
-    ingest_csv_queue.py / csv_ingest.py / pipeline_queue.py — CR-119 drop-folder ingest, quarantine, queued rows
+    ingest_csv_queue.py / csv_ingest.py / pipeline_queue.py — CR-119 drop-folder ingest, quarantine, queued rows; POST /api/pipeline-queue/upload writes the same inbox
     queue_claim.py / queue_lock.py / run_queue_worker.py — pack claim, per-slug OS lock, invoke run_submission.py {slug} --resume
     stage0_db_gate.py / stage0_prefs_gate.py — DB application-history and preferences sub-gates
     domain_gate.py / industry_gate.py / seniority_gate.py / solo_pm_gate.py / anchor_gate.py — individual hard gates

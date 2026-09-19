@@ -361,6 +361,21 @@ def main() -> None:
                     f"{_folder_for_events} --resume"
                 )
                 print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
+            elif pause_kind == "subscription_review":
+                print("WAITING_FOR_INPUT — Stage 0 Agy evidence review")
+                print(
+                    "Why: the subscription adapter ran and did not return a "
+                    "complete evidence batch (omitted item IDs or invalid "
+                    "harness output)."
+                )
+                print(f"Reason: {result.get('reason')}")
+                print("Agy already ran. This is not a cost-authorization pause.")
+                print(
+                    "Resume the same run after a complete cascade import or a "
+                    "code fix: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
             else:
                 print(
                     "WAITING_FOR_INPUT — resolve the pending Review Center confirmation "

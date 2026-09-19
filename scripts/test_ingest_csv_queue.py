@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import os
 import sqlite3
 import sys
@@ -346,6 +347,15 @@ class TestIngestCli(IngestHarness):
         self.assertNotIn(JD_MARKER, printed)
         self.assertNotIn(CONTACT_MARKER, printed)
         self.assertNotIn("raw_payload", printed)
+        buf_json = io.StringIO()
+        with mock.patch("sys.stdout", buf_json):
+            ingest_main(["--inbox", str(self.inbox), "--db", str(self.db), "--json"])
+        json_line = buf_json.getvalue().strip()
+        self.assertTrue(json_line.startswith("{"))
+        parsed = json.loads(json_line)
+        self.assertEqual(set(parsed), {"queued", "duplicate", "quarantined"})
+        self.assertNotIn(JD_MARKER, json_line)
+        self.assertNotIn(CONTACT_MARKER, json_line)
         conn = self._conn()
         try:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0], 0)

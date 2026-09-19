@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -213,8 +214,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--inbox", default=str(DEFAULT_INBOX))
     parser.add_argument("--db", default=str(pq.DEFAULT_DB))
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     counts = ingest_inbox(Path(args.inbox), Path(args.db), dry_run=args.dry_run)
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "queued": counts["queued"],
+                    "duplicate": counts["files_duplicate_hash"],
+                    "quarantined": counts["files_quarantined"] + counts["quarantined_rows"],
+                }
+            )
+        )
+        return 0
     _safe_print(
         "files_seen={files_seen} archived={files_archived} "
         "quarantined_files={files_quarantined} duplicate_hash={files_duplicate_hash} "

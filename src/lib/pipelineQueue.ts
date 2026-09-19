@@ -6,6 +6,7 @@ import type {
   PipelineQueueStats,
   PipelineQuarantineRow,
   PipelineStuckItem,
+  PipelineUploadResult,
 } from '../types/pipelineQueue';
 
 export { STUCK_STALE_MINUTES };
@@ -118,4 +119,31 @@ export async function fetchPipelineQuarantine(): Promise<PipelineQuarantineRow[]
     throw new Error('Pipeline quarantine could not load.');
   }
   return normalizeQuarantineRows(await response.json());
+}
+
+export function normalizeUploadResult(value: unknown): PipelineUploadResult {
+  const source = isRecord(value) ? value : {};
+  return {
+    queued: numberValue(source.queued),
+    duplicate: numberValue(source.duplicate),
+    quarantined: numberValue(source.quarantined),
+  };
+}
+
+export async function uploadPipelineCsv(file: File): Promise<PipelineUploadResult> {
+  const base = file.name.replace(/\\/g, '/').split('/').pop() || 'upload.csv';
+  const response = await apiFetch('/api/pipeline-queue/upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/csv',
+      'X-Applyr-Upload-Name': base,
+    },
+    body: file,
+  });
+  if (!response.ok) {
+    if (response.status === 413) throw new Error('CSV is too large.');
+    if (response.status === 415) throw new Error('CSV only.');
+    throw new Error('CSV upload failed.');
+  }
+  return normalizeUploadResult(await response.json());
 }

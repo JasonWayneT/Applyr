@@ -17,6 +17,9 @@ from stage0_classifier_contract import (
 )
 
 MAX_BATCH_ITEMS = 24
+# Live Agy evidence omits item_ids on Groq-sized batches. Archive smoke that
+# passed used chunks of 3 (`scripts/smoke_stage0_agy_archive.py`).
+SUBSCRIPTION_EVIDENCE_CHUNK = 3
 
 # CR-108 Epic 7.5 (2026-09-09): proactive batch sizing. When the estimated
 # output tokens for a batch exceed _SAFE_OUTPUT_TOKENS, the batch is split in
@@ -123,31 +126,39 @@ def _classify_requirements_subscription(
     Never calls Groq or Gemini. Invalid, partial, exhausted, or substituted
     harness output raises CascadeReviewNeeded so Stage 0 can pause for review.
     Successful rows still pass through validate_batch_response, so unsafe HARD
-    cannot skip.
+    cannot skip. One omitted-ID retry on the missing items only, matching the
+    Groq cascade's partial-acceptance behavior.
     """
     from stage0_subscription_adapter import (
         AdapterBudget,
         AdapterConfig,
+        AdapterResult,
         Stage0Item,
         run_stage0_subscription,
     )
 
     config = AdapterConfig(enabled=True)
-    payload = [
-        Stage0Item(
-            item.item_id,
-            bucket=item.bucket,
-            requirement=item.requirement,
-            evidence_excerpt=item.evidence_excerpt,
+    budget = AdapterBudget(config)
+
+    def _run(batch: list[BatchItem]) -> AdapterResult:
+        payload = [
+            Stage0Item(
+                item.item_id,
+                bucket=item.bucket,
+                requirement=item.requirement,
+                evidence_excerpt=item.evidence_excerpt,
+            )
+            for item in batch
+        ]
+        if provider_event_callback:
+            provider_event_callback("subscription", "call")
+        return run_stage0_subscription(
+            "evidence", payload, config=config, budget=budget
         )
-        for item in items
-    ]
-    if provider_event_callback:
-        provider_event_callback("subscription", "call")
-    result = run_stage0_subscription(
-        "evidence", payload, config=config, budget=AdapterBudget(config)
-    )
-    if raw_response_callback:
+
+    def _emit(result: AdapterResult) -> None:
+        if not raw_response_callback:
+            return
         raw_response_callback(
             json.dumps(
                 {
@@ -160,11 +171,28 @@ def _classify_requirements_subscription(
                 }
             )
         )
-    if result.outcome not in {"ok", "cache_hit"} or result.missing_item_ids:
+
+    result = _run(items)
+    _emit(result)
+    kept: list[dict[str, Any]] = list(result.results)
+    got = {str(row.get("item_id")) for row in kept if isinstance(row, dict)}
+    missing_items = [item for item in items if item.item_id not in got]
+    if missing_items and result.outcome in {"ok", "cache_hit", "review"}:
+        retry = _run(missing_items)
+        _emit(retry)
+        kept.extend(retry.results)
+        got = {str(row.get("item_id")) for row in kept if isinstance(row, dict)}
+        missing_items = [item for item in items if item.item_id not in got]
+        if not missing_items:
+            return validate_batch_response({"results": kept}, items, exact_ids=True)
+        raise CascadeReviewNeeded(
+            retry.reason or result.reason or "harness omitted item_ids"
+        )
+    if result.outcome not in {"ok", "cache_hit"} or missing_items:
         raise CascadeReviewNeeded(
             result.reason or "subscription adapter required review"
         )
-    return validate_batch_response({"results": result.results}, items, exact_ids=True)
+    return validate_batch_response({"results": kept}, items, exact_ids=True)
 
 
 def configured_provider_order(settings: dict[str, Any]) -> list[str]:
@@ -403,6 +431,28 @@ def classify_requirements_batch(
     """
     if not items:
         return {}
+    if _subscription_evidence_enabled():
+        if len(items) > SUBSCRIPTION_EVIDENCE_CHUNK:
+            merged: dict[str, dict[str, Any]] = {}
+            for start in range(0, len(items), SUBSCRIPTION_EVIDENCE_CHUNK):
+                chunk = items[start : start + SUBSCRIPTION_EVIDENCE_CHUNK]
+                merged.update(
+                    classify_requirements_batch(
+                        chunk,
+                        settings=settings,
+                        raw_response_callback=raw_response_callback,
+                        provider_event_callback=provider_event_callback,
+                        folder=folder,
+                        cost_ledger=cost_ledger,
+                        allow_import=False,
+                    )
+                )
+            return merged
+        return _classify_requirements_subscription(
+            items,
+            raw_response_callback=raw_response_callback,
+            provider_event_callback=provider_event_callback,
+        )
     # Manual import is validated only by the Stage 0 builder, never here.
     # Improvement #4: automatic chunking for batches > MAX_BATCH_ITEMS.
     if len(items) > MAX_BATCH_ITEMS:
@@ -439,12 +489,6 @@ def classify_requirements_batch(
             allow_import=False,
         )
         return {**left, **right}
-    if _subscription_evidence_enabled():
-        return _classify_requirements_subscription(
-            items,
-            raw_response_callback=raw_response_callback,
-            provider_event_callback=provider_event_callback,
-        )
     from utils import call_llm, load_llm_settings
     from cost_eligibility import (
         CostPauseError,

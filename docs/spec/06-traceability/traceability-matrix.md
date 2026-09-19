@@ -411,7 +411,9 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-343` / `AC-441` / `NFR-016` | CR-119 | `claim_pack`, heartbeat, release, fencing, `queue_claim.py` | `scripts/test_pipeline_queue.py` | implemented |
 | `FR-344` / `AC-442` / `AC-444` / `AC-447` / `AC-448` | CR-119 | `queue_lock.py`, `run_queue_worker.py`, Job Object / process group, status mirror | `scripts/test_queue_lock.py`, `scripts/test_run_queue_worker.py` | implemented |
 | `FR-345` / `AC-443` | CR-119 | `pipelineQueueRepository.ts`, `/api/pipeline-queue/*`, `PipelineQueuePanel` | `tests/unit/pipelineQueueRepository.test.ts`, `tests/unit/pipelineQueueRoute.test.ts`, `src/lib/pipelineQueue.test.ts` | implemented |
-| `DATA-006` / `SEC-007` | CR-119 | migration `025`, `data/inbox/`, `data/queue_locks/`, no PII in API or logs | `tests/unit/pipelineQueueMigration.test.ts`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-346` / `AC-449` | CR-119 | `paused_at`, `_paused_should_promote`, migration `026` | `scripts/test_pipeline_queue.py` | implemented |
+| `FR-347` / `AC-450` | CR-119 | `POST /api/pipeline-queue/upload`, `pipelineQueueUpload.ts`, panel upload | `tests/unit/pipelineQueueRoute.test.ts` | implemented |
+| `DATA-006` / `SEC-007` | CR-119 | migration `025`/`026`, `data/inbox/`, `data/queue_locks/`, no PII in API or logs | `tests/unit/pipelineQueueMigration.test.ts`, `scripts/test_pipeline_queue.py` | implemented |
 
 ## Coverage checklist
 

@@ -398,6 +398,28 @@ class RunUntilWaitingTests(unittest.TestCase):
         ok, _ = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)
 
+    def test_subscription_review_pause_does_not_rerun_stage0(self):
+        state = init_state(str(self.folder), mode="production")
+        state["status"] = "WAITING_FOR_INPUT"
+        state["active_stage"] = "stage0"
+        state["stages"]["stage0"]["status"] = "WAITING_FOR_INPUT"
+        write_state(str(self.folder), state)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={"pause_kind": "subscription_review"},
+        )
+        write_receipt(str(self.folder), receipt)
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as build:
+            out = run_until_waiting_for_llm(
+                str(self.folder), mode="production", adopt=False
+            )
+        build.assert_not_called()
+        self.assertEqual(out["status"], "WAITING_FOR_INPUT")
+
 
 class Stage0MissingReceiptDoesNotReExtractTests(unittest.TestCase):
     """CR-108 (2026-08-31, ebanx_95710d65 incident): workflow_state.json can claim

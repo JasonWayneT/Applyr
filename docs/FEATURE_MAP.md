@@ -168,13 +168,14 @@ is the entire mapping (`STATUS_CONFIG`). Notable non-obvious ones: DB status `'N
 
 Confirmed via `grep` (not imported by `App.tsx` or any page/component as of 2026-08-28):
 
-- [`src/components/BulkUploadForm.tsx`](../src/components/BulkUploadForm.tsx) — CSV drag-drop upload
 - [`src/components/JDInputForm.tsx`](../src/components/JDInputForm.tsx) — single-JD paste form
 
-Both are leftovers of the single-JD "Add Job" / "Find New Jobs" page removed in CR-093
-(2026-08-19, see `Sidebar.tsx`'s own comment at line ~28). They still compile and have no
+`BulkUploadForm.tsx` was deleted in the CR-119 addendum. CSV upload now lives on the Review Center pipeline panel and writes into `data/inbox/csv/`.
+
+`JDInputForm.tsx` is a leftover of the single-JD "Add Job" / "Find New Jobs" page removed in CR-093
+(2026-08-19, see `Sidebar.tsx`'s own comment at line ~28). It still compiles and has no
 current importer — don't treat a screenshot or design reference showing that old page as
-current, and don't spend time debugging these files unless you're deliberately reviving that
+current, and don't spend time debugging this file unless you're deliberately reviving that
 flow.
 
 ---
@@ -224,6 +225,9 @@ Every `router.<verb>('/api/...')` registration, grouped by file. Frontend call s
 | GET | `/api/jobs/:id/skill-gap` | `server/routes/jobs/files.ts` |
 | POST | `/api/jobs/:id/ai-rewrite` | `server/routes/jobs/files.ts` |
 | GET | `/api/jobs/:id/download-all` | `server/routes/jobs/files.ts` |
+| GET | `/api/pipeline-queue/stats` | `server/routes/pipelineQueue.ts` |
+| GET | `/api/pipeline-queue/quarantine` | `server/routes/pipelineQueue.ts` |
+| POST | `/api/pipeline-queue/upload` | `server/routes/pipelineQueue.ts` |
 
 `server/routes/jobs/index.ts` is just the mount point for the 4 `jobs/*` sub-files;
 `server/routes/jobs/shared.ts` holds the `jobBaseDir` helper they share.

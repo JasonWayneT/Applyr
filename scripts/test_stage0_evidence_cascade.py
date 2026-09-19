@@ -898,5 +898,85 @@ class TestStage0EvidenceCascade(unittest.TestCase):
         self.assertEqual(call.call_count, 1)
 
 
+class TestSubscriptionEvidenceLiveFixes(unittest.TestCase):
+    def _items(self, count: int) -> list[BatchItem]:
+        return [
+            BatchItem(f"req:{index}", "required", f"Need {index}", "excerpt")
+            for index in range(count)
+        ]
+
+    def _row(self, item_id: str) -> dict:
+        return {
+            "item_id": item_id,
+            "gate": "NONE",
+            "gap_source": "",
+            "evidence_level": 3,
+            "confidence": "high",
+            "reasoning": f"ok {item_id}",
+        }
+
+    def _result(self, item_ids: list[str], *, missing: list[str] | None = None, outcome: str = "ok"):
+        from stage0_subscription_adapter import AdapterResult
+
+        return AdapterResult(
+            outcome,
+            "evidence",
+            [self._row(item_id) for item_id in item_ids],
+            missing or [],
+            "harness omitted item_ids" if missing else None,
+            1,
+            0.1,
+            0.0,
+            None,
+            "k",
+            ["agy"],
+        )
+
+    def test_subscription_evidence_chunks_like_smoke(self) -> None:
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        sizes: list[int] = []
+
+        def fake(_task, items, **_kwargs):
+            ids = [item.item_id for item in items]
+            sizes.append(len(ids))
+            return self._result(ids)
+
+        with patch("stage0_evidence_cascade._subscription_evidence_enabled", return_value=True):
+            with patch("stage0_subscription_adapter.run_stage0_subscription", side_effect=fake):
+                result = classify_requirements_batch(self._items(7))
+        self.assertEqual(sizes, [3, 3, 1])
+        self.assertEqual(len(result), 7)
+
+    def test_subscription_evidence_retries_omitted_ids(self) -> None:
+        from stage0_evidence_cascade import classify_requirements_batch
+
+        calls: list[list[str]] = []
+
+        def fake(_task, items, **_kwargs):
+            ids = [item.item_id for item in items]
+            calls.append(ids)
+            if len(ids) == 2:
+                return self._result(ids[:1], missing=[ids[1]], outcome="review")
+            return self._result(ids)
+
+        with patch("stage0_evidence_cascade._subscription_evidence_enabled", return_value=True):
+            with patch("stage0_subscription_adapter.run_stage0_subscription", side_effect=fake):
+                result = classify_requirements_batch(self._items(2))
+        self.assertEqual(calls, [["req:0", "req:1"], ["req:1"]])
+        self.assertEqual(set(result.keys()), {"req:0", "req:1"})
+
+    def test_subscription_review_pause_kind_is_not_cost_authorization(self) -> None:
+        from build_stage0_fit_gate import Stage0CostAuthorizationNeeded
+
+        cost = Stage0CostAuthorizationNeeded(reason="no_eligible_provider")
+        review = Stage0CostAuthorizationNeeded(
+            reason="subscription_review:harness omitted item_ids",
+            model_call_occurred=True,
+        )
+        self.assertEqual(cost.pause_kind(), "cost_authorization")
+        self.assertEqual(review.pause_kind(), "subscription_review")
+
+
 if __name__ == "__main__":
     unittest.main()

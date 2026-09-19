@@ -36,7 +36,9 @@ CREATE TABLE jobs (
     status TEXT DEFAULT 'New',
     rejection_type TEXT,
     outcome_notes TEXT,
-    status_changed_at DATETIME
+    status_changed_at DATETIME,
+    applied_at DATETIME,
+    created_at DATETIME
 )
 """
 
@@ -60,10 +62,14 @@ def _insert(conn: sqlite3.Connection, **kwargs) -> None:
         "rejection_type": kwargs.get("rejection_type", None),
         "outcome_notes": kwargs.get("outcome_notes", None),
         "status_changed_at": kwargs.get("status_changed_at", None),
+        "applied_at": kwargs.get("applied_at", None),
+        "created_at": kwargs.get("created_at", None),
     }
     conn.execute(
-        "INSERT INTO jobs (id,company,title,status,rejection_type,outcome_notes,status_changed_at)"
-        " VALUES (:id,:company,:title,:status,:rejection_type,:outcome_notes,:status_changed_at)",
+        "INSERT INTO jobs (id,company,title,status,rejection_type,outcome_notes,"
+        "status_changed_at,applied_at,created_at)"
+        " VALUES (:id,:company,:title,:status,:rejection_type,:outcome_notes,"
+        ":status_changed_at,:applied_at,:created_at)",
         row,
     )
     conn.commit()
@@ -286,7 +292,7 @@ class TestEvaluatedNoCooldown(unittest.TestCase):
 
 
 class TestNullStatusChangedAt(unittest.TestCase):
-    """NULL status_changed_at → conservative: treat as within cooldown."""
+    """All cooldown dates NULL → conservative: treat as within cooldown."""
 
     def test_null_date_ghosted_rejects(self):
         conn = _make_conn()
@@ -301,6 +307,36 @@ class TestNullStatusChangedAt(unittest.TestCase):
         _insert(conn, company="NullDate Co", status="Rejected",
                 rejection_type="Rejected", status_changed_at=None)
         result = evaluate_db_gate("NullDate Co", _conn=conn)
+        self.assertEqual(result["action"], "reject")
+
+    def test_omnissa_created_at_passes_30d_cooldown(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company="Omnissa",
+            status="Rejected",
+            rejection_type=None,
+            status_changed_at=None,
+            applied_at=None,
+            created_at="2026-05-29T00:00:00+00:00",
+        )
+        now = datetime(2026, 9, 18, tzinfo=timezone.utc)
+        result = evaluate_db_gate("Omnissa", _conn=conn, now=now)
+        self.assertNotEqual(result["action"], "reject")
+
+    def test_ulteig_applied_at_still_blocks_120d(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company="Ulteig",
+            status="Closed",
+            rejection_type="Rejected",
+            status_changed_at=None,
+            applied_at="2026-07-24T00:00:00+00:00",
+            created_at="2026-07-01T00:00:00+00:00",
+        )
+        now = datetime(2026, 9, 18, tzinfo=timezone.utc)
+        result = evaluate_db_gate("Ulteig", _conn=conn, now=now)
         self.assertEqual(result["action"], "reject")
 
 

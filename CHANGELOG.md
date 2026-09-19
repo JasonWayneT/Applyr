@@ -1,16 +1,23 @@
 ## [Unreleased] - 2026-09-18
-[DRAFT] CSV drop-folder ingest, leased harness packs, and a read-only pipeline panel in Review Center. Drop a jobs CSV in `data/inbox/csv/`, claim a small pack, and resume each job with the same `run_submission.py {slug} --resume` path as before.
+[DRAFT] CSV drop-folder ingest, leased harness packs, and a pipeline panel in Review Center. Drop a jobs CSV in `data/inbox/csv/` (or upload from the panel), then run `run_queue_worker.py`. Resume each job with the same `run_submission.py {slug} --resume` path as before.
 
 ### New
 - Drop `applyr_jobs*.csv` into `data/inbox/csv/` and run `python scripts/ingest_csv_queue.py`. Valid rows become queued opportunities plus `pending_review/{slug}/Original_JD.txt`. Bad rows and broken files go to a durable quarantine list instead of disappearing from the terminal (CR-119 / FR-340–FR-342).
-- Claim a pack with `python scripts/queue_claim.py claim --worker <id> --size 8`, then run `python scripts/run_queue_worker.py --worker <id>`. Two harnesses can share one SQLite queue. A killed worker does not leave a second runner on the same slug (CR-119 / FR-343–FR-344).
-- Review Center now shows queue depth, current leases, stuck items, and quarantine file/line/error codes. The panel is read-only (CR-119 / FR-345).
+- Claim a pack with `python scripts/queue_claim.py claim --worker <id> --size 8` (inspection only). The default run path is `python scripts/run_queue_worker.py --worker <id>`, which claims its own pack. Two harnesses can share one SQLite queue. A killed worker does not leave a second runner on the same slug (CR-119 / FR-343–FR-344).
+- Review Center shows queue depth, current leases, stuck items, and quarantine file/line/error codes, and can upload a CSV into the same inbox (CR-119 / FR-345, FR-347).
 
 ### Changed
 - `scripts/import_csv_to_submissions.py` is a legacy wrapper. It no longer hardcodes Downloads paths and requires explicit CSV arguments. Prefer `ingest_csv_queue.py`.
+- Cooldown NULL dates fall back to `applied_at`, then `created_at`, instead of blocking forever.
+- AI/ML hard-skip is train / fine-tune / build models, or an ML engineering / data science background. Product copy like "deploy AI models" and "shipped AI features" no longer skip.
+- `apply_resume_header.py` always overwrites name/contact, role headings and location lines, education, cover-letter greeting, and sign-off from `workExperience.md`. The author writes only summary, competencies, bullets, and letter body.
+- Stage 1 verify failures use a repair prompt (`scripts/build_stage1_repair_prompt.py`) instead of a full fresh authoring resample. Loop until verify passes or a round makes no progress. Truth/format blocks stay blocking; other findings forward to Stage 2.
+- A job paused at `NEEDS_DISPOSITION` stays paused across claims until `reviews/dispositions.json` is newer than `paused_at`. `WAITING_FOR_INPUT` stays paused until Review Center questions for that slug are all completed, or a cascade/extraction-review import is newer than `paused_at`. `WAITING_FOR_LLM` still promotes when Stage 1 files are ready. `FAILED` never auto-promotes (CR-119 / FR-346). `claim_pack` promotes at most remaining claim capacity, so extra paused rows stay paused. `WAITING_FOR_INPUT` without new input returns the last Stage 0 receipt instead of re-running Agy.
+- Unused high-priority packet claims are forwarded in `stage1_forwarded_findings.json` instead of failing Stage 1. Cover letters argue 1-2 stories that each cover several top requirements, not one story per requirement.
+- Stage 0 Agy evidence uses 3-item chunks and retries omitted IDs once. An incomplete Agy evidence batch pauses as `subscription_review`, not cost authorization. Queue `WAITING_FOR_INPUT` and `FAILED` map to `paused` so the lease clears.
 
 ### Developer
-- CR-119: additive SQLite tables `pipeline_queue`, `csv_ingest_ledger`, `csv_quarantine` (migration 025 + Python `ensure_schema`). Per-slug OS lock at `data/queue_locks/{slug}.lock`. Windows runner children sit in a Job Object with `KILL_ON_JOB_CLOSE`. `run_submission.py` is unchanged and remains the canonical runner.
+- CR-119: additive SQLite tables `pipeline_queue`, `csv_ingest_ledger`, `csv_quarantine` (migration 025 + Python `ensure_schema`). `paused_at` on `pipeline_queue` (migration 026). Per-slug OS lock at `data/queue_locks/{slug}.lock`. Windows runner children sit in a Job Object with `KILL_ON_JOB_CLOSE`. `POST /api/pipeline-queue/upload` writes a server-chosen `.csv` under `data/inbox/csv/` then runs ingest. `run_submission.py` is unchanged and remains the canonical runner.
 
 ## [Unreleased] - 2026-09-17
 

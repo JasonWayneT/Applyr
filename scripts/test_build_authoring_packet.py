@@ -110,6 +110,9 @@ _CLAIMS_FIXTURE: dict = {
 _DISABLED_FIXTURE: set[str] = {"ACC-114-COST"}
 
 _WE_TEXT_FIXTURE = textwrap.dedent("""
+    ### 1.0 Contact Information
+    A Product Manager with **7 years** of experience in technically complex platforms.
+
     ## Section 4: Metrics
 
     | Code | Metric | Value |
@@ -676,6 +679,22 @@ class TestBuildPacketIntegration(unittest.TestCase):
         self.assertIsInstance(packet["hard_constraints"], list)
         self.assertGreater(len(packet["hard_constraints"]), 0)
 
+    def test_packet_adds_pm_years_constraint_from_we(self):
+        packet = self._run_build(_STAGE0_TIER1)
+        joined = "\n".join(packet["hard_constraints"])
+        self.assertIn("Total product management experience: 7 years", joined)
+        self.assertIn("seven years", joined)
+        self.assertIn("never 4, 5, or 6", joined)
+
+    def test_rentana_packet_contains_pm_years_constraint(self):
+        folder = Path(__file__).resolve().parents[1] / "data" / "submissions" / "rentana"
+        if not (folder / "stage0_fit_gate.json").is_file():
+            self.skipTest("rentana submission folder missing")
+        packet = build_packet(folder, no_hook=True)
+        joined = "\n".join(packet["hard_constraints"])
+        self.assertIn("Total product management experience: 7 years", joined)
+        self.assertIn("never 4, 5, or 6", joined)
+
     def test_jd_buckets_preserves_all_four_keys(self):
         packet = self._run_build(_STAGE0_TIER1)
         buckets = packet.get("jd_buckets", {})
@@ -1082,9 +1101,8 @@ class TestJdBucketsDedup(unittest.TestCase):
 
 class TestHardConstraintsTrimmed(unittest.TestCase):
 
-    def test_hard_constraints_is_two_items(self):
-        """CR-085: trimmed from 8 to 2 (verbatim-copy rule + geo note); the rest
-        duplicated authoring_rule_digest.md, which is loaded alongside every packet."""
+    def test_hard_constraints_is_two_static_items(self):
+        """CR-085: static list stays verbatim-copy + geo. Years comes from WE §1.0."""
         from build_authoring_packet import _HARD_CONSTRAINTS
         self.assertEqual(len(_HARD_CONSTRAINTS), 2)
         self.assertTrue(any("verbatim" in c.lower() for c in _HARD_CONSTRAINTS))

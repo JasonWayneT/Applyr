@@ -86,6 +86,13 @@ class TestGenerateDigest(unittest.TestCase):
                 generate_digest()
             self.assertIn("hard limit", str(ctx.exception))
 
+    def test_self_check_uses_we_years_figure(self) -> None:
+        we = "### 1.0 Contact\nA PM with **7 years** of experience in platforms.\n"
+        content, _ = generate_digest(we_text=we)
+        self.assertIn("Total product management experience: 7 years", content)
+        self.assertIn("never 4, 5, or 6", content)
+        self.assertNotIn("see packet hard_constraints", content)
+
     def test_content_contains_required_sections(self) -> None:
         """Digest must include the key sections callers depend on."""
         content, _ = generate_digest()

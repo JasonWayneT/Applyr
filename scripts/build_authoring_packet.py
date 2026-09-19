@@ -37,6 +37,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
 from authoring_examples import bank_version, select_examples  # noqa: E402
+from pm_years import years_constraint_from_we  # noqa: E402
 from evidence_dominance import apply_class1_dominance  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
     _ADMIN_BACKGROUND_RE,
@@ -1550,6 +1551,15 @@ def _shrink_excerpts_to_budget(
     return shrunk
 
 
+def _packet_hard_constraints(we_text: str) -> list[str]:
+    items = list(_HARD_CONSTRAINTS)
+    try:
+        items.append(years_constraint_from_we(we_text))
+    except ValueError:
+        pass
+    return items
+
+
 def assemble_packet(
     stage0: dict,
     evidence_map: list[dict],
@@ -1563,6 +1573,7 @@ def assemble_packet(
     claim_constraints: dict | None = None,
     jd_text: str = "",
     ats_term_contract: list[dict] | None = None,
+    we_text: str = "",
 ) -> dict:
     """Story 3.3 — Assemble the full authoring_packet dict matching schema v1.0."""
     tier = stage0.get("tier", "Tier 1")
@@ -1605,7 +1616,7 @@ def assemble_packet(
             "resume_unit": "bullet",
             "cover_letter_unit": "factual_sentence",
         },
-        "hard_constraints": _HARD_CONSTRAINTS,
+        "hard_constraints": _packet_hard_constraints(we_text),
         "hook_fact": hook_fact,
         "rule_digest_version": _load_rule_digest_version(),  # Story 4.3
         "packet_status": "ready",
@@ -1864,6 +1875,7 @@ def build_packet(
         claim_constraints=claim_constraints,
         jd_text=jd_text,
         ats_term_contract=ats_term_contract,
+        we_text=we_text,
     )
     _write_selection_trace(folder, packet, selection_trace)
 

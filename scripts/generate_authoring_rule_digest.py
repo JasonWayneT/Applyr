@@ -188,6 +188,7 @@ imposed, or drove other teams "into" a decision.
 - Every claim_id, excerpt, metric, and company name belongs to THIS packet.
 - Employer on the cited claim matches the role section (rule 3).
 - Bullets ordered by JD-relevance (required-mapped first).
+- Total product management experience: see packet hard_constraints (never invent 4, 5, or 6).
 - Zero gap-confession, em dashes, semicolons, double-hyphens, or `word: word` elaboration.
 
 ---
@@ -213,12 +214,32 @@ def _version_from_content(content: str) -> str:
     return digest[:16]
 
 
-def generate_digest() -> tuple[str, str]:
+_WE_PATH = _REPO_ROOT / "data" / "workExperience.md"
+_SELF_CHECK_YEARS_FALLBACK = (
+    "- Total product management experience: see packet hard_constraints "
+    "(never invent 4, 5, or 6)."
+)
+
+
+def _years_self_check_line(we_text: str | None = None) -> str:
+    from pm_years import years_constraint_from_we
+
+    source = we_text
+    if source is None:
+        source = _WE_PATH.read_text(encoding="utf-8") if _WE_PATH.exists() else ""
+    try:
+        return "- " + years_constraint_from_we(source) + "."
+    except ValueError:
+        return _SELF_CHECK_YEARS_FALLBACK
+
+
+def generate_digest(we_text: str | None = None) -> tuple[str, str]:
     """Return (content, version_str) without writing any files.
 
     Raises ValueError if content exceeds _HARD_CHAR_LIMIT.
     """
-    content = _DIGEST_CONTENT
+    years_line = _years_self_check_line(we_text)
+    content = _DIGEST_CONTENT.replace(_SELF_CHECK_YEARS_FALLBACK, years_line, 1)
     n = len(content)
     if n > _HARD_CHAR_LIMIT:
         raise ValueError(

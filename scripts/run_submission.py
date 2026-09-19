@@ -211,6 +211,13 @@ def main() -> None:
         # Epic D (observability design): count events already on disk before this invocation
         # advances anything, so the console summary below prints only what *this* run produced.
         _folder_for_events = _resolve_folder(args.folder)
+        try:
+            from agy_quota_tracker import RECEIPTS_ENV, bind_active_job
+
+            bind_active_job(_folder_for_events)
+            os.environ[RECEIPTS_ENV] = "1"
+        except Exception:
+            pass
         _before_count = len(read_events(_folder_for_events))
 
         # Stage 3-only path when already Stage 2 COMPLETE

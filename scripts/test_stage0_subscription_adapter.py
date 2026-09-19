@@ -50,6 +50,7 @@ def _ok_evidence() -> subprocess.CompletedProcess[str]:
 class Stage0SubscriptionAdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         self._env = os.environ.pop(adapter.ENABLED_ENV, None)
+        self._quota_env = os.environ.pop("APPLYR_AGY_QUOTA_RECEIPTS", None)
         self._npx = patch.object(adapter, "_npx_cmd", return_value="npx.cmd")
         self._npx.start()
         self.addCleanup(self._npx.stop)
@@ -62,6 +63,10 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
             os.environ.pop(adapter.ENABLED_ENV, None)
         else:
             os.environ[adapter.ENABLED_ENV] = self._env
+        if self._quota_env is None:
+            os.environ.pop("APPLYR_AGY_QUOTA_RECEIPTS", None)
+        else:
+            os.environ["APPLYR_AGY_QUOTA_RECEIPTS"] = self._quota_env
 
     def _config(self, **kwargs) -> adapter.AdapterConfig:
         tmp = Path(tempfile.mkdtemp())
@@ -520,6 +525,40 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         cwd = Path(captured["cwd"]).resolve()
         self.assertNotEqual(cwd, Path(".").resolve())
         self.assertFalse((cwd / "scripts" / "stage0_subscription_adapter.py").exists())
+
+    def test_quota_reader_records_missing_before_not_zero(self) -> None:
+        from agy_quota_tracker import events
+
+        folder = Path(tempfile.mkdtemp())
+        os.environ["APPLYR_ACTIVE_FOLDER"] = str(folder)
+        os.environ["APPLYR_ACTIVE_SLUG"] = "rentana"
+        calls = {"n": 0}
+
+        def reader():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("usage unavailable")
+            return {
+                "at": "2026-09-18T20:00:00+00:00",
+                "windows": {
+                    "Weekly Limit Remaining": {"remaining_percent": 70, "reset_at": "x"},
+                    "Five Hour Limit Remaining": {"remaining_percent": 80, "reset_at": "x"},
+                },
+            }
+
+        result = adapter.run_stage0_subscription(
+            "extraction",
+            _items(),
+            config=self._config(quota_reader=reader),
+            runner=lambda *_a, **_k: _ok_extract(),
+        )
+        self.assertEqual(result.outcome, "ok")
+        rows = events(folder / "observability" / "agy_quota.jsonl")
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["before_missing"])
+        self.assertIsNone(rows[0]["weekly_before"])
+        self.assertEqual(rows[0]["weekly_after"], 70)
+        self.assertFalse(rows[0]["after_missing"])
 
 
 if __name__ == "__main__":

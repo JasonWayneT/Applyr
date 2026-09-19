@@ -115,7 +115,10 @@ def _stage1_ready(folder: Path, files: tuple[str, ...] = ("Resume.md", "CoverLet
         encoding="utf-8",
     )
     for name in files:
-        (folder / name).write_text("x", encoding="utf-8")
+        if name.endswith(".json"):
+            (folder / name).write_text('{"ok": true}\n', encoding="utf-8")
+        else:
+            (folder / name).write_text("x", encoding="utf-8")
 
 
 class QueueHarness(unittest.TestCase):

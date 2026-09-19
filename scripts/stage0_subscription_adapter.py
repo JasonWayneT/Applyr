@@ -68,6 +68,7 @@ class AdapterConfig:
     max_wall_seconds: int = 600
     cache_dir: Path = field(default_factory=lambda: Path("data") / "stage0_subscription_cache")
     workspace: Path | None = None
+    quota_reader: Callable[[], dict[str, Any]] | None = None
 
 
 @dataclass
@@ -547,6 +548,73 @@ def _write_cache(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _record_stage0_quota(
+    cfg: AdapterConfig,
+    *,
+    task: RunTask,
+    cache_status: str,
+    wall_seconds: float,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    reported_usage: dict[str, Any] | None = None,
+) -> None:
+    if cfg.quota_reader is None:
+        try:
+            from agy_quota_tracker import receipts_enabled
+        except ImportError:
+            return
+        if not receipts_enabled():
+            return
+    try:
+        from agy_quota_tracker import (
+            ACTIVE_FOLDER_ENV,
+            ACTIVE_SLUG_ENV,
+            DEFAULT_LEDGER,
+            build_call_receipt,
+            emit_call_receipt,
+            receipts_enabled,
+        )
+    except ImportError:
+        return
+    folder = os.environ.get(ACTIVE_FOLDER_ENV) or None
+    slug = os.environ.get(ACTIVE_SLUG_ENV) or (Path(folder).name if folder else "")
+    receipt = build_call_receipt(
+        stage="stage0",
+        slug=slug,
+        task=task,
+        model=cfg.model,
+        effort=cfg.effort,
+        cache_status=cache_status,
+        prompt_estimate=None,
+        reported_usage=reported_usage,
+        before=before,
+        after=after,
+        wall_seconds=wall_seconds,
+    )
+    write_ledger = receipts_enabled() and cfg.quota_reader is None
+    emit_call_receipt(
+        receipt,
+        folder=folder,
+        ledger=DEFAULT_LEDGER if write_ledger else None,
+    )
+
+
+def _quota_snapshot(cfg: AdapterConfig) -> dict[str, Any] | None:
+    if cfg.quota_reader is None:
+        try:
+            from agy_quota_tracker import receipts_enabled, snapshot_quota
+        except ImportError:
+            return None
+        if not receipts_enabled():
+            return None
+        return snapshot_quota()
+    try:
+        from agy_quota_tracker import snapshot_quota
+    except ImportError:
+        return None
+    return snapshot_quota(cfg.quota_reader)
+
+
 def _kept_from_cache(
     cached: dict[str, Any] | None,
     items: list[Stage0Item],
@@ -762,12 +830,37 @@ def run_stage0_subscription(
     kept = _kept_from_cache(cached, items)
     pending = _pending_items(items, kept)
     if not pending:
+        missing = {
+            "ok": False,
+            "missing": True,
+            "reason": "cache_hit_no_agy_call",
+            "quota": None,
+        }
+        _record_stage0_quota(
+            cfg,
+            task=task,
+            cache_status="hit",
+            wall_seconds=0.0,
+            before=missing,
+            after=missing,
+        )
         return AdapterResult(
             "cache_hit", task, kept, [], None, 0, 0.0, 0.0, None, key, empty_command,
         )
+
     started = time.monotonic()
+    before = _quota_snapshot(cfg)
     last = _call_harness(
         task, pending, cfg, live_budget, runner, session, key, empty_command,
+    )
+    after = _quota_snapshot(cfg)
+    _record_stage0_quota(
+        cfg,
+        task=task,
+        cache_status="fresh",
+        wall_seconds=time.monotonic() - started,
+        before=before,
+        after=after,
     )
     parsed = last.reason in {None, 'harness omitted item_ids'}
     merged, still_missing = _merge_item_results(items, kept, last.results if parsed else [])
@@ -776,8 +869,18 @@ def run_stage0_subscription(
         retry_allowed, _retry_reason = live_budget.remaining()
         if retry_allowed:
             retry_batch = [item for item in items if item.item_id in still_missing]
+            retry_started = time.monotonic()
+            retry_before = _quota_snapshot(cfg)
             last = _call_harness(
                 task, retry_batch, cfg, live_budget, runner, session, key, empty_command,
+            )
+            _record_stage0_quota(
+                cfg,
+                task=task,
+                cache_status="retry",
+                wall_seconds=time.monotonic() - retry_started,
+                before=retry_before,
+                after=_quota_snapshot(cfg),
             )
             parsed = last.reason in {None, 'harness omitted item_ids'}
             merged, still_missing = _merge_item_results(

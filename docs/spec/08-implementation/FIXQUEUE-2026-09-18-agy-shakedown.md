@@ -42,10 +42,13 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
 
 - [x] **8. Trustworthy quota numbers.** Tracker copies Agy's final `result.usage` faithfully. `rentana_stage1_03` was 58 internal agent steps whose inputs sum to 419,638 (cache-read sum 4,154,618). A clean one-step author (`stage1-02`) was 38,961 input, 0 cache, 1 five-hour point. Cache-read did not move the five-hour window 1:1 with input. Size batches from five-hour drops (~1pp per clean author call, 3pp for a tool-loop). Tracker now logs `agent_steps` and `cache_read`.
 
-- [ ] **9. Incoming from testing**, in the order Codex ranks it.
+- [x] **9. Incoming from testing**, in the order Codex ranks it.
   - [x] **9a.** Ready paused jobs are claimed before queued backlog. Oldest `paused_at` first, up to pack size, then oldest queued. Promotion rules from item 1 unchanged.
+  - [x] **9b.** Stage 0 Agy calls write quota receipts (`observability/agy_quota.jsonl`). Missing `/usage` snapshots are explicit, not zero.
+  - [x] **9c.** Empty `Resume.md` / `CoverLetter.md` / invalid `claim_provenance.json` are not Stage 1 ready, even if Agy returned `SUCCESS`.
+  - [ ] **9d.** P2 live quarantine-panel check stays a Codex preflight.
 
-- [ ] **10. Stage 1 split (CR-117 plus RESEARCH-2026-09-18-stage1-authoring-shape.md).** Give CR-117 a free CR number first (ID collision). Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen CR-117 cases.
+- [ ] **10. Stage 1 split (reserved CR-120; `CR-117-stage1-evidence-first-authoring.md` collides with years-range CR-117).** Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen CR-117 cases.
 
 ---
 
@@ -61,33 +64,16 @@ rows. Change-detection rules from item 1 are unchanged.
 
 ### P0 - Capture Agy quota for every stage, not only Stage 1 authoring
 
-**Evidence:** Pack 1 captured before/after allowance for all four Stage 1 author
-calls, but captured no allowance snapshots around Stage 0 extraction or evidence.
-The adapter reported `api_cents=None`, which does not measure subscription usage.
-Stage 2 did not run, so its quota is also unmeasured. The supervised run now
-requires separate Stage 0 evidence, Stage 1 author, Stage 1 repair, and Stage 2
-quota totals.
-
-**Frequency:** Every Stage 0 call in pack 1 lacked before/after quota data.
-
-**Suggested fix:** Wrap each Agy call site with one shared quota receipt helper.
-Persist stage, slug, task, model, effort, cache status, prompt estimate, reported
-usage, weekly/five-hour before and after, and wall time. Keep extraction and
-evidence separable. A missing allowance snapshot should be explicit, not
-silently represented as zero.
+Landed in item 9b. Stage 0 extraction/evidence/retry/cache-hit calls emit
+`observability/agy_quota.jsonl`. Missing allowance snapshots are `missing`
+with a reason, never zero. Stage 1 author/repair still use
+`agy_quota_tracker.py before/after`. Stage 2 has no Agy call site yet.
 
 ### P0 - Reject Agy `SUCCESS` when required author artifacts are empty or absent
 
-**Evidence:** `cr119-rentana-stage1-01` returned top-level `SUCCESS` after a
-denied `read_file` attempt, consumed 41,889 input and 1,856 output tokens, and
-had an empty final response. Stream:
-`data/eval/cr119_supervised/rentana_stage1_01/agy_stream.jsonl`.
-
-**Suggested fix:** Author success requires nonempty `Resume.md`,
-`CoverLetter.md`, and valid `claim_provenance.json`. Treat missing artifacts,
-empty response, denied required action, or malformed fences as a failed author
-call regardless of Agy's top-level status. The clean author workspace should
-contain only `authoring_prompt.md`.
+Landed in item 9c. `check_stage1_ready` and runner `_docs_present` reject empty
+resume/cover letter bodies and empty/invalid `claim_provenance.json`. Those
+jobs stay `WAITING_FOR_LLM`.
 
 ### P1 - Claiming a small pack mutates more paused rows than the claim size
 

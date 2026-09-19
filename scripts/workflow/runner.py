@@ -604,9 +604,17 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
 
 
 def _docs_present(folder: str) -> bool:
-    return os.path.exists(os.path.join(folder, "Resume.md")) and os.path.exists(
-        os.path.join(folder, "CoverLetter.md")
-    )
+    for name in ("Resume.md", "CoverLetter.md"):
+        path = os.path.join(folder, name)
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path, encoding="utf-8") as handle:
+                if not handle.read().strip():
+                    return False
+        except OSError:
+            return False
+    return True
 
 
 def reconcile(folder: str, state: dict[str, Any]) -> dict[str, Any]:

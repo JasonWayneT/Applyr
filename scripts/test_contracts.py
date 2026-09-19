@@ -1096,6 +1096,24 @@ class TestCheckStage1Ready(unittest.TestCase):
             self.assertFalse(ok)
             self.assertTrue(any("claim_provenance.json not found" in e for e in errors))
 
+    def test_empty_resume_is_not_stage1_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            self._write_all_valid(folder)
+            (folder / "Resume.md").write_text("  \n", encoding="utf-8")
+            ok, errors = check_stage1_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("Resume.md is empty" in e for e in errors))
+
+    def test_empty_provenance_is_not_stage1_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            folder = Path(tmpdir)
+            self._write_all_valid(folder)
+            (folder / "claim_provenance.json").write_text("{}\n", encoding="utf-8")
+            ok, errors = check_stage1_ready(str(folder))
+            self.assertFalse(ok)
+            self.assertTrue(any("claim_provenance.json is empty or invalid" in e for e in errors))
+
 
 # ---------------------------------------------------------------------------
 # check_stage2_ready (CR-075 Epic 3, Story 3.2/3.3)

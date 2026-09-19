@@ -115,6 +115,55 @@ class AgyQuotaTrackerTests(unittest.TestCase):
             self.assertEqual(parsed["step_sum"]["input_tokens"], 41579)
             self.assertEqual(parsed["step_sum"]["cache_read_tokens"], 36949)
 
+    def test_failed_quota_read_is_missing_not_zero(self) -> None:
+        snap = tracker.snapshot_quota(reader=lambda: (_ for _ in ()).throw(RuntimeError("agy down")))
+        self.assertTrue(snap["missing"])
+        self.assertIsNone(snap["quota"])
+        receipt = tracker.build_call_receipt(
+            stage="stage0",
+            slug="rentana",
+            task="evidence",
+            model="gemini-3.8-flash-medium",
+            effort="medium",
+            cache_status="fresh",
+            prompt_estimate=None,
+            reported_usage=None,
+            before=snap,
+            after=snap,
+            wall_seconds=1.5,
+        )
+        self.assertIsNone(receipt["weekly_before"])
+        self.assertIsNone(receipt["five_hour_before"])
+        self.assertIsNone(receipt["weekly_after"])
+        self.assertTrue(receipt["before_missing"])
+        self.assertEqual(receipt["before_reason"], "agy down")
+
+    def test_emit_call_receipt_writes_folder_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            before = tracker.snapshot_quota(reader=lambda: quota(70, 80))
+            after = tracker.snapshot_quota(reader=lambda: quota(69, 79))
+            receipt = tracker.build_call_receipt(
+                stage="stage0",
+                slug="rentana",
+                task="extraction",
+                model="gemini-3.8-flash-medium",
+                effort="medium",
+                cache_status="fresh",
+                prompt_estimate=1200,
+                reported_usage={"input_tokens": 10},
+                before=before,
+                after=after,
+                wall_seconds=2,
+            )
+            tracker.emit_call_receipt(receipt, folder=folder)
+            path = folder / "observability" / "agy_quota.jsonl"
+            rows = tracker.events(path)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["weekly_before"], 70)
+            self.assertEqual(rows[0]["five_hour_after"], 79)
+            self.assertFalse(rows[0]["before_missing"])
+
 
 if __name__ == "__main__":
     unittest.main()

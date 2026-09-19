@@ -6,16 +6,21 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = ROOT / "data" / "eval" / "cr117" / "agy_quota_ledger.jsonl"
 FAMILY = "Gemini Models"
 WINDOWS = ("Weekly Limit Remaining", "Five Hour Limit Remaining")
+RECEIPTS_ENV = "APPLYR_AGY_QUOTA_RECEIPTS"
+ACTIVE_SLUG_ENV = "APPLYR_ACTIVE_SLUG"
+ACTIVE_FOLDER_ENV = "APPLYR_ACTIVE_FOLDER"
 
 
 def now() -> str:
@@ -41,7 +46,95 @@ def read_quota() -> dict:
         windows[fields[1]] = {"remaining_percent": remaining, "reset_at": fields[3]}
     if set(windows) != set(WINDOWS):
         raise ValueError("Agy /usage did not return both Gemini quota windows")
-    return {"at": now(), "windows": windows}
+    return {"at": now(), "windows": windows    }
+
+
+def receipts_enabled() -> bool:
+    return os.environ.get(RECEIPTS_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def snapshot_quota(reader: Callable[[], dict] | None = None) -> dict[str, Any]:
+    """Read Agy quota. A failed read is missing, never a silent zero."""
+    try:
+        quota = (reader or read_quota)()
+    except Exception as exc:
+        reason = " ".join(str(exc).split())[:240] or "quota read failed"
+        return {"ok": False, "missing": True, "reason": reason, "quota": None}
+    if not isinstance(quota, dict) or not isinstance(quota.get("windows"), dict):
+        return {
+            "ok": False,
+            "missing": True,
+            "reason": "quota snapshot missing windows",
+            "quota": None,
+        }
+    return {"ok": True, "missing": False, "reason": None, "quota": quota}
+
+
+def _window_remaining(snapshot: dict[str, Any] | None, window: str) -> int | None:
+    if not isinstance(snapshot, dict) or snapshot.get("missing") or not snapshot.get("ok"):
+        return None
+    windows = (snapshot.get("quota") or {}).get("windows") or {}
+    value = windows.get(window) if isinstance(windows, dict) else None
+    if not isinstance(value, dict):
+        return None
+    remaining = value.get("remaining_percent")
+    return remaining if isinstance(remaining, int) else None
+
+
+def build_call_receipt(
+    *,
+    stage: str,
+    slug: str,
+    task: str,
+    model: str,
+    effort: str | None,
+    cache_status: str,
+    prompt_estimate: int | None,
+    reported_usage: dict[str, Any] | None,
+    before: dict[str, Any] | None,
+    after: dict[str, Any] | None,
+    wall_seconds: float,
+) -> dict[str, Any]:
+    return {
+        "schema_version": "agy-quota-receipt-v1",
+        "type": "call",
+        "stage": stage,
+        "slug": slug,
+        "task": task,
+        "model": model,
+        "effort": effort,
+        "cache_status": cache_status,
+        "prompt_estimate": prompt_estimate,
+        "reported_usage": reported_usage,
+        "weekly_before": _window_remaining(before, WINDOWS[0]),
+        "five_hour_before": _window_remaining(before, WINDOWS[1]),
+        "weekly_after": _window_remaining(after, WINDOWS[0]),
+        "five_hour_after": _window_remaining(after, WINDOWS[1]),
+        "wall_seconds": round(float(wall_seconds), 3),
+        "before_missing": bool(not before or before.get("missing")),
+        "after_missing": bool(not after or after.get("missing")),
+        "before_reason": None if not before else before.get("reason"),
+        "after_reason": None if not after else after.get("reason"),
+        "at": now(),
+    }
+
+
+def emit_call_receipt(
+    receipt: dict[str, Any],
+    *,
+    folder: Path | str | None = None,
+    ledger: Path | None = None,
+) -> None:
+    if folder:
+        append_event(Path(folder) / "observability" / "agy_quota.jsonl", receipt)
+    if ledger is not None:
+        append_event(ledger, receipt)
+
+
+def bind_active_job(folder: Path | str, slug: str | None = None) -> None:
+    path = Path(folder)
+    os.environ[ACTIVE_FOLDER_ENV] = str(path)
+    os.environ[ACTIVE_SLUG_ENV] = slug or path.name
 
 
 def events(path: Path) -> list[dict]:

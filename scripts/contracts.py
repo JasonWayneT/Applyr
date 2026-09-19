@@ -666,9 +666,34 @@ def check_stage1_ready(folder: str) -> tuple[bool, list[str]]:
                     "(no incomplete_reasons recorded)"
                 )
 
-    for doc in ("Resume.md", "CoverLetter.md", "claim_provenance.json"):
-        if not os.path.exists(os.path.join(folder, doc)):
+    for doc in ("Resume.md", "CoverLetter.md"):
+        path = os.path.join(folder, doc)
+        if not os.path.exists(path):
             errors.append(f"{doc} not found -- Stage 1 has not produced this document yet")
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                body = handle.read()
+        except OSError as exc:
+            errors.append(f"{doc} unreadable: {exc}")
+            continue
+        if not body.strip():
+            errors.append(
+                f"{doc} is empty — Agy SUCCESS without author artifacts is a failed call"
+            )
+
+    prov_path = os.path.join(folder, "claim_provenance.json")
+    if not os.path.exists(prov_path):
+        errors.append("claim_provenance.json not found -- Stage 1 has not produced this document yet")
+    else:
+        provenance, prov_err = load_json(prov_path)
+        if prov_err:
+            errors.append(prov_err)
+        elif not isinstance(provenance, dict) or not provenance:
+            errors.append(
+                "claim_provenance.json is empty or invalid — Agy SUCCESS without "
+                "author artifacts is a failed call"
+            )
 
     return len(errors) == 0, errors
 

@@ -179,7 +179,10 @@ Full list: `scripts/submission_linter.py` LR-009 / LW-006 / LW-007.
 
 Influence and alignment, not authority. Use "built alignment across," "brought teams to a shared
 order of priorities," "got everyone to commit to," "aligned X and Y on." Never: forced, made,
-imposed, or drove other teams "into" a decision.
+imposed, or drove other teams "into" a decision. Mention countries, team locations, time zones,
+or "global/distributed" only when Original_JD.txt asks for global, international, distributed,
+cross-timezone, or multi-region work. Otherwise describe the collaboration itself (who, what
+was aligned, what shipped).
 
 ---
 
@@ -190,6 +193,7 @@ imposed, or drove other teams "into" a decision.
 - Bullets ordered by JD-relevance (required-mapped first).
 - Total product management experience: see packet hard_constraints (never invent 4, 5, or 6).
 - Zero gap-confession, em dashes, semicolons, double-hyphens, or `word: word` elaboration.
+- No countries, time zones, or global/distributed framing unless the JD asks.
 
 ---
 """

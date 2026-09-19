@@ -115,6 +115,12 @@ class TestGenerateDigest(unittest.TestCase):
             "Digest missing keep-fact / change-language pair-restatement instruction.",
         )
 
+    def test_digest_contains_geography_rule(self) -> None:
+        content, _ = generate_digest()
+        self.assertIn("only when Original_JD.txt asks", content)
+        self.assertIn("global, international, distributed", content)
+        self.assertIn("No countries, time zones, or global/distributed framing", content)
+
     def test_negative_control_incidental_resume_cover_letter_is_insufficient(self) -> None:
         """Negative control: document-type words alone must not satisfy the checker."""
         incidental = (

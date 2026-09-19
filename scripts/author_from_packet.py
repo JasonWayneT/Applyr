@@ -124,6 +124,10 @@ Never print "closed-lost". Say lost subscriptions or lost subscription opportuni
 Never claim a design team. Jason has not worked with design.
 Never open by calling the role interesting, compelling, or exciting; name the
 concrete company action, product, or operating problem instead.
+GEOGRAPHY: mention countries, team locations, time zones, or "global/distributed"
+only when Original_JD.txt asks for global, international, distributed,
+cross-timezone, or multi-region work. Otherwise describe the collaboration
+itself (who, what was aligned, what shipped).
 
 Output exactly three fenced code blocks in this order:
   1. A block labeled "Resume.md" containing the full resume Markdown.
@@ -627,6 +631,7 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             from submission_linter import (  # type: ignore
                 check_cross_document_repetition,
                 check_jd_specificity_floor,
+                check_unsolicited_geography,
                 lint_document,
             )
 
@@ -690,6 +695,27 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                     )
                 else:
                     lines.append("PASS [lint/LW-026 specificity]")
+
+                geo_any = False
+                for path, doc_type in ((resume, "resume"), (letter, "cover_letter")):
+                    geo_warns = check_unsolicited_geography(
+                        texts[doc_type], jd_text, doc_type
+                    )
+                    for item in geo_warns:
+                        violations.append(_violation_row(item, doc_type))
+                    if geo_warns:
+                        geo_any = True
+                        passed = False
+                        lines.append(
+                            f"FAIL [lint/LW-039 geography]: {path.name} names "
+                            "geography the JD never asked for"
+                        )
+                        for w in geo_warns:
+                            lines.append(
+                                _format_lint_item("WARN", path.name, w, texts[doc_type])
+                            )
+                if not geo_any:
+                    lines.append("PASS [lint/LW-039 geography]")
         except ImportError:
             lines.append("SKIP [lint] — submission_linter not importable; run manually")
         except Exception as exc:

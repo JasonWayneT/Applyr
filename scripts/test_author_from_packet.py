@@ -872,6 +872,8 @@ class TestCoverVoiceKickerLint(unittest.TestCase):
         from author_from_packet import _PREAMBLE
         self.assertIn("Never open by calling the role interesting, compelling, or exciting", _PREAMBLE)
         self.assertIn("concrete company action, product, or operating problem instead", _PREAMBLE)
+        self.assertIn("GEOGRAPHY:", _PREAMBLE)
+        self.assertIn("only when Original_JD.txt asks", _PREAMBLE)
         self.assertIn("FIXED CHROME", _PREAMBLE)
         self.assertIn("A later injector overwrites", _PREAMBLE)
         self.assertIn("COVER LETTER SHAPE", _PREAMBLE)

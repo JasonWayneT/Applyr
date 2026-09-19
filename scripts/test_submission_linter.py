@@ -8,6 +8,7 @@ from submission_linter import (
     lint_document,
     LintResult,
     check_b2b_saas_positioning,
+    check_unsolicited_geography,
     check_attribution_verb_strength,
     check_cross_employer_audience_bleed,
     check_generic_hook_self_reference,
@@ -492,6 +493,33 @@ def test_LR031_ignores_b2b_saas_outside_summary():
     resume += "\n* Owned product across two customer-facing B2B SaaS platform stacks."
     jd = "Product Manager for a healthcare marketplace. No SaaS keyword here."
     assert check_b2b_saas_positioning(resume, jd) == []
+
+
+def test_LW039_rentana_cover_letter_line_12_fires():
+    from pathlib import Path
+
+    folder = Path(__file__).resolve().parent.parent / "data" / "submissions" / "rentana"
+    letter = (folder / "CoverLetter.md").read_text(encoding="utf-8")
+    jd = (folder / "Original_JD.txt").read_text(encoding="utf-8")
+    lines = letter.splitlines()
+    assert "distributed across the U.S., Budapest, and India" in lines[11]
+    warns = check_unsolicited_geography(letter, jd, "cover_letter")
+    assert len(warns) == 1
+    assert warns[0].rule_id == "LW-039"
+    assert warns[0].severity == "WARN"
+    assert warns[0].line == 12
+
+
+def test_LW039_global_teams_jd_does_not_fire():
+    from pathlib import Path
+
+    folder = Path(__file__).resolve().parent.parent / "data" / "submissions" / "rentana"
+    letter = (folder / "CoverLetter.md").read_text(encoding="utf-8")
+    jd = (
+        "Title: Product Manager\n\nRemote (USA)\n\n"
+        "You will collaborate with global teams on the product roadmap.\n"
+    )
+    assert check_unsolicited_geography(letter, jd, "cover_letter") == []
 
 
 # ---------------------------------------------------------------------------

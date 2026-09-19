@@ -1530,6 +1530,78 @@ def check_b2b_saas_positioning(resume_text: str, jd_text: str) -> List[LintViola
     )]
 
 
+# LW-039: JD-conditional geography. Remote (USA) is not a license to name
+# Budapest / India / time zones / "global/distributed" teams.
+_JD_GEOGRAPHY_ASKED_RE = re.compile(
+    r"\b("
+    r"global|international|distributed|worldwide|"
+    r"multi[-\s]?region|"
+    r"cross[-\s]?time[-\s]?zones?|time[-\s]?zones?|timezones?"
+    r")\b",
+    re.IGNORECASE,
+)
+_UNSOLICITED_GEOGRAPHY_RE = re.compile(
+    r"\b("
+    r"global|worldwide|distributed|international|"
+    r"multi[-\s]?region|"
+    r"time[-\s]?zones?|timezones?"
+    r")\b"
+    r"|Budapest|\bIndia\b|\bIsrael\b|\bHungary\b",
+    re.IGNORECASE,
+)
+
+
+def _geography_body_start_line(doc_text: str, doc_type: str) -> int:
+    """Skip injected chrome (contact header / greeting) so candidate location does not fire."""
+    lines = doc_text.splitlines()
+    if doc_type == "cover_letter":
+        for i, line in enumerate(lines, start=1):
+            if re.match(r"^Dear\b", line.strip(), re.IGNORECASE):
+                return i + 1
+        return 1
+    for i, line in enumerate(lines, start=1):
+        if line.startswith("## "):
+            return i
+    return 1
+
+
+def check_unsolicited_geography(
+    doc_text: str, jd_text: str, doc_type: str = "cover_letter"
+) -> List[LintViolation]:
+    """LW-039: WARN when a draft names geography the JD never asked for.
+
+    FIXQUEUE 9i (2026-09-19, Jason from the rentana read): the cover-letter closer
+    spent itself on "engineering distributed across the U.S., Budapest, and India"
+    when Original_JD.txt only said "Remote (USA)". True (ACC-202-DELIVERY) but not
+    relevant. WARN because a resume bullet can still fairly keep a location detail.
+    """
+    if not doc_text.strip() or not jd_text.strip():
+        return []
+    if _JD_GEOGRAPHY_ASKED_RE.search(jd_text):
+        return []
+    start = _geography_body_start_line(doc_text, doc_type)
+    for i, line in enumerate(doc_text.splitlines(), start=1):
+        if i < start:
+            continue
+        if _UNSOLICITED_GEOGRAPHY_RE.search(line):
+            return [LintViolation(
+                rule_id="LW-039",
+                severity="WARN",
+                message=(
+                    "Draft names countries, team locations, time zones, or "
+                    "global/distributed work, but Original_JD.txt never asks for "
+                    "global, international, distributed, cross-timezone, or "
+                    "multi-region work."
+                ),
+                suggestion=(
+                    "Drop the geography. Describe the collaboration itself "
+                    "(who, what was aligned, what shipped)."
+                ),
+                line=i,
+            )]
+    return []
+
+
 _CROSS_JD_GENERIC_WORDS = {
     "product", "products", "team", "teams", "platform", "platforms", "roadmap",
     "customer", "customers", "user", "users", "feature", "features", "data",
@@ -2293,6 +2365,37 @@ def lint_folder(folder: str) -> List[dict]:
                     passed=False,
                     blocks=positioning_blocks,
                     document_type="positioning",
+                ),
+            })
+
+    # LW-039: unsolicited geography vs JD (needs Original_JD.txt).
+    if ("resume" in texts_by_doc_type or "cover_letter" in texts_by_doc_type) and os.path.exists(jd_path):
+        try:
+            with open(jd_path, encoding="utf-8") as f:
+                geo_jd_text = f.read()
+        except OSError:
+            geo_jd_text = ""
+        geo_warns: List[LintViolation] = []
+        for doc_key, doc_type in (("resume", "resume"), ("cover_letter", "cover_letter")):
+            if doc_key in texts_by_doc_type:
+                geo_warns.extend(
+                    check_unsolicited_geography(
+                        texts_by_doc_type[doc_key], geo_jd_text, doc_type
+                    )
+                )
+        if geo_warns:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "unsolicited geography vs JD",
+                "doc_type": "geography",
+                "status": "WARN",
+                "blocks": 0,
+                "warns": len(geo_warns),
+                "infos": 0,
+                "result": LintResult(
+                    passed=True,
+                    warns=geo_warns,
+                    document_type="geography",
                 ),
             })
 

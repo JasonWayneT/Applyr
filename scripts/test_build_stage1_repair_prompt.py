@@ -180,6 +180,34 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertNotIn("## Current CoverLetter.md", prompt)
         self.assertNotIn("Implemented mobile Unique Visitors", prompt)
 
+    def test_lw039_rentana_line_12_feeds_repair_prompt(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "data" / "submissions" / "rentana"
+        letter = (source / "CoverLetter.md").read_text(encoding="utf-8")
+        jd = (source / "Original_JD.txt").read_text(encoding="utf-8")
+        from generate_authoring_rule_digest import generate_digest
+        from submission_linter import check_unsolicited_geography
+
+        warns = check_unsolicited_geography(letter, jd, "cover_letter")
+        self.assertEqual(warns[0].line, 12)
+        findings = repair._format_lint_item("WARN", "CoverLetter.md", warns[0], letter)
+        drafts = {
+            "Resume.md": "# Name\n",
+            "CoverLetter.md": letter,
+            "claim_provenance.json": "{}",
+        }
+        digest, _version = generate_digest()
+        prompt = repair.build_repair_prompt(
+            drafts,
+            findings,
+            digest_text=digest,
+            packet={"company": "Rentana", "evidence_map": []},
+        )
+        self.assertIn("[LW-039]", prompt)
+        self.assertIn("line 12", prompt)
+        self.assertIn("Budapest", prompt)
+        self.assertIn("Collaboration Framing", prompt)
+        self.assertIn("who, what was aligned, what shipped", prompt.lower())
+
     def test_missing_files_fail(self) -> None:
         (self.folder / "claim_provenance.json").unlink()
         code, message = repair.build_for_folder(

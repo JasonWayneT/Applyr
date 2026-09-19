@@ -59,6 +59,7 @@ _DIGEST_FOR_RULE = {
     "LR-015": ("7. Forbidden Formatting",),
     "LR-016": ("5. Cover Letter Argument Rules",),
     "LR-031": ("2. Resume Structure",),
+    "LW-039": ("10. Collaboration Framing",),
     "LR-020": ("2. Resume Structure",),
     "LR-021": ("2. Resume Structure",),
     "optimization_bar": ("1b. Optimization bar (hard — Round 4)",),

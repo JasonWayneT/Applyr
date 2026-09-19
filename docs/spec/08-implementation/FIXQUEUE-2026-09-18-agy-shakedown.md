@@ -54,6 +54,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **9f (pack 4).** Stage 2 COMPLETE / Stage 3 READY maps to `paused` `ready_to_finalize`, lease released, Review Center panel count separate, never auto-promoted. `--finalize` maps to `done`.
   - [x] **9g (pack 4).** Repair calls are single-shot sandboxed text in/out with a wall-time and event cap.
   - [x] **9h (pack 4).** Requeue a FAILED repair only after valid artifacts are written.
+  - [x] **9i.** Geography only when the JD asks. Digest §10/§11 + `_PREAMBLE`. `LW-039` WARNs when a resume or cover letter names countries / global / distributed / worldwide / time zones and Original_JD.txt does not ask. Rentana CoverLetter.md line 12 fires; a JD with "global teams" does not. Fed to the repair loop with line + offending text.
   - [ ] **9f.** P2 live quarantine-panel check stays a Codex preflight.
 
 - [ ] **10. Stage 1 split (CR-120 reserved: `FR-348`–`FR-352`, `AC-451`–`AC-455`; docs renamed from colliding CR-117).** Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen cases in `data/eval/cr117/`.

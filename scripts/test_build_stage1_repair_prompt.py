@@ -57,7 +57,7 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertIn("## Relevant digest", prompt)
         self.assertNotIn("## Original authoring prompt", prompt)
         self.assertIn("Return the full corrected Resume.md and CoverLetter.md", prompt)
-        self.assertIn("claim_provenance.json is optional", prompt)
+        self.assertIn("omit claim_provenance.json to keep the current file", prompt)
         self.assertIn(
             "Do not load workExperience.md, master_claims.json, AGENTS.md, or agent_context_pack.md.",
             prompt,
@@ -187,6 +187,55 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertIn("## Current CoverLetter.md", prompt)
         self.assertNotIn("## Original authoring prompt", prompt)
         self.assertNotIn("evidence_map", prompt)
+
+    def test_uncited_sentence_finding_pulls_all_packet_excerpts(self) -> None:
+        # An "uncited bullet/sentence" finding never names a claim ID in its own
+        # text -- that's the whole problem -- so the old code (which only pulled
+        # excerpts for claim IDs literally mentioned in the findings) handed the
+        # repair nothing to cite from, and it kept regenerating an uncited
+        # paraphrase across rounds instead of converging. Confirmed live on
+        # 2026-09-19 on binance (ACC-220-CLOUDERAEXIT) and healthstream.
+        findings = (
+            'FAIL [sentence_provenance/resume]: uncited bullet '
+            '"Drove the decision to exit Cloudera hosting, pivoting to AWS EKS and MSK."'
+        )
+        packet = {
+            "excerpts": {
+                "ACC-220-CLOUDERAEXIT": "Prioritized and drove the decision to exit Cloudera...",
+                "ACC-101-SCOPE": "Some unrelated excerpt about scope.",
+            }
+        }
+        drafts = {
+            "Resume.md": "# Name\n\n## EDUCATION\nB.S. Fake College, 2018\n",
+            "CoverLetter.md": "Dear Hiring Manager,\n\nBody.\n",
+            "claim_provenance.json": "{}",
+        }
+        prompt = repair.build_repair_prompt(drafts, findings, packet=packet)
+        self.assertIn("ACC-220-CLOUDERAEXIT excerpt:", prompt)
+        self.assertIn("ACC-101-SCOPE excerpt:", prompt)
+        self.assertIn("must be backed by one of the excerpts below", prompt)
+        self.assertIn("do not invent a citation", prompt)
+
+    def test_non_uncited_finding_only_pulls_named_claim_excerpts(self) -> None:
+        # A finding that already names a claim ID (e.g. an attribution or
+        # prohibited-language violation on a specific claim) should not balloon
+        # the prompt with every excerpt in the packet -- only uncited-sentence
+        # findings need the full set.
+        findings = "FAIL [attribution]: ACC-101-SCOPE overclaims ownership"
+        packet = {
+            "excerpts": {
+                "ACC-220-CLOUDERAEXIT": "Prioritized and drove the decision to exit Cloudera...",
+                "ACC-101-SCOPE": "Some unrelated excerpt about scope.",
+            }
+        }
+        drafts = {
+            "Resume.md": "# Name\n",
+            "CoverLetter.md": "Dear Hiring Manager,\n\nBody.\n",
+            "claim_provenance.json": "{}",
+        }
+        prompt = repair.build_repair_prompt(drafts, findings, packet=packet)
+        self.assertIn("ACC-101-SCOPE excerpt:", prompt)
+        self.assertNotIn("ACC-220-CLOUDERAEXIT excerpt:", prompt)
 
     def test_lw039_rentana_line_12_feeds_repair_prompt(self) -> None:
         source = Path(__file__).resolve().parents[1] / "data" / "submissions" / "rentana"

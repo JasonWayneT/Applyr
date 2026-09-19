@@ -48,6 +48,26 @@ _BLOCKING_RE = re.compile(
 _FINDING_RE = re.compile(r"^(FAIL|WARN)\b", re.I)
 _RULE_RE = re.compile(r"\[([A-Z]{1,3}-\d+)\]")
 _CLAIM_RE = re.compile(r"\b(?:ACC|MET|VOC|SKL)-\d+\b")
+
+
+def _resolve_claim_ids(raw_ids: list[str], keys: object) -> list[str]:
+    """Expand bare short-form IDs ("ACC-101") to the full excerpt-dict key(s)
+    they actually appear as ("ACC-101-SCOPE"). Real packet excerpts are keyed
+    on the full form (checked against 17 live packets on 2026-09-19; every
+    ACC key carried a suffix, MET/VOC keys did not). A finding mentioning only
+    the bare numeric ID would otherwise never match `excerpts.get(claim_id)`,
+    silently dropping the excerpt the repair needed most.
+    """
+    if not isinstance(keys, dict):
+        return raw_ids
+    resolved: list[str] = []
+    for raw in raw_ids:
+        if raw in keys:
+            resolved.append(raw)
+            continue
+        prefix = raw + "-"
+        resolved.extend(k for k in keys if k.startswith(prefix))
+    return list(dict.fromkeys(resolved)) or raw_ids
 _LINE_RE = re.compile(r"\bline\s+(\d+)\b", re.I)
 _LINT_FILE_RE = re.compile(r"\[lint/([^\]]+)\]")
 _DIGEST_FOR_RULE = {
@@ -474,6 +494,15 @@ def _local_context(drafts: dict[str, str], findings: str) -> str:
     return "\n\n".join(parts).strip()
 
 
+_UNCITED_RE = re.compile(
+    r"uncited (?:bullet|factual sentence)\s*[:\"]?\s*\"([^\"]+)\"", re.I
+)
+
+
+def _has_uncited_finding(findings: str) -> bool:
+    return bool(_UNCITED_RE.search(findings))
+
+
 def _packet_support(findings: str, packet: dict | None) -> str:
     if not packet:
         return ""
@@ -485,10 +514,24 @@ def _packet_support(findings: str, packet: dict | None) -> str:
         if isinstance(packet.get("claim_constraints"), dict)
         else {}
     )
-    for claim_id in claims:
-        excerpt = excerpts.get(claim_id)
-        if excerpt:
-            chunks.append(f"{claim_id} excerpt:\n{excerpt.strip()}")
+    # A sentence_provenance failure ("uncited bullet/sentence") never names a
+    # claim ID in its finding text -- that's the whole problem. Without this,
+    # the repair has no real source material for that sentence, so it either
+    # keeps regenerating an uncited paraphrase (whack-a-mole across rounds) or
+    # invents something new. Packets are small (a few KB across ~15-20 claims),
+    # so on an uncited finding we hand over every excerpt rather than try to
+    # guess which one applies -- the model can match it, or find none apply
+    # and remove the sentence instead of leaving it unsupported.
+    if _has_uncited_finding(findings):
+        for claim_id, excerpt in excerpts.items():
+            if excerpt:
+                chunks.append(f"{claim_id} excerpt:\n{excerpt.strip()}")
+    else:
+        for claim_id in _resolve_claim_ids(claims, excerpts):
+            excerpt = excerpts.get(claim_id)
+            if excerpt:
+                chunks.append(f"{claim_id} excerpt:\n{excerpt.strip()}")
+    for claim_id in _resolve_claim_ids(claims, constraints):
         constraint = constraints.get(claim_id)
         if constraint:
             chunks.append(
@@ -513,7 +556,8 @@ def _provenance_support(drafts: dict[str, str], findings: str) -> str:
         payload = json.loads(raw)
     except json.JSONDecodeError:
         return ""
-    kept: list[dict] = []
+    all_rows: list[dict] = []
+    known_ids: dict[str, None] = {}
     if isinstance(payload, dict):
         for rows in payload.values():
             if not isinstance(rows, list):
@@ -521,9 +565,15 @@ def _provenance_support(drafts: dict[str, str], findings: str) -> str:
             for row in rows:
                 if not isinstance(row, dict):
                     continue
-                ids = [str(x) for x in (row.get("claim_ids") or [])]
-                if any(cid in ids for cid in claims):
-                    kept.append(row)
+                all_rows.append(row)
+                for cid in row.get("claim_ids") or []:
+                    known_ids[str(cid)] = None
+    resolved = _resolve_claim_ids(claims, known_ids)
+    kept: list[dict] = []
+    for row in all_rows:
+        ids = [str(x) for x in (row.get("claim_ids") or [])]
+        if any(cid in ids for cid in resolved):
+            kept.append(row)
     if not kept:
         return ""
     return json.dumps(kept, indent=2, ensure_ascii=False)
@@ -548,7 +598,12 @@ def build_repair_prompt(
         "Fix ONLY the ranked findings listed below. Do not rewrite sections the findings do not name.",
         "Keep everything else.",
         "Return the full corrected Resume.md and CoverLetter.md as fenced blocks labeled Resume.md and CoverLetter.md.",
-        "claim_provenance.json is optional. Omit it to keep the current file.",
+        "If a finding is an uncited bullet or sentence: find the claim ID below whose excerpt actually supports it, "
+        "and include claim_provenance.json as a third fenced block adding or updating that sentence's citation to "
+        "that claim ID. If no excerpt below actually supports it, remove the sentence -- do not invent a citation "
+        "and do not leave it uncited. The same rule applies to any other sentence you add or reword: it must be "
+        "backed by one of the excerpts below, and its citation must be in your claim_provenance.json output.",
+        "If you did not touch any previously-cited or new factual sentence, omit claim_provenance.json to keep the current file.",
         "Don't use tools or files.",
         "Do not load workExperience.md, master_claims.json, AGENTS.md, or agent_context_pack.md.",
         "",

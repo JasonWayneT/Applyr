@@ -30,7 +30,9 @@ from build_authoring_packet import (
     _employers_covered,
     _excerpt_for_claim,
     _extract_excerpt_for_project,
+    _force_empty_claim_scoring,
     _is_boilerplate_item,
+    _is_employment_logistics_non_claimable,
     _score_claims_for_item,
     _synthetic_excerpt,
     _MAX_SLOTS_PER_PROJECT,
@@ -1711,6 +1713,32 @@ class TestClaimConstraintsBudget(unittest.TestCase):
         self.assertEqual(packet["claim_constraints"], fat_constraints)
         self.assertNotEqual(packet["claim_constraints"], {})
         self.assertNotEqual(packet["packet_status"], "ready")
+
+
+class TestEmploymentLogisticsNonClaimable(unittest.TestCase):
+    """Found 2026-09-19 on binance: a contract-length/location-flexibility JD line
+    was scored `required` and matched ACC-220-CLOUDERAEXIT on the shared word
+    "contract" -- a nonsensical bridge no author/repair should be asked to satisfy.
+    These lines are posting terms, not skills, same class as education/comp/
+    productivity-suite boilerplate above them in the file.
+    """
+
+    def test_fixed_term_contract_line_is_non_claimable(self) -> None:
+        item = (
+            "This is a full-time fixed-term (12 months) remote contract position. "
+            "Contract extension may be possible, but cannot be guaranteed. You do "
+            "not need to be based in the indicated locations and may be located "
+            "anywhere across APAC time zones."
+        )
+        self.assertTrue(_is_employment_logistics_non_claimable(item))
+        bridge = _force_empty_claim_scoring(item)
+        self.assertIsNotNone(bridge)
+        self.assertIn("no evidence required", bridge)
+
+    def test_real_skill_line_is_unaffected(self) -> None:
+        item = "5+ years of product management experience with SQL and Kafka."
+        self.assertFalse(_is_employment_logistics_non_claimable(item))
+        self.assertIsNone(_force_empty_claim_scoring(item))
 
 
 if __name__ == "__main__":

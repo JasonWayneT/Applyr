@@ -3,11 +3,48 @@
 Items 1-4 landed: YES
 Runtime hold: NO
 
-PLAN-2026-09-18 Task 3. Gemini and Groq free tiers are off. Agy is the only LLM path (`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1` for Stage 0, Agy for Stage 1). Codex runs tests and does not edit code. Cursor fixes. Agy quota is the binding budget. Each fresh Agy call carries about 22k tokens of harness overhead.
+## SESSION HANDOFF (read this first — updated 2026-09-19, Claude Sonnet 5 driving)
+
+**Deadline:** Jason wants Applyr working on Agy by end of Sunday 2026-09-20. Monday is a checkpoint to reassess approach if not, not a hard wall.
+
+**Definition of done:** at least 5 real jobs from the queue reach `ready_to_finalize` (Stage 2 COMPLETE) using only what's already built in the worker/repair loop — no new code needed mid-run for at least the last 3 of the 5. Max 2 repair rounds each. Jason reads each one and calls it sendable (grounded, accurate) — mechanically clean is necessary but not sufficient.
+
+**Scope split, effective now — every new finding goes in exactly one bucket:**
+- **Fix now:** produces a wrong fact / drift / hallucination; stops a job from ever finishing (infinite loop, unrecoverable failure); is a direct blocker between a queued job and `ready_to_finalize`.
+- **DEFERRED — LATER LIST (do not fix this weekend):** see section below. Log it there with one line, move on.
+
+**Hard rule, unchanged from earlier today:** never author a resume/cover letter directly in a full-context session (any harness) to route around Agy/the packet. That's a grounding regression, not a shortcut. If Agy is broken, fix Agy — don't bypass it.
+
+**Who's driving:** Claude Sonnet 5 (this session) is now running the worker directly and making code fixes itself — Codex is out of tokens, Cursor's availability is being confirmed with Jason. Jason will switch to Antigravity (or another harness) when this session runs out of tokens, cycling through available tools. **Whoever picks this file up next: read this whole SESSION HANDOFF block, then "Current state" below, before doing anything.** Keep "Current state" accurate after every action — that's the only thing a cold handoff can trust.
+
+### DEFERRED — LATER LIST (real, not urgent, do not touch this weekend)
+- CR-117 full evidence-first Stage 1 redesign (plan/compose/split architecture).
+- Quota-tracking precision beyond "good enough to not run out unexpectedly" (item 8 follow-ups).
+- Review Center panel UI polish.
+- Root-causing a rare Agy flake that recovers on its own retry (only escalate to fix-now if it's failing most jobs, not an occasional one).
+
+### Current state (update after every action)
+- 2026-09-19, start of this session's driving: queue = 2 done (rentana COMPLETE, raya SKIPPED), 3 paused (casper_studios WAITING_FOR_INPUT/subscription_review, binance FAILED, healthstream FAILED), 38 queued. Nothing leased. Runtime hold NO. 9j (repair sends/returns full drafts) and 9l (manual requeue command) both landed and tested, unverified against a live failure yet.
+- Requeued binance and healthstream via 9l, ran the worker (size 2). Both repaired the findings they were given but each surfaced a NEW `sentence_provenance` uncited-sentence finding — a real, recurring pattern, not noise. Root cause (item 9m below): `_packet_support` only pulled excerpts for claim IDs literally named in the finding text, but an "uncited bullet/sentence" finding never names one (that's the whole problem), so the repair had zero real source material for exactly the findings it needed it most for, and kept regenerating an uncited paraphrase every round instead of converging.
+- **binance's specific uncited sentence was checked against ground truth and is TRUE and fully grounded** (ACC-220-CLOUDERAEXIT covers exactly this: Jason owns the PM-level decision to exit Cloudera and pivot to AWS EKS/MSK, ~$100K, folded into an existing contract — not a drift/hallucination case, purely a missing-citation bookkeeping gap).
+- **9m landed (this session, uncommitted as of this note):** `build_stage1_repair_prompt.py` now (a) hands over every packet excerpt, not just named ones, whenever a finding is an uncited bullet/sentence, since packets are small (~11.5KB / ~2900 tokens for 18 excerpts on binance) and guessing which one applies is unreliable; (b) instructs the model to add/update `claim_provenance.json` for any sentence it keeps or writes, backed by a real excerpt, and to remove (not invent) a sentence with no real support; (c) fixed a separate latent bug — `_CLAIM_RE` only extracted the bare numeric claim ID ("ACC-101") but packet excerpt dict keys are full-form ("ACC-101-SCOPE" for every real ACC key checked), so a named-claim finding's excerpt lookup was silently failing before this fix too, via a new `_resolve_claim_ids` helper used in `_packet_support` and `_provenance_support`. 26 repair-prompt tests pass (24 existing + 2 new), plus 94 adjacent queue/worker/author tests, all green. NOT YET committed, NOT YET verified against a live repair.
+- **Correction to the above:** the "worse" result wasn't caused by 9m. Diffed attempts 2/3/4's raw repair output byte-for-byte — they're IDENTICAL. binance's draft has been broadly under-cited (8+ uncited sentences) since round 2, well before my session touched anything; nobody had run a full `author_from_packet.py --verify-only` pass on its true current state until I did. My "fresh repair" call under 9m returned byte-identical text to the prior round (no actual change), so 9m itself is unproven as a net negative — it just landed on an already-drifted draft.
+- **binance: repair abandoned, fresh Stage 1 author pass run instead.** After 4+ repair rounds a draft is not a repair candidate anymore -- too much accumulated drift to patch surgically. Archived the messy chain to `data/submissions/binance/pre_fresh_author_2026-09-19/`, ran one clean, isolated Agy author call (gemini-3.8-flash-medium, sandboxed, stdin stream-json -- **the CLI `--print` argument form fails with "Argument list too long" on a ~45KB prompt on Windows; must use `--input-format stream-json` + stdin, and the response text must be reconstructed from `step_update.text_delta` chunks, NOT read from the final `result` event's `text` field which is empty for streaming responses -- this cost real debugging time and should go in a reusable helper, see 9n below**). Result: `PASS [sentence_provenance]: every resume bullet and factual cover-letter sentence has exact claim coverage` -- a clean single-context author pass reliably cites everything; the citation-tracking failure mode is specific to REPAIR, not authoring. This is strong evidence for CR-117's deferred evidence-first split, but not something to build this weekend.
+- **9n (real, fix-now, found via the above): two more real bugs, both fixed, both committed-pending:**
+  1. **Employment-logistics JD lines (contract length, remote/location flexibility) were being scored as `required` evidence needing a claim**, matching real claims on lexical overlap alone (binance: a "12-month fixed-term contract" JD line matched ACC-220-CLOUDERAEXIT purely on the word "contract" — a nonsensical bridge no honest author/repair can satisfy). Fixed in `build_authoring_packet.py`: added `_is_employment_logistics_non_claimable` / `_EMPLOYMENT_LOGISTICS_RE`, same pattern as the existing education/compensation/productivity-suite exclusions. Hand-patched binance's already-built packet (both `evidence_map` and the separately-derived `soft_gaps` row -- `_build_soft_gaps` reads from `evidence_map`, so future packets get this for free from one fix; only needed the double-patch because I hand-edited JSON instead of regenerating). 2 new tests, 87 total pass in `test_build_authoring_packet.py`.
+  2. **LR-026 (unverified tool claim) false-positives on "epic" as the ordinary Agile noun** ("epics and stories" — Jason's own approved ACC-179 language), because `epic` is in `HARD_BLOCKED_TOOLS` for the Epic EHR/healthcare company. Fixed in `blocked_tools.py` with a negative-lookahead exclusion for the Agile-idiom shape, same pattern as the existing `workday`/"workday hours" exclusion. Real Epic-EHR mentions ("Epic Systems", "Epic EHR") still correctly flagged. New `test_blocked_tools.py`, 5 tests pass; 230 adjacent linter/gate tests still pass.
+- **binance current state:** 2 findings left, neither is an uncited-sentence type (repeated phrase between resume/cover-letter, one ATS term "Engagement" missing from resume). Safe candidate for one narrow repair round next (won't trigger 9m's full-excerpt-dump path). NOT yet attempted.
+- **9m's "dump all excerpts on an uncited finding" is still a live risk worth watching**, independent of the above correction: it hands the model a lot of unrelated material at once, and *should* be scoped by relevance rather than dumped wholesale — that redesign (targeted excerpt selection, e.g. keyword-overlap scoring) is real but not urgent given packets are small (~11KB) and no confirmed case of it CAUSING a bad rewrite has been observed yet (the one case investigated was pre-existing drift, not new). Note for whoever picks this up: watch the next few uncited-sentence repairs for scope creep before trusting this as fully safe.
+- **9o (quota tracker bug, later-list, not fix-now):** `agy_quota_tracker.py`'s `finish`/history-filter crashes (`KeyError: 'run_id'`) when the ledger contains entries from a different schema (some entries have `slug`/`stage`/`type` instead of `run_id`/`case` — written by something other than agy_quota_tracker.py itself, unclear what). Worked around by closing the one blocking entry manually and tracking quota via `status`'s "Gemini now" line by hand for this session's calls. Real bug, doesn't affect resume quality, deferred.
+- Next planned action: one narrow repair round for binance's 2 remaining findings. Then re-run healthstream (its repair state was reset earlier for the 9m test but never got a real repair call — needs the same "check draft is actually a repair candidate, not too drifted" judgment first). Then requeue casper_studios with 9l. Then continue the queued backlog toward the 5-job target.
+
+---
+
+PLAN-2026-09-18 Task 3. Gemini and Groq free tiers are off. Agy is the only LLM path (`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1` for Stage 0, Agy for Stage 1). Agy quota is the binding budget. Each fresh Agy call carries about 22k tokens of harness overhead.
 
 CR-117 (years-range low-end) and CR-118 (false skips / people-gate negation / exact company match) already landed. Do not redo those. Do not edit `data/candidate_preferences.json`. Do not push.
 
-A new session resumes at the first unchecked box. Finish each item fully (fix, tests pass, CHANGELOG line, checkbox note) before starting the next.
+A new session resumes at the first unchecked box below. Finish each item fully (fix, tests pass, CHANGELOG line, checkbox note) before starting the next.
 
 Before changing any script the worker uses, check `pipeline_queue` for `leased` or `in_progress` rows. If any exist, Codex is mid-pack: wait, or work on a non-runtime item.
 
@@ -67,6 +104,55 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
 ## Incoming from testing
 
 Ranked findings not already covered by items 1-8:
+
+### P0 - Optional provenance leaves accepted Stage 1 repairs unverifiable
+
+**Evidence:** First worker validation after 9j's accepted full-document
+repairs found five exact-provenance mismatches on HealthStream and three on
+Binance, plus Binance LR-026. Codex's HealthStream repair round 4 then used a
+10,013-byte prompt, ran 96.454 seconds / 1 counted event, and returned
+structurally accepted Resume.md and CoverLetter.md without a provenance
+block (`stage1_repair_attempts/4.txt`). The next worker validation still
+failed on three uncited sentences and a supported ATS term. Binance repair
+round 3 used a 10,712-byte prompt, ran 86.890 seconds / 1 counted event,
+and also returned documents without provenance (`stage1_repair_attempts/3.txt`).
+Its next validation cleared LR-026 and the ATS term, but still had two
+uncited passages plus a repeated phrase. The builder at
+`scripts/build_stage1_repair_prompt.py` says `claim_provenance.json is
+optional. Omit it to keep the current file`, although the verifier requires
+exact sentence/bullet correspondence. **How often:** 4/4 accepted live 9j
+repair outputs across the two jobs omitted provenance; 0/2 jobs passed
+Stage 1. The failure is not a malformed repair response; it is a cross-file
+contract mismatch after valid rewrites. No Stage 2 ran on either job.
+
+**Suggested fix:** Make provenance update mandatory whenever a repair
+changes a cited sentence or bullet, or deterministically rebind unchanged
+claim IDs only when the replacement text has been truth-checked against the
+same source. Give the isolated model the existing provenance rows for the
+specific findings and require matching replacement entries in the returned
+artifact. Reject/re-prompt a docs-only repair that would leave exact
+coverage stale; do not loop full-document prose repairs while the old
+provenance is guaranteed to fail. Keep the raw attempt and quota telemetry.
+
+### P0 - 9l requeue does not make subscription-review Stage 0 runnable
+
+**Evidence:** On commit `453af92310f7ae5953d21442df07f0be6d2165e4`,
+`python scripts/queue_claim.py requeue --slug casper_studios --reason
+'Supervised 9k evidence-omission retry after 9l landed' --worker chatgpt-1`
+reported `requeued=1` and stored the reason. A size-1 worker then claimed
+Casper but returned `WORKFLOW status=WAITING_FOR_INPUT active=stage0` with the
+old `subscription_review:harness omitted item_ids` reason in under one
+second. No Agy call, new stream, or newly recorded missing IDs appeared.
+`scripts/workflow/runner.py:87-98` only resumes a `subscription_review`
+pause when `stage0_cascade_import.json` exists; 9l changes the queue row,
+not that orchestrator predicate. **How often:** 1/1 explicit 9l requeues
+tested live. Casper returned to paused WAITING_FOR_INPUT.
+
+**Suggested fix:** Carry the audited 9l retry intent through the worker to
+the Stage 0 resume predicate, or add a versioned retry marker consumed once
+by the orchestrator. Keep the normal worker lease and fence; do not make all
+subscription-review pauses auto-retry. Test the full `requeue -> claim ->
+new evidence call` path, not only the queue transition.
 
 ### P0 - Stage 2 complete remains leased in_progress instead of finalize-ready
 

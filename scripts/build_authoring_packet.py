@@ -445,6 +445,24 @@ _PRODUCTIVITY_SUITE_RE = re.compile(
     re.I,
 )
 
+_NON_CLAIMABLE_BRIDGE_LOGISTICS = (
+    "Not a skill claim (employment/contract logistics) -- no evidence required."
+)
+
+# Found 2026-09-19 on binance: a JD line stating contract length/type and location
+# flexibility ("fixed-term (12 months)... may be located anywhere across APAC time
+# zones") was scored as a `required` item and matched ACC-220-CLOUDERAEXIT purely on
+# the shared word "contract" -- a nonsensical bridge that repair/authoring can only
+# satisfy by forcing an unrelated fact into an irrelevant sentence. Same class of
+# problem as education/comp/productivity-suite boilerplate above: these lines
+# describe the job posting's terms, not a skill, and must not receive claim_ids.
+_EMPLOYMENT_LOGISTICS_RE = re.compile(
+    r"\bfixed-term\b|\bcontract\s+(?:position|extension)\b|"
+    r"you\s+do\s+not\s+need\s+to\s+be\s+based|may\s+be\s+located\s+anywhere|"
+    r"\bAPAC\s+time\s+zones?\b",
+    re.I,
+)
+
 
 def _is_degree_non_claimable(item_text: str) -> bool:
     """Bachelor's/undergrad lines map to no ACC — force empty claim_ids."""
@@ -465,6 +483,11 @@ def _is_productivity_suite_non_claimable(item_text: str) -> bool:
     return bool(_PRODUCTIVITY_SUITE_RE.search(item_text or ""))
 
 
+def _is_employment_logistics_non_claimable(item_text: str) -> bool:
+    """Contract length/type and location-flexibility lines are posting terms, not skills."""
+    return bool(_EMPLOYMENT_LOGISTICS_RE.search(item_text or ""))
+
+
 def _item_names_hard_blocked_tool(item_text: str) -> bool:
     """True when the JD line names a Stage-0 hard-blocked tool Jason must not claim."""
     if not (item_text or "").strip():
@@ -483,6 +506,8 @@ def _force_empty_claim_scoring(item_text: str) -> str | None:
         return _NON_CLAIMABLE_BRIDGE_COMP
     if _is_productivity_suite_non_claimable(item_text):
         return _NON_CLAIMABLE_BRIDGE_PRODUCTIVITY
+    if _is_employment_logistics_non_claimable(item_text):
+        return _NON_CLAIMABLE_BRIDGE_LOGISTICS
     if _item_names_hard_blocked_tool(item_text):
         return _HARD_TOOL_EVIDENCE_BRIDGE
     return None

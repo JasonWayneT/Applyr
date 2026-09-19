@@ -73,18 +73,32 @@ _DISPLAY_ALIASES: dict[str, str] = {
 }
 
 
+def _epic_pattern(esc: str) -> str:
+    """``epic`` (the healthcare EHR company) false-positives on the ordinary
+    Agile noun ("epic"/"epics" as in epics and stories) -- live miss on binance,
+    2026-09-19, where ACC-179's own approved language ("drafting epics and
+    stories") tripped the healthcare-tool block. Same negative-lookahead shape
+    as the ``workday`` exclusion below: exclude the Agile idiom, not the word.
+    """
+    return rf"{esc}s?(?!\s*(?:-level|\s+and\s+(?:user\s+)?stor(?:y|ies)|\s+hierarch))"
+
+
 def hard_blocked_tool_pattern() -> re.Pattern[str]:
     """Case-insensitive word-boundary alternation over HARD_BLOCKED_TOOLS.
 
     ``workday`` keeps a negative lookahead so capacity phrasing like
     ``workday-hours`` / ``workday hours`` is not treated as the Workday HCM
     product (live false positive on neogen/precisepk/procede, 2026-08-11).
+    ``epic`` keeps a similar lookahead for the Agile-noun sense (see
+    ``_epic_pattern``).
     """
     parts: list[str] = []
     for tool in sorted(HARD_BLOCKED_TOOLS, key=len, reverse=True):
         esc = re.escape(tool)
         if tool == "workday":
             parts.append(rf"{esc}(?![\s-]*hours?\b)")
+        elif tool == "epic":
+            parts.append(_epic_pattern(esc))
         else:
             parts.append(esc)
     pattern = r"\b(?:" + "|".join(parts) + r")\b"
@@ -116,6 +130,8 @@ def hard_blocked_tools_lint_alternation() -> str:
         esc = re.escape(t)
         if t.lower() == "workday":
             parts.append(rf"{esc}(?![\s-]*hours?\b)")
+        elif t.lower() == "epic":
+            parts.append(_epic_pattern(esc))
         else:
             parts.append(esc)
     return "|".join(parts)

@@ -428,6 +428,30 @@ def _example_bank_version() -> str:
         return ""
 
 
+def _offending_excerpt(text: str, line: int | None) -> str:
+    if not line:
+        return ""
+    rows = text.splitlines()
+    if 1 <= int(line) <= len(rows):
+        return rows[int(line) - 1].strip()[:240]
+    return ""
+
+
+def _format_lint_item(kind: str, filename: str, item: object, text: str) -> str:
+    line = getattr(item, "line", None)
+    rule_id = str(getattr(item, "rule_id", "") or "")
+    message = str(getattr(item, "message", "") or "")
+    suggestion = str(getattr(item, "suggestion", "") or "").strip()
+    excerpt = _offending_excerpt(text, line)
+    line_bit = f" line {line}" if line else ""
+    out = f"{kind} [lint/{filename}] [{rule_id}]{line_bit}: {message}"
+    if suggestion:
+        out += f" (suggestion: {suggestion})"
+    if excerpt:
+        out += f" offending: {excerpt}"
+    return out
+
+
 def _violation_row(violation: object, doc: str) -> dict:
     """Project a lint violation into the verify_history schema (CR-097 Story 1.2)."""
     rule_id = str(getattr(violation, "rule_id", "") or "")
@@ -621,8 +645,10 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                         f"FAIL [lint/{path.name}]: {len(result.blocks)} hard block(s), "
                         f"{len(result.warns)} warn(s)"
                     )
-                    for b in result.blocks[:5]:
-                        lines.append(f"  [{b.rule_id}] {b.message}")
+                    for b in result.blocks:
+                        lines.append(_format_lint_item("FAIL", path.name, b, text))
+                    for w in result.warns[:8]:
+                        lines.append(_format_lint_item("WARN", path.name, w, text))
 
             if "resume" in texts and "cover_letter" in texts:
                 pair_warns = check_cross_document_repetition(

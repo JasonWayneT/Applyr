@@ -50,15 +50,19 @@ class TestStage1RepairPrompt(unittest.TestCase):
         prompt = (self.folder / repair.REPAIR_PROMPT_NAME).read_text(encoding="utf-8")
         self.assertIn("1. " + findings, prompt)
         self.assertIn("B.S. Fake College, 2018", prompt)
-        self.assertIn("Dear Hiring Manager", prompt)
-        self.assertIn("ACC-101", prompt)
-        self.assertIn("SYSTEM digest", prompt)
+        self.assertIn("## EDUCATION", prompt)
+        self.assertNotIn("Dear Hiring Manager", prompt)
+        self.assertIn("## Relevant digest", prompt)
+        self.assertNotIn("## Original authoring prompt", prompt)
         self.assertIn("Fix ONLY the ranked findings listed below", prompt)
         self.assertIn(
             "Do not load workExperience.md, master_claims.json, AGENTS.md, or agent_context_pack.md.",
             prompt,
         )
         self.assertNotIn("data/workExperience.md", prompt)
+
+    def test_same_findings_no_progress_keeps_blocking(self) -> None:
+        findings = "FAIL [lint]: LR-014 semicolon"
 
     def test_same_findings_no_progress_keeps_blocking(self) -> None:
         findings = "FAIL [lint]: LR-014 semicolon"
@@ -102,6 +106,42 @@ class TestStage1RepairPrompt(unittest.TestCase):
         prompt = (self.folder / repair.REPAIR_PROMPT_NAME).read_text(encoding="utf-8")
         self.assertIn("SNAPSHOT RESUME", prompt)
         self.assertNotIn("B.S. Fake College, 2018", prompt)
+        self.assertNotIn("## Original authoring prompt", prompt)
+
+    def test_rentana_lr013_single_finding_prompt_under_10kb(self) -> None:
+        source = Path(__file__).resolve().parents[1] / "data" / "submissions" / "rentana"
+        resume = (source / "Resume.md").read_text(encoding="utf-8")
+        letter = (source / "CoverLetter.md").read_text(encoding="utf-8")
+        packet = json.loads((source / "authoring_packet.json").read_text(encoding="utf-8"))
+        from generate_authoring_rule_digest import generate_digest
+        from submission_linter import lint_document
+
+        result = lint_document(resume, "resume", filename="Resume.md")
+        lr013 = next(item for item in result.blocks if item.rule_id == "LR-013")
+        findings = repair._format_lint_item("FAIL", "Resume.md", lr013, resume)
+        drafts = {
+            "Resume.md": resume,
+            "CoverLetter.md": letter,
+            "claim_provenance.json": "{}",
+        }
+        digest, _version = generate_digest()
+        prompt = repair.build_repair_prompt(
+            drafts,
+            findings,
+            digest_text=digest,
+            packet=packet,
+        )
+        self.assertLess(len(prompt.encode("utf-8")), 10_000, len(prompt.encode("utf-8")))
+        self.assertIn("[LR-013]", prompt)
+        self.assertIn("line 8", prompt)
+        self.assertIn("six years", prompt)
+        self.assertIn("suggestion:", prompt.lower())
+        self.assertIn("seven years", prompt.lower())
+        self.assertIn("## Relevant digest", prompt)
+        self.assertIn("Self-Check", prompt)
+        self.assertNotIn("## Original authoring prompt", prompt)
+        self.assertNotIn("## Current CoverLetter.md", prompt)
+        self.assertNotIn("Implemented mobile Unique Visitors", prompt)
 
     def test_missing_files_fail(self) -> None:
         (self.folder / "claim_provenance.json").unlink()

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build a Stage 1 repair prompt from a failed verify pass.
+"""Build a compact Stage 1 repair prompt from a failed verify pass.
 
-A failed draft must not trigger a full fresh authoring resample. This script
-assembles one isolated prompt: the original authoring_prompt.md, the failed
-Resume.md / CoverLetter.md / claim_provenance.json, and a ranked findings
-list. The repair session still never receives workExperience.md, claims,
-AGENTS.md, or the context pack.
+A failed draft must not trigger a full fresh authoring resample. The repair
+prompt carries ranked findings (rule, file, line, offending text, suggestion),
+local draft context, the digest sections those rules need, and packet excerpts
+for any cited claim IDs. It does not re-send the full authoring prompt or both
+whole drafts.
 
 Loop until verify passes or a round makes no progress (same findings as the
 previous round). On no progress, truth/format blocks stay blocking and are
@@ -38,13 +38,42 @@ REQUIRED_FILES = (
     "claim_provenance.json",
 )
 _BLOCKING_RE = re.compile(
-    r"fabrication|invent|attribution|employer mismatch|LR-006|LR-014|LR-015|"
+    r"fabrication|invent|attribution|employer mismatch|LR-006|LR-013|LR-014|LR-015|"
     r"semicolon|em dash|page count|one page|_pdf_page_count|"
     r"optimization_bar|required evidence unused|extra_packet|identity|"
     r"HARD_BLOCK|forbidden punctuation",
     re.I,
 )
 _FINDING_RE = re.compile(r"^(FAIL|WARN)\b", re.I)
+_RULE_RE = re.compile(r"\[([A-Z]{1,3}-\d+)\]")
+_CLAIM_RE = re.compile(r"\b(?:ACC|MET|VOC|SKL)-\d+\b")
+_LINE_RE = re.compile(r"\bline\s+(\d+)\b", re.I)
+_LINT_FILE_RE = re.compile(r"\[lint/([^\]]+)\]")
+_DIGEST_FOR_RULE = {
+    "LR-013": (
+        "11. Before You Finish — Self-Check",
+        "2. Resume Structure",
+    ),
+    "LR-014": ("7. Forbidden Formatting",),
+    "LR-006": ("7. Forbidden Formatting",),
+    "LR-015": ("7. Forbidden Formatting",),
+    "LR-016": ("5. Cover Letter Argument Rules",),
+    "LR-031": ("2. Resume Structure",),
+    "LR-020": ("2. Resume Structure",),
+    "LR-021": ("2. Resume Structure",),
+    "optimization_bar": ("1b. Optimization bar (hard — Round 4)",),
+    "evidence_utilization": (
+        "1. Closed-World Rule (hardest constraint)",
+        "1b. Optimization bar (hard — Round 4)",
+    ),
+    "stage1_quality": (
+        "2. Resume Structure",
+        "9. Exclusion Zones — What Jason Is NOT",
+    ),
+    "identity": ("2. Resume Structure",),
+    "extra_packet": ("1. Closed-World Rule (hardest constraint)",),
+}
+_DEFAULT_DIGEST = ("11. Before You Finish — Self-Check",)
 
 
 def _utc_now() -> str:
@@ -110,13 +139,40 @@ def collect_findings(folder: Path, findings_text: str | None) -> str:
     return text
 
 
+def _strip_rank(raw: str) -> str:
+    return re.sub(r"^\s*\d+\.\s*", "", raw).rstrip()
+
+
 def _finding_lines(findings: str) -> list[str]:
-    lines: list[str] = []
+    kept: list[str] = []
+    pending = ""
     for raw in findings.splitlines():
-        line = re.sub(r"^\s*\d+\.\s*", "", raw).strip()
-        if _FINDING_RE.match(line) or line.startswith("FAIL [") or line.startswith("WARN ["):
-            lines.append(line)
-    return lines
+        line = _strip_rank(raw)
+        stripped = line.strip()
+        if not stripped:
+            if pending:
+                kept.append(pending)
+                pending = ""
+            continue
+        if _FINDING_RE.match(stripped) or stripped.startswith("FAIL [") or stripped.startswith("WARN ["):
+            if pending:
+                kept.append(pending)
+            pending = stripped
+            continue
+        if pending and (
+            stripped.startswith("[")
+            or stripped.lower().startswith(("suggestion:", "offending:", "line "))
+        ):
+            pending = pending + " | " + stripped
+            continue
+        if pending:
+            kept.append(pending)
+            pending = ""
+            if _FINDING_RE.match(stripped):
+                pending = stripped
+    if pending:
+        kept.append(pending)
+    return kept
 
 
 def findings_fingerprint(findings: str) -> str:
@@ -156,6 +212,30 @@ def _load_drafts(folder: Path) -> dict[str, str]:
     }
 
 
+def _load_digest() -> str:
+    try:
+        from generate_authoring_rule_digest import generate_digest
+
+        content, _version = generate_digest()
+        return content
+    except Exception:
+        path = _REPO_ROOT / "data" / "authoring_rule_digest.md"
+        if path.is_file():
+            return path.read_text(encoding="utf-8")
+        return ""
+
+
+def _load_packet(folder: Path) -> dict:
+    path = folder / "authoring_packet.json"
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def _merge_forwarded(folder: Path, forwarded: list[str]) -> None:
     path = folder / FORWARDED_NOTES
     existing: dict = {}
@@ -175,8 +255,271 @@ def _merge_forwarded(folder: Path, forwarded: list[str]) -> None:
     path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
 
 
-def build_repair_prompt(authoring_prompt: str, drafts: dict[str, str], findings: str) -> str:
+def _is_lint_summary(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped.startswith(("FAIL [lint/", "WARN [lint/")):
+        return False
+    if _RULE_RE.search(stripped) and _LINE_RE.search(stripped):
+        return False
+    return "hard block" in stripped.lower() or stripped.startswith("WARN [lint/")
+
+
+def _format_lint_item(kind: str, filename: str, item: object, text: str) -> str:
+    from author_from_packet import _format_lint_item as shared
+
+    return shared(kind, filename, item, text)
+
+
+def expand_lint_findings(findings: str, drafts: dict[str, str]) -> str:
+    """Replace summary-only lint FAIL lines with rule/line/suggestion/offending rows."""
+    rows = findings.splitlines()
+    if not any(_is_lint_summary(_strip_rank(row)) for row in rows):
+        return findings.strip()
+    from submission_linter import lint_document
+
+    lint_lines: list[str] = []
+    for name, doc_type in (("Resume.md", "resume"), ("CoverLetter.md", "cover_letter")):
+        text = drafts.get(name) or ""
+        if not text:
+            continue
+        result = lint_document(text, doc_type, filename=name)
+        for block in result.blocks:
+            lint_lines.append(_format_lint_item("FAIL", name, block, text))
+    kept: list[str] = []
+    skip_indent = False
+    for raw in rows:
+        line = _strip_rank(raw)
+        stripped = line.strip()
+        if _is_lint_summary(stripped):
+            skip_indent = True
+            continue
+        if skip_indent and stripped.startswith("["):
+            continue
+        skip_indent = False
+        if stripped:
+            kept.append(stripped)
+    return "\n".join(lint_lines + kept).strip()
+
+
+def _digest_sections(digest_text: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    if not digest_text.strip():
+        return sections
+    parts = re.split(r"\n(?=## )", digest_text)
+    for part in parts:
+        match = re.match(r"##\s+(.+)", part)
+        if not match:
+            continue
+        sections[match.group(1).strip()] = part.strip()
+    return sections
+
+
+def _rules_in_findings(findings: str) -> set[str]:
+    rules = set(_RULE_RE.findall(findings))
+    lower = findings.lower()
+    for token in (
+        "optimization_bar",
+        "evidence_utilization",
+        "stage1_quality",
+        "identity",
+        "extra_packet",
+    ):
+        if token in lower:
+            rules.add(token)
+    return rules
+
+
+def _relevant_digest(findings: str, digest_text: str) -> str:
+    sections = _digest_sections(digest_text)
+    wanted: list[str] = []
+    for rule in sorted(_rules_in_findings(findings)):
+        for title in _DIGEST_FOR_RULE.get(rule, ()):
+            if title not in wanted:
+                wanted.append(title)
+    if not wanted:
+        wanted.extend(_DEFAULT_DIGEST)
+    chunks = [sections[title] for title in wanted if title in sections]
+    return "\n\n".join(chunks).strip()
+
+
+def _paragraph_at(text: str, line_no: int) -> str:
+    lines = text.splitlines()
+    if not lines:
+        return ""
+    idx = max(0, min(line_no - 1, len(lines) - 1))
+    start = idx
+    end = idx
+    while start > 0 and lines[start - 1].strip():
+        start -= 1
+    while end + 1 < len(lines) and lines[end + 1].strip():
+        end += 1
+    heading = start - 1
+    while heading >= 0 and not lines[heading].strip():
+        heading -= 1
+    if heading >= 0 and lines[heading].lstrip().startswith("#"):
+        start = heading
+        prior = heading - 1
+        while prior >= 0 and not lines[prior].strip():
+            prior -= 1
+        if prior >= 0 and lines[prior].lstrip().startswith("#"):
+            start = prior
+    return "\n".join(lines[start : end + 1]).strip()
+
+
+def _search_paragraph(text: str, needles: list[str]) -> str:
+    lowered = text.lower()
+    for needle in needles:
+        if not needle or len(needle) < 4:
+            continue
+        pos = lowered.find(needle.lower())
+        if pos < 0:
+            continue
+        line_no = text[:pos].count("\n") + 1
+        return _paragraph_at(text, line_no)
+    return ""
+
+
+def _needles_for_line(line: str) -> list[str]:
+    offending = ""
+    match = re.search(r" offending: (.+)$", line)
+    if match:
+        offending = match.group(1).strip().strip("'\"")
+    needles = []
+    if offending:
+        needles.append(offending[:80])
+    needles.extend(re.findall(r"[A-Za-z][A-Za-z0-9'’.-]{5,}", line))
+    return needles
+
+
+def _files_for_line(line: str) -> list[str]:
+    match = _LINT_FILE_RE.search(line)
+    if match:
+        name = match.group(1).strip()
+        if name in ("Resume.md", "CoverLetter.md", "claim_provenance.json"):
+            return [name]
+        if "resume" in name.lower() and "cover" not in name.lower():
+            return ["Resume.md"]
+        if "cover" in name.lower():
+            return ["CoverLetter.md"]
+    names: list[str] = []
+    if "resume" in line.lower():
+        names.append("Resume.md")
+    if "cover" in line.lower() or "letter" in line.lower():
+        names.append("CoverLetter.md")
+    if "provenance" in line.lower():
+        names.append("claim_provenance.json")
+    return names
+
+
+def _local_context(drafts: dict[str, str], findings: str) -> str:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for line in _finding_lines(findings):
+        line_match = _LINE_RE.search(line)
+        files = _files_for_line(line) or ["Resume.md", "CoverLetter.md"]
+        snippet = ""
+        if line_match:
+            for name in files:
+                text = drafts.get(name) or ""
+                if not text:
+                    continue
+                snippet = _paragraph_at(text, int(line_match.group(1)))
+                if snippet:
+                    key = name + "::" + snippet
+                    if key not in seen:
+                        seen.add(key)
+                        parts.append(f"### {name}\n\n{snippet}")
+                    break
+            if snippet:
+                continue
+        needles = _needles_for_line(line)
+        for name in files:
+            text = drafts.get(name) or ""
+            snippet = _search_paragraph(text, needles)
+            if snippet:
+                key = name + "::" + snippet
+                if key not in seen:
+                    seen.add(key)
+                    parts.append(f"### {name}\n\n{snippet}")
+                break
+        else:
+            for name in files:
+                text = (drafts.get(name) or "").strip()
+                if text and len(text) <= 1500:
+                    key = name + "::all"
+                    if key not in seen:
+                        seen.add(key)
+                        parts.append(f"### {name}\n\n{text}")
+    return "\n\n".join(parts).strip()
+
+
+def _packet_support(findings: str, packet: dict | None) -> str:
+    if not packet:
+        return ""
+    chunks: list[str] = []
+    claims = list(dict.fromkeys(_CLAIM_RE.findall(findings)))
+    excerpts = packet.get("excerpts") if isinstance(packet.get("excerpts"), dict) else {}
+    constraints = (
+        packet.get("claim_constraints")
+        if isinstance(packet.get("claim_constraints"), dict)
+        else {}
+    )
+    for claim_id in claims:
+        excerpt = excerpts.get(claim_id)
+        if excerpt:
+            chunks.append(f"{claim_id} excerpt:\n{excerpt.strip()}")
+        constraint = constraints.get(claim_id)
+        if constraint:
+            chunks.append(
+                f"{claim_id} constraints:\n{json.dumps(constraint, ensure_ascii=False)}"
+            )
+    rules = _rules_in_findings(findings)
+    hard = packet.get("hard_constraints") if isinstance(packet.get("hard_constraints"), list) else []
+    if "LR-013" in rules or re.search(r"\byears?\b", findings, re.I):
+        for item in hard:
+            text = str(item)
+            if re.search(r"experience|years", text, re.I):
+                chunks.append(text)
+    return "\n\n".join(chunks).strip()
+
+
+def _provenance_support(drafts: dict[str, str], findings: str) -> str:
+    claims = list(dict.fromkeys(_CLAIM_RE.findall(findings)))
+    if not claims:
+        return ""
+    raw = drafts.get("claim_provenance.json") or ""
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return ""
+    kept: list[dict] = []
+    if isinstance(payload, dict):
+        for rows in payload.values():
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                ids = [str(x) for x in (row.get("claim_ids") or [])]
+                if any(cid in ids for cid in claims):
+                    kept.append(row)
+    if not kept:
+        return ""
+    return json.dumps(kept, indent=2, ensure_ascii=False)
+
+
+def build_repair_prompt(
+    drafts: dict[str, str],
+    findings: str,
+    *,
+    digest_text: str = "",
+    packet: dict | None = None,
+) -> str:
     ranked = rank_findings(findings)
+    context = _local_context(drafts, findings)
+    digest = _relevant_digest(findings, digest_text)
+    packet_bits = _packet_support(findings, packet)
+    provenance = _provenance_support(drafts, findings)
     parts = [
         "# Stage 1 repair",
         "",
@@ -190,24 +533,18 @@ def build_repair_prompt(authoring_prompt: str, drafts: dict[str, str], findings:
         "",
         ranked,
         "",
-        "## Original authoring prompt",
+        "## Draft context (only the involved lines)",
         "",
-        authoring_prompt.strip(),
-        "",
-        "## Current Resume.md",
-        "",
-        drafts["Resume.md"].rstrip(),
-        "",
-        "## Current CoverLetter.md",
-        "",
-        drafts["CoverLetter.md"].rstrip(),
-        "",
-        "## Current claim_provenance.json",
-        "",
-        drafts["claim_provenance.json"].rstrip(),
+        context or "(no local draft excerpt matched the findings)",
         "",
     ]
-    return "\n".join(parts)
+    if digest:
+        parts.extend(["## Relevant digest", "", digest, ""])
+    if packet_bits:
+        parts.extend(["## Packet excerpts", "", packet_bits, ""])
+    if provenance:
+        parts.extend(["## Provenance rows for cited claims", "", provenance, ""])
+    return "\n".join(parts).rstrip() + "\n"
 
 
 def build_for_folder(
@@ -237,6 +574,8 @@ def build_for_folder(
     if not findings:
         return 0, "no repair needed — verify produced no findings"
 
+    drafts = _load_drafts(folder)
+    findings = expand_lint_findings(findings, drafts)
     fingerprint = findings_fingerprint(findings)
     blocking, forwarded = classify_findings(findings)
     if state["attempts"] > 0 and fingerprint and fingerprint == state["previous_findings_hash"]:
@@ -255,13 +594,13 @@ def build_for_folder(
             f"{FORWARDED_NOTES}. Continue to Stage 2."
         )
 
-    drafts = _load_drafts(folder)
     prompt = build_repair_prompt(
-        (folder / "authoring_prompt.md").read_text(encoding="utf-8"),
         drafts,
         findings,
+        digest_text=_load_digest(),
+        packet=_load_packet(folder),
     )
-    (folder / REPAIR_PROMPT_NAME).write_text(prompt + "\n", encoding="utf-8")
+    (folder / REPAIR_PROMPT_NAME).write_text(prompt, encoding="utf-8")
     attempts = state["attempts"] + 1
     save_repair_state(
         folder,

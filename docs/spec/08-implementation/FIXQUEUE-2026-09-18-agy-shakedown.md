@@ -48,7 +48,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **9c.** Empty `Resume.md` / `CoverLetter.md` / invalid `claim_provenance.json` are not Stage 1 ready, even if Agy returned `SUCCESS`.
   - [x] **9b (pack 3).** Packet `hard_constraints` and digest self-check include total PM experience from `workExperience.md` §1.0 (7 / seven; never 4, 5, or 6). Not hardcoded.
   - [x] **9c (pack 3).** Deterministic pre-repair for mechanical findings (years, LR-014/LR-006/LR-015) before any Agy call. `scripts/stage1_prerepair.py` logs `auto_fixes` on `stage1_repair_state.json`. Tests: six years fixed with no Agy prompt; clean draft byte-identical.
-  - [ ] **9d (pack 3).** Small repair prompts: rule/file/line/offending text/suggestion, local context, relevant digest, mentioned excerpts. Under 10KB for a single finding.
+  - [x] **9d (pack 3).** Small repair prompts: rule/file/line/offending text/suggestion, local context, relevant digest, mentioned excerpts. Rentana LR-013 case stays under 10KB.
   - [ ] **9e (pack 3).** Stage 1 validation failure maps to `paused` with `last_workflow_status=FAILED`, lease released, never auto-promoted. Repair requeues explicitly.
   - [ ] **9f.** P2 live quarantine-panel check stays a Codex preflight.
 

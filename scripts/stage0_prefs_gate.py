@@ -276,6 +276,86 @@ def _check_ai_ml_ownership(jd_text: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Required non-English language fluency
+# ---------------------------------------------------------------------------
+# Found 2026-09-19 on binance (Data Product Manager, Derivatives): the JD stated
+# "Bilingual English/Mandarin required to coordinate with overseas partners."
+# Stage 0's LLM evidence classifier downgraded this to gap_class SOFT, reasoning
+# that Jason's experience coordinating with distributed teams IN ENGLISH
+# (U.S./India/Budapest/Israel) "demonstrates the underlying cross-geographic
+# coordination capability" -- that is a different skill and does not address
+# actual language fluency at all. Jason confirmed directly: no Mandarin, "a
+# little Spanish and English." An LLM judgment call on a factual, binary
+# question (does the candidate speak this language) is the wrong tool here --
+# same reasoning as why travel/years/title use deterministic gates instead of
+# trusting the cascade's soft/hard call. Spanish is a genuine partial case (some
+# proficiency, unclear if it meets a given JD's bar) so it flags for review
+# instead of a hard reject; every other named language hard-rejects since
+# there is zero evidence of any proficiency.
+# Matches only an explicit human-language name, never an open word class -- an
+# earlier version used `\w+` after "fluent in" and false-positived on "become
+# deeply fluent in legal and medical workflows" (indigo JD: domain fluency,
+# not language fluency, and not even hiring-requirement framing).
+_LANGUAGE_NAMES = (
+    "mandarin|chinese|cantonese|spanish|french|german|japanese|korean|"
+    "portuguese|italian|russian|arabic|hindi|vietnamese|thai|tagalog|"
+    "polish|dutch|swedish|turkish|hebrew|indonesian|malay|farsi|persian|"
+    "urdu|bengali|punjabi|tamil|ukrainian|greek|romanian|hungarian|czech|"
+    "danish|norwegian|finnish|swahili"
+)
+_REQUIRED_LANGUAGE_RE = re.compile(
+    rf"\b(?:bilingual\s+english/(?P<lang1>{_LANGUAGE_NAMES})|"
+    rf"fluent(?:cy)?\s+in\s+(?P<lang2>{_LANGUAGE_NAMES})|"
+    rf"(?P<lang3>{_LANGUAGE_NAMES})\s+fluency\s+(?:is\s+)?required|"
+    rf"must\s+(?:speak|be\s+fluent\s+in)\s+(?P<lang4>{_LANGUAGE_NAMES})|"
+    rf"native\s+(?P<lang5>{_LANGUAGE_NAMES})\s+speaker\s+required)\b",
+    re.I,
+)
+_ENGLISH_RE = re.compile(r"^english$", re.I)
+_SPANISH_RE = re.compile(r"^spanish$", re.I)
+
+
+def _check_required_language(jd_text: str) -> tuple[list[dict], list[dict]]:
+    """Return (rejects, flags) for an explicit required non-English language.
+
+    Only fires on "required"/"must"/"fluent" framing, not "preferred" or
+    "a plus" -- those are legitimate soft gaps the existing evidence cascade
+    can reason about (they are not a binary pass/fail on Jason's own history).
+    """
+    if not jd_text:
+        return [], []
+    rejects: list[dict] = []
+    flags: list[dict] = []
+    seen: set[str] = set()
+    for match in _REQUIRED_LANGUAGE_RE.finditer(jd_text):
+        lang = next((g for g in match.groups() if g), None)
+        if not lang or _ENGLISH_RE.match(lang):
+            continue
+        key = lang.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        if _SPANISH_RE.match(lang):
+            flags.append({
+                "code": "required_language_partial",
+                "note": (
+                    f"JD requires {lang} fluency; Jason has some Spanish but "
+                    "proficiency against this JD's bar is unconfirmed — needs a "
+                    "human check, not an automatic pass or skip."
+                ),
+            })
+            continue
+        rejects.append({
+            "code": "required_language_unmet",
+            "reason": (
+                f"JD requires {lang} fluency; Jason speaks English (and some "
+                "Spanish) with no documented proficiency in this language"
+            ),
+        })
+    return rejects, flags
+
+
+# ---------------------------------------------------------------------------
 # Blocked company
 # ---------------------------------------------------------------------------
 
@@ -413,6 +493,11 @@ def run_prefs_gate(
     rejects.extend(_check_people_management(jd_text))
     rejects.extend(_check_revenue_billing(jd_text))
     rejects.extend(_check_ai_ml_ownership(jd_text))
+
+    # 8b. Required non-English language fluency (live miss, binance, 2026-09-19)
+    lang_rejects, lang_flags = _check_required_language(jd_text)
+    rejects.extend(lang_rejects)
+    flags.extend(lang_flags)
 
     # 9. JD content validation (CR-110 Gap B). network_page is a flag, not a skip.
     from jd_content_validation import check_jd_placeholders, check_network_page

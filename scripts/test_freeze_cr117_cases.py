@@ -1,4 +1,4 @@
-"""Focused tests for CR-117 pilot case manifest validation."""
+"""Focused tests for CR-120 frozen case manifest validation (folder data/eval/cr117)."""
 from __future__ import annotations
 
 import json

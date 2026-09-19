@@ -1,14 +1,14 @@
 ---
-status: backlog_provisional_id
+status: draft
 date: 2026-09-18
-implementation_plan: ../08-implementation/CR-117-stage1-evidence-first-authoring-epics.md
+implementation_plan: ../08-implementation/CR-120-stage1-evidence-first-authoring-epics.md
 research: ../08-implementation/RESEARCH-2026-09-18-stage1-authoring-shape.md
-related: CR-074, CR-094, CR-097, CR-102, CR-112, FEAT-004
+related: CR-074, CR-094, CR-097, CR-102, CR-112, CR-117, FEAT-004
 ---
 
-# CR-117: Evidence-first Stage 1 authoring
+# CR-120: Evidence-first Stage 1 authoring
 
-**ID collision:** This draft used CR-117 before the 2026-09-18 CSV-drop handoff identified CR-117 as the years-range change. Its `FR-332` to `FR-336` and `AC-430` to `AC-434` labels are also provisional; at least `FR-332` and `AC-430/431` belong to years-range in the live registry. Treat this Stage 1 document as backlog, not an approved CR. Assign free IDs during product review; do not use these numbers for implementation tracking.
+**ID reservation (2026-09-18):** This document was first drafted as CR-117 and reused `FR-332`–`FR-336` / `AC-430`–`AC-434`. Years-range already owns those IDs. The Stage 1 candidate is now CR-120 with `FR-348`–`FR-352` and `AC-451`–`AC-455`. Frozen comparison cases still live under gitignored `data/eval/cr117/` (historical folder name). Do not change the production Stage 1 default until this candidate wins on those frozen cases.
 
 ## Decision sought
 
@@ -42,11 +42,11 @@ The overhead budget has three separate lines: cold session/harness input, packet
 
 | Requirement | Acceptance criterion |
 | --- | --- |
-| `FR-332`: Comparable Stage 1 evaluation | `AC-430`: Frozen, privacy-safe JD/packet cases and a blind scorecard compare the current path with evidence-first authoring under the same packet, model capability tier, shared rules, and repair limit. First-draft and final outcomes, truth errors, review effort, elapsed time, and subscription usage are recorded separately. The runner does not write production submissions, receipts, or SQLite. |
-| `FR-333`: Evidence-plan contract | `AC-431`: A small plan names source-backed resume slots and a distinct cover-letter argument, with exact packet claim IDs, source-span references, JD need, metric/attribution constraints, and explicit omissions. A deterministic gate rejects unknown IDs, source text absent from the cited excerpt, employer mismatch, prohibited/disabled evidence, unaddressed required items without an honest bridge, and over-budget role slots. Semantic support that cannot be proved mechanically is flagged for qualitative review. The plan never widens the packet. |
-| `FR-334`: Paired authoring and provenance | `AC-432`: A subscription author composes both documents from the same checked plan and packet, then performs a separate editorial read of the pair. The output contract covers factual Core Competencies and other factual resume units as well as factual cover-letter sentences; no cited unit can rely only on an unrelated valid ID. Existing Stage 1 checks and Stage 2 qualitative review still run. |
-| `FR-335`: Targeted repair | `AC-433`: Stage 1 returns ranked, actionable defects and permits at most the existing bounded fix rounds. A repair uses only the same packet and checked plan, preserves unaffected valid content, and re-verifies both documents and provenance. Unresolved objective blocks remain blocks. |
-| `FR-336`: Subscription cascade and controlled promotion | `AC-434`: Agy pilots `gemini-3.8-flash-medium` first and uses one sandboxed stream session per application when context permits. Each result's cumulative usage is converted to per-turn deltas; packet and harness context are not resent through a new process between plan, draft, and review. On a real context or allowance limit, it pauses or resumes from checked artifacts on a separately quality-qualified subscription model; it never silently moves to paid API or purchased credits. A failed headless permission check is a transport failure, not a draft. The production default changes only after blind paired quality review, no truth/attribution regression, and independent QA of `run_submission.py`. The old path remains available for rollback. |
+| `FR-348`: Comparable Stage 1 evaluation | `AC-451`: Frozen, privacy-safe JD/packet cases and a blind scorecard compare the current path with evidence-first authoring under the same packet, model capability tier, shared rules, and repair limit. First-draft and final outcomes, truth errors, review effort, elapsed time, and subscription usage are recorded separately. The runner does not write production submissions, receipts, or SQLite. |
+| `FR-349`: Evidence-plan contract | `AC-452`: A small plan names source-backed resume slots and a distinct cover-letter argument, with exact packet claim IDs, source-span references, JD need, metric/attribution constraints, and explicit omissions. A deterministic gate rejects unknown IDs, source text absent from the cited excerpt, employer mismatch, prohibited/disabled evidence, unaddressed required items without an honest bridge, and over-budget role slots. Semantic support that cannot be proved mechanically is flagged for qualitative review. The plan never widens the packet. |
+| `FR-350`: Paired authoring and provenance | `AC-453`: A subscription author composes both documents from the same checked plan and packet, then performs a separate editorial read of the pair. The output contract covers factual Core Competencies and other factual resume units as well as factual cover-letter sentences; no cited unit can rely only on an unrelated valid ID. Existing Stage 1 checks and Stage 2 qualitative review still run. |
+| `FR-351`: Targeted repair | `AC-454`: Stage 1 returns ranked, actionable defects and permits at most the existing bounded fix rounds. A repair uses only the same packet and checked plan, preserves unaffected valid content, and re-verifies both documents and provenance. Unresolved objective blocks remain blocks. |
+| `FR-352`: Subscription cascade and controlled promotion | `AC-455`: Agy pilots `gemini-3.8-flash-medium` first and uses one sandboxed stream session per application when context permits. Each result's cumulative usage is converted to per-turn deltas; packet and harness context are not resent through a new process between plan, draft, and review. On a real context or allowance limit, it pauses or resumes from checked artifacts on a separately quality-qualified subscription model; it never silently moves to paid API or purchased credits. A failed headless permission check is a transport failure, not a draft. The production default changes only after blind paired quality review, no truth/attribution regression, and independent QA of `run_submission.py`. The old path remains available for rollback. |
 
 ## Scope and boundaries
 

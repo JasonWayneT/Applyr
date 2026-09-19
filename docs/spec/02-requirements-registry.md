@@ -951,6 +951,23 @@ Design: `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-
 | `FR-347` | functional | P0 | accepted | `POST /api/pipeline-queue/upload` writes a `.csv` (10 MiB cap, server-chosen name) only under `data/inbox/csv/`, runs the same ingest as `ingest_csv_queue.py`, and returns queued/duplicate/quarantined counts. Pipeline panel hosts the control. | `AC-450` | CR-119 |
 | `AC-450` | acceptance | P0 | accepted | A valid CSV upload lands in `data/inbox/csv/` under a server-chosen filename, is ingested, and the response counts match ingest. A non-CSV or oversized body is rejected and writes nothing. The client path is never used as the on-disk name. | `FR-347` | CR-119 |
 
+## CR-120 Evidence-first Stage 1 authoring
+
+Draft IDs. Production Stage 1 stays on the current single-pass author until the candidate wins on frozen cases under `data/eval/cr117/`. Years-range remains CR-117.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-348` | functional | P1 | draft | Frozen, privacy-safe JD/packet cases and a blind scorecard compare the current Stage 1 path with evidence-first authoring | `AC-451` | CR-120 |
+| `AC-451` | acceptance | P1 | draft | Comparison uses the same packet, model capability tier, shared rules, and repair limit. First-draft and final outcomes are recorded separately. The runner does not write production submissions, receipts, or SQLite | `FR-348` | CR-120 |
+| `FR-349` | functional | P1 | draft | A small evidence plan names source-backed resume slots and a distinct cover-letter argument from the packet only | `AC-452` | CR-120 |
+| `AC-452` | acceptance | P1 | draft | Deterministic plan gate rejects unknown IDs, missing source text, employer mismatch, prohibited/disabled evidence, unaddressed required items without an honest bridge, and over-budget role slots. The plan never widens the packet | `FR-349` | CR-120 |
+| `FR-350` | functional | P1 | draft | One subscription author writes both documents from the checked plan, then a separate editorial read of the pair | `AC-453` | CR-120 |
+| `AC-453` | acceptance | P1 | draft | Provenance covers factual resume units and factual cover-letter sentences. Existing Stage 1 checks and Stage 2 qualitative review still run | `FR-350` | CR-120 |
+| `FR-351` | functional | P1 | draft | Targeted repair uses the same packet and checked plan, within the existing fix-round limit | `AC-454` | CR-120 |
+| `AC-454` | acceptance | P1 | draft | Repair preserves unaffected valid content and re-verifies both documents and provenance. Unresolved objective blocks remain blocks | `FR-351` | CR-120 |
+| `FR-352` | functional | P1 | draft | Evidence-first path is behind a switch. One sandboxed Agy session per job. Production default changes only after quality review | `AC-455` | CR-120 |
+| `AC-455` | acceptance | P1 | draft | Switch default is off. `gemini-3.8-flash-medium` is the pilot model. No silent paid API fallback. Old path remains for rollback | `FR-352` | CR-120 |
+
 ### Data Traceability (DATA-006)
 
 | ID | Type | Priority | Status | Requirement | Acceptance | Source |

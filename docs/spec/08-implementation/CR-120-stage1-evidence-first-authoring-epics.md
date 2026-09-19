@@ -1,23 +1,23 @@
 ---
-status: backlog_provisional_id
+status: draft
 date: 2026-09-18
-change_request: ../05-change-requests/CR-117-stage1-evidence-first-authoring.md
+change_request: ../05-change-requests/CR-120-stage1-evidence-first-authoring.md
 ---
 
-# CR-117 execution tracker
+# CR-120 execution tracker
 
-**Provisional IDs:** CR-117 and some `FR-332` to `FR-336` / `AC-430` to `AC-434` labels collide with the years-range registry. This Stage 1 tracker is backlog until product review assigns free IDs. The narrow first-draft snapshot fix is separate from this proposed evidence-first workflow.
+IDs reserved 2026-09-18: CR-120, `FR-348`–`FR-352`, `AC-451`–`AC-455`. Years-range keeps CR-117 / `FR-332` / `AC-430`–`AC-431`. Frozen comparison cases remain under gitignored `data/eval/cr117/`. The production Stage 1 default stays the current single-pass author until this candidate wins on those cases. The narrow first-draft snapshot fix is separate from this evidence-first workflow.
 
 Work one unchecked story at a time. Each story needs focused tests, an independent QA result, and a short verification note before its checkbox is marked. Build the evidence-first candidate behind a switch; a separate release review decides the production default. Quality is the primary authoring objective. Use subscription capacity and cascade on actual context or allowance limits.
 
-## Epic 1: Lock the comparison (`FR-332`, `AC-430`)
+## Epic 1: Lock the comparison (`FR-348`, `AC-451`)
 
 1. [ ] **1.1 Audit and freeze cases.** Inspect the CR-112 five-JD fixture set and identify missing Stage 1 inputs. Create sanitized packet snapshots and a small holdout covering narrow, broad, and soft-gap cases. Hash JD, packet, digest, and model configuration. Keep real PII and generated documents out of Git. Deliverable: case manifest with valid-packet checks and privacy review.
 2. [ ] **1.2 Define the judgment card.** Pre-register send / one-pass / rework criteria, pairwise blind preference, truth and attribution severity, evidence utilization, letter distinctiveness, voice, and repair effort. Record subscription turns, allowance pauses, context growth, and wall time as operational data. Two reviewers independently read the document pair; disagreements remain visible. Deliverable: scorecard and review protocol, approved before candidate output is viewed.
 3. [ ] **1.3 Build the offline comparison runner.** Extend or complement `scripts/run_cr112_eval.py` without changing its existing zero-call default. Isolate each arm/case/attempt under `data/eval/`, preserve the initial pair before editorial or mechanical repair, capture `verify_history.json`, and emit one comparable report. It must refuse production `jobagent.sqlite` and never mint workflow receipts. Tests prove case isolation, blinding, no paid API call by default, and separate subscription-usage fields.
 4. [ ] **1.4 Record the current-path baseline.** Run the unchanged Stage 1 author on frozen packets through the available subscription path. Capture initial and post-repair scores, turns, and any allowance pauses. This is a diagnostic baseline; rerun the control after any shared contract change for a matched comparison. Do not tune the candidate on holdout output.
 
-## Epic 2: Build the candidate (`FR-333`, `FR-334`, `AC-431`, `AC-432`)
+## Epic 2: Build the candidate (`FR-349`, `FR-350`, `AC-452`, `AC-453`)
 
 5. [ ] **2.1 Specify the evidence-plan schema.** Include document slot, role, exact claim IDs, excerpt/span reference, JD item, metric requirement, attribution tier, cover-letter argument, and omission reason. State which items are advisory versus hard constraints. Provide healthy, soft-gap, employer-mismatch, and unsupported-fact examples. A reviewer accepts the schema before model prompts are built.
 6. [ ] **2.2 Build the plan gate.** Validate against the frozen packet, including disabled/prohibited evidence, claim constraints, employer assignment, exact source text and metrics, required/soft-gap coverage, role bullet budget, and no packet widening. A valid ID alone is insufficient semantic support: ambiguous support must be flagged for qualitative review, not auto-approved. Test malformed, stale-hash, extra-ID, wrong-employer, metric-invention, and capacity cases.
@@ -27,7 +27,7 @@ Work one unchecked story at a time. Each story needs focused tests, an independe
 10. [ ] **2.6 Add a dedicated editorial pass.** Read the resume and cover letter as a pair for JD relevance, distinct arguments, evidence density, metric use, hook originality, voice, and repetition. Return specific edits to the same subscription author or the next eligible subscription session. Preserve the initial pair as the first-draft snapshot. A mechanical PASS alone does not skip this read; Stage 2 still performs its separate qualitative review.
 11. [ ] **2.7 Test prompt compaction.** Measure the current pretty packet, a compact JSON rendering, and any deduplicated instructions on the same frozen cases. Keep source excerpts, attribution constraints, and all truth rules intact. Adopt a smaller representation only if blind quality and provenance are no worse; record provider-reported token deltas, not just bytes/4 estimates.
 
-## Epic 3: Evaluate and decide (`FR-335`, `FR-336`, `AC-433`, `AC-434`)
+## Epic 3: Evaluate and decide (`FR-351`, `FR-352`, `AC-454`, `AC-455`)
 
 12. [ ] **3.1 Test targeted repair.** Turn validator findings into a short ranked repair request using packet and checked plan only. Test that repair does not drop a correct high-value fact, add extra-packet claims, or exceed the existing fix limit. Capture before/after documents and provenance.
 13. [ ] **3.2 Run the blind quality comparison.** Rerun the matched control if common contracts changed, then use the frozen holdout and comparable model capability, repair allowance, and review criteria. Report the initial pair and final pair separately; record provider-reported tokens when available, estimates otherwise, wall time, and any API cents separately. Subtract cumulative usage snapshots for per-turn counts and keep cache reads separate. Include failed and incomplete runs.
@@ -39,7 +39,7 @@ Work one unchecked story at a time. Each story needs focused tests, an independe
 
 - Research memo and CR are drafted; no Stage 1 variant has been implemented or compared.
 - Story 1.1 implementation is ready for independent QA, not yet accepted. Five CR-112 pilot JDs and three longer fictional holdout JDs (platform, operations, soft-gap compliance) were assembled under gitignored `data/eval/cr117/frozen_inputs/`. All eight packets are `ready`; prompts and SHA-256 manifest are frozen there. `scripts/freeze_cr117_cases.py` verifies drift by default and requires `--refresh` to replace changed hashes. The tracked holdout fixtures contain no candidate contact details or work-history excerpts. The holdout has not been sent to an author model. Verification: `python -m unittest discover -s scripts -p test_freeze_cr117_cases.py -v` (4 OK), `python scripts/freeze_cr117_cases.py` (8 verified), and `python scripts/audit_packet_integrity.py --root data/eval/cr117/frozen_inputs` (8 inspected, 0 flagged). Independent QA and a second privacy read remain.
-- Story 1.2 judgment card is drafted in `CR-117-blind-scorecard.md` before any model-authored holdout output. It remains unapproved. A local contact-pattern scan of all eight generated packets/prompts found zero emails and LinkedIn URLs; the phone-pattern hit in each was a numeric digest-hash substring, not a contact line. Do not author holdout pairs until the card is reviewed and locked.
+- Story 1.2 judgment card is drafted in `CR-120-blind-scorecard.md` before any model-authored holdout output. It remains unapproved. A local contact-pattern scan of all eight generated packets/prompts found zero emails and LinkedIn URLs; the phone-pattern hit in each was a numeric digest-hash substring, not a contact line. Do not author holdout pairs until the card is reviewed and locked.
 - Pilot baseline diagnostic, not Story 1.4 completion: Jason chose Sonnet over Opus for the default. An in-flight Opus call was interrupted with no saved response. One frozen Northwind pilot prompt was sent to Agy Sonnet in a sandboxed no-tools headless session; `result.status=SUCCESS`, nonempty three-artifact output, 36,297 input and 2,649 output tokens, zero cache reads, no denied actions. The untouched pair and provenance are in gitignored `data/eval/cr117/pilot_runs/northwind_control_sonnet_01/initial/`; the raw stream is beside them. `author_from_packet.py --verify-only` modified working copies and failed on forbidden punctuation, placeholder/header issues, a long bullet, repeated phrasing, letter specificity, and four uncited factual letter sentences. Do not treat the verifier-mutated files as the first draft. This is one short fictional JD, not a model ranking or holdout result.
 - Stage 0 work is active. Freeze each Stage 1 case from one packet version and repeat the comparison if that contract materially changes.
 - Stage 1 currently uses manual subscription authoring. Eight local prompt/draft pairs average ~12.3k estimated input tokens and ~1.5k resume/letter output tokens; seven provenance files average ~1.4k output tokens. These are bytes/4 estimates, not provider usage or money charges.

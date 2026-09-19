@@ -168,7 +168,7 @@ The following are explicitly excluded from this CR. Do not implement, design, or
 |--------------|-----------|
 | Promote `data/stage0_classifier.candidate.pkl` over the live pkl | `PLAN-2026-09-18-stage0-new-flow-ready.md`; live pkl hash `77b317...` stays unchanged |
 | In-office / Aegon / ss_c skip-reason work | `docs/spec/08-implementation/stage0-backlog.md` |
-| Stage 1 evidence-first authoring (CR-117 id collision / rename) | `docs/spec/05-change-requests/CR-117-stage1-evidence-first-authoring.md` |
+| Stage 1 evidence-first authoring (CR-120) | `docs/spec/05-change-requests/CR-120-stage1-evidence-first-authoring.md` |
 | Changing Stage 0 Agy adapter behavior; `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` stays off | `SESSION-HANDOFF-2026-09-18-csv-drop-queue.md` |
 | PLAN Task 3 live Stage 0 batch | `docs/spec/08-implementation/PLAN-2026-09-18-stage0-new-flow-ready.md` Task 3 |
 | Auto-running Stage 0 inside the Node scout process | Decision rule 10 above |

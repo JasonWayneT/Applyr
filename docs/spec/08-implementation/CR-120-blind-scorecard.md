@@ -1,14 +1,14 @@
 ---
 status: draft_pre_registered
 date: 2026-09-18
-change_request: ../05-change-requests/CR-117-stage1-evidence-first-authoring.md
+change_request: ../05-change-requests/CR-120-stage1-evidence-first-authoring.md
 ---
 
-# CR-117 blind authoring scorecard
+# CR-120 blind authoring scorecard
 
 ## Scope and lock
 
-Apply this card to one resume and cover-letter pair at a time. The five CR-112 fictional JDs are the pilot set; the three CR-117 fictional JDs are a holdout. Freeze this card before any candidate holdout draft is viewed. The current path and candidate use the same packet, digest, model capability tier, document contract, and allowed repair rounds. Label pairs with random opaque IDs; reviewers must not see the arm, prompts, plan, model transcript, or token usage until their judgments are submitted. Preserve the first draft before editorial or repair, and score first and final pairs separately.
+Apply this card to one resume and cover-letter pair at a time. The five CR-112 fictional JDs are the pilot set; the three CR-120 holdout JDs (stored under gitignored `data/eval/cr117/`) are a holdout. Freeze this card before any candidate holdout draft is viewed. The current path and candidate use the same packet, digest, model capability tier, document contract, and allowed repair rounds. Label pairs with random opaque IDs; reviewers must not see the arm, prompts, plan, model transcript, or token usage until their judgments are submitted. Preserve the first draft before editorial or repair, and score first and final pairs separately.
 
 ## Independent reviewer card
 

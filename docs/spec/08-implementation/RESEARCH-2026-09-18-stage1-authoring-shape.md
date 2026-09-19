@@ -1,6 +1,6 @@
 # Stage 1 authoring shape: research and recommendation
 
-Status: research recommendation. CR-117 now scopes a subscription-first evidence-plan candidate with a dedicated editorial pass; its quality and release gates supersede the lower-cost three-arm experiment proposed below.
+Status: research recommendation. CR-120 now scopes a subscription-first evidence-plan candidate with a dedicated editorial pass; its quality and release gates supersede the lower-cost three-arm experiment proposed below. Years-range work remains CR-117.
 
 ## Decision question
 

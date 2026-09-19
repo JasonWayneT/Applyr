@@ -77,7 +77,7 @@ The candidate still labels `csi:e12` as preferred. Holdout accuracy is 0.69. Jun
 - In-office / hybrid skip rule
 - `ss_c_technologies` and `aegon` right-skip-wrong-reason
 - Reason-accuracy scoring
-- Stage 1 evidence-first authoring (wrong CR-117 number)
+- Stage 1 evidence-first authoring (CR-120)
 - Checking the 38 years-flip postings (Jason's read, not an engineer task)
 
 ---

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Freeze privacy-safe metadata for CR-117 pilot authoring cases."""
+"""Freeze privacy-safe metadata for CR-120 Stage 1 comparison cases.
+
+Historical folder name: data/eval/cr117/frozen_inputs. Years-range CR-117 does
+not own these packets. Do not point this script at production submissions.
+"""
 from __future__ import annotations
 
 import argparse

@@ -127,7 +127,8 @@ def _classify_requirements_subscription(
     harness output raises CascadeReviewNeeded so Stage 0 can pause for review.
     Successful rows still pass through validate_batch_response, so unsafe HARD
     cannot skip. One omitted-ID retry on the missing items only, matching the
-    Groq cascade's partial-acceptance behavior.
+    Groq cascade's partial-acceptance behavior. Never pass an AgySession here:
+    the worker is one-shot per chunk. Sessions must not be reused across jobs.
     """
     from stage0_subscription_adapter import (
         AdapterBudget,

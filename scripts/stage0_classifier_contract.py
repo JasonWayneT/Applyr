@@ -30,8 +30,9 @@ SCHEMA_VERSION = "stage0-classifier-v3"
 
 EXTRACTION_SYSTEM = (
     "You are labeling job-description lines for Applyr Stage 0. "
-    "Output JSON only. Do not explain. Do not invent item_ids. "
-    "Do not use tools. Do not read files. Classify only from this prompt."
+    "Output JSON only. Do not explain. Copy each item_id exactly from the "
+    "bracketed labels. Do not invent item_ids or sequential labels such as "
+    "req-001. Do not use tools. Do not read files. Classify only from this prompt."
 )
 
 EXTRACTION_USER_PREFIX = (
@@ -109,7 +110,8 @@ RESPONSE FORMAT — every result object MUST include ALL of these fields:
   "reasoning": a non-empty string citing the requirement's vocabulary and the evidence
   "gap_source": "degree" or "domain" or "role_exclusion" or "certification" (only when gate="HARD"; empty string otherwise)
 
-Example: {"item_id":"req-001","gate":"NONE","evidence_level":3,"confidence":"high","reasoning":"The requirement asks for roadmap ownership and the candidate led the C3 platform roadmap for 4 years.","gap_source":""}
+Example: {"item_id":"required:0:deadbeef","gate":"NONE","evidence_level":3,"confidence":"high","reasoning":"The requirement asks for roadmap ownership and the candidate led the C3 platform roadmap for 4 years.","gap_source":""}
+Copy each item_id EXACTLY from the packet. Live ids look like required:0:<hex>. Never invent or substitute example ids.
 
 EVIDENCE SCALE (0-4) -- rate how much of the requirement the candidate's documented \
 experience actually satisfies:

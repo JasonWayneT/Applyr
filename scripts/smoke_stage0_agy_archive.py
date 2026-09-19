@@ -245,21 +245,23 @@ def main() -> int:
     extract_session = None
     evidence_session = None
     try:
-        extract_session = AgySession("extraction", config)
-        print("Extraction session started", flush=True)
+        print("Extraction sessions start per JD", flush=True)
         for row in prepared:
             if "extract_items" not in row:
                 continue
-            row["extraction"] = _run_task(
-                "extraction", row["extract_items"], config, budget, extract_session
-            )
+            extract_session = AgySession("extraction", config)
+            try:
+                row["extraction"] = _run_task(
+                    "extraction", row["extract_items"], config, budget, extract_session
+                )
+            finally:
+                extract_session.close()
+                extract_session = None
             print(
                 f"  {row['slug']}: leftovers={row['leftover_lines']} "
                 f"extract={row['extraction']['outcome']}",
                 flush=True,
             )
-        extract_session.close()
-        extract_session = None
         print("Evidence sessions start per JD", flush=True)
         for row in prepared:
             if "evidence_items" not in row:
@@ -304,7 +306,7 @@ def main() -> int:
         "gold_labels": False,
         "model": "gemini-3.8-flash-medium",
         "effort": "medium",
-        "sticky_session": True,
+        "sticky_session": "per_job",
         "elapsed_seconds": round(time.monotonic() - started, 3),
         "jds": per_jd,
     }

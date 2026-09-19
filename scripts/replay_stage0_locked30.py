@@ -237,84 +237,84 @@ def main() -> int:
         flush=True,
     )
 
-    extract_session = AgySession("extraction", config)
     prepared: list[dict] = []
-    try:
-        for mark_row in marks:
-            slug = mark_row["slug"]
-            path = _jd_path(slug)
-            raw = path.read_text(encoding="utf-8", errors="replace")
-            jd_text = _clean_jd(raw)
-            prefs_rows.append(_prefs_row(slug, jd_text, mark_row["your_mark"], prefs))
-            collected = _collect_nlp_section_candidates(jd_text)
-            row: dict = {
-                "slug": slug,
-                "slug_hash": hashlib.sha256(slug.encode("utf-8")).hexdigest()[:12],
-            }
-            if collected is None:
-                row["error"] = "nlp_unavailable"
-                row["extract_items"] = []
-                row["evidence_items"] = []
-                prepared.append(row)
-                print(f"  {slug}: NLP unavailable", flush=True)
-                continue
-            buckets, leftovers = collected
-            row["leftover_lines"] = len(leftovers)
-            row["extract_items"] = [
-                Stage0Item(f"{slug}:e{idx}", combo)
-                for idx, (combo, _bullet, _header) in enumerate(leftovers)
-            ]
-            evidence_items: list[Stage0Item] = []
-            for idx, line in enumerate(buckets.get("required", [])[:_EVIDENCE_REQUIRED]):
-                evidence_items.append(
-                    Stage0Item(
-                        f"{slug}:req:{idx}",
-                        bucket="required",
-                        requirement=line,
-                        evidence_excerpt=build_evidence_context(
-                            line, work_exp, k=4, max_chars=_EVIDENCE_EXCERPT_CHARS
-                        )
-                        if work_exp
-                        else "",
-                    )
-                )
-            for idx, line in enumerate(buckets.get("preferred", [])[:_EVIDENCE_PREFERRED]):
-                evidence_items.append(
-                    Stage0Item(
-                        f"{slug}:pref:{idx}",
-                        bucket="preferred",
-                        requirement=line,
-                        evidence_excerpt=build_evidence_context(
-                            line, work_exp, k=4, max_chars=_EVIDENCE_EXCERPT_CHARS
-                        )
-                        if work_exp
-                        else "",
-                    )
-                )
-            row["evidence_items"] = evidence_items
+    for mark_row in marks:
+        slug = mark_row["slug"]
+        path = _jd_path(slug)
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        jd_text = _clean_jd(raw)
+        prefs_rows.append(_prefs_row(slug, jd_text, mark_row["your_mark"], prefs))
+        collected = _collect_nlp_section_candidates(jd_text)
+        row: dict = {
+            "slug": slug,
+            "slug_hash": hashlib.sha256(slug.encode("utf-8")).hexdigest()[:12],
+        }
+        if collected is None:
+            row["error"] = "nlp_unavailable"
+            row["extract_items"] = []
+            row["evidence_items"] = []
             prepared.append(row)
+            print(f"  {slug}: NLP unavailable", flush=True)
+            continue
+        buckets, leftovers = collected
+        row["leftover_lines"] = len(leftovers)
+        row["extract_items"] = [
+            Stage0Item(f"{slug}:e{idx}", combo)
+            for idx, (combo, _bullet, _header) in enumerate(leftovers)
+        ]
+        evidence_items: list[Stage0Item] = []
+        for idx, line in enumerate(buckets.get("required", [])[:_EVIDENCE_REQUIRED]):
+            evidence_items.append(
+                Stage0Item(
+                    f"{slug}:req:{idx}",
+                    bucket="required",
+                    requirement=line,
+                    evidence_excerpt=build_evidence_context(
+                        line, work_exp, k=4, max_chars=_EVIDENCE_EXCERPT_CHARS
+                    )
+                    if work_exp
+                    else "",
+                )
+            )
+        for idx, line in enumerate(buckets.get("preferred", [])[:_EVIDENCE_PREFERRED]):
+            evidence_items.append(
+                Stage0Item(
+                    f"{slug}:pref:{idx}",
+                    bucket="preferred",
+                    requirement=line,
+                    evidence_excerpt=build_evidence_context(
+                        line, work_exp, k=4, max_chars=_EVIDENCE_EXCERPT_CHARS
+                    )
+                    if work_exp
+                    else "",
+                )
+            )
+        row["evidence_items"] = evidence_items
+        prepared.append(row)
 
-        for row in prepared:
-            if row.get("error"):
-                row["extraction"] = {
-                    "outcome": "review",
-                    "silent_line_loss": False,
-                    "calls": 0,
-                    "wall_seconds": 0.0,
-                }
-                continue
-            jd_started = time.monotonic()
+    for row in prepared:
+        if row.get("error"):
+            row["extraction"] = {
+                "outcome": "review",
+                "silent_line_loss": False,
+                "calls": 0,
+                "wall_seconds": 0.0,
+            }
+            continue
+        jd_started = time.monotonic()
+        extract_session = AgySession("extraction", config)
+        try:
             row["extraction"] = _run_task(
                 "extraction", row["extract_items"], config, budget, extract_session
             )
-            row["extract_wall"] = round(time.monotonic() - jd_started, 3)
-            print(
-                f"  {row['slug']}: leftovers={row.get('leftover_lines', 0)} "
-                f"extract={row['extraction']['outcome']}",
-                flush=True,
-            )
-    finally:
-        extract_session.close()
+        finally:
+            extract_session.close()
+        row["extract_wall"] = round(time.monotonic() - jd_started, 3)
+        print(
+            f"  {row['slug']}: leftovers={row.get('leftover_lines', 0)} "
+            f"extract={row['extraction']['outcome']}",
+            flush=True,
+        )
 
     run_evidence_per_jd(
         prepared,

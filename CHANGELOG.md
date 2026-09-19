@@ -16,6 +16,7 @@
 - Unused high-priority packet claims are forwarded in `stage1_forwarded_findings.json` instead of failing Stage 1. Cover letters argue 1-2 stories that each cover several top requirements, not one story per requirement.
 - `agy_quota_tracker` now records agent-step count and cache-read tokens. Agy's final `result.usage` is the sum of internal agent steps, not a misread field. Size batches from five-hour percentage-point drops; cache-read is not 1:1 with those drops.
 - Stage 0 Agy evidence uses 3-item chunks and retries omitted IDs once. An incomplete Agy evidence batch pauses as `subscription_review`, not cost authorization. Queue `WAITING_FOR_INPUT` and `FAILED` map to `paused` so the lease clears.
+- Stage 0 subscription adapter caches each returned item and re-asks only missing IDs once, then fail-closed. Evidence example ids are live-shaped (`required:0:<hex>`), not `req-001`. Replay/smoke Agy sessions are one per job.
 
 ### Developer
 - CR-119: additive SQLite tables `pipeline_queue`, `csv_ingest_ledger`, `csv_quarantine` (migration 025 + Python `ensure_schema`). `paused_at` on `pipeline_queue` (migration 026). Per-slug OS lock at `data/queue_locks/{slug}.lock`. Windows runner children sit in a Job Object with `KILL_ON_JOB_CLOSE`. `POST /api/pipeline-queue/upload` writes a server-chosen `.csv` under `data/inbox/csv/` then runs ingest. `run_submission.py` is unchanged and remains the canonical runner.

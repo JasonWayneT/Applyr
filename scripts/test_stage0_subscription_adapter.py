@@ -201,6 +201,46 @@ class Stage0SubscriptionAdapterTests(unittest.TestCase):
         self.assertEqual(result.missing_item_ids, ["e1"])
         self.assertEqual(result.results[0]["item_id"], "e0")
 
+    def test_partial_eight_item_chunk_reasks_only_missing_two(self) -> None:
+        ids = [f"item-{i}" for i in range(8)]
+        items = [adapter.Stage0Item(item_id, f"line {item_id}") for item_id in ids]
+        asked: list[list[str]] = []
+
+        def runner(command, **_kwargs):
+            prompt = command[command.index("--print") + 1]
+            this = [item_id for item_id in ids if f"[{item_id}]" in prompt]
+            asked.append(this)
+            keep = this[:6] if len(this) == 8 else this
+            body = json.dumps({
+                "results": [{"item_id": item_id, "bucket": "required"} for item_id in keep]
+            })
+            return subprocess.CompletedProcess(["agy.exe"], 0, body, "")
+
+        result = adapter.run_stage0_subscription(
+            "extraction", items, config=self._config(), runner=runner
+        )
+        self.assertEqual(result.outcome, "ok")
+        self.assertEqual([row["item_id"] for row in result.results], ids)
+        self.assertEqual(asked[0], ids)
+        self.assertEqual(asked[1], ids[6:])
+        self.assertEqual(result.calls, 2)
+
+    def test_empty_omission_fails_closed_without_retry(self) -> None:
+        calls = {"n": 0}
+
+        def runner(*_a, **_k):
+            calls["n"] += 1
+            return subprocess.CompletedProcess(
+                ["agy.exe"], 0, json.dumps({"results": []}), ""
+            )
+
+        result = adapter.run_stage0_subscription(
+            "extraction", _items(), config=self._config(), runner=runner
+        )
+        self.assertEqual(result.outcome, "review")
+        self.assertEqual(calls["n"], 1)
+        self.assertEqual(result.missing_item_ids, ["e0", "e1"])
+
     def test_cache_hit_does_not_spawn_again(self) -> None:
         calls = {"n": 0}
 

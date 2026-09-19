@@ -547,6 +547,178 @@ def _write_cache(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def _kept_from_cache(
+    cached: dict[str, Any] | None,
+    items: list[Stage0Item],
+) -> list[dict[str, Any]]:
+    wanted = {item.item_id for item in items}
+    kept: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in (cached or {}).get("results") or []:
+        if not isinstance(row, dict):
+            continue
+        item_id = str(row.get("item_id") or "")
+        if item_id in wanted and item_id not in seen:
+            kept.append(row)
+            seen.add(item_id)
+    return kept
+
+
+def _pending_items(items: list[Stage0Item], kept: list[dict[str, Any]]) -> list[Stage0Item]:
+    have = {str(row.get("item_id") or "") for row in kept}
+    return [item for item in items if item.item_id not in have]
+
+
+def _merge_item_results(
+    items: list[Stage0Item],
+    *batches: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[str]]:
+    wanted = [item.item_id for item in items]
+    wanted_set = set(wanted)
+    by_id: dict[str, dict[str, Any]] = {}
+    for batch in batches:
+        for row in batch:
+            item_id = str(row.get("item_id") or "")
+            if item_id in wanted_set:
+                by_id[item_id] = row
+    ordered = [by_id[item_id] for item_id in wanted if item_id in by_id]
+    missing = [item_id for item_id in wanted if item_id not in by_id]
+    return ordered, missing
+
+
+def _call_harness(
+    task: RunTask,
+    batch: list[Stage0Item],
+    cfg: AdapterConfig,
+    live_budget: AdapterBudget,
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None,
+    session: AgySession | None,
+    key: str,
+    empty_command: list[str],
+) -> AdapterResult:
+    """One harness attempt for `batch`. Does not read or write cache."""
+    prompt = _prompt(task, batch)
+    started = time.monotonic()
+    if session is not None:
+        live_budget.calls += 1
+        try:
+            envelope = session.classify(prompt)
+        except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - started
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                "harness timed out", live_budget.calls, elapsed, elapsed / 60.0, None, key,
+                session.command,
+            )
+        except (OSError, FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
+            elapsed = time.monotonic() - started
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                f"invalid harness output: {exc}", live_budget.calls, elapsed, elapsed / 60.0,
+                None, key, session.command,
+            )
+        elapsed = time.monotonic() - started
+        minutes = elapsed / 60.0
+        try:
+            payload = _results_payload(envelope)
+            results, missing = _validate(task, payload, batch)
+        except (ValueError, json.JSONDecodeError) as exc:
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                f"invalid harness output: {exc}", live_budget.calls, elapsed, minutes,
+                None, key, session.command,
+            )
+        if missing:
+            return AdapterResult(
+                "review", task, results, missing,
+                "harness omitted item_ids", live_budget.calls, elapsed, minutes,
+                None, key, session.command,
+            )
+        return AdapterResult(
+            "ok", task, results, [], None, live_budget.calls, elapsed, minutes, None, key,
+            session.command,
+        )
+    execute = runner or subprocess.run
+    with tempfile.TemporaryDirectory(prefix="stage0-sub-") as tmp:
+        schema_path = Path(tmp) / f"{task}.schema.json"
+        schema_path.write_text(json.dumps(schema_for(task), indent=2) + "\n", encoding="utf-8")
+        prompt_path = Path(tmp) / "prompt.txt"
+        prompt_path.write_text(prompt, encoding="utf-8")
+        try:
+            command = build_command(prompt_path, schema_path, cfg)
+        except FileNotFoundError as exc:
+            live_budget.calls += 1
+            elapsed = time.monotonic() - started
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                f"harness unavailable: {exc}", live_budget.calls, elapsed, elapsed / 60.0,
+                None, key, empty_command,
+            )
+        if (cfg.harness or "").strip().lower() != "agy" and any(
+            any(token in part.lower() for token in FORBIDDEN_TARGETS) for part in command
+        ):
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                "forbidden harness target in command", live_budget.calls, 0.0, 0.0,
+                None, key, command,
+            )
+        live_budget.calls += 1
+        try:
+            completed = execute(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=cfg.timeout_seconds,
+                cwd=str(cfg.workspace or tmp),
+                shell=False,
+            )
+        except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - started
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                "harness timed out", live_budget.calls, elapsed, elapsed / 60.0, None, key, command,
+            )
+        except OSError as extra:
+            elapsed = time.monotonic() - started
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                f"harness unavailable: {extra}", live_budget.calls, elapsed, elapsed / 60.0,
+                None, key, command,
+            )
+    elapsed = time.monotonic() - started
+    minutes = elapsed / 60.0
+    if completed.returncode != 0:
+        return AdapterResult(
+            "review", task, [], [item.item_id for item in batch],
+            _harness_exit_reason(completed), live_budget.calls, elapsed, minutes, None, key, command,
+        )
+    try:
+        envelope = _load_json_object(completed.stdout)
+        violation = _route_violation(envelope, cfg)
+        if violation:
+            return AdapterResult(
+                "review", task, [], [item.item_id for item in batch],
+                violation, live_budget.calls, elapsed, minutes, None, key, command,
+            )
+        payload = _results_payload(envelope)
+        results, missing = _validate(task, payload, batch)
+    except (ValueError, json.JSONDecodeError) as exc:
+        return AdapterResult(
+            "review", task, [], [item.item_id for item in batch],
+            f"invalid harness output: {exc}", live_budget.calls, elapsed, minutes, None, key, command,
+        )
+    if missing:
+        return AdapterResult(
+            "review", task, results, missing,
+            "harness omitted item_ids", live_budget.calls, elapsed, minutes, None, key, command,
+        )
+    return AdapterResult(
+        "ok", task, results, [], None, live_budget.calls, elapsed, minutes, None, key, command,
+    )
+
+
 def run_stage0_subscription(
     task: RunTask,
     items: list[Stage0Item],
@@ -587,130 +759,45 @@ def run_stage0_subscription(
     )
     cache_path = cfg.cache_dir / f"{key}.json"
     cached = _load_cache(cache_path)
-    if cached and cached.get("results") and not cached.get("missing_item_ids"):
+    kept = _kept_from_cache(cached, items)
+    pending = _pending_items(items, kept)
+    if not pending:
         return AdapterResult(
-            "cache_hit", task, list(cached["results"]), list(cached.get("missing_item_ids") or []),
-            None, 0, 0.0, 0.0, None, key, empty_command,
+            "cache_hit", task, kept, [], None, 0, 0.0, 0.0, None, key, empty_command,
         )
-    prompt = _prompt(task, items)
     started = time.monotonic()
-    if session is not None:
-        live_budget.calls += 1
-        try:
-            envelope = session.classify(prompt)
-        except subprocess.TimeoutExpired:
-            elapsed = time.monotonic() - started
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                "harness timed out", live_budget.calls, elapsed, elapsed / 60.0, None, key,
-                session.command,
+    last = _call_harness(
+        task, pending, cfg, live_budget, runner, session, key, empty_command,
+    )
+    parsed = last.reason in {None, 'harness omitted item_ids'}
+    merged, still_missing = _merge_item_results(items, kept, last.results if parsed else [])
+    _write_cache(cache_path, {'results': merged, 'missing_item_ids': still_missing})
+    if parsed and still_missing and last.results:
+        retry_allowed, _retry_reason = live_budget.remaining()
+        if retry_allowed:
+            retry_batch = [item for item in items if item.item_id in still_missing]
+            last = _call_harness(
+                task, retry_batch, cfg, live_budget, runner, session, key, empty_command,
             )
-        except (OSError, FileNotFoundError, ValueError, json.JSONDecodeError) as exc:
-            elapsed = time.monotonic() - started
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                f"invalid harness output: {exc}", live_budget.calls, elapsed, elapsed / 60.0,
-                None, key, session.command,
+            parsed = last.reason in {None, 'harness omitted item_ids'}
+            merged, still_missing = _merge_item_results(
+                items, merged, last.results if parsed else [],
             )
-        elapsed = time.monotonic() - started
-        minutes = elapsed / 60.0
-        try:
-            payload = _results_payload(envelope)
-            results, missing = _validate(task, payload, items)
-        except (ValueError, json.JSONDecodeError) as exc:
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                f"invalid harness output: {exc}", live_budget.calls, elapsed, minutes,
-                None, key, session.command,
-            )
-        if missing:
-            return AdapterResult(
-                "review", task, results, missing,
-                "harness omitted item_ids", live_budget.calls, elapsed, minutes,
-                None, key, session.command,
-            )
-        _write_cache(cache_path, {"results": results, "missing_item_ids": []})
-        return AdapterResult(
-            "ok", task, results, [], None, live_budget.calls, elapsed, minutes, None, key,
-            session.command,
-        )
-    execute = runner or subprocess.run
-    started = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix="stage0-sub-") as tmp:
-        schema_path = Path(tmp) / f"{task}.schema.json"
-        schema_path.write_text(json.dumps(schema_for(task), indent=2) + "\n", encoding="utf-8")
-        prompt_path = Path(tmp) / "prompt.txt"
-        prompt_path.write_text(prompt, encoding="utf-8")
-        try:
-            command = build_command(prompt_path, schema_path, cfg)
-        except FileNotFoundError as exc:
-            live_budget.calls += 1
-            elapsed = time.monotonic() - started
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                f"harness unavailable: {exc}", live_budget.calls, elapsed, elapsed / 60.0,
-                None, key, empty_command,
-            )
-        if (cfg.harness or "").strip().lower() != "agy" and any(
-            any(token in part.lower() for token in FORBIDDEN_TARGETS) for part in command
-        ):
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                "forbidden harness target in command", live_budget.calls, 0.0, 0.0,
-                None, key, command,
-            )
-        live_budget.calls += 1
-        try:
-            completed = execute(
-                command,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=cfg.timeout_seconds,
-                cwd=str(cfg.workspace or tmp),
-                shell=False,
-            )
-        except subprocess.TimeoutExpired:
-            elapsed = time.monotonic() - started
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                "harness timed out", live_budget.calls, elapsed, elapsed / 60.0, None, key, command,
-            )
-        except OSError as exc:
-            elapsed = time.monotonic() - started
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                f"harness unavailable: {exc}", live_budget.calls, elapsed, elapsed / 60.0, None, key, command,
-            )
+            _write_cache(cache_path, {'results': merged, 'missing_item_ids': still_missing})
+
     elapsed = time.monotonic() - started
     minutes = elapsed / 60.0
-    if completed.returncode != 0:
+    if not parsed:
         return AdapterResult(
-            "review", task, [], [item.item_id for item in items],
-            _harness_exit_reason(completed), live_budget.calls, elapsed, minutes, None, key, command,
+            last.outcome, task, merged, still_missing or [item.item_id for item in pending],
+            last.reason, live_budget.calls, elapsed, minutes, None, key, last.command,
         )
-    try:
-        envelope = _load_json_object(completed.stdout)
-        violation = _route_violation(envelope, cfg)
-        if violation:
-            return AdapterResult(
-                "review", task, [], [item.item_id for item in items],
-                violation, live_budget.calls, elapsed, minutes, None, key, command,
-            )
-        payload = _results_payload(envelope)
-        results, missing = _validate(task, payload, items)
-    except (ValueError, json.JSONDecodeError) as exc:
+    if still_missing:
         return AdapterResult(
-            "review", task, [], [item.item_id for item in items],
-            f"invalid harness output: {exc}", live_budget.calls, elapsed, minutes, None, key, command,
+            'review', task, merged, still_missing,
+            last.reason or 'harness omitted item_ids',
+            live_budget.calls, elapsed, minutes, None, key, last.command,
         )
-    if missing:
-        return AdapterResult(
-            "review", task, results, missing,
-            "harness omitted item_ids", live_budget.calls, elapsed, minutes, None, key, command,
-        )
-    _write_cache(cache_path, {"results": results, "missing_item_ids": []})
     return AdapterResult(
-        "ok", task, results, [], None, live_budget.calls, elapsed, minutes, None, key, command,
+        'ok', task, merged, [], None, live_budget.calls, elapsed, minutes, None, key, last.command,
     )

@@ -32,9 +32,9 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **4b.** AI/ML hard-skip is train / fine-tune / build models, or ML eng / DS background. SS&C-style deploy language passes. Digest regenerated (`2eae1d7894b79a1f`); rentana packet + prompt rebuilt.
   - [x] **4c.** People management: ESO coaching/mentoring does not skip. Direct-reports language still skips. CR-118 not redone.
 
-- [ ] **5. Make Stage 0 screening reliable.**
-  - [ ] **5a.** Keep partial answers. Cache returned items. Retry only missing IDs. Test: 8-item chunk that returns 6 re-asks only 2.
-  - [ ] **5b.** Find why Agy omits item IDs using `data/eval/cr119_supervised/`. One session per job, never across jobs. Incomplete still fail-closed, never loop. Target: casper_studios evidence passes three runs in a row.
+- [x] **5. Make Stage 0 screening reliable.**
+  - [x] **5a.** Partial results are cached. Same chunk key re-asks only missing IDs (one retry, then fail-closed). Test: 8-item chunk returning 6 re-asks 2.
+  - [x] **5b.** Live worker is already one-shot per chunk (no cross-job session). Omitted IDs: example `req-001` vs live `required:0:<hex>` plus uncached partials. Prompt now uses a live-shaped id. Replay/smoke extraction sessions are per job. Empty omissions do not retry. casper_studios 3/3 is Codex live.
 
 - [ ] **6. Re-run the wrong skips (after 4).** Back up the DB, delete these `stage0_skips` rows, re-queue via a new CSV in `data/inbox/csv/` pulled from archive by URL. Slugs: omnissa, optum, origami_risk, goodrx_product_manager, businessolver_product_manager_remote, cordance, binance_product_manager_social_features_content, eso (drop `eso_product_manager`), velera_product_manager_shared_branch, employers, ss_c_technologies. Cordance and Binance only need the ledger row cleared. Velera and Employers get a fresh Stage 0. Leave legitimate: Associate x3, Sartorius, Infojini, Urrly, Alinea, Imagine Learning, Salas O'Brien, Solace, Ulteig, Helix.
 

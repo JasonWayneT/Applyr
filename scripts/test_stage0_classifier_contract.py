@@ -39,6 +39,8 @@ class Stage0ClassifierContractTests(unittest.TestCase):
     def test_evidence_packet_includes_hard_gate_rules(self) -> None:
         self.assertIn("EVIDENCE SCALE", EVIDENCE_SYSTEM)
         self.assertIn("PREFERRED bucket NEVER gates", EVIDENCE_SYSTEM)
+        self.assertIn("required:0:deadbeef", EVIDENCE_SYSTEM)
+        self.assertIn("Copy each item_id EXACTLY from the packet", EVIDENCE_SYSTEM)
         prompt = evidence_user_prompt(
             [{
                 "item_id": "required:0:abc",

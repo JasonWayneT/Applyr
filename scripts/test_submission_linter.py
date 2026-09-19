@@ -495,15 +495,33 @@ def test_LR031_ignores_b2b_saas_outside_summary():
     assert check_b2b_saas_positioning(resume, jd) == []
 
 
+_RENTANA_GEO_LETTER = """# Jason Taylor
+San Diego, CA | candidate@example.com
+
+Dear Hiring Manager,
+
+Rentana's use of operating data to support decisions caught my attention.
+
+At Cision I owned the customer-facing platform for media monitoring.
+
+I also organized the roadmap around cost efficiency and platform stability.
+
+I have worked across two fully remote companies with engineering distributed across the U.S., Budapest, and India, and I would welcome the chance to bring that approach to Rentana's platform.
+
+Best regards,
+
+Jason Taylor
+"""
+
+
 def test_LW039_rentana_cover_letter_line_12_fires():
     from pathlib import Path
 
     folder = Path(__file__).resolve().parent.parent / "data" / "submissions" / "rentana"
-    letter = (folder / "CoverLetter.md").read_text(encoding="utf-8")
     jd = (folder / "Original_JD.txt").read_text(encoding="utf-8")
-    lines = letter.splitlines()
+    lines = _RENTANA_GEO_LETTER.splitlines()
     assert "distributed across the U.S., Budapest, and India" in lines[11]
-    warns = check_unsolicited_geography(letter, jd, "cover_letter")
+    warns = check_unsolicited_geography(_RENTANA_GEO_LETTER, jd, "cover_letter")
     assert len(warns) == 1
     assert warns[0].rule_id == "LW-039"
     assert warns[0].severity == "WARN"
@@ -511,15 +529,11 @@ def test_LW039_rentana_cover_letter_line_12_fires():
 
 
 def test_LW039_global_teams_jd_does_not_fire():
-    from pathlib import Path
-
-    folder = Path(__file__).resolve().parent.parent / "data" / "submissions" / "rentana"
-    letter = (folder / "CoverLetter.md").read_text(encoding="utf-8")
     jd = (
         "Title: Product Manager\n\nRemote (USA)\n\n"
         "You will collaborate with global teams on the product roadmap.\n"
     )
-    assert check_unsolicited_geography(letter, jd, "cover_letter") == []
+    assert check_unsolicited_geography(_RENTANA_GEO_LETTER, jd, "cover_letter") == []
 
 
 # ---------------------------------------------------------------------------

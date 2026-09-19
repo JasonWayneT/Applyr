@@ -51,10 +51,13 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertIn("1. " + findings, prompt)
         self.assertIn("B.S. Fake College, 2018", prompt)
         self.assertIn("## EDUCATION", prompt)
-        self.assertNotIn("Dear Hiring Manager", prompt)
+        self.assertIn("## Current Resume.md", prompt)
+        self.assertIn("## Current CoverLetter.md", prompt)
+        self.assertIn("Dear Hiring Manager", prompt)
         self.assertIn("## Relevant digest", prompt)
         self.assertNotIn("## Original authoring prompt", prompt)
-        self.assertIn("Return only the corrected fenced blocks. Don't use tools or files.", prompt)
+        self.assertIn("Return the full corrected Resume.md and CoverLetter.md", prompt)
+        self.assertIn("claim_provenance.json is optional", prompt)
         self.assertIn(
             "Do not load workExperience.md, master_claims.json, AGENTS.md, or agent_context_pack.md.",
             prompt,
@@ -143,7 +146,7 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertNotIn("B.S. Fake College, 2018", prompt)
         self.assertNotIn("## Original authoring prompt", prompt)
 
-    def test_rentana_lr013_single_finding_prompt_under_10kb(self) -> None:
+    def test_rentana_lr013_single_finding_prompt_under_16kb(self) -> None:
         source = Path(__file__).resolve().parents[1] / "data" / "submissions" / "rentana"
         resume = (source / "Resume.md").read_text(encoding="utf-8")
         if "six years" not in resume.lower():
@@ -168,7 +171,11 @@ class TestStage1RepairPrompt(unittest.TestCase):
             digest_text=digest,
             packet=packet,
         )
-        self.assertLess(len(prompt.encode("utf-8")), 10_000, len(prompt.encode("utf-8")))
+        self.assertLess(
+            len(prompt.encode("utf-8")),
+            repair.REPAIR_PROMPT_BYTE_TARGET,
+            len(prompt.encode("utf-8")),
+        )
         self.assertIn("[LR-013]", prompt)
         self.assertIn("line 8", prompt)
         self.assertIn("six years", prompt)
@@ -176,14 +183,34 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertIn("seven years", prompt.lower())
         self.assertIn("## Relevant digest", prompt)
         self.assertIn("Self-Check", prompt)
+        self.assertIn("## Current Resume.md", prompt)
+        self.assertIn("## Current CoverLetter.md", prompt)
         self.assertNotIn("## Original authoring prompt", prompt)
-        self.assertNotIn("## Current CoverLetter.md", prompt)
-        self.assertNotIn("Implemented mobile Unique Visitors", prompt)
+        self.assertNotIn("evidence_map", prompt)
 
     def test_lw039_rentana_line_12_feeds_repair_prompt(self) -> None:
         source = Path(__file__).resolve().parents[1] / "data" / "submissions" / "rentana"
-        letter = (source / "CoverLetter.md").read_text(encoding="utf-8")
         jd = (source / "Original_JD.txt").read_text(encoding="utf-8")
+        letter = (
+            "# Jason Taylor\n"
+            "San Diego, CA | candidate@example.com\n"
+            "\n"
+            "Dear Hiring Manager,\n"
+            "\n"
+            "Rentana's use of operating data to support decisions caught my attention.\n"
+            "\n"
+            "At Cision I owned the customer-facing platform for media monitoring.\n"
+            "\n"
+            "I also organized the roadmap around cost efficiency and platform stability.\n"
+            "\n"
+            "I have worked across two fully remote companies with engineering "
+            "distributed across the U.S., Budapest, and India, and I would welcome "
+            "the chance to bring that approach to Rentana's platform.\n"
+            "\n"
+            "Best regards,\n"
+            "\n"
+            "Jason Taylor\n"
+        )
         from generate_authoring_rule_digest import generate_digest
         from submission_linter import check_unsolicited_geography
 
@@ -207,6 +234,7 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertIn("Budapest", prompt)
         self.assertIn("Collaboration Framing", prompt)
         self.assertIn("who, what was aligned, what shipped", prompt.lower())
+        self.assertIn("## Current CoverLetter.md", prompt)
 
     def test_missing_files_fail(self) -> None:
         (self.folder / "claim_provenance.json").unlink()

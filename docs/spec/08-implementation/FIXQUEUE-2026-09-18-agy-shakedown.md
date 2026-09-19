@@ -55,6 +55,7 @@ GATE: when items 1-4 are checked, set the top line to `Items 1-4 landed: YES`. C
   - [x] **9g (pack 4).** Repair calls are single-shot sandboxed text in/out with a wall-time and event cap.
   - [x] **9h (pack 4).** Requeue a FAILED repair only after valid artifacts are written.
   - [x] **9i.** Geography only when the JD asks. Digest §10/§11 + `_PREAMBLE`. `LW-039` WARNs when a resume or cover letter names countries / global / distributed / worldwide / time zones and Original_JD.txt does not ask. Rentana CoverLetter.md line 12 fires; a JD with "global teams" does not. Fed to the repair loop with line + offending text.
+  - [x] **9j.** Repair prompt includes the full current Resume.md and CoverLetter.md, ranked findings, relevant digest, and cited-claim excerpts. No full authoring prompt or packet. Target under 16KB. Model returns full docs; `claim_provenance.json` is optional and the existing file is kept if omitted. Raw output always saved to `stage1_repair_attempts/{n}.txt`. Validator requires both documents nonempty and structurally sane. Event cap counts tool/non-text steps, not `agent_response` deltas. Live: healthstream 13.11KB / 23.3s / 1 event / artifacts accepted; binance 10.25KB / 28.4s / 1 event / artifacts accepted. Both omitted provenance (old file kept). Stage 1 verify did not fully clear: remaining findings are uncited rewritten sentences (healthstream) plus LR-026 Agile (binance), which the next repair round is supposed to see.
   - [ ] **9f.** P2 live quarantine-panel check stays a Codex preflight.
 
 - [ ] **10. Stage 1 split (CR-120 reserved: `FR-348`–`FR-352`, `AC-451`–`AC-455`; docs renamed from colliding CR-117).** Build behind a switch: plan, code-check plan, write both docs, validate + 3d repair, generate `claim_provenance.json` from the plan. One fresh sandboxed Agy session per job. Don't change the default until it wins on frozen cases in `data/eval/cr117/`.
@@ -100,6 +101,72 @@ unavailable; account allowance snapshots moved from 67%/89% to 65%/84%
 repair calls and fail when required artifacts are absent. Disable tool and
 slash-command exploration for prompt-only repairs. Record an interrupted
 call's allowance delta separately even without a final Agy result event.
+
+**Post-9g live result (pack 5, `fa5d247fd662082e6a4201398c1b9d538717b004`):**
+HealthStream's refreshed prompt was 11,886 bytes (11.61 KiB) for multiple
+blocking and geography findings. `python scripts/run_stage1_repair.py
+data/submissions/healthstream` exited `repair_timeout / event_count` at
+21 events / 21.718 seconds, wrote no artifacts, and left the row paused
+FAILED without a lease. The cap prevents the old unbounded loop, but the
+repair still made no progress. Account snapshots were 65%/99% before and
+66%/98% after (weekly/five-hour); rounding/concurrent work preclude an
+exact charge. **How often after fix:** 1/1 capped live repairs timed out.
+Landed in item 9j: the event cap now counts tool/non-text steps, not
+streaming `agent_response` deltas. Wall stays 180s.
+
+### P0 - One-shot repair returns invalid artifacts on two live jobs
+
+Landed in item 9j. The prompt now includes the full current drafts. A
+two-document response is accepted and keeps the existing
+`claim_provenance.json`. Raw output is saved to
+`stage1_repair_attempts/{n}.txt`. Live healthstream and binance both
+accepted artifacts.
+
+### P1 - Interrupted Agy call blocks later quota tracking
+
+**Evidence:** `agy_quota_tracker.py before --run-id
+cr119-rentana-closing-01` failed closed with `A prior run has no
+after-snapshot; finish it before starting another` because HealthStream
+repair 1 was interrupted and has no complete stream/result. The follow-on
+Rentana and HealthStream calls required separate account snapshots; neither
+has a trusted per-call tracker delta. **How often:** 2/2 subsequent planned
+repair calls lacked the normal tracker path.
+
+**Suggested fix:** Add an explicit interrupted/aborted after-record with
+before/after allowance snapshots and an unknown model-usage marker. Preserve
+the original incomplete result rather than fabricating zero usage, then
+allow the next `before` call. Link the run to the interruption reason.
+
+### P2 - Worker cannot target a repaired job for supervised re-verification
+
+**Evidence:** With `--size 1`, Rentana's expired `in_progress` row was not
+claimed first; Binance's answered `WAITING_FOR_INPUT` pause promoted ahead
+of it and ran five fresh Stage 0 evidence calls before Rentana. After
+Rentana's first Stage 1 failure, another size-1 claim picked queued
+HealthStream while Rentana was correctly paused FAILED. **How often:** 2/2
+untargeted worker calls during this requested Rentana-first check took a
+different job. Queue prioritization behaved as implemented; this is a
+supervision/control gap, not a claim-order bug.
+
+**Suggested fix:** Provide an optional worker `--slug`/targeted-claim mode
+that still obtains the normal lease, lock, heartbeat, and fence. Keep the
+ordinary ready-paused-first pack order unchanged.
+
+### P2 - Previously answered Casper questions do not trigger its current pause
+
+**Evidence:** Read-only DB inspection found four completed and zero open
+`casper_studios` Review Center confirmations, with the latest completion at
+00:54:48Z. The queue paused at 00:59:59Z, and the Stage 0 receipt's
+`pause_kind` is `subscription_review`, not an open Review Center question.
+There is no `stage0_cascade_import.json`, so `_paused_should_promote`
+correctly returns false. Item 5's omitted-ID fix has not been retested on
+this existing paused row. **How often:** 1/1 Casper row in pack 6.
+
+**Suggested fix:** Provide a supervised, explicit requeue command for a
+paused `subscription_review` job after the evidence adapter version changes,
+while preserving the normal lease/lock/fence and avoiding automatic retries
+on every worker run. Expose the actual pause kind in the panel so completed
+Review Center questions are not mistaken for the current blocker.
 
 ### P1 - Repair builder requeues before repaired files exist
 
@@ -159,8 +226,8 @@ when it writes a prompt or auto-fixes.
 ### P1 - A one-finding Gemini repair can burn quota without progress
 
 Landed in items 9b–9d. Years figure is in the packet. Mechanical findings
-auto-fix before Agy. Remaining repair prompts are compact (rule/line/
-offending/suggestion + local context), under 10KB for Rentana LR-013.
+auto-fix before Agy. Remaining repair prompts include the full current
+drafts plus ranked findings (under 16KB; live healthstream 13.11KB).
 
 ### P1 - Rebuilt Stage 1 packet leaves old receipt hashes stale
 

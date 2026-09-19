@@ -38,8 +38,7 @@ class TestRepairStreamCaps(unittest.TestCase):
                             "step_update": {
                                 "step_index": index,
                                 "state": "ACTIVE",
-                                "step_type": "agent_response",
-                                "text_delta": f"chunk-{index}",
+                                "step_type": "thinking",
                             },
                         }
                     )
@@ -56,7 +55,32 @@ class TestRepairStreamCaps(unittest.TestCase):
         self.assertEqual(result["reason"], "event_count")
         self.assertEqual(result["event_count"], 6)
         self.assertEqual(killed, [True])
-        self.assertNotIn("chunk-20", result["text"])
+
+    def test_agent_response_deltas_do_not_hit_event_cap(self) -> None:
+        rows = [_event({"event": "init"})]
+        for index in range(40):
+            rows.append(
+                _event(
+                    {
+                        "event": "step_update",
+                        "step_update": {
+                            "step_index": index,
+                            "state": "ACTIVE",
+                            "step_type": "agent_response",
+                            "text_delta": f"chunk-{index}\n",
+                        },
+                    }
+                )
+            )
+        rows.append(
+            _event({"event": "result", "result": {"status": "SUCCESS", "output": ""}})
+        )
+        result = repair.consume_repair_stream(
+            rows, wall_seconds=60, max_events=5
+        )
+        self.assertEqual(result["outcome"], "ok")
+        self.assertIn("chunk-20", result["text"])
+        self.assertEqual(result["event_count"], 0)
 
     def test_wall_time_kills_slow_stream(self) -> None:
         clock = {"t": 0.0}
@@ -208,7 +232,7 @@ class TestRepairStreamCaps(unittest.TestCase):
                                     "step_update": {
                                         "step_index": index,
                                         "state": "ACTIVE",
-                                        "step_type": "agent_response",
+                                        "step_type": "thinking",
                                     },
                                 }
                             )
@@ -308,6 +332,80 @@ class TestRepairStreamCaps(unittest.TestCase):
                 self.assertEqual(row["status"], "queued")
             finally:
                 conn.close()
+
+    def test_two_document_response_keeps_existing_provenance(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "healthstream"
+            folder.mkdir(parents=True)
+            (folder / "Resume.md").write_text("OLD RESUME\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("OLD LETTER\n", encoding="utf-8")
+            old_prov = (
+                '{"company": "HealthStream", "resume_claims": '
+                '[{"bullet": "old", "claim_ids": ["ACC-101"]}]}\n'
+            )
+            (folder / "claim_provenance.json").write_text(old_prov, encoding="utf-8")
+            (folder / "stage1_repair_state.json").write_text(
+                json.dumps({"attempts": 1, "pending_findings_hash": "abc"}),
+                encoding="utf-8",
+            )
+            text = (
+                "```Resume.md\n# Name\nRepaired resume body\n```\n"
+                "```CoverLetter.md\nDear Hiring Manager,\nRepaired letter body\n```\n"
+            )
+            result = repair.apply_repair_result(
+                folder,
+                {
+                    "outcome": "ok",
+                    "reason": None,
+                    "event_count": 2,
+                    "wall_seconds": 1,
+                    "text": text,
+                },
+            )
+            self.assertEqual(result["outcome"], "ok")
+            self.assertTrue(result["wrote_files"])
+            self.assertTrue(result["kept_existing_provenance"])
+            self.assertIn(
+                "Repaired resume body",
+                (folder / "Resume.md").read_text(encoding="utf-8"),
+            )
+            self.assertEqual(
+                (folder / "claim_provenance.json").read_text(encoding="utf-8"),
+                old_prov,
+            )
+            saved = (folder / repair.ATTEMPTS_DIR / "1.txt").read_text(encoding="utf-8")
+            self.assertEqual(saved, text)
+
+    def test_malformed_response_is_rejected_and_raw_saved(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "binance"
+            folder.mkdir(parents=True)
+            (folder / "Resume.md").write_text("OLD RESUME\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("OLD LETTER\n", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text("{}\n", encoding="utf-8")
+            (folder / "stage1_repair_state.json").write_text(
+                json.dumps({"attempts": 2}),
+                encoding="utf-8",
+            )
+            text = "I rewrote the resume in prose with no fenced documents."
+            result = repair.apply_repair_result(
+                folder,
+                {
+                    "outcome": "ok",
+                    "reason": None,
+                    "event_count": 3,
+                    "wall_seconds": 2,
+                    "text": text,
+                },
+            )
+            self.assertEqual(result["outcome"], "repair_failed")
+            self.assertEqual(result["reason"], "invalid_artifacts")
+            self.assertFalse(result["wrote_files"])
+            self.assertEqual(
+                (folder / "Resume.md").read_text(encoding="utf-8"), "OLD RESUME\n"
+            )
+            saved = (folder / repair.ATTEMPTS_DIR / "2.txt").read_text(encoding="utf-8")
+            self.assertEqual(saved, text)
 
     def test_timeout_does_not_requeue_or_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

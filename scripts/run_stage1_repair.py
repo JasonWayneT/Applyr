@@ -18,8 +18,11 @@ DEFAULT_WALL_SECONDS = 180
 DEFAULT_MAX_EVENTS = 20
 DEFAULT_MODEL = "gemini-3.8-flash-medium"
 ARTIFACT_NAMES = ("Resume.md", "CoverLetter.md", "claim_provenance.json")
+REQUIRED_DOC_NAMES = ("Resume.md", "CoverLetter.md")
+ATTEMPTS_DIR = "stage1_repair_attempts"
 SANDBOX_INSTRUCTION = (
-    "Return only the corrected fenced blocks. Don't use tools or files."
+    "Return the full corrected Resume.md and CoverLetter.md as fenced blocks. "
+    "claim_provenance.json is optional. Don't use tools or files."
 )
 _FENCE_RE = re.compile(r"```([^\n]*)\n(.*?)```", re.DOTALL)
 TOOL_STEP_TYPES = frozenset(
@@ -130,13 +133,18 @@ def consume_repair_stream(
             continue
         if event.get("event") == "init":
             continue
-        counted += 1
         if is_tool_or_permission_event(event):
+            counted += 1
             return _stop("repair_failed", "tool_or_permission")
-        if counted > max_events:
-            return _stop("repair_timeout", "event_count")
         step = event.get("step_update") if event.get("event") == "step_update" else None
-        if isinstance(step, dict) and step.get("step_type") == "agent_response":
+        is_text_delta = (
+            isinstance(step, dict) and step.get("step_type") == "agent_response"
+        )
+        if not is_text_delta and event.get("event") != "result":
+            counted += 1
+            if counted > max_events:
+                return _stop("repair_timeout", "event_count")
+        if is_text_delta:
             delta = step.get("text_delta") or step.get("text") or ""
             if delta:
                 text_bits.append(str(delta))
@@ -269,21 +277,55 @@ def extract_fenced_artifacts(text: str) -> dict[str, str]:
     return found
 
 
+def document_is_structurally_sane(name: str, body: str) -> bool:
+    text = (body or "").strip()
+    if len(text) < 8:
+        return False
+    if name == "Resume.md":
+        return bool(
+            re.search(r"(?m)^#{1,3}\s", text)
+            or re.search(r"PROFESSIONAL (SUMMARY|EXPERIENCE)", text, re.I)
+        )
+    if name == "CoverLetter.md":
+        return bool(re.search(r"(?im)^Dear\b", text) or len(text) >= 40)
+    return False
+
+
 def artifacts_are_valid(found: dict[str, str]) -> bool:
-    if set(found.keys()) != set(ARTIFACT_NAMES):
-        return False
-    if not found["Resume.md"].strip() or not found["CoverLetter.md"].strip():
-        return False
+    for name in REQUIRED_DOC_NAMES:
+        if not document_is_structurally_sane(name, found.get(name, "")):
+            return False
+    return True
+
+
+def _valid_provenance_body(raw: str) -> str | None:
     try:
-        payload = json.loads(found["claim_provenance.json"])
+        payload = json.loads(raw)
     except json.JSONDecodeError:
-        return False
-    return isinstance(payload, dict) and bool(payload)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    body = raw.strip() + "\n"
+    return body
 
 
 def write_repair_artifacts(folder: Path, found: dict[str, str]) -> None:
-    for name, body in found.items():
-        (folder / name).write_text(body, encoding="utf-8")
+    for name in REQUIRED_DOC_NAMES:
+        if name in found:
+            (folder / name).write_text(found[name], encoding="utf-8")
+    raw = found.get("claim_provenance.json")
+    if raw:
+        body = _valid_provenance_body(raw)
+        if body is not None:
+            (folder / "claim_provenance.json").write_text(body, encoding="utf-8")
+
+
+def save_raw_attempt(folder: Path, n: int, text: str) -> Path:
+    dest = folder / ATTEMPTS_DIR
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / f"{n}.txt"
+    path.write_text(text or "", encoding="utf-8")
+    return path
 
 
 def apply_repair_result(
@@ -302,11 +344,14 @@ def apply_repair_result(
     state = load_repair_state(folder)
     pending = str(state.get("pending_findings_hash") or state.get("previous_findings_hash") or "")
     payload = dict(result)
+    attempt_n = int(state.get("attempts") or 0) or 1
+    save_raw_attempt(folder, attempt_n, str(payload.get("text") or ""))
     if payload.get("outcome") == "ok":
         found = extract_fenced_artifacts(str(payload.get("text") or ""))
         if artifacts_are_valid(found):
             write_repair_artifacts(folder, found)
             payload["wrote_files"] = True
+            payload["kept_existing_provenance"] = "claim_provenance.json" not in found
             state["previous_findings_hash"] = pending
             state["last_outcome"] = "repaired"
             state["last_repair_reason"] = None

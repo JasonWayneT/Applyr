@@ -3,9 +3,9 @@
 
 A failed draft must not trigger a full fresh authoring resample. The repair
 prompt carries ranked findings (rule, file, line, offending text, suggestion),
-local draft context, the digest sections those rules need, and packet excerpts
-for any cited claim IDs. It does not re-send the full authoring prompt or both
-whole drafts.
+the full current Resume.md and CoverLetter.md, the digest sections those rules
+need, and packet excerpts for any cited claim IDs. It does not re-send the
+full authoring prompt or the packet.
 
 Loop until verify passes or a round makes no progress (same findings as the
 previous round). On no progress, truth/format blocks stay blocking and are
@@ -29,6 +29,7 @@ sys.path.insert(0, str(_SCRIPT_DIR))
 
 REPAIR_STATE_NAME = "stage1_repair_state.json"
 REPAIR_PROMPT_NAME = "stage1_repair_prompt.md"
+REPAIR_PROMPT_BYTE_TARGET = 16_000
 AUTHOR_OUTPUT_DIR = "stage1_author_output"
 FORWARDED_NOTES = "stage1_forwarded_findings.json"
 REQUIRED_FILES = (
@@ -536,34 +537,38 @@ def build_repair_prompt(
     packet: dict | None = None,
 ) -> str:
     ranked = rank_findings(findings)
-    context = _local_context(drafts, findings)
     digest = _relevant_digest(findings, digest_text)
     packet_bits = _packet_support(findings, packet)
-    provenance = _provenance_support(drafts, findings)
+    resume = (drafts.get("Resume.md") or "").rstrip()
+    letter = (drafts.get("CoverLetter.md") or "").rstrip()
     parts = [
         "# Stage 1 repair",
         "",
         "You are repairing an Applyr draft that failed mechanical validation.",
         "Fix ONLY the ranked findings listed below. Do not rewrite sections the findings do not name.",
         "Keep everything else.",
-        "Return only the corrected fenced blocks. Don't use tools or files.",
+        "Return the full corrected Resume.md and CoverLetter.md as fenced blocks labeled Resume.md and CoverLetter.md.",
+        "claim_provenance.json is optional. Omit it to keep the current file.",
+        "Don't use tools or files.",
         "Do not load workExperience.md, master_claims.json, AGENTS.md, or agent_context_pack.md.",
         "",
         "## Findings (ranked)",
         "",
         ranked,
         "",
-        "## Draft context (only the involved lines)",
+        "## Current Resume.md",
         "",
-        context or "(no local draft excerpt matched the findings)",
+        resume,
+        "",
+        "## Current CoverLetter.md",
+        "",
+        letter,
         "",
     ]
     if digest:
         parts.extend(["## Relevant digest", "", digest, ""])
     if packet_bits:
         parts.extend(["## Packet excerpts", "", packet_bits, ""])
-    if provenance:
-        parts.extend(["## Provenance rows for cited claims", "", provenance, ""])
     return "\n".join(parts).rstrip() + "\n"
 
 

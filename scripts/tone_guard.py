@@ -32,7 +32,10 @@ _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
         "through increasing organizational and resource constraints",
     ),
     (re.compile(r"\bworkforce\s+attrition\b", re.IGNORECASE), "staffing constraints"),
-    (re.compile(r"\battrition\b", re.IGNORECASE), "staffing constraints"),
+    (
+        re.compile(r"(?<!customer\s)(?<!client\s)(?<!subscriber\s)\battrition\b", re.IGNORECASE),
+        "staffing constraints",
+    ),
     (re.compile(r"\blayoffs?\b", re.IGNORECASE), "resource constraints"),
     (re.compile(r"\blaid[\s-]off\b", re.IGNORECASE), "resource-constrained"),
     (
@@ -53,7 +56,11 @@ _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
 _BLOCKED_TONE_PATTERNS: List[re.Pattern] = [
     re.compile(r"\blayoffs?\b", re.IGNORECASE),
     re.compile(r"\blaid[\s-]off\b", re.IGNORECASE),
-    re.compile(r"\battrition\b", re.IGNORECASE),
+    # 2026-09-20 (swoon, live false positive): "customer attrition" is standard
+    # churn vocabulary, unrelated to this file's actual purpose (workforce
+    # reduction). Only a bare/workforce/employee-style "attrition" should
+    # block -- same fix class as the earlier "Partnered closely" removal above.
+    re.compile(r"(?<!customer\s)(?<!client\s)(?<!subscriber\s)\battrition\b", re.IGNORECASE),
     re.compile(r"\breductions?\s+in\s+force\b", re.IGNORECASE),
     re.compile(r"\bR\.?I\.?F\.?\b"),
 ]

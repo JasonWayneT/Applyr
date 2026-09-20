@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any
 
+from author_from_packet import _normalize_provenance_unit
 from pm_years import parse_pm_years_of_experience, pm_years_hard_constraint
 from submission_linter import lint_document
 
@@ -153,6 +155,51 @@ def _fix_punct_text(text: str, rule_id: str) -> tuple[str, list[dict[str, str]],
     return "".join(out_lines), applied, skipped
 
 
+def _strip_bullet_marker(line: str) -> str:
+    return re.sub(r"^\s*[*-]\s+", "", line).strip()
+
+
+def _resync_provenance(folder: Path, doc_type: str, line_changes: list[dict[str, str]]) -> bool:
+    """Rewrite matching claim_provenance.json bullet/sentence text after a
+    mechanical punctuation fix changes a line's wording (found live on obie,
+    2026-09-20: an LR-015 colon-split silently desynced the provenance record,
+    turning a fully-cited bullet into a false 'uncited' finding on the very
+    next verify pass -- the same failure class already documented for Agy
+    repair calls, but here the culprit is this module's own auto-fix, which
+    changes the document text but never touched the provenance file)."""
+    prov_path = folder / "claim_provenance.json"
+    if not prov_path.is_file() or not line_changes:
+        return False
+    try:
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(provenance, dict):
+        return False
+    section = "resume_claims" if doc_type == "resume" else "cover_letter_claims"
+    field = "bullet" if doc_type == "resume" else "sentence"
+    rows = provenance.get(section)
+    if not isinstance(rows, list):
+        return False
+    changed = False
+    for change in line_changes:
+        old_text = _strip_bullet_marker(change["from"])
+        new_text = _strip_bullet_marker(change["to"])
+        old_norm = _normalize_provenance_unit(old_text)
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            value = row.get(field)
+            if isinstance(value, str) and _normalize_provenance_unit(value) == old_norm:
+                row[field] = new_text
+                changed = True
+    if changed:
+        prov_path.write_text(
+            json.dumps(provenance, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+    return changed
+
+
 def apply_mechanical_fixes(
     folder: Path,
     *,
@@ -175,6 +222,7 @@ def apply_mechanical_fixes(
             continue
         original = path.read_text(encoding="utf-8")
         text = original
+        doc_line_changes: list[dict[str, str]] = []
         result = lint_document(text, doc_type, filename=name)
         rule_ids = {item.rule_id for item in result.blocks}
         if years is not None and "LR-013" in rule_ids:
@@ -189,10 +237,13 @@ def apply_mechanical_fixes(
             text, punct_applied, punct_skipped = _fix_punct_text(text, rule_id)
             for change in punct_applied:
                 applied.append({"rule_id": rule_id, "file": name, **change})
+                doc_line_changes.append(change)
             for row in punct_skipped:
                 skipped.append({"file": name, **row})
         if text != original:
             path.write_text(text, encoding="utf-8")
+        if doc_line_changes:
+            _resync_provenance(folder, doc_type, doc_line_changes)
     return {
         "applied": applied,
         "skipped": skipped,

@@ -89,11 +89,21 @@ def _waiting_for_input_has_new_work(folder: str) -> bool:
     No new input means return the existing receipt and do not re-run Agy.
     """
     receipt = load_receipt(folder, "stage0") or {}
-    kind = ((receipt.get("result") or {}) if isinstance(receipt, dict) else {}).get(
-        "pause_kind"
-    )
+    result = (receipt.get("result") or {}) if isinstance(receipt, dict) else {}
+    kind = result.get("pause_kind")
     if kind == "subscription_review":
-        return os.path.isfile(os.path.join(folder, "stage0_cascade_import.json"))
+        if os.path.isfile(os.path.join(folder, "stage0_cascade_import.json")):
+            return True
+        # Item 9k: a harness-side item-ID omission is a transient, retriable
+        # extraction failure, not one that requires a human to paste a
+        # manual cascade import -- classify_requirements_batch re-asks only
+        # the missing items from spool/cache on its own. Gate only the
+        # genuine cost-authorization pauses (no missing_item_ids, no
+        # omission reason) behind the manual-import file.
+        reason = str(result.get("reason") or "")
+        if result.get("missing_item_ids") or "omitted item_ids" in reason:
+            return True
+        return False
     if kind == "requirement_extraction_review":
         return os.path.isfile(
             os.path.join(folder, "stage0_requirement_extraction_review.json")

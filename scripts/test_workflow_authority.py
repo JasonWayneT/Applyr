@@ -19,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import contracts  # noqa: E402
+from workflow import runner  # noqa: E402
 from workflow import receipts as receipts_mod  # noqa: E402
 from workflow.policy import evaluate_packet, evaluate_stage0  # noqa: E402
 from workflow.receipts import (  # noqa: E402
@@ -419,6 +420,65 @@ class RunUntilWaitingTests(unittest.TestCase):
             )
         build.assert_not_called()
         self.assertEqual(out["status"], "WAITING_FOR_INPUT")
+
+    def test_subscription_review_omitted_item_ids_reruns_stage0(self):
+        """Item 9l/casper fix: a harness-side item-ID omission is transient and
+        retriable without a manual cascade import -- requeuing this pause must
+        actually re-attempt Stage 0, not bounce straight back to the same
+        stale WAITING_FOR_INPUT receipt (found live on casper_studios, which
+        stayed stuck across two explicit requeues after 9k/9l landed)."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "subscription_review",
+                "reason": "subscription_review:harness omitted item_ids",
+                "missing_item_ids": [],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertTrue(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_subscription_review_missing_item_ids_field_reruns_stage0(self):
+        """Same as above, via the forward-looking `missing_item_ids` receipt
+        field (item 9k) rather than the reason-string substring match."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "subscription_review",
+                "reason": "subscription_review:some other pause",
+                "missing_item_ids": ["required:0:deadbeef"],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertTrue(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_subscription_review_genuine_cost_pause_still_needs_manual_import(self):
+        """A subscription_review pause with no omission signal (a real
+        cost-authorization case) must still refuse to rerun without the
+        manual stage0_cascade_import.json -- only the transient omitted-IDs
+        case is auto-retriable."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "subscription_review",
+                "reason": "subscription_review:certify_zero_charge required",
+                "missing_item_ids": [],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertFalse(runner._waiting_for_input_has_new_work(str(self.folder)))
 
 
 class Stage0MissingReceiptDoesNotReExtractTests(unittest.TestCase):

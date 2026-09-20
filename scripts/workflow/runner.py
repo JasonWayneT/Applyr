@@ -611,10 +611,18 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
 
     verdict = policy.evaluate_packet(packet)
     if verdict["verdict"] != "PASS":
-        raise WorkflowError(
-            "authoring_packet.json not ready (no --force for packet_status):\n  - "
-            + "\n  - ".join(verdict["reasons"])
+        reason = "authoring_packet.json not ready (no --force for packet_status):\n  - " + "\n  - ".join(
+            verdict["reasons"]
         )
+        # 2026-09-20 (clarion_events_inc_north_america, over token budget): this
+        # used to raise straight through with no state write, leaving
+        # workflow_state.json at whatever it was mid-run (IN_PROGRESS) --
+        # map_run_result() only recognizes a terminal status, so the queue
+        # worker had nothing to map and the row sat `in_progress` on an
+        # active lease until it expired. Persist FAILED first, same as a
+        # Stage 1 verify failure, so the worker releases the lease immediately.
+        _persist_stage1_failed(folder, state, reason)
+        raise WorkflowError(reason)
 
     prompt_md, meta = build_authoring_prompt(Path(folder), force=False)
     prompt_path = os.path.join(folder, "authoring_prompt.md")

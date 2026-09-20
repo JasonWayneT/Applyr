@@ -399,6 +399,51 @@ class RunUntilWaitingTests(unittest.TestCase):
         ok, _ = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)
 
+    def test_over_budget_packet_persists_failed_instead_of_stale_in_progress(self):
+        """Found live on clarion_events_inc_north_address, 2026-09-20: an
+        over-token-budget packet (packet_status != 'ready') raised straight
+        through run_stage1_prompt with no state write, leaving
+        workflow_state.json at whatever it was mid-run (IN_PROGRESS).
+        map_run_result() only recognizes a terminal status, so the queue
+        worker had nothing to map and the row sat `in_progress` on an active
+        lease until it expired. This must persist FAILED before raising."""
+        gate = _valid_stage0()
+        packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "incomplete",
+            "incomplete_reasons": ["Over token budget: 8565 > 8000"],
+            "jd_buckets": {"required": [], "preferred": [], "responsibilities": [], "culture": []},
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 8565,
+        }
+
+        def fake_build_packet(folder, no_hook=True):
+            return packet
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.build_packet", side_effect=fake_build_packet):
+                with mock.patch("workflow.runner.require_stage_ready"):
+                    with self.assertRaises(WorkflowError):
+                        run_until_waiting_for_llm(
+                            str(self.folder),
+                            mode="production",
+                            adopt=False,
+                            no_hook=True,
+                        )
+        persisted = load_state(str(self.folder))
+        self.assertEqual(persisted["status"], "FAILED")
+        self.assertEqual(persisted["stages"]["stage1"]["status"], "FAILED")
+        self.assertIn("over token budget", persisted["metadata"]["stage1_fail_reason"].lower())
+
     def test_subscription_review_pause_does_not_rerun_stage0(self):
         state = init_state(str(self.folder), mode="production")
         state["status"] = "WAITING_FOR_INPUT"

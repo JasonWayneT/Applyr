@@ -603,13 +603,34 @@ def _parse_paused_at(value: object) -> datetime | None:
 
 
 def _dispositions_mtime(folder: Path) -> datetime | None:
+    """Return dispositions.json's own recorded write time, not filesystem mtime.
+
+    Found 2026-09-20/21 root-causing FIXQUEUE 2026-09-18 item #5 (crio/lexipol
+    repeatedly re-promoted with nothing actually changed): this used to read
+    the file's OS mtime (full sub-second precision) and compare it against
+    `paused_at` from the DB, which `utc_now()` truncates to whole seconds
+    (`.replace(microsecond=0)`). Any write to dispositions.json that happens
+    in the *same* wall-clock second as the pause -- which is the normal case,
+    since the file is written moments before the row is marked paused -- has
+    a sub-second remainder that always compares as "later than" the
+    truncated `paused_at`, even though nothing changed since the pause.
+    Reading the file's own `updated_at` field instead (written by
+    workflow/reviews.py's `_write_dispositions` via the same whole-second
+    `utc_now()` format used for `paused_at`) makes both sides of the
+    comparison the same precision, so only a genuinely later write promotes
+    the row. Also avoids false promotion from filesystem-level mtime changes
+    that aren't a real edit (git checkout, file copy, backup/sync tooling).
+    """
     path = folder / "reviews" / "dispositions.json"
     if not path.is_file():
         return None
     try:
-        return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
-    except OSError:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
         return None
+    if not isinstance(payload, dict):
+        return None
+    return _parse_paused_at(payload.get("updated_at"))
 
 
 def _file_mtime(path: Path) -> datetime | None:

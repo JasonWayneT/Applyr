@@ -169,10 +169,38 @@ def _close_job(job: Any) -> None:
         pass
 
 
+def _utf8_child_env() -> dict[str, str]:
+    """Force Python UTF-8 mode (PEP 540) in the spawned pipeline process.
+
+    Found 2026-09-20/21 root-causing the Stage 0 mojibake bug (FIXQUEUE
+    2026-09-18 item #4, habiterre): this machine's default locale encoding
+    is cp1252 (confirmed via `locale.getpreferredencoding()`), with neither
+    PYTHONUTF8 nor PYTHONIOENCODING set anywhere in the ambient environment.
+    Every direct file/subprocess encoding call in the Stage 0 path
+    (build_stage0_fit_gate.py, stage0_subscription_adapter.py,
+    stage0_requirement_extraction_review.py, stage0_checkpoint.py) was
+    audited and already pins encoding="utf-8" explicitly, so the exact
+    unpinned call responsible for the observed "SYMFONI+â„¢"
+    corruption (UTF-8 bytes decoded as cp1252) could not be reproduced or
+    isolated without a live subscription-adapter outage. Forcing UTF-8 mode
+    for the whole spawned pipeline process closes this entire bug class --
+    any current or future code path that omits an explicit encoding= now
+    falls back to UTF-8 instead of the OS locale codepage, in this process
+    and everywhere it imports. Scoped to the spawned child only (not this
+    worker's own process, and not machine-wide) so the change is reversible
+    via git and does not touch the user's environment.
+    """
+    env = dict(os.environ)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
 def spawn_runner(cmd: list[str], *, cwd: Path | None = None) -> RunnerHandle:
+    env = _utf8_child_env()
     if os.name == "nt":
         job = _create_kill_on_close_job()
-        proc = subprocess.Popen(cmd, cwd=str(cwd) if cwd else None)
+        proc = subprocess.Popen(cmd, cwd=str(cwd) if cwd else None, env=env)
         try:
             _assign_pid_to_job(job, proc.pid)
         except OSError:
@@ -180,7 +208,9 @@ def spawn_runner(cmd: list[str], *, cwd: Path | None = None) -> RunnerHandle:
             _close_job(job)
             raise
         return RunnerHandle(proc=proc, job=job)
-    proc = subprocess.Popen(cmd, cwd=str(cwd) if cwd else None, start_new_session=True)
+    proc = subprocess.Popen(
+        cmd, cwd=str(cwd) if cwd else None, start_new_session=True, env=env
+    )
     return RunnerHandle(proc=proc, pgid=proc.pid)
 
 

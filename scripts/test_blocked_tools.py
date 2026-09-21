@@ -50,6 +50,26 @@ class TestEpicAgileFalsePositive(unittest.TestCase):
         self.assertIsNone(hard_blocked_tool_pattern().search("logged workday hours"))
         self.assertIsNotNone(hard_blocked_tool_pattern().search("implemented Workday HCM"))
 
+    def test_epic_in_list_phrasing_not_flagged(self) -> None:
+        """Live miss (lexipol, 2026-09-20): "epics" in a list with other Agile
+        nouns, not the narrow "epics and stories" adjacency the original fix
+        covered."""
+        text = (
+            "defining technical Requirements, epics, and detailed User "
+            "Stories while using AI tools"
+        )
+        self.assertIsNone(hard_blocked_tool_pattern().search(text))
+
+    def test_epic_structures_and_acceptance_criteria_not_flagged(self) -> None:
+        """Live miss (lexipol, 2026-09-20): "epic structures" with no
+        "story"/"stories" word at all -- only "acceptance criteria" nearby."""
+        text = (
+            "established a standardized Agile and Kanban framework that "
+            "defined requirements, epic structures, and acceptance criteria "
+            "across all three regions"
+        )
+        self.assertIsNone(hard_blocked_tool_pattern().search(text))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

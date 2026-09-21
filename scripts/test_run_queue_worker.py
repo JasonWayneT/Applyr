@@ -391,6 +391,44 @@ time.sleep(60)
             holder.stderr.close()
 
 
+class TestUtf8ChildEnv(unittest.TestCase):
+    """FIXQUEUE 2026-09-18 item #4: spawned pipeline child must run in
+    Python UTF-8 mode regardless of the host's default locale codepage."""
+
+    def test_utf8_child_env_sets_both_vars_without_mutating_ambient_environ(self) -> None:
+        before = dict(os.environ)
+        env = worker._utf8_child_env()
+        self.assertEqual(env.get("PYTHONUTF8"), "1")
+        self.assertEqual(env.get("PYTHONIOENCODING"), "utf-8")
+        self.assertEqual(os.environ, before, "must not mutate the worker's own environ")
+
+    def test_spawned_child_reports_utf8_mode_active(self) -> None:
+        # spawn_runner() does not pipe the child's stdout (it inherits the
+        # console), so the child reports its own encoding state to a temp
+        # file instead of relying on captured output.
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = Path(tmp) / "encoding_report.txt"
+            script = (
+                "import sys, pathlib; "
+                "pathlib.Path(sys.argv[1]).write_text("
+                "f'{sys.flags.utf8_mode}\\n{sys.stdout.encoding}\\n', encoding='utf-8')"
+            )
+            handle = worker.spawn_runner(
+                [sys.executable, "-c", script, str(out_path)]
+            )
+            proc = handle.proc
+            try:
+                proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                raise
+            self.assertTrue(out_path.exists(), "child did not run to completion")
+            lines = out_path.read_text(encoding="utf-8").splitlines()
+        self.assertGreaterEqual(len(lines), 2, lines)
+        self.assertEqual(lines[0].strip(), "1", "sys.flags.utf8_mode must be on in the child")
+        self.assertEqual(lines[1].strip().lower(), "utf-8")
+
+
 def _pid_alive(pid: int) -> bool:
     if os.name == "nt":
         import ctypes

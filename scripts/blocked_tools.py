@@ -79,8 +79,24 @@ def _epic_pattern(esc: str) -> str:
     2026-09-19, where ACC-179's own approved language ("drafting epics and
     stories") tripped the healthcare-tool block. Same negative-lookahead shape
     as the ``workday`` exclusion below: exclude the Agile idiom, not the word.
+
+    Widened 2026-09-20 (2nd live miss, lexipol): the original lookahead only
+    excluded "epic(s) and stor(y|ies)" immediately adjacent, which missed real
+    phrasing shapes like "requirements, epics, and detailed User Stories" (a
+    list, not "epics and stories") and "epic structures, and acceptance
+    criteria" (no "stories" at all). Rather than keep enumerating exact
+    adjacency shapes -- the same whack-a-mole this file's own history warns
+    about -- the lookahead now scans a bounded forward window (not crossing a
+    sentence boundary) for any ordinary Agile/PM vocabulary word, which is
+    exactly what distinguishes the Agile noun from the EHR company: the real
+    company's mentions (see ``test_real_epic_ehr_company_still_flagged``)
+    never have this vocabulary nearby.
     """
-    return rf"{esc}s?(?!\s*(?:-level|\s+and\s+(?:user\s+)?stor(?:y|ies)|\s+hierarch))"
+    agile_context = (
+        r"-level|hierarch|stor(?:y|ies)|backlog|sprint|roadmap|kanban|scrum"
+        r"|requirement|acceptance\s+criteria|ticket|prioriti|user\s+stor"
+    )
+    return rf"{esc}s?(?![^.]{{0,100}}(?:{agile_context}))"
 
 
 def hard_blocked_tool_pattern() -> re.Pattern[str]:

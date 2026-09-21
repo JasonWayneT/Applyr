@@ -297,13 +297,51 @@ class TestClaimPack(QueueHarness):
         reviews = folder / "reviews"
         reviews.mkdir()
         dispositions = reviews / "dispositions.json"
-        dispositions.write_text("{}", encoding="utf-8")
-        later = datetime.now(timezone.utc).timestamp()
-        os.utime(dispositions, (later, later))
+        # updated_at (whole-second, matching utc_now()'s own precision) is what
+        # actually drives promotion now -- see FIXQUEUE 2026-09-18 item #5.
+        later = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        dispositions.write_text(json.dumps({"updated_at": later}), encoding="utf-8")
         rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["slug"], "disposed")
         self.assertEqual(rows[0]["status"], "leased")
+
+    def test_needs_disposition_does_not_promote_on_same_second_mtime_noise(self) -> None:
+        """FIXQUEUE 2026-09-18 item #5 regression: a real production bug where a
+        dispositions.json write in the *same wall-clock second* as the pause
+        (the normal case -- the file is written moments before the row pauses)
+        used to compare as "newer" than paused_at purely from sub-second
+        filesystem mtime noise, because paused_at is truncated to whole
+        seconds by utc_now(). This kept re-promoting crio/lexipol -- rows
+        genuinely stuck on a non-disposable BLOCK -- for a full re-run of
+        Truth->ATS->HM->Mech even though nothing had actually changed since
+        the pause. Reading dispositions.json's own `updated_at` field (same
+        whole-second precision as paused_at) must not promote here."""
+        _seed(self.conn, "stuck")
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        paused_at = now.isoformat()
+        _set_paused(self.conn, "stuck", paused_at=paused_at)
+        folder = self.data / "pending_review" / "stuck"
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "NEEDS_DISPOSITION", "active_stage": "stage2"}),
+            encoding="utf-8",
+        )
+        reviews = folder / "reviews"
+        reviews.mkdir()
+        dispositions = reviews / "dispositions.json"
+        # Same logical write as the pause itself: updated_at equals paused_at
+        # exactly, but the file's OS mtime is set slightly *later* in
+        # wall-clock time (same second, non-zero microseconds) to reproduce
+        # the exact filesystem-noise condition that caused false promotion
+        # before this fix -- the bug used to read st_mtime instead of this
+        # field, so this line existing at all is the regression check.
+        dispositions.write_text(json.dumps({"updated_at": paused_at}), encoding="utf-8")
+        noisy_mtime = now.timestamp() + 0.734
+        os.utime(dispositions, (noisy_mtime, noisy_mtime))
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(rows, [])
+        self.assertEqual(pq.get_row(self.conn, "stuck")["status"], "paused")
 
     def _write_waiting_for_input(self, slug: str, pause_kind: str) -> Path:
         folder = self.data / "pending_review" / slug

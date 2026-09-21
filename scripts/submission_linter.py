@@ -2215,7 +2215,14 @@ def check_wrong_job_company_bleed(
     combined = _application_body(resume, cover_letter)
     hits: List[LintViolation] = []
     seen: Set[str] = set()
-    for name in sorted(names, key=len, reverse=True):
+    # Tie-break by lowercased name (not just length) so two equal-length names
+    # (e.g. "workday" and "Unified", both 7 chars) sort the same way on every
+    # run. `names` comes from a set, whose iteration order is hash-randomized
+    # per process -- without this tie-break, `sorted(..., key=len)` silently
+    # inherited that randomness for any length tie, flipping finding order
+    # (and the dispositions.json content hash bound to it) between runs on
+    # otherwise-unchanged documents. Found live 2026-09-20 on crio.
+    for name in sorted(names, key=lambda n: (-len(n), n.lower())):
         trimmed = name.strip()
         if len(trimmed) < _MIN_COMPANY_NAME_CHARS:
             continue

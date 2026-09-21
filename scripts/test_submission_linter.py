@@ -606,6 +606,32 @@ def test_LW026_specificity_floor_still_finds_real_hits():
     assert violations == []
 
 
+def test_LW032_equal_length_names_have_deterministic_tie_break():
+    """Two equal-length names ('workday', 'Unified', both 7 chars) must always
+    sort the same way -- reproduces a live bug (crio, 2026-09-20) where
+    `sorted(names, key=len, reverse=True)` had no tie-break, so a length tie
+    let the hash-randomized iteration order of the `names` set (a fresh
+    per-process ordering, since `known_company_names()` returns a set) leak
+    into finding order, flipping the dispositions.json content hash bound to
+    it across separate worker process runs on unchanged documents. The fix
+    adds a lowercased-name tie-break, which is a total order for distinct
+    names and therefore always produces the same output regardless of the
+    input set's iteration order."""
+    resume = "Built an engineering capacity model based on workday-hours per developer."
+    cover_letter = "Presented unified quarterly product roadmaps to stakeholders."
+    hits = check_wrong_job_company_bleed(
+        resume=resume,
+        cover_letter=cover_letter,
+        jd_text="Product Manager at Crio",
+        own_company="Crio",
+        known_names={"workday", "Unified", "Gravitee"},
+    )
+    matched = [v.message for v in hits if v.rule_id == "LW-032"]
+    assert len(matched) == 2
+    # "unified" < "workday" alphabetically -- the tie-break must be stable.
+    assert "Unified" in matched[0] and "workday" in matched[1]
+
+
 def test_LW032_flags_other_known_company():
     hits = check_wrong_job_company_bleed(
         resume="Worked at Cision on the platform.",

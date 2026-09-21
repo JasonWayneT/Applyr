@@ -9,7 +9,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from blocked_tools import hard_blocked_tool_pattern, hard_blocked_tools_lint_alternation
+from blocked_tools import epic_match_is_agile_noun, hard_blocked_tool_pattern, hard_blocked_tools_lint_alternation
 
 
 class TestEpicAgileFalsePositive(unittest.TestCase):
@@ -69,6 +69,26 @@ class TestEpicAgileFalsePositive(unittest.TestCase):
             "across all three regions"
         )
         self.assertIsNone(hard_blocked_tool_pattern().search(text))
+
+    def test_epic_match_is_agile_noun_catches_backward_context(self) -> None:
+        """Live miss (peoplefinders, 2026-09-21): the Agile qualifying word
+        ("roadmap") comes BEFORE "epics", not after -- ``_epic_pattern``'s
+        regex lookahead is forward-only (stdlib re cannot express a
+        variable-width lookbehind), so ``hard_blocked_tool_pattern()`` alone
+        still matches this text; ``epic_match_is_agile_noun()`` is the
+        additional check that correctly excludes it by scanning the whole
+        sentence in both directions. See submission_linter.py's LR-026
+        dispatch for where this gets wired in for the live consumer."""
+        line = "giving teams realistic bandwidth bands for new roadmap epics."
+        m = hard_blocked_tool_pattern().search(line)
+        self.assertIsNotNone(m, "sanity: the bare regex still matches -- that's the known gap")
+        self.assertTrue(epic_match_is_agile_noun(line, m.start(), m.end()))
+
+    def test_epic_match_is_agile_noun_still_flags_real_company(self) -> None:
+        line = "migrated data out of Epic into the new platform."
+        m = hard_blocked_tool_pattern().search(line)
+        self.assertIsNotNone(m)
+        self.assertFalse(epic_match_is_agile_noun(line, m.start(), m.end()))
 
 
 if __name__ == "__main__":

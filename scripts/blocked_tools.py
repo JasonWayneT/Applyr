@@ -73,6 +73,13 @@ _DISPLAY_ALIASES: dict[str, str] = {
 }
 
 
+_AGILE_CONTEXT_PATTERN = (
+    r"-level|hierarch|stor(?:y|ies)|backlog|sprint|roadmap|kanban|scrum"
+    r"|requirement|acceptance\s+criteria|ticket|prioriti|user\s+stor"
+)
+_AGILE_CONTEXT_RE = re.compile(_AGILE_CONTEXT_PATTERN, re.I)
+
+
 def _epic_pattern(esc: str) -> str:
     """``epic`` (the healthcare EHR company) false-positives on the ordinary
     Agile noun ("epic"/"epics" as in epics and stories) -- live miss on binance,
@@ -91,12 +98,36 @@ def _epic_pattern(esc: str) -> str:
     exactly what distinguishes the Agile noun from the EHR company: the real
     company's mentions (see ``test_real_epic_ehr_company_still_flagged``)
     never have this vocabulary nearby.
+
+    Known remaining gap (found live 2026-09-21, peoplefinders): this lookahead
+    is forward-only -- Python's stdlib ``re`` cannot express a variable-width
+    lookbehind (confirmed: ``re.compile(r"(?<=foo|barbaz)x")`` raises
+    "look-behind requires fixed-width pattern" even though each alternative is
+    individually fixed-width), so "new roadmap epics." (the qualifying word
+    BEFORE "epics", not after) still slips through this regex alone. Callers
+    that need full correctness (currently: submission_linter.py's LR-026, the
+    only live consumer of this exclusion -- Stage 0's ``hard_blocked_tool_pattern``
+    import is unused/unreachable code) must additionally call
+    ``epic_match_is_agile_noun()`` on each surviving match, which checks the
+    WHOLE sentence in both directions rather than relying on regex lookaround.
+    This function's forward-only lookahead is kept as a cheap pre-filter, not
+    removed, since a caller that only wants "good enough" still benefits.
     """
-    agile_context = (
-        r"-level|hierarch|stor(?:y|ies)|backlog|sprint|roadmap|kanban|scrum"
-        r"|requirement|acceptance\s+criteria|ticket|prioriti|user\s+stor"
-    )
-    return rf"{esc}s?(?![^.]{{0,100}}(?:{agile_context}))"
+    return rf"{esc}s?(?![^.]{{0,100}}(?:{_AGILE_CONTEXT_PATTERN}))"
+
+
+def epic_match_is_agile_noun(line: str, start: int, end: int) -> bool:
+    """True if the epic/epics occurrence at ``line[start:end]`` is the ordinary
+    Agile noun, not the Epic EHR/healthcare company -- checked by scanning the
+    WHOLE sentence containing the match (bounded by the nearest '.' on either
+    side, or the line's own start/end) for Agile/PM vocabulary, in both
+    directions. See ``_epic_pattern``'s docstring for why a regex-only
+    (lookahead-only) check misses the "roadmap epics" shape this catches."""
+    sentence_start = line.rfind(".", 0, start) + 1
+    dot_after = line.find(".", end)
+    sentence_end = dot_after if dot_after != -1 else len(line)
+    sentence = line[sentence_start:sentence_end]
+    return bool(_AGILE_CONTEXT_RE.search(sentence))
 
 
 def hard_blocked_tool_pattern() -> re.Pattern[str]:

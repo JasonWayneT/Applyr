@@ -777,6 +777,25 @@ def test_LW032_missing_db_does_not_raise():
     assert names == set()
 
 
+def test_LR026_epic_not_flagged_when_agile_word_precedes_it():
+    """Live miss (peoplefinders, 2026-09-21): "new roadmap epics." -- the
+    qualifying Agile word ("roadmap") comes BEFORE "epics", which
+    blocked_tools.py's regex-only lookahead can't catch (stdlib re has no
+    variable-width lookbehind). lint_document() must not HARD_BLOCK this."""
+    text = (
+        "giving teams realistic bandwidth bands for new roadmap epics. "
+        "In parallel, I evaluated user interaction patterns."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert not any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
+def test_LR026_real_epic_company_still_flagged():
+    text = "Worked extensively with Epic EHR systems for clinical data integration."
+    result = lint_document(text, doc_type="resume")
+    assert any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
     for name, value in sorted(globals().items()):

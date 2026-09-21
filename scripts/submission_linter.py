@@ -22,7 +22,7 @@ _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
-from blocked_tools import hard_blocked_tools_lint_alternation  # noqa: E402
+from blocked_tools import epic_match_is_agile_noun, hard_blocked_tools_lint_alternation  # noqa: E402
 
 # Split literals so public-repo PII audit does not flag rule definitions.
 _PHONE_PLACEHOLDER = "[" + "REDACTED_" + "PHONE]"
@@ -922,6 +922,22 @@ def _check_unverified_partner(text: str) -> Optional[str]:
     return ", ".join(bad[:3]) if bad else None
 
 
+def _lr026_unverified_tool_line_match(pattern: str, line: str) -> bool:
+    """LR-026's per-line check, with an extra Python-level pass for "epic(s)"
+    matches: ``_epic_pattern``'s embedded regex lookahead is forward-only (Python's
+    stdlib re cannot express a variable-width lookbehind), so a match that
+    survives the regex might still be the ordinary Agile noun when the
+    qualifying word comes BEFORE it in the sentence ("new roadmap epics.") --
+    live miss on peoplefinders, 2026-09-21. Every other hard-blocked tool is
+    unaffected and keeps the plain regex-only path."""
+    for m in re.finditer(pattern, line, re.IGNORECASE):
+        token = m.group(0).lower()
+        if token.rstrip("s") == "epic" and epic_match_is_agile_noun(line, m.start(), m.end()):
+            continue
+        return True
+    return False
+
+
 def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResult:
     """Run all lint rules against text. doc_type can be 'cover_letter' or 'resume'."""
     if not doc_type:
@@ -942,7 +958,11 @@ def lint_document(text: str, doc_type: str = "", filename: str = "") -> LintResu
         if rule.check_type == "regex" and rule.pattern:
             flags = (re.IGNORECASE | re.MULTILINE) if rule.rule_id not in ("LR-010", "LR-011") else re.MULTILINE
             for i, line in enumerate(lines, start=1):
-                if re.search(rule.pattern, line, flags):
+                if rule.rule_id == "LR-026":
+                    hit = _lr026_unverified_tool_line_match(rule.pattern, line)
+                else:
+                    hit = bool(re.search(rule.pattern, line, flags))
+                if hit:
                     violation = LintViolation(
                         rule_id=rule.rule_id,
                         severity=rule.severity,

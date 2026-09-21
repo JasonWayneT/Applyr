@@ -325,6 +325,12 @@ _TOOL_DETECTION_STOPWORDS: frozenset[str] = frozenset({
     "acquisition", "finance", "legal", "sales", "marketing", "recruiting",
     "api", "apis", "rest", "json", "xml", "llm", "llms", "ai", "ml",
     "machine", "learning", "gtm", "hcm", "ats", "crm", "hris",
+    # Added 2026-09-21: category acronyms and methodology openers confirmed
+    # live on velosio/certara. PSA/ERP are the same class as CRM/HCM already
+    # in this list (software category, not a product). "Minimum" is the first
+    # word of title-cased "Minimum Viable Product", which the regex treats as
+    # a 3-word product name because only the first token is stopword-checked.
+    "psa", "erp", "minimum",
     # Added 2026-09-02 (CR-109 follow-up): second batch confirmed in a live
     # Stage 0 run the same day — Tools And Frameworks, Utilizing Strategic
     # Marketing, SKILLS AND REQUIRED, Decision Making, Strategy, Empathy,
@@ -353,11 +359,11 @@ _TOOL_DETECTION_STOPWORDS: frozenset[str] = frozenset({
 # a common English abstract noun (Judgment, Prioritization, Leadership,
 # Resilience, Empowerment, Scalability), not a named tool/product. Tool names
 # are proper nouns that don't follow English derivational morphology —
-# "Kafka", "Asana", "Greenhouse", "Excel", "SAML" don't end in -tion/-ment.
+# "Kafka", "Asana", "Greenhouse", "Excel", "SAML" don't end in -tion/-ment/-ics.
 # This is a structural guard so the stopword list isn't the only defense.
 _ABSTRACT_NOUN_SUFFIXES: frozenset[str] = frozenset({
     "tion", "sion", "ment", "ness", "ity", "ship", "ance", "ence",
-    "ism", "ist", "dom", "acy", "ency", "logy", "graphy",
+    "ism", "ist", "dom", "acy", "ency", "logy", "graphy", "ics",
 })
 
 # Mid-sentence capitalized token run: NOT at the start of the string/sentence
@@ -388,7 +394,7 @@ def looks_like_named_tool(text: str) -> list[str]:
             continue
         # Structural guard (CR-109 follow-up 2): a word ending in an
         # abstract-noun suffix is an English derivation (Judgment, Leadership,
-        # Prioritization, Resilience), not a tool/product name. Tool names are
+        # Prioritization, Resilience, Biostatistics), not a tool/product name. Tool names are
         # proper nouns that don't follow English morphology. This is the
         # structural complement to the stopword list — together they catch
         # soft skills and traits without enumerating every English word.

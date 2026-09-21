@@ -156,6 +156,34 @@ class TestStage0Confirmations(unittest.TestCase):
         )
         self.assertEqual(candidates, [])
 
+    def test_methodology_fields_and_category_acronyms_are_not_tools(self) -> None:
+        """Live miss 2026-09-21: certara queued 'Have you used Minimum Viable
+        Product?' and 'Have you used Biostatistics?'; velosio queued 'Have you
+        used PSA?'. Title-case methodology phrases, scientific fields, and
+        category acronyms (PSA/ERP, same class as CRM/HCM already in the
+        stopword list) are not named products. Microsoft Dynamics 365 on the
+        same Velosio line is a real product and must still be asked."""
+        velosio = named_skill_candidates(
+            [
+                "Experience with Microsoft Dynamics 365 Business Central and "
+                "project accounting / PSA solutions",
+                "Experience working with enterprise SaaS, ERP, or PSA solutions",
+            ]
+        )
+        names = [candidate.display_name for candidate in velosio]
+        self.assertIn("Microsoft Dynamics 365", names)
+        self.assertNotIn("PSA", names)
+        self.assertNotIn("ERP", names)
+        certara = named_skill_candidates(
+            [
+                "Proficiency in shaping an idea in way that delivers immediate "
+                "business value beginning with Minimum Viable Product",
+                "Familiarity with the clinical data stream, in areas adjacent "
+                "to Data Management and Biostatistics",
+            ]
+        )
+        self.assertEqual(certara, [])
+
     def test_blocked_tool_inside_longer_candidate_is_excluded(self) -> None:
         """CR-109 / BUG-001: "workday" is hard-blocked, yet "Workday Ecosystem",
         "Workday Web Services", and "Workday Recruiting" all queued as blocking

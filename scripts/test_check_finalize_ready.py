@@ -14,16 +14,28 @@ Run with:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _SCRIPT_PATH = os.path.join(_SCRIPT_DIR, "check_finalize_ready.py")
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+
+
+def _sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _current_rubric_sha256() -> str:
+    with open(os.path.join(_PROJECT_ROOT, "data", "conversion_rubric.md"), "rb") as f:
+        return _sha256_hex(f.read())
 
 _VALID_MANIFEST: dict = {
     "company": "TestCo",
@@ -97,8 +109,44 @@ class TestCheckFinalizeReady(unittest.TestCase):
         self.assertFalse(parsed["ok"])
 
     def test_genuinely_passing_folder_is_accepted(self):
-        _write_json(self.folder / "draft_manifest.json", _VALID_MANIFEST)
+        # CR-112 (FR-318/FR-322) bound rubric_score to the documents' own content hashes plus
+        # a hash-bound reviews/rubric_scorecard.json -- a genuinely passing folder needs both,
+        # not just draft_manifest.json + verification_receipt.json. This fixture predates that
+        # CR and was never updated, so this test always failed after CR-112 landed even though
+        # nothing was actually broken in check_finalize_ready.py itself (every real finalized
+        # submission already carries reviews/rubric_scorecard.json -- confirmed against
+        # data/submissions/{rentana,healthstream,indigo,tuniform,swoon} while diagnosing this).
+        resume_hash = _sha256_hex((self.folder / "Resume.md").read_bytes())
+        cover_hash = _sha256_hex((self.folder / "CoverLetter.md").read_bytes())
+        manifest = dict(_VALID_MANIFEST)
+        manifest["rubric_score"] = {
+            "resume": {"total": 78, "document_sha256": {"resume": resume_hash, "cover_letter": cover_hash}},
+            "cover_letter": {"total": 70, "document_sha256": {"resume": resume_hash, "cover_letter": cover_hash}},
+            "document_sha256": {"resume": resume_hash, "cover_letter": cover_hash},
+        }
+        _write_json(self.folder / "draft_manifest.json", manifest)
         _write_json(self.folder / "verification_receipt.json", _VALID_RECEIPT)
+        scorecard = [
+            {
+                "schema_version": 1,
+                "rubric_sha256": _current_rubric_sha256(),
+                "scored_at": datetime.now(timezone.utc).isoformat(),
+                "reviewer_run_id": "test-check-finalize-ready",
+                "reviewer_role": "correcting_implementer",
+                "document_sha256": {"resume": resume_hash, "cover_letter": cover_hash},
+                "resume": {
+                    "total": 78,
+                    "breakdown": {"R1": 10, "R2": 12, "R3": 12, "R4": 16, "R5": 12, "R6": 8, "R7": 6, "R8": 2},
+                },
+                "cover_letter": {
+                    "total": 70,
+                    "breakdown": {"C1": 15, "C2": 20, "C3": 15, "C4": 15, "C5": 5},
+                },
+            }
+        ]
+        reviews_dir = self.folder / "reviews"
+        reviews_dir.mkdir(exist_ok=True)
+        _write_json(reviews_dir / "rubric_scorecard.json", scorecard)
         code, parsed = _run(str(self.folder))
         self.assertEqual(code, 0)
         self.assertTrue(parsed["ok"])

@@ -1479,6 +1479,48 @@ class TestLiveCatalogQuarantine(unittest.TestCase):
         scored_ids = [cid for cid, _ in scored]
         self.assertNotIn("ACC-114-COST", scored_ids)
 
+    def test_live_catalog_marks_acc_185_disabled(self):
+        """FIXQUEUE bug #5 (2026-09-21): ACC-185-CUSTOMER-DISCOVERY documents
+        an acknowledged gap (workExperience.md: "no story anywhere in his
+        record of a direct, proactive customer discovery conversation"), not
+        real positive evidence -- confirmed offered by the packet as if it
+        were usable evidence on peoplefinders and at least 4 other jobs
+        before this fix. Root cause: its WE title didn't match any
+        _NONCLAIMABLE_RE trigger phrase, so it defaulted to "story" and the
+        coverage audit required a claim row. Fixed at the WE-classifier level
+        (added an "acknowledged gap" trigger) and by disabling the claim row
+        directly; this is the golden-content spot check for the live catalog."""
+        claims, disabled = load_claims()
+        if "ACC-185-CUSTOMER-DISCOVERY" not in claims:
+            self.skipTest(
+                "ACC-185-CUSTOMER-DISCOVERY not in the live claims catalog -- "
+                "no real candidate data present (CI/fresh clone)."
+            )
+        self.assertIn("ACC-185-CUSTOMER-DISCOVERY", disabled)
+
+    def test_scoring_skips_acknowledged_gap_claim_even_without_flag(self):
+        claims = {
+            "ACC-185-CUSTOMER-DISCOVERY": {
+                "project_id": "ACC-185",
+                "tags": ["Customer Discovery", "Customer Feedback", "Product Learning"],
+                "attribution": "OWNED",
+            },
+            "ACC-101-TECH": {
+                "project_id": "ACC-101",
+                "tags": ["Platform", "Monitoring"],
+                "metrics": [],
+            },
+        }
+        scored = _score_claims_for_item(
+            "Gather customer feedback and run customer discovery to inform decisions",
+            claims,
+            {"ACC-185-CUSTOMER-DISCOVERY"},
+            jd_profile=None,
+            jd_text="Gather customer feedback and run customer discovery to inform decisions",
+        )
+        scored_ids = [cid for cid, _ in scored]
+        self.assertNotIn("ACC-185-CUSTOMER-DISCOVERY", scored_ids)
+
 
 class TestLearnedExamplesPacket(unittest.TestCase):
     """CR-097 Epic 3 — retrieval bank injection and budget ordering."""

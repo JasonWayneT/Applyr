@@ -37,6 +37,8 @@ _WE = textwrap.dedent("""
     * **[ACC-126] DO NOT CLAIM:** owning the ETL platform.
 
     * **[ACC-169] Hands-On AWS S3**: Used S3 for a legacy content ingestion path.
+
+    * **[ACC-185] Direct customer discovery — a real, acknowledged gap, and a stated future approach**: never happened.
 """).strip()
 
 
@@ -55,6 +57,13 @@ class ClassifyWeAccTests(unittest.TestCase):
         self.assertEqual(classes["ACC-124"], wai.CLASS_DO_NOT_CLAIM)
         self.assertEqual(classes["ACC-126"], wai.CLASS_DO_NOT_CLAIM)
         self.assertEqual(classes["ACC-119"], wai.CLASS_TOOLS)
+
+    def test_acknowledged_gap_title_is_nonclaimable(self):
+        """Regression for the ACC-185 bug (2026-09-21): a story titled as an
+        acknowledged gap must not default-classify as a claimable story just
+        because its wording doesn't match an older trigger phrase."""
+        classes = wai.classify_we_acc_ids(_WE)
+        self.assertEqual(classes["ACC-185"], wai.CLASS_NONCLAIMABLE)
 
     def test_indexable_ids_are_stories_only(self):
         self.assertEqual(

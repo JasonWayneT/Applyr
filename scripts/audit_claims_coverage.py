@@ -142,6 +142,44 @@ def audit(
                 }
             )
 
+    # CR-088 follow-up (2026-09-21): a claim row whose project_id is
+    # WE-classified as nonclaimable/substory/attribution/do_not_claim --
+    # i.e. real content but not resume-bullet-shaped, per CLAIMS_STANDARD.md's
+    # own ACC-class table -- has no business being claimable evidence at all.
+    # ACC-185-CUSTOMER-DISCOVERY (a documented "acknowledged gap, not a
+    # resume-bullet accomplishment" story) slipped through with a normal
+    # OWNED claim row because the WE<->claims audit only ever checked one
+    # direction (a story missing its claim row), never this one (a claim row
+    # for something WE itself says is not claimable). Confirmed root cause
+    # via we_acc_index.classify_we_acc_ids() directly: ACC-185 defaulted to
+    # "story" because its title didn't match any _NONCLAIMABLE_RE trigger
+    # phrase, not because it was ever meant to be claimable.
+    if we_text:
+        we_classes = wai.classify_we_acc_ids(we_text)
+        non_claimable_classes = {
+            wai.CLASS_NONCLAIMABLE,
+            wai.CLASS_SUBSTORY,
+            wai.CLASS_ATTRIBUTION,
+            wai.CLASS_DO_NOT_CLAIM,
+        }
+        for pid in sorted(claimed_projects):
+            if pid in side_corpus:
+                continue
+            we_class = we_classes.get(pid)
+            if we_class in non_claimable_classes:
+                errors.append(
+                    {
+                        "code": "nonclaimable_project_claimed",
+                        "claim_id": "",
+                        "detail": (
+                            f"{pid} is WE-classified as {we_class!r} (not a "
+                            "resume-bullet story) but has a live master_claims "
+                            "row -- disable it or reword the WE title so the "
+                            "classifier catches it, per CLAIMS_STANDARD.md"
+                        ),
+                    }
+                )
+
     return {"errors": errors, "warns": warns}
 
 

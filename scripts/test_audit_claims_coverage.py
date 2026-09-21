@@ -121,6 +121,41 @@ class AuditClaimsCoverageTests(unittest.TestCase):
         )
         self.assertEqual(result["errors"], [])
 
+    def test_nonclaimable_project_with_live_claim_row_is_flagged(self):
+        """Regression for the ACC-185 bug (2026-09-21): a claim row for a
+        WE-classified nonclaimable/substory/attribution/do_not_claim project
+        id is real evidence-selection risk, not just a we_unclaimed miss --
+        the audit only ever checked that direction before."""
+        we_text = (
+            "* **[ACC-101] Story**: did the work.\n"
+            "* **[ACC-154] Not owned:** next-gen import.\n"
+            "* **[ACC-122] What Jason drove:** monitoring detail.\n"
+        )
+        claims = {
+            "ACC-101-TECH": {"project_id": "ACC-101", "tags": ["x"]},
+            "ACC-154-GHOST": {"project_id": "ACC-154", "tags": ["Import"]},
+            "ACC-122-GHOST": {"project_id": "ACC-122", "tags": ["Monitoring"]},
+        }
+        result = self.mod.audit(
+            claims, {"ACC-101", "ACC-154", "ACC-122"}, we_text=we_text
+        )
+        flagged = {
+            e["detail"].split(" ", 1)[0]
+            for e in result["errors"]
+            if e["code"] == "nonclaimable_project_claimed"
+        }
+        self.assertEqual(flagged, {"ACC-154", "ACC-122"})
+
+    def test_disabled_nonclaimable_claim_row_is_not_flagged(self):
+        we_text = "* **[ACC-154] Not owned:** next-gen import.\n"
+        claims = {
+            "ACC-154-GHOST": {
+                "project_id": "ACC-154", "tags": ["Import"], "disabled": True,
+            },
+        }
+        result = self.mod.audit(claims, {"ACC-154"}, we_text=we_text)
+        self.assertEqual(result["errors"], [])
+
     def test_miskey_detected(self):
         claims = {
             "ACC-101-RETENTION": {

@@ -121,6 +121,10 @@ def _print_status(folder: str) -> int:
 
 
 def main() -> None:
+    # Direct CLI runs must use Agy too. Leaving this unset was the Groq/Gemini
+    # leak when someone hand-ran run_submission.py instead of the worker.
+    if not os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", "").strip():
+        os.environ["APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"] = "1"
     parser = argparse.ArgumentParser(
         description="Applyr authoritative submission workflow (CR-076/077/079)."
     )

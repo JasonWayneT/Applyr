@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -187,6 +188,7 @@ def _run_live(entries: list[dict], provider: str) -> tuple[int, int]:
 
 def main() -> int:
     """Run offline provider fixtures or an explicitly requested live sample."""
+    os.environ["APPLYR_STAGE0_CLOUD_LLM"] = "1"
     parser = argparse.ArgumentParser()
     parser.add_argument("--live", action="store_true", help="Use the configured provider and spend quota")
     parser.add_argument("--provider", choices=("groq", "gemini", "local"), default="groq")

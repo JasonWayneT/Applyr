@@ -26,6 +26,8 @@ class TestStage0EvidenceCascade(unittest.TestCase):
     def setUp(self) -> None:
         from cost_eligibility import set_test_zero_charge_providers
 
+        os.environ["APPLYR_STAGE0_CLOUD_LLM"] = "1"
+        self.addCleanup(os.environ.pop, "APPLYR_STAGE0_CLOUD_LLM", None)
         set_test_zero_charge_providers(["groq", "gemini", "local"])
         self._decl = patch(
             "cost_eligibility.declared_cost_class",

@@ -193,6 +193,11 @@ def _utf8_child_env() -> dict[str, str]:
     env = dict(os.environ)
     env["PYTHONUTF8"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
+    # Standing plan (FIXQUEUE / PLAN-2026-09-18 Task 3 / FR-328): Agy is the
+    # Stage 0 LLM. Groq and Gemini are not in rotation. Force the adapter on
+    # for the spawned pipeline child even if the worker's own shell left it
+    # unset -- that miss is what sent the 2026-09-21 queue pack to Groq 429s.
+    env["APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"] = "1"
     return env
 
 

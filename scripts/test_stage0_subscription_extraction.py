@@ -35,6 +35,8 @@ class SubscriptionExtractionTests(unittest.TestCase):
             os.environ[adapter.ENABLED_ENV] = self._env
 
     def test_disabled_switch_keeps_groq_path(self) -> None:
+        os.environ[adapter.CLOUD_LLM_ENV] = "1"
+        self.addCleanup(os.environ.pop, adapter.CLOUD_LLM_ENV, None)
         with patch.object(fit_gate, "_resolve_uncertain_extraction_llm", return_value=[]) as llm, patch.object(
             fit_gate, "_resolve_uncertain_extraction_subscription"
         ) as sub:
@@ -42,6 +44,18 @@ class SubscriptionExtractionTests(unittest.TestCase):
         self.assertEqual(unresolved, [])
         llm.assert_called_once()
         sub.assert_not_called()
+
+    def test_disabled_switch_without_cloud_llm_does_not_call_groq(self) -> None:
+        os.environ.pop(adapter.CLOUD_LLM_ENV, None)
+        with patch.object(fit_gate, "_resolve_uncertain_extraction_llm") as llm, patch.object(
+            fit_gate, "_resolve_uncertain_extraction_subscription"
+        ) as sub:
+            unresolved = fit_gate._resolve_uncertain_extraction(QUEUE, _buckets())
+        llm.assert_not_called()
+        sub.assert_not_called()
+        self.assertEqual(len(unresolved), 2)
+        self.assertEqual(unresolved[0]["reason"], "subscription_adapter_required")
+        self.assertFalse(unresolved[0]["model_call_occurred"])
 
     def test_enabled_switch_never_calls_llm(self) -> None:
         os.environ[adapter.ENABLED_ENV] = "1"

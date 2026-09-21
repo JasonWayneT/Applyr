@@ -34,6 +34,15 @@ import contracts  # noqa: E402
 import run_submission  # noqa: E402
 
 
+def setUpModule() -> None:
+    """These tests exercise the retired Groq/Gemini Stage 0 path on purpose."""
+    os.environ["APPLYR_STAGE0_CLOUD_LLM"] = "1"
+
+
+def tearDownModule() -> None:
+    os.environ.pop("APPLYR_STAGE0_CLOUD_LLM", None)
+
+
 def _item() -> BatchItem:
     return BatchItem(
         item_id="required:0:abcdef0123456789",
@@ -663,6 +672,7 @@ class TestStory71FollowUpContracts(unittest.TestCase):
         env = {
             "STAGE0_SECTION_MODE": "deterministic",
             "APPLYR_STAGE0_REVIEW_DB": db_path,
+            "APPLYR_STAGE0_CLOUD_LLM": "1",
         }
         stack = contextlib.ExitStack()
         stack.enter_context(patch.dict(os.environ, env, clear=False))

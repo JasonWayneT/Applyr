@@ -36,10 +36,11 @@ class SubscriptionEvidenceTests(unittest.TestCase):
     def test_disabled_switch_does_not_call_adapter(self) -> None:
         with patch.object(adapter, "run_stage0_subscription") as run, patch(
             "utils.call_llm", return_value=None
-        ):
-            with self.assertRaises(Exception):
+        ) as llm:
+            with self.assertRaises(CascadeReviewNeeded):
                 classify_requirements_batch(ITEMS, settings={"stage0_evidence_classification": {}})
         run.assert_not_called()
+        llm.assert_not_called()
 
     def test_enabled_switch_never_calls_llm(self) -> None:
         os.environ[adapter.ENABLED_ENV] = "1"

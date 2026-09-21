@@ -400,6 +400,7 @@ class TestUtf8ChildEnv(unittest.TestCase):
         env = worker._utf8_child_env()
         self.assertEqual(env.get("PYTHONUTF8"), "1")
         self.assertEqual(env.get("PYTHONIOENCODING"), "utf-8")
+        self.assertEqual(env.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"), "1")
         self.assertEqual(os.environ, before, "must not mutate the worker's own environ")
 
     def test_spawned_child_reports_utf8_mode_active(self) -> None:

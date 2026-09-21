@@ -42,6 +42,7 @@ AGY_MODEL_DEFAULT = "gemini-3.8-flash-medium"
 AGY_EFFORT_DEFAULT = "medium"
 TASKS = ("extraction", "evidence")
 ENABLED_ENV = "APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"
+CLOUD_LLM_ENV = "APPLYR_STAGE0_CLOUD_LLM"
 FORBIDDEN_TARGETS = {"groq", "gemini", "factory", "droid"}
 
 RunTask = Literal["extraction", "evidence"]
@@ -123,6 +124,12 @@ def adapter_enabled(config: AdapterConfig | None = None) -> bool:
     if env in {"1", "true", "yes", "on"}:
         return True
     return bool(config and config.enabled)
+
+
+def cloud_llm_fallback_enabled() -> bool:
+    """Retired Groq/Gemini Stage 0 path. Off unless a test explicitly re-enables it."""
+    env = os.environ.get(CLOUD_LLM_ENV, "").strip().lower()
+    return env in {"1", "true", "yes", "on"}
 
 
 def _forbidden_target(config: AdapterConfig) -> str | None:

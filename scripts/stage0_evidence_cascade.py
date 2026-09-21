@@ -469,6 +469,12 @@ def classify_requirements_batch(
             raw_response_callback=raw_response_callback,
             provider_event_callback=provider_event_callback,
         )
+    from stage0_subscription_adapter import cloud_llm_fallback_enabled
+    if not cloud_llm_fallback_enabled():
+        raise CascadeReviewNeeded(
+            "Stage 0 cloud LLM fallback is off; use APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1",
+            [item.item_id for item in items],
+        )
     # Manual import is validated only by the Stage 0 builder, never here.
     # Improvement #4: automatic chunking for batches > MAX_BATCH_ITEMS.
     if len(items) > MAX_BATCH_ITEMS:

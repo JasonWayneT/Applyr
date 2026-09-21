@@ -1344,9 +1344,10 @@ def _collect_nlp_section_candidates(
 def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
     """NLP (TF-IDF + LogReg) section extraction with a bounded fallback.
 
-    Confident lines stay on the local classifier. Uncertain lines go to Groq/Gemini
-    unless APPLYR_STAGE0_SUBSCRIPTION_ADAPTER is on, in which case they go to the
-    Stage 0 subscription adapter and never spill into a metered API.
+    Confident lines stay on the local classifier. Uncertain lines go to Agy
+    when APPLYR_STAGE0_SUBSCRIPTION_ADAPTER is on. Groq/Gemini are off unless
+    APPLYR_STAGE0_CLOUD_LLM is explicitly enabled. Otherwise those lines pause
+    for Review Center instead of a metered API.
     """
     collected = _collect_nlp_section_candidates(jd_text)
     if collected is None:
@@ -1393,12 +1394,20 @@ def _resolve_uncertain_extraction(
 
     The subscription adapter, when enabled, replaces Groq/Gemini for this batch only.
     It never writes training labels and never silently drops a queued line.
+    Groq/Gemini stay off unless APPLYR_STAGE0_CLOUD_LLM is explicitly on.
     """
     if not fallback_queue:
         return []
     if _subscription_extraction_enabled():
         return _resolve_uncertain_extraction_subscription(fallback_queue, buckets)
-    return _resolve_uncertain_extraction_llm(fallback_queue, buckets)
+    from stage0_subscription_adapter import cloud_llm_fallback_enabled
+    if cloud_llm_fallback_enabled():
+        return _resolve_uncertain_extraction_llm(fallback_queue, buckets)
+    return _record_unresolved(
+        fallback_queue,
+        "subscription_adapter_required",
+        model_call_occurred=False,
+    )
 
 
 def _resolve_uncertain_extraction_subscription(

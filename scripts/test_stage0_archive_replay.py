@@ -285,6 +285,7 @@ def _pick_jds(limit: int, jd_filter: str | None) -> list[Path]:
 
 
 def main() -> int:
+    os.environ["APPLYR_STAGE0_CLOUD_LLM"] = "1"
     parser = argparse.ArgumentParser(description="CR-108 archive replay harness")
     parser.add_argument("--limit", type=int, default=5, help="Number of JDs to replay")
     parser.add_argument("--compare", action="store_true", help="Also run legacy per-line classifier")

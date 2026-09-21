@@ -97,6 +97,26 @@ class TestEpicAgileFalsePositive(unittest.TestCase):
         self.assertIsNotNone(m)
         self.assertFalse(epic_match_is_agile_noun(line, m.start(), m.end()))
 
+    def test_epic_match_is_agile_noun_sees_agile_word_in_a_later_sentence(self) -> None:
+        """Live miss (nymbl_systems, 2026-09-21): the Agile qualifying word
+        ("tickets") is in the NEXT sentence of the same paragraph, not the
+        sentence containing "epic" itself. epic_match_is_agile_noun used to
+        bound its scan to just the one sentence around the match -- narrower
+        than the whole paragraph its caller (LR-026's per-markdown-line
+        dispatch) already hands it -- so it missed this real, approved
+        ACC-222 epic-writing-template claim and hard-blocked it as the EHR
+        company. Widened to scan the whole `line` (paragraph) instead."""
+        line = (
+            "I developed a consistent plain-English epic structure detailing "
+            "the teams involved, the core problem, the solution, and the "
+            "conditions of resolution. On a major account migration "
+            "initiative, I authored the overarching epic and the majority "
+            "of build-out tickets, specifying the location of existing data."
+        )
+        m = hard_blocked_tool_pattern().search(line)
+        self.assertIsNotNone(m, "sanity: the bare regex still matches this sentence alone")
+        self.assertTrue(epic_match_is_agile_noun(line, m.start(), m.end()))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

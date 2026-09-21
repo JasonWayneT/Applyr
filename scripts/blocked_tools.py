@@ -147,15 +147,30 @@ def _epic_pattern(esc: str) -> str:
 def epic_match_is_agile_noun(line: str, start: int, end: int) -> bool:
     """True if the epic/epics occurrence at ``line[start:end]`` is the ordinary
     Agile noun, not the Epic EHR/healthcare company -- checked by scanning the
-    WHOLE sentence containing the match (bounded by the nearest '.' on either
-    side, or the line's own start/end) for Agile/PM vocabulary, in both
-    directions. See ``_epic_pattern``'s docstring for why a regex-only
-    (lookahead-only) check misses the "roadmap epics" shape this catches."""
-    sentence_start = line.rfind(".", 0, start) + 1
-    dot_after = line.find(".", end)
-    sentence_end = dot_after if dot_after != -1 else len(line)
-    sentence = line[sentence_start:sentence_end]
-    return bool(_AGILE_CONTEXT_RE.search(sentence))
+    WHOLE ``line`` (not just the one sentence containing the match) for
+    Agile/PM vocabulary. See ``_epic_pattern``'s docstring for why a
+    regex-only (lookahead-only) check misses the "roadmap epics" shape this
+    catches.
+
+    Widened from sentence-bounded to whole-line 2026-09-21 (live miss,
+    nymbl_systems): both real callers already pass one coherent unit as
+    ``line`` -- a full cover-letter/resume paragraph in
+    submission_linter.py's LR-026 dispatch (markdown paragraphs are written
+    as one source line, confirmed via lint_document's ``text.splitlines()``),
+    or one Stage-0 JD item in build_authoring_packet.py's
+    ``_item_names_hard_blocked_tool`` -- so a second, tighter sentence
+    boundary inside THIS function was throwing away context the caller had
+    already scoped correctly. Live case: "I developed a consistent
+    plain-English epic structure detailing the teams involved..." has no
+    Agile word in its own sentence, but the very next sentence in the same
+    paragraph says "...the majority of build-out tickets..." -- a real ACC-222
+    epic-writing-template claim, incorrectly hard-blocked as the EHR company
+    because the old sentence-only scan couldn't see it. No existing test
+    fixture depends on sentence-level isolation within a longer ``line``
+    (every fixture is a single sentence, where whole-line and single-sentence
+    scope are identical) -- confirmed via test suite before widening.
+    """
+    return bool(_AGILE_CONTEXT_RE.search(line))
 
 
 def hard_blocked_tool_pattern() -> re.Pattern[str]:

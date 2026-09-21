@@ -2256,7 +2256,20 @@ def check_wrong_job_company_bleed(
             continue
         if lower in jd_lower:
             continue
-        if not re.search(r"\b" + re.escape(trimmed) + r"\b", combined, re.IGNORECASE):
+        # "workday" collides with ordinary capacity-planning phrasing
+        # ("developer workday-hours") the same way it does in
+        # blocked_tools.hard_blocked_tool_pattern's own workday exclusion --
+        # that fix never propagated here because this is a separate
+        # company-bleed check, not the hard-blocked-tool one. Live false
+        # positive found 2026-09-21 (isolved): a real Cision capacity-model
+        # bullet flagged as naming the Workday company. Same narrow
+        # lookahead exclusion, same reasoning.
+        pattern = (
+            rf"\b{re.escape(trimmed)}\b(?![\s-]*hours?\b)"
+            if lower == "workday"
+            else r"\b" + re.escape(trimmed) + r"\b"
+        )
+        if not re.search(pattern, combined, re.IGNORECASE):
             continue
         seen.add(lower)
         hits.append(

@@ -617,7 +617,12 @@ def test_LW032_equal_length_names_have_deterministic_tie_break():
     adds a lowercased-name tie-break, which is a total order for distinct
     names and therefore always produces the same output regardless of the
     input set's iteration order."""
-    resume = "Built an engineering capacity model based on workday-hours per developer."
+    # Fixture note (2026-09-21): originally used "workday-hours" as filler
+    # resume text -- that is itself the exact capacity-phrasing false
+    # positive fixed the same day (isolved), so this fixture would have
+    # started silently asserting on excluded text. Switched to a genuine
+    # company mention so the fixture still exercises a real LW-032 match.
+    resume = "Implemented Workday HCM as part of the engineering capacity rollout."
     cover_letter = "Presented unified quarterly product roadmaps to stakeholders."
     hits = check_wrong_job_company_bleed(
         resume=resume,
@@ -643,6 +648,37 @@ def test_LW032_flags_other_known_company():
     assert any(v.rule_id == "LW-032" and "Lightcast" in v.message for v in hits)
     assert not any("Gravitee" in v.message for v in hits)
     assert not any("Cision" in v.message for v in hits)
+
+
+def test_LW032_workday_hours_capacity_phrase_not_flagged():
+    """Live false positive (isolved, 2026-09-21): "developer workday-hours"
+    is ordinary capacity-planning phrasing, not a mention of the Workday
+    company -- same collision blocked_tools.hard_blocked_tool_pattern's own
+    workday exclusion already handles, in a separate check that never got
+    the same fix."""
+    hits = check_wrong_job_company_bleed(
+        resume=(
+            "Optimized engineering resource allocation by establishing a "
+            "PTO-adjusted capacity model based on developer workday-hours "
+            "and uncertainty bands."
+        ),
+        cover_letter="",
+        jd_text="Product Manager",
+        own_company="Isolved",
+        known_names={"workday", "Isolved"},
+    )
+    assert hits == []
+
+
+def test_LW032_real_workday_mention_still_flagged():
+    hits = check_wrong_job_company_bleed(
+        resume="Implemented Workday HCM for the client's HR team.",
+        cover_letter="",
+        jd_text="Product Manager",
+        own_company="Isolved",
+        known_names={"workday", "Isolved"},
+    )
+    assert any(v.rule_id == "LW-032" and "workday" in v.message for v in hits)
 
 
 def test_LW032_own_company_does_not_warn():

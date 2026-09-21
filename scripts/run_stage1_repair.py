@@ -91,6 +91,34 @@ def is_tool_or_permission_event(event: dict[str, Any]) -> bool:
     return False
 
 
+def summarize_trigger_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Redacted summary of the event that tripped is_tool_or_permission_event.
+
+    Kept deliberately small (tool name/step type/truncated message) so a
+    stuck retry is diagnosable from the saved result without needing a live
+    agy repro -- the prior version discarded this entirely, which is why
+    root-causing the 2026-09-21 flaky-retry report required rerunning agy
+    live instead of just reading what had already happened.
+    """
+    name = str(event.get("event") or "")
+    step = event.get("step_update") if name == "step_update" else {}
+    step = step if isinstance(step, dict) else {}
+    info = step.get("tool_info") if isinstance(step.get("tool_info"), dict) else {}
+    message = " ".join(
+        str(info.get(key) or "") for key in ("output", "error", "message")
+    ).strip()
+    if isinstance(info.get("error"), dict):
+        err = info["error"]
+        message = (message + " " + str(err.get("message") or "")).strip()
+    return {
+        "event": name,
+        "step_type": str(step.get("step_type") or ""),
+        "step_state": str(step.get("state") or ""),
+        "tool_name": str(step.get("tool_name") or ""),
+        "message": message[:300],
+    }
+
+
 def consume_repair_stream(
     lines: Iterable[str],
     *,
@@ -106,6 +134,7 @@ def consume_repair_stream(
     counted = 0
     text_bits: list[str] = []
     result_event: dict[str, Any] | None = None
+    trigger_event: dict[str, Any] | None = None
 
     def _stop(outcome: str, reason: str) -> dict[str, Any]:
         if kill is not None:
@@ -117,6 +146,7 @@ def consume_repair_stream(
             "wall_seconds": round(now() - start, 3),
             "text": "".join(text_bits),
             "result": result_event,
+            "trigger_event": trigger_event,
         }
 
     for raw in lines:
@@ -135,6 +165,7 @@ def consume_repair_stream(
             continue
         if is_tool_or_permission_event(event):
             counted += 1
+            trigger_event = summarize_trigger_event(event)
             return _stop("repair_failed", "tool_or_permission")
         step = event.get("step_update") if event.get("event") == "step_update" else None
         is_text_delta = (
@@ -165,6 +196,7 @@ def consume_repair_stream(
         "wall_seconds": round(now() - start, 3),
         "text": "".join(text_bits),
         "result": result_event,
+        "trigger_event": None,
     }
 
 
@@ -368,6 +400,7 @@ def apply_repair_result(
     state["last_repair_reason"] = payload.get("reason")
     state["last_event_count"] = payload.get("event_count")
     state["last_wall_seconds"] = payload.get("wall_seconds")
+    state["last_trigger_event"] = payload.get("trigger_event")
     state["no_progress_streak"] = int(state.get("no_progress_streak") or 0) + 1
     payload["wrote_files"] = False
     save_repair_state(folder, state)
@@ -430,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
         + (f" — {result['reason']}" if result.get("reason") else "")
         + f" events={result.get('event_count')} wall={result.get('wall_seconds')}s"
     )
+    if result.get("trigger_event"):
+        print(f"trigger_event: {json.dumps(result['trigger_event'])}")
     if result.get("outcome") == "ok":
         return 0
     return 2

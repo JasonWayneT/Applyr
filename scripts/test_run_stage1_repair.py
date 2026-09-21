@@ -151,6 +151,8 @@ class TestRepairStreamCaps(unittest.TestCase):
         self.assertEqual(result["outcome"], "repair_failed")
         self.assertEqual(result["reason"], "tool_or_permission")
         self.assertEqual(killed, [True])
+        self.assertEqual(result["trigger_event"]["tool_name"], "view_file")
+        self.assertEqual(result["trigger_event"]["step_type"], "tool")
 
     def test_permission_denial_is_a_failed_call(self) -> None:
         lines = [
@@ -176,6 +178,8 @@ class TestRepairStreamCaps(unittest.TestCase):
         )
         self.assertEqual(result["outcome"], "repair_failed")
         self.assertEqual(result["reason"], "tool_or_permission")
+        self.assertEqual(result["trigger_event"]["tool_name"], "run_command")
+        self.assertIn("Access to the path", result["trigger_event"]["message"])
 
     def test_successful_result_without_tools(self) -> None:
         lines = [
@@ -203,6 +207,7 @@ class TestRepairStreamCaps(unittest.TestCase):
         )
         self.assertEqual(result["outcome"], "ok")
         self.assertIn("Resume.md", result["text"])
+        self.assertIsNone(result["trigger_event"])
 
     def test_command_is_sandboxed_print_with_no_workspace_files(self) -> None:
         with mock.patch.object(repair, "_agy_cmd", return_value="agy"):

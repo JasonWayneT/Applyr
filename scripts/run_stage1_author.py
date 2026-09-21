@@ -259,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         + f" events={result.get('event_count')} wall={result.get('wall_seconds')}s"
         + f" wrote_files={result.get('wrote_files')}"
     )
+    if result.get("trigger_event"):
+        print(f"trigger_event: {json.dumps(result['trigger_event'])}")
     return 0 if result.get("outcome") == "ok" and result.get("wrote_files") else 2
 
 

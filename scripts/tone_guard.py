@@ -7,6 +7,29 @@ from __future__ import annotations
 import re
 from typing import List, Tuple
 
+# Business-relationship nouns that make a preceding "X attrition" churn
+# vocabulary, not workforce-reduction language -- the two share this same
+# list (previously two independently hand-typed lookbehind chains that could
+# silently drift apart). Widened 2026-09-21 (isolved, live false positive):
+# "account attrition" -- as ordinary a SaaS churn term as "customer
+# attrition" (fixed 2026-09-20 on swoon) -- tripped the same hard block.
+# Same whack-a-mole risk as the "epic"/EHR-company fix elsewhere in this
+# repo: enumerating individual "safe" nouns will keep missing new ones
+# (member, user, tenant, buyer attrition are all equally legitimate and
+# equally unlisted before this pass). Kept as an explicit allowlist rather
+# than inverted to "block only near workforce words" because the failure
+# direction matters here: a missed real layoff reference (false negative)
+# violates Jason's explicit hard rule against ever naming layoffs, which is
+# worse than an occasional false-positive block needing a one-word rewrite --
+# so this stays a conservative, if imperfect, allowlist rather than a laxer
+# workforce-context check.
+_ATTRITION_SAFE_NOUNS = (
+    "customer", "client", "subscriber", "account", "user", "member",
+)
+_ATTRITION_PATTERN_SRC = (
+    "".join(rf"(?<!{noun}\s)" for noun in _ATTRITION_SAFE_NOUNS) + r"\battrition\b"
+)
+
 # Longest-first rewrite chains (applied before hard block checks on output).
 _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
     (
@@ -33,7 +56,7 @@ _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
     ),
     (re.compile(r"\bworkforce\s+attrition\b", re.IGNORECASE), "staffing constraints"),
     (
-        re.compile(r"(?<!customer\s)(?<!client\s)(?<!subscriber\s)\battrition\b", re.IGNORECASE),
+        re.compile(_ATTRITION_PATTERN_SRC, re.IGNORECASE),
         "staffing constraints",
     ),
     (re.compile(r"\blayoffs?\b", re.IGNORECASE), "resource constraints"),
@@ -56,11 +79,12 @@ _TONE_REWRITES: List[Tuple[re.Pattern, str]] = [
 _BLOCKED_TONE_PATTERNS: List[re.Pattern] = [
     re.compile(r"\blayoffs?\b", re.IGNORECASE),
     re.compile(r"\blaid[\s-]off\b", re.IGNORECASE),
-    # 2026-09-20 (swoon, live false positive): "customer attrition" is standard
-    # churn vocabulary, unrelated to this file's actual purpose (workforce
-    # reduction). Only a bare/workforce/employee-style "attrition" should
-    # block -- same fix class as the earlier "Partnered closely" removal above.
-    re.compile(r"(?<!customer\s)(?<!client\s)(?<!subscriber\s)\battrition\b", re.IGNORECASE),
+    # 2026-09-20 (swoon) / 2026-09-21 (isolved): customer/client/subscriber/
+    # account/user/member attrition is standard churn vocabulary, unrelated
+    # to this file's actual purpose (workforce reduction). See
+    # _ATTRITION_PATTERN_SRC above for the shared allowlist and why it stays
+    # an allowlist rather than a broader workforce-context check.
+    re.compile(_ATTRITION_PATTERN_SRC, re.IGNORECASE),
     re.compile(r"\breductions?\s+in\s+force\b", re.IGNORECASE),
     re.compile(r"\bR\.?I\.?F\.?\b"),
 ]

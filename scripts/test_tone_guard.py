@@ -33,6 +33,17 @@ class TestToneGuard(unittest.TestCase):
         self.assertEqual(tone_violations("A rise in client attrition followed."), [])
         self.assertEqual(tone_violations("Subscriber attrition rose that quarter."), [])
 
+    def test_account_user_member_attrition_not_blocked(self) -> None:
+        """Found live on isolved, 2026-09-21: 'account attrition' is exactly
+        the same class of ordinary SaaS churn vocabulary as 'customer
+        attrition' (fixed 2026-09-20), just a different noun the original
+        allowlist didn't happen to include."""
+        self.assertEqual(
+            tone_violations("data accuracy issues were driving account attrition."), []
+        )
+        self.assertEqual(tone_violations("user attrition rose that quarter."), [])
+        self.assertEqual(tone_violations("member attrition was the main driver."), [])
+
     def test_sanitize_leaves_customer_attrition_untouched(self) -> None:
         text = "Analysis revealed drivers of customer attrition."
         self.assertEqual(sanitize_submission_tone(text), text)

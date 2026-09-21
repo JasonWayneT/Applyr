@@ -3,6 +3,43 @@
 Items 1-4 landed: YES
 Runtime hold: NO
 
+## HANDOFF — Claude Sonnet 5, 2026-09-21 ~19:15 UTC, stopping on Jason's weekly token limit — read this fully before touching anything
+
+Picked up right after the "all 8 bugs closed" handoff below and moved to backlog work, per Jason's "continue through the queue, priority on finding/fixing bugs" instruction. Stopping now on his call, not on a natural break point -- **nothing is stuck or leased**, verified directly: `git status` clean, every queue row is `paused` (never `in_progress`/`leased`).
+
+### Real bugs found and fixed this pass (all committed, all tested)
+
+1. **`epic_match_is_agile_noun` (blocked_tools.py) was sentence-bounded, not paragraph-bounded.** Live miss on nymbl_systems: a real, approved ACC-222 epic-template claim hard-blocked as the Epic EHR company because the qualifying Agile word ("tickets") was in the *next* sentence of the same paragraph, outside the function's own redundant re-narrowing of the `line` its callers already scope to one paragraph/JD-item. Widened to scan the whole `line`. Commit `3317470`.
+2. **`tone_guard.py`'s attrition allowlist missing "account".** Live miss on isolved: "driving account attrition" (real Cision churn content) hard-blocked as workforce-reduction language. Same class as the "customer attrition" fix from 2026-09-20 -- widened the allowlist (account/user/member) and de-duplicated the pattern into one shared constant so the two lists (`_BLOCKED_TONE_PATTERNS`/`_TONE_REWRITES`) can't drift apart again. Commit `bda8335`.
+3. **`submission_linter.py`'s LW-032 company-bleed check missing the workday-hours exclusion.** Live miss on isolved: "developer workday-hours" (ordinary capacity-planning phrasing) flagged as naming the Workday company -- the *exact* collision `blocked_tools.hard_blocked_tool_pattern` already excludes for its own hard-tool check, in a totally separate function that never got the same fix. Also found the existing tie-break test's own fixture text was an unrecognized live instance of this same bug (used "workday-hours" as filler, asserted the false positive as correct) -- fixed the fixture too. Commit `1f8c45f`.
+
+Pattern across all three: a narrow exception/allowlist fixed in one place, not propagated to a structurally identical check elsewhere. Worth deliberately scanning for a fourth instance early next session if there's time -- this has now happened four times total counting the epic/EHR fix from earlier in the day.
+
+### Real bugs investigated and found NOT to be bugs (reported honestly, no fix made)
+
+- **Worker re-promoting an already-blocked NEEDS_DISPOSITION row instead of claiming fresh work** (looked like the still-unsolved item from the 2026-09-20 20:30 handoff). Root-caused twice this pass, two different real mechanisms, neither a code defect: (a) hand-running `run_submission.py --resume` directly (instead of through the worker) never touches `pipeline_queue` at all -- confirmed via code trace, `_queue_mark_done` only fires on `--finalize` -- so `paused_at` goes stale relative to dispositions.json edits and the worker correctly re-verifies once when it's next run. This happened on nymbl_systems and again on isolved (I hand-ran `--resume` repeatedly while doing disposition work, which is real, necessary interactive work the worker can't do -- each time cost exactly one extra ~3s Stage 2 replay, not a real problem). (b) amplify's stale-looking promotion check traced to something unrelated entirely: its review-file consumption already worked fine, but Stage 0's *next* gate (the evidence cascade) hit the same Groq-rate-limit failure already flagged and deferred as bug #3 last session. Confirmed via direct reproduction, not guessed.
+- **A duplicate stuck "Add details about your Git experience" Review Center question on sourcegraph**, one answered 2026-09-17, one silently open ever since (5 days), blocking the row. Could not fully pin the exact race in `stage0_confirmations.py`'s `_create_evidence_enrichment` (its own duplicate guard looks structurally correct) -- answered the duplicate honestly with the same already-Jason-confirmed content and moved on rather than chase a low-blast-radius, hard-to-reproduce race further.
+
+### Opportunities flagged, not fixed (real, but need design judgment)
+
+- **`task_19f27c01`** (background task chip, still pending) -- authoring-packet token-budget failures (`Over token budget: X > 8000`) confirmed on 3 separate real jobs now (clarion_events_inc_north_america, confidential, sourcegraph), all proportionate to genuinely large JDs (20+ requirement lines), not a construction bug. The shrink algorithm's per-excerpt floor (400 chars) can't get a 30+-excerpt packet under budget no matter what. Worth a real look at raising the budget or making the shrink algorithm cut weak excerpts entirely instead of uniformly shrinking everything toward the floor.
+
+### Jobs touched this session, current state
+
+- **nymbl_systems**: fully authored and reviewed. Resume 68/100, Cover Letter 82/100 -- correctly parked on the non-disposable `mech.rubric_floor.resume` BLOCK. PDFs sent to Jason.
+- **isolved**: fully authored and reviewed, three real bugs found and fixed along the way (see above). First-pass resume score (72) landed in the boundary band, triggering a required independent-blind re-score (63, below floor -- real weak point: Cision is media-monitoring, not HCM/workforce software, a genuine vertical mismatch the generous first pass under-weighted). Cover Letter 80/100. Correctly parked on the same non-disposable BLOCK. PDFs sent to Jason.
+- **sourcegraph**: cleared Stage 0 (answered 2 open Review Center questions, including the stuck duplicate above), authored, then hit the token-budget failure (see task_19f27c01). `paused`/`FAILED` at stage1, same class as the two pre-existing jobs in that state -- not touched further.
+- **amplify**: still blocked on the pre-existing, deferred Groq-rate-limit evidence-cascade issue (bug #3). Confirmed its own review-file consumption already works; nothing new needed here until #3 is addressed.
+- **velosio**: fresh Stage 0 pause, `WAITING_FOR_INPUT`, 2 open Review Center questions never answered (Microsoft Dynamics 365, PSA) -- not investigated, straightforward next-session pickup (check `workExperience.md`/`skills_catalog.json`, answer honestly).
+- **certara**: fresh Stage 0 pause, `WAITING_FOR_INPUT`, 2 open Review Center questions never answered (Minimum Viable Product, Biostatistics) -- not investigated. "Minimum Viable Product" flagged as a named tool is suspicious (likely the same false-tool-extraction class already seen on sourcegraph's Eastern Time/North America/IDEs questions, all correctly answered `BAD_DATA` by a past batch-monitor session) -- worth checking that pattern specifically before assuming it needs a real skill-presence answer.
+
+### Next session, in order
+
+1. Read this whole entry before running anything.
+2. Resolve velosio's and certara's open Review Center confirmations (`stage0_confirmations.answer_confirmation`), then run the worker to let both continue.
+3. Keep working the backlog with the same discipline: root-cause real bugs before patching around them (evidence-driven-problem-solving), commit each fix once tested, never force a resume past a genuinely below-floor rubric score without Jason's call, and **use the worker to advance a queued slug's workflow state, not a hand-run `--resume`** -- hand-running is fine (and sometimes necessary) for disposition work itself, but always let the worker do the final commit/promotion afterward rather than assuming a hand-run alone was enough.
+4. Consider whether `task_19f27c01` (token-budget failures) is worth picking up now that it's a 3x-confirmed pattern.
+
 ## HANDOFF — Claude Sonnet 5, 2026-09-21 (fresh session), all 8 open bugs from the prior handoff closed with Jason's per-item direction
 
 Picked up the prior handoff's 8-item bug list. Jason gave explicit per-item direction (#3 deferred/bookmarked per his standing call, #6 delete, #7 and #8 investigate now) and asked for evidence-driven-problem-solving throughout. All 7 addressed items are committed individually; see each commit message for the full root-cause writeup. Summary:

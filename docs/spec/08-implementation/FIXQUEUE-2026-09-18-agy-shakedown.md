@@ -3,6 +3,12 @@
 Items 1-4 landed: YES
 Runtime hold: NO
 
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~20:15 UTC — Groq/Gemini are not the Stage 0 path
+
+Jason's standing plan, restated: no Groq, no Gemini, no pay-tier APIs. Stage 0 LLM is Agy until a subscription provider with remaining quota replaces it. I had this wrong last turn (Gemini attestation). Live `agy_quota_tracker.py status` this pass: `[usage_panel] weekly 55%, five-hour 91%` remaining. Agy was not over quota. The 2026-09-21 worker pack never called Agy because `run_queue_worker.py` did not set `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`.
+
+Fix committed: worker child env forces that switch on; `run_submission.py` sets it when unset; Groq/Gemini require explicit `APPLYR_STAGE0_CLOUD_LLM=1`. Do not run a Groq pack. Next worker run is an Agy run. Do not re-answer velosio/certara skill cards.
+
 ## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~20:05 UTC — read this fully before touching anything
 
 Picked up the 19:15 UTC entry (velosio/certara confirmations first). Answered those cards, fixed the false-tool extractor, ran `python scripts/run_queue_worker.py --worker cursor-grok-4-6 --once`, then root-caused the Groq cascade against live Settings instead of guessing. **Do not run another large worker pack until Gemini is operator-attested (or Groq is no longer 429ing).** A pack will re-claim velosio/certara (questions already answered) and burn Groq again.

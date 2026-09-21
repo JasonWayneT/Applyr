@@ -260,10 +260,32 @@ def bind_active_job(folder: Path | str, slug: str | None = None) -> None:
 
 
 def events(path: Path) -> list[dict]:
+    """Load every JSONL row in path. Generic -- the same file can hold both
+    before/after quota-tracking rows and build_call_receipt() rows (see
+    emit_call_receipt's ledger= path), which have different shapes. Callers
+    that need only the before/after rows should use quota_events() below."""
     if not path.exists():
         return []
     with path.open(encoding="utf-8") as source:
         return [json.loads(line) for line in source if line.strip()]
+
+
+def quota_events(path: Path) -> list[dict]:
+    """Load only the before/after quota-tracking rows, skipping anything
+    else in the ledger (call-receipt rows sharing this file, or a
+    hand-edited row missing "type"/"run_id") that would otherwise KeyError
+    every direct item["type"]/item["run_id"] access in preflight/finish/
+    status/observed_cushions below."""
+    result = []
+    for item in events(path):
+        if (
+            not isinstance(item, dict)
+            or item.get("type") not in ("before", "after")
+            or not item.get("run_id")
+        ):
+            continue
+        result.append(item)
+    return result
 
 
 def append_event(path: Path, event: dict) -> None:
@@ -344,14 +366,14 @@ def deltas(before: dict, after: dict) -> dict[str, int | None]:
 
 def observed_cushions(history: list[dict]) -> dict[str, int]:
     return {
-        window: max([5] + [item["quota_drop_points"][window] or 0
+        window: max([5] + [(item.get("quota_drop_points") or {}).get(window) or 0
                             for item in history if item["type"] == "after"])
         for window in WINDOWS
     }
 
 
 def preflight(args: argparse.Namespace) -> int:
-    history = events(args.ledger)
+    history = quota_events(args.ledger)
     if any(item["type"] == "before" and not any(
         later["type"] == "after" and later["run_id"] == item["run_id"] for later in history
     ) for item in history):
@@ -388,10 +410,15 @@ def preflight(args: argparse.Namespace) -> int:
 
 
 def finish(args: argparse.Namespace) -> int:
-    history = events(args.ledger)
+    history = quota_events(args.ledger)
     matches = [item for item in history if item["run_id"] == args.run_id]
     if len(matches) != 1 or matches[0]["type"] != "before":
         raise ValueError("Run must have exactly one unfinished preflight")
+    if "quota" not in matches[0]:
+        raise ValueError(
+            f"Preflight record for {args.run_id} is missing its 'quota' baseline "
+            "(malformed or hand-edited ledger row) -- cannot compute a delta"
+        )
     stream = result_usage(args.stream)
     this_call_tokens = _event_tokens({"agy_result": stream}) if stream else 0
     quota = read_quota(
@@ -421,7 +448,7 @@ def finish(args: argparse.Namespace) -> int:
 
 
 def status(args: argparse.Namespace) -> int:
-    history = events(args.ledger)
+    history = quota_events(args.ledger)
     quota = read_quota(ledger=args.ledger)
     print(f"Gemini now [{quota['windows'][WINDOWS[1]].get('source', 'unknown')}]: "
           f"weekly {quota['windows'][WINDOWS[0]]['remaining_percent']}%, "
@@ -435,21 +462,22 @@ def status(args: argparse.Namespace) -> int:
     for item in history:
         if item["type"] != "after":
             continue
-        before = runs[item["run_id"]]
-        drops = item["quota_drop_points"]
-        usage = (item["agy_result"] or {}).get("usage") or {}
-        steps = (item["agy_result"] or {}).get("agent_steps_with_usage")
-        print(f"{item['run_id']} [{before['model']}] prompt~{before['prompt_estimated_tokens']} tokens; "
+        before = runs.get(item["run_id"]) or {}
+        drops = item.get("quota_drop_points") or {}
+        usage = (item.get("agy_result") or {}).get("usage") or {}
+        steps = (item.get("agy_result") or {}).get("agent_steps_with_usage")
+        print(f"{item['run_id']} [{before.get('model', '?')}] "
+              f"prompt~{before.get('prompt_estimated_tokens', '?')} tokens; "
               f"input={usage.get('input_tokens', '?')} output={usage.get('output_tokens', '?')} "
               f"thinking={usage.get('thinking_tokens', '?')} "
               f"cache_read={usage.get('cache_read_tokens', '?')} "
               f"agent_steps={steps if steps is not None else '?'}; "
-              f"weekly={drops[WINDOWS[0]]}pp five-hour={drops[WINDOWS[1]]}pp")
+              f"weekly={drops.get(WINDOWS[0], '?')}pp five-hour={drops.get(WINDOWS[1], '?')}pp")
     for run_id in runs:
         if not any(item["type"] == "after" and item["run_id"] == run_id for item in history):
             print(f"UNFINISHED {run_id}")
     comparable = [item for item in history if item["type"] == "after" and all(
-        item["quota_drop_points"][window] is not None for window in WINDOWS
+        (item.get("quota_drop_points") or {}).get(window) is not None for window in WINDOWS
     )]
     if len(comparable) < 2:
         print("Batch-size estimate: waiting for two comparable before/after calls.")

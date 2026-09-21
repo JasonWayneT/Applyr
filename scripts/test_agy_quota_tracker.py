@@ -112,6 +112,44 @@ class AgyQuotaTrackerTests(unittest.TestCase):
             self.assertEqual(after["agy_result"]["usage"]["input_tokens"], 123)
             self.assertEqual(after["quota_drop_points"][tracker.WINDOWS[0]], 2)
 
+    def test_status_survives_mixed_schema_ledger(self):
+        """emit_call_receipt() can write receipt rows (no type/run_id) into
+        the same ledger file preflight/finish use for before/after rows (see
+        stage0_subscription_adapter.py's ledger=DEFAULT_LEDGER path). Before
+        the fix, status()/preflight()/finish()/observed_cushions() all read
+        the raw ledger and crashed with KeyError on the first receipt row or
+        any other row missing "type"/"run_id" (FIXQUEUE item 9v-2)."""
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "ledger.jsonl"
+            tracker.append_event(ledger, {
+                "stage": "stage0", "slug": "rentana", "weekly_before": 70,
+                "five_hour_after": 79, "before_missing": False, "at": tracker.now(),
+            })
+            tracker.append_event(ledger, {"type": "before", "run_id": "one", "quota": quota()})
+            tracker.append_event(ledger, {"garbled": True})
+            tracker.append_event(ledger, {
+                "type": "after", "run_id": "one", "quota": quota(70, 84),
+                "quota_drop_points": {tracker.WINDOWS[0]: 2, tracker.WINDOWS[1]: 1},
+                "agy_result": {"usage": {"input_tokens": 5}, "agent_steps_with_usage": 1},
+            })
+            args = SimpleNamespace(ledger=ledger)
+            with patch.object(tracker, "read_quota", return_value=quota()):
+                self.assertEqual(tracker.status(args), 0)
+            history = tracker.quota_events(ledger)
+            self.assertEqual(len(history), 2)
+            self.assertEqual(tracker.observed_cushions(history)[tracker.WINDOWS[0]], 5)
+
+    def test_finish_reports_clear_error_on_missing_quota_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "ledger.jsonl"
+            tracker.append_event(ledger, {"type": "before", "run_id": "one"})
+            stream = Path(directory) / "stream.jsonl"
+            stream.write_text("", encoding="utf-8")
+            args = SimpleNamespace(ledger=ledger, run_id="one", stream=stream)
+            with self.assertRaises(ValueError) as ctx:
+                tracker.finish(args)
+            self.assertIn("quota", str(ctx.exception))
+
     def test_deltas_mismatched_source_is_not_comparable(self):
         """A real /usage panel reading and a self-tracked estimate are
         different measurement systems -- comparing them would produce a

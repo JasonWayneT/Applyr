@@ -15,6 +15,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(__file__))
 
 from jd_term_extractor import (  # noqa: E402
+    _claim_is_eligible_for_ats_contract,
     _stem,
     _term_present_stemmed,
     build_packet_ats_term_contract,
@@ -272,3 +273,114 @@ class TestAtsTermContractEligibilityAnchor(unittest.TestCase):
             )
         terms = sorted(e["term"] for e in contract)
         self.assertEqual(terms, ["Roadmap"])
+
+
+class TestAtsTermContractClaimEligibility(unittest.TestCase):
+    """CR-112 design doc's "Eligibility filter" section (design_v1_pending_review,
+    2026-09-13) was never implemented -- confirmed via grep, zero references to
+    eligible_claim_ids/NOT_ACTIONABLE anywhere in scripts/. This is the real,
+    still-open half of FIXQUEUE bug #8 (2026-09-21): the requirement_text anchor
+    only checks WHERE a term occurs in the JD, never WHETHER the claim it would
+    cite is actually usable, so a genuinely-anchored term could still cite a
+    "flagged but unusable" claim (empty allowed_claims, non-empty
+    prohibited_claims -- the same shape ACC-185-CUSTOMER-DISCOVERY had before
+    it was disabled for FIXQUEUE bug #5)."""
+
+    def test_helper_flags_flagged_but_unusable_claim(self):
+        self.assertFalse(_claim_is_eligible_for_ats_contract(
+            "X", {"X": {"allowed_claims": [], "prohibited_claims": ["no"]}}
+        ))
+
+    def test_helper_allows_claim_with_real_allowed_claims(self):
+        self.assertTrue(_claim_is_eligible_for_ats_contract(
+            "X", {"X": {"allowed_claims": ["real thing"], "prohibited_claims": ["no"]}}
+        ))
+
+    def test_helper_allows_unconstrained_empty_empty_card(self):
+        """No allowed_claims, no prohibited_claims -- unconstrained, per the
+        design doc's own rule, stays eligible."""
+        self.assertTrue(_claim_is_eligible_for_ats_contract("X", {"X": {}}))
+        self.assertTrue(_claim_is_eligible_for_ats_contract("X", {}))
+
+    def test_fallback_loop_drops_ineligible_claim_even_when_anchored(self):
+        """Design doc test 1/4 shape: term genuinely anchored via
+        requirement_text, but the only candidate claim is flagged-unusable."""
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j, "_load_true_vocabulary",
+            return_value={"customer discovery": "Customer Discovery"},
+        ):
+            contract = build_packet_ats_term_contract(
+                jd_text="Run customer discovery interviews with enterprise accounts weekly.",
+                evidence_map=[],
+                claims={
+                    "ACC-BOUNDARY-X": {
+                        "tags": ["Customer Discovery"],
+                        "allowed_claims": [],
+                        "prohibited_claims": ["that direct discovery conversations occurred"],
+                    },
+                },
+                excerpt_claim_ids={"ACC-BOUNDARY-X"},
+                requirement_text="Run customer discovery interviews with enterprise accounts weekly.",
+            )
+        self.assertEqual(contract, [])
+
+    def test_fallback_loop_keeps_eligible_sibling_when_one_claim_ineligible(self):
+        """Design doc test 5 shape: an ineligible and an eligible claim both
+        tag-match the same term -- only the eligible one should survive."""
+        import jd_term_extractor as j
+
+        with mock.patch.object(
+            j, "_load_true_vocabulary",
+            return_value={"customer discovery": "Customer Discovery"},
+        ):
+            contract = build_packet_ats_term_contract(
+                jd_text="Run customer discovery interviews with enterprise accounts weekly.",
+                evidence_map=[],
+                claims={
+                    "ACC-BOUNDARY-X": {
+                        "tags": ["Customer Discovery"],
+                        "allowed_claims": [],
+                        "prohibited_claims": ["that direct discovery conversations occurred"],
+                    },
+                    "ACC-REAL-Y": {
+                        "tags": ["Customer Discovery"],
+                        "allowed_claims": ["ran structured feedback sessions"],
+                        "prohibited_claims": ["a formal discovery program"],
+                    },
+                },
+                excerpt_claim_ids={"ACC-BOUNDARY-X", "ACC-REAL-Y"},
+                requirement_text="Run customer discovery interviews with enterprise accounts weekly.",
+            )
+        self.assertEqual(len(contract), 1)
+        self.assertEqual(contract[0]["claim_ids"], ["ACC-REAL-Y"])
+
+    def test_main_loop_drops_ineligible_claim(self):
+        """Design doc test 1 shape, but via the evidence_map-anchored main
+        loop rather than the tag-matched fallback loop."""
+        contract = build_packet_ats_term_contract(
+            jd_text="Run agile ceremonies with the team.",
+            evidence_map=[{
+                "jd_item": "Run agile ceremonies with the team.",
+                "claim_ids": ["ACC-BOUNDARY-Y"],
+            }],
+            claims={"ACC-BOUNDARY-Y": {"allowed_claims": [], "prohibited_claims": ["no"]}},
+        )
+        self.assertEqual(contract, [])
+
+    def test_main_loop_keeps_eligible_sibling_when_one_claim_ineligible(self):
+        contract = build_packet_ats_term_contract(
+            jd_text="Run agile ceremonies with the team.",
+            evidence_map=[{
+                "jd_item": "Run agile ceremonies with the team.",
+                "claim_ids": ["ACC-BOUNDARY-Y", "ACC-REAL-Z"],
+            }],
+            claims={
+                "ACC-BOUNDARY-Y": {"allowed_claims": [], "prohibited_claims": ["no"]},
+                "ACC-REAL-Z": {"allowed_claims": ["ran agile ceremonies"], "prohibited_claims": []},
+            },
+        )
+        self.assertTrue(contract, "real vocabulary should still match at least one term")
+        for entry in contract:
+            self.assertEqual(entry["claim_ids"], ["ACC-REAL-Z"])

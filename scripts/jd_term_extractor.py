@@ -202,6 +202,46 @@ def find_jd_term_gaps(jd_text: str, resume_text: str, cover_letter_text: str = "
     }
 
 
+def _claim_is_eligible_for_ats_contract(claim_id: str, claims: dict[str, dict]) -> bool:
+    """CR-112 eligibility filter (docs/spec/08-implementation/CR-112-ats-term-
+    contract-eligibility-defect.md, "Eligibility filter" section) -- designed
+    2026-09-13, explicitly marked "pending review, not implement without
+    review" for its full eligible_claim_ids/status schema, and never
+    implemented at all: confirmed via grep, zero references to
+    eligible_claim_ids/NOT_ACTIONABLE/selection_reason anywhere in scripts/.
+    That gap is why the FIXQUEUE-documented false-anchor bug survived CR-112's
+    actual shipped fix (the requirement_text anchor below) -- that anchor only
+    checks WHERE a term occurs in the JD, never WHETHER the claim it would
+    cite is actually usable. Live repro (2026-09-21): a claim genuinely
+    anchored via requirement_text, with allowed_claims=[] and non-empty
+    prohibited_claims (the same "flagged but unusable" shape as ACC-185
+    before it was disabled), still entered the contract -- an impossible
+    citation demand the author has no honest way to satisfy.
+
+    Only the claim-eligibility half of the design doc is implemented here
+    (allowed_claims / prohibited_claims), matching its literal rule: a claim
+    with a non-empty allowed_claims list is eligible; a claim with an empty
+    allowed_claims list is eligible only if it *also* has no prohibited_claims
+    (unconstrained); "flagged but unusable" -- empty allowed, non-empty
+    prohibited -- is the sole disqualifying shape. The doc's attribution-tier
+    check is explicitly deferred there ("no case in this packet needs it;
+    note as a follow-up, not a blocker") and stays deferred here too. The
+    full eligible_claim_ids/status/selection_reason schema (which would also
+    touch run_verify_only's _check_packet_ats_term_contract) is NOT built --
+    that is a bigger, cross-module change the design doc reserves for
+    reviewer sign-off, not something to implement unilaterally here. Filtering
+    an ineligible claim_id out here is sufficient on its own: a term left
+    with zero claim_ids is already dropped from the contract by this
+    function's existing return-time filter, achieving the doc's stated goal
+    ("never actionable ... drop it from the author-facing contract entirely")
+    without the larger schema change.
+    """
+    rec = claims.get(claim_id) or {}
+    allowed = rec.get("allowed_claims") or []
+    prohibited = rec.get("prohibited_claims") or []
+    return bool(allowed) or not prohibited
+
+
 def build_packet_ats_term_contract(
     jd_text: str,
     evidence_map: list[dict],
@@ -237,6 +277,7 @@ def build_packet_ats_term_contract(
     vocab = _load_true_vocabulary()
     jd_lower = jd_text.lower()
     disabled = disabled or set()
+    claims = claims or {}
     requirement_lower = requirement_text.lower() if requirement_text is not None else None
     contract: dict[str, dict] = {}
     for term_lower, display in vocab.items():
@@ -249,6 +290,7 @@ def build_packet_ats_term_contract(
             claim_ids = [
                 claim_id for claim_id in (row.get("claim_ids") or [])
                 if isinstance(claim_id, str) and claim_id.strip() and claim_id not in disabled
+                and _claim_is_eligible_for_ats_contract(claim_id, claims)
             ]
             if not claim_ids or not _term_present(term_lower, item.lower()):
                 continue
@@ -266,9 +308,8 @@ def build_packet_ats_term_contract(
     # packet claim's tags support them AND (when requirement_text is given)
     # the term genuinely occurs in a real required/preferred/responsibility
     # line, not merely somewhere in the JD's culture/benefits/marketing prose.
-    claims = claims or {}
     for claim_id in excerpt_claim_ids or set():
-        if claim_id in disabled:
+        if claim_id in disabled or not _claim_is_eligible_for_ats_contract(claim_id, claims):
             continue
         claim = claims.get(claim_id) or {}
         tags = [str(tag) for tag in claim.get("tags") or []]

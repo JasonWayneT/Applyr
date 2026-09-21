@@ -3,6 +3,51 @@
 Items 1-4 landed: YES
 Runtime hold: NO
 
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~20:05 UTC — read this fully before touching anything
+
+Picked up the 19:15 UTC entry (velosio/certara confirmations first). Answered those cards, fixed the false-tool extractor, ran `python scripts/run_queue_worker.py --worker cursor-grok-4-6 --once`, then root-caused the Groq cascade against live Settings instead of guessing. **Do not run another large worker pack until Gemini is operator-attested (or Groq is no longer 429ing).** A pack will re-claim velosio/certara (questions already answered) and burn Groq again.
+
+### Real bugs found and fixed this pass (tested, committed)
+
+1. **Named-tool extraction queued methodology phrases, fields, and category acronyms as "have you used X?" cards.** Live on certara (`Minimum Viable Product`, `Biostatistics`) and velosio (`PSA`). Root cause: `looks_like_named_tool()` only stopword-checks the first token of a Title-Case run, and `_ABSTRACT_NOUN_SUFFIXES` had no `-ics` field ending. Dynamics 365 on the same Velosio line is a real product and still extracts. Test: `test_methodology_fields_and_category_acronyms_are_not_tools`. Commit `75d369e`. `FR-286` / CR-109.
+
+2. **`Stage0ExtractError` did not persist `FAILED`, so the queue worker left the row `in_progress`.** Same class as the Stage 1 over-token-budget leak already fixed 2026-09-20. Live on nava_benefits after this pack: `last_workflow_status=NOT_STARTED`, lease held until expiry. `run_stage0` only wrote an observability event, then raised. `map_run_result` maps only terminal statuses. Added `_persist_stage0_failed` (and the missing-JD path). Test: `test_stage0_extract_error_persists_failed_instead_of_stale_in_progress`. `FR-343`.
+
+### Review Center answers (honest, not guessed)
+
+- velosio `skill:microsoft_dynamics_365` → `NOT_PRESENT` (real product, nowhere in WE / skills catalog)
+- velosio `skill:psa` → `BAD_DATA` (category acronym, not a product)
+- certara `skill:minimum_viable_product` → `BAD_DATA` (methodology phrase)
+- certara `skill:biostatistics` → `BAD_DATA` (scientific field)
+
+Both slugs promoted after answers. Worker claimed them. Cascade then failed (see below). Do not re-answer these cards.
+
+### Cascade: investigated, not a code hole to patch
+
+Live `llm_settings` (SQLite, redacted): `costClasses.groq=free_only` with a valid 2026-09-16 operator assertion; `costClasses.gemini=unknown` with **no** `freeTierAssertions.gemini`; Gemini API key is present; `stage0_evidence_classification` is unset so provider_order defaults to `["groq", "gemini"]`. `classify_provider("gemini")` → ineligible `unknown_cost_class`. `authorize_provider_chain(["groq","gemini"])` therefore returns **only groq**.
+
+That is CR-112 working as designed, not Agy `/usage` dropping Gemini. This worker path does not set `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER`, so Agy is not in the chain at all. The 00:40 UTC note that tied this to Agy headless permissions does not match this path.
+
+What the pack actually did: Groq 429 with wait above the cascade threshold → `_call_groq` returns `None` ("cascading to next provider") → no authorized next provider → `missing batch item_ids after all providers`. After three 429s the circuit breaker skips Groq. Later jobs (outschool, omnissa, optum, origami_risk) then pause on `requirement_extraction_review` because the LLM fallback never ran.
+
+Do not silently call Gemini. `FR-326` requires Jason's operator free-tier attestation in Settings (same shape as Groq's). Local is eligible (`offline`) but Stage 0 evidence policy does not add it unless `local_only`.
+
+### Jobs touched this session, current state
+
+- **velosio / certara**: questions answered, then `paused`/`WAITING_FOR_INPUT` on the stale `review_center` receipt (cascade failed, no new Stage 0 receipt). Next claim will treat them as ready and hit Groq again.
+- **nava_benefits**: still `in_progress`/`NOT_STARTED` as of the ~20:05 UTC `queue_claim.py status` dump, `locked_by=cursor-grok-4-6`, `lease_expires_at=2026-09-21T19:53:45Z`. The persist-FAILED fix does not rewrite already-stuck rows. Next `claim_pack` reclaims an expired lease. After the fix, a future extract error pauses `FAILED` immediately. Do not hand-run `--resume`.
+- **aderant**: worker SKIPPED at Stage 0 (done).
+- **outschool, omnissa, optum, origami_risk**: `paused`/`WAITING_FOR_INPUT` / `requirement_extraction_review`. Fill those templates only after a real fallback exists.
+- **amplify** and rubric-floor parks: untouched.
+
+### Next session, in order
+
+1. Read this whole entry before running anything.
+2. Confirm `nava_benefits` is no longer `in_progress` (`python scripts/queue_claim.py status`).
+3. Jason's call, not a code patch: attest Gemini in Settings (`freeTierAssertions` + `costClasses.gemini=free_only`) if the Groq→Gemini cascade should actually run. Until then a worker pack is Groq-only quota burn.
+4. After Gemini is attested (or Groq recovers), velosio/certara can continue. Do not re-answer the skill cards.
+5. Same discipline: root-cause before patching, worker not hand `--resume` for queued slugs, never override a below-floor rubric BLOCK without Jason.
+
 ## HANDOFF — Claude Sonnet 5, 2026-09-21 ~19:15 UTC, stopping on Jason's weekly token limit — read this fully before touching anything
 
 Picked up right after the "all 8 bugs closed" handoff below and moved to backlog work, per Jason's "continue through the queue, priority on finding/fixing bugs" instruction. Stopping now on his call, not on a natural break point -- **nothing is stuck or leased**, verified directly: `git status` clean, every queue row is `paused` (never `in_progress`/`leased`).

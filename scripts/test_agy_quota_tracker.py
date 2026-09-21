@@ -8,10 +8,10 @@ from unittest.mock import patch
 from scripts import agy_quota_tracker as tracker
 
 
-def quota(weekly=72, five_hour=85, reset="2026-09-23T02:26:54Z"):
+def quota(weekly=72, five_hour=85, reset="2026-09-23T02:26:54Z", source="usage_panel"):
     return {"at": "2026-09-18T20:00:00+00:00", "windows": {
-        tracker.WINDOWS[0]: {"remaining_percent": weekly, "reset_at": reset},
-        tracker.WINDOWS[1]: {"remaining_percent": five_hour, "reset_at": reset},
+        tracker.WINDOWS[0]: {"remaining_percent": weekly, "reset_at": reset, "source": source},
+        tracker.WINDOWS[1]: {"remaining_percent": five_hour, "reset_at": reset, "source": source},
     }}
 
 
@@ -25,11 +25,40 @@ class AgyQuotaTrackerTests(unittest.TestCase):
         self.assertEqual(result["windows"][tracker.WINDOWS[0]]["remaining_percent"], 72)
         self.assertEqual(result["windows"][tracker.WINDOWS[1]]["remaining_percent"], 85)
 
-    def test_missing_window_fails_closed(self):
+    def test_missing_window_falls_back_to_self_tracked_estimate(self):
+        """A malformed/incomplete /usage response (still broken in headless
+        mode as of 2026-09-21 -- see module docstring) must never raise and
+        block the caller; it falls back to the self-tracked ledger estimate,
+        clearly tagged with source="self_tracked_estimate" so callers can
+        tell the difference from a real reading."""
         output = "Gemini Models\tWeekly Limit Remaining\t72%\t2026-09-23T02:26:54Z\n"
-        with patch.object(tracker.subprocess, "run", return_value=SimpleNamespace(stdout=output)):
-            with self.assertRaises(ValueError):
-                tracker.read_quota()
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "ledger.jsonl"
+            with patch.object(tracker.subprocess, "run", return_value=SimpleNamespace(stdout=output)):
+                result = tracker.read_quota(ledger=ledger)
+        for window in tracker.WINDOWS:
+            self.assertEqual(result["windows"][window]["source"], "self_tracked_estimate")
+            self.assertEqual(result["windows"][window]["remaining_percent"], 100)
+
+    def test_self_tracked_estimate_reflects_real_ledger_usage(self):
+        """No agy call at all here -- read_quota() must fall back purely
+        from ledger history when the real panel is unreachable."""
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "ledger.jsonl"
+            budget = tracker.load_budget_config()
+            half_five_hour = budget[tracker.WINDOWS[1]] // 2
+            tracker.append_event(ledger, {
+                "type": "after", "run_id": "x", "at": tracker.now(),
+                "agy_result": {"status": "SUCCESS", "usage": {"total_tokens": half_five_hour}},
+            })
+            with patch.object(
+                tracker.subprocess, "run", side_effect=RuntimeError("agy unreachable")
+            ):
+                result = tracker.read_quota(ledger=ledger)
+        self.assertEqual(result["windows"][tracker.WINDOWS[1]]["source"], "self_tracked_estimate")
+        self.assertAlmostEqual(
+            result["windows"][tracker.WINDOWS[1]]["remaining_percent"], 50, delta=1
+        )
 
     def test_preflight_reserve_and_unfinished_call(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -67,7 +96,7 @@ class AgyQuotaTrackerTests(unittest.TestCase):
                 self.assertEqual(tracker.preflight(args), 0)
             self.assertEqual(tracker.events(args.ledger)[0]["prompt_estimated_tokens"], 1234)
 
-    def test_after_reads_nested_result_and_reset_blocks_delta(self):
+    def test_after_reads_nested_result(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             ledger = root / "ledger.jsonl"
@@ -77,11 +106,21 @@ class AgyQuotaTrackerTests(unittest.TestCase):
                 "status": "SUCCESS", "usage": {"input_tokens": 123, "thinking_tokens": 45}
             }}) + "\n", encoding="utf-8")
             args = SimpleNamespace(ledger=ledger, run_id="one", stream=stream)
-            with patch.object(tracker, "read_quota", return_value=quota(70, 84, "new-reset")):
+            with patch.object(tracker, "read_quota", return_value=quota(70, 84)):
                 self.assertEqual(tracker.finish(args), 0)
             after = tracker.events(ledger)[1]
             self.assertEqual(after["agy_result"]["usage"]["input_tokens"], 123)
-            self.assertIsNone(after["quota_drop_points"][tracker.WINDOWS[0]])
+            self.assertEqual(after["quota_drop_points"][tracker.WINDOWS[0]], 2)
+
+    def test_deltas_mismatched_source_is_not_comparable(self):
+        """A real /usage panel reading and a self-tracked estimate are
+        different measurement systems -- comparing them would produce a
+        misleading percentage-point number, so the delta must be None."""
+        before = quota(72, 85, source="usage_panel")
+        after = quota(70, 84, source="self_tracked_estimate")
+        changes = tracker.deltas(before, after)
+        self.assertIsNone(changes[tracker.WINDOWS[0]])
+        self.assertIsNone(changes[tracker.WINDOWS[1]])
 
     def test_result_usage_sums_done_agent_steps(self):
         with tempfile.TemporaryDirectory() as directory:

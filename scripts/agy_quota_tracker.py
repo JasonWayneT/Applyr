@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
-"""Record Agy Gemini quota around supervised Stage 1 authoring calls."""
+"""Record Agy Gemini quota around supervised Stage 1 authoring calls.
+
+``/usage`` in headless mode (``agy -p "/usage"``) is currently broken -- a
+confirmed Google-side bug in the agy/Antigravity CLI (headless print mode
+soft-denies the file-read the command needs to answer, so it never returns
+real numbers; reproduced directly 2026-09-21, no client-side permissions.allow
+fix found). read_quota() below still tries the real panel first (self-healing
+the moment Google fixes it, no code change needed here), and falls back to a
+SELF-TRACKED estimate computed purely from our own ledger's real per-call
+token usage (every agy call already reports exact token counts via
+``--output-format json``/stream usage, independent of ``/usage``) against a
+locally configured safety budget in data/agy_quota_budget.json -- NOT
+Google's real ceiling, which headless mode has no way to read. See that
+file's _description for how the budget numbers were derived and how to
+recalibrate them. Every quota dict below carries a "source" field
+("usage_panel" or "self_tracked_estimate") so callers and printed output are
+never silently vague about which one produced a number.
+"""
 
 from __future__ import annotations
 
@@ -9,15 +26,19 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_LEDGER = ROOT / "data" / "eval" / "cr117" / "agy_quota_ledger.jsonl"
+DEFAULT_BUDGET_CONFIG = ROOT / "data" / "agy_quota_budget.json"
 FAMILY = "Gemini Models"
 WINDOWS = ("Weekly Limit Remaining", "Five Hour Limit Remaining")
+_WINDOW_HOURS = {WINDOWS[0]: 24 * 7, WINDOWS[1]: 5}
+_WINDOW_BUDGET_KEY = {WINDOWS[0]: "weekly_token_budget", WINDOWS[1]: "five_hour_token_budget"}
+_FALLBACK_TOKEN_BUDGET = {WINDOWS[0]: 50_000_000, WINDOWS[1]: 6_000_000}
 RECEIPTS_ENV = "APPLYR_AGY_QUOTA_RECEIPTS"
 ACTIVE_SLUG_ENV = "APPLYR_ACTIVE_SLUG"
 ACTIVE_FOLDER_ENV = "APPLYR_ACTIVE_FOLDER"
@@ -27,7 +48,12 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def read_quota() -> dict:
+def _read_usage_panel() -> dict:
+    """The real Google-reported quota, via agy's interactive /usage panel.
+
+    Currently fails in headless mode (see module docstring) -- kept as the
+    first attempt, not removed, so this self-heals the moment Google fixes
+    the underlying bug."""
     result = subprocess.run(
         ["agy", "-p", "/usage"], capture_output=True, text=True, timeout=30, check=True
     )
@@ -43,10 +69,106 @@ def read_quota() -> dict:
         if not 0 <= remaining <= 100:
             raise ValueError(f"Quota outside 0-100: {percent}")
         datetime.fromisoformat(fields[3].replace("Z", "+00:00"))
-        windows[fields[1]] = {"remaining_percent": remaining, "reset_at": fields[3]}
+        windows[fields[1]] = {
+            "remaining_percent": remaining,
+            "reset_at": fields[3],
+            "source": "usage_panel",
+        }
     if set(windows) != set(WINDOWS):
         raise ValueError("Agy /usage did not return both Gemini quota windows")
-    return {"at": now(), "windows": windows    }
+    return {"at": now(), "windows": windows}
+
+
+def load_budget_config(path: Path = DEFAULT_BUDGET_CONFIG) -> dict[str, int]:
+    """Local safety-budget ceilings for the self-tracked fallback estimate.
+    Falls back to conservative hardcoded defaults if the file is missing or
+    a key is absent -- never crashes just because config wasn't written."""
+    budget = dict(_FALLBACK_TOKEN_BUDGET)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return budget
+        for window, key in _WINDOW_BUDGET_KEY.items():
+            value = data.get(key)
+            if isinstance(value, (int, float)) and value > 0:
+                budget[window] = int(value)
+    return budget
+
+
+def _event_tokens(event: dict[str, Any]) -> int:
+    """Best-effort real token total from an 'after' ledger event. Prefers
+    agy's own result.usage.total_tokens; falls back to the step-sum for the
+    rare SUCCESS-with-empty-result.usage case (FIXQUEUE item 9b)."""
+    result = event.get("agy_result") or {}
+    if not isinstance(result, dict):
+        return 0
+    usage = result.get("usage") or {}
+    if isinstance(usage, dict):
+        total = usage.get("total_tokens")
+        if isinstance(total, (int, float)) and total > 0:
+            return int(total)
+    step_sum = result.get("step_sum") or {}
+    if isinstance(step_sum, dict):
+        return sum(
+            int(step_sum.get(key) or 0)
+            for key in ("input_tokens", "output_tokens", "thinking_tokens")
+        )
+    return 0
+
+
+def _self_tracked_quota(
+    *, ledger: Path, budget: dict[str, int], extra_tokens: dict[str, int] | None = None
+) -> dict:
+    """Estimate remaining quota purely from our own ledger's real per-call
+    token usage within each rolling window -- no agy call at all, so this
+    cannot hang or hit the headless-permission bug. See module docstring."""
+    history = events(ledger) if ledger.exists() else []
+    now_dt = datetime.now(timezone.utc)
+    pending = extra_tokens or {}
+    windows_out: dict[str, dict[str, Any]] = {}
+    for window in WINDOWS:
+        cutoff = now_dt - timedelta(hours=_WINDOW_HOURS[window])
+        used = 0
+        for item in history:
+            if item.get("type") != "after":
+                continue
+            try:
+                at = datetime.fromisoformat(str(item.get("at", "")).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if at < cutoff:
+                continue
+            used += _event_tokens(item)
+        used += int(pending.get(window, 0))
+        ceiling = max(1, int(budget[window]))
+        remaining_percent = max(0, min(100, round(100 * (1 - used / ceiling))))
+        windows_out[window] = {
+            "remaining_percent": remaining_percent,
+            "reset_at": (now_dt + timedelta(hours=_WINDOW_HOURS[window])).isoformat(),
+            "source": "self_tracked_estimate",
+            "tokens_used_in_window": used,
+            "token_budget": ceiling,
+        }
+    return {"at": now(), "windows": windows_out}
+
+
+def read_quota(
+    *,
+    ledger: Path = DEFAULT_LEDGER,
+    budget: dict[str, int] | None = None,
+    extra_tokens: dict[str, int] | None = None,
+) -> dict:
+    """The real /usage panel if it works, else our own self-tracked
+    estimate. Never raises for the "headless /usage is broken" case --
+    that's the expected, common path now, not an error."""
+    try:
+        return _read_usage_panel()
+    except Exception:
+        pass
+    return _self_tracked_quota(
+        ledger=ledger, budget=budget or load_budget_config(), extra_tokens=extra_tokens
+    )
 
 
 def receipts_enabled() -> bool:
@@ -201,13 +323,20 @@ def result_usage(path: Path) -> dict | None:
 
 
 def deltas(before: dict, after: dict) -> dict[str, int | None]:
+    """Percentage-point drop per window. None when not comparable: a real
+    /usage panel read and a self-tracked estimate are different measurement
+    systems (see read_quota()'s docstring), so mixing them would be
+    misleading rather than just imprecise -- both sides must share a
+    "source". Self-tracked mode has no fixed reset_at to compare (it is
+    always "now + window hours", recomputed fresh each read), so unlike the
+    original panel-only version this no longer gates on reset_at equality."""
     changes = {}
     for window in WINDOWS:
         old = before["windows"][window]
         new = after["windows"][window]
         changes[window] = (
             old["remaining_percent"] - new["remaining_percent"]
-            if old["reset_at"] == new["reset_at"]
+            if old.get("source") == new.get("source")
             and old["remaining_percent"] >= new["remaining_percent"] else None
         )
     return changes
@@ -234,7 +363,7 @@ def preflight(args: argparse.Namespace) -> int:
     metadata = args.prompt.parent / "authoring_prompt_meta.json"
     if estimate is None and metadata.exists():
         estimate = json.loads(metadata.read_text(encoding="utf-8")).get("total_estimated_tokens")
-    quota = read_quota()
+    quota = read_quota(ledger=args.ledger)
     cushions = observed_cushions(history)
     lows = [name for name, value in quota["windows"].items()
             if value["remaining_percent"] <= args.reserve_percent + cushions[name]]
@@ -250,7 +379,8 @@ def preflight(args: argparse.Namespace) -> int:
         "reserve_percent": args.reserve_percent, "quota": quota,
     }
     append_event(args.ledger, event)
-    print(f"READY {args.run_id}: weekly {quota['windows'][WINDOWS[0]]['remaining_percent']}%, "
+    print(f"READY {args.run_id} [{quota['windows'][WINDOWS[1]].get('source', 'unknown')}]: "
+          f"weekly {quota['windows'][WINDOWS[0]]['remaining_percent']}%, "
           f"five-hour {quota['windows'][WINDOWS[1]]['remaining_percent']}% "
           f"(reserve {args.reserve_percent}%, minimum call cushion 5pp). "
           "Finish this run before the next preflight.")
@@ -263,7 +393,11 @@ def finish(args: argparse.Namespace) -> int:
     if len(matches) != 1 or matches[0]["type"] != "before":
         raise ValueError("Run must have exactly one unfinished preflight")
     stream = result_usage(args.stream)
-    quota = read_quota()
+    this_call_tokens = _event_tokens({"agy_result": stream}) if stream else 0
+    quota = read_quota(
+        ledger=args.ledger,
+        extra_tokens={WINDOWS[0]: this_call_tokens, WINDOWS[1]: this_call_tokens},
+    )
     changes = deltas(matches[0]["quota"], quota)
     append_event(args.ledger, {
         "type": "after", "run_id": args.run_id, "quota": quota,
@@ -288,9 +422,15 @@ def finish(args: argparse.Namespace) -> int:
 
 def status(args: argparse.Namespace) -> int:
     history = events(args.ledger)
-    quota = read_quota()
-    print(f"Gemini now: weekly {quota['windows'][WINDOWS[0]]['remaining_percent']}%, "
+    quota = read_quota(ledger=args.ledger)
+    print(f"Gemini now [{quota['windows'][WINDOWS[1]].get('source', 'unknown')}]: "
+          f"weekly {quota['windows'][WINDOWS[0]]['remaining_percent']}%, "
           f"five-hour {quota['windows'][WINDOWS[1]]['remaining_percent']}%")
+    if quota["windows"][WINDOWS[1]].get("source") == "self_tracked_estimate":
+        print(
+            "  (estimate from our own ledger, not Google's real number -- "
+            "/usage is unreadable in headless mode, see data/agy_quota_budget.json)"
+        )
     runs = {item["run_id"]: item for item in history if item["type"] == "before"}
     for item in history:
         if item["type"] != "after":

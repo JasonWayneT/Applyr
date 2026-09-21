@@ -30,6 +30,7 @@ from workflow.receipts import (  # noqa: E402
     write_receipt,
     write_state,
 )
+from build_stage0_fit_gate import Stage0ExtractError  # noqa: E402
 from workflow.runner import (  # noqa: E402
     WorkflowError,
     adopt_existing,
@@ -443,6 +444,31 @@ class RunUntilWaitingTests(unittest.TestCase):
         self.assertEqual(persisted["status"], "FAILED")
         self.assertEqual(persisted["stages"]["stage1"]["status"], "FAILED")
         self.assertIn("over token budget", persisted["metadata"]["stage1_fail_reason"].lower())
+
+    def test_stage0_extract_error_persists_failed_instead_of_stale_in_progress(self):
+        """Found live on nava_benefits, 2026-09-21: Stage0ExtractError from a
+        Groq 429 cascade with no authorized next provider raised WorkflowError
+        after only an observability event. workflow_state.json stayed
+        NOT_STARTED. map_run_result() only recognizes a terminal status, so
+        the queue worker left the row in_progress on an active lease until
+        expiry. Persist FAILED before raising, same as Stage 1 over-budget."""
+        state = init_state(str(self.folder), mode="production")
+        write_state(str(self.folder), state)
+        with mock.patch(
+            "workflow.runner.build_stage0_fit_gate",
+            side_effect=Stage0ExtractError(
+                "missing batch item_ids after all providers: ['required:0:deadbeef']"
+            ),
+        ):
+            with self.assertRaises(WorkflowError):
+                run_stage0(str(self.folder), state)
+        persisted = load_state(str(self.folder))
+        self.assertEqual(persisted["status"], "FAILED")
+        self.assertEqual(persisted["stages"]["stage0"]["status"], "FAILED")
+        self.assertIn(
+            "missing batch item_ids",
+            persisted["metadata"]["stage0_fail_reason"].lower(),
+        )
 
     def test_subscription_review_pause_does_not_rerun_stage0(self):
         state = init_state(str(self.folder), mode="production")

@@ -284,6 +284,7 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     jd = os.path.join(folder, "Original_JD.txt")
     if not os.path.exists(jd):
         append_event(folder, _run_id, "stage0", "failed", reason="Original_JD.txt not found")
+        _persist_stage0_failed(folder, state, "Original_JD.txt not found")
         raise WorkflowError("Original_JD.txt not found")
 
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
@@ -416,6 +417,12 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
         return result_state
     except Stage0ExtractError as exc:
         append_event(folder, _run_id, "stage0", "failed", reason=str(exc)[:500])
+        # 2026-09-21 (nava_benefits): raising here with no state write left
+        # workflow_state.json at NOT_STARTED. map_run_result() only recognizes
+        # a terminal status, so the queue worker left the row in_progress on
+        # an active lease until expiry. Persist FAILED first, same as a
+        # Stage 1 over-budget packet.
+        _persist_stage0_failed(folder, state, str(exc))
         raise WorkflowError(str(exc)) from exc
     protected = False
     if os.path.exists(gate_path) and not force:
@@ -698,6 +705,23 @@ def _verify_attempt_count(folder: str) -> int | None:
         return len(history) if isinstance(history, list) else None
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def _persist_stage0_failed(folder: str, state: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Queue mapping reads workflow status. Stage 0 extract failures must be FAILED."""
+    state = dict(state)
+    stages = dict(state.get("stages") or {})
+    s0_failed = dict(stages.get("stage0") or {})
+    s0_failed["status"] = "FAILED"
+    stages["stage0"] = s0_failed
+    state["stages"] = stages
+    state["status"] = "FAILED"
+    state["active_stage"] = "stage0"
+    meta = dict(state.get("metadata") or {})
+    meta["stage0_fail_reason"] = reason[:500]
+    state["metadata"] = meta
+    write_state(folder, state)
+    return state
 
 
 def _persist_stage1_failed(folder: str, state: dict[str, Any], reason: str) -> dict[str, Any]:

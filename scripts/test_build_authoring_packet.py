@@ -1222,6 +1222,25 @@ class TestItemOverlapPrecision(unittest.TestCase):
         self.assertNotIn("ACC-999-GENERIC", ids)
         self.assertIn("ACC-105-EXECUTION", ids)
 
+    def test_epics_ending_a_sentence_does_not_force_empty_claim_ids(self):
+        """Root cause of the failure above, isolated: _item_names_hard_blocked_tool
+        was matching plain "epics" (the Agile noun) as the blocked Epic EHR
+        company whenever no Agile-vocabulary word happened to follow it in the
+        same sentence, via _force_empty_claim_scoring -- silently wiping every
+        claim_id for that JD line regardless of how well real evidence scored.
+        Fixed 2026-09-21 by excluding the plural form unconditionally in
+        blocked_tools._epic_pattern (see its docstring)."""
+        from build_authoring_packet import _item_names_hard_blocked_tool
+        self.assertFalse(
+            _item_names_hard_blocked_tool(
+                "Keep the self-managed team equipped to work on the appropriate epics."
+            )
+        )
+        # Sanity: a real hard-blocked tool mention still forces empty claim_ids.
+        self.assertTrue(
+            _item_names_hard_blocked_tool("hands-on experience with Epic EHR configuration")
+        )
+
 
 class TestEvidenceMapBestMatchGuards(unittest.TestCase):
     """Pressure-test fixes: tools denylist, hard-tool empty, degree/comp noise."""

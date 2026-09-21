@@ -70,16 +70,23 @@ class TestEpicAgileFalsePositive(unittest.TestCase):
         )
         self.assertIsNone(hard_blocked_tool_pattern().search(text))
 
-    def test_epic_match_is_agile_noun_catches_backward_context(self) -> None:
-        """Live miss (peoplefinders, 2026-09-21): the Agile qualifying word
-        ("roadmap") comes BEFORE "epics", not after -- ``_epic_pattern``'s
-        regex lookahead is forward-only (stdlib re cannot express a
-        variable-width lookbehind), so ``hard_blocked_tool_pattern()`` alone
-        still matches this text; ``epic_match_is_agile_noun()`` is the
-        additional check that correctly excludes it by scanning the whole
-        sentence in both directions. See submission_linter.py's LR-026
-        dispatch for where this gets wired in for the live consumer."""
+    def test_plural_epics_never_matches_regardless_of_context(self) -> None:
+        """2026-09-21: plural "epics" is excluded unconditionally now (see
+        _epic_pattern's docstring) since every real company mention is
+        singular, title-case -- so this live miss (peoplefinders, the Agile
+        qualifying word "roadmap" coming BEFORE "epics", which the old
+        forward-only regex lookahead couldn't see) is now fixed at the regex
+        level, no bidirectional scan needed for the plural form at all."""
         line = "giving teams realistic bandwidth bands for new roadmap epics."
+        self.assertIsNone(hard_blocked_tool_pattern().search(line))
+
+    def test_epic_match_is_agile_noun_catches_backward_context_singular(self) -> None:
+        """Singular "epic" is still genuinely ambiguous (Agile item vs. the
+        company) and keeps the forward-lookahead regex plus
+        epic_match_is_agile_noun()'s bidirectional scan as backup for a
+        backward-only-context sentence, same shape as the plural miss above
+        before that got the simpler, unconditional fix."""
+        line = "giving teams realistic bandwidth bands for a new roadmap epic."
         m = hard_blocked_tool_pattern().search(line)
         self.assertIsNotNone(m, "sanity: the bare regex still matches -- that's the known gap")
         self.assertTrue(epic_match_is_agile_noun(line, m.start(), m.end()))

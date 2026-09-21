@@ -47,6 +47,7 @@ from build_stage0_fit_gate import (  # noqa: E402
     _get_hard_tool_pattern,
     _is_administratively_satisfied,
 )
+from blocked_tools import epic_match_is_agile_noun  # noqa: E402
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -515,10 +516,31 @@ def _is_travel_logistics_non_claimable(item_text: str) -> bool:
 
 
 def _item_names_hard_blocked_tool(item_text: str) -> bool:
-    """True when the JD line names a Stage-0 hard-blocked tool Jason must not claim."""
+    """True when the JD line names a Stage-0 hard-blocked tool Jason must not claim.
+
+    "epic(s)" needs an extra Python-level pass: _epic_pattern's embedded regex
+    lookahead is forward-only, so a match can still be the ordinary Agile noun
+    when the qualifying word comes BEFORE it in the sentence ("appropriate
+    epics.") or nowhere in the sentence's forward context at all -- confirmed
+    live via test_zero_overlap_jd_score_alone_does_not_fill_evidence_map,
+    which force-emptied a real evidence-map row (ACC-105-EXECUTION) because
+    "epics" ended its sentence with no Agile word after it. blocked_tools.py's
+    own docstring claimed this Stage 0 caller was dead/unreachable code and
+    that submission_linter.py's LR-026 was the only live consumer needing the
+    bidirectional epic_match_is_agile_noun() check -- that assumption was
+    wrong (this function is on the live evidence-map path), which is why the
+    fix never propagated here when LR-026 got it. Every other hard-blocked
+    tool keeps the plain regex-only path, same as LR-026's own dispatch.
+    """
     if not (item_text or "").strip():
         return False
-    return _get_hard_tool_pattern().search(item_text) is not None
+    pattern = _get_hard_tool_pattern()
+    for m in pattern.finditer(item_text):
+        token = m.group(0).lower()
+        if token.rstrip("s") == "epic" and epic_match_is_agile_noun(item_text, m.start(), m.end()):
+            continue
+        return True
+    return False
 
 
 def _force_empty_claim_scoring(item_text: str) -> str | None:

@@ -105,15 +105,43 @@ def _epic_pattern(esc: str) -> str:
     "look-behind requires fixed-width pattern" even though each alternative is
     individually fixed-width), so "new roadmap epics." (the qualifying word
     BEFORE "epics", not after) still slips through this regex alone. Callers
-    that need full correctness (currently: submission_linter.py's LR-026, the
-    only live consumer of this exclusion -- Stage 0's ``hard_blocked_tool_pattern``
-    import is unused/unreachable code) must additionally call
+    that need full correctness must additionally call
     ``epic_match_is_agile_noun()`` on each surviving match, which checks the
     WHOLE sentence in both directions rather than relying on regex lookaround.
     This function's forward-only lookahead is kept as a cheap pre-filter, not
     removed, since a caller that only wants "good enough" still benefits.
+
+    Live consumers of the bidirectional check: submission_linter.py's LR-026,
+    and build_authoring_packet.py's ``_item_names_hard_blocked_tool`` (used by
+    the evidence-map builder's ``_force_empty_claim_scoring``). An earlier
+    version of this docstring claimed the Stage 0 path
+    (``build_stage0_fit_gate.py``'s ``_get_hard_tool_pattern`` /
+    ``hard_blocked_tool_pattern`` re-export, imported by
+    build_authoring_packet.py) was dead/unreachable -- it is not: that
+    incorrect assumption is why this fix never propagated there when LR-026
+    got it, and a bare "epics" ending a sentence with no Agile word after it
+    (e.g. "...work on the appropriate epics.") force-emptied real evidence-map
+    claim_ids on that JD line. Grep for real call sites before trusting a
+    "this is unreachable" claim in code you're about to change.
+
+    Plural "epics" never matches the company at all (2026-09-21, root-caused
+    via test_zero_overlap_jd_score_alone_does_not_fill_evidence_map): every
+    documented false positive across this file's history -- binance's "epics
+    and stories", lexipol's list/no-stories-word misses, peoplefinders'
+    "roadmap epics" backward-only miss, and this one -- was the PLURAL form,
+    and test_real_epic_ehr_company_still_flagged's genuine company mentions
+    are exclusively singular, title-case ("Epic Systems", "Epic EHR",
+    "migrated ... out of Epic") -- companies are not referred to in lowercase
+    plural form. So the plural form is excluded unconditionally here, not
+    just when a co-occurring Agile word happens to be found nearby; this
+    fixes every documented plural miss at the mechanism level instead of
+    continuing to special-case each new sentence shape. The forward-lookahead
+    context check still applies to the singular "epic", which remains
+    genuinely ambiguous (an Agile item vs. the company) and still needs
+    epic_match_is_agile_noun()'s bidirectional check as backup for a
+    backward-only-context singular sentence.
     """
-    return rf"{esc}s?(?![^.]{{0,100}}(?:{_AGILE_CONTEXT_PATTERN}))"
+    return rf"{esc}(?!s)(?![^.]{{0,100}}(?:{_AGILE_CONTEXT_PATTERN}))"
 
 
 def epic_match_is_agile_noun(line: str, start: int, end: int) -> bool:

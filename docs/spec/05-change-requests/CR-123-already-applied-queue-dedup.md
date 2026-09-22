@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: implemented
 date: 2026-09-21
 related: CR-091, CR-092, CR-119, CR-121, CR-122
 ---

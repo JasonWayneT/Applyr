@@ -415,6 +415,19 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-347` / `AC-450` | CR-119 | `POST /api/pipeline-queue/upload`, `pipelineQueueUpload.ts`, panel upload | `tests/unit/pipelineQueueRoute.test.ts` | implemented |
 | `DATA-006` / `SEC-007` | CR-119 | migration `025`/`026`, `data/inbox/`, `data/queue_locks/`, no PII in API or logs | `tests/unit/pipelineQueueMigration.test.ts`, `scripts/test_pipeline_queue.py` | implemented |
 
+## CR-123 Already-applied queue dedup
+
+Extends CR-119 `FR-342` / `AC-440`. Those IDs stay as written.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-361` / `AC-470` / `AC-476` | CR-123 | Ingest Applied+ = no queue row / folder / skip ledger; pre-apply reuses slug | `scripts/test_csv_ingest.py`, `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-362` / `AC-471` | CR-123 | Archive/submissions and archive/skipped block new pending_review and new queued rows | `scripts/test_csv_ingest.py` | implemented |
+| `FR-363` / `AC-472` | CR-123 | Existing Applied+ queue row → `done`; claim/worker refuse | `scripts/test_pipeline_queue.py`, `scripts/test_run_queue_worker.py` | implemented |
+| `FR-364` / `AC-473` | CR-123 | `applyJobStatusUpdate` Applied+ closes matching queue; Backlog/Drafted do not | `tests/unit/jobStatusService.test.ts` | implemented |
+| `FR-365` / `AC-474` | CR-123 | Stage 0 same-posting Applied+ already-handled; different-role flag stays; cooldown/Self-Rejected stay | `scripts/test_stage0_db_gate.py`, `scripts/test_build_stage0_fit_gate.py`, `scripts/test_workflow_authority.py`, `scripts/test_run_queue_worker.py`, `scripts/test_stage0_skip_ledger.py` | implemented |
+| `FR-366` / `AC-475` | CR-123 | Reconcile Applied+ / archive / SKIPPED ghosts without a new CSV | `scripts/test_pipeline_queue.py`, `scripts/test_ingest_csv_queue.py` | implemented |
+
 ## Coverage checklist
 
 - [x] Every P0 requirement has acceptance criteria.

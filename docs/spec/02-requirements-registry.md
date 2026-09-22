@@ -968,6 +968,26 @@ Draft IDs. Production Stage 1 stays on the current single-pass author until the 
 | `FR-352` | functional | P1 | draft | Evidence-first path is behind a switch. One sandboxed Agy session per job. Production default changes only after quality review | `AC-455` | CR-120 |
 | `AC-455` | acceptance | P1 | draft | Switch default is off. `gemini-3.8-flash-medium` is the pilot model. No silent paid API fallback. Old path remains for rollback | `FR-352` | CR-120 |
 
+## CR-123 Already-applied and archived postings close the CSV queue
+
+Extends CR-119 `FR-342` / `AC-440`. Those IDs stay as written; this CR completes the lookup set.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-361` | functional | P0 | implemented | CSV ingest treats a same-posting `jobs` row in Applied / Recruiter Screen / Core Interviews / Offer and Negotiation as already-handled: no new `pipeline_queue` row, no `pending_review/` folder, no `stage0_skips` write. URL first (including `jobs.url`); company+title when URL is absent. Backlog / Drafted / Needs Retry reuse the slug and are not already-applied | `AC-470`, `AC-476` | CR-123 |
+| `AC-470` | acceptance | P0 | implemented | Ingest of a row matching an Applied+ `jobs` posting (URL or URL-less company+title) creates zero queue rows, zero `pending_review/` folders, and zero skip-ledger rows. Second ingest of the same file stays idempotent | `FR-361` | CR-123 |
+| `AC-476` | acceptance | P0 | implemented | Ingest of a row matching a Backlog / Drafted / Needs Retry `jobs` posting reuses the existing slug and does not treat the row as already-applied | `FR-361` | CR-123 |
+| `FR-362` | functional | P0 | implemented | A CSV row whose posting already exists under `data/archive/submissions/` or `data/archive/skipped/` does not recreate `pending_review/` and does not insert a new `queued` row. Live folder reuse stays CR-119 | `AC-471` | CR-123 |
+| `AC-471` | acceptance | P0 | implemented | Archive-tree posting match produces no new `pending_review/` folder and no new queued row. Live `pending_review/` or `submissions/` still reuse the slug | `FR-362` | CR-123 |
+| `FR-363` | functional | P0 | implemented | A `pipeline_queue` row whose posting matches `jobs` Applied+ is `done` and must not be leased or authored. Closable from `queued`, `paused`, `leased`, or `in_progress`. No new runner-kill | `AC-472` | CR-123 |
+| `AC-472` | acceptance | P0 | implemented | A paused or queued row for an Applied `jobs` posting becomes `done`. The next claim does not return it. The worker does not invoke `run_submission.py` for that slug | `FR-363` | CR-123 |
+| `FR-364` | functional | P0 | implemented | `applyJobStatusUpdate` to Applied / Recruiter Screen / Core Interviews / Offer and Negotiation closes matching `pipeline_queue` rows to `done` by posting identity. Pre-apply statuses do not. Folder archive behavior unchanged | `AC-473` | CR-123 |
+| `AC-473` | acceptance | P0 | implemented | Status update to Applied+ marks the matching queue row `done`. Status update to Backlog or Drafted does not | `FR-364` | CR-123 |
+| `FR-365` | functional | P0 | implemented | Stage 0 same-posting Applied+ is terminal already-handled: not PASS, not PASS-with-flag, not Skip. No author. No skip-ledger write. Queue `done`. Different-role `active_application` flag unchanged. Cooldown / Self-Rejected unchanged | `AC-474` | CR-123 |
+| `AC-474` | acceptance | P0 | implemented | Same-posting Applied Stage 0 (worker or hand) does not PASS, does not author, does not write `stage0_skips`, and sets the queue `done`. Different-role same-company still flags. Self-Rejected / cooldown still follow the existing DB gate | `FR-365` | CR-123 |
+| `FR-366` | functional | P0 | implemented | Reconcile marks `done` existing non-`done` queue rows that match Applied+, `archive/submissions/`, or a recorded Skip already in `archive/skipped/`. Must run without a new CSV. Ingest of a matching row also closes the existing row | `AC-475` | CR-123 |
+| `AC-475` | acceptance | P0 | implemented | Reconcile without a new CSV closes Applied+ paused rows, archive/submissions paused rows, and archive/skipped stale mirrors. Those rows are not claimable. Tests use synthetic fixtures | `FR-366` | CR-123 |
+
 ### Data Traceability (DATA-006)
 
 | ID | Type | Priority | Status | Requirement | Acceptance | Source |

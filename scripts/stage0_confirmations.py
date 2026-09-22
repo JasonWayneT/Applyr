@@ -111,7 +111,13 @@ def named_skill_candidates(
     blocked_keys = {canonical_skill_key(term) for term in HARD_BLOCKED_TOOLS}
     seen: set[str] = set()
     candidates: list[NamedSkillCandidate] = []
+    hire_site = re.compile(
+        r"\bfor\s+all\s+hires?\s+in\b|\bwork\s+in\s+the\s+office\s+a\s+minimum\b",
+        re.I,
+    )
     for line in lines:
+        if hire_site.search(line or ""):
+            continue
         for surface in looks_like_named_tool(line or ""):
             display_name = surface.strip()
             skill_key = canonical_skill_key(display_name)
@@ -265,8 +271,8 @@ def create_skill_confirmation(
                     review_key,
                     key,
                     (display_name or key).strip(),
-                    f"Have you used {(display_name or key).strip()} in your work?",
-                    "Applyr needs your input before this opportunity can continue.",
+                    f"{(display_name or key).strip()} is not in work experience, so this JD will not use it as evidence. Add it there if we missed it.",
+                    "Optional correction. Stage 0 is not waiting on this card.",
                     (requirement or "").strip() or None,
                     (evidence_excerpt or "").strip() or None,
                     (decision_basis or "").strip() or None,
@@ -548,7 +554,7 @@ def answer_confirmation(
                 """,
                 (answer, serialized, now, now, review_key),
             )
-            if is_presence:
+            if is_presence and answer in {"CONFIRMED_USE", "BAD_DATA"}:
                 connection.execute(
                     """
                     INSERT INTO skill_memory (

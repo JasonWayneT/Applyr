@@ -681,6 +681,34 @@ def test_LW032_real_workday_mention_still_flagged():
     assert any(v.rule_id == "LW-032" and "workday" in v.message for v in hits)
 
 
+def test_LW032_the_standard_line_phrase_not_flagged():
+    """Live false positive (omnissa, 2026-09-21): 'skip the standard line'
+    is ordinary queue phrasing, not a mention of The Standard."""
+    hits = check_wrong_job_company_bleed(
+        resume="",
+        cover_letter=(
+            "I designed a weighted priority-score formula for Jira issues "
+            "from severity and incident frequency, with a qualitative "
+            "override so premium clients could skip the standard line."
+        ),
+        jd_text="Product Manager at Omnissa",
+        own_company="Omnissa",
+        known_names={"The Standard", "Omnissa"},
+    )
+    assert hits == []
+
+
+def test_LW032_real_the_standard_mention_still_flagged():
+    hits = check_wrong_job_company_bleed(
+        resume="I interviewed at The Standard for their platform PM role.",
+        cover_letter="",
+        jd_text="Product Manager at Omnissa",
+        own_company="Omnissa",
+        known_names={"The Standard", "Omnissa"},
+    )
+    assert any(v.rule_id == "LW-032" and "The Standard" in v.message for v in hits)
+
+
 def test_LW032_own_company_does_not_warn():
     hits = check_wrong_job_company_bleed(
         resume="",
@@ -813,6 +841,24 @@ def test_LW032_missing_db_does_not_raise():
     assert names == set()
 
 
+def test_LW005_devops_partner_is_verified():
+    """Live miss (velosio, 2026-09-21): rstrip('s') turned DevOps into
+    'devop', which is not in _VERIFIED_PARTNERS, so a verified partner
+    warned as unverified."""
+    text = (
+        "In previous roles, partnering with DevOps, quality assurance, "
+        "and customer-facing teams kept each committed increment honest."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert not any(v.rule_id == "LW-005" for v in result.warns), result.warns
+
+
+def test_LW005_still_warns_unverified_design_partner():
+    text = "I partnered with Design to ship the checkout flow."
+    result = lint_document(text, doc_type="cover_letter")
+    assert any(v.rule_id == "LW-005" for v in result.warns), result.warns
+
+
 def test_LR026_epic_not_flagged_when_agile_word_precedes_it():
     """Live miss (peoplefinders, 2026-09-21): "new roadmap epics." -- the
     qualifying Agile word ("roadmap") comes BEFORE "epics", which
@@ -829,6 +875,29 @@ def test_LR026_epic_not_flagged_when_agile_word_precedes_it():
 def test_LR026_real_epic_company_still_flagged():
     text = "Worked extensively with Epic EHR systems for clinical data integration."
     result = lint_document(text, doc_type="resume")
+    assert any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
+def test_LR026_blocks_dynamics_365_business_central():
+    """Live miss (velosio, 2026-09-21): first-draft cover letter opened on
+    Microsoft Dynamics 365 Business Central. Jason answered NOT_PRESENT.
+    SAP/NetSuite were already hard-blocked; Dynamics was not."""
+    text = (
+        "Expanding proprietary IP solutions across Microsoft Dynamics 365 "
+        "Business Central requires a product manager who can anchor development."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
+def test_LR026_blocks_workspace_one_uem():
+    """Live miss (omnissa, 2026-09-21): Review Center NOT_PRESENT on
+    Workspace ONE UEM, then Stage 0 still mapped a SOFT bridge."""
+    text = (
+        "Hands-on experience with Workspace ONE UEM is how I would "
+        "approach frontline device management at Omnissa."
+    )
+    result = lint_document(text, doc_type="cover_letter")
     assert any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
 
 

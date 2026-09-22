@@ -29,6 +29,8 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from stage0_skip_ledger import normalize_url, posting_key
+
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
 _DEFAULT_DB = _REPO_ROOT / "data" / "jobagent.sqlite"
@@ -45,6 +47,18 @@ _NO_SIGNAL_TYPES = frozenset({"Ghosted", "No Longer Available"})
 _TERMINAL_STATUSES = frozenset({"Rejected", "Closed"})
 
 _PENDING_ASSETS_PREFIX = "Pending-assets cleanup"
+
+# Lockstep with shared/domain/jobPipeline.ts APPLICATION_FUNNEL_STATUSES.
+# Implements FR-365 / AC-474. Closed / Rejected / Ghosted / Self-Rejected
+# are not this rule.
+_APPLIED_PLUS_STATUSES = frozenset(
+    {
+        "Applied",
+        "Recruiter Screen",
+        "Core Interviews",
+        "Offer and Negotiation",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -273,10 +287,14 @@ def classify_rejection_row(
     # --- Compute within_cooldown ---
     changed_at_raw, anchor_field = _cooldown_anchor(row)
     if changed_at_raw is None:
-        within_cooldown = True
+        # Unknown date is not evidence the cooldown is still running.
+        # Live miss 2026-09-21: optum/origami_risk SKIPPED cooldown_no_signal
+        # because every date was NULL. Self-Rejected still blocks above.
+        # Implements AC-457 / FR-252.
+        within_cooldown = False
         reason_detail = (
-            f"{category} | NULL status_changed_at/applied_at/created_at "
-            f"→ treated as within {cooldown_days}d cooldown"
+            f"{category} | unknown cooldown date "
+            f"(NULL status_changed_at/applied_at/created_at)"
         )
     else:
         changed_at = _parse_job_datetime(changed_at_raw)
@@ -385,7 +403,7 @@ def _evaluate_db_gate_core(
         cur = conn.execute(
             """
             SELECT status, rejection_type, status_changed_at, applied_at, created_at,
-                   company, outcome_notes, title
+                   company, outcome_notes, title, url
             FROM jobs
             WHERE lower(company) LIKE ?
             """,
@@ -514,7 +532,7 @@ def _find_active_applications(
 
     try:
         cur = conn.execute(
-            "SELECT status, title, company FROM jobs WHERE lower(company) LIKE ?",
+            "SELECT status, title, company, url FROM jobs WHERE lower(company) LIKE ?",
             (f"%{company.lower().strip()}%",),
         )
         rows = [dict(r) for r in cur.fetchall()]
@@ -535,9 +553,117 @@ def _find_active_applications(
     return active
 
 
+def find_same_posting_applied_plus(
+    url: str | None,
+    company: str,
+    title: str | None,
+    db_path: Path | None = None,
+    _conn: "sqlite3.Connection | None" = None,
+) -> dict | None:
+    """Return the Applied+ jobs row for this posting, or None.
+
+    Args: url/company/title identify the posting under review; db_path and
+    _conn select the jobs DB (same injection as evaluate_db_gate).
+    Returns {url, company, title, status} when status is Applied+ and
+    identity matches (normalized URL, else exact company+title). Missing
+    jobs table or url column is treated as no match.
+    """
+    # Implements FR-365 / AC-474.
+    if _conn is not None:
+        conn = _conn
+        close_after = False
+    else:
+        path = db_path or _DEFAULT_DB
+        if not Path(path).exists():
+            return None
+        conn = sqlite3.connect(str(path))
+        conn.row_factory = sqlite3.Row
+        close_after = True
+
+    try:
+        try:
+            rows = conn.execute(
+                "SELECT url, company, title, status FROM jobs WHERE status IN (?, ?, ?, ?)",
+                tuple(_APPLIED_PLUS_STATUSES),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return None
+    finally:
+        if close_after:
+            conn.close()
+
+    url_text = (url or "").strip()
+    url_key = normalize_url(url_text) if url_text else None
+    wanted_key = posting_key(company, title or "")
+    for row in rows:
+        job_url, job_company, job_title, status = row[0], row[1], row[2], row[3]
+        if status not in _APPLIED_PLUS_STATUSES:
+            continue
+        if url_key:
+            job_url_key = normalize_url(job_url) if job_url else None
+            if job_url_key and job_url_key == url_key:
+                return {
+                    "url": job_url,
+                    "company": job_company,
+                    "title": job_title,
+                    "status": status,
+                }
+            continue
+        if posting_key(job_company or "", job_title or "") == wanted_key:
+            return {
+                "url": job_url,
+                "company": job_company,
+                "title": job_title,
+                "status": status,
+            }
+    return None
+
+
+def _apply_already_handled(
+    result: dict,
+    url: str | None,
+    company: str,
+    role: str | None,
+    db_path: Path | None,
+    _conn: "sqlite3.Connection | None",
+    self_identified: str | None,
+) -> dict:
+    """Set action already_handled when Applied+ matches and cooldown does not.
+
+    Args: result is the cooldown/flag gate dict; url/company/role/db_path/
+    _conn/self_identified are the posting and lookup context.
+    Returns the same dict, possibly with action already_handled.
+    Cooldown reject / reapply_flag stay first. Same-posting Applied+
+    replaces the Kroll-style active_application flag.
+    """
+    # Implements FR-365 / AC-474.
+    if result.get("action") in ("reject", "reapply_flag"):
+        return result
+    handled = find_same_posting_applied_plus(url, company, role, db_path, _conn)
+    if (
+        handled is None
+        and self_identified
+        and not company_token_match(self_identified, company)
+    ):
+        handled = find_same_posting_applied_plus(
+            url, self_identified, role, db_path, _conn
+        )
+    if not handled:
+        return result
+    result["action"] = "already_handled"
+    result["already_handled"] = handled
+    result["reason_code"] = "already_handled"
+    result["reason"] = (
+        f"Same posting already {handled.get('status')} "
+        f"({handled.get('company')!r} / {handled.get('title')!r})"
+    )
+    result.pop("active_application", None)
+    return result
+
+
 # Action severity, most restrictive first -- used to pick one result when a
 # company_mismatch means two names were checked and they disagree.
-_ACTION_SEVERITY = {"reject": 0, "reapply_flag": 1, "clear": 2}
+_ACTION_SEVERITY = {"reject": 0, "reapply_flag": 1, "already_handled": 2, "clear": 3}
 
 
 def evaluate_db_gate(
@@ -547,6 +673,7 @@ def evaluate_db_gate(
     now: datetime | None = None,
     _conn: "sqlite3.Connection | None" = None,
     jd_text: str | None = None,
+    url: str | None = None,
 ) -> dict:
     """Query the jobs DB and decide whether *company* is gated -- checking
     both *company* and, if *jd_text* is given and self-identifies a
@@ -562,14 +689,16 @@ def evaluate_db_gate(
 
     When the two names genuinely disagree (company_token_match says no) and
     both have DB history, this returns whichever result is more restrictive
-    (reject > reapply_flag > clear) -- conservative-default, matching this
+    (reject > reapply_flag > already_handled > clear) -- conservative-default, matching this
     pipeline's existing fail-closed posture elsewhere (Stage 0's NULL-date
     cooldown handling does the same thing). *matched_rows* is the union of
     both lookups' rows. A `company_mismatch` key is always present: None if
     no jd_text was given or nothing was extracted/it matched *company*;
     otherwise {"csv": company, "jd_self_identified": <name>} -- surfaced even
     when neither name has DB history, since "this posting is a board mirror"
-    is useful on its own regardless of dedup outcome."""
+    is useful on its own regardless of dedup outcome. Optional *url* enables
+    posting-identity Applied+ lookup (FR-365); a hit sets action
+    already_handled and the matched job unless reject / reapply_flag apply."""
     primary = _evaluate_db_gate_core(company, role=role, db_path=db_path, now=now, _conn=_conn)
 
     self_identified = extract_self_identified_company(jd_text) if jd_text else None
@@ -587,7 +716,9 @@ def evaluate_db_gate(
 
     if not self_identified or company_token_match(self_identified, company):
         primary["company_mismatch"] = None
-        return primary
+        return _apply_already_handled(
+            primary, url, company, role, db_path, _conn, self_identified
+        )
 
     secondary = _evaluate_db_gate_core(self_identified, role=role, db_path=db_path, now=now, _conn=_conn)
 
@@ -609,7 +740,9 @@ def evaluate_db_gate(
         result["reason"] = (
             f"(via self-identified employer '{self_identified}', CSV said '{company}') " + result["reason"]
         )
-    return result
+    return _apply_already_handled(
+        result, url, company, role, db_path, _conn, self_identified
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -5,8 +5,8 @@
 - Feature ID: `FEAT-002`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-005`
-- Related requirements: `FR-006`, `FR-007`, `FR-008`, `FR-009`, `FR-035`, `FR-039`, `FR-109`, `FR-170`, `FR-171`, `FR-172`, `FR-188`, `FR-189`, `FR-190`, `FR-191`, `FR-192`, `FR-242`, `FR-243`, `FR-246`, `FR-247`, `FR-278`–`FR-285`, `NFR-009`–`NFR-012`, `DATA-002`–`DATA-004`
-- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`, `CR-053`, `CR-054`, `CR-108`, `CR-114`, `CR-115`, `CR-116`, `CR-117`, `CR-118`
+- Related requirements: `FR-006`, `FR-007`, `FR-008`, `FR-009`, `FR-035`, `FR-039`, `FR-109`, `FR-170`, `FR-171`, `FR-172`, `FR-188`, `FR-189`, `FR-190`, `FR-191`, `FR-192`, `FR-242`, `FR-243`, `FR-246`, `FR-247`, `FR-278`–`FR-285`, `FR-357`–`FR-366`, `UX-001`, `NFR-009`–`NFR-012`, `DATA-002`–`DATA-004`
+- Related change requests: `CR-027`, `CR-028`, `CR-035`, `CR-036`, `CR-037`, `CR-038`, `CR-039`, `CR-053`, `CR-054`, `CR-091`, `CR-108`, `CR-114`, `CR-115`, `CR-116`, `CR-117`, `CR-118`, `CR-119`, `CR-121`, `CR-122`, `CR-123`
 
 ## Problem statement
 
@@ -46,13 +46,24 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `FR-280` | Batched ambiguous evidence judgment | One structured request per opportunity with strict item validation (`CR-108`, rollout-flagged) |
 | `FR-281` | Asymmetric HARD safety policy | Low-confidence or ungrounded HARD cannot disqualify (`CR-108`, rollout-flagged) |
 | `FR-282` | Durable Stage 0 checkpoint and resume | Per-item persistence, crash recovery, and per-opportunity pause (`CR-108`, rollout-flagged) |
-| `FR-283` | Durable skill confirmation memory | Deduplicated user decisions for unknown tools and skills (`CR-108`, rollout-flagged) |
+| `FR-283` | Durable skill confirmation memory | Grouped Review Center occurrences for unknown tools. Pause and forever-No superseded by CR-122 |
 | `FR-284` | Attestation versus authoring evidence boundary | User confirmation cannot create unsupported resume claims (`CR-108`, implemented) |
 | `FR-285` | Review / Questions workflow | Standalone UI and harness adapter share one confirmation resolver (`CR-108`, rollout-flagged) |
+| `FR-357` | Unknown tools do not pause Stage 0 | Preferred/OR-list unknown named tools are undocumented evidence, not `WAITING_FOR_INPUT` (`CR-122`) |
+| `FR-358` | Absence is WE, not forever No | Auto evidence-0 cap. No new `NOT_PRESENT` memory. WE/catalog wins leftover No (`CR-122`) |
+| `FR-359` | Review Center correction inbox | Grouped by tool. `BAD_DATA` still durable. `CONFIRMED_USE` still not authorable (`CR-122`) |
+| `FR-360` | Skill cards do not hold the CSV queue | Open `skill_presence` ignored for promote. `hard_gate_review` still blocks (`CR-122`) |
+| `FR-361` | Ingest treats jobs Applied+ as already-handled | Same posting in Applied / Recruiter Screen / Core Interviews / Offer and Negotiation: no queue row, no `pending_review/`, no skip-ledger write (`CR-123`) |
+| `FR-362` | Ingest does not recreate archived packs | Same posting under `archive/submissions/` or `archive/skipped/`: no new folder, no new queued row (`CR-123`) |
+| `FR-363` | Applied+ queue rows are done and not leased | Existing `pipeline_queue` row for an Applied+ posting is `done`; claim does not lease (`CR-123`) |
+| `FR-364` | Funnel status update closes matching queue rows | `applyJobStatusUpdate` to Applied+ marks matching queue rows `done` (`CR-123`) |
+| `FR-365` | Stage 0 same-posting Applied+ is already-handled | Not PASS-with-flag. No author. No skip ledger. Queue `done`. Different-role flag unchanged (`CR-123`) |
+| `FR-366` | Reconcile stale queue mirrors | Existing paused Applied+ / archive / SKIPPED queue rows become `done` without a new CSV (`CR-123`) |
+| `UX-001` | Skill cards are optional | Copy is a later WE correction, not a pipeline wait (`CR-122`) |
 | `FR-327` | Reviewed-only Stage 0 learning | Quarantine unverified fallback labels; company-held-out candidate model (`CR-114`) |
 | `FR-328` | Bounded subscription fallback | Separate extraction and evidence schemas; leftover `junk` is chrome only; AI leftover retrieval includes `aiProjects.md` (`CR-114`, in progress, production switch off) |
 | `FR-329` | Safe local evidence matcher | Reviewed cases and abstention before decision authority (`CR-114`, in progress, shadow only) |
-| `FR-330` | Scored-path heading/fragment drop | Required/preferred must not score leftover-junk chrome (`CR-115`, in progress, before 30-JD replay) |
+| `FR-330` | Scored-path heading/fragment drop | Required/preferred must not score leftover-junk chrome or hire-site office-days; empty qualification-required at fit 0 stays Tier 2 (`CR-115`, in progress, before 30-JD replay) |
 | `FR-331` | Non-AI retrieval coverage | Distinctive WE tokens must reach the evidence excerpt (`CR-116`, in progress, before 30-JD replay) |
 | `FR-332` | Years range low end | A years range gates on the minimum the posting will accept; age and company tenure are not floors (`CR-117`) |
 | `FR-337` | Exact blocked-company match | Whole normalized company name only; blank never matches (`CR-118`) |
@@ -73,14 +84,26 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `AC-360` | `FR-280` | An opportunity has multiple unresolved lines | Evidence classification runs | One structured batch request covers those lines and every response item maps to one stable item ID |
 | `AC-361` | `FR-281` | Model returns low-confidence or ungrounded HARD | Postprocessing runs | The opportunity is not disqualified; the result is escalated or held for review |
 | `AC-362` | `FR-282` | A Stage 0 process stops after persisted judgments | The opportunity resumes | Completed work is reused and only missing work is executed |
-| `AC-363` | `FR-283` | A named tool is absent from verified ground truth | Stage 0 evaluates the opportunity | One durable grouped confirmation is created and only that opportunity pauses |
+| `AC-363` | `FR-283` | A named tool is absent from verified ground truth | Stage 0 evaluates the opportunity | **Superseded by `AC-465`:** a grouped Review Center card is created; that opportunity does not pause |
+| `AC-465` | `FR-357` | JD names an unknown preferred tool (IBM Cloud-shaped) | Stage 0 runs | `skill_presence` exists, status is not `WAITING_FOR_INPUT`, queue is not `review_center` |
+| `AC-466` | `FR-358` | Unknown tool, no Review Center tap | Score and packet build | Evidence 0, no `claim_ids`, no new `NOT_PRESENT` row. Later WE/catalog add is known |
+| `AC-467` | `FR-359` | Two JDs name the same unknown tool | Review Center lists items | One grouped card, both opportunities. `BAD_DATA` suppresses. Yes cannot author |
+| `AC-468` | `UX-001` | User opens a skill-presence card | Reads the question | Pipeline-wait / "Do not ask again" copy is gone. Hard-gate wait copy remains |
+| `AC-469` | `FR-360` | Pack is paused `review_center` with only open skill cards | Worker or `requeue_paused` | Pack promotes. Open hard-gate still refuses |
+| `AC-470` | `FR-361` | CSV row URL or company+title matches a `jobs` Applied+ posting | Ingest runs | No new queue row, no `pending_review/` folder, no `stage0_skips` write |
+| `AC-471` | `FR-362` | CSV row matches a folder in `archive/submissions/` or `archive/skipped/` | Ingest runs | No new `pending_review/` folder and no new queued row |
+| `AC-472` | `FR-363` | Queue row is `paused` or `queued` and `jobs` is Applied | Claim / worker | Row is `done` and is not leased or authored |
+| `AC-473` | `FR-364` | Job has a matching non-`done` queue row | `applyJobStatusUpdate` to Applied+ | Matching queue row is `done`. Pre-apply status does not close it |
+| `AC-474` | `FR-365` | Same posting is already Applied | Stage 0 runs (worker or hand) | Already-handled: no PASS-with-flag, no author, no skip ledger, queue `done`. Different-role flag still fires |
+| `AC-475` | `FR-366` | Stale paused rows match Applied+, `archive/submissions/`, or `archive/skipped/` | Reconcile without a new CSV | Those rows are `done` and not claimable |
+| `AC-476` | `FR-361` | CSV row matches a `jobs` Backlog / Drafted / Needs Retry posting | Ingest runs | Existing slug is reused. Not treated as already-applied |
 | `AC-364` | `FR-284` | User answers Yes without verified evidence details | Stage 1 packet is built | The attestation cannot create an authorable claim |
 | `AC-365` | `FR-285` | User answers in the UI or harness | Confirmation resolver runs | Both surfaces update the same durable decision and the opportunity can resume |
 | `AC-366` | `FR-281` | A proposed HARD requires user review | User selects a hard-gate action | `KEEP_ELIGIBLE`, `CONFIRM_HARD`, and `NEEDS_MORE_INFO` produce their documented state transitions |
 | `AC-425` | `FR-327` | An extraction fallback answers an uncertain line | Stage 0 stores the runtime answer | No training CSV is written; retraining ignores legacy feedback |
 | `AC-426` | `FR-328` | The subscription adapter is enabled for an uncertain batch | The harness times out, substitutes a different lane, or returns invalid JSON | Every item enters explicit review; `subscription_minutes` is recorded and `api_cents` stays null |
 | `AC-427` | `FR-329` | A local evidence matcher sees an unreviewed or uncertain phrase | Shadow matching runs | The matcher abstains and cannot emit terminal HARD or Skip |
-| `AC-428` | `FR-330` | NLP confidently labels a section heading or truncated fragment as required | Evidence scoring runs | The heading/fragment is not scored; leftover junk semantics stay unchanged |
+| `AC-428` | `FR-330` | NLP confidently labels a section heading, truncated fragment, or hire-site office-days line as required | Evidence scoring runs | The chrome/logistics line is not scored; leftover junk semantics stay unchanged; empty qualification-required at fit 0 stays Tier 2 PASS |
 | `AC-429` | `FR-331` | A non-AI requirement has distinctive tokens in workExperience.md | Evidence retrieval builds the excerpt | Those tokens are in the excerpt; `coverage_ok` is False if they are not |
 | `AC-430` | `FR-332` | JD states 3-7 years of product management experience | Years gate runs with max=7 | Parsed floor is 3 and the JD passes |
 | `AC-431` | `FR-332` | An archived years skip's winning figure is a range top, an age, or company history | Years audit runs | The row is flagged as a wrong number, not blessed |
@@ -100,5 +123,6 @@ Most job postings are poor fits. Sending every lead to an LLM for full analysis 
 | `TEST-114C` | `FR-329`, `AC-427` | unit | Shadow matcher matches reviewed tool aliases, abstains otherwise, and never emits HARD or Skip | in_progress |
 | `TEST-114D` | `FR-332`, `AC-430`, `AC-431` | unit/archive | Range gates on the low end; age and company tenure are not hits; remaining years skips are not range-top, age, or history | in_progress |
 | `TEST-118A` | `FR-337`, `FR-338`, `FR-339`, `AC-435`, `AC-436`, `AC-437` | unit/archive | Exact company match; people-gate negation; network_page flag; preferred lead-in; 30-JD replay records reason agreement | in_progress |
-| `TEST-115A` | `FR-330`, `AC-428` | unit | Heading/fragment strings cannot receive a scored evidence level that moves fit; Accuity heading vs degree pair and 1uphealth metadata/fragment are fixtures | in_progress |
+| `TEST-115A` | `FR-330`, `AC-428` | unit | Heading/fragment/hire-site strings cannot receive a scored evidence level that moves fit; Accuity heading vs degree pair, 1uphealth metadata/fragment, and Optum hire-site office-days are fixtures | in_progress |
 | `TEST-116A` | `FR-331`, `AC-429` | unit | Acquia Jira/Confluence and executive-briefing excerpts contain the WE evidence; `coverage_ok` fails when those tokens are starved | in_progress |
+| `TEST-123A` | `FR-361`–`FR-366`, `AC-470`–`AC-476` | unit | Applied+ ingest creates no queue row or folder; archive hit creates neither; Backlog reuses slug; Applied+ queue is `done` and not leased; status update closes Applied+ only; Stage 0 same-posting Applied+ is already-handled (different-role still flags); reconcile closes Applied+ / archive / SKIPPED ghosts without a new CSV | proposed |

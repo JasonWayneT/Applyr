@@ -44,6 +44,10 @@ DEFAULT_EFFORT = "medium"
 PROMPT_NAME = "authoring_prompt.md"
 ATTEMPTS_DIR = "stage1_author_attempts"
 REQUIRED_ARTIFACT_NAMES = ("Resume.md", "CoverLetter.md", "claim_provenance.json")
+SANDBOX_INSTRUCTION = (
+    "Return the full Resume.md, CoverLetter.md, and claim_provenance.json as fenced blocks. "
+    "Don't use tools or files."
+)
 
 
 def build_author_command(
@@ -106,6 +110,7 @@ def run_author_process(
     wall_seconds: int | None = None,
     max_events: int | None = None,
     spawn: Callable[[list[str], Path], subprocess.Popen[str]] | None = None,
+    instruction: str | None = None,
 ) -> dict[str, Any]:
     wall = wall_seconds if wall_seconds is not None else DEFAULT_WALL_SECONDS
     events = max_events if max_events is not None else DEFAULT_MAX_EVENTS
@@ -131,6 +136,7 @@ def run_author_process(
     proc = starter(command, workspace)
     assert proc.stdin is not None and proc.stdout is not None
     start = time.monotonic()
+    lead = instruction if instruction is not None else SANDBOX_INSTRUCTION
     try:
         try:
             raw_init = _readline_timeout(proc.stdout, wall)
@@ -145,7 +151,17 @@ def run_author_process(
         if init_event.get("event") != "init":
             return _stopped("missing_init_event", wall_seconds=time.monotonic() - start)
 
-        proc.stdin.write(json.dumps({"event": "user", "message": {"content": prompt}}) + "\n")
+        proc.stdin.write(
+            json.dumps(
+                {
+                    "event": "user",
+                    "message": {
+                        "content": lead + "\n\n" + prompt.strip() + "\n"
+                    },
+                }
+            )
+            + "\n"
+        )
         proc.stdin.flush()
         proc.stdin.close()
 

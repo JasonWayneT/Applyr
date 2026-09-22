@@ -184,6 +184,32 @@ class TestStage0Confirmations(unittest.TestCase):
         )
         self.assertEqual(certara, [])
 
+    def test_hire_site_cities_are_not_tools(self) -> None:
+        """Live miss 2026-09-21 optum: 'For all hires in the Minneapolis or
+        Washington, D.C. area' queued Have you used Minneapolis / Washington."""
+        candidates = named_skill_candidates(
+            [
+                "For all hires in the Minneapolis or Washington, D.C. area, "
+                "you will be required to work in the office a minimum of four "
+                "days per week.",
+                "Experience with Rally",
+            ]
+        )
+        names = [candidate.display_name for candidate in candidates]
+        self.assertNotIn("Minneapolis", names)
+        self.assertNotIn("Washington", names)
+        self.assertIn("Rally", names)
+
+    def test_risk_management_domain_is_not_a_tool(self) -> None:
+        """Live miss 2026-09-21 origami_risk: preferred P&C / Risk Management
+        line queued Have you used Risk Management?"""
+        candidates = named_skill_candidates(
+            [
+                "Prior Risk Management and/or P&C Insurance experience strongly preferred."
+            ]
+        )
+        self.assertEqual(candidates, [])
+
     def test_blocked_tool_inside_longer_candidate_is_excluded(self) -> None:
         """CR-109 / BUG-001: "workday" is hard-blocked, yet "Workday Ecosystem",
         "Workday Web Services", and "Workday Recruiting" all queued as blocking
@@ -404,7 +430,27 @@ class TestStage0Confirmations(unittest.TestCase):
         )
         self.assertEqual(list_pending_for_opportunity("acme", self.db_path), [])
 
-    def test_stage0_builder_pauses_for_unknown_named_skill_before_scoring(self) -> None:
+    def test_not_present_does_not_write_skill_memory(self) -> None:
+        """CR-122 / AC-466: No is this-JD undocumented, not a forever career fact."""
+        create_skill_confirmation(
+            db_path=self.db_path,
+            skill_key="ibm_cloud",
+            display_name="IBM Cloud",
+            requirement="including AWS, Azure, Google Cloud, and IBM Cloud",
+            opportunity_key="ssc",
+            opportunity_company="SS&C",
+            opportunity_title="Product Manager",
+        )
+        answer_confirmation(
+            db_path=self.db_path,
+            review_key="skill:ibm_cloud",
+            answer="NOT_PRESENT",
+        )
+        self.assertIsNone(get_skill_memory("ibm_cloud", self.db_path))
+        self.assertEqual(list_pending_for_opportunity("ssc", self.db_path), [])
+
+    def test_stage0_builder_does_not_pause_for_unknown_named_skill(self) -> None:
+        """CR-122 / AC-465: unknown tools create a card and auto-absent, no WAITING_FOR_INPUT."""
         with tempfile.TemporaryDirectory() as folder:
             Path(folder, "Original_JD.txt").write_text(
                 "Product Manager\n\nRequirements\n- Experience with Acme Platform\n",
@@ -416,17 +462,44 @@ class TestStage0Confirmations(unittest.TestCase):
                 "responsibilities": [],
                 "culture": [],
             }
+
+            def fake_batch(items, **_kwargs):
+                return {
+                    item.item_id: {
+                        "item": item.requirement,
+                        "evidence_level": 3,
+                        "gap": False,
+                        "gap_class": None,
+                        "gate": "NONE",
+                        "gap_source": "",
+                        "anchor": "test",
+                        "confidence": "high",
+                        "reasoning": "test",
+                    }
+                    for item in items
+                }
+
             with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
-                with self.assertRaises(Stage0NeedsInput) as raised:
-                    build_stage0_fit_gate(
+                with patch(
+                    "stage0_evidence_cascade.classify_requirements_batch",
+                    side_effect=fake_batch,
+                ):
+                    result = build_stage0_fit_gate(
                         folder,
                         db_gate_result={"action": "clear"},
                         prefs={"blocked_companies": []},
                         confirmation_db_path=self.db_path,
                     )
-            self.assertEqual(raised.exception.opportunity_key, Path(folder).name)
-            self.assertEqual(raised.exception.pending[0]["skill_key"], "acme_platform")
-            self.assertEqual(list_pending_for_opportunity(Path(folder).name, self.db_path)[0]["title"], "Acme Platform")
+            pending = list_pending_for_opportunity(Path(folder).name, self.db_path)
+            self.assertEqual(pending[0]["skill_key"], "acme_platform")
+            self.assertEqual(pending[0]["title"], "Acme Platform")
+            self.assertEqual(pending[0]["status"], "open")
+            names = [
+                row["display_name"]
+                for row in result.get("not_present_named_tools") or []
+            ]
+            self.assertIn("Acme Platform", names)
+            self.assertNotEqual(result.get("decision"), "WAITING_FOR_INPUT")
 
     def test_harness_emits_the_same_actionable_question_record(self) -> None:
         create_skill_confirmation(
@@ -573,7 +646,7 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                         }
                     )
 
-                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1"}):
+                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1", "APPLYR_STAGE0_CLOUD_LLM": "1"}):
                     with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
                         with patch("utils.load_llm_settings", return_value=settings):
                             with patch("utils.call_llm", side_effect=provider_response):
@@ -612,7 +685,7 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                     review_key=raised.exception.pending[0]["review_key"],
                     answer="KEEP_ELIGIBLE",
                 )
-                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1"}):
+                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1", "APPLYR_STAGE0_CLOUD_LLM": "1"}):
                     with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
                         with patch("utils.load_llm_settings", return_value=settings):
                             with patch("utils.call_llm", side_effect=AssertionError("cached judgment was not reused")):
@@ -627,12 +700,9 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
             finally:
                 os.unlink(db_path)
 
-    def test_model_flagged_unknown_tool_creates_pending_and_pauses(self) -> None:
-        """CR-108 Epic 7.2: when the deterministic extractor misses a named
-        tool (patched to find nothing) and the batch model flags it with
-        needs_user_confirmation + canonical_skill, the fit gate creates the
-        same durable pending item the deterministic path would have, pauses
-        WAITING_FOR_INPUT, and resumes reusing the persisted checkpoint."""
+    def test_model_flagged_unknown_tool_creates_pending_without_pausing(self) -> None:
+        """CR-108 Epic 7.2 + CR-122: model-flagged named tools still create a
+        durable pending item. Stage 0 does not WAITING_FOR_INPUT for skill cards."""
         with tempfile.TemporaryDirectory() as folder:
             folder_path = Path(folder)
             (folder_path / "Original_JD.txt").write_text(
@@ -682,35 +752,30 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                     )
 
                 # The deterministic extractor misses the tool on purpose.
-                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1"}):
+                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1", "APPLYR_STAGE0_CLOUD_LLM": "1"}):
                     with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
                         with patch("build_stage0_fit_gate.named_skill_candidates", return_value=[]):
                             with patch("utils.load_llm_settings", return_value=settings):
                                 with patch("utils.call_llm", side_effect=provider_response):
-                                    with self.assertRaises(Stage0NeedsInput) as raised:
-                                        build_stage0_fit_gate(
-                                            folder_path,
-                                            db_gate_result={"action": "clear"},
-                                            prefs={"blocked_companies": []},
-                                            confirmation_db_path=db_path,
-                                        )
+                                    result = build_stage0_fit_gate(
+                                        folder_path,
+                                        db_gate_result={"action": "clear"},
+                                        prefs={"blocked_companies": []},
+                                        confirmation_db_path=db_path,
+                                    )
                 pending = list_pending_for_opportunity(folder_path.name, db_path)
                 self.assertEqual(len(pending), 1)
                 self.assertEqual(pending[0]["question_type"], "skill_presence")
                 self.assertEqual(pending[0]["skill_key"], "acme_platform")
                 self.assertEqual(pending[0]["status"], "open")
-                self.assertEqual(
-                    raised.exception.pending[0]["review_key"],
-                    "skill:acme_platform",
-                )
+                names = [
+                    row["display_name"]
+                    for row in result.get("not_present_named_tools") or []
+                ]
+                self.assertIn("Acme Platform", names)
                 self.assertEqual(len(calls), 1)
 
-                answer_confirmation(
-                    db_path=db_path,
-                    review_key=raised.exception.pending[0]["review_key"],
-                    answer="CONFIRMED_USE",
-                )
-                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1"}):
+                with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1", "APPLYR_STAGE0_CLOUD_LLM": "1"}):
                     with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
                         with patch("build_stage0_fit_gate.named_skill_candidates", return_value=[]):
                             with patch("utils.load_llm_settings", return_value=settings):
@@ -764,20 +829,24 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                         "skill_kind": "skill",
                     }]})
 
-                with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
-                    with patch("utils.load_llm_settings", return_value={
-                        "stage0_evidence_classification": {
-                            "provider_order": ["groq"],
-                            "models": {"groq": "groq-test"},
-                        }
-                    }):
-                        with patch("utils.call_llm", side_effect=provider_response):
-                            build_stage0_fit_gate(
-                                folder_path,
-                                db_gate_result={"action": "clear"},
-                                prefs={"blocked_companies": []},
-                                confirmation_db_path=db_path,
-                            )
+                with patch.dict(
+                    os.environ,
+                    {"STAGE0_EVIDENCE_CASCADE": "1", "APPLYR_STAGE0_CLOUD_LLM": "1"},
+                ):
+                    with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
+                        with patch("utils.load_llm_settings", return_value={
+                            "stage0_evidence_classification": {
+                                "provider_order": ["groq"],
+                                "models": {"groq": "groq-test"},
+                            }
+                        }):
+                            with patch("utils.call_llm", side_effect=provider_response):
+                                build_stage0_fit_gate(
+                                    folder_path,
+                                    db_gate_result={"action": "clear"},
+                                    prefs={"blocked_companies": []},
+                                    confirmation_db_path=db_path,
+                                )
                 self.assertEqual(list_pending_for_opportunity(folder_path.name, db_path), [])
             finally:
                 os.unlink(db_path)
@@ -830,6 +899,7 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                     os.environ,
                     {
                         "STAGE0_EVIDENCE_CASCADE": "1",
+                        "APPLYR_STAGE0_CLOUD_LLM": "1",
                         "STAGE0_SECTION_MODE": "deterministic",
                         "APPLYR_STAGE0_REVIEW_DB": db_path,
                     },
@@ -857,6 +927,7 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                     os.environ,
                     {
                         "STAGE0_EVIDENCE_CASCADE": "1",
+                        "APPLYR_STAGE0_CLOUD_LLM": "1",
                         "STAGE0_SECTION_MODE": "deterministic",
                         "APPLYR_STAGE0_REVIEW_DB": db_path,
                     },

@@ -114,6 +114,45 @@ class TestMapping(WorkerHarness):
         self.assertEqual(row["last_workflow_status"], "WAITING_FOR_LLM")
         self.assertTrue(self.cmds[0][-1] == "--resume")
         self.assertEqual(self.cmds[0][-2], "waitco")
+        self.assertEqual(len(self.cmds), 1)
+
+    def test_waiting_for_llm_with_prompt_runs_author_then_resume(self) -> None:
+        _seed(self.conn, "authorco")
+        folder = self._write_state("authorco", "WAITING_FOR_LLM", "stage1")
+        (folder / "authoring_prompt.md").write_text("PROMPT", encoding="utf-8")
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        row = pq.get_row(self.conn, "authorco")
+        assert row is not None
+        self.assertEqual(row["status"], "paused")
+        self.assertEqual(row["last_workflow_status"], "WAITING_FOR_LLM")
+        self.assertEqual(len(self.cmds), 3)
+        self.assertTrue(self.cmds[0][-1] == "--resume")
+        self.assertIn("run_stage1_author.py", self.cmds[1][1])
+        self.assertEqual(self.cmds[1][-1], str(folder))
+        self.assertTrue(self.cmds[2][-1] == "--resume")
+
+    def test_waiting_for_llm_with_resume_does_not_author(self) -> None:
+        _seed(self.conn, "hasresume")
+        folder = self._write_state("hasresume", "WAITING_FOR_LLM", "stage1")
+        (folder / "authoring_prompt.md").write_text("PROMPT", encoding="utf-8")
+        (folder / "Resume.md").write_text("# Name\n", encoding="utf-8")
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        self.assertEqual(len(self.cmds), 1)
+        self.assertNotIn("run_stage1_author.py", " ".join(self.cmds[0]))
 
     def test_complete_maps_to_done(self) -> None:
         _seed(self.conn, "doneco")
@@ -159,6 +198,52 @@ class TestMapping(WorkerHarness):
         self.assertEqual(row["status"], "paused")
         self.assertIsNone(row["locked_by"])
         self.assertEqual(row["last_workflow_status"], "WAITING_FOR_INPUT")
+
+    def test_conversion_risk_maps_paused_reason(self) -> None:
+        mapped, reason, mirror = worker.map_run_result(
+            {
+                "status": "WAITING_FOR_INPUT",
+                "active_stage": "stage0",
+                "metadata": {"pause_kind": pq.PAUSE_KIND_CONVERSION_RISK},
+            }
+        )
+        self.assertEqual(mapped, "paused")
+        self.assertEqual(reason, pq.PAUSED_REASON_CONVERSION_RISK)
+        self.assertEqual(mirror, "WAITING_FOR_INPUT")
+
+    def test_stage2_rubric_hook_off_without_env(self) -> None:
+        folder = self.pending / "scoreco"
+        folder.mkdir()
+        (folder / "Resume.md").write_text("resume\n", encoding="utf-8")
+        (folder / "CoverLetter.md").write_text("cover\n", encoding="utf-8")
+        self.assertFalse(worker.needs_stage2_rubric(folder))
+
+    def test_stage2_rubric_hook_skips_when_scorecard_current(self) -> None:
+        import hashlib
+
+        folder = self.pending / "scored"
+        folder.mkdir()
+        resume = b"# Name\nresume\n"
+        cover = b"Dear Hiring Manager,\n"
+        (folder / "Resume.md").write_bytes(resume)
+        (folder / "CoverLetter.md").write_bytes(cover)
+        reviews = folder / "reviews"
+        reviews.mkdir()
+        (reviews / "rubric_scorecard.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "document_sha256": {
+                            "resume": hashlib.sha256(resume).hexdigest(),
+                            "cover_letter": hashlib.sha256(cover).hexdigest(),
+                        }
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        with unittest.mock.patch.dict(os.environ, {"APPLYR_STAGE2_AGY_RUBRIC": "1"}):
+            self.assertFalse(worker.needs_stage2_rubric(folder))
 
     def test_failed_maps_to_paused_and_releases_lease(self) -> None:
         _seed(self.conn, "failco")
@@ -265,6 +350,29 @@ class TestMapping(WorkerHarness):
             heartbeat_s=0.05,
         )
         self.assertEqual(pq.get_row(self.conn, "skipco")["status"], "done")
+
+    def test_already_handled_workflow_maps_to_done(self) -> None:
+        """FR-365 / AC-474: ALREADY_HANDLED is a DONE_WORKFLOW status."""
+        mapped, reason, mirror = worker.map_run_result({"status": "ALREADY_HANDLED"})
+        self.assertEqual(mapped, "done")
+        self.assertIsNone(reason)
+        self.assertEqual(mirror, "ALREADY_HANDLED")
+
+    def test_already_handled_run_pack_closes_queue(self) -> None:
+        _seed(self.conn, "handledco")
+        self._write_state("handledco", "ALREADY_HANDLED")
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        row = pq.get_row(self.conn, "handledco")
+        assert row is not None
+        self.assertEqual(row["status"], "done")
+        self.assertEqual(row["last_workflow_status"], "ALREADY_HANDLED")
 
 
 class TestAbort(WorkerHarness):
@@ -428,6 +536,72 @@ class TestUtf8ChildEnv(unittest.TestCase):
         self.assertGreaterEqual(len(lines), 2, lines)
         self.assertEqual(lines[0].strip(), "1", "sys.flags.utf8_mode must be on in the child")
         self.assertEqual(lines[1].strip().lower(), "utf-8")
+
+
+_JOBS_DDL = """
+CREATE TABLE IF NOT EXISTS jobs (
+  id TEXT,
+  company TEXT,
+  title TEXT,
+  url TEXT,
+  status TEXT
+);
+"""
+
+
+class TestCr123WorkerAlreadyHandled(WorkerHarness):
+    """CR-123 Story 2.3: worker pre-invoke refuse (FR-363, AC-472)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.conn.executescript(_JOBS_DDL)
+        self.conn.commit()
+
+    def _seed_applied_leased(self, slug: str, *, worker_id: str = "w1") -> dict:
+        """Insert one synthetic Applied+ job, queue it, and lease it to worker_id."""
+        from stage0_skip_ledger import normalize_url, posting_key
+
+        company = f"Synth Worker {slug} Co"
+        title = "Platform Product Manager"
+        url = f"https://example.test/jobs/{slug}"
+        pq.upsert_queued(
+            self.conn,
+            slug=slug,
+            company=company,
+            title=title,
+            url=url,
+            url_key=normalize_url(url),
+            posting_key=posting_key(company, title),
+            networking_contacts_raw=None,
+            source_sha256=None,
+            source_line=None,
+            folder_root="pending_review",
+        )
+        self.conn.execute(
+            "INSERT INTO jobs (id, company, title, url, status) VALUES (?, ?, ?, ?, ?)",
+            (slug, company, title, url, "Applied"),
+        )
+        self.conn.commit()
+        return pq.transition(slug, "leased", worker=worker_id, token=0, conn=self.conn)
+
+    def test_applied_plus_leased_is_done_and_spawn_never_invoked(self) -> None:
+        leased = self._seed_applied_leased("synth_worker_applied")
+        self.assertEqual(leased["status"], "leased")
+        self.assertEqual(leased["locked_by"], "w1")
+        outcome = worker.process_slug(
+            leased,
+            worker="w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        self.assertEqual(outcome, "already_handled")
+        self.assertEqual(self.cmds, [])
+        after = pq.get_row(self.conn, "synth_worker_applied")
+        assert after is not None
+        self.assertEqual(after["status"], "done")
 
 
 def _pid_alive(pid: int) -> bool:

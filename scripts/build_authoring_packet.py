@@ -342,6 +342,10 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "equipped",
         "excellent",
         "experience",
+        # Live miss 2026-09-21 omnissa: ACC-189 lens kafka_architecture_exposure
+        # shared the rare word "exposure" with "Exposure to frontline verticals".
+        "exposure",
+        "exposed",
         "from",
         "good",
         "have",
@@ -540,6 +544,21 @@ def _item_names_hard_blocked_tool(item_text: str) -> bool:
         if token.rstrip("s") == "epic" and epic_match_is_agile_noun(item_text, m.start(), m.end()):
             continue
         return True
+    return False
+
+
+_NOT_PRESENT_NAMED_TOOL_BRIDGE = (
+    "Named tool marked NOT_PRESENT. Do not claim it. Use another packet "
+    "excerpt as a transferable bridge, never the JD's tool name."
+)
+
+
+def _item_mentions_any_named_tool(text: str, names: list[str]) -> bool:
+    """True when *text* contains any Review Center NOT_PRESENT display name."""
+    hay = text or ""
+    for name in names:
+        if name and re.search(re.escape(name), hay, re.IGNORECASE):
+            return True
     return False
 
 
@@ -795,6 +814,8 @@ def build_evidence_map(
             )
         return None
 
+    not_present_names = _not_present_display_names(stage0)
+
     def _enqueue(item: str, bucket: str, *, is_required: bool) -> None:
         forced_bridge = _force_empty_claim_scoring(item)
         soft_raw = (soft_gap_bridges.get(item) or "").strip()
@@ -807,6 +828,16 @@ def build_evidence_map(
                 "jd_item": item,
                 "bucket": bucket,
                 "bridge": soft_raw or None,
+                "scored": [],
+            })
+            return
+        # AC-456 / FR-283: NOT_PRESENT named tools must not receive claim_ids
+        # at map-build time. Packet assemble_packet strip is a backstop only.
+        if _item_mentions_any_named_tool(item, not_present_names):
+            pending.append({
+                "jd_item": item,
+                "bucket": bucket,
+                "bridge": soft_raw or _NOT_PRESENT_NAMED_TOOL_BRIDGE,
                 "scored": [],
             })
             return
@@ -1010,6 +1041,36 @@ def _truncate_at_sentence(text: str, max_chars: int) -> str:
     if best_end > 0:
         return window[:best_end].rstrip()
     return window
+
+
+def _truncate_excerpt_card(text: str, max_chars: int) -> str:
+    """Sentence-truncate an excerpt card without dropping the WE span.
+
+    Cards are ``hedge header\\nWE span``. Header sentences end inside the
+    first ~100 characters. `_truncate_at_sentence` on the whole card with a
+    400-char floor therefore cuts at 'none listed.' and discards the WE
+    sentence still running past that window. Live miss 2026-09-21 velosio
+    ACC-203-TECH: 475-char certificate-workflow card became a 96-char lens
+    header, Stage 1 had no honest Dynamics bridge, and the author wrote
+    Microsoft Dynamics 365 from the jd_item instead. FR-297 / FR-094.
+    """
+    clean = (text or "").strip()
+    if len(clean) <= max_chars:
+        return clean
+    header, sep, body = clean.partition("\n")
+    body = body.strip()
+    if not sep or not body:
+        return _truncate_at_sentence(clean, max_chars)
+    body_budget = max_chars - len(header) - 1
+    if body_budget < 1:
+        return clean
+    kept_body = _truncate_at_sentence(body, body_budget)
+    if not kept_body.strip():
+        return clean
+    out = f"{header}\n{kept_body}"
+    if len(out) > max_chars and kept_body == body:
+        return clean
+    return out
 
 
 def _is_thin_synthetic_excerpt(excerpt: str) -> bool:
@@ -1605,7 +1666,7 @@ def _shrink_excerpts_to_budget(
                 for cid, text in non_required.items():
                     share = len(text) / total_nr
                     target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
-                    shrunk_nr[cid] = _truncate_at_sentence(text, target) if target < len(text) else text
+                    shrunk_nr[cid] = _truncate_excerpt_card(text, target) if target < len(text) else text
                 # Recalculate overage after phase 1
                 phase1_savings = sum(len(v) for v in non_required.values()) - sum(len(v) for v in shrunk_nr.values())
                 remaining_overage_chars = max(0, overage_chars - phase1_savings)
@@ -1622,8 +1683,272 @@ def _shrink_excerpts_to_budget(
     for cid, text in excerpts.items():
         share = len(text) / total_chars
         target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
-        shrunk[cid] = _truncate_at_sentence(text, target) if target < len(text) else text
+        shrunk[cid] = _truncate_excerpt_card(text, target) if target < len(text) else text
     return shrunk
+
+
+def _drop_trailing_sentence(text: str, min_chars: int) -> str | None:
+    """Return text without the last sentence, or None if that would go below min.
+
+    Used after the proportional shrink pass when a leftover token overage is
+    smaller than one sentence and int(share * overage) cannot take a bite.
+    """
+    clean = (text or "").strip()
+    if len(clean) <= min_chars:
+        return None
+    matches = list(_SENTENCE_END_RE.finditer(clean))
+    if len(matches) < 2:
+        cut = _truncate_at_sentence(clean, min_chars)
+        return cut if cut and len(cut) < len(clean) else None
+    trimmed = clean[: matches[-2].end()].rstrip()
+    if len(trimmed) < min_chars or not trimmed or trimmed == clean:
+        return None
+    # Never collapse a header+WE card into a hedge header. Same live miss as
+    # `_truncate_excerpt_card` (velosio ACC-203-TECH).
+    if "\n" in clean and "\n" not in trimmed:
+        return None
+    return trimmed
+
+
+def _trim_excerpts_until_under_budget(
+    excerpts: dict[str, str],
+    draft: dict,
+    estimated_tokens: int,
+) -> tuple[dict[str, str], int]:
+    """Drop trailing sentences from the longest over-floor excerpts until under budget.
+
+    Live miss 2026-09-21 velosio: 8010 > 8000 after one proportional shrink.
+    33 excerpts made int(overage_chars * share) 0-2 characters; sentence
+    truncation would not take that bite. Five excerpts were still above
+    _EXCERPT_MIN_CHARS. Implements FR-297: do not wipe claim_constraints.
+    """
+    if estimated_tokens <= _TOKEN_BUDGET or not excerpts:
+        return excerpts, estimated_tokens
+    skipped: set[str] = set()
+    for _ in range(len(excerpts) * 8):
+        if estimated_tokens <= _TOKEN_BUDGET:
+            break
+        candidates = [
+            cid
+            for cid, text in excerpts.items()
+            if cid not in skipped and len(text) > _EXCERPT_MIN_CHARS
+        ]
+        if not candidates:
+            break
+        cid = max(candidates, key=lambda key: len(excerpts[key]))
+        trimmed = _drop_trailing_sentence(excerpts[cid], _EXCERPT_MIN_CHARS)
+        if trimmed is None:
+            skipped.add(cid)
+            continue
+        excerpts = {**excerpts, cid: trimmed}
+        draft["excerpts"] = excerpts
+        estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+    return excerpts, estimated_tokens
+
+
+_CANONICAL_ROLE_PREFIXES = ("ACC-201", "ACC-202", "ACC-203", "ACC-301", "ACC-302")
+
+
+def _is_pointer_or_header_only_card(text: str) -> bool:
+    """True when a card has no WE span after the hedge header."""
+    clean = (text or "").strip()
+    if "Same WE story as" in clean:
+        return True
+    _header, sep, body = clean.partition("\n")
+    return not sep or not body.strip()
+
+
+def _mapped_claim_ids(evidence_map: list[dict]) -> set[str]:
+    """Return every claim_id still cited on an evidence_map row."""
+    mapped: set[str] = set()
+    for row in evidence_map:
+        for cid in row.get("claim_ids") or []:
+            if cid:
+                mapped.add(cid)
+    return mapped
+
+
+def _strip_claim_id_from_rows(rows: list[dict], cid: str) -> list[dict]:
+    """Remove one claim_id from evidence_map or soft_gaps rows."""
+    updated: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        ids = [item_id for item_id in (item.get("claim_ids") or []) if item_id != cid]
+        if ids != list(item.get("claim_ids") or []):
+            item["claim_ids"] = ids
+        updated.append(item)
+    return updated
+
+
+def _drop_excerpt_and_constraint(
+    excerpts: dict[str, str],
+    draft: dict,
+    cid: str,
+) -> tuple[dict[str, str], dict]:
+    """Remove one excerpt and its claim_constraints entry from the draft packet."""
+    excerpts = {key: value for key, value in excerpts.items() if key != cid}
+    draft["excerpts"] = excerpts
+    constraints = draft.get("claim_constraints")
+    if isinstance(constraints, dict) and cid in constraints:
+        draft["claim_constraints"] = {
+            key: value for key, value in constraints.items() if key != cid
+        }
+    return excerpts, draft
+
+
+def _drop_non_required_excerpts_until_under_budget(
+    excerpts: dict[str, str],
+    draft: dict,
+    estimated_tokens: int,
+    required_cids: set[str],
+) -> tuple[dict[str, str], int]:
+    """Drop non-required floor excerpts when leftover sentence-trim cannot fit.
+
+    Live miss 2026-09-21 omnissa: 29 excerpts already at _EXCERPT_MIN_CHARS,
+    leftover trim no-op, 9210 > 8000, Stage 1 FAILED. A second miss the same
+    hour dropped preferred-mapped ACC-106-GTM without stripping it from
+    evidence_map, so fail-closed Rule 4 fired. Unmapped filler cards drop
+    first. Mapped preferred/responsibility cards drop only after that, and
+    their claim_ids are stripped from evidence_map/soft_gaps. Required
+    mapped cards and canonical-role fillers stay. Pointer/header-only
+    cards drop first within each phase. Implements FR-297.
+    """
+    if estimated_tokens <= _TOKEN_BUDGET or not excerpts:
+        return excerpts, estimated_tokens
+    protected = set(required_cids)
+    for cid in excerpts:
+        if cid.startswith(_CANONICAL_ROLE_PREFIXES):
+            protected.add(cid)
+
+    def _drop_order(candidates: list[str]) -> list[str]:
+        return sorted(
+            candidates,
+            key=lambda cid: (
+                not _is_pointer_or_header_only_card(excerpts.get(cid, "")),
+                -len(excerpts.get(cid, "")),
+                cid,
+            ),
+        )
+
+    dropped: list[str] = []
+    evidence_map = list(draft.get("evidence_map") or [])
+    mapped = _mapped_claim_ids(evidence_map)
+    for cid in _drop_order(
+        [key for key in excerpts if key not in mapped and key not in protected]
+    ):
+        if estimated_tokens <= _TOKEN_BUDGET:
+            break
+        excerpts, draft = _drop_excerpt_and_constraint(excerpts, draft, cid)
+        dropped.append(cid)
+        estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+
+    if estimated_tokens > _TOKEN_BUDGET:
+        for cid in _drop_order([key for key in excerpts if key not in protected]):
+            if estimated_tokens <= _TOKEN_BUDGET:
+                break
+            excerpts, draft = _drop_excerpt_and_constraint(excerpts, draft, cid)
+            evidence_map = _strip_claim_id_from_rows(evidence_map, cid)
+            draft["evidence_map"] = evidence_map
+            soft_gaps = draft.get("soft_gaps")
+            if isinstance(soft_gaps, list):
+                draft["soft_gaps"] = _strip_claim_id_from_rows(soft_gaps, cid)
+            dropped.append(cid)
+            estimated_tokens = (
+                len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+            )
+
+    compaction = dict(draft.get("budget_compaction") or {})
+    compaction["non_required_excerpts_dropped"] = dropped
+    if dropped:
+        compaction["reason"] = "author_prompt_budget_drop_non_required_floor_excerpts"
+        draft["budget_compaction"] = compaction
+    return excerpts, estimated_tokens
+
+
+def _sync_ats_term_contract(draft: dict) -> None:
+    """Keep ats_term_contract claim_ids inside the live packet.
+
+    Live miss 2026-09-21 clarion: leftover-trim dropped ACC-108-SUPPORT/OPS
+    excerpts, but Jira/Workflow stayed on the contract. The author cited
+    those IDs, extra_packet FAIL, REMOVE_EXTRA, then ats_term FAIL.
+    Implements FR-297.
+    """
+    live: set[str] = set(draft.get("excerpts") or {})
+    for row in draft.get("evidence_map") or []:
+        if not isinstance(row, dict):
+            continue
+        for claim_id in row.get("claim_ids") or []:
+            if isinstance(claim_id, str) and claim_id.strip():
+                live.add(claim_id)
+    kept: list[dict] = []
+    for row in draft.get("ats_term_contract") or []:
+        if not isinstance(row, dict):
+            continue
+        ids = [
+            claim_id
+            for claim_id in (row.get("claim_ids") or [])
+            if isinstance(claim_id, str) and claim_id in live
+        ]
+        if not ids:
+            continue
+        kept.append({**row, "claim_ids": ids})
+    draft["ats_term_contract"] = kept
+
+
+def _not_present_display_names(stage0: dict) -> list[str]:
+    """Return Review Center NOT_PRESENT / BAD_DATA tool names from Stage 0."""
+    names: list[str] = []
+    for row in stage0.get("not_present_named_tools") or []:
+        if isinstance(row, dict):
+            name = str(row.get("display_name") or "").strip()
+        else:
+            name = str(row or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _apply_not_present_named_tools(
+    evidence_map: list[dict],
+    soft_gaps: list[dict],
+    hard_constraints: list[str],
+    names: list[str],
+) -> tuple[list[dict], list[dict], list[str]]:
+    """Strip mapped claims from jd_items that name a NOT_PRESENT tool.
+
+    Live miss on velosio (Dynamics) and omnissa (Android / Workspace ONE UEM):
+    answering NOT_PRESENT cleared the Review Center pause, then Stage 0 still
+    mapped SOFT bridges and Stage 1 wrote the JD tool name.
+    """
+    if not names:
+        return evidence_map, soft_gaps, hard_constraints
+    for name in names:
+        constraint = (
+            f"Do not claim {name}. Review Center answer was NOT_PRESENT. "
+            "Do not invent a nearby product or write the JD tool name."
+        )
+        if constraint not in hard_constraints:
+            hard_constraints.append(constraint)
+    note = _NOT_PRESENT_NAMED_TOOL_BRIDGE
+
+    def _mentions(text: str) -> bool:
+        return _item_mentions_any_named_tool(text, names)
+
+    new_map: list[dict] = []
+    for row in evidence_map:
+        item = dict(row)
+        if _mentions(str(item.get("jd_item") or "")) and item.get("claim_ids"):
+            item["claim_ids"] = []
+            item["bridge"] = note
+        new_map.append(item)
+    new_gaps: list[dict] = []
+    for row in soft_gaps:
+        item = dict(row)
+        if _mentions(str(item.get("item") or "")) and item.get("claim_ids"):
+            item["claim_ids"] = []
+            item["note"] = note
+        new_gaps.append(item)
+    return new_map, new_gaps, hard_constraints
 
 
 def _packet_hard_constraints(we_text: str) -> list[str]:
@@ -1657,7 +1982,12 @@ def assemble_packet(
     thin_jd = bool(stage0.get("thin_jd", False))
 
     jd_buckets = _build_jd_buckets(stage0)
-    soft_gaps = _build_soft_gaps(stage0, evidence_map)
+    evidence_map, soft_gaps, hard_constraints = _apply_not_present_named_tools(
+        [dict(row) for row in evidence_map],
+        _build_soft_gaps(stage0, evidence_map),
+        _packet_hard_constraints(we_text),
+        _not_present_display_names(stage0),
+    )
     from jd_term_extractor import build_packet_ats_term_contract
     if ats_term_contract is None:
         ats_term_contract = build_packet_ats_term_contract(
@@ -1691,7 +2021,7 @@ def assemble_packet(
             "resume_unit": "bullet",
             "cover_letter_unit": "factual_sentence",
         },
-        "hard_constraints": _packet_hard_constraints(we_text),
+        "hard_constraints": hard_constraints,
         "hook_fact": hook_fact,
         "rule_digest_version": _load_rule_digest_version(),  # Story 4.3
         "packet_status": "ready",
@@ -1760,6 +2090,15 @@ def assemble_packet(
             excerpts = shrunk_excerpts
             draft["excerpts"] = excerpts
             estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+        excerpts, estimated_tokens = _trim_excerpts_until_under_budget(
+            excerpts, draft, estimated_tokens
+        )
+        excerpts, estimated_tokens = _drop_non_required_excerpts_until_under_budget(
+            excerpts, draft, estimated_tokens, required_cids
+        )
+        evidence_map = list(draft.get("evidence_map") or evidence_map)
+
+    _sync_ats_term_contract(draft)
 
     # CR-112 Story 1.2: do not wipe claim_constraints to squeeze under
     # _TOKEN_BUDGET. That fence is the Stage 1 attribution hedge

@@ -16,6 +16,8 @@ import {
   APPLICATION_FUNNEL_SET,
   PRE_APPLY_STATUSES,
 } from '../../shared/domain/jobPipeline.js';
+import { closeMatchingQueuedOrPaused } from '../repository/pipelineQueueRepository.js';
+import type Database from 'better-sqlite3';
 
 export interface JobStatusUpdateInput {
   status: string;
@@ -60,10 +62,14 @@ function readManifestRubricScore(company: string): Record<string, any> | null {
  * activity log entry. Callers (the HTTP route, or CR-072's Gmail sync service) translate the discriminated
  * result into whatever response shape they need — this function has no req/res, no HTTP awareness.
  */
-export function applyJobStatusUpdate(id: string, input: JobStatusUpdateInput): JobStatusUpdateResult {
+export function applyJobStatusUpdate(
+  id: string,
+  input: JobStatusUpdateInput,
+  database: Database.Database = db,
+): JobStatusUpdateResult {
   if (!isValidJobId(id)) return { kind: 'invalid_id' };
 
-  const job = db.prepare('SELECT company, status, interview_date, applied_at, rowid FROM jobs WHERE id = ?').get(id) as any;
+  const job = database.prepare('SELECT company, status, interview_date, applied_at, rowid FROM jobs WHERE id = ?').get(id) as any;
   if (!job) return { kind: 'not_found' };
 
   let status = input.status;
@@ -99,7 +105,7 @@ export function applyJobStatusUpdate(id: string, input: JobStatusUpdateInput): J
   const archivePath = resolveCompanyFolder(job.company, ARCHIVE_DIR);
 
   if (status === 'No Longer Available') {
-    const fullJob = db.prepare('SELECT company, title, url FROM jobs WHERE id = ?').get(id) as any;
+    const fullJob = database.prepare('SELECT company, title, url FROM jobs WHERE id = ?').get(id) as any;
     if (fs.existsSync(activePath)) fs.rmSync(activePath, { recursive: true, force: true });
     if (fs.existsSync(archivePath)) fs.rmSync(archivePath, { recursive: true, force: true });
     deleteJobRecord(id, fullJob?.url, fullJob?.company ?? job.company, fullJob?.title ?? '');
@@ -168,11 +174,27 @@ export function applyJobStatusUpdate(id: string, input: JobStatusUpdateInput): J
   params.push(statusActuallyChanged ? 1 : 0); // better-sqlite3 has no native boolean bind
   params.push(id);
 
-  db.prepare(updateSql).run(...params);
-  logActivity('INFO', 'System', `Job "${job.company}" status changed to ${status}`);
+  database.prepare(updateSql).run(...params);
+  if (database === db) {
+    logActivity('INFO', 'System', `Job "${job.company}" status changed to ${status}`);
+  }
+
+  // Implements FR-364 / AC-473 — funnel statuses close unlocked queued/paused matches.
+  if (APPLICATION_FUNNEL_SET.has(status)) {
+    const posting = database.prepare(
+      'SELECT url, company, title FROM jobs WHERE id = ?',
+    ).get(id) as { url: string | null; company: string; title: string } | undefined;
+    if (posting) {
+      closeMatchingQueuedOrPaused(database, {
+        url: posting.url,
+        company: posting.company,
+        title: posting.title,
+      });
+    }
+  }
 
   // FR-210: log rubric score alongside outcome for calibration
-  if (rubricScore !== null) {
+  if (rubricScore !== null && database === db) {
     logActivity('INFO', 'RubricLog', `Outcome recorded for "${job.company}": ${status}`, {
       event: 'outcome_rubric_log',
       job_id: id,

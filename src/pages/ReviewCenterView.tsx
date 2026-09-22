@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import WorkflowOperator from '../components/WorkflowOperator';
 import PipelineQueuePanel from '../components/PipelineQueuePanel';
-import { hasMinimumEvidence } from '../lib/reviewCenter';
+import { decisionBasisLabel, hasMinimumEvidence, SKILL_ANSWER_HELPERS } from '../lib/reviewCenter';
 import type {
   EvidenceDetails,
   ReviewAnswer,
@@ -158,15 +158,15 @@ function EvidenceFields({
 }
 
 const SKILL_ANSWER_OPTIONS: ReadonlyArray<{ value: ReviewAnswer; label: string; helper: string }> = [
-  { value: 'CONFIRMED_USE', label: "Yes, I've used it", helper: 'Remember this for future opportunities' },
-  { value: 'NOT_PRESENT', label: 'No', helper: 'Do not ask again' },
-  { value: 'UNSURE_NO_REASK', label: 'Not sure', helper: 'Do not ask again automatically' },
-  { value: 'BAD_DATA', label: 'Not a real skill', helper: 'Bad extraction, never ask again' },
+  { value: 'CONFIRMED_USE', label: "Yes, I've used it", helper: SKILL_ANSWER_HELPERS.CONFIRMED_USE },
+  { value: 'NOT_PRESENT', label: 'Not in my history', helper: SKILL_ANSWER_HELPERS.NOT_PRESENT },
+  { value: 'UNSURE_NO_REASK', label: 'Not sure', helper: SKILL_ANSWER_HELPERS.UNSURE_NO_REASK },
+  { value: 'BAD_DATA', label: 'Not a real skill', helper: SKILL_ANSWER_HELPERS.BAD_DATA },
 ];
 
 const ANSWER_LABELS: Record<ReviewAnswer, string> = {
   CONFIRMED_USE: "Yes, I've used it",
-  NOT_PRESENT: 'No',
+  NOT_PRESENT: 'Not in my history',
   UNSURE_NO_REASK: 'Not sure',
   BAD_DATA: 'Not a real skill',
   KEEP_ELIGIBLE: 'Keep eligible',
@@ -293,7 +293,7 @@ function ReviewDetail({
           )}
           {item.decisionBasis && (
             <div>
-              <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Why this paused</p>
+              <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">{decisionBasisLabel(item.type)}</p>
               <p className="text-sm text-on-surface mt-1 leading-relaxed">{item.decisionBasis}</p>
             </div>
           )}

@@ -408,6 +408,22 @@ def main() -> None:
                     f"{_folder_for_events} --resume"
                 )
                 print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
+            elif pause_kind == "conversion_risk":
+                print("WAITING_FOR_INPUT — conversion risk (Stage 0 PASS withheld)")
+                print(
+                    "Why: fit PASS cannot support conversion identity "
+                    "(required named tool is NOT_PRESENT or evidence 0)."
+                )
+                print("Stage 0 is complete. Documents were not authored.")
+                print("Skip ledger was not written. This is not a Skip.")
+                print(
+                    "Only requeue --reason apply_anyway promotes this pause."
+                )
+                print(
+                    "Then: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print("Do not paste authoring_prompt.md until apply_anyway exists.")
             else:
                 print(
                     "WAITING_FOR_INPUT — resolve the pending Review Center confirmation "

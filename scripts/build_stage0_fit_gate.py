@@ -364,6 +364,10 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         # "About your role" / "About what you get" on their real buckets.
         r"more\s+about\s+\w+|"
         r"about\s+(?!you\b|your\b|what\b)\w+|"
+        # Nava-class (2026-09-21): "Working at Nava" is a culture/DEI header,
+        # not a preferred qualification. Company token stays Title-Case so
+        # "Working at scale with distributed teams" cannot match as a label.
+        r"working\s+at\s+(?-i:[A-Z][\w'&.-]{1,20})|"
         # CR-086: "Our Core Values" did not match `our values` (intervening "Core").
         r"(?:our\s+)?core\s+values?|"
         r"why\s+(?:us|join|we|this\s+role)|company\s+overview|who\s+we\s+are|"
@@ -675,11 +679,17 @@ _SECTION_HEADING_CHROME_RE = re.compile(
     r"credentials?|"
     r"additional\s+details|"
     r"company\s+summary|"
-    r"expectations?\s+of\s+the\s+role"
+    r"expectations?\s+of\s+the\s+role|"
+    r"working\s+at\s+\S+"
     r")\s*:?\s*$"
 )
 _TRUNCATED_FRAGMENT_RE = re.compile(
     r"(?i)^(?:experiences?|skills?|knowledge|background)\s+that\b"
+)
+# Same hire-site logistics as stage0_confirmations.named_skill_candidates.
+# Split fragments still match one side of the original sentence.
+_HIRE_SITE_OFFICE_DAYS_RE = re.compile(
+    r"(?i)\bfor\s+all\s+hires?\s+in\b|\bwork\s+in\s+the\s+office\s+a\s+minimum\b"
 )
 
 
@@ -697,6 +707,7 @@ _ORPHAN_HEADER_LABEL_RE = re.compile(
     r"key\s+capabilities?\s+for\s+success|"
     r"about\s+(?:the\s+)?(?:role|company|us)|"
     r"more\s+about\s+\w+|"
+    r"working\s+at\s+\w+|"
     r"what\s+we\s+offer|"
     r"what\s+you\s+can\s+expect(?:\s+from\s+us)?|"
     r"your\s+qualifications?|"
@@ -778,6 +789,9 @@ def _is_unscored_chrome_item(text: str) -> bool:
     """True when a required/preferred line is heading, board, or fragment chrome.
 
     Implements FR-330 / AC-428. Leftover junk semantics are unchanged.
+    Hire-site / in-office-days lines are posting logistics, not hire criteria
+    (live miss 2026-09-21 optum: a split Minneapolis/Washington office-days
+    sentence became the only required items and fit-scored 0).
     """
     clean = (text or "").strip().lstrip("-•*◦▪▸→").strip()
     if not clean:
@@ -789,6 +803,8 @@ def _is_unscored_chrome_item(text: str) -> bool:
     if _SECTION_HEADING_CHROME_RE.match(clean):
         return True
     if _TRUNCATED_FRAGMENT_RE.match(clean):
+        return True
+    if _HIRE_SITE_OFFICE_DAYS_RE.search(clean):
         return True
     return False
 
@@ -1327,6 +1343,15 @@ def _collect_nlp_section_candidates(
 
                 if is_disposition_culture_line(item):
                     buckets["culture"].append(item)
+                    continue
+
+                # Honor the JD's own Preferred header over the classifier.
+                # Live miss 2026-09-21 nava_benefits: "5+ years" / 0-to-1 under
+                # Preferred Experience were predicted required at >=0.65 and
+                # skipped the job below the fit floor. Inline "is required"
+                # already rewrote combo_header above. Implements CR-105 / FR-330.
+                if preferred_header and combo_header != "required":
+                    buckets["preferred"].append(item)
                     continue
 
                 pred = pipeline.predict([combo_text])[0]
@@ -2063,8 +2088,14 @@ def _prepare_skill_confirmations(
     role: str,
     internal_terms: list[str] | None,
     db_path: Path | str | None = None,
-) -> tuple[list[dict[str, str]], dict[str, str]]:
-    """Create pending unknown-tool questions and return confirmed presence terms."""
+    work_exp: str = "",
+) -> tuple[list[dict[str, str]], dict[str, str], dict[str, str]]:
+    """Create advisory unknown-tool cards and return confirmed and absent terms.
+
+    CR-122: unknown tools are undocumented for this JD without a Review Center
+    tap. WE mention wins leftover NOT_PRESENT. Cards do not pause Stage 0.
+    Implements FR-357 / FR-358 / AC-465 / AC-466.
+    """
     candidates = named_skill_candidates(
         items,
         known_terms=set(_load_skills_catalog_terms_shared()),
@@ -2072,12 +2103,24 @@ def _prepare_skill_confirmations(
     )
     pending: list[dict[str, str]] = []
     confirmed_terms: dict[str, str] = {}
+    absent_terms: dict[str, str] = {}
     for candidate in candidates:
+        # WE is closed-world truth. A leftover forever-No cannot veto a tool
+        # the candidate later wrote down.
+        if work_exp and _item_mentions_skill_term(work_exp, candidate.display_name):
+            continue
         memory = get_skill_memory(candidate.skill_key, db_path)
         if memory:
-            if memory.get("decision") == "CONFIRMED_USE":
+            decision = str(memory.get("decision") or "")
+            if decision == "CONFIRMED_USE":
                 confirmed_terms[candidate.skill_key] = candidate.display_name
+            elif decision in {"NOT_PRESENT", "BAD_DATA"}:
+                # Live miss on velosio/omnissa: memory existed so Stage 0 did
+                # not pause, then scoring still mapped SOFT bridges onto the
+                # named tool. Persist absence so the packet can refuse it.
+                absent_terms[candidate.skill_key] = candidate.display_name
             continue
+        absent_terms[candidate.skill_key] = candidate.display_name
         requirement = next(
             (
                 line
@@ -2112,7 +2155,15 @@ def _prepare_skill_confirmations(
                 "requirement": requirement,
             }
         )
-    return pending, confirmed_terms
+    return pending, confirmed_terms, absent_terms
+
+
+def _item_mentions_skill_term(item: str, display_name: str) -> bool:
+    """True when *item* contains the Review Center skill display name."""
+    name = (display_name or "").strip()
+    if not name:
+        return False
+    return re.search(re.escape(name), item or "", re.IGNORECASE) is not None
 
 
 def _cap_confirmed_presence(
@@ -2122,7 +2173,7 @@ def _cap_confirmed_presence(
 ) -> dict:
     """Keep a bare skill attestation at evidence level one during scoring."""
     for display_name in confirmed_terms.values():
-        if not re.search(re.escape(display_name), item, re.IGNORECASE):
+        if not _item_mentions_skill_term(item, display_name):
             continue
         result["evidence_level"] = min(int(result.get("evidence_level") or 0), 1)
         result["gap"] = True
@@ -2134,6 +2185,48 @@ def _cap_confirmed_presence(
         )
         break
     return result
+
+
+def _cap_absent_named_tools(
+    result: dict,
+    item: str,
+    absent_terms: dict[str, str],
+) -> dict:
+    """Score a Review Center NOT_PRESENT named tool as undocumented, not owned.
+
+    CR-108: known absent is scored as not documented. Tools stay SOFT (never a
+    HARD skip). Live miss on velosio/omnissa: answering NOT_PRESENT unpaused
+    Stage 0, then cascade still treated the JD product line as a mapped SOFT
+    bridge. Implements AC-456 / FR-283.
+    """
+    for display_name in absent_terms.values():
+        if not _item_mentions_skill_term(item, display_name):
+            continue
+        result["evidence_level"] = 0
+        result["gap"] = True
+        result["gap_class"] = "SOFT"
+        result["domain_soft"] = True
+        result["gate"] = "NONE"
+        result["gap_source"] = "tool"
+        result["anchor"] = (
+            f"Named tool {display_name} is not in verified work experience. "
+            "Do not treat this named tool as owned. Transferable bridge only; "
+            "do not write the JD tool name."
+        )
+        break
+    return result
+
+
+def _apply_skill_memory_caps(
+    result: dict,
+    item: str,
+    attested_skill_terms: dict[str, str],
+    absent_skill_terms: dict[str, str],
+) -> dict:
+    """Copy a cascade result, then apply CONFIRMED_USE then NOT_PRESENT caps."""
+    capped = dict(result)
+    capped = _cap_confirmed_presence(capped, item, attested_skill_terms)
+    return _cap_absent_named_tools(capped, item, absent_skill_terms)
 
 
 def _prepare_hard_gate_reviews(
@@ -2228,6 +2321,7 @@ def classify_gaps(
     company: str = "",
     internal_terms: list[str] | None = None,
     attested_skill_terms: dict[str, str] | None = None,
+    absent_skill_terms: dict[str, str] | None = None,
     cached_results: dict[str, dict] | None = None,
     judgment_callback: Callable[[str, int, str, dict], None] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
@@ -2251,6 +2345,9 @@ def classify_gaps(
     tool requirement.
     attested_skill_terms: user-confirmed skill names that remain capped at
     evidence level 1 until separately promoted.
+    absent_skill_terms: Review Center NOT_PRESENT / BAD_DATA display names.
+    Named-tool JD items that mention them score as undocumented SOFT gaps
+    (evidence_level 0) and must not be treated as owned. Tools never HARD-skip.
     cached_results: completed checkpoint results keyed by bucket/item ordinal,
     produced by the CR-108 evidence cascade. Items missing from cached_results
     are a real error (the cascade should have covered them) — raises
@@ -2269,7 +2366,12 @@ def classify_gaps(
                 f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini."
             )
         classified_required.append(
-            _cap_confirmed_presence(result, item, attested_skill_terms or {})
+            _apply_skill_memory_caps(
+                result,
+                item,
+                attested_skill_terms or {},
+                absent_skill_terms or {},
+            )
         )
 
     classified_preferred: list[dict] = []
@@ -2281,7 +2383,12 @@ def classify_gaps(
                 f"Preferred item {ordinal} missing from cascade cached_results "
                 f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini."
             )
-        result = _cap_confirmed_presence(result, item, attested_skill_terms or {})
+        result = _apply_skill_memory_caps(
+            result,
+            item,
+            attested_skill_terms or {},
+            absent_skill_terms or {},
+        )
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
         elif result["gap"]:
@@ -2538,6 +2645,97 @@ def _determine_tier(
     return "Tier 1", "PASS"
 
 
+def _apply_fit_score_to_tier(
+    *,
+    decision: str,
+    disqualified: bool,
+    fit_score: int,
+    skip_floor: int,
+    tier1_floor: int,
+    qual_required_n: int,
+) -> tuple[str, str]:
+    """Apply CR-093 score bands without washing out an empty-required extract.
+
+    Step 5 already forced Tier 2 for required_empty. Step 5.5 used to overwrite
+    that to Skip when hire-site logistics scored evidence 0 (optum 2026-09-21,
+    fit 0 below the 40 floor). Empty required stays Tier 2 PASS. A real
+    qualification-shaped required list may still Skip below the floor.
+    """
+    if disqualified:
+        return "Skip", "SKIP"
+    if decision != "PASS":
+        return "Skip", "SKIP"
+    if fit_score >= tier1_floor:
+        tier = "Tier 1"
+    elif fit_score >= skip_floor:
+        tier = "Tier 2"
+    elif qual_required_n == 0:
+        return "Tier 2", "PASS"
+    else:
+        return "Skip", "SKIP"
+    if qual_required_n == 0 and tier == "Tier 1":
+        tier = "Tier 2"
+    return tier, "PASS"
+
+
+def evaluate_conversion_feasibility(
+    *,
+    decision: str,
+    required: list,
+    not_present_named_tools: list | None = None,
+) -> dict:
+    """CR-121: whether a Stage 0 PASS can support conversion R2/R3 identity.
+
+    Replay 2026-09-21 of parked velosio/certara/omnissa/outschool/goodrx gates
+    killed 'zero distinctive WE overlap'. All five already have required PM
+    items at evidence 3-4. The identity misses that parked honest 70 floors
+    with a named tool were required evidence-0 product lines (Dynamics,
+    Workspace ONE, Android). Clinical/pharmacy identity sat in preferred or
+    at evidence 1 and is out of this band. Skip floor is unchanged. This
+    never changes decision/tier.
+    """
+    if decision != "PASS":
+        return {"verdict": "n/a", "reasons": []}
+    reasons: list[str] = []
+    seen: set[str] = set()
+    tools = not_present_named_tools or []
+    names = []
+    for row in tools:
+        if isinstance(row, dict):
+            name = str(row.get("display_name") or "").strip()
+        else:
+            name = str(row or "").strip()
+        if name:
+            names.append(name)
+    for row in required or []:
+        if isinstance(row, dict):
+            item = str(row.get("item") or "")
+            evidence = row.get("evidence_level")
+        else:
+            item = str(row or "")
+            evidence = None
+        if not item:
+            continue
+        lower = item.lower()
+        for name in names:
+            key = f"not_present_required_tool:{name}"
+            if name.lower() in lower and key not in seen:
+                seen.add(key)
+                reasons.append(key)
+        if evidence == 0:
+            present_names = {n.lower() for n in names}
+            for hit in _looks_like_named_tool(item):
+                if " " not in hit.strip() and hit.lower() not in present_names:
+                    continue
+                key = f"required_unproven_named_tool:{hit}"
+                if key not in seen:
+                    seen.add(key)
+                    reasons.append(key)
+    if reasons:
+        return {"verdict": "risk", "reasons": reasons}
+    return {"verdict": "ok", "reasons": []}
+
+
 def _build_exclusion_zone_summary(prefs_result: dict) -> str:
     """Compose a human-readable exclusion zone summary line."""
     exclusion_codes = {
@@ -2685,7 +2883,13 @@ def build_stage0_fit_gate(
         # between the CSV company and the JD's own self-identified employer
         # (e.g. "AdaMarie" carrying a Pinterest posting) gets checked under
         # both names, not just whatever the CSV happened to say.
-        db_gate_result = evaluate_db_gate(company_display, role=role, db_path=_DEFAULT_DB, jd_text=jd_text)
+        db_gate_result = evaluate_db_gate(
+            company_display,
+            role=role,
+            db_path=_DEFAULT_DB,
+            jd_text=jd_text,
+            url=url or None,
+        )
 
     db_action = db_gate_result.get("action", "clear")
 
@@ -2711,6 +2915,28 @@ def build_stage0_fit_gate(
             "notes": db_gate_result.get("reason", "DB gate reject"),
         }
         return output
+
+    # Same-posting Applied+ is a terminal, not Skip and not PASS-with-flag.
+    # Implements FR-365 / AC-474. No skip_reason_code so placement cannot
+    # treat this as a Skip. Do not attach active_application.
+    if db_action == "already_handled":
+        return {
+            "company": company_display,
+            "role": role,
+            "url": url or None,
+            "decision": "ALREADY_HANDLED",
+            "tier": "Skip",
+            "reach_out": False,
+            "stage_signal": _detect_stage_signal(jd_text),
+            "thin_jd": _detect_thin_jd(jd_text, []),
+            "required": [],
+            "preferred": [],
+            "responsibilities": [],
+            "culture": [],
+            "flagged_gaps": [],
+            "exclusion_zone_check": "n/a (already handled at DB gate)",
+            "notes": db_gate_result.get("reason", "Same posting already handled"),
+        }
 
     # --- Step 2: Prefs / exclusion gate ---
     prefs_result = run_prefs_gate_safe(company_display, jd_text, prefs)
@@ -2882,21 +3108,23 @@ def build_stage0_fit_gate(
     checkpoint_db_path = confirmation_db_path or os.environ.get("APPLYR_STAGE0_REVIEW_DB")
     checkpoint_db_path = checkpoint_db_path or _DEFAULT_DB
 
-    # Implements FR-283: pause only this opportunity for an unknown named tool.
-    # Do this before any evidence-model calls so a pending answer is durable
-    # even when the score model is unavailable.
-    pending_confirmations, attested_skill_terms = _prepare_skill_confirmations(
-        required_raw + preferred_raw,
-        folder=folder,
-        company=company_display,
-        role=role,
-        internal_terms=internal_terms,
-        db_path=checkpoint_db_path,
-    )
     # work_exp is the exact source text used to build the evidence context.
     # Its hash participates in the run key so a changed source invalidates reuse.
     from utils import load_file, WORK_EXP_FILE
     work_exp = load_file(WORK_EXP_FILE) or ""
+    # CR-122: create Review Center cards and auto-absent unknown tools before
+    # scoring. Do not raise Stage0NeedsInput for skill_presence.
+    pending_confirmations, attested_skill_terms, absent_skill_terms = (
+        _prepare_skill_confirmations(
+            required_raw + preferred_raw,
+            folder=folder,
+            company=company_display,
+            role=role,
+            internal_terms=internal_terms,
+            db_path=checkpoint_db_path,
+            work_exp=work_exp,
+        )
+    )
     jd_hash = _sha256_text(jd_text)
     evidence_index_hash = _sha256_text(work_exp)
     prompt_version = "evidence-scale-v1"
@@ -2958,10 +3186,6 @@ def build_stage0_fit_gate(
     )
     checkpoint_boundary("after_run_requested")
     mark_run_status(checkpoint_db_path, run_key, "RUNNING")
-    if pending_confirmations:
-        mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
-        checkpoint_boundary("after_pending_confirmation_commit")
-        raise Stage0NeedsInput(folder.name, pending_confirmations)
 
     # --- Step 4: Gap classification (CR-093 evidence-scale engine) ---
     # Extract and score now use the same model (qwen2.5:7b-instruct-q4_K_M).
@@ -3258,6 +3482,7 @@ def build_stage0_fit_gate(
     classified_required, classified_preferred, flagged_gaps = classify_gaps(
         required_raw, preferred_raw, work_exp=work_exp, company=company_display,
         internal_terms=internal_terms, attested_skill_terms=attested_skill_terms,
+        absent_skill_terms=absent_skill_terms,
         cached_results=cached_results, judgment_callback=_persist_judgment,
     )
 
@@ -3333,10 +3558,10 @@ def build_stage0_fit_gate(
                 "requirement": flagged["requirement"],
             }
         )
-    all_pending = pending_hard_reviews + pending_skill_reviews
-    if all_pending:
+        absent_skill_terms[skill_key] = display_name
+    if pending_hard_reviews:
         mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
-        raise Stage0NeedsInput(folder.name, all_pending)
+        raise Stage0NeedsInput(folder.name, pending_hard_reviews)
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)
     word_count = len(re.findall(r"\w+", jd_text or ""))
@@ -3432,24 +3657,19 @@ def build_stage0_fit_gate(
     # else. See load_score_bands()'s docstring for the full reasoning.
     skip_floor, tier1_floor = load_score_bands()
 
-    if score_result["disqualified"]:
-        tier = "Skip"
-        decision = "SKIP"
-    elif decision == "PASS":
-        if fit_score >= tier1_floor:
-            tier = "Tier 1"
-        elif fit_score >= skip_floor:
-            tier = "Tier 2"
-        else:
+    if score_result["disqualified"] or decision != "PASS":
+        if score_result["disqualified"]:
             tier = "Skip"
             decision = "SKIP"
-        # Score must not wash out an empty-required extract (Beyond-class,
-        # 2026-08-10). Step 5 already forced Tier 2 for required_empty;
-        # Step 5.5 then overwrote it whenever preferred items scored >= 65
-        # (confirmed live 2026-08-20: a Jira/Confluence preferred-only
-        # fixture landed Tier 1). Empty required stays visible as Tier 2.
-        if qual_required_n == 0 and decision == "PASS" and tier == "Tier 1":
-            tier = "Tier 2"
+    elif decision == "PASS":
+        tier, decision = _apply_fit_score_to_tier(
+            decision=decision,
+            disqualified=score_result["disqualified"],
+            fit_score=fit_score,
+            skip_floor=skip_floor,
+            tier1_floor=tier1_floor,
+            qual_required_n=qual_required_n,
+        )
 
     # --- Step 6: Build skip_reason if needed ---
     skip_reason: str | None = None
@@ -3575,7 +3795,16 @@ def build_stage0_fit_gate(
         # are always visible here with their reason code, never silent, even
         # when nothing paused (every item bypassed).
         "requirement_extraction_review": requirement_extraction_review,
+        "not_present_named_tools": [
+            {"skill_key": key, "display_name": name}
+            for key, name in sorted(absent_skill_terms.items())
+        ],
     }
+    output["conversion_feasibility"] = evaluate_conversion_feasibility(
+        decision=decision,
+        required=classified_required,
+        not_present_named_tools=output["not_present_named_tools"],
+    )
 
     if skip_reason:
         output["skip_reason"] = skip_reason

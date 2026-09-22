@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """CR-119 queue worker: claim, fence, lock, invoke run_submission.py.
 
-# Implements FR-343 / FR-344 / AC-442 / AC-444 / AC-447
+# Implements FR-343 / FR-344 / AC-442 / AC-444 / AC-447 / AC-458
 # Does not import scripts/workflow/ and does not edit run_submission.py.
+# One in-lease run_stage1_author.py call when WAITING_FOR_LLM has a prompt
+# and no Resume.md; then --resume. Partial Stage 1 files stay paused (AC-448).
 """
 from __future__ import annotations
 
@@ -22,13 +24,21 @@ from queue_lock import SlugLockUnavailable, acquire_slug_lock
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
 RUN_SUBMISSION = _SCRIPT_DIR / "run_submission.py"
+RUN_STAGE1_AUTHOR = _SCRIPT_DIR / "run_stage1_author.py"
+RUN_STAGE2_RUBRIC = _SCRIPT_DIR / "run_stage2_rubric.py"
 DEFAULT_HEARTBEAT_S = 300
 
 PAUSE_WORKFLOW = frozenset(
     {"WAITING_FOR_LLM", "NEEDS_DISPOSITION", "WAITING_FOR_INPUT", "FAILED"}
 )
 DONE_WORKFLOW = frozenset(
-    {"COMPLETE", "COMPLETE_WITH_OVERRIDE", "PRACTICE_COMPLETE", "SKIPPED"}
+    {
+        "COMPLETE",
+        "COMPLETE_WITH_OVERRIDE",
+        "PRACTICE_COMPLETE",
+        "SKIPPED",
+        "ALREADY_HANDLED",  # Implements FR-365 / AC-474
+    }
 )
 
 _abort_requested = False
@@ -257,6 +267,77 @@ def build_runner_command(
     return cmd
 
 
+def build_author_command(
+    folder: Path,
+    *,
+    python_exe: str | None = None,
+) -> list[str]:
+    """Invoke run_stage1_author.py for a WAITING_FOR_LLM folder."""
+    return [python_exe or sys.executable, str(RUN_STAGE1_AUTHOR), str(folder)]
+
+
+def build_rubric_command(
+    folder: Path,
+    *,
+    python_exe: str | None = None,
+) -> list[str]:
+    """Invoke run_stage2_rubric.py for a folder waiting on a scorecard."""
+    return [python_exe or sys.executable, str(RUN_STAGE2_RUBRIC), str(folder)]
+
+
+def needs_stage2_rubric(folder: Path | None) -> bool:
+    """True when the off-default Agy scorecard hook should run.
+
+    AC-463 / AC-464: production stays off until APPLYR_STAGE2_AGY_RUBRIC=1
+    and frozen parks fail closed. Missing docs or a current-hash scorecard
+    does not call.
+    """
+    if os.environ.get("APPLYR_STAGE2_AGY_RUBRIC", "").strip() != "1":
+        return False
+    if folder is None:
+        return False
+    if not (folder / "Resume.md").is_file() or not (folder / "CoverLetter.md").is_file():
+        return False
+    from run_stage2_rubric import has_current_hash_scorecard
+
+    return not has_current_hash_scorecard(folder)
+
+
+def needs_stage1_author(folder: Path | None) -> bool:
+    """True when Stage 0 left WAITING_FOR_LLM with a prompt and no Resume.md.
+
+    AC-458 / FR-344: one in-lease author attempt. Partial Stage 1 files stay
+    paused (AC-448). Missing prompt is fail-closed: pause, do not author.
+    """
+    if folder is None:
+        return False
+    if read_workflow_state(folder).get("status") != "WAITING_FOR_LLM":
+        return False
+    if not (folder / "authoring_prompt.md").is_file():
+        return False
+    if (folder / "Resume.md").exists():
+        return False
+    return True
+
+
+def wait_for_runner(
+    handle: RunnerHandle,
+    *,
+    heartbeat_s: float,
+    conn: Any,
+    worker: str,
+) -> int | None:
+    """Wait for a spawned runner, heartbeating the lease until it exits."""
+    while True:
+        if _abort_requested:
+            handle.kill_tree()
+            return handle.poll()
+        try:
+            return handle.wait(timeout=heartbeat_s)
+        except subprocess.TimeoutExpired:
+            pq.heartbeat(worker, conn=conn)
+
+
 def is_ready_to_finalize(state: dict[str, Any]) -> bool:
     """Stage 2 COMPLETE / Stage 3 READY: waiting for Jason's --finalize, not stuck."""
     if not isinstance(state, dict):
@@ -289,6 +370,14 @@ def map_run_result(state: dict[str, Any]) -> tuple[str | None, str | None, str |
             pq.MIRROR_READY_TO_FINALIZE,
         )
     wf_status = state.get("status") if isinstance(state.get("status"), str) else None
+    if wf_status == "WAITING_FOR_INPUT":
+        kind = (state.get("metadata") or {}).get("pause_kind")
+        if kind == pq.PAUSE_KIND_CONVERSION_RISK:
+            return (
+                "paused",
+                pq.PAUSED_REASON_CONVERSION_RISK,
+                wf_status,
+            )
     mapped = map_workflow_status(wf_status)
     return mapped, None, wf_status
 
@@ -414,6 +503,19 @@ def process_slug(
         return "stale_token"
     if fresh["locked_by"] != worker:
         return "stale_token"
+    # Implements FR-363 / AC-472. Holder closes already-handled before invoke.
+    if slug in pq._already_handled_slugs(conn, data_root):
+        try:
+            pq.transition(
+                slug,
+                "done",
+                worker=worker,
+                token=fresh["fencing_token"],
+                conn=conn,
+            )
+        except pq.FenceRejected:
+            return "stale_token"
+        return "already_handled"
     try:
         with acquire_slug_lock(
             slug, worker, fresh["fencing_token"], lock_dir=lock_dir
@@ -431,16 +533,68 @@ def process_slug(
             )
             handle = spawn(cmd)
             lock.set_runner_pid(handle.pid)
-            exit_code: int | None = None
-            while True:
-                if _abort_requested:
-                    handle.kill_tree()
-                    break
-                try:
-                    exit_code = handle.wait(timeout=heartbeat_s)
-                    break
-                except subprocess.TimeoutExpired:
-                    pq.heartbeat(worker, conn=conn)
+            exit_code = wait_for_runner(
+                handle, heartbeat_s=heartbeat_s, conn=conn, worker=worker
+            )
+            if not _abort_requested:
+                folder = find_folder(slug, data_root, folder)
+                if needs_stage1_author(folder):
+                    # Implements AC-458 / FR-344: one in-lease author, then resume.
+                    author_handle = spawn(
+                        build_author_command(folder, python_exe=python_exe)
+                    )
+                    lock.set_runner_pid(author_handle.pid)
+                    wait_for_runner(
+                        author_handle,
+                        heartbeat_s=heartbeat_s,
+                        conn=conn,
+                        worker=worker,
+                    )
+                    if not _abort_requested:
+                        folder = find_folder(slug, data_root, folder)
+                        resume_cmd = build_runner_command(
+                            slug,
+                            folder,
+                            python_exe=python_exe,
+                            script_path=script_path,
+                        )
+                        handle = spawn(resume_cmd)
+                        lock.set_runner_pid(handle.pid)
+                        exit_code = wait_for_runner(
+                            handle,
+                            heartbeat_s=heartbeat_s,
+                            conn=conn,
+                            worker=worker,
+                        )
+                folder = find_folder(slug, data_root, folder)
+                if needs_stage2_rubric(folder):
+                    # Implements AC-463: off-default in-lease rubric, then resume.
+                    rubric_handle = spawn(
+                        build_rubric_command(folder, python_exe=python_exe)
+                    )
+                    lock.set_runner_pid(rubric_handle.pid)
+                    wait_for_runner(
+                        rubric_handle,
+                        heartbeat_s=heartbeat_s,
+                        conn=conn,
+                        worker=worker,
+                    )
+                    if not _abort_requested:
+                        folder = find_folder(slug, data_root, folder)
+                        resume_cmd = build_runner_command(
+                            slug,
+                            folder,
+                            python_exe=python_exe,
+                            script_path=script_path,
+                        )
+                        handle = spawn(resume_cmd)
+                        lock.set_runner_pid(handle.pid)
+                        exit_code = wait_for_runner(
+                            handle,
+                            heartbeat_s=heartbeat_s,
+                            conn=conn,
+                            worker=worker,
+                        )
             if not _abort_requested:
                 try:
                     apply_run_result(

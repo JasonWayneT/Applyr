@@ -1,11 +1,13 @@
 ---
 status: in_progress
 created: 2026-08-31
-related: CR-093, CR-105, CR-091, CR-107, CR-015
+related: CR-093, CR-105, CR-091, CR-107, CR-015, CR-122
 implementation_plan: ../08-implementation/IMP-CR-108-stage0-evidence-cascade.md
 ---
 
 # CR-108 - Stage 0 evidence cascade, durable checkpoints, and skill confirmations
+
+**Partial supersession (CR-122, 2026-09-21):** `AC-363` pause-on-unknown-tool and durable `NOT_PRESENT` / `UNSURE_NO_REASK` as forever-No are superseded. Unknown tools still create grouped Review Center cards. They default to WE (not evidence for that JD) and do not pause Stage 0. Required named tools withhold via CR-121 `conversion_risk`. `BAD_DATA`, `CONFIRMED_USE` / `FR-284`, and `hard_gate_review` pauses remain.
 
 ## Decision summary
 
@@ -298,7 +300,9 @@ The system distinguishes three cases:
 1. **Known and documented:** canonical key is in the verified profile/catalog and
    retrieval supports it. No question is created.
 2. **Known absent:** a prior user decision says `NOT_PRESENT`. The item is scored as
-   not documented and is not asked again.
+   not documented (evidence level 0, no authoring `claim_ids`) and is not asked again.
+   Named tools stay SOFT: they never HARD-skip the opportunity. Transferable bridges
+   must not copy the JD tool name.
 3. **Unknown to the profile:** a named skill/tool candidate is not in the verified
    profile or memory. The item creates a confirmation question and the
    opportunity pauses before a final Stage 0 verdict.

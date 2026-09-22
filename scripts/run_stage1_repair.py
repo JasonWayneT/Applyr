@@ -285,27 +285,82 @@ def run_repair_process(
         tmp.cleanup()
 
 
+def _fence_body(body: str) -> str:
+    """Normalize fence bodies so CRLF from Windows Agy output does not leak."""
+    return (body or "").replace("\r\n", "\n").replace("\r", "\n").strip() + "\n"
+
+
+def _label_from_header(header: str) -> str:
+    """Match Resume.md / CoverLetter.md / claim_provenance.json in a fence info string."""
+    cleaned = (header or "").replace("\r", " ").replace(":", " ")
+    tokens = [part.strip().strip("`") for part in cleaned.split()]
+    for token in tokens:
+        for name in ARTIFACT_NAMES:
+            if token.lower() == name.lower():
+                return name
+    return ""
+
+
+def _label_from_first_line(body: str) -> tuple[str, str]:
+    """Treat a first-line artifact name as a label, stripping that line from the body."""
+    lines = body.lstrip().splitlines() or [""]
+    first = lines[0].strip().lstrip("#").strip()
+    for name in ARTIFACT_NAMES:
+        if first.lower() == name.lower():
+            rest = "\n".join(lines[1:]).strip() + "\n"
+            return name, rest
+    return "", body
+
+
+def _classify_unlabeled_fence(body: str) -> str:
+    """Map ```markdown / ```json fences that omitted the artifact filename.
+
+    Live miss 2026-09-22 sourcegraph: Agy returned CRLF ```markdown and ```json
+    blocks. Header tokens were language tags, so extract dropped a complete
+    three-artifact draft and the queue paused WAITING_FOR_LLM with no Resume.md.
+    Implements FR-344 / AC-458.
+    """
+    text = (body or "").strip()
+    if not text:
+        return ""
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict) and (
+        "resume_claims" in payload
+        or "cover_letter_claims" in payload
+        or bool(payload.get("company"))
+    ):
+        return "claim_provenance.json"
+    if re.search(r"PROFESSIONAL (SUMMARY|EXPERIENCE)", text, re.I):
+        return "Resume.md"
+    if re.search(r"(?im)^Dear\b", text):
+        return "CoverLetter.md"
+    return ""
+
+
 def extract_fenced_artifacts(text: str) -> dict[str, str]:
     found: dict[str, str] = {}
+    unlabeled: list[str] = []
     for header, body in _FENCE_RE.findall(text or ""):
-        tokens = [part.strip().strip("`") for part in header.replace(":", " ").split()]
-        label = ""
-        for token in tokens:
-            for name in ARTIFACT_NAMES:
-                if token.lower() == name.lower():
-                    label = name
-                    break
-            if label:
-                break
+        body_text = _fence_body(body)
+        label = _label_from_header(header)
         if not label:
-            first = (body.lstrip().splitlines() or [""])[0].strip().lstrip("#").strip()
-            for name in ARTIFACT_NAMES:
-                if first.lower() == name.lower():
-                    label = name
-                    body = "\n".join(body.lstrip().splitlines()[1:])
-                    break
+            label, body_text = _label_from_first_line(body_text)
         if label:
-            found[label] = body.strip() + "\n"
+            found[label] = body_text
+        else:
+            unlabeled.append(body_text)
+    for body_text in unlabeled:
+        label = _classify_unlabeled_fence(body_text)
+        if label and label not in found:
+            found[label] = body_text
+    if "CoverLetter.md" not in found:
+        for body_text in unlabeled:
+            if body_text not in found.values() and len(body_text.strip()) >= 40:
+                found["CoverLetter.md"] = body_text
+                break
     return found
 
 

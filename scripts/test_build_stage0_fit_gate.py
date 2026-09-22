@@ -352,7 +352,7 @@ def setUpModule():
     global _SKILL_CONFIRM_PATCHER
     _SKILL_CONFIRM_PATCHER = patch(
         "build_stage0_fit_gate._prepare_skill_confirmations",
-        return_value=([], []),
+        return_value=([], {}, {}),
     )
     _SKILL_CONFIRM_PATCHER.start()
 
@@ -437,6 +437,26 @@ _THIN_JD = textwrap.dedent("""
 
     We are hiring a PM. You should have 3 years of experience.
     Apply with resume.
+""").strip()
+
+# Live miss 2026-09-21 nava_benefits: all hire criteria sat under Preferred
+# Experience, then a "Working at {Company}" culture header. NLP promoted the
+# years / 0-to-1 lines into required; regex left the culture header itself
+# as a preferred item.
+_NAVA_SHAPED_JD = textwrap.dedent("""
+    Product Manager
+
+    Key Responsibilities
+    Drive engagement and satisfaction with employee-facing technology products.
+
+    Preferred Experience
+    5+ years in product management.
+    A demonstrated track record of taking products from zero to one and finding product-market fit, with a bias toward action and rapid learning.
+    Experience deploying and scaling mission-critical SaaS products.
+
+    Working at Nava
+    As a remote-first company, Nava is committed to building a dynamic and inclusive culture.
+    Candidates from all backgrounds are encouraged to apply.
 """).strip()
 
 # A JD for a blocked company.
@@ -575,6 +595,43 @@ _DB_CLEAR = {"action": "clear", "reason_code": "no_terminal_rows", "reason": "No
 _DB_REJECT = {"action": "reject", "reason_code": "self_rejected", "reason": "Self-Rejected (permanent)", "matched_rows": []}
 # DB gate "reapply_flag" mock result.
 _DB_REAPPLY = {"action": "reapply_flag", "reason_code": "reapply_eligible", "reason": "Cooldown expired", "matched_rows": []}
+
+# CR-123 Story 4.2 — synthetic already-handled / different-role / cooldown fixtures.
+# Implements FR-365 / AC-474. example.test only; no live company names.
+_SYNTH_FIT_COMPANY = "Synth Fit Co"
+_SYNTH_FIT_TITLE = "Synth Product Manager"
+_SYNTH_FIT_URL = "https://example.test/jobs/fit-applied-1"
+_SYNTH_FIT_URL_TRACKED = "https://example.test/jobs/fit-applied-1?utm_source=board"
+_DB_ALREADY_HANDLED = {
+    "action": "already_handled",
+    "reason_code": "already_handled",
+    "reason": "Same posting already Applied ('Synth Fit Co' / 'Synth Product Manager')",
+    "already_handled": {
+        "url": _SYNTH_FIT_URL,
+        "company": _SYNTH_FIT_COMPANY,
+        "title": _SYNTH_FIT_TITLE,
+        "status": "Applied",
+    },
+    # Gate overlay pops this; the stub must not re-attach it.
+    "active_application": [
+        {"status": "Applied", "title": _SYNTH_FIT_TITLE, "company": _SYNTH_FIT_COMPANY}
+    ],
+}
+_DB_DIFFERENT_ROLE_FLAG = {
+    "action": "clear",
+    "reason_code": "no_terminal_rows",
+    "reason": "No prior rows",
+    "matched_rows": [],
+    "active_application": [
+        {"status": "Applied", "title": "Data Engineer", "company": _SYNTH_FIT_COMPANY}
+    ],
+}
+_DB_COOLDOWN_REJECT = {
+    "action": "reject",
+    "reason_code": "cooldown_evaluated_no",
+    "reason": "Rejected within 120-day cooldown",
+    "matched_rows": [],
+}
 
 
 # ---------------------------------------------------------------------------
@@ -1265,6 +1322,44 @@ class TestGapClassification(unittest.TestCase):
         self.assertTrue(any(g.get("gap_class") == "SOFT" for g in flagged))
         self.assertFalse(any(g.get("gap_class") == "HARD" for g in flagged))
 
+    def test_not_present_named_tool_caps_owned_cascade_as_undocumented_soft(self):
+        # Live miss: velosio Dynamics / omnissa UEM. Cascade mapped the JD
+        # product line as owned (or a SOFT bridge) after NOT_PRESENT.
+        from stage0_checkpoint import make_item_key
+
+        reqs = ["Hands-on experience with Microsoft Dynamics 365"]
+        cached = _build_cached_results(reqs)
+        key = make_item_key("required", reqs[0], 0)
+        cached[key]["gap"] = False
+        cached[key]["gap_class"] = None
+        cached[key]["evidence_level"] = 3
+        cached[key]["anchor"] = "WE mentions a comparable platform"
+        classified, _, flagged = classify_gaps(
+            reqs, [], vocab=self.vocab,
+            cached_results=cached,
+            absent_skill_terms={
+                "microsoft_dynamics_365": "Microsoft Dynamics 365",
+            },
+        )
+        self.assertTrue(classified[0]["gap"])
+        self.assertEqual(classified[0]["gap_class"], "SOFT")
+        self.assertEqual(classified[0]["evidence_level"], 0)
+        self.assertNotEqual(classified[0]["gap_class"], "HARD")
+        self.assertIn("work experience", classified[0]["anchor"])
+        self.assertTrue(any(g.get("gap_class") == "SOFT" for g in flagged))
+        self.assertFalse(any(g.get("gap_class") == "HARD" for g in flagged))
+
+    def test_not_present_does_not_cap_unrelated_required_item(self):
+        reqs = ["3+ years of product management experience in an agile environment"]
+        classified, _, _ = classify_gaps(
+            reqs, [], vocab=self.vocab,
+            cached_results=_build_cached_results(reqs),
+            absent_skill_terms={
+                "microsoft_dynamics_365": "Microsoft Dynamics 365",
+            },
+        )
+        self.assertFalse(classified[0]["gap"], "agile/PM exp should find anchors")
+
 
 # ---------------------------------------------------------------------------
 # Test: PO solo-backlog-ownership signal (2026-08-18)
@@ -1657,6 +1752,80 @@ class TestDbGateInteraction(unittest.TestCase):
         self.assertIn(result["tier"], {"Tier 1", "Tier 2"})
 
 
+class TestAlreadyHandledFitGate(unittest.TestCase):
+    """Story 4.2: same-posting Applied short-circuits to ALREADY_HANDLED.
+
+    Assert the gate JSON only. Do not run placement. Synthetic fixtures.
+    """
+
+    def test_same_posting_applied_is_already_handled_not_pass(self):
+        result = _build(_CLEAN_PM_JD, db_result=_DB_ALREADY_HANDLED)
+        self.assertEqual(result["decision"], "ALREADY_HANDLED")
+        self.assertNotEqual(result["decision"], "PASS")
+        self.assertNotEqual(result["decision"], "SKIP")
+        self.assertNotIn("skip_reason_code", result)
+        self.assertNotIn("skip_reason", result)
+        self.assertNotIn("active_application", result)
+        self.assertEqual(result["required"], [])
+        self.assertEqual(result["preferred"], [])
+        self.assertEqual(result["responsibilities"], [])
+        self.assertEqual(result["flagged_gaps"], [])
+
+    def test_different_role_same_company_still_passes_with_active_application(self):
+        result = _build(_CLEAN_PM_JD, db_result=_DB_DIFFERENT_ROLE_FLAG)
+        self.assertEqual(result["decision"], "PASS")
+        self.assertIn("active_application", result)
+        self.assertEqual(result["active_application"][0]["title"], "Data Engineer")
+        self.assertEqual(result["active_application"][0]["company"], _SYNTH_FIT_COMPANY)
+
+    def test_cooldown_reject_is_still_skip(self):
+        result = _build(_CLEAN_PM_JD, db_result=_DB_COOLDOWN_REJECT)
+        self.assertEqual(result["decision"], "SKIP")
+        self.assertEqual(result["skip_reason_code"], "cooldown_evaluated_no")
+
+    def test_evaluate_db_gate_receives_parsed_url(self):
+        jd_text = f"URL: {_SYNTH_FIT_URL_TRACKED}\n\n{_CLEAN_PM_JD}"
+        folder = _make_submission_folder(jd_text)
+        db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
+        os.close(db_fd)
+        try:
+            for candidate in named_skill_candidates([jd_text]):
+                create_skill_confirmation(
+                    db_path=db_path,
+                    skill_key=candidate.skill_key,
+                    display_name=candidate.display_name,
+                    requirement=candidate.display_name,
+                    opportunity_key=folder.name,
+                    opportunity_company=_SYNTH_FIT_COMPANY,
+                    opportunity_title=_SYNTH_FIT_TITLE,
+                )
+                answer_confirmation(
+                    db_path=db_path,
+                    review_key=f"skill:{candidate.skill_key}",
+                    answer="NOT_PRESENT",
+                )
+            with patch(
+                "stage0_db_gate.evaluate_db_gate",
+                return_value=_DB_ALREADY_HANDLED,
+            ) as mocked:
+                result = build_stage0_fit_gate(
+                    folder,
+                    db_gate_result=None,
+                    prefs=_PREFS_MINIMAL,
+                    vocab=_load_anchor_vocab(),
+                    confirmation_db_path=db_path,
+                )
+        finally:
+            try:
+                os.unlink(db_path)
+            except FileNotFoundError:
+                pass
+        mocked.assert_called_once()
+        self.assertEqual(mocked.call_args.kwargs.get("url"), _SYNTH_FIT_URL_TRACKED)
+        self.assertEqual(result["decision"], "ALREADY_HANDLED")
+        self.assertNotIn("active_application", result)
+
+
 # ---------------------------------------------------------------------------
 # Test: Output shape
 # ---------------------------------------------------------------------------
@@ -2029,6 +2198,23 @@ class TestReadyNetStyleInformalHeaders(unittest.TestCase):
         required_blob = " | ".join(sections["required"]).lower()
         for junk in ("humble but ambitious", "comfortable working remotely"):
             self.assertNotIn(junk, required_blob, f"culture personality leaked into required: {junk}")
+
+    def test_working_at_company_is_culture_not_preferred_item(self):
+        """Nava-class (2026-09-21): 'Working at Nava' is a culture header.
+
+        Header routing missed it, so the label and the following DEI /
+        remote-first copy leaked into preferred and were scored as gaps.
+        Implements FR-330.
+        """
+        sections = _extract_sections(_NAVA_SHAPED_JD)
+        preferred_blob = " | ".join(sections["preferred"]).lower()
+        required_blob = " | ".join(sections["required"]).lower()
+        scored = preferred_blob + " | " + required_blob
+        self.assertTrue(any("5+ years" in p.lower() for p in sections["preferred"]))
+        self.assertFalse(any("zero to one" in r.lower() for r in sections["required"]))
+        self.assertNotIn("working at nava", scored)
+        self.assertNotIn("encouraged to apply", scored)
+        self.assertNotIn("remote-first company", scored)
 
 
 class TestRealtimeAllCapsHeaders(unittest.TestCase):
@@ -2864,6 +3050,32 @@ class TestSectionExtractionNLP(unittest.TestCase):
             prompt = call.kwargs.get("user_prompt", "")
             self.assertNotIn("jobs.ashbyhq.com", prompt)
 
+    def test_preferred_experience_header_is_not_classifier_overridden(self):
+        """Live miss on nava_benefits (2026-09-21): the JD labeled every
+        qualification Preferred Experience, including '5+ years' and 0-to-1.
+        The local classifier still bucketed those two as required at >=0.65
+        confidence, KEEP_ELIGIBLE converted the 0-to-1 hard gate to SOFT, and
+        fit 34 skipped below the 40 floor. Regex extraction kept them preferred.
+        Implements CR-105 / FR-330.
+        """
+        with patch.dict(os.environ, {
+            "STAGE0_SECTION_MODE": "nlp",
+            "APPLYR_STAGE0_SUBSCRIPTION_ADAPTER": "0",
+            "APPLYR_STAGE0_CLOUD_LLM": "0",
+        }):
+            with patch("utils.call_llm", return_value=None):
+                result = self._extract_sections_nlp(_NAVA_SHAPED_JD)
+        self.assertIsNotNone(result)
+        required_blob = " | ".join(result["required"]).lower()
+        preferred_blob = " | ".join(result["preferred"]).lower()
+        self.assertIn("5+ years", preferred_blob)
+        self.assertIn("zero to one", preferred_blob)
+        self.assertNotIn("5+ years", required_blob)
+        self.assertNotIn("zero to one", required_blob)
+        self.assertNotIn("working at nava", preferred_blob)
+        self.assertNotIn("working at nava", required_blob)
+        self.assertNotIn("encouraged to apply", preferred_blob + " | " + required_blob)
+
     def test_ambiguous_bullet_fallback_uses_groq_then_gemini(self):
         """The fallback call must request Groq first, Gemini second -- not a bare
         single-provider string (the original version hardcoded "gemini" only)."""
@@ -3008,6 +3220,119 @@ class TestCR115ScoredChrome(unittest.TestCase):
         self.assertNotIn("Additional Details", out["required"])
         self.assertNotIn("Additional Details", out["culture"])
 
+    def test_hire_site_office_days_leave_required(self) -> None:
+        """Live miss 2026-09-21 optum: NLP split the Minneapolis/Washington
+        office-days sentence into the only required items. Implements FR-330.
+        """
+        from build_stage0_fit_gate import _divert_scored_chrome
+
+        hire_a = "For all hires in the Minneapolis or Washington, D.C."
+        hire_b = (
+            "area, you will be required to work in the office a minimum of four "
+            "days per week."
+        )
+        years = "5+ years of product management experience"
+        sections = {
+            "required": [hire_a, hire_b, years],
+            "preferred": [],
+            "junk": [],
+        }
+        out = _divert_scored_chrome(sections)
+        required_blob = " | ".join(out["required"]).lower()
+        junk_blob = " | ".join(out["junk"]).lower()
+        self.assertNotIn("minneapolis", required_blob)
+        self.assertNotIn("work in the office a minimum", required_blob)
+        self.assertIn("5+ years of product management", required_blob)
+        self.assertIn("minneapolis", junk_blob)
+        self.assertIn("work in the office a minimum", junk_blob)
+
+
+class TestEmptyRequiredFitWashout(unittest.TestCase):
+    """Step 5.5 must not Skip an empty-required extract at fit 0. FR-330 / AC-428."""
+
+    def test_fit_zero_with_no_qualification_required_stays_tier2_pass(self) -> None:
+        from build_stage0_fit_gate import _apply_fit_score_to_tier
+
+        tier, decision = _apply_fit_score_to_tier(
+            decision="PASS",
+            disqualified=False,
+            fit_score=0,
+            skip_floor=40,
+            tier1_floor=80,
+            qual_required_n=0,
+        )
+        self.assertEqual(tier, "Tier 2")
+        self.assertEqual(decision, "PASS")
+
+    def test_fit_zero_with_real_required_still_skips(self) -> None:
+        from build_stage0_fit_gate import _apply_fit_score_to_tier
+
+        tier, decision = _apply_fit_score_to_tier(
+            decision="PASS",
+            disqualified=False,
+            fit_score=0,
+            skip_floor=40,
+            tier1_floor=80,
+            qual_required_n=2,
+        )
+        self.assertEqual(tier, "Skip")
+        self.assertEqual(decision, "SKIP")
+
+    def test_optum_hire_site_only_extract_is_tier2_pass_not_fit_skip(self) -> None:
+        """Original Optum shape: hire-site fragments as the only required
+        lines, real responsibilities, fit 0 after divert. Must not Skip.
+        """
+        hire_a = "For all hires in the Minneapolis or Washington, D.C."
+        hire_b = (
+            "area, you will be required to work in the office a minimum of four "
+            "days per week."
+        )
+        duties = (
+            "You will work directly with the CPS Development team to drive "
+            "Agile/Scrum best practices in order to design and deploy solutions."
+        )
+        jd = (
+            "Product Manager - Remote\n\n"
+            + ("Enterprise healthcare platform serving care providers. " * 40)
+            + "\nRequirements\n"
+            + hire_a
+            + "\n"
+            + hire_b
+            + "\nResponsibilities\n"
+            + duties
+        )
+        sections = {
+            "required": [hire_a, hire_b],
+            "preferred": [],
+            "responsibilities": [duties],
+            "culture": [],
+            "junk": [],
+        }
+        folder = _make_submission_folder(jd)
+        with patch(
+            "build_stage0_fit_gate._extract_sections_nlp",
+            return_value=sections,
+        ):
+            result = build_stage0_fit_gate(
+                folder,
+                db_gate_result=_DB_CLEAR,
+                prefs=_PREFS_MINIMAL,
+            )
+        required_blob = " | ".join(
+            (row["item"] if isinstance(row, dict) else str(row))
+            for row in (result.get("required") or [])
+        ).lower()
+        junk_blob = " | ".join(result.get("junk") or []).lower()
+        self.assertNotIn("minneapolis", required_blob)
+        self.assertNotIn("work in the office a minimum", required_blob)
+        self.assertIn("minneapolis", junk_blob)
+        self.assertIn("work in the office a minimum", junk_blob)
+        self.assertEqual(result["decision"], "PASS")
+        self.assertEqual(result["tier"], "Tier 2")
+        self.assertEqual(
+            (result.get("conversion_feasibility") or {}).get("verdict"), "ok"
+        )
+
 
 class TestSubscriptionReviewKeepsSpool(unittest.TestCase):
     def test_omitted_ids_leave_spool_and_pause_ids(self) -> None:
@@ -3040,6 +3365,152 @@ class TestSubscriptionReviewKeepsSpool(unittest.TestCase):
         self.assertIn("required:", ctx.exception.missing_item_ids[0])
         self.assertIn("subscription_review:", ctx.exception.reason)
         self.assertEqual(ctx.exception.pause_kind(), "subscription_review")
+
+
+class TestConversionFeasibility(unittest.TestCase):
+    """CR-121 / FR-354. Replay of parked 2026-09-21 gates."""
+
+    def test_dynamics_required_evidence_zero_is_risk(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="PASS",
+            required=[
+                {
+                    "item": "5+ years of experience in product management or a related role",
+                    "evidence_level": 4,
+                },
+                {
+                    "item": (
+                        "Experience with Microsoft Dynamics 365 Business Central "
+                        "and project accounting / PSA solutions"
+                    ),
+                    "evidence_level": 0,
+                    "gap": True,
+                    "gap_class": "SOFT",
+                },
+            ],
+            not_present_named_tools=[],
+        )
+        self.assertEqual(out["verdict"], "risk")
+        self.assertTrue(
+            any("Dynamics" in reason for reason in out["reasons"])
+        )
+
+    def test_uem_not_present_required_is_risk(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="PASS",
+            required=[
+                {
+                    "item": "3+ years in product management",
+                    "evidence_level": 3,
+                },
+                {
+                    "item": (
+                        "Hands-on experience with Workspace ONE UEM or a "
+                        "comparable enterprise endpoint management platform."
+                    ),
+                    "evidence_level": 0,
+                },
+            ],
+            not_present_named_tools=[
+                {"skill_key": "workspace_one_uem", "display_name": "Workspace ONE UEM"},
+            ],
+        )
+        self.assertEqual(out["verdict"], "risk")
+        self.assertIn(
+            "not_present_required_tool:Workspace ONE UEM", out["reasons"]
+        )
+
+    def test_kafka_required_with_evidence_is_ok(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="PASS",
+            required=[
+                {
+                    "item": "Exposure to Kafka architecture and event-driven systems",
+                    "evidence_level": 3,
+                },
+            ],
+            not_present_named_tools=[],
+        )
+        self.assertEqual(out["verdict"], "ok")
+        self.assertEqual(out["reasons"], [])
+
+    def test_empty_required_is_ok(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="PASS",
+            required=[],
+            not_present_named_tools=[],
+        )
+        self.assertEqual(out["verdict"], "ok")
+
+    def test_skip_is_not_applicable(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="SKIP",
+            required=[{"item": "Microsoft Dynamics 365", "evidence_level": 0}],
+        )
+        self.assertEqual(out["verdict"], "n/a")
+
+    def test_certara_clinical_evidence_one_stays_ok(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="PASS",
+            required=[
+                {"item": "5+ years' experience in product management", "evidence_level": 4},
+                {
+                    "item": (
+                        "Familiarity with the clinical data stream, in areas "
+                        "adjacent to Data Management and Biostatistics"
+                    ),
+                    "evidence_level": 1,
+                    "gap": True,
+                    "gap_class": "SOFT",
+                },
+            ],
+        )
+        self.assertEqual(out["verdict"], "ok")
+
+    def test_goodrx_preferred_pharmacy_does_not_risk(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="PASS",
+            required=[
+                {
+                    "item": "3+ years of product management, business / systems analyst",
+                    "evidence_level": 3,
+                },
+            ],
+        )
+        self.assertEqual(out["verdict"], "ok")
+
+    def test_single_token_central_is_not_a_reason(self) -> None:
+        from build_stage0_fit_gate import evaluate_conversion_feasibility
+
+        out = evaluate_conversion_feasibility(
+            decision="PASS",
+            required=[
+                {
+                    "item": "Experience with Microsoft Dynamics 365 Business Central",
+                    "evidence_level": 0,
+                },
+            ],
+            not_present_named_tools=[],
+        )
+        self.assertEqual(out["verdict"], "risk")
+        self.assertTrue(any("Dynamics" in reason for reason in out["reasons"]))
+        self.assertFalse(
+            any(reason.endswith(":Central") for reason in out["reasons"])
+        )
 
 
 # ---------------------------------------------------------------------------

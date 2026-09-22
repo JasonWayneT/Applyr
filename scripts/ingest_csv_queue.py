@@ -42,10 +42,24 @@ def ingest_inbox(
     dry_run: bool = False,
     pending_root: Path | None = None,
     submissions_root: Path | None = None,
+    archive_submissions_root: Path | None = None,
+    archive_skipped_root: Path | None = None,
+    data_root: Path | None = None,
+    reconcile_already_handled: bool = False,
     sleep_s: float | None = None,
 ) -> dict[str, int]:
     pending = pending_root if pending_root is not None else ingest.PENDING_REVIEW
     submissions = submissions_root if submissions_root is not None else ingest.SUBMISSIONS
+    archive_subs = (
+        archive_submissions_root
+        if archive_submissions_root is not None
+        else ingest.ARCHIVE_SUBMISSIONS
+    )
+    archive_skip = (
+        archive_skipped_root
+        if archive_skipped_root is not None
+        else ingest.ARCHIVE_SKIPPED
+    )
     archive_dir = inbox / "archive"
     quarantine_dir = inbox / "quarantine"
     counts = {
@@ -57,12 +71,25 @@ def ingest_inbox(
         "queued": 0,
         "reused": 0,
         "skipped_ledger": 0,
+        "already_handled": 0,
         "quarantined_rows": 0,
+        "reconciled": 0,
     }
+    root = data_root if data_root is not None else pending.parent
     conn = pq.connect(db_path)
     ensure_skip_schema(conn)
     try:
+        if reconcile_already_handled:
+            # Implements FR-366 / AC-475. Same closer as already_handled rows.
+            counts["reconciled"] = pq.reconcile_already_handled(
+                conn,
+                data_root=root,
+                archive_submissions_root=archive_subs,
+                archive_skipped_root=archive_skip,
+            )
         if not inbox.exists():
+            if reconcile_already_handled:
+                return counts
             raise FileNotFoundError(f"inbox not found: {inbox}")
         for path in sorted(inbox.glob("*.csv")):
             counts["files_seen"] += 1
@@ -152,9 +179,23 @@ def ingest_inbox(
                     pending_root=pending,
                     submissions_root=submissions,
                     skip_db_path=db_path,
+                    archive_submissions_root=archive_subs,
+                    archive_skipped_root=archive_skip,
                 )
                 if action == "skip_ledger":
                     counts["skipped_ledger"] += 1
+                    continue
+                if action == "already_handled":
+                    # Implements FR-361 / AC-470. Distinct from skip_ledger.
+                    counts["already_handled"] += 1
+                    if not dry_run:
+                        # Implements FR-366 / AC-475. Close any existing ghost.
+                        counts["reconciled"] += pq.reconcile_already_handled(
+                            conn,
+                            data_root=root,
+                            archive_submissions_root=archive_subs,
+                            archive_skipped_root=archive_skip,
+                        )
                     continue
                 if action == "reuse":
                     counts["reused"] += 1
@@ -216,8 +257,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", default=str(pq.DEFAULT_DB))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--reconcile-already-handled",
+        action="store_true",
+        help="Close already-handled queue ghosts without requiring inbox CSVs.",
+    )
     args = parser.parse_args(argv)
-    counts = ingest_inbox(Path(args.inbox), Path(args.db), dry_run=args.dry_run)
+    counts = ingest_inbox(
+        Path(args.inbox),
+        Path(args.db),
+        dry_run=args.dry_run,
+        reconcile_already_handled=args.reconcile_already_handled,
+    )
     if args.json:
         print(
             json.dumps(
@@ -233,7 +284,8 @@ def main(argv: list[str] | None = None) -> int:
         "files_seen={files_seen} archived={files_archived} "
         "quarantined_files={files_quarantined} duplicate_hash={files_duplicate_hash} "
         "unstable={files_unstable} queued={queued} reused={reused} "
-        "skipped_ledger={skipped_ledger} quarantined_rows={quarantined_rows}".format(**counts)
+        "skipped_ledger={skipped_ledger} already_handled={already_handled} "
+        "reconciled={reconciled} quarantined_rows={quarantined_rows}".format(**counts)
     )
     return 0
 

@@ -282,8 +282,8 @@ export function createSkillConfirmation(
     reviewKey,
     skillKey,
     clean(input.title) || skillKey,
-    clean(input.question) || `Have you used ${skillKey} in your work?`,
-    clean(input.summary) || 'Applyr needs your input before this opportunity can continue.',
+    clean(input.question) || `${clean(input.title) || skillKey} is not in work experience, so this JD will not use it as evidence. Add it there if we missed it.`,
+    clean(input.summary) || 'Optional correction. Stage 0 is not waiting on this card.',
     clean(input.requirement) || null,
     clean(input.evidenceExcerpt) || null,
     opportunityKey,
@@ -468,12 +468,15 @@ export function answerReviewItem(
 
   if (isSkill && rows[0].skill_key) {
     const skillKey = rows[0].skill_key;
-    // Implements FR-287: BAD_DATA records that the extracted candidate was not a
-    // real skill/tool so the same candidate is never queued again.
-    const decision = existingPromotion?.status === 'VERIFIED'
-      ? 'VERIFIED_EVIDENCE'
-      : answer as 'CONFIRMED_USE' | 'NOT_PRESENT' | 'UNSURE_NO_REASK' | 'BAD_DATA';
-    upsertSkillMemory(skillKey, rows[0].title, decision, details, database);
+    // CR-122 / FR-358: NOT_PRESENT and UNSURE_NO_REASK complete the card
+    // without minting a forever-No skill_memory row. BAD_DATA still suppresses
+    // junk extraction. CONFIRMED_USE remains durable attestation.
+    if (answer === 'CONFIRMED_USE' || answer === 'BAD_DATA' || existingPromotion?.status === 'VERIFIED') {
+      const decision = existingPromotion?.status === 'VERIFIED'
+        ? 'VERIFIED_EVIDENCE'
+        : answer as 'CONFIRMED_USE' | 'BAD_DATA';
+      upsertSkillMemory(skillKey, rows[0].title, decision, details, database);
+    }
     if (promoteToVerifiedEvidence) {
       promotionId = existingPromotion?.id ?? randomUUID();
       if (!existingPromotion) {

@@ -869,6 +869,15 @@ def waiting_for_input_message(folder: str) -> str:
             f"Then: python scripts/run_submission.py {folder} --resume. "
             "Do not paste authoring_prompt.md. Stage 0 is not finished."
         )
+    if kind == "conversion_risk":
+        return (
+            "workflow WAITING_FOR_INPUT — conversion risk. Stage 0 PASS "
+            "withheld authoring because a required named tool is unproven. "
+            "Skip ledger was not written. Only requeue --reason apply_anyway "
+            "promotes. "
+            f"Then: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md until apply_anyway exists."
+        )
     return (
         "workflow WAITING_FOR_INPUT — resolve Review Center confirmations then --resume"
     )

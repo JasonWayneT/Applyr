@@ -26,7 +26,8 @@ from csv_ingest import (  # noqa: E402
     validate_row,
 )
 from ingest_csv_queue import ingest_inbox, main as ingest_main  # noqa: E402
-from stage0_skip_ledger import record_skip  # noqa: E402
+import pipeline_queue as pq  # noqa: E402
+from stage0_skip_ledger import normalize_url, posting_key, record_skip  # noqa: E402
 
 CONTACTS_SQL = """
 CREATE TABLE IF NOT EXISTS contacts (
@@ -71,18 +72,32 @@ class IngestHarness(unittest.TestCase):
         self.inbox = self.root / "inbox"
         self.pending = self.root / "pending_review"
         self.submissions = self.root / "submissions"
+        self.archive_submissions = self.root / "archive" / "submissions"
+        self.archive_skipped = self.root / "archive" / "skipped"
         self.inbox.mkdir()
         self.pending.mkdir()
         self.submissions.mkdir()
+        self.archive_submissions.mkdir(parents=True)
+        self.archive_skipped.mkdir(parents=True)
         (self.inbox / "archive").mkdir()
         (self.inbox / "quarantine").mkdir()
         self.db = self.root / "jobagent.sqlite"
         self._pending_patch = mock.patch("csv_ingest.PENDING_REVIEW", self.pending)
         self._sub_patch = mock.patch("csv_ingest.SUBMISSIONS", self.submissions)
+        self._arch_sub_patch = mock.patch(
+            "csv_ingest.ARCHIVE_SUBMISSIONS", self.archive_submissions
+        )
+        self._arch_skip_patch = mock.patch(
+            "csv_ingest.ARCHIVE_SKIPPED", self.archive_skipped
+        )
         self._pending_patch.start()
         self._sub_patch.start()
+        self._arch_sub_patch.start()
+        self._arch_skip_patch.start()
         self.addCleanup(self._pending_patch.stop)
         self.addCleanup(self._sub_patch.stop)
+        self.addCleanup(self._arch_sub_patch.stop)
+        self.addCleanup(self._arch_skip_patch.stop)
 
     def _write_csv(self, name: str, rows: list[dict[str, str]]) -> Path:
         path = self.inbox / name
@@ -411,6 +426,177 @@ class TestIngestCli(IngestHarness):
             [p.name for p in self.pending.iterdir() if p.is_dir()],
             first_folders,
         )
+
+
+_JOBS_DDL = """
+CREATE TABLE jobs (
+  id TEXT PRIMARY KEY,
+  company TEXT,
+  title TEXT,
+  url TEXT,
+  status TEXT
+);
+"""
+
+
+class TestCr123IngestReconcile(IngestHarness):
+    """CR-123 Story 5.1: ingest / CLI hook for reconcile (FR-366, AC-475)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        conn = pq.connect(self.db)
+        conn.executescript(_JOBS_DDL)
+        conn.commit()
+        conn.close()
+
+    def _ingest(self) -> dict[str, int]:
+        return ingest_inbox(
+            self.inbox,
+            self.db,
+            pending_root=self.pending,
+            submissions_root=self.submissions,
+            archive_submissions_root=self.archive_submissions,
+            archive_skipped_root=self.archive_skipped,
+            data_root=self.root,
+            sleep_s=0,
+        )
+
+    def _seed_paused(
+        self,
+        slug: str,
+        *,
+        company: str,
+        title: str,
+        url: str,
+        folder_root: str = "pending_review",
+    ) -> None:
+        """Insert one paused synthetic queue row. Returns None."""
+        conn = pq.connect(self.db)
+        pq.upsert_queued(
+            conn,
+            slug=slug,
+            company=company,
+            title=title,
+            url=url,
+            url_key=normalize_url(url),
+            posting_key=posting_key(company, title),
+            networking_contacts_raw=None,
+            source_sha256=None,
+            source_line=None,
+            folder_root=folder_root,
+        )
+        conn.execute(
+            "UPDATE pipeline_queue SET status = 'paused', locked_by = NULL, "
+            "lease_expires_at = NULL, paused_at = ? WHERE slug = ?",
+            (pq.utc_now(), slug),
+        )
+        conn.commit()
+        conn.close()
+
+    def test_already_handled_ingest_closes_existing_paused_applied_row(self) -> None:
+        """Ingest of an Applied+ row closes the existing paused queue row."""
+        slug = "synth_recon_ingest_co"
+        company = "Synth Recon Ingest Co"
+        title = "Platform Product Manager"
+        url = "https://example.test/jobs/recon-ingest"
+        conn = pq.connect(self.db)
+        conn.execute(
+            "INSERT INTO jobs (id, company, title, url, status) VALUES (?, ?, ?, ?, ?)",
+            (slug, company, title, url, "Applied"),
+        )
+        conn.commit()
+        conn.close()
+        self._seed_paused(slug, company=company, title=title, url=url)
+        self._write_csv(
+            "recon-ingest.csv",
+            [
+                {
+                    "Company": company,
+                    "Position": title,
+                    "URL": f"{url}?utm_source=board",
+                    "Job Description": _jd(" recon-ingest"),
+                }
+            ],
+        )
+        counts = self._ingest()
+        self.assertEqual(counts["already_handled"], 1)
+        self.assertEqual(counts["queued"], 0)
+        self.assertFalse((self.pending / slug).exists())
+        conn = pq.connect(self.db)
+        try:
+            self.assertEqual(pq.get_row(conn, slug)["status"], "done")
+            claimed = pq.claim_pack("w1", size=1, conn=conn, data_root=self.root)
+        finally:
+            conn.close()
+        self.assertEqual(claimed, [])
+
+    def test_cli_reconcile_already_handled_with_no_inbox_files(self) -> None:
+        """--reconcile-already-handled closes AC-475 shapes with an empty inbox."""
+        applied_slug = "synth_cli_applied"
+        skipped_slug = "synth_cli_skipped"
+        archived_slug = "synth_cli_archived"
+        applied_company = "Synth Cli Applied Co"
+        skipped_company = "Synth Cli Skipped Co"
+        archived_company = "Synth Cli Archive Co"
+        title = "Platform Product Manager"
+        applied_url = "https://example.test/jobs/cli-applied"
+        skipped_folder = self.archive_skipped / skipped_slug
+        skipped_folder.mkdir()
+        (skipped_folder / "Original_JD.txt").write_text(
+            "synthetic skipped marker\n", encoding="utf-8"
+        )
+        archived_folder = self.archive_submissions / archived_slug
+        archived_folder.mkdir()
+        (archived_folder / "Original_JD.txt").write_text(
+            "synthetic archived marker\n", encoding="utf-8"
+        )
+        conn = pq.connect(self.db)
+        conn.execute(
+            "INSERT INTO jobs (id, company, title, url, status) VALUES (?, ?, ?, ?, ?)",
+            (applied_slug, applied_company, title, applied_url, "Applied"),
+        )
+        conn.commit()
+        conn.close()
+        self._seed_paused(
+            applied_slug, company=applied_company, title=title, url=applied_url
+        )
+        self._seed_paused(
+            skipped_slug,
+            company=skipped_company,
+            title=title,
+            url="https://example.test/jobs/cli-skipped",
+            folder_root="archive/skipped",
+        )
+        self._seed_paused(
+            archived_slug,
+            company=archived_company,
+            title=title,
+            url="https://example.test/jobs/cli-archived",
+        )
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            rc = ingest_main(
+                [
+                    "--inbox",
+                    str(self.inbox),
+                    "--db",
+                    str(self.db),
+                    "--reconcile-already-handled",
+                ]
+            )
+        self.assertEqual(rc, 0)
+        self.assertEqual(list(self.inbox.glob("*.csv")), [])
+        conn = pq.connect(self.db)
+        try:
+            self.assertEqual(pq.get_row(conn, applied_slug)["status"], "done")
+            self.assertEqual(pq.get_row(conn, skipped_slug)["status"], "done")
+            self.assertEqual(pq.get_row(conn, archived_slug)["status"], "done")
+            claimed = pq.claim_pack("w1", size=3, conn=conn, data_root=self.root)
+        finally:
+            conn.close()
+        self.assertEqual(claimed, [])
+        self.assertTrue(skipped_folder.is_dir())
+        self.assertTrue(archived_folder.is_dir())
 
 
 if __name__ == "__main__":

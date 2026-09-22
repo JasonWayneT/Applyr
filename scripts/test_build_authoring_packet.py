@@ -1123,6 +1123,13 @@ class TestItemOverlapPrecision(unittest.TestCase):
             _distinctive_overlap({"agile", "sprint", "team"}, {"agile", "team", "planning"}),
             {"agile"},
         )
+        self.assertEqual(
+            _distinctive_overlap(
+                {"exposure", "frontline", "retail"},
+                {"exposure", "kafka", "architecture"},
+            ),
+            set(),
+        )
 
     def test_camunda_epics_line_does_not_select_acc120(self):
         """Regression: 'equip team for epics' must not map to ACC-120 via 'team'."""
@@ -1163,6 +1170,52 @@ class TestItemOverlapPrecision(unittest.TestCase):
         self.assertIn("ACC-105-EXECUTION", top_ids)
         score_120 = next(s for cid, s in scored if cid == "ACC-120-AIRESEARCH")
         self.assertEqual(score_120, 0)
+
+    def test_exposure_lens_does_not_map_kafka_to_frontline_verticals(self):
+        """Live miss on omnissa: ACC-189 lens kafka_architecture_exposure
+        shared the rare word 'exposure' with 'Exposure to frontline verticals'
+        and won Top-2. A Kafka JD item must still match on kafka itself.
+        """
+        claims = {
+            "ACC-189-KAFKA": {
+                "employer": "cision",
+                "project_id": "ACC-189",
+                "lens": "kafka_architecture_exposure",
+                "tags": [
+                    "Kafka",
+                    "Product Architecture",
+                    "Data Pipeline",
+                    "Contact Database",
+                    "ETL",
+                    "Architecture Planning",
+                ],
+                "metrics": [],
+            },
+            "ACC-106-GTM": {
+                "employer": "cision",
+                "project_id": "ACC-106",
+                "lens": "gtm",
+                "tags": ["Go-To-Market", "Product Marketing"],
+                "metrics": [],
+            },
+        }
+        frontline = (
+            "Exposure to frontline verticals such as retail, healthcare, logistics, "
+            "transportation, or manufacturing, including shared device and "
+            "shift-based work patterns."
+        )
+        scored = _score_claims_for_item(
+            frontline, claims, set(), jd_profile=None, jd_text=frontline
+        )
+        kafka_score = next(s for cid, s in scored if cid == "ACC-189-KAFKA")
+        self.assertEqual(kafka_score, 0)
+
+        kafka_item = "Experience with Java, Kafka, and event-driven architecture."
+        kafka_scored = _score_claims_for_item(
+            kafka_item, claims, set(), jd_profile=None, jd_text=kafka_item
+        )
+        self.assertEqual(kafka_scored[0][0], "ACC-189-KAFKA")
+        self.assertGreater(kafka_scored[0][1], 0)
 
     def test_ai_item_still_boosts_acc120(self):
         """Capability boost path must keep working when the JD actually names AI/ML."""
@@ -1774,6 +1827,457 @@ class TestClaimConstraintsBudget(unittest.TestCase):
         self.assertEqual(packet["claim_constraints"], fat_constraints)
         self.assertNotEqual(packet["claim_constraints"], {})
         self.assertNotEqual(packet["packet_status"], "ready")
+
+
+class TestPacketBudgetRemainderTrim(unittest.TestCase):
+    """Live miss 2026-09-21 velosio: 8010 > 8000 after one proportional shrink.
+
+    33 excerpts made int(overage_chars * share) a 0-2 character bite.
+    Sentence-bounded truncation would not take that bite, five excerpts
+    were still above the 400 floor, and Stage 1 failed closed. Implements
+    FR-297: constraints stay; leftover overage comes out of the longest
+    excerpt's trailing sentence.
+    """
+
+    def test_ten_token_overage_trims_longest_excerpt_to_ready(self) -> None:
+        # Mirror velosio's shape: many already-at-floor excerpts plus a few
+        # slightly over the floor. Proportional 10-token shrink assigns 0-2
+        # characters per excerpt, which sentence truncation will not take.
+        floor_excerpt = (
+            "Shipped the customer-facing platform work with engineering. "
+            "Kept the release on the published date."
+        )
+        long_excerpt = (
+            "Led quarterly planning across engineering and CX. " * 10
+            + "Drop this trailing sentence about a side workshop."
+        )
+        excerpts = {f"ACC-{i:03d}-FILL": floor_excerpt for i in range(1, 29)}
+        excerpts["ACC-105-AGILE"] = long_excerpt
+        excerpts["ACC-118-COACHING"] = (
+            "Coached the team through incident triage on the paid tier. " * 8
+            + "Drop this extra coaching anecdote."
+        )
+        kwargs = dict(
+            stage0={
+                **_STAGE0_TIER1,
+                "thin_jd": True,
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+            },
+            evidence_map=[
+                {
+                    "jd_item": "Agile planning",
+                    "bucket": "required",
+                    "claim_ids": ["ACC-105-AGILE"],
+                    "bridge": None,
+                }
+            ],
+            excerpts=excerpts,
+            disabled=set(),
+            hook_fact=None,
+            company="Velosio",
+            role_title="Product Manager",
+            slug="velosio",
+            url=None,
+            claim_constraints={
+                "ACC-105-AGILE": {
+                    "attribution": "CONTRIBUTED",
+                    "prohibited_claims": ["Do not claim sole delivery."],
+                }
+            },
+            jd_text="",
+            ats_term_contract=[],
+        )
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            base = assemble_packet(**kwargs)
+        self.assertGreater(len(base["excerpts"]["ACC-105-AGILE"]), 400)
+        budget = base["estimated_tokens"] - 10
+        self.assertGreater(budget, 0)
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            with patch("build_authoring_packet._TOKEN_BUDGET", budget):
+                packet = assemble_packet(**kwargs)
+        self.assertEqual(packet["packet_status"], "ready", packet.get("incomplete_reasons"))
+        self.assertLessEqual(packet["estimated_tokens"], budget)
+        self.assertLess(
+            len(packet["excerpts"]["ACC-105-AGILE"]),
+            len(excerpts["ACC-105-AGILE"]),
+        )
+        self.assertEqual(
+            packet["claim_constraints"]["ACC-105-AGILE"]["attribution"],
+            "CONTRIBUTED",
+        )
+
+    def test_floor_excerpts_drop_non_required_to_fit_budget(self) -> None:
+        """Live miss 2026-09-21 omnissa: 29 floor excerpts, leftover trim
+        no-op, 9210 > 8000. Non-required cards must drop; required stays."""
+        from build_authoring_packet import assemble_packet
+
+        floor_excerpt = (
+            "Shipped the customer-facing platform work with engineering. "
+            "Kept the release on the published date. "
+        ) * 4
+        floor_excerpt = floor_excerpt[:400]
+        excerpts = {f"ACC-{i:03d}-FILL": floor_excerpt for i in range(1, 28)}
+        excerpts["ACC-105-AGILE"] = floor_excerpt
+        excerpts["ACC-301-AUTO"] = floor_excerpt
+        kwargs = dict(
+            stage0={
+                **_STAGE0_TIER1,
+                "thin_jd": True,
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+            },
+            evidence_map=[
+                {
+                    "jd_item": "Agile planning",
+                    "bucket": "required",
+                    "claim_ids": ["ACC-105-AGILE"],
+                    "bridge": None,
+                }
+            ],
+            excerpts=excerpts,
+            disabled=set(),
+            hook_fact=None,
+            company="Omnissa",
+            role_title="Product Manager",
+            slug="omnissa",
+            url=None,
+            claim_constraints={
+                cid: {
+                    "attribution": "OWNED",
+                    "prohibited_claims": [
+                        "Do not invent a metric, partner team, or tool name."
+                    ]
+                    * 8,
+                }
+                for cid in excerpts
+            },
+            jd_text="",
+            ats_term_contract=[],
+        )
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            with patch("build_authoring_packet._TOKEN_BUDGET", 3500):
+                packet = assemble_packet(**kwargs)
+        self.assertEqual(packet["packet_status"], "ready", packet.get("incomplete_reasons"))
+        self.assertLessEqual(packet["estimated_tokens"], 3500)
+        self.assertIn("ACC-105-AGILE", packet["excerpts"])
+        self.assertIn("ACC-301-AUTO", packet["excerpts"])
+        self.assertLess(len(packet["excerpts"]), len(excerpts))
+
+    def test_mapped_preferred_excerpt_stays_while_unmapped_fillers_drop(self) -> None:
+        """Live miss 2026-09-21 omnissa: dropping ACC-106-GTM because it was
+        preferred, not required, left it on evidence_map and Rule 4 failed."""
+        from build_authoring_packet import assemble_packet
+
+        floor_excerpt = (
+            "Shipped the customer-facing platform work with engineering. "
+            "Kept the release on the published date. "
+        ) * 4
+        floor_excerpt = floor_excerpt[:400]
+        excerpts = {f"ACC-{i:03d}-FILL": floor_excerpt for i in range(1, 28)}
+        excerpts["ACC-105-AGILE"] = floor_excerpt
+        excerpts["ACC-106-GTM"] = floor_excerpt
+        excerpts["ACC-301-AUTO"] = floor_excerpt
+        kwargs = dict(
+            stage0={
+                **_STAGE0_TIER1,
+                "thin_jd": True,
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+            },
+            evidence_map=[
+                {
+                    "jd_item": "Agile planning",
+                    "bucket": "required",
+                    "claim_ids": ["ACC-105-AGILE"],
+                    "bridge": None,
+                },
+                {
+                    "jd_item": "Go-to-market planning",
+                    "bucket": "preferred",
+                    "claim_ids": ["ACC-106-GTM"],
+                    "bridge": None,
+                },
+            ],
+            excerpts=excerpts,
+            disabled=set(),
+            hook_fact=None,
+            company="Omnissa",
+            role_title="Product Manager",
+            slug="omnissa",
+            url=None,
+            claim_constraints={
+                cid: {
+                    "attribution": "OWNED",
+                    "prohibited_claims": [
+                        "Do not invent a metric, partner team, or tool name."
+                    ]
+                    * 8,
+                }
+                for cid in excerpts
+            },
+            jd_text="",
+            ats_term_contract=[],
+        )
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            with patch("build_authoring_packet._TOKEN_BUDGET", 3500):
+                packet = assemble_packet(**kwargs)
+        self.assertEqual(packet["packet_status"], "ready", packet.get("incomplete_reasons"))
+        self.assertIn("ACC-106-GTM", packet["excerpts"])
+        mapped = {
+            cid
+            for row in packet["evidence_map"]
+            for cid in (row.get("claim_ids") or [])
+        }
+        self.assertTrue(mapped <= set(packet["excerpts"]))
+        self.assertNotIn("ACC-001-FILL", packet["excerpts"])
+
+    def test_over_budget_preferred_is_stripped_from_evidence_map(self) -> None:
+        """If fillers are gone and preferred still blows the budget, drop it
+        and strip the claim_id so Rule 4 does not fire."""
+        from build_authoring_packet import assemble_packet
+
+        floor_excerpt = (
+            "Shipped the customer-facing platform work with engineering. "
+            "Kept the release on the published date. "
+        ) * 4
+        floor_excerpt = floor_excerpt[:400]
+        excerpts = {
+            "ACC-105-AGILE": floor_excerpt,
+            "ACC-106-GTM": floor_excerpt,
+            "ACC-301-AUTO": floor_excerpt,
+        }
+        kwargs = dict(
+            stage0={
+                **_STAGE0_TIER1,
+                "thin_jd": True,
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+            },
+            evidence_map=[
+                {
+                    "jd_item": "Agile planning",
+                    "bucket": "required",
+                    "claim_ids": ["ACC-105-AGILE"],
+                    "bridge": None,
+                },
+                {
+                    "jd_item": "Go-to-market planning",
+                    "bucket": "preferred",
+                    "claim_ids": ["ACC-106-GTM"],
+                    "bridge": None,
+                },
+            ],
+            excerpts=excerpts,
+            disabled=set(),
+            hook_fact=None,
+            company="Omnissa",
+            role_title="Product Manager",
+            slug="omnissa",
+            url=None,
+            claim_constraints={
+                cid: {
+                    "attribution": "OWNED",
+                    "prohibited_claims": [
+                        "Do not invent a metric, partner team, or tool name."
+                    ]
+                    * 12,
+                }
+                for cid in excerpts
+            },
+            jd_text="",
+            ats_term_contract=[],
+        )
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            with patch("build_authoring_packet._TOKEN_BUDGET", 980):
+                packet = assemble_packet(**kwargs)
+        self.assertEqual(packet["packet_status"], "ready", packet.get("incomplete_reasons"))
+        self.assertNotIn("ACC-106-GTM", packet["excerpts"])
+        mapped = {
+            cid
+            for row in packet["evidence_map"]
+            for cid in (row.get("claim_ids") or [])
+        }
+        self.assertNotIn("ACC-106-GTM", mapped)
+        self.assertIn("ACC-105-AGILE", packet["excerpts"])
+
+
+class TestAtsTermContractSurvivesBudgetDrop(unittest.TestCase):
+    def test_dropped_excerpt_is_removed_from_ats_term_contract(self) -> None:
+        from build_authoring_packet import _sync_ats_term_contract
+
+        draft = {
+            "excerpts": {
+                "ACC-105-AGILE": "Agile planning excerpt.",
+                "ACC-214-PARALLELS": "Parallels QA excerpt.",
+            },
+            "evidence_map": [
+                {"claim_ids": ["ACC-105-AGILE"]},
+            ],
+            "ats_term_contract": [
+                {"term": "Agile", "claim_ids": ["ACC-105-AGILE"], "jd_items": []},
+                {"term": "Jira", "claim_ids": ["ACC-108-SUPPORT"], "jd_items": []},
+                {
+                    "term": "Support",
+                    "claim_ids": ["ACC-214-PARALLELS", "ACC-108-SUPPORT"],
+                    "jd_items": [],
+                },
+            ],
+        }
+        _sync_ats_term_contract(draft)
+        terms = {row["term"]: row["claim_ids"] for row in draft["ats_term_contract"]}
+        self.assertEqual(terms["Agile"], ["ACC-105-AGILE"])
+        self.assertNotIn("Jira", terms)
+        self.assertEqual(terms["Support"], ["ACC-214-PARALLELS"])
+
+
+class TestNotPresentNamedToolsStripMapping(unittest.TestCase):
+    def test_not_present_tool_clears_mapped_claims_and_adds_constraint(self) -> None:
+        from build_authoring_packet import assemble_packet
+
+        kwargs = dict(
+            stage0={
+                **_STAGE0_TIER1,
+                "not_present_named_tools": [
+                    {"skill_key": "workspace_one_uem", "display_name": "Workspace ONE UEM"}
+                ],
+            },
+            evidence_map=[
+                {
+                    "jd_item": "Hands-on experience with Workspace ONE UEM or a comparable platform.",
+                    "bucket": "required",
+                    "claim_ids": ["ACC-108-RETENTION"],
+                    "bridge": "Soft gap",
+                },
+                {
+                    "jd_item": "Write clear requirements.",
+                    "bucket": "required",
+                    "claim_ids": ["ACC-202-REQUIREMENTS"],
+                    "bridge": None,
+                },
+            ],
+            excerpts={
+                "ACC-108-RETENTION": "Lens retention.\nPartnered on a retention program.",
+                "ACC-202-REQUIREMENTS": "Lens requirements.\nWrote requirements.",
+            },
+            disabled=set(),
+            hook_fact=None,
+            company="Omnissa",
+            role_title="Product Manager",
+            slug="omnissa",
+            url=None,
+            claim_constraints={},
+            jd_text="Hands-on experience with Workspace ONE UEM.",
+            ats_term_contract=[],
+        )
+        with patch("build_authoring_packet.select_examples", return_value=[]):
+            packet = assemble_packet(**kwargs)
+        uem_row = next(
+            row
+            for row in packet["evidence_map"]
+            if "Workspace ONE" in row["jd_item"]
+        )
+        self.assertEqual(uem_row["claim_ids"], [])
+        self.assertIn("NOT_PRESENT", uem_row["bridge"])
+        self.assertTrue(
+            any("Workspace ONE UEM" in item for item in packet["hard_constraints"])
+        )
+        req_row = next(
+            row
+            for row in packet["evidence_map"]
+            if "requirements" in row["jd_item"]
+        )
+        self.assertEqual(req_row["claim_ids"], ["ACC-202-REQUIREMENTS"])
+
+
+class TestNotPresentNamedToolsSkipScoring(unittest.TestCase):
+    def test_not_present_tool_does_not_receive_overlap_claim_ids(self):
+        """Scoring must not map ACC-105 onto a NOT_PRESENT product line.
+
+        Live miss: velosio Dynamics / omnissa UEM. assemble_packet later
+        stripped claim_ids, but build_evidence_map had already assigned them.
+        Use a tool that is not in HARD_BLOCKED_TOOLS so LR-026 is not the path.
+        """
+        stage0 = {
+            **_STAGE0_TIER1,
+            "required": [
+                {
+                    "item": "Hands-on Pegasystems experience plus agile roadmap delivery",
+                    "anchor": "none",
+                    "gap": True,
+                    "gap_class": "SOFT",
+                },
+                {
+                    "item": "Agile sprint planning and roadmap experience",
+                    "anchor": "tags: agile",
+                    "gap": False,
+                },
+            ],
+            "preferred": [],
+            "responsibilities": [],
+            "not_present_named_tools": [
+                {"skill_key": "pegasystems", "display_name": "Pegasystems"},
+            ],
+        }
+        em = build_evidence_map(
+            stage0,
+            "Hands-on Pegasystems experience plus agile roadmap delivery",
+            _CLAIMS_FIXTURE,
+            _DISABLED_FIXTURE,
+            jd_profile=None,
+        )
+        pega = next(row for row in em if "Pegasystems" in row["jd_item"])
+        self.assertEqual(pega["claim_ids"], [])
+        self.assertIn("NOT_PRESENT", pega.get("bridge") or "")
+        agile = next(
+            row for row in em if row["jd_item"].startswith("Agile sprint")
+        )
+        self.assertTrue(agile.get("claim_ids"))
+
+
+class TestExcerptShrinkKeepsWeSpan(unittest.TestCase):
+    """Live miss 2026-09-21 velosio: ACC-203-TECH was a hedge header plus one
+    WE sentence (~475 chars). Shrink targeted 400. `_truncate_at_sentence`
+    takes the last sentence end inside that window, which is the header's
+    'none listed.' The WE sentence is unfinished there, so the card collapsed
+    to a lens header. Stage 1 then had no certificate-workflow facts for the
+    Dynamics 365 soft gap and wrote the JD's tool name instead.
+    """
+
+    _HEADER = (
+        "Lens technical of ACC-203. Employer: sterkly. Attribution: unspecified. "
+        "Prohibited: none listed."
+    )
+    _WE = (
+        "ACC-203 Critical Revenue Bottleneck Resolution: Resolved a critical "
+        "distribution bottleneck for a macOS security product by developing an "
+        "in-house browser extension certificate procurement workflow, saving "
+        "approximately $100 per certificate, and sustaining an estimated "
+        "$1M-$3M in product revenue that had been blocked."
+    )
+
+    def test_floor_truncate_keeps_certificate_workflow_span(self) -> None:
+        from build_authoring_packet import _EXCERPT_MIN_CHARS, _truncate_excerpt_card
+
+        card = f"{self._HEADER}\n{self._WE}"
+        self.assertGreater(len(card), _EXCERPT_MIN_CHARS)
+        truncated = _truncate_excerpt_card(card, _EXCERPT_MIN_CHARS)
+        self.assertIn("$100", truncated)
+        self.assertIn("certificate", truncated)
+        self.assertTrue(truncated.startswith("Lens technical of ACC-203"))
+
+    def test_sentence_truncate_alone_drops_the_we_span(self) -> None:
+        """Pin the broken helper so a future revert of the card-aware path
+        cannot silently restore header-only Dynamics bridges."""
+        from build_authoring_packet import _EXCERPT_MIN_CHARS, _truncate_at_sentence
+
+        card = f"{self._HEADER}\n{self._WE}"
+        broken = _truncate_at_sentence(card, _EXCERPT_MIN_CHARS)
+        self.assertNotIn("certificate", broken)
 
 
 class TestEmploymentLogisticsNonClaimable(unittest.TestCase):

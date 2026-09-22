@@ -203,6 +203,19 @@ describe('review center repository', () => {
     ).toEqual({ answer: 'BAD_DATA' });
   });
 
+  it('does not write skill_memory for NOT_PRESENT', () => {
+    const database = createDatabase();
+    createReview(database);
+    expect(
+      answerReviewItem('skill:servicenow_itsm', 'NOT_PRESENT', undefined, false, database),
+    ).toEqual({ ok: true, status: 'completed' });
+    expect(
+      database
+        .prepare('SELECT decision FROM skill_memory WHERE skill_key = ?')
+        .get('servicenow_itsm'),
+    ).toBeUndefined();
+  });
+
   it('rejects BAD_DATA on hard-gate reviews', () => {
     const database = createDatabase();
     const review = createHardGateReview(

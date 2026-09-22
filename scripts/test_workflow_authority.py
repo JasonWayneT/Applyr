@@ -35,6 +35,7 @@ from workflow.runner import (  # noqa: E402
     WorkflowError,
     adopt_existing,
     run_stage0,
+    run_stage1_prompt,
     run_stage1_validate,
     run_until_stage1_complete,
     run_until_waiting_for_llm,
@@ -294,6 +295,80 @@ class WorkflowAuthorityTests(unittest.TestCase):
         self.assertEqual(out["status"], "SKIPPED")
         self.assertEqual(load_receipt(str(self.folder), "stage0")["status"], "SKIPPED")
 
+    def test_policy_already_handled_even_when_tier_is_skip(self):
+        """FR-365 / AC-474: decision ALREADY_HANDLED must not remap to SKIP."""
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        out = evaluate_stage0(gate)
+        self.assertEqual(out["verdict"], "ALREADY_HANDLED")
+        self.assertEqual(out["decision"], "ALREADY_HANDLED")
+        self.assertNotEqual(out["verdict"], "SKIP")
+        self.assertNotEqual(out["verdict"], "FAIL")
+        self.assertNotEqual(out["verdict"], "PASS")
+
+    def test_run_stage0_already_handled_is_not_skipped(self):
+        """FR-365: runner commits ALREADY_HANDLED, not SKIPPED, and does not start Stage 1."""
+        _write(self.folder, "Original_JD.txt", "Whatever\n")
+        state = init_state(str(self.folder))
+        write_state(str(self.folder), state)
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("stage0_skip_ledger.record_skip") as record:
+                out = run_stage0(str(self.folder), state)
+        self.assertEqual(out["status"], "ALREADY_HANDLED")
+        self.assertNotEqual(out["status"], "SKIPPED")
+        self.assertNotEqual(out["status"], "FAILED")
+        self.assertIsNone(out.get("active_stage"))
+        self.assertEqual(out["stages"]["stage1"]["status"], "LOCKED")
+        self.assertEqual(load_receipt(str(self.folder), "stage0")["status"], "ALREADY_HANDLED")
+        record.assert_not_called()
+
+    def test_run_stage0_already_handled_marks_unlocked_queue_done(self):
+        """FR-365: after commit, mark_done an unlocked queue row for this slug."""
+        import pipeline_queue as pq
+
+        _write(self.folder, "Original_JD.txt", "Whatever\n")
+        state = init_state(str(self.folder))
+        write_state(str(self.folder), state)
+        db = Path(self._tmpdir.name) / "jobagent.sqlite"
+        conn = pq.connect(db)
+        self.addCleanup(conn.close)
+        slug = self.folder.name
+        pq.upsert_queued(
+            conn,
+            slug=slug,
+            company="Synth Queue Co",
+            title="Product Manager",
+            url=None,
+            url_key=None,
+            posting_key="synth queue co||product manager",
+            networking_contacts_raw=None,
+            source_sha256=None,
+            source_line=None,
+            folder_root="pending_review",
+        )
+        self.assertEqual(pq.get_row(conn, slug)["status"], "queued")
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        with mock.patch.dict(os.environ, {"APPLYR_SANDBOX_DB": str(db)}):
+            with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+                out = run_stage0(str(self.folder), state)
+        self.assertEqual(out["status"], "ALREADY_HANDLED")
+        row = pq.get_row(conn, slug)
+        assert row is not None
+        self.assertEqual(row["status"], "done")
+        self.assertEqual(row["last_workflow_status"], "ALREADY_HANDLED")
+
     def test_force_reruns_previously_skipped_stage0(self):
         _write(self.folder, "Original_JD.txt", "Whatever\n")
         state = init_state(str(self.folder))
@@ -396,9 +471,176 @@ class RunUntilWaitingTests(unittest.TestCase):
                         )
         self.assertEqual(state["status"], "WAITING_FOR_LLM")
         self.assertTrue((self.folder / "authoring_prompt.md").exists())
+
+    def test_conversion_risk_pass_pauses_before_prompt(self):
+        gate = _valid_stage0(
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["required_unproven_named_tool:Microsoft Dynamics 365"],
+            }
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.require_stage_ready"):
+                with mock.patch("workflow.runner.build_packet") as build_packet:
+                    state = run_until_waiting_for_llm(
+                        str(self.folder),
+                        mode="production",
+                        adopt=False,
+                        no_hook=True,
+                    )
+        self.assertEqual(state["status"], "WAITING_FOR_INPUT")
+        self.assertEqual(state["metadata"]["pause_kind"], "conversion_risk")
+        self.assertFalse((self.folder / "authoring_prompt.md").exists())
+        build_packet.assert_not_called()
+        receipt = load_receipt(str(self.folder), "stage0")
+        self.assertEqual(receipt["status"], "COMPLETE")
+        self.assertEqual(receipt["result"]["pause_kind"], "conversion_risk")
+        self.assertEqual(receipt["result"]["decision"], "PASS")
+
+    def test_already_handled_does_not_lock_as_skip_or_start_stage1(self):
+        """FR-365 / AC-474: orchestrator stops; not SKIPPED; no Stage 1 prompt."""
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.require_stage_ready"):
+                with mock.patch("workflow.runner.build_packet") as build_packet:
+                    with mock.patch("stage0_skip_ledger.record_skip") as record:
+                        state = run_until_waiting_for_llm(
+                            str(self.folder),
+                            mode="production",
+                            adopt=False,
+                            no_hook=True,
+                        )
+        self.assertEqual(state["status"], "ALREADY_HANDLED")
+        self.assertNotEqual(state["status"], "SKIPPED")
+        self.assertIsNone(state.get("active_stage"))
+        self.assertFalse((self.folder / "authoring_prompt.md").exists())
+        self.assertFalse((self.folder / "authoring_packet.json").exists())
+        build_packet.assert_not_called()
+        record.assert_not_called()
+
+    def test_conversion_risk_apply_anyway_builds_prompt(self):
+        gate = _valid_stage0(
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["required_unproven_named_tool:Microsoft Dynamics 365"],
+            }
+        )
+        packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+        (self.folder / "conversion_risk_apply_anyway.json").write_text(
+            '{"reason": "apply_anyway"}\n', encoding="utf-8"
+        )
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt", side_effect=fake_prompt
+                ):
+                    with mock.patch("workflow.runner.require_stage_ready"):
+                        with mock.patch(
+                            "workflow.runner.hashes_match", return_value=(True, [])
+                        ):
+                            state = run_until_waiting_for_llm(
+                                str(self.folder),
+                                mode="production",
+                                adopt=False,
+                                no_hook=True,
+                            )
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "authoring_prompt.md").exists())
         self.assertTrue((self.folder / "stage_receipts" / "stage1.json").exists())
         ok, _ = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)
+
+    def test_conversion_risk_resume_after_apply_anyway_builds_prompt(self):
+        gate = _valid_stage0(
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["required_unproven_named_tool:Microsoft Dynamics 365"],
+            }
+        )
+        packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.require_stage_ready"):
+                with mock.patch("workflow.runner.build_packet") as build_packet:
+                    paused = run_until_waiting_for_llm(
+                        str(self.folder),
+                        mode="production",
+                        adopt=False,
+                        no_hook=True,
+                    )
+        self.assertEqual(paused["status"], "WAITING_FOR_INPUT")
+        build_packet.assert_not_called()
+        (self.folder / "conversion_risk_apply_anyway.json").write_text(
+            '{"reason": "apply_anyway"}\n', encoding="utf-8"
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt", side_effect=fake_prompt
+                ):
+                    with mock.patch("workflow.runner.require_stage_ready"):
+                        with mock.patch(
+                            "workflow.runner.hashes_match", return_value=(True, [])
+                        ):
+                            state = run_until_waiting_for_llm(
+                                str(self.folder),
+                                mode="production",
+                                adopt=False,
+                                no_hook=True,
+                            )
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "authoring_prompt.md").exists())
 
     def test_over_budget_packet_persists_failed_instead_of_stale_in_progress(self):
         """Found live on clarion_events_inc_north_address, 2026-09-20: an
@@ -444,6 +686,68 @@ class RunUntilWaitingTests(unittest.TestCase):
         self.assertEqual(persisted["status"], "FAILED")
         self.assertEqual(persisted["stages"]["stage1"]["status"], "FAILED")
         self.assertIn("over token budget", persisted["metadata"]["stage1_fail_reason"].lower())
+        self.assertFalse((self.folder / "stage1_budget_retry.json").exists())
+
+    def test_failed_over_budget_retry_writes_marker_then_rebuilds(self):
+        """AC-459: one --resume from FAILED over-budget with no Resume.md."""
+        state = init_state(str(self.folder), mode="production")
+        state["status"] = "FAILED"
+        state["active_stage"] = "stage1"
+        state["stages"]["stage0"]["status"] = "COMPLETE"
+        state["stages"]["stage1"]["status"] = "FAILED"
+        write_state(str(self.folder), state)
+        (self.folder / "authoring_packet.json").write_text(
+            json.dumps(
+                {
+                    "packet_status": "incomplete",
+                    "incomplete_reasons": ["Over token budget: 8565 > 8000"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        ready_packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.require_stage_ready"):
+            with mock.patch("workflow.runner.hashes_match", return_value=(True, [])):
+                with mock.patch(
+                    "workflow.runner.load_receipt",
+                    return_value={"status": "COMPLETE", "output_hashes": {}},
+                ):
+                    with mock.patch(
+                        "workflow.runner.build_packet", return_value=ready_packet
+                    ):
+                        with mock.patch(
+                            "workflow.runner.build_authoring_prompt",
+                            side_effect=fake_prompt,
+                        ):
+                            out = run_stage1_prompt(
+                                str(self.folder), state, no_hook=True
+                            )
+        self.assertTrue((self.folder / "stage1_budget_retry.json").exists())
+        self.assertEqual(out["status"], "WAITING_FOR_LLM")
 
     def test_stage0_extract_error_persists_failed_instead_of_stale_in_progress(self):
         """Found live on nava_benefits, 2026-09-21: Stage0ExtractError from a
@@ -512,6 +816,44 @@ class RunUntilWaitingTests(unittest.TestCase):
         )
         write_receipt(str(self.folder), receipt)
         self.assertTrue(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_no_provider_extraction_review_reruns_stage0(self):
+        """outschool-class: adapter-off packs paused requirement extraction
+        with every queue item extraction_reason=no_provider. Requeue must
+        re-attempt Stage 0, not bounce on the missing import file."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "requirement_extraction_review",
+                "queue": [
+                    {"text": "Title: Product Manager", "extraction_reason": "no_provider"},
+                    {"text": "About the company", "extraction_reason": "no_provider"},
+                ],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertTrue(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_real_extraction_review_without_import_does_not_rerun(self):
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "requirement_extraction_review",
+                "queue": [
+                    {"text": "5+ years PM", "extraction_reason": "low_confidence"},
+                ],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertFalse(runner._waiting_for_input_has_new_work(str(self.folder)))
 
     def test_subscription_review_missing_item_ids_field_reruns_stage0(self):
         """Same as above, via the forward-looking `missing_item_ids` receipt

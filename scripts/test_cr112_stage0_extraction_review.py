@@ -107,7 +107,7 @@ def setUpModule():
             "industry_semantic.classify_industry_safe",
             return_value={"blocked_industry": "", "confidence": "high", "reasoning": "mocked"},
         ),
-        patch("build_stage0_fit_gate._prepare_skill_confirmations", return_value=([], [])),
+        patch("build_stage0_fit_gate._prepare_skill_confirmations", return_value=([], {}, {})),
     ]
     for p in patchers:
         p.start()
@@ -381,6 +381,19 @@ class TestExtractSectionsNlpDumpSites(unittest.TestCase):
 
     def setUp(self):
         os.environ["STAGE0_SECTION_MODE"] = "nlp"
+        # These tests patch utils.call_llm. That path only runs when the
+        # subscription adapter is off and the retired cloud LLM fallback is on.
+        # Production sessions export APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1, which
+        # otherwise records subscription_adapter_required instead of no_provider.
+        self._env = patch.dict(
+            os.environ,
+            {
+                "APPLYR_STAGE0_SUBSCRIPTION_ADAPTER": "0",
+                "APPLYR_STAGE0_CLOUD_LLM": "1",
+            },
+        )
+        self._env.start()
+        self.addCleanup(self._env.stop)
 
     def test_no_provider_is_recorded_not_defaulted_to_responsibilities(self):
         with patch("utils.call_llm", return_value=None):

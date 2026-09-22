@@ -79,7 +79,9 @@ class TestRunAuthorProcess(unittest.TestCase):
         self.assertEqual(result["outcome"], "ok")
         self.assertIn("hello", result["text"])
         sent = json.loads(proc.stdin.written.strip())
-        self.assertEqual(sent, {"event": "user", "message": {"content": "PROMPT BODY"}})
+        self.assertEqual(sent["event"], "user")
+        self.assertIn(author.SANDBOX_INSTRUCTION, sent["message"]["content"])
+        self.assertIn("PROMPT BODY", sent["message"]["content"])
 
     def test_missing_init_event_is_author_failed(self) -> None:
         proc = FakeProc([])
@@ -163,6 +165,38 @@ class TestRunForFolder(unittest.TestCase):
             self.assertEqual(result["reason"], "invalid_or_incomplete_artifacts")
             self.assertFalse(result["wrote_files"])
             self.assertFalse((folder / "Resume.md").exists())
+
+    def test_crlf_language_fences_are_classified_and_written(self) -> None:
+        """Live miss 2026-09-22 sourcegraph: ```markdown\\r / ```json\\r (FR-344)."""
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            (folder / "authoring_prompt.md").write_text("# prompt\n", encoding="utf-8")
+            text = (
+                "```markdown\r\n"
+                "## PROFESSIONAL SUMMARY\r\n"
+                "Product manager body.\r\n"
+                "```\r\n"
+                "```markdown\r\n"
+                "Sourcegraph solves a hard engineering problem in code search.\r\n"
+                "```\r\n"
+                "```json\r\n"
+                '{"company": "Sourcegraph", "resume_claims": '
+                '[{"bullet": "x", "claim_ids": ["ACC-101"]}]}\r\n'
+                "```\r\n"
+            )
+            rows = [_event({"event": "result", "result": {"status": "SUCCESS", "output": text}})]
+
+            def spawn(cmd: list[str], cwd: Path) -> FakeProc:
+                return FakeProc(rows)
+
+            with mock.patch.object(author, "_agy_cmd", return_value="agy"):
+                result = author.run_for_folder(folder, wall_seconds=30, spawn=spawn)
+            self.assertEqual(result["outcome"], "ok")
+            self.assertTrue(result["wrote_files"])
+            self.assertIn("PROFESSIONAL SUMMARY", (folder / "Resume.md").read_text(encoding="utf-8"))
+            self.assertIn("Sourcegraph solves", (folder / "CoverLetter.md").read_text(encoding="utf-8"))
+            provenance = json.loads((folder / "claim_provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(provenance["company"], "Sourcegraph")
 
 
 if __name__ == "__main__":

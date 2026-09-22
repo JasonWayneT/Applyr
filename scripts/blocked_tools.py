@@ -39,6 +39,12 @@ HARD_BLOCKED_TOOLS: frozenset[str] = frozenset({
     # Finance/payments/billing tools
     "stripe", "braintree", "adyen", "recurly", "chargebee",
     "netsuite", "workday", "sap",
+    # ERP / partner-IP suites not in WE (2026-09-21 velosio: Stage 1 wrote
+    # Microsoft Dynamics 365 Business Central into the cover-letter hook
+    # because the JD item was in the packet and LR-026 did not block it.
+    # Same class as SAP / NetSuite above.)
+    "dynamics 365", "dynamics365", "microsoft dynamics", "business central",
+    "workspace one", "workspaceone", "android enterprise",
     # Legal/contract
     "ironclad", "docusign",
     # Domain-specific
@@ -331,6 +337,17 @@ _TOOL_DETECTION_STOPWORDS: frozenset[str] = frozenset({
     # word of title-cased "Minimum Viable Product", which the regex treats as
     # a 3-word product name because only the first token is stopword-checked.
     "psa", "erp", "minimum",
+    # Added 2026-09-21 (origami_risk): domain practices are not products.
+    # "Prior Risk Management and/or P&C Insurance experience" queued
+    # "Have you used Risk Management?".
+    "risk",
+    # Added 2026-09-21 (optum): US hire-site cities are not products.
+    # "For all hires in the Minneapolis or Washington, D.C. area" queued
+    # "Have you used Minneapolis?" and "Have you used Washington?".
+    "minneapolis", "washington", "chicago", "seattle", "boston", "atlanta",
+    "denver", "austin", "dallas", "phoenix", "portland", "miami", "detroit",
+    "baltimore", "philadelphia", "houston", "orlando", "nashville", "raleigh",
+    "charlotte", "columbus", "pittsburgh", "sacramento",
     # Added 2026-09-02 (CR-109 follow-up): second batch confirmed in a live
     # Stage 0 run the same day — Tools And Frameworks, Utilizing Strategic
     # Marketing, SKILLS AND REQUIRED, Decision Making, Strategy, Empathy,

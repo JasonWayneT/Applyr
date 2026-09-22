@@ -23,11 +23,23 @@ HM_CRITICAL_READ_DISALLOWED = HM_DISALLOWED_DISPOSITIONS
 def evaluate_stage0(gate: dict[str, Any]) -> dict[str, Any]:
     """Map stage0_fit_gate.json business fields to a policy verdict.
 
-    Returns dict with keys: verdict (PASS|SKIP|FAIL), tier, decision, reasons.
+    Returns dict with keys: verdict (PASS|SKIP|FAIL|ALREADY_HANDLED), tier, decision, reasons.
     """
     tier = str(gate.get("tier") or "")
     decision = str(gate.get("decision") or "").upper()
     reasons: list[str] = []
+
+    # Implements FR-365 / AC-474. Decision wins over leftover tier=Skip on
+    # the Story 4.2 stub. Remapping ALREADY_HANDLED to SKIP is the hole.
+    if decision == "ALREADY_HANDLED":
+        reason = gate.get("notes") or "Same posting already handled"
+        reasons.append(str(reason))
+        return {
+            "verdict": "ALREADY_HANDLED",
+            "tier": tier,
+            "decision": "ALREADY_HANDLED",
+            "reasons": reasons,
+        }
 
     if tier == "Skip" or decision == "SKIP":
         reason = gate.get("skip_reason") or gate.get("notes") or "Stage 0 Skip"

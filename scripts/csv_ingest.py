@@ -20,7 +20,31 @@ from stage0_skip_ledger import lookup_skip, normalize_url, posting_key
 ROOT = Path(__file__).resolve().parents[1]
 PENDING_REVIEW = ROOT / "data" / "pending_review"
 SUBMISSIONS = ROOT / "data" / "submissions"
+ARCHIVE_SUBMISSIONS = ROOT / "data" / "archive" / "submissions"
+ARCHIVE_SKIPPED = ROOT / "data" / "archive" / "skipped"
 DB = ROOT / "data" / "jobagent.sqlite"
+
+# Lockstep with shared/domain/jobPipeline.ts APPLICATION_FUNNEL_STATUSES.
+# Implements FR-361 / AC-470.
+APPLIED_PLUS_STATUSES = frozenset(
+    {
+        "Applied",
+        "Recruiter Screen",
+        "Core Interviews",
+        "Offer and Negotiation",
+    }
+)
+
+# Lockstep with shared/domain/jobPipeline.ts PRE_APPLY_STATUSES.
+# Implements FR-361 / AC-476. These never return already_handled.
+PRE_APPLY_STATUSES = frozenset(
+    {
+        "New",
+        "Backlog",
+        "Drafted",
+        "Needs Retry",
+    }
+)
 
 # Closed error-code set (CR-119). Spellings are part of the contract.
 EMPTY_COMPANY = "EMPTY_COMPANY"
@@ -254,20 +278,56 @@ def _jd_header_value(folder: Path, prefix: str) -> str | None:
     return None
 
 
+def _slug_for_url_in_folders(url: str, *roots: Path) -> str | None:
+    """Return a folder slug if URL matches Original_JD.txt under roots.
+
+    Args: url is the CSV URL; roots are folder trees to scan with _scan_jd_urls.
+    Returns the matching folder name, or None.
+    """
+    url_key = normalize_url(url)
+    lowered = url.strip().lower()
+    mapping: dict[str, str] = {}
+    for root in roots:
+        _scan_jd_urls(root, mapping)
+    for stored, slug in mapping.items():
+        if stored == lowered or (url_key and normalize_url(stored) == url_key):
+            return slug
+    return None
+
+
+def _slug_for_posting_in_folders(company: str, title: str, *roots: Path) -> str | None:
+    """Return a folder slug if URL-less company+title matches under roots.
+
+    Args: company/title are the CSV posting; roots are folder trees.
+    Returns sanitize(company) when the title header matches (or is absent)
+    and the folder has no URL header. Otherwise None.
+    """
+    base = sanitize(company)
+    for root in roots:
+        if not root.exists():
+            continue
+        candidate = root / base
+        if not candidate.is_dir():
+            continue
+        folder_url = _jd_header_value(candidate, "url:")
+        folder_title = _jd_header_value(candidate, "title:") or ""
+        if folder_url:
+            continue
+        if folder_title.strip().lower() == title.strip().lower() or not folder_title:
+            return base
+    return None
+
+
 def _slug_for_url(
     url: str,
     pending: Path,
     submissions: Path,
     conn: sqlite3.Connection,
 ) -> str | None:
+    existing = _slug_for_url_in_folders(url, pending, submissions)
+    if existing:
+        return existing
     url_key = normalize_url(url)
-    lowered = url.strip().lower()
-    mapping: dict[str, str] = {}
-    _scan_jd_urls(pending, mapping)
-    _scan_jd_urls(submissions, mapping)
-    for stored, slug in mapping.items():
-        if stored == lowered or (url_key and normalize_url(stored) == url_key):
-            return slug
     if url_key:
         row = conn.execute(
             "SELECT slug FROM pipeline_queue WHERE url_key = ?",
@@ -292,19 +352,60 @@ def _slug_for_posting(
     ).fetchone()
     if row:
         return row["slug"] if isinstance(row, sqlite3.Row) else row[0]
-    base = sanitize(company)
-    for root in (pending, submissions):
-        if not root.exists():
+    return _slug_for_posting_in_folders(company, title, pending, submissions)
+
+
+def lookup_applied_plus_job(
+    conn: sqlite3.Connection,
+    url: str,
+    company: str,
+    title: str,
+) -> dict[str, Any] | None:
+    """Return the jobs row if this posting is Applied+, else None.
+
+    Args: conn is the jobs DB; url/company/title are the CSV posting.
+    Returns a dict with url, company, title, status, or None. Missing
+    jobs table is treated as no match (same OperationalError guard as
+    url_to_slug). URL present: normalize both sides, URL match only.
+    URL absent: exact lowered company+title via posting_key.
+    Pre-apply statuses (Backlog, Drafted, Needs Retry, New) are not
+    Applied+ and must not match (FR-361 / AC-476).
+    """
+    # Implements FR-361 / AC-470 / AC-476.
+    try:
+        rows = conn.execute(
+            "SELECT url, company, title, status FROM jobs WHERE status IN (?, ?, ?, ?)",
+            tuple(APPLIED_PLUS_STATUSES),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return None
+
+    url_text = (url or "").strip()
+    url_key = normalize_url(url_text) if url_text else None
+    wanted_key = posting_key(company, title)
+    for row in rows:
+        job_url, job_company, job_title, status = row[0], row[1], row[2], row[3]
+        if status in PRE_APPLY_STATUSES:
             continue
-        candidate = root / base
-        if not candidate.is_dir():
+        if status not in APPLIED_PLUS_STATUSES:
             continue
-        folder_url = _jd_header_value(candidate, "url:")
-        folder_title = _jd_header_value(candidate, "title:") or ""
-        if folder_url:
+        if url_key:
+            job_url_key = normalize_url(job_url) if job_url else None
+            if job_url_key and job_url_key == url_key:
+                return {
+                    "url": job_url,
+                    "company": job_company,
+                    "title": job_title,
+                    "status": status,
+                }
             continue
-        if folder_title.strip().lower() == title.strip().lower() or not folder_title:
-            return base
+        if posting_key(job_company or "", job_title or "") == wanted_key:
+            return {
+                "url": job_url,
+                "company": job_company,
+                "title": job_title,
+                "status": status,
+            }
     return None
 
 
@@ -317,10 +418,20 @@ def resolve_opportunity(
     pending_root: Path | None = None,
     submissions_root: Path | None = None,
     skip_db_path: Path | str | None = None,
+    archive_submissions_root: Path | None = None,
+    archive_skipped_root: Path | None = None,
 ) -> tuple[str, str]:
-    """Return (action, slug) where action is create / reuse / skip_ledger."""
+    """Return (action, slug): create / reuse / skip_ledger / already_handled."""
     pending = pending_root if pending_root is not None else PENDING_REVIEW
     submissions = submissions_root if submissions_root is not None else SUBMISSIONS
+    archive_subs = (
+        archive_submissions_root
+        if archive_submissions_root is not None
+        else ARCHIVE_SUBMISSIONS
+    )
+    archive_skip = (
+        archive_skipped_root if archive_skipped_root is not None else ARCHIVE_SKIPPED
+    )
     url_text = (url or "").strip()
 
     if url_text:
@@ -333,9 +444,16 @@ def resolve_opportunity(
         )
         if prior:
             return "skip_ledger", prior.get("slug") or sanitize(company)
+        applied = lookup_applied_plus_job(conn, url_text, company, title)
+        if applied:
+            return "already_handled", sanitize(company)
         existing = _slug_for_url(url_text, pending, submissions, conn)
         if existing:
             return "reuse", existing
+        # Implements FR-362 / AC-471. Archive hit is already_handled, not reuse.
+        archived = _slug_for_url_in_folders(url_text, archive_subs, archive_skip)
+        if archived:
+            return "already_handled", archived
         return "create", unique_slug(sanitize(company), pending, submissions)
 
     prior = lookup_skip(
@@ -347,9 +465,16 @@ def resolve_opportunity(
     )
     if prior:
         return "skip_ledger", prior.get("slug") or sanitize(company)
+    applied = lookup_applied_plus_job(conn, "", company, title)
+    if applied:
+        return "already_handled", sanitize(company)
     existing = _slug_for_posting(company, title, pending, submissions, conn)
     if existing:
         return "reuse", existing
+    # Implements FR-362 / AC-471. Same title-header match as live folders.
+    archived = _slug_for_posting_in_folders(company, title, archive_subs, archive_skip)
+    if archived:
+        return "already_handled", archived
     return "create", unique_slug(sanitize(company), pending, submissions)
 
 

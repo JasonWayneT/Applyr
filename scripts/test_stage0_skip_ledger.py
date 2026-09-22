@@ -88,6 +88,15 @@ _PASS_GATE = {
     "skip_reason": None,
 }
 
+_ALREADY_HANDLED_GATE = {
+    "company": "Synth Placement Co",
+    "role": "Product Manager",
+    "url": "https://example.test/jobs/already-handled-1",
+    "decision": "ALREADY_HANDLED",
+    "tier": "Skip",
+    "notes": "Same posting already handled",
+}
+
 
 class NormalizeUrlTests(unittest.TestCase):
     def test_strips_utm_and_gh_src(self):
@@ -271,6 +280,29 @@ class PlacementTests(unittest.TestCase):
         self.assertTrue(stray.exists())
         self.assertIsNone(
             lookup_skip(url=_SKIP_GATE["url"], company="Expel", title="Product Manager", db_path=self.db)
+        )
+
+    def test_already_handled_leaves_folder_and_skip_count(self):
+        """FR-365 / AC-474: placement no-op. Folder stays. No stage0_skips write."""
+        folder = self._write_folder(self.pending, "synth_already")
+        conn = connect(self.db)
+        self.addCleanup(conn.close)
+        before = conn.execute("SELECT COUNT(*) FROM stage0_skips").fetchone()[0]
+        with mock.patch.object(placement, "record_skip") as record:
+            dest = apply_stage0_placement(folder, _ALREADY_HANDLED_GATE, db_path=self.db)
+        self.assertEqual(dest, folder)
+        self.assertTrue(folder.exists())
+        self.assertTrue((folder / "Original_JD.txt").exists())
+        after = conn.execute("SELECT COUNT(*) FROM stage0_skips").fetchone()[0]
+        self.assertEqual(after, before)
+        record.assert_not_called()
+        self.assertIsNone(
+            lookup_skip(
+                url=_ALREADY_HANDLED_GATE["url"],
+                company="Synth Placement Co",
+                title="Product Manager",
+                db_path=self.db,
+            )
         )
 
     def test_practice_mode_does_not_write_ledger(self):

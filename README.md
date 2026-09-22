@@ -159,6 +159,12 @@ Wait for Google Drive to finish syncing `data/`, then `npm run dev`. The app rea
 
 Complete these steps in order before running your first scout.
 
+### Pipeline LLM (CSV queue / `run_submission.py`)
+
+Stage 0 and Stage 1 use **Agy**. The queue worker sets `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`. Groq and Gemini API keys in Settings are leftover cascade code (`utils.call_llm`). Those keys are free-tier and do not currently serve production pipeline calls. That is expected. It is not "the LLM is off." Do not run a live worker pack with `APPLYR_STAGE0_CLOUD_LLM=1`. After Stage 0 PASS, required named-tool evidence 0 / `NOT_PRESENT` withholds authoring (`conversion_risk`). Agy rubric scoring stays off until frozen parks fail closed (AC-464).
+
+The Settings → API table below is for scout research, Gmail, and the document editor, not the CSV queue.
+
 ### 1. Add your LLM provider
 
 Go to **Settings → API or Connections**. Under **LLM Providers**, enter a key for at least one provider:
@@ -253,14 +259,7 @@ Live progress and source metrics (fetched, filtered, and passed counts), along w
 
 Full spec: `data/fit_rubric_spec.html` (the research this implements) and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md` (the implementation + calibration record). `docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md` is superseded — read CR-093 instead.
 
-**Current CR-108 rollout:** Applyr uses an accuracy-first cascade for the
-per-requirement evidence step: deterministic evidence retrieval first, one
-batched Groq/Gemini request for unresolved lines, and an explicit Local option
-in AI Usage rather than a local-model default. It also includes durable
-per-opportunity checkpoints and a Review Center workflow for skills absent
-from the profile. Deterministic provider fixtures, crash-recovery tests, and
-isolated API tests pass behind the rollout flag. Live provider sampling, archive
-replay, and default cutover remain deferred until the CR-093 release gate passes.
+**Current CR-108 / CR-121 rollout:** Applyr's production Stage 0 evidence path is Agy (`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`, forced by `run_queue_worker.py`). A leftover Groq/Gemini `utils.call_llm` cascade still exists for tests (`APPLYR_STAGE0_CLOUD_LLM=1`). Settings free-tier Groq/Gemini keys do not serve production queue calls. That is expected, not a blocker. Review Center still handles skills absent from the profile. Live Groq/Gemini sampling is not the operator path.
 
 **Cost authorization (CR-112 Epic 7):** every model call carries an explicit
 cost class. Groq and Gemini default to `unknown` (never called) until either a

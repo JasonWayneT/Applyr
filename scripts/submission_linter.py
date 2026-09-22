@@ -912,8 +912,13 @@ def _check_unverified_partner(text: str) -> Optional[str]:
     mentioned = set()
     for groups in partner_context:
         for g in groups:
-            if g.strip():
-                mentioned.add(g.strip().rstrip("s").lower())
+            token = (g or "").strip().lower()
+            if token:
+                # Keep the raw capture. rstrip("s") turned "devops" into "devop"
+                # (live miss on velosio, 2026-09-21) and then missed the verified
+                # partner. Plural forms still match because each partner string
+                # is a substring of the plural ("engineer" in "engineers").
+                mentioned.add(token)
 
     bad = []
     for mention in mentioned:
@@ -2264,11 +2269,19 @@ def check_wrong_job_company_bleed(
         # positive found 2026-09-21 (isolved): a real Cision capacity-model
         # bullet flagged as naming the Workday company. Same narrow
         # lookahead exclusion, same reasoning.
-        pattern = (
-            rf"\b{re.escape(trimmed)}\b(?![\s-]*hours?\b)"
-            if lower == "workday"
-            else r"\b" + re.escape(trimmed) + r"\b"
-        )
+        # "The Standard" collides with ordinary English ("the standard line",
+        # "the standard queue"). Live miss 2026-09-21 omnissa: cover letter
+        # "skip the standard line" flagged the insurance company.
+        if lower == "workday":
+            pattern = rf"\b{re.escape(trimmed)}\b(?![\s-]*hours?\b)"
+        elif lower == "the standard":
+            pattern = (
+                rf"\b{re.escape(trimmed)}\b(?!\s+"
+                rf"(line|queue|way|practice|set|issue|approach|process|bar|"
+                rf"fare|procedure)s?\b)"
+            )
+        else:
+            pattern = r"\b" + re.escape(trimmed) + r"\b"
         if not re.search(pattern, combined, re.IGNORECASE):
             continue
         seen.add(lower)

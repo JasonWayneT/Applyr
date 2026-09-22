@@ -175,6 +175,17 @@ def _canonical_role_heading(company: str) -> str:
     return f"### {_ROLE_TITLES[company]} | {company} | {_ROLE_DATES[company]}"
 
 
+def _is_experience_bullet(line: str) -> bool:
+    """True when the line is a resume bullet, including common Markdown markers.
+
+    Live miss on outschool: Agy authored `- ` bullets. `_ensure_role_blocks`
+    only treated `*` as a bullet, so the first hyphen bullet in each role was
+    overwritten with the location line (FR-265).
+    """
+    stripped = line.lstrip()
+    return stripped.startswith("*") or stripped.startswith("- ") or stripped.startswith("-\t")
+
+
 def _ensure_header(lines: list[str], h: dict, actions: list[str]) -> list[str]:
     new1, new2 = real_header_lines(h)
     if not lines:
@@ -266,7 +277,7 @@ def _ensure_role_blocks(lines: list[str], h: dict, actions: list[str]) -> list[s
         j = i + 1
         while j < len(lines) and not lines[j].strip():
             j += 1
-        if j >= len(lines) or lines[j].lstrip().startswith("*") or lines[j].startswith("#"):
+        if j >= len(lines) or _is_experience_bullet(lines[j]) or lines[j].startswith("#"):
             lines.insert(i + 1, loc + "\n")
             actions.append(f"role location {company}")
         elif lines[j].rstrip("\n") != loc:

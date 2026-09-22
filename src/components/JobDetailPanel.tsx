@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Job } from '../types/job';
 import { Contact } from '../types/contact';
 import { api } from '../lib/api';
-import { companyOpportunityKey, fetchReviewQueue } from '../lib/reviewCenter';
+import { companyOpportunityKey, fetchReviewQueue, holdsStage0 } from '../lib/reviewCenter';
 import type { ReviewItem } from '../types/reviewCenter';
 import StatusChip from './StatusChip';
 import ErrorBoundary from './ErrorBoundary';
@@ -159,7 +159,7 @@ const JobDetailPanel: React.FC<JobDetailPanelProps> = ({
         const opportunityKey = companyOpportunityKey(job.company);
         const match = items.find(item =>
           item.status === 'open' &&
-          (item.type === 'skill_presence' || item.type === 'hard_gate_review') &&
+          holdsStage0(item.type) &&
           item.affectedOpportunities.some(opportunity =>
             opportunity.jobId === job.id || opportunity.jobId === opportunityKey,
           ),

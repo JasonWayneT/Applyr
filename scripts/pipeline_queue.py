@@ -280,14 +280,22 @@ LEGAL_TRANSITIONS = frozenset(
         ("leased", "queued"),
         # Expiry reclaim: an expired in_progress row becomes claimable (Story 3.3).
         ("in_progress", "queued"),
+        # CR-123 FR-363: already-handled close. Supersedes CR-119 Story 3.1
+        # for these two pairs only. Still five statuses.
+        ("queued", "done"),
+        ("leased", "done"),
     }
 )
 
 MAX_PACK_SIZE = 10
 DEFAULT_PACK_SIZE = 8
 DEFAULT_LEASE_MINUTES = 20
+CONVERSION_RISK_OVERRIDE_NAME = "conversion_risk_apply_anyway.json"
+PAUSE_KIND_CONVERSION_RISK = "conversion_risk"
+PAUSED_REASON_CONVERSION_RISK = "conversion_risk"
 PAUSED_REASON_READY_TO_FINALIZE = "ready_to_finalize"
 MIRROR_READY_TO_FINALIZE = "READY_TO_FINALIZE"
+STAGE1_BUDGET_RETRY_NAME = "stage1_budget_retry.json"
 
 
 def mark_done(
@@ -297,11 +305,16 @@ def mark_done(
     last_workflow_status: str = "COMPLETE",
     last_stage: str | None = "stage3",
 ) -> dict[str, Any] | None:
-    """Move a paused or in_progress queue row to done after --finalize."""
+    """Move a closable queue row to done. Implements FR-363.
+
+    Accepts queued, paused, leased, and in_progress. done is a no-op.
+    Still calls transition() with the row's locked_by + fencing_token
+    (empty worker + unlocked fence when locked_by is NULL).
+    """
     row = get_row(conn, slug)
     if row is None or row["status"] == "done":
         return row
-    if row["status"] not in ("paused", "in_progress"):
+    if row["status"] not in ("queued", "paused", "leased", "in_progress"):
         return row
     return transition(
         slug,
@@ -511,8 +524,11 @@ def requeue_paused(
 ) -> dict[str, Any]:
     """Move an eligible paused row back to queued through transition().
 
-    Allowed: paused FAILED, or paused subscription_review evidence.
-    Refused: leased, in_progress, done, ready_to_finalize, and any other pause.
+    Allowed: paused FAILED, paused subscription_review evidence, paused
+    requirement_extraction_review whose queue is entirely no_provider, or
+    paused review_center with zero open questions.
+    Refused: leased, in_progress, done, ready_to_finalize, real extraction
+    reviews, and review_center with open cards.
     """
     note = (reason or "").strip()
     who = (worker or "manual").strip() or "manual"
@@ -536,9 +552,22 @@ def requeue_paused(
             raise RequeueRefused("refused: ready_to_finalize")
         failed = row.get("last_workflow_status") == "FAILED"
         folder = _resolve_row_folder(row, (data_root or DATA_ROOT).resolve())
-        review = bool(folder) and _pause_kind(folder) == "subscription_review"
-        if not failed and not review:
-            raise RequeueRefused("refused: not FAILED or subscription_review")
+        kind = _pause_kind(folder) if folder is not None else None
+        if kind == PAUSE_KIND_CONVERSION_RISK:
+            if note.strip().lower() != "apply_anyway":
+                raise RequeueRefused(
+                    "refused: conversion_risk requires reason apply_anyway"
+                )
+            (folder / CONVERSION_RISK_OVERRIDE_NAME).write_text(
+                json.dumps(
+                    {"reason": "apply_anyway", "requeued_by": who, "at": utc_now()},
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        elif not failed and not _requeue_pause_allowed(row, folder, conn):
+            raise RequeueRefused("refused: not an eligible pause")
         try:
             return transition(
                 slug,
@@ -661,36 +690,104 @@ def _pause_kind(folder: Path) -> str | None:
     return kind if isinstance(kind, str) and kind.strip() else None
 
 
+def _stage0_pause_result(folder: Path) -> dict[str, Any] | None:
+    """Return the Stage 0 receipt result object, or None if unreadable."""
+    receipt = folder / "stage_receipts" / "stage0.json"
+    if not receipt.is_file():
+        return None
+    try:
+        payload = json.loads(receipt.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    result = (payload or {}).get("result")
+    return result if isinstance(result, dict) else None
+
+
+def _extraction_review_is_no_provider(folder: Path) -> bool:
+    """True when every extraction-review queue item failed for no_provider.
+
+    Live miss 2026-09-21: adapter-off packs paused outschool/omnissa/optum/
+    origami_risk for human bucket review. Filling those templates is the
+    wrong recovery once Agy is on. Implements FR-346.
+    """
+    result = _stage0_pause_result(folder)
+    if not result or result.get("pause_kind") != "requirement_extraction_review":
+        return False
+    queue = result.get("queue") or []
+    if not isinstance(queue, list) or not queue:
+        return False
+    return all(
+        isinstance(item, dict)
+        and str(item.get("extraction_reason") or "") == "no_provider"
+        for item in queue
+    )
+
+
+def _review_center_open_count(
+    conn: sqlite3.Connection | None, slug: str
+) -> int | None:
+    """Return open blocking Review Center count, or None if unread.
+
+    CR-122 / FR-360: only ``hard_gate_review`` holds the queue. Open
+    ``skill_presence`` cards are a later correction inbox.
+    """
+    if conn is None or not slug:
+        return None
+    try:
+        open_n = conn.execute(
+            """
+            SELECT COUNT(*) FROM pending_skill_confirmations
+            WHERE opportunity_key = ? AND status = 'open'
+              AND question_type = 'hard_gate_review'
+            """,
+            (slug,),
+        ).fetchone()[0]
+    except sqlite3.OperationalError:
+        return None
+    return int(open_n)
+
+
+def _requeue_pause_allowed(
+    row: dict[str, Any],
+    folder: Path | None,
+    conn: sqlite3.Connection | None,
+) -> bool:
+    """True when a paused row may go back to queued through requeue_paused."""
+    if row.get("last_workflow_status") == "FAILED":
+        return True
+    if folder is None:
+        return False
+    kind = _pause_kind(folder)
+    if kind == "subscription_review":
+        return True
+    if kind == "requirement_extraction_review" and _extraction_review_is_no_provider(
+        folder
+    ):
+        return True
+    if kind == "review_center":
+        return _review_center_open_count(conn, str(row.get("slug") or "")) == 0
+    if kind == PAUSE_KIND_CONVERSION_RISK:
+        return True
+    return False
+
+
 def _review_center_should_promote(
     conn: sqlite3.Connection | None,
     slug: str,
     paused_at: datetime | None,
 ) -> bool:
-    """Promote only when this slug has no open Review Center questions and a
-    completion newer than paused_at. Missing table or paused_at stays paused.
+    """Promote when this slug has no open hard-gate Review Center questions.
+
+    CR-122 / AC-469: skill_presence may stay open. Missing table stays paused.
+    paused_at is unused; kept so callers do not change.
     """
-    if conn is None or paused_at is None or not slug:
+    del paused_at
+    if conn is None or not slug:
         return False
-    try:
-        open_n = conn.execute(
-            "SELECT COUNT(*) FROM pending_skill_confirmations "
-            "WHERE opportunity_key = ? AND status = 'open'",
-            (slug,),
-        ).fetchone()[0]
-        if int(open_n) > 0:
-            return False
-        rows = conn.execute(
-            "SELECT resolved_at, updated_at FROM pending_skill_confirmations "
-            "WHERE opportunity_key = ? AND status = 'completed'",
-            (slug,),
-        ).fetchall()
-    except sqlite3.OperationalError:
+    open_n = _review_center_open_count(conn, slug)
+    if open_n is None:
         return False
-    for row in rows:
-        stamp = _parse_paused_at(row[0] or row[1])
-        if stamp is not None and stamp > paused_at:
-            return True
-    return False
+    return open_n == 0
 
 
 def _waiting_for_input_should_promote(
@@ -708,8 +805,51 @@ def _waiting_for_input_should_promote(
         )
     if kind == "cost_authorization":
         return False
+    if kind == "conversion_risk":
+        return _newer_than_paused(folder / CONVERSION_RISK_OVERRIDE_NAME, paused_at)
     return _review_center_should_promote(
         conn, str((row or {}).get("slug") or folder.name), paused_at
+    )
+
+
+def is_retryable_stage1_budget_failure(folder: Path) -> bool:
+    """True when FAILED is an over-budget packet with no draft yet.
+
+    Live 2026-09-21: clarion/confidential/sourcegraph FAILED at 8565/8310/8783
+    with no Resume.md. Current assemble trims those to ready. A FAILED folder
+    that already has a resume stays paused. One retry marker blocks a loop.
+    Implements AC-459 / FR-344. This is not a draft promote.
+    """
+    if not folder.is_dir():
+        return False
+    if (folder / "Resume.md").exists():
+        return False
+    if (folder / STAGE1_BUDGET_RETRY_NAME).exists():
+        return False
+    packet_path = folder / "authoring_packet.json"
+    if not packet_path.is_file():
+        return False
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(packet, dict):
+        return False
+    if packet.get("packet_status") == "ready":
+        return True
+    blob = " ".join(str(item) for item in (packet.get("incomplete_reasons") or []))
+    return "over token budget" in blob.lower()
+
+
+def write_stage1_budget_retry_marker(folder: Path) -> None:
+    """Record that the one over-budget packet retry has started."""
+    payload = {
+        "reason": "over_token_budget",
+        "started_at": utc_now(),
+    }
+    (folder / STAGE1_BUDGET_RETRY_NAME).write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
     )
 
 
@@ -731,12 +871,13 @@ def _paused_should_promote(
         return dispositions_at > paused_at
     if status == "WAITING_FOR_INPUT":
         return _waiting_for_input_should_promote(folder, row, conn)
+    if status == "FAILED":
+        return is_retryable_stage1_budget_failure(folder)
     if status in (
         "COMPLETE",
         "COMPLETE_WITH_OVERRIDE",
         "PRACTICE_COMPLETE",
         "SKIPPED",
-        "FAILED",
     ):
         return False
     from contracts import check_stage1_ready
@@ -766,6 +907,184 @@ def _promotable_paused_slugs(conn: sqlite3.Connection, data_root: Path) -> list[
     return slugs
 
 
+def _archive_roots(
+    data_root: Path,
+    archive_submissions_root: Path | None,
+    archive_skipped_root: Path | None,
+) -> tuple[Path, Path]:
+    """Resolve archive trees from data_root unless callers inject roots.
+
+    Args: data_root plus optional archive/submissions and archive/skipped.
+    Returns the two roots. Does not list either tree.
+    """
+    subs = (
+        archive_submissions_root
+        if archive_submissions_root is not None
+        else data_root / "archive" / "submissions"
+    )
+    skip = (
+        archive_skipped_root
+        if archive_skipped_root is not None
+        else data_root / "archive" / "skipped"
+    )
+    return subs, skip
+
+
+def _slug_is_already_archived(
+    slug: str,
+    data_root: Path,
+    *,
+    archive_submissions_root: Path | None = None,
+    archive_skipped_root: Path | None = None,
+) -> bool:
+    """True when slug folder exists under archive/submissions or archive/skipped.
+
+    Args: slug plus data_root and optional injectable archive roots.
+    Returns True on a directory hit. Uses exists, not a tree walk.
+    """
+    subs, skip = _archive_roots(
+        data_root, archive_submissions_root, archive_skipped_root
+    )
+    return (subs / slug).is_dir() or (skip / slug).is_dir()
+
+
+def _folder_is_under_archive(folder: Path, data_root: Path) -> bool:
+    """True when *folder* is inside data/archive (skipped or submissions)."""
+    archive_root = (data_root / "archive").resolve()
+    try:
+        folder.resolve().relative_to(archive_root)
+    except ValueError:
+        return False
+    return True
+
+
+def _already_handled_slugs(
+    conn: sqlite3.Connection,
+    data_root: Path,
+    *,
+    archive_submissions_root: Path | None = None,
+    archive_skipped_root: Path | None = None,
+) -> set[str]:
+    """Return non-done slugs that are jobs Applied+ or already archived.
+
+    Args: conn, data_root, optional injectable archive roots.
+    Returns a set of slugs. Implements FR-363 / AC-472 and FR-366 / AC-475.
+    """
+    from csv_ingest import lookup_applied_plus_job
+
+    handled: set[str] = set()
+    for row in list_rows(conn):
+        if row["status"] == "done":
+            continue
+        slug = row["slug"]
+        if _slug_is_already_archived(
+            slug,
+            data_root,
+            archive_submissions_root=archive_submissions_root,
+            archive_skipped_root=archive_skipped_root,
+        ):
+            # Live pending_review / submissions wins a leftover archive/skipped
+            # folder from an earlier skip of the same slug (employers 2026-09-22).
+            live = _resolve_row_folder(row, data_root)
+            if live is None or _folder_is_under_archive(live, data_root):
+                handled.add(slug)
+            continue
+        applied = lookup_applied_plus_job(
+            conn,
+            row.get("url") or "",
+            row.get("company") or "",
+            row.get("title") or "",
+        )
+        if applied:
+            handled.add(slug)
+    return handled
+
+
+def _close_already_handled_rows(
+    conn: sqlite3.Connection,
+    slugs: set[str],
+    now: str,
+) -> None:
+    """Fence-close already-handled rows inside the claim transaction.
+
+    Args: conn, precomputed slugs, utc_now string used for expiry.
+    Returns None. queued/paused use the unlocked fence. Expired
+    leased/in_progress use the stored locked_by + token. Live leases
+    are left alone. Implements FR-363 / AC-472 and FR-366 / AC-475.
+    """
+    for slug in slugs:
+        row = get_row(conn, slug)
+        if row is None or row["status"] == "done":
+            continue
+        status = row["status"]
+        try:
+            if status in ("queued", "paused") and not row["locked_by"]:
+                transition(
+                    slug,
+                    "done",
+                    worker="",
+                    token=int(row["fencing_token"] or 0),
+                    conn=conn,
+                    commit=False,
+                )
+            elif status in ("leased", "in_progress"):
+                expires = row.get("lease_expires_at")
+                if expires and expires <= now:
+                    transition(
+                        slug,
+                        "done",
+                        worker=row["locked_by"] or "",
+                        token=int(row["fencing_token"] or 0),
+                        conn=conn,
+                        commit=False,
+                    )
+        except FenceRejected:
+            continue
+
+
+def reconcile_already_handled(
+    conn: sqlite3.Connection | None = None,
+    *,
+    db_path: Path | str | None = None,
+    data_root: Path | None = None,
+    archive_submissions_root: Path | None = None,
+    archive_skipped_root: Path | None = None,
+) -> int:
+    """Close already-handled non-done queue rows. Returns how many became done.
+
+    Walks Applied+ jobs plus archive/skipped and archive/submissions slugs
+    via _already_handled_slugs. queued/paused close immediately; expired
+    leased/in_progress close with the stored fence; a live lease is left.
+    Implements FR-366 / AC-475.
+    """
+    close_after = False
+    if conn is None:
+        conn = connect(db_path)
+        close_after = True
+    root = data_root if data_root is not None else DATA_ROOT
+    try:
+        handled = _already_handled_slugs(
+            conn,
+            root,
+            archive_submissions_root=archive_submissions_root,
+            archive_skipped_root=archive_skipped_root,
+        )
+        before = {
+            slug: (get_row(conn, slug) or {}).get("status") for slug in handled
+        }
+        _close_already_handled_rows(conn, handled, utc_now())
+        conn.commit()
+        closed = 0
+        for slug in handled:
+            row = get_row(conn, slug)
+            if row and row["status"] == "done" and before.get(slug) != "done":
+                closed += 1
+        return closed
+    finally:
+        if close_after:
+            conn.close()
+
+
 def claim_pack(
     worker: str,
     size: int = DEFAULT_PACK_SIZE,
@@ -774,6 +1093,8 @@ def claim_pack(
     *,
     db_path: Path | str | None = None,
     data_root: Path | None = None,
+    archive_submissions_root: Path | None = None,
+    archive_skipped_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     if size < 1 or size > MAX_PACK_SIZE:
         raise PackSizeError(f"size must be 1..{MAX_PACK_SIZE}, got {size}")
@@ -783,12 +1104,25 @@ def claim_pack(
         close_after = True
     root = data_root if data_root is not None else DATA_ROOT
     try:
-        promotable = _promotable_paused_slugs(conn, root)
+        # Same pre-BEGIN IMMEDIATE slot as _promotable_paused_slugs.
+        # Implements FR-363 / AC-472.
+        already_handled = _already_handled_slugs(
+            conn,
+            root,
+            archive_submissions_root=archive_submissions_root,
+            archive_skipped_root=archive_skipped_root,
+        )
+        promotable = [
+            slug
+            for slug in _promotable_paused_slugs(conn, root)
+            if slug not in already_handled
+        ]
         now = utc_now()
         old_level = conn.isolation_level
         conn.isolation_level = None
         conn.execute("BEGIN IMMEDIATE")
         try:
+            _close_already_handled_rows(conn, already_handled, now)
             claimed: list[dict[str, Any]] = []
             for slug in promotable[:size]:
                 row = get_row(conn, slug)
@@ -816,6 +1150,9 @@ def claim_pack(
             remaining = size - len(claimed)
             if remaining > 0:
                 exclude = [row["slug"] for row in claimed]
+                exclude.extend(
+                    slug for slug in already_handled if slug not in exclude
+                )
                 where_sql = """
                     status = 'queued'
                     OR (

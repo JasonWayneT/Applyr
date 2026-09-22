@@ -21,6 +21,7 @@ from stage0_db_gate import (
     company_token_match,
     evaluate_db_gate,
     extract_self_identified_company,
+    find_same_posting_applied_plus,
     is_different_role,
 )
 
@@ -33,6 +34,7 @@ CREATE TABLE jobs (
     id TEXT PRIMARY KEY,
     company TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '',
+    url TEXT,
     status TEXT DEFAULT 'New',
     rejection_type TEXT,
     outcome_notes TEXT,
@@ -58,6 +60,7 @@ def _insert(conn: sqlite3.Connection, **kwargs) -> None:
         "id": kwargs.get("id", f"row-{id(kwargs)}"),
         "company": kwargs["company"],
         "title": kwargs.get("title", "PM"),
+        "url": kwargs.get("url", None),
         "status": kwargs.get("status", "New"),
         "rejection_type": kwargs.get("rejection_type", None),
         "outcome_notes": kwargs.get("outcome_notes", None),
@@ -66,9 +69,9 @@ def _insert(conn: sqlite3.Connection, **kwargs) -> None:
         "created_at": kwargs.get("created_at", None),
     }
     conn.execute(
-        "INSERT INTO jobs (id,company,title,status,rejection_type,outcome_notes,"
+        "INSERT INTO jobs (id,company,title,url,status,rejection_type,outcome_notes,"
         "status_changed_at,applied_at,created_at)"
-        " VALUES (:id,:company,:title,:status,:rejection_type,:outcome_notes,"
+        " VALUES (:id,:company,:title,:url,:status,:rejection_type,:outcome_notes,"
         ":status_changed_at,:applied_at,:created_at)",
         row,
     )
@@ -292,22 +295,24 @@ class TestEvaluatedNoCooldown(unittest.TestCase):
 
 
 class TestNullStatusChangedAt(unittest.TestCase):
-    """All cooldown dates NULL → conservative: treat as within cooldown."""
+    """All cooldown dates NULL → unknown, not in-window (AC-457)."""
 
-    def test_null_date_ghosted_rejects(self):
+    def test_null_date_ghosted_is_reapply_flag_not_reject(self):
         conn = _make_conn()
         _insert(conn, company="NullDate Co", status="Rejected",
                 rejection_type="Ghosted", status_changed_at=None)
         result = evaluate_db_gate("NullDate Co", _conn=conn)
-        self.assertEqual(result["action"], "reject")
-        self.assertIn("cooldown", result["reason_code"])
+        self.assertNotEqual(result["action"], "reject")
+        self.assertEqual(result["action"], "reapply_flag")
+        self.assertIn("unknown", result["matched_rows"][0]["reason_detail"])
 
-    def test_null_date_evaluated_no_rejects(self):
+    def test_null_date_evaluated_no_is_reapply_flag_not_reject(self):
         conn = _make_conn()
         _insert(conn, company="NullDate Co", status="Rejected",
                 rejection_type="Rejected", status_changed_at=None)
         result = evaluate_db_gate("NullDate Co", _conn=conn)
-        self.assertEqual(result["action"], "reject")
+        self.assertNotEqual(result["action"], "reject")
+        self.assertEqual(result["action"], "reapply_flag")
 
     def test_omnissa_created_at_passes_30d_cooldown(self):
         conn = _make_conn()
@@ -434,17 +439,28 @@ class TestActiveApplicationFlag(unittest.TestCase):
     gate was never designed to catch -- this is what the real Pinterest/
     AdaMarie case actually was. Flagged (Tier 2), never auto-Skip."""
 
-    def test_applied_row_surfaces_as_active_application(self):
+    def test_applied_row_same_posting_is_already_handled_not_flag(self):
+        # CR-123 / FR-365: same-posting Applied+ is already-handled, not the
+        # Kroll-style active_application flag (that flag stays for pre-apply).
         conn = _make_conn()
         _insert(conn, company="Pinterest", status="Applied",
                 title="Product Manager II, Search Experience")
         result = evaluate_db_gate("Pinterest", role="Product Manager II, Search Experience", _conn=conn)
+        self.assertEqual(result["action"], "already_handled")
+        self.assertNotIn("active_application", result)
+
+    def test_backlog_row_surfaces_as_active_application(self):
+        conn = _make_conn()
+        _insert(conn, company="Pinterest", status="Backlog",
+                title="Product Manager II, Search Experience")
+        result = evaluate_db_gate("Pinterest", role="Product Manager II, Search Experience", _conn=conn)
         self.assertIn("active_application", result)
-        self.assertEqual(result["active_application"][0]["status"], "Applied")
+        self.assertEqual(result["active_application"][0]["status"], "Backlog")
+        self.assertNotEqual(result["action"], "already_handled")
 
     def test_active_application_surfaces_under_self_identified_name_too(self):
         conn = _make_conn()
-        _insert(conn, company="Pinterest", status="Applied",
+        _insert(conn, company="Pinterest", status="Backlog",
                 title="Product Manager II, Search Experience")
         jd = "About Pinterest:\n\nMillions of people come to our platform.\n\nProduct Manager II, Search Experience\n"
         result = evaluate_db_gate("Adamarie", role="Product Manager II, Search Experience", _conn=conn, jd_text=jd)
@@ -527,6 +543,206 @@ class TestCompanyMismatchDbGate(unittest.TestCase):
                 rejection_type="Rejected", status_changed_at=_dt(5))
         result = evaluate_db_gate("Adamarie", _conn=conn, jd_text=self._pinterest_jd())
         self.assertEqual(result["action"], "reject")
+
+
+# ---------------------------------------------------------------------------
+# CR-123 Story 4.1 — same-posting Applied+ is already-handled (FR-365 / AC-474)
+# ---------------------------------------------------------------------------
+
+_SYNTH_GATE_COMPANY = "Synth Gate Co"
+_SYNTH_GATE_TITLE = "Synth Product Manager"
+_SYNTH_GATE_URL = "https://example.test/jobs/gate-applied-1"
+_SYNTH_GATE_URL_TRACKED = "https://example.test/jobs/gate-applied-1?utm_source=board"
+_APPLIED_PLUS_STATUSES = (
+    "Applied",
+    "Recruiter Screen",
+    "Core Interviews",
+    "Offer and Negotiation",
+)
+
+
+class TestAlreadyHandledDbGate(unittest.TestCase):
+    """Story 4.1: posting-identity Applied+ lookup on evaluate_db_gate.
+
+    Synthetic fixtures only. Cooldown / Self-Rejected stay first. Same-posting
+    Applied+ wins over the CR-092 Kroll-style active_application flag.
+    """
+
+    def _gate(self, conn: sqlite3.Connection, **kwargs):
+        """Call evaluate_db_gate with Synth Gate Co defaults. Returns the result."""
+        return evaluate_db_gate(
+            kwargs.pop("company", _SYNTH_GATE_COMPANY),
+            role=kwargs.pop("role", _SYNTH_GATE_TITLE),
+            url=kwargs.pop("url", _SYNTH_GATE_URL_TRACKED),
+            _conn=conn,
+            **kwargs,
+        )
+
+    def test_helper_url_tracking_query_stripped_is_already_handled(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url=_SYNTH_GATE_URL,
+            status="Applied",
+        )
+        hit = find_same_posting_applied_plus(
+            _SYNTH_GATE_URL_TRACKED,
+            _SYNTH_GATE_COMPANY,
+            _SYNTH_GATE_TITLE,
+            _conn=conn,
+        )
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["status"], "Applied")
+
+    def test_applied_url_tracking_query_stripped_is_already_handled(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url=_SYNTH_GATE_URL,
+            status="Applied",
+        )
+        result = self._gate(conn)
+        self.assertEqual(result["action"], "already_handled")
+        self.assertIn("already_handled", result)
+        self.assertEqual(result["already_handled"]["status"], "Applied")
+        self.assertNotIn("active_application", result)
+
+    def test_each_other_funnel_status_url_is_already_handled(self):
+        for status in _APPLIED_PLUS_STATUSES:
+            if status == "Applied":
+                continue
+            with self.subTest(status=status):
+                conn = _make_conn()
+                _insert(
+                    conn,
+                    company=_SYNTH_GATE_COMPANY,
+                    title=_SYNTH_GATE_TITLE,
+                    url=_SYNTH_GATE_URL,
+                    status=status,
+                )
+                result = self._gate(conn)
+                self.assertEqual(result["action"], "already_handled")
+                self.assertEqual(result["already_handled"]["status"], status)
+                self.assertNotIn("active_application", result)
+
+    def test_urlless_company_title_applied_is_already_handled(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url="",
+            status="Applied",
+        )
+        result = self._gate(conn, url="")
+        self.assertEqual(result["action"], "already_handled")
+        self.assertEqual(result["already_handled"]["status"], "Applied")
+        self.assertNotIn("active_application", result)
+
+    def test_different_role_same_company_is_not_already_handled(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title="Data Engineer",
+            url="https://example.test/jobs/gate-other-role",
+            status="Applied",
+        )
+        self.assertTrue(is_different_role(_SYNTH_GATE_TITLE, "Data Engineer"))
+        result = self._gate(conn)
+        self.assertNotEqual(result["action"], "already_handled")
+        self.assertNotIn("already_handled", result)
+        self.assertNotIn("active_application", result)
+
+    def test_same_posting_backlog_is_not_already_handled(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url=_SYNTH_GATE_URL,
+            status="Backlog",
+        )
+        result = self._gate(conn)
+        self.assertNotEqual(result["action"], "already_handled")
+        self.assertNotIn("already_handled", result)
+        self.assertIn("active_application", result)
+        self.assertEqual(result["active_application"][0]["status"], "Backlog")
+
+    def test_self_rejected_still_reject_not_already_handled(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url=_SYNTH_GATE_URL,
+            status="Self-Rejected",
+            status_changed_at=_dt(10),
+        )
+        _insert(
+            conn,
+            id="row-applied-same-posting",
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url=_SYNTH_GATE_URL,
+            status="Applied",
+        )
+        result = self._gate(conn)
+        self.assertEqual(result["action"], "reject")
+        self.assertEqual(result["reason_code"], "self_rejected")
+        self.assertNotEqual(result["action"], "already_handled")
+
+    def test_in_window_cooldown_still_reject_not_already_handled(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url="https://example.test/jobs/gate-old-reject",
+            status="Rejected",
+            rejection_type="Rejected",
+            status_changed_at=_dt(10),
+        )
+        _insert(
+            conn,
+            id="row-applied-same-posting",
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url=_SYNTH_GATE_URL,
+            status="Applied",
+        )
+        result = self._gate(conn)
+        self.assertEqual(result["action"], "reject")
+        self.assertEqual(result["reason_code"], "cooldown_evaluated_no")
+        self.assertNotEqual(result["action"], "already_handled")
+
+    def test_reapply_flag_stays_first_over_same_posting_applied(self):
+        conn = _make_conn()
+        _insert(
+            conn,
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url="https://example.test/jobs/gate-old-reject",
+            status="Rejected",
+            rejection_type="Rejected",
+            status_changed_at=_dt(130),
+        )
+        _insert(
+            conn,
+            id="row-applied-same-posting",
+            company=_SYNTH_GATE_COMPANY,
+            title=_SYNTH_GATE_TITLE,
+            url=_SYNTH_GATE_URL,
+            status="Applied",
+        )
+        result = self._gate(conn)
+        self.assertEqual(result["action"], "reapply_flag")
+        self.assertEqual(result["reason_code"], "reapply_eligible")
+        self.assertNotEqual(result["action"], "already_handled")
 
 
 if __name__ == "__main__":

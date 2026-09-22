@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { db } from '../db.js';
+import { normalizeSkipUrl, postingKey } from '../stage0SkipLedger.js';
 
 export const STUCK_STALE_MINUTES = 120;
 
@@ -166,6 +167,43 @@ export function stuckItems(
     });
   }
   return items;
+}
+
+export function closeMatchingQueuedOrPaused(
+  database: Database.Database,
+  match: { url?: string | null; company: string; title: string },
+): number {
+  // Implements FR-364 / AC-473 — unlocked queued/paused close only.
+  const urlKey = normalizeSkipUrl(match.url);
+  const now = new Date().toISOString();
+  const hasReason = tableHasColumn(database, 'pipeline_queue', 'paused_reason');
+  const reasonSql = hasReason ? ', paused_reason = NULL' : '';
+
+  if (urlKey) {
+    const result = database.prepare(
+      `UPDATE pipeline_queue
+       SET status = 'done'${reasonSql},
+           updated_at = ?
+       WHERE url_key = ?
+         AND status IN ('queued', 'paused')
+         AND locked_by IS NULL`,
+    ).run(now, urlKey);
+    return result.changes;
+  }
+
+  const key = postingKey(match.company, match.title);
+  if (key === '||') return 0;
+
+  const result = database.prepare(
+    `UPDATE pipeline_queue
+     SET status = 'done'${reasonSql},
+         updated_at = ?
+     WHERE posting_key = ?
+       AND (url_key IS NULL OR url_key = '')
+       AND status IN ('queued', 'paused')
+       AND locked_by IS NULL`,
+  ).run(now, key);
+  return result.changes;
 }
 
 export function quarantineRows(database: Database.Database = db): QuarantineRow[] {

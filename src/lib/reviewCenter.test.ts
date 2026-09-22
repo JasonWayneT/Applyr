@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { hasMinimumEvidence, normalizeReviewItems } from './reviewCenter';
+import {
+  decisionBasisLabel,
+  hasMinimumEvidence,
+  holdsStage0,
+  normalizeReviewItems,
+  SKILL_ANSWER_HELPERS,
+  SKILL_REVIEW_SUMMARY,
+  skillReviewQuestion,
+} from './reviewCenter';
 
 describe('Review Center data contract', () => {
   // Implements FR-285: protect the shared UI/client contract from malformed records.
@@ -51,6 +59,26 @@ describe('Review Center data contract', () => {
     expect(item.decisionBasis).toBe('Deterministic named-tool scan.');
     expect(item.uncertainty).toBe('unknown_named_tool');
     expect(item.evidenceExcerpt).toBe('Named tool is in the JD.');
+  });
+
+  it('uses optional-correction fallbacks for skill cards (CR-122 / AC-468)', () => {
+    const [item] = normalizeReviewItems([{ id: 'ibm', title: 'IBM Cloud' }]);
+    expect(item.question).toBe(skillReviewQuestion('IBM Cloud'));
+    expect(item.summary).toBe(SKILL_REVIEW_SUMMARY);
+    expect(item.question).not.toMatch(/before this opportunity can continue|Do not ask again/i);
+    expect(item.summary).not.toMatch(/is waiting for your review|Do not ask again|before Stage 0 can continue/i);
+  });
+
+  it('treats only hard-gate cards as a Stage 0 hold', () => {
+    expect(holdsStage0('hard_gate_review')).toBe(true);
+    expect(holdsStage0('skill_presence')).toBe(false);
+    expect(holdsStage0('evidence_enrichment')).toBe(false);
+    expect(decisionBasisLabel('hard_gate_review')).toBe('Why this paused');
+    expect(decisionBasisLabel('skill_presence')).toBe('Why this was flagged');
+    expect(SKILL_ANSWER_HELPERS.NOT_PRESENT).toBe(
+      'Same as leaving this unanswered. Not a forever no.',
+    );
+    expect(SKILL_ANSWER_HELPERS.NOT_PRESENT).not.toMatch(/Do not ask again/i);
   });
 
   it('drops malformed review items instead of rendering unsafe partial records', () => {

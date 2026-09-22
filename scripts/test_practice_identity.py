@@ -186,6 +186,34 @@ class TestApplyResumeHeaderIdentity(unittest.TestCase):
         self.assertNotIn("January 2018 - Present", text)
         self.assertIn("San Diego, CA\n* Shipped a thing.", text.replace("\r\n", "\n"))
 
+    def test_hyphen_first_bullet_is_not_overwritten_with_location(self):
+        from apply_resume_header import patch_file
+
+        header = dict(_FAKE_WE_HEADER)
+        self.folder.joinpath("Resume.md").write_text(
+            "# Alex Example\n"
+            "San Diego, CA | 555-010-1234 | alex.example@example.com | linkedin.com/in/alexexample\n\n"
+            "## PROFESSIONAL EXPERIENCE\n"
+            "### Cision\n"
+            "- Kept the first Cision bullet.\n"
+            "- Second Cision bullet.\n"
+            "### Sterkly\n"
+            "- Kept the first Sterkly bullet.\n"
+            "### Zero To Sixty\n"
+            "- Kept the first Zero To Sixty bullet.\n"
+            "## EDUCATION\n",
+            encoding="utf-8",
+        )
+        result = patch_file(str(self.folder / "Resume.md"), header)
+        text = (self.folder / "Resume.md").read_text(encoding="utf-8").replace("\r\n", "\n")
+        self.assertIn("role heading Cision", result)
+        self.assertIn("role location Cision", result)
+        self.assertIn("- Kept the first Cision bullet.", text)
+        self.assertIn("- Kept the first Sterkly bullet.", text)
+        self.assertIn("- Kept the first Zero To Sixty bullet.", text)
+        self.assertNotIn("San Diego, CA\n- Second Cision bullet.", text)
+        self.assertIn("San Diego, CA\n- Kept the first Cision bullet.", text)
+
     def test_missing_signoff_is_injected(self):
         from apply_resume_header import patch_file
 

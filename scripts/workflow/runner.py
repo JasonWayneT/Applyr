@@ -105,12 +105,43 @@ def _waiting_for_input_has_new_work(folder: str) -> bool:
             return True
         return False
     if kind == "requirement_extraction_review":
-        return os.path.isfile(
+        if os.path.isfile(
             os.path.join(folder, "stage0_requirement_extraction_review.json")
-        )
+        ):
+            return True
+        # Adapter-off packs paused here with extraction_reason=no_provider.
+        # Requeue must re-run Stage 0 once Agy is on; filling the template
+        # is the wrong recovery. Same class as the omitted-item-ids retry.
+        queue = result.get("queue") or []
+        if (
+            isinstance(queue, list)
+            and queue
+            and all(
+                isinstance(item, dict)
+                and str(item.get("extraction_reason") or "") == "no_provider"
+                for item in queue
+            )
+        ):
+            return True
+        return False
     if kind == "cost_authorization":
         return False
+    if kind == "conversion_risk":
+        return os.path.isfile(
+            os.path.join(folder, "conversion_risk_apply_anyway.json")
+        )
     return True
+
+
+def _conversion_risk_ready_to_author(folder: str, state: dict[str, Any]) -> bool:
+    """True when a conversion_risk pause has apply_anyway and should author."""
+    if state.get("status") != "WAITING_FOR_INPUT":
+        return False
+    receipt = load_receipt(folder, "stage0") or {}
+    result = (receipt.get("result") or {}) if isinstance(receipt, dict) else {}
+    if result.get("pause_kind") != "conversion_risk":
+        return False
+    return os.path.isfile(os.path.join(folder, "conversion_risk_apply_anyway.json"))
 
 
 def _place_after_stage0(folder: str, state: dict[str, Any]) -> str:
@@ -127,6 +158,66 @@ def _place_after_stage0(folder: str, state: dict[str, Any]) -> str:
     mode = state.get("mode") or "production"
     new_folder = apply_stage0_placement(folder, result, mode=mode)
     return str(new_folder)
+
+
+def _queue_db_path() -> Path | None:
+    """Resolve the queue DB. Tests must not open production jobagent.sqlite."""
+    sandbox = os.environ.get("APPLYR_SANDBOX_DB")
+    if sandbox:
+        return Path(sandbox)
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        return None
+    from pipeline_queue import DEFAULT_DB
+
+    return Path(DEFAULT_DB)
+
+
+def _try_mark_already_handled_queue(slug: str) -> None:
+    """Close an unlocked queue row after ALREADY_HANDLED. Implements FR-365.
+
+    No-op if no row or no DB. Leave a live lease (locked_by set or FenceRejected).
+    """
+    from pipeline_queue import FenceRejected, connect, get_row, mark_done
+
+    db_path = _queue_db_path()
+    if db_path is None or not db_path.exists():
+        return
+    conn = connect(db_path)
+    try:
+        row = get_row(conn, slug)
+        if row is None or row.get("locked_by"):
+            return
+        mark_done(
+            slug,
+            conn=conn,
+            last_workflow_status="ALREADY_HANDLED",
+            last_stage=None,
+        )
+    except FenceRejected:
+        return
+    finally:
+        conn.close()
+
+
+def _commit_already_handled(
+    folder: str,
+    state: dict[str, Any],
+    receipt: dict[str, Any],
+) -> dict[str, Any]:
+    """Commit the ALREADY_HANDLED terminal. No Stage 1. Implements FR-365."""
+    state = commit_stage(
+        folder,
+        state,
+        receipt,
+        workflow_status="ALREADY_HANDLED",
+        active_stage=None,
+    )
+    state = dict(state)
+    state["active_stage"] = None
+    write_state(folder, state)
+    slug = str(state.get("slug") or os.path.basename(folder.rstrip("/\\")))
+    _try_mark_already_handled_queue(slug)
+    return state
 
 
 def _ensure_caller_mode(
@@ -198,9 +289,18 @@ def _adopt_stage0_from_disk(
 
     gate = _load_json(stage0_path)
     verdict = policy.evaluate_stage0(gate)
-    status = "SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE"
-    wf_status = "SKIPPED" if status == "SKIPPED" else "IN_PROGRESS"
-    active = None if status == "SKIPPED" else "stage1"
+    if verdict["verdict"] == "SKIP":
+        status = "SKIPPED"
+        wf_status = "SKIPPED"
+        active: str | None = None
+    elif verdict["verdict"] == "ALREADY_HANDLED":
+        status = "ALREADY_HANDLED"
+        wf_status = "ALREADY_HANDLED"
+        active = None
+    else:
+        status = "COMPLETE"
+        wf_status = "IN_PROGRESS"
+        active = "stage1"
     receipt = build_receipt(
         stage="stage0",
         status=status,
@@ -220,6 +320,8 @@ def _adopt_stage0_from_disk(
         )
         state["stages"]["stage1"]["status"] = "READY"
         write_state(folder, state)
+    elif status == "ALREADY_HANDLED":
+        state = _commit_already_handled(folder, state, receipt)
     else:
         state = commit_stage(
             folder, state, receipt, workflow_status=wf_status, active_stage=active
@@ -239,7 +341,7 @@ def adopt_existing(folder: str, mode: str = "production") -> dict[str, Any]:
     prompt_path = os.path.join(folder, "authoring_prompt.md")
     state = load_state(folder) or state
     if (
-        state.get("status") != "SKIPPED"
+        state.get("status") not in ("SKIPPED", "ALREADY_HANDLED")
         and os.path.exists(packet_path)
         and os.path.exists(prompt_path)
     ):
@@ -464,9 +566,15 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
         receipt_result["cascade_import"] = dict(result.get("cascade_import") or {})
         receipt_result["model_call_occurred"] = False
         receipt_result["cost_applicable"] = False
+    if verdict["verdict"] == "SKIP":
+        receipt_status = "SKIPPED"
+    elif verdict["verdict"] == "ALREADY_HANDLED":
+        receipt_status = "ALREADY_HANDLED"
+    else:
+        receipt_status = "COMPLETE"
     receipt = build_receipt(
         stage="stage0",
-        status="SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE",
+        status=receipt_status,
         mode=mode,
         input_hashes=file_hash_map(folder, input_files),
         output_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
@@ -493,6 +601,9 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             workflow_status="SKIPPED",
             active_stage=None,
         )
+    if verdict["verdict"] == "ALREADY_HANDLED":
+        append_event(folder, _run_id, "stage0", "already_handled", **_event_fields)
+        return _commit_already_handled(folder, state, receipt)
     if verdict["verdict"] != "PASS":
         failed = dict(receipt)
         failed["status"] = "FAILED"
@@ -515,6 +626,48 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
         )
         append_event(folder, _run_id, "stage0", "failed", reasons=verdict["reasons"], **_event_fields)
         raise WorkflowError("Stage 0 policy FAIL: " + "; ".join(verdict["reasons"]))
+
+    from pipeline_queue import (
+        CONVERSION_RISK_OVERRIDE_NAME,
+        PAUSE_KIND_CONVERSION_RISK,
+    )
+
+    feasibility = result.get("conversion_feasibility") or {}
+    override_path = os.path.join(folder, CONVERSION_RISK_OVERRIDE_NAME)
+    if feasibility.get("verdict") == "risk" and not os.path.isfile(override_path):
+        receipt_result["pause_kind"] = PAUSE_KIND_CONVERSION_RISK
+        receipt_result["conversion_feasibility"] = feasibility
+        receipt = build_receipt(
+            stage="stage0",
+            status="COMPLETE",
+            mode=mode,
+            input_hashes=file_hash_map(folder, input_files),
+            output_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
+            result=receipt_result,
+            checks={
+                "contracts.check_stage0_fit_gate": True,
+                "policy.evaluate_stage0": verdict["verdict"],
+            },
+        )
+        state = dict(state)
+        meta = dict(state.get("metadata") or {})
+        meta["pause_kind"] = PAUSE_KIND_CONVERSION_RISK
+        state["metadata"] = meta
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            pause_kind=PAUSE_KIND_CONVERSION_RISK,
+            **_event_fields,
+        )
+        return commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
 
     state = commit_stage(
         folder,
@@ -609,6 +762,14 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
     meta = dict(state.get("metadata") or {})
     meta["identity_source"] = identity_source
     state["metadata"] = meta
+
+    from pipeline_queue import (
+        is_retryable_stage1_budget_failure,
+        write_stage1_budget_retry_marker,
+    )
+
+    if is_retryable_stage1_budget_failure(Path(folder)):
+        write_stage1_budget_retry_marker(Path(folder))
 
     packet = build_packet(Path(folder), no_hook=no_hook)
     packet_path = os.path.join(folder, "authoring_packet.json")
@@ -2087,7 +2248,7 @@ def run_until_stage1_complete(
     state = _refresh_waiting_stage1_receipt(folder, state)
     state = reconcile(folder, state)
 
-    if state.get("status") == "SKIPPED":
+    if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
         return state
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
@@ -2106,14 +2267,14 @@ def run_until_stage1_complete(
             state = run_stage0(folder, state, force=force)
         folder = _place_after_stage0(folder, state)
         state = load_state(folder) or state
-        if state.get("status") == "SKIPPED":
+        if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
             return state
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
     s1 = (state.get("stages") or {}).get("stage1") or {}
 
     # Need Stage 0 COMPLETE before prompt/validate
-    if s0.get("status") not in ("COMPLETE", "SKIPPED"):
+    if s0.get("status") not in ("COMPLETE", "SKIPPED", "ALREADY_HANDLED"):
         state = run_until_waiting_for_llm(
             folder, mode=mode, adopt=False, no_hook=no_hook, force=force
         )
@@ -2129,7 +2290,7 @@ def run_until_stage1_complete(
         # run_stage0() below raise "Original_JD.txt not found" against the
         # same stale path -- on every single fresh JD that passed Stage 0,
         # not an edge case.
-        if state.get("status") == "SKIPPED":
+        if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
             return state
         if state.get("status") == "WAITING_FOR_INPUT":
             return state
@@ -2250,6 +2411,7 @@ def run_until_truth_settled(
         return state
     if state.get("status") in (
         "SKIPPED",
+        "ALREADY_HANDLED",
         "WAITING_FOR_LLM",
         "WAITING_FOR_INPUT",
         "FAILED",
@@ -2355,7 +2517,7 @@ def run_until_waiting_for_llm(
     # --force is the explicit recovery path for a prior Stage 0 decision,
     # such as a corrected gate rule. Do not let the terminal status return
     # before run_stage0 has a chance to rebuild the gate.
-    if state.get("status") == "SKIPPED" and not force:
+    if state.get("status") in ("SKIPPED", "ALREADY_HANDLED") and not force:
         return state
 
     if state.get("status") == "WAITING_FOR_INPUT" and not force:
@@ -2363,7 +2525,11 @@ def run_until_waiting_for_llm(
             return state
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
-    if force or s0.get("status") == "STALE" or s0.get("status") not in ("COMPLETE", "SKIPPED"):
+    if force or s0.get("status") == "STALE" or s0.get("status") not in (
+        "COMPLETE",
+        "SKIPPED",
+        "ALREADY_HANDLED",
+    ):
         # CR-108: same missing-receipt-vs-real-change distinction as
         # run_until_stage1_complete above -- try adopting an already-valid
         # stage0_fit_gate.json before falling through to real re-extraction.
@@ -2374,10 +2540,11 @@ def run_until_waiting_for_llm(
             state = run_stage0(folder, state, force=force)
         folder = _place_after_stage0(folder, state)
         state = load_state(folder) or state
-        if state.get("status") == "SKIPPED":
+        if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
             return state
 
     if state.get("status") in ("WAITING_FOR_LLM", "WAITING_FOR_INPUT"):
-        return state
+        if not _conversion_risk_ready_to_author(folder, state):
+            return state
 
     return run_stage1_prompt(folder, state, no_hook=no_hook)

@@ -1,7 +1,265 @@
 # FIXQUEUE — Agy whole-workflow shakedown (2026-09-18)
 
+## HANDOFF — Cursor (Grok 4.6), 2026-09-22 — conversion_risk after CR-122
+
+Decision brief: `docs/spec/08-implementation/DECISION-2026-09-22-conversion-risk-after-cr122.md`. CR-122 unblocked skill cards. Live `businessolver` / `employers` then parked `conversion_risk` on junk nouns plus one real product (Delta Lake). Do not `apply_anyway` as a habit. Do not Skip. Product pick is still open.
+
 Items 1-4 landed: YES
 Runtime hold: NO
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 — CR-121 stories 2–4 landed
+
+Withhold is on. Agy rubric hook is off.
+
+Parked-gate helper replay: velosio `risk` (Dynamics); omnissa `risk` (Android / Workspace ONE UEM); certara, outschool, goodrx `ok`. Distinctive WE overlap was killed; all five already have required PM evidence 3–4. No gazetteer.
+
+Behavior: Stage 0 PASS + `conversion_feasibility.risk` commits stage0 COMPLETE, workflow WAITING_FOR_INPUT `pause_kind=conversion_risk`, no prompt. Queue `paused_reason=conversion_risk`. Only `queue_claim.py requeue --slug SLUG --reason apply_anyway` writes `conversion_risk_apply_anyway.json` and promotes.
+
+`run_stage2_rubric.py` exists (fixture tests, no `call_llm`). Worker calls it only if `APPLYR_STAGE2_AGY_RUBRIC=1`. AC-464 live Agy pass on the five parked resumes is not run. Do not enable the hook.
+
+Do not auto-requeue velosio/certara/omnissa/outschool/goodrx, optum, origami, nava. Leave amplify paused.
+
+Next: size-1 worker. Dynamics/UEM-shaped PASSes will pause conversion_risk. Claim will still pick FAILED retryable (clarion/confidential/sourcegraph) before businessolver. Story 5.1 is the remaining CR-121 bar.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 — CR-121 plan + LLM path docs
+
+Groq/Gemini "off" is not a product hole. Those Settings keys are free-tier and do not serve `utils.call_llm`. Agy is Stage 0/1. Docs now say that (AGENTS.md, README, ACTIVE_WORKFLOW, PRODUCT_CAPABILITIES, constitution). `eval_submission.py` stays retired as a judge. It inflated pop_up_talent CL 69 to 92.
+
+Planned solution (not coded past docs): CR-121.
+
+1. After PASS, `conversion_feasibility` `risk` if a required tool is `NOT_PRESENT` or no required item has distinctive WE overlap. Do not raise skip floor 40. Do not Skip. Pause `conversion_risk`, worker takes the next slug. `requeue --reason apply_anyway` is the only promote.
+2. Replay parked gates (velosio/certara/omnissa/outschool/goodrx). If certara/goodrx stay `ok`, stop before adding a domain gazetteer.
+3. Agy `run_stage2_rubric.py` writes CR-112 scorecards. Production hook off until those five parked resumes below 70 do not score ≥ 70.
+
+Next code story: 2.1 feasibility helper. Do not auto-requeue parked floors, optum, origami, nava.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 — leftover unsupervised RCA
+
+Three leftovers, investigated separately. Outside research: ATS knockout gates cause false negatives; LLM rubric scores correlate poorly with humans; keep two thresholds, do not merge them.
+
+1. Stage 1 FAILED auto-repair was the wrong hole. Live clarion / confidential / sourcegraph have no `Resume.md`. Packets failed at 8565 / 8310 / 8783. Leftover-trim already rebuilds them ready (7906 / 7999 / 7962). Queue refused FAILED. Fix: one-shot claim when over-budget and no resume (`AC-459`). Marker `stage1_budget_retry.json`. Tests: `test_failed_over_budget_without_resume_promotes_once`, `test_failed_never_auto_promotes` still holds for a resume on disk. `FR-344`.
+
+2. Rubric scoring stays agent, not Jason, and not `eval_submission.py`. That script uses `call_llm` (Groq/Gemini, off). Research: LLM rubric ≠ hiring-manager (weak correlation; presentation flips scores). Independent-blind ±3 already required near floors. Do not wire auto-score. CR-120 is the quality path, switch-off until it wins frozen cases.
+
+3. Honest 70-floor parks are not "Stage 0 skip floor too low." Velosio was Tier 1 fit 71 then resume 63. Mapping bugs (Dynamics `claim_ids`, Kafka `exposure`) made it worse and are already fixed for future packets. Remaining gap: Stage 0 measures PM-eligibility with SOFT bridges; R3/R8 measure whether the document looks native to this JD's domain. Raising the 40 skip floor would not catch velosio.
+
+Stricter Stage 0 look (not built this pass): a conversion-feasibility band after PASS, not a higher skip floor. Flag or withhold authoring when identity NOT_PRESENT tools or no WE domain overlap make R8 structurally unwinnable. Do not Skip those roles automatically. Do not rebuild parked floor folders. Do not auto-requeue optum / origami / nava.
+
+### Next
+
+Size-1 worker: businessolver, then the three FAILED retry slugs if they promote. Parked honest floors: velosio 63, certara 64, outschool 66, omnissa 64, goodrx 64.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 — Optum fit-0 + Kafka exposure + CR-112 isolation
+
+The durable Optum skip was not the NULL cooldown. Timestamped `optum_20260921T220054` had `db_reapply_flag` True. NLP split the hire-site office-days sentence into the only required items, both SOFT evidence 0, fit 0. Step 5 was already empty-required Tier 2 PASS. Step 5.5 overwrote that to Skip below the 40 floor.
+
+Kafka mapped to Omnissa "Exposure to frontline verticals" because live ACC-189 lens `kafka_architecture_exposure` shares the rare word `exposure`. Standard Kafka tags without that lens word score 0 on that item. A Kafka JD item still matches on `kafka`.
+
+Do not rebuild parked floor folders. Do not requeue velosio/certara/outschool/omnissa/goodrx. Do not auto-requeue optum or origami. Leave amplify paused. Leave nava skipped.
+
+1. Hire-site office-days divert into junk before scoring (`_HIRE_SITE_OFFICE_DAYS_RE`, same pattern as named-skill skip). Tests: `test_hire_site_office_days_leave_required`, `test_optum_hire_site_only_extract_is_tier2_pass_not_fit_skip`. `FR-330` / `AC-428`.
+2. Step 5.5 empty qualification-required + fit 0 stays Tier 2 PASS. Real required lists at fit 0 still Skip. Tests: `TestEmptyRequiredFitWashout`.
+3. `_GENERIC_OVERLAP_TOKENS` adds `exposure` / `exposed`. Test: `test_exposure_lens_does_not_map_kafka_to_frontline_verticals`. `CR-087`.
+4. CR-112 dump-site tests pin adapter off + `APPLYR_STAGE0_CLOUD_LLM=1` so `utils.call_llm` is the path under a production adapter session.
+
+Still open: Stage 1 FAIL still needs explicit requeue; rubric is still agent; Stage 0 PASS vs honest 70 floor is still a product question.
+
+### Next
+
+Size-1 worker: businessolver. Parked honest floors: velosio 63, certara 64, outschool 66, omnissa 64, goodrx 64.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 — scoring / cooldown / worker author
+
+Implemented the three unsupervised-path recommendations. Do not rebuild parked floor folders. Do not requeue velosio/certara/outschool/omnissa/goodrx. Leave amplify paused. Leave nava skipped.
+
+1. `NOT_PRESENT` named tools now cap `classify_gaps` at evidence level 0 (SOFT, never HARD skip) and `build_evidence_map` assigns no `claim_ids`. Packet strip remains a backstop. Tests: `test_not_present_named_tool_caps_owned_cascade_as_undocumented_soft`, `test_not_present_tool_does_not_receive_overlap_claim_ids`. `FR-283` / `AC-456`.
+2. All-NULL cooldown dates are unknown, not in-window (`reapply_flag`). Dated `applied_at`/`created_at` fallbacks still count. Tests: `TestNullStatusChangedAt`. `FR-252` / `AC-457`.
+3. Worker runs `run_stage1_author.py` once at `WAITING_FOR_LLM` when the prompt exists and `Resume.md` does not, then `--resume`. Tests: `test_waiting_for_llm_with_prompt_runs_author_then_resume`. `FR-344` / `AC-458`.
+
+Still open: Kafka-to-frontline mapping; Stage 1 FAIL still needs explicit requeue; rubric is still agent; Stage 0 PASS vs honest 70 floor is still a product question. Optum/origami were skipped under the old NULL rule; they are not auto-requeued here.
+
+### Next
+
+Size-1 worker: businessolver. Parked honest floors: velosio 63, certara 64, outschool 66, omnissa 64, goodrx 64.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~22:24 UTC — goodrx parked honest floor 64
+
+Goodrx Stage 0 PASS, packet 7936, Stage 1 authored (11s), repaired ($8,500 monthly not annually, ACC-111 scope, ACC-108 support/docs). Stage 2 through Mech. Honest rubric resume 64 / CL 69. Parked `mech.rubric_floor.resume` BLOCK. Do not force. Do not requeue. Domain is pharmacy claims adjudication.
+
+Also this pass: optum and origami_risk SKIPPED `cooldown_no_signal`. Hire-site cities and "Risk Management" no longer queue as named-tool cards.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~21:56 UTC — omnissa parked honest floor 64
+
+Omnissa Stage 0 PASS fit 52. Packet ready 7932 after drop-unmapped-then-strip-preferred plus NOT_PRESENT strip. Stage 1 authored, repaired (Kafka cited as architecture exposure, not UEM; CL-012; pair-lint; LW-039). Stage 2 through Mech. Honest rubric resume 67 then independent-blind 64 / CL 69. Parked `mech.rubric_floor.resume` BLOCK. Do not force. Do not requeue.
+
+Root causes this slug:
+1. Leftover trim no-op at 400-char floor (9210>8000). Drop unmapped fillers, then strip mapped preferred from evidence_map so Rule 4 cannot fire. Live miss: ACC-106-GTM dropped, map kept. Tests in `TestPacketBudgetRemainderTrim`.
+2. NOT_PRESENT only unpaused Stage 0; scoring still SOFT-mapped Android/UEM. Gate now writes `not_present_named_tools`; packet strips those rows. `FR-283`.
+3. `LW-032` flagged "skip the standard line" as company The Standard. Lookahead exclusion. Tests `test_LW032_the_standard_line_phrase_not_flagged`.
+4. Stage 0 still mapped Kafka to "frontline verticals" (retail/healthcare). Author cited Kafka honestly and did not claim those verticals. Mapping quality still open.
+
+### Still open for unsupervised confidence
+
+- Worker still pauses at `WAITING_FOR_LLM`. `run_stage1_author.py` is manual.
+- Stage 1 FAIL writes `FAILED` and does not auto-call repair.
+- Rubric scoring is still a human/agent Stage 2 step.
+- FAILED queue rows need explicit requeue.
+- Kafka-to-frontline-verticals SOFT mapping is a Stage 0 quality hole.
+- Hire-site cities queued as named-tool cards (fixed; optum then SKIPPED on 30-day cooldown).
+
+### Next
+
+Size-1 worker: businessolver. Parked honest floors: velosio 63, certara 64, outschool 66, omnissa 64, goodrx 64. Optum and origami skipped `cooldown_no_signal` (NULL status_changed_at treated as in-window). Leave amplify paused. Leave nava skipped.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~21:50 UTC — omnissa packet budget Rule 4
+
+Omnissa Stage 0 PASS fit 52. First packet 9210>8000 (29 floor excerpts, leftover trim no-op). `NOT_PRESENT` for Android / Android Enterprise / Workspace ONE UEM / Android OEM now writes `not_present_named_tools` on the gate and strips those SOFT mappings in the packet. Second rebuild dropped preferred `ACC-106-GTM` without stripping `evidence_map`, so Rule 4 `Missing excerpt` FAILED.
+
+Fix: drop unmapped fillers first; if still over, strip mapped preferred/responsibility claim_ids from the map before fail-closed. Fail-closed now reads `draft["evidence_map"]`. Tests: `TestPacketBudgetRemainderTrim` including `test_mapped_preferred_excerpt_stays_while_unmapped_fillers_drop`. Do not force floors.
+
+### Still open for unsupervised confidence
+
+- Worker still pauses at `WAITING_FOR_LLM`. `run_stage1_author.py` is manual.
+- Stage 1 FAIL writes `FAILED` and does not auto-call `run_stage1_repair.py`.
+- Rubric scoring is still a human/agent Stage 2 step.
+- FAILED queue rows need `queue_claim.py requeue` (never auto-promote).
+
+### Next
+
+Requeue omnissa, size-1 worker, inspect packet WE spans, then author if ready. Leave velosio/certara/outschool parked. Leave amplify paused. Leave nava skipped.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~21:32 UTC — outschool parked; hyphen-bullet RCA
+
+Outschool Stage 0 PASS fit 62, packet ready 7555, Stage 1 authored, Stage 2 through Mech. Honest rubric resume 72 then independent-blind 66 / CL 74. Parked `mech.rubric_floor.resume` BLOCK. Do not force. Do not requeue.
+
+Root cause this slug: `apply_resume_header._ensure_role_blocks` only treated `*` as a bullet. Agy authored `- ` bullets, so Stage 1 verify overwrote the first bullet of each role with `San Diego, CA`. Cision lost the 40% drop-off line, Sterkly lost the certificate line, ZTS lost the 100-unit line. Tests: `test_hyphen_first_bullet_is_not_overwritten_with_location`. 16 identity tests OK.
+
+Also on this slug: first author missed required ACC-104-CS, pair-linted the 40% phrase, and stamped "end-to-end Product Lifecycle" on ACC-106 UVPM because of the lifecycle pointer card plus ATS contract. Hand-repaired from packet. Pointer/lens cards remain a quality hole.
+
+### Still open for unsupervised confidence
+
+- Worker still pauses at `WAITING_FOR_LLM`. `run_stage1_author.py` is manual.
+- Stage 1 FAIL writes `FAILED` and does not auto-call `run_stage1_repair.py`.
+- `NOT_PRESENT` answers still do not inject into packet `hard_constraints`.
+- Rubric scoring is still a human/agent Stage 2 step.
+
+### Next
+
+Size-1 worker: omnissa (oldest queued). Leave velosio/certara/outschool parked on honest floors. Leave amplify paused. Leave nava skipped.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~21:20 UTC — quality RCA, not queue
+
+Focus today is consistent artifacts, not throughput. Root cause of velosio writing Dynamics 365:
+
+1. Excerpt shrink cut `ACC-203-TECH` at the hedge-header period (`none listed.`). Fresh extract is 475 chars with the certificate workflow. Live packet was 96 chars, header only. 21 of 33 velosio excerpts were header-only. Stage 1 had no WE facts for the mapped Dynamics bridge and used the jd_item tool name instead.
+2. `LR-026` already blocked SAP/NetSuite and did not block Dynamics 365. First-draft hook would now HARD_BLOCK.
+
+Fixes in `build_authoring_packet.py` (`_truncate_excerpt_card`) and `blocked_tools.py`. Tests: `TestExcerptShrinkKeepsWeSpan`, `test_LR026_blocks_dynamics_365_business_central`. 181 packet/linter/blocked-tools tests OK. Do not rebuild parked velosio/certara packets. Do not force their rubric floors.
+
+### Still open for quality
+
+- `NOT_PRESENT` answers still do not inject into packet `hard_constraints`. The gazetteer catch is Dynamics-shaped. The next unnamed ERP will need that loop.
+- Pointer/lens-only cards still waste budget. Shrink now refuses to destroy a WE span; leftover overage may still come from other cards.
+
+### Next
+
+Do not run outschool until a new PASS packet is checked for WE spans on mapped soft-gap claims, and Stage 1 lint would catch a Dynamics-class tool.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~21:05 UTC — velosio + certara parked on rubric floor
+
+Two Stage 0 PASSes made it through authoring and Stage 2. Both parked on honest `mech.rubric_floor.resume`. Do not force either floor. Do not requeue them.
+
+| slug | Stage 0 | Stage 1 | Rubric (resume / CL) | Queue now |
+|---|---|---|---|---|
+| velosio | PASS fit 71 | PASS after Dynamics de-claim | 63 / 78 | paused BLOCK floor |
+| certara | PASS fit 58, NLP cache_hit | PASS after no-tools preamble | 64 / 78 | paused BLOCK floor |
+
+### Real bugs found and fixed this pass (tested, not committed)
+
+1. **`LW-005` stripped the trailing `s` off `DevOps`.** `_check_unverified_partner` used `rstrip("s")`, so `devops` became `devop`. Tests: `test_LW005_devops_partner_is_verified`, `test_LW005_still_warns_unverified_design_partner`. 76 linter tests OK.
+2. **`run_stage1_author.py` did not send the no-tools fenced-block instruction that repair already sends.** Live miss on certara: Agy called `write_to_file`, fail-closed, no artifacts. After the preamble, certara authored in 51s. Author+repair tests 18 OK.
+
+### Authoring notes, not code holes
+
+- Velosio first author claimed Dynamics in the letter. Honest fix: Sterkly ACC-203 certificate workflow, never Dynamics/PSA/ERP.
+- Packet excerpts for some mapped IDs were lens headers, not WE spans. Watch on later PASSes.
+- Competencies keyword-stuffing to clear ATS exact-phrase gaps hurt velosio R2. Certara did not repeat that. Extra-packet coverage WARNs stay NOT_APPLICABLE.
+
+### Still open
+
+- velosio + certara rubric-floor parks (with nymbl/isolved/peoplefinders).
+- amplify stays paused (`partial_mapping_unresolved`).
+- nava_benefits stays `archive/skipped` until Jason says restore.
+
+### Next
+
+Size-1 worker on outschool (queued). Same discipline.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~20:50 UTC — velosio Stage 2 parked on rubric floor
+
+Size-1 worker took velosio after Stage 1 verify PASS. Truth/ATS/HM cleared. Mech compiled PDFs. Honest rubric: resume 68 then independent-blind 63, cover letter 78. `mech.rubric_floor.resume` BLOCK at 63. Parked. Do not force the floor. Do not requeue velosio.
+
+### Real bug found and fixed this pass (tested, not committed)
+
+**`LW-005` stripped the trailing `s` off `DevOps`.** `_check_unverified_partner` used `rstrip("s")`, so `devops` became `devop`, missed `_VERIFIED_PARTNERS`, and warned a verified partner as unverified. Live on velosio CoverLetter.md. Tests: `test_LW005_devops_partner_is_verified`, `test_LW005_still_warns_unverified_design_partner`. 76 linter tests OK.
+
+### Authoring notes, not code holes
+
+- Stage 1 verify first failed on unused Dynamics bridge `ACC-203-TECH` / `ACC-218-SCALING`. Author had claimed Dynamics in the letter. Honest fix: Sterkly certificate-workflow bullet (ACC-203) plus ACC-202 communication sentence. Do not claim Dynamics 365 / PSA / ERP.
+- Packet excerpts for several mapped IDs were lens headers, not WE spans. Author had to write from WE anyway. Watch this on the next PASS packet.
+- Competencies absorbed ATS exact-phrase gaps. Resume lint went clean. Coverage WARNs for extra-packet claims stayed NOT_APPLICABLE.
+
+### Still open
+
+- **velosio** paused `NEEDS_DISPOSITION` / `mech.rubric_floor.resume` BLOCK. Leave it with nymbl/isolved/peoplefinders.
+- **amplify** stays paused (`partial_mapping_unresolved`).
+- nava_benefits stays `archive/skipped` until Jason says restore.
+
+### Next
+
+Size-1 worker on certara (queued). Watch Preferred vs required buckets and named-tool cards. Same discipline.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~20:35 UTC — extraction + requeue, velosio packet budget
+
+Agy is on. Groq was not in this pass (subscription adapter `cache_hit`). Size-1 worker claimed velosio after requeue. Stage 0 COMPLETE, Stage 1 FAILED `Over token budget: 8010 > 8000`, lease released. Same known packet-shrink miss as clarion/confidential/sourcegraph, now correctly paused FAILED instead of leaking `in_progress`.
+
+### Real bugs found and fixed this pass (tested, not committed)
+
+1. **NLP ignored the JD's Preferred Experience header.** Live nava_benefits: classifier promoted `5+ years` and 0-to-1 into required; KEEP_ELIGIBLE made the gate SOFT; fit 34 skipped below 40. `"Working at Nava"` was not a culture header. Tests: `test_working_at_company_is_culture_not_preferred_item`, `test_preferred_experience_header_is_not_classifier_overridden`. Live re-extract: NLP required empty, preferred list is the five real Preferred Experience lines. `FR-330` / CR-105. nava_benefits stays `archive/skipped` until Jason says restore.
+
+2. **Requeue could not recover adapter-off extraction pauses or completed Review Center cards whose `resolved_at` was older than `paused_at`.** Allowed `no_provider` extraction-review and review_center with zero open questions. Runner now treats all-`no_provider` extraction pauses as new work so requeue actually re-runs Stage 0. Tests in `test_pipeline_queue.py` and `test_workflow_authority.py`. `FR-346`. Requeued velosio, certara, outschool, omnissa, optum, origami_risk.
+
+### Still open
+
+- **Packet token budget 8010 > 8000** on velosio after a real Stage 0 pass. Shrink leftover, not a construction hole. Next real process bug if we want artifacts out. Do not `--force` the packet.
+- **amplify** stays paused (`partial_mapping_unresolved`, model actually ran). Do not requeue as no_provider.
+- Rubric-floor parks (nymbl, isolved, peoplefinders): leave them.
+- Do not fill extraction-review templates.
+
+### Next
+
+Size-1 worker on certara (queued). Watch Preferred vs required buckets on Stage 0. Same discipline.
+
+## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~20:25 UTC — preferred-header NLP miss
+
+Ran size-1 worker after nava_benefits KEEP_ELIGIBLE / Codex CONFIRMED_USE. Agy cache hit, no Groq. Stage 0 SKIPPED: fit 34 below the 40 floor. Folder is `data/archive/skipped/nava_benefits`. Do not treat that Skip as a real below-floor call until re-run after the extraction fix below. Do not auto-restore without Jason.
+
+### Real bug found and fixed this pass (tested, not committed)
+
+**NLP ignored the JD's Preferred Experience header.** Live on nava_benefits: regex kept `5+ years` and the 0-to-1 line in preferred. The classifier predicted both `required` at >=0.65. KEEP_ELIGIBLE correctly turned the hard gate into SOFT; the skip was the weighted required score, not the gate. Same JD: `"Working at Nava"` was not a culture header, so the label (and DEI copy on the regex path) leaked into preferred. Tests: `test_working_at_company_is_culture_not_preferred_item`, `test_preferred_experience_header_is_not_classifier_overridden`. Live re-extract after the fix: NLP required empty, all five Preferred Experience lines stay preferred, Working at Nava is culture. `FR-330` / CR-105.
+
+### Still stuck, not a code hole in this patch
+
+- **velosio / certara**: `WAITING_FOR_INPUT` / `review_center`. Skill cards are completed, but `resolved_at` is older than `paused_at` (the later Groq-failure pause), so they do not auto-promote. `requeue_paused` refuses review_center pauses. Do not re-answer the cards.
+- **outschool / omnissa / optum / origami_risk**: `requirement_extraction_review` with `extraction_reason=no_provider` from the Groq-off pack. Agy is on now. Do not fill those templates. They need a requeue/resume path for `no_provider` pauses; the current CLI only requeues FAILED or subscription_review.
+- **amplify**: still WAITING_FOR_INPUT at Stage 0.
+- Rubric-floor NEEDS_DISPOSITION parks (nymbl, isolved, peoplefinders, …): leave them.
+
+### Next
+
+1. Next worker claim should be a fresh `queued` slug (goodrx first), size 1, Agy on.
+2. Unstick the `no_provider` extraction-review rows without filling templates.
+3. Same discipline: root-cause before patching, worker not hand `--resume` for queued slugs, never override a below-floor rubric BLOCK without Jason.
 
 ## HANDOFF — Cursor (Grok 4.6), 2026-09-21 ~20:15 UTC — Groq/Gemini are not the Stage 0 path
 

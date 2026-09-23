@@ -1,12 +1,14 @@
 import { apiFetch } from './api';
 import { STUCK_STALE_MINUTES } from '../types/pipelineQueue';
 import type {
+  PipelineDecisionItem,
   PipelineLease,
   PipelineQueueCounts,
   PipelineQueueStats,
   PipelineQuarantineRow,
   PipelineStuckItem,
   PipelineUploadResult,
+  PipelineWaitingItem,
 } from '../types/pipelineQueue';
 
 export { STUCK_STALE_MINUTES };
@@ -53,6 +55,17 @@ function normalizeLease(value: unknown, index: number): PipelineLease | null {
   };
 }
 
+function normalizeWaiting(value: unknown, index: number): PipelineWaitingItem | null {
+  if (!isRecord(value)) return null;
+  const slug = stringValue(value.slug);
+  if (!slug) return null;
+  return {
+    slug,
+    company: stringValue(value.company, `company-${index}`),
+    reason: stringValue(value.reason, 'Waiting on a check before the packet can continue.'),
+  };
+}
+
 function normalizeStuck(value: unknown, index: number): PipelineStuckItem | null {
   if (!isRecord(value)) return null;
   const slug = stringValue(value.slug);
@@ -69,6 +82,21 @@ function normalizeStuck(value: unknown, index: number): PipelineStuckItem | null
   };
 }
 
+function normalizeDecision(value: unknown, index: number): PipelineDecisionItem | null {
+  if (!isRecord(value)) return null;
+  const slug = stringValue(value.slug);
+  if (!slug) return null;
+  const state = value.state;
+  const allowed = state === 'Continuing' || state === 'Skipped' || state === 'Running' || state === 'Failed';
+  return {
+    slug,
+    company: stringValue(value.company, `company-${index}`),
+    state: allowed ? state : 'Continuing',
+    reason: stringValue(value.reason, 'Continuing from today\'s work experience.'),
+    canRetry: value.canRetry === true || value.can_retry === true,
+  };
+}
+
 export function normalizePipelineStats(value: unknown): PipelineQueueStats {
   const source = isRecord(value) ? value : {};
   const leases = Array.isArray(source.leases)
@@ -77,9 +105,17 @@ export function normalizePipelineStats(value: unknown): PipelineQueueStats {
   const stuck = Array.isArray(source.stuck)
     ? source.stuck.map(normalizeStuck).filter((row): row is PipelineStuckItem => row !== null)
     : [];
+  const waiting = Array.isArray(source.waiting)
+    ? source.waiting.map(normalizeWaiting).filter((row): row is PipelineWaitingItem => row !== null)
+    : [];
+  const decisions = Array.isArray(source.decisions)
+    ? source.decisions.map(normalizeDecision).filter((row): row is PipelineDecisionItem => row !== null)
+    : [];
   return {
     counts: normalizeCounts(source.counts),
     leases,
+    waiting,
+    decisions,
     stuck,
   };
 }
@@ -147,4 +183,13 @@ export async function uploadPipelineCsv(file: File): Promise<PipelineUploadResul
     throw new Error('CSV upload failed.');
   }
   return normalizeUploadResult(await response.json());
+}
+
+export async function redoPipelineJob(slug: string): Promise<void> {
+  const response = await apiFetch(`/api/pipeline-queue/${encodeURIComponent(slug)}/redo`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('This job could not be tried again.');
+  }
 }

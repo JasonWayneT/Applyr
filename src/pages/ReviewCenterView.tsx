@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import WorkflowOperator from '../components/WorkflowOperator';
-import PipelineQueuePanel from '../components/PipelineQueuePanel';
 import { decisionBasisLabel, hasMinimumEvidence, SKILL_ANSWER_HELPERS } from '../lib/reviewCenter';
+import { usePipelineQueue } from '../hooks/usePipelineQueue';
 import type {
   EvidenceDetails,
   ReviewAnswer,
@@ -20,6 +19,8 @@ interface ReviewCenterViewProps {
   onAnswer: (itemId: string, payload: ReviewAnswerPayload) => Promise<void>;
   onVerifyPromotion: (promotionId: string) => Promise<void>;
   onOpenJob: (jobId: string) => void;
+  onRedoJob: (slug: string) => Promise<void>;
+  onOpenPipeline: () => void;
 }
 
 const EMPTY_DETAILS: EvidenceDetails = {
@@ -42,7 +43,8 @@ function itemBelongsToQueue(item: ReviewItem, queue: QueueView): boolean {
   if (queue === 'strengthen') {
     return item.type === 'evidence_enrichment' || item.evidenceStatus === 'incomplete' || item.evidenceStatus === 'ready';
   }
-  return item.type === 'skill_presence' || item.type === 'hard_gate_review';
+  if (item.type === 'hard_gate_review') return false;
+  return item.type === 'skill_presence';
 }
 
 function itemTypeLabel(item: ReviewItem): string {
@@ -209,11 +211,13 @@ function ReviewDetail({
   onAnswer,
   onVerifyPromotion,
   onOpenJob,
+  onRedoJob,
 }: {
   item: ReviewItem;
   onAnswer: (payload: ReviewAnswerPayload) => Promise<void>;
   onVerifyPromotion: (promotionId: string) => Promise<void>;
   onOpenJob: (jobId: string) => void;
+  onRedoJob: (slug: string) => Promise<void>;
 }) {
   const [details, setDetails] = useState<EvidenceDetails>(EMPTY_DETAILS);
   const [showEvidencePreview, setShowEvidencePreview] = useState(false);
@@ -232,7 +236,7 @@ function ReviewDetail({
   const canReviewEvidence = hasMinimumEvidence(details);
   const showAnswerPad = item.status === 'open' || changingAnswer;
 
-  const saveAnswer = async (selectedAnswer: ReviewAnswer, promote = false) => {
+  const saveAnswer = async (selectedAnswer: ReviewAnswer, promote = false, writeWorkExperience = false) => {
     if (promote && !canReviewEvidence) {
       setError('Add where, what, and when before promoting this to verified evidence.');
       return;
@@ -242,7 +246,9 @@ function ReviewDetail({
     try {
       await onAnswer({
         answer: selectedAnswer,
-        details: item.type === 'evidence_enrichment' ? details : undefined,
+        details: writeWorkExperience
+          ? { ...details, writeWorkExperience: true }
+          : item.type === 'evidence_enrichment' ? details : undefined,
         promoteToVerifiedEvidence: promote,
       });
       setChangingAnswer(false);
@@ -368,14 +374,36 @@ function ReviewDetail({
 
       {showAnswerPad && item.type === 'skill_presence' && (
         <div className="space-y-4">
-          <div>
-            <h3 className="text-xs uppercase tracking-widest font-bold text-on-surface-variant mb-3">Your answer</h3>
-            <SkillAnswerPad saving={saving} onSelect={value => { void saveAnswer(value); }} />
-          </div>
-          <p className="text-xs text-on-surface-variant leading-relaxed">
-            One tap saves and opens the next card. A Yes can get where/what/when detail later under
-            Strengthen evidence, and any answer can be corrected from Completed.
+          <p className="text-sm text-on-surface leading-relaxed">
+            Stopped because {item.title} is not in work experience.
           </p>
+          <button
+            type="button"
+            onClick={() => { void saveAnswer('CONFIRMED_USE', false, true); }}
+            className="btn-primary min-h-12 rounded-xl px-4 text-sm font-bold disabled:opacity-50"
+            disabled={saving}
+          >
+            I have used this
+          </button>
+          <p className="text-xs text-on-surface-variant leading-relaxed">
+            This writes the tool into work experience. Later jobs can use it. Nothing here starts a worker, and jobs that already went out stay as they are.
+          </p>
+          {item.affectedOpportunities.length > 0 && (
+            <div className="space-y-2">
+              {item.affectedOpportunities.map(opportunity => (
+                <div key={opportunity.jobId} className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-on-surface">{opportunity.company}</p>
+                  <button
+                    type="button"
+                    onClick={() => { void onRedoJob(opportunity.jobId); }}
+                    className="btn-secondary min-h-10 px-3 rounded-lg text-xs"
+                  >
+                    Redo this one
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -542,7 +570,13 @@ const ReviewCenterView: React.FC<ReviewCenterViewProps> = ({
   onAnswer,
   onVerifyPromotion,
   onOpenJob,
+  onRedoJob,
+  onOpenPipeline,
 }) => {
+  const pipeline = usePipelineQueue();
+  const decisions = pipeline.items?.decisions ?? [];
+  const continued = decisions.filter(row => row.state === 'Continuing' || row.state === 'Running').length;
+  const skipped = decisions.filter(row => row.state === 'Skipped').length;
   // Implements FR-285: render the focused Review Center queue and evidence workflow.
   const [queue, setQueue] = useState<QueueView>('needs_answer');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -625,10 +659,13 @@ const ReviewCenterView: React.FC<ReviewCenterViewProps> = ({
     <div className="space-y-8 animate-fade-in">
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
-          <p className="text-[10px] uppercase tracking-widest font-bold text-primary mb-2">Decision queue</p>
+          <p className="text-[10px] uppercase tracking-widest font-bold text-primary mb-2">Later correction</p>
           <h1 className="text-3xl font-headline font-extrabold text-on-surface tracking-tight">Review Center</h1>
           <p className="text-on-surface-variant mt-2 max-w-2xl leading-relaxed">
-            Resolve the questions that keep opportunities from moving forward. You decide what Applyr can remember and use.
+            {continued} continued, {skipped} skipped, and none are waiting on you.{' '}
+            <button type="button" onClick={onOpenPipeline} className="underline font-bold text-on-surface">
+              Open the pipeline
+            </button>
           </p>
         </div>
         <button
@@ -641,10 +678,6 @@ const ReviewCenterView: React.FC<ReviewCenterViewProps> = ({
           Refresh
         </button>
       </div>
-
-      <WorkflowOperator />
-
-      <PipelineQueuePanel onOpenJob={onOpenJob} />
 
       {error && (
         <div role="alert" className="bg-error-container text-on-error-container rounded-xl px-4 py-3 flex items-center gap-3">
@@ -686,6 +719,7 @@ const ReviewCenterView: React.FC<ReviewCenterViewProps> = ({
               onAnswer={payload => handleAnswer(selectedItem, payload)}
               onVerifyPromotion={onVerifyPromotion}
               onOpenJob={onOpenJob}
+              onRedoJob={onRedoJob}
             />
           ) : (
             <EmptyState

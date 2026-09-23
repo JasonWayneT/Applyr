@@ -8,6 +8,8 @@ import NotificationPanel from './components/NotificationPanel';
 import TuningLogView from './pages/TuningLogView';
 import SettingsView from './components/SettingsView';
 import ReviewCenterView from './pages/ReviewCenterView';
+import PipelineQueuePanel from './components/PipelineQueuePanel';
+import { redoPipelineJob } from './lib/pipelineQueue';
 import ErrorBoundary from './components/ErrorBoundary';
 import { useReviewCenter } from './hooks/useReviewCenter';
 import { companyOpportunityKey } from './lib/reviewCenter';
@@ -118,6 +120,10 @@ function App() {
             onRefresh={() => { void reviewCenter.refresh(); }}
             onAnswer={reviewCenter.answer}
             onVerifyPromotion={reviewCenter.verifyPromotion}
+            onRedoJob={async (slug) => {
+              await redoPipelineJob(slug);
+            }}
+            onOpenPipeline={() => setActiveTab('Pipeline')}
             onOpenJob={(jobId) => {
               // The opportunity_key is a folder slug (e.g. "workday_practice"),
               // which may not exactly match any job's id or company slug.
@@ -137,6 +143,22 @@ function App() {
                 // user can find it manually instead of a silent dead click.
                 setActiveTab('Opportunities');
               }
+            }}
+          />
+        );
+      case 'Pipeline':
+        return (
+          <PipelineQueuePanel
+            onOpenJob={(jobId) => {
+              const job = jobs.find(candidate => {
+                const slug = companyOpportunityKey(candidate.company);
+                return candidate.id === jobId
+                  || slug === jobId
+                  || jobId.startsWith(slug)
+                  || slug.startsWith(jobId);
+              });
+              if (job) setSelectedJob(job);
+              else setActiveTab('Opportunities');
             }}
           />
         );

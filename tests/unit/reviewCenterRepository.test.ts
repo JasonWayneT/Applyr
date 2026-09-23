@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
-import { readFileSync } from 'fs';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import os from 'os';
 import path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -302,5 +303,63 @@ describe('review center repository', () => {
         .prepare('SELECT answer FROM review_answer_history WHERE review_key = ?')
         .get(review.reviewKey),
     ).toEqual({ answer: 'CONFIRM_HARD' });
+  });
+
+  it('writes I have used this into work experience and does not store a no', () => {
+    const database = createDatabase();
+    createReview(database);
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'applyr-we-'));
+    const filePath = path.join(dir, 'workExperience.md');
+    writeFileSync(filePath, '# Work\n', 'utf8');
+    expect(
+      answerReviewItem(
+        'skill:servicenow_itsm',
+        'CONFIRMED_USE',
+        { writeWorkExperience: true },
+        false,
+        database,
+        filePath,
+      ),
+    ).toEqual({ ok: true, status: 'completed' });
+    expect(readFileSync(filePath, 'utf8')).toContain('- ServiceNow');
+    expect(
+      database.prepare(
+        "SELECT 1 FROM skill_memory WHERE decision = 'NOT_PRESENT'",
+      ).get(),
+    ).toBeUndefined();
+  });
+
+  it('lists a skill card only for a job that never went out because of that tool', () => {
+    const database = createDatabase();
+    database.exec(`
+      CREATE TABLE pipeline_queue (
+        slug TEXT PRIMARY KEY,
+        company TEXT,
+        title TEXT,
+        status TEXT,
+        paused_reason TEXT
+      );
+    `);
+    database.prepare(
+      `INSERT INTO pipeline_queue (slug, company, title, status, paused_reason)
+       VALUES ('acme', 'Acme', 'Product Manager', 'paused', 'conversion_risk')`,
+    ).run();
+    createReview(database);
+    const root = mkdtempSync(path.join(os.tmpdir(), 'applyr-gate-'));
+    const folder = path.join(root, 'pending_review', 'acme');
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(
+      path.join(folder, 'stage0_fit_gate.json'),
+      JSON.stringify({
+        conversion_feasibility: { reasons: ['required_unproven_named_tool:ServiceNow'] },
+      }),
+      'utf8',
+    );
+    const shown = listReviewItems('open', database, root);
+    expect(shown.map(item => item.title)).toEqual(['ServiceNow']);
+    database.prepare(
+      "UPDATE pipeline_queue SET status = 'queued', paused_reason = NULL WHERE slug = 'acme'",
+    ).run();
+    expect(listReviewItems('open', database, root)).toHaveLength(0);
   });
 });

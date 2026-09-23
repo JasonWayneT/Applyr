@@ -337,6 +337,19 @@ _TOOL_DETECTION_STOPWORDS: frozenset[str] = frozenset({
     # word of title-cased "Minimum Viable Product", which the regex treats as
     # a 3-word product name because only the first token is stopword-checked.
     "psa", "erp", "minimum",
+    # Added 2026-09-22 (CR-124): methodology tokens and header glue. Live
+    # conversion_risk parks treated "OKRs" and the chopped header
+    # "And Experience" as required products. First-token only, same as the
+    # rest of this list. "Delta Lake" and "Microsoft Dynamics 365" do not
+    # start with these words and still count.
+    "okr", "okrs", "mvp", "mvps", "and", "or",
+    # Added 2026-09-22 (nisum): LTV and CDP are category acronyms, same class
+    # as CRM. "Member 360" and "Delta Lake" do not start with these.
+    "ltv", "cdp", "cdps",
+    # Added 2026-09-22 (staritas, reltio): healthcare and data category
+    # acronyms in example lists, same class as ERP/CRM. "Reltio IDE" does
+    # not start with these and still counts.
+    "mmis", "mdm", "mcp", "nlp",
     # Added 2026-09-21 (origami_risk): domain practices are not products.
     # "Prior Risk Management and/or P&C Insurance experience" queued
     # "Have you used Risk Management?".
@@ -383,6 +396,40 @@ _ABSTRACT_NOUN_SUFFIXES: frozenset[str] = frozenset({
     "ism", "ist", "dom", "acy", "ency", "logy", "graphy", "ics",
 })
 
+# Section-header nouns. A Title-Case run that contains one of these is a
+# chopped heading ("And Experience", "Background And Experience"), not a
+# product. Checked on every token, because the regex often starts mid-header.
+# Implements FR-367 (CR-124).
+_SECTION_HEADER_TOKENS: frozenset[str] = frozenset({
+    "experience", "expertise", "qualification", "qualifications",
+    "responsibility", "responsibilities", "requirement", "requirements",
+    "background", "skill", "skills",
+})
+
+_EMPLOYER_LEGAL_SUFFIXES: frozenset[str] = frozenset({
+    "inc", "llc", "ltd", "corp", "corporation", "company", "co", "plc",
+})
+
+# Time zones and regions. Title Case makes the tool regex treat them as
+# products. Live miss (sourcegraph, 2026-09-22): Eastern Time, North America.
+_GEOGRAPHY_SURFACES: frozenset[str] = frozenset({
+    "eastern time",
+    "central time",
+    "mountain time",
+    "pacific time",
+    "north america",
+    "south america",
+    "latin america",
+    "united states",
+    "member 360",
+})
+
+# Business-model and delivery-model labels. Title Case makes the tool
+# regex treat them as products. They are not. Implements FR-367 (CR-124).
+_MARKET_MODEL_LABELS: frozenset[str] = frozenset({
+    "b2b", "b2c", "b2b2c", "b2c2b", "d2c", "c2c", "saas", "paas", "iaas",
+})
+
 # Mid-sentence capitalized token run: NOT at the start of the string/sentence
 # (a lookbehind requiring a lowercase letter/comma-space before it), one or
 # more Title-Case words, optionally followed by a version number or a
@@ -397,6 +444,67 @@ _TOOL_TOKEN_RE = re.compile(
 )
 
 
+def named_tool_surface_is_chrome(surface: str) -> bool:
+    """True when *surface* is header, methodology, or ordinary JD vocabulary.
+
+    Same first-token rules as ``looks_like_named_tool``, plus a section-header
+    token anywhere in the run. Used so a stale ``not_present`` row cannot
+    withhold authoring after the extractor should have dropped the noun.
+    Implements FR-367 (CR-124).
+    """
+    candidate = (surface or "").strip()
+    if not candidate:
+        return True
+    words = candidate.split()
+    first_word = words[0].lower()
+    if first_word in _TOOL_DETECTION_STOPWORDS or first_word in _MARKET_MODEL_LABELS:
+        return True
+    if candidate.lower() in _GEOGRAPHY_SURFACES:
+        return True
+    # EdTech, FinTech, HealthTech. Industry compounds, not products.
+    # "Dynamics" does not end in tech. "Delta Lake" is two words.
+    if len(first_word) > 4 and first_word.endswith("tech"):
+        return True
+    # "Dynamics" ends in -ics but is a product, not a field name like
+    # Biostatistics. CR-124 keeps that required line as conversion_risk.
+    if first_word != "dynamics" and any(
+        first_word.endswith(suffix) for suffix in _ABSTRACT_NOUN_SUFFIXES
+    ):
+        return True
+    header_tokens = _SECTION_HEADER_TOKENS
+    return any(word.lower().strip(".,") in header_tokens for word in words)
+
+
+def _normalize_employer_name(value: str) -> str:
+    """Lowercase employer text and drop legal suffixes."""
+    text = re.sub(r"[^a-z0-9]+", " ", (value or "").lower())
+    parts = [
+        part for part in text.split()
+        if part and part not in _EMPLOYER_LEGAL_SUFFIXES
+    ]
+    return " ".join(parts)
+
+
+def is_posting_employer_name(surface: str, company: str | None) -> bool:
+    """True when *surface* is this posting's employer, not a separate product.
+
+    Exact normalized equality, after a trailing dedupe number is removed.
+    ``Sourcegraph`` matches a gate company of ``Sourcegraph 2`` (the slug
+    collision suffix). ``Delta Lake`` does not match ``Employers``.
+    Implements FR-367 (CR-124).
+    """
+    left = _strip_dedupe_suffix(_normalize_employer_name(surface))
+    right = _strip_dedupe_suffix(_normalize_employer_name(company or ""))
+    if not left or not right:
+        return False
+    return left == right
+
+
+def _strip_dedupe_suffix(name: str) -> str:
+    """Drop a trailing queue-slug index (``sourcegraph 2`` -> ``sourcegraph``)."""
+    return re.sub(r"\s+\d+$", "", name).strip()
+
+
 def looks_like_named_tool(text: str) -> list[str]:
     """Best-effort detection of proper-noun tool/product names in *text* --
     NOT a verdict on whether Jason has the tool, just "this line appears to
@@ -406,16 +514,7 @@ def looks_like_named_tool(text: str) -> list[str]:
     hits = []
     for m in _TOOL_TOKEN_RE.finditer(text):
         candidate = m.group(0).strip()
-        first_word = candidate.split()[0].lower()
-        if first_word in _TOOL_DETECTION_STOPWORDS:
-            continue
-        # Structural guard (CR-109 follow-up 2): a word ending in an
-        # abstract-noun suffix is an English derivation (Judgment, Leadership,
-        # Prioritization, Resilience, Biostatistics), not a tool/product name. Tool names are
-        # proper nouns that don't follow English morphology. This is the
-        # structural complement to the stopword list — together they catch
-        # soft skills and traits without enumerating every English word.
-        if any(first_word.endswith(suffix) for suffix in _ABSTRACT_NOUN_SUFFIXES):
+        if named_tool_surface_is_chrome(candidate):
             continue
         # Implements FR-286 / BUG-001 (CR-109, 2026-09-02): reject JD label
         # shapes. A capitalized run immediately followed by ":" is a bullet

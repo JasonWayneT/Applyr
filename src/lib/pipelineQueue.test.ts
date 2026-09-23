@@ -13,6 +13,12 @@ describe('pipeline queue client normalize', () => {
         leaseAgeMinutes: 12,
         networking_contacts_raw: 'SECRET',
       }],
+      waiting: [{
+        slug: 'waitco',
+        company: 'Wait',
+        reason: 'The last run failed.',
+        networking_contacts_raw: 'SECRET',
+      }],
       stuck: [{
         slug: 'stuckco',
         company: 'Stuck',
@@ -27,6 +33,7 @@ describe('pipeline queue client normalize', () => {
     expect(stats.leases[0].lockedBy).toBe('harness-1');
     expect(JSON.stringify(stats)).not.toContain('SECRET');
     expect(stats.stuck[0].reason).toBe('expired_lease');
+    expect(stats.waiting[0].reason).toBe('The last run failed.');
   });
 
   it('normalizes quarantine rows without rendering payload fields', () => {

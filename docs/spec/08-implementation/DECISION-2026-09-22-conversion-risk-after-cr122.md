@@ -1,12 +1,17 @@
 ---
-status: open
+status: decided
 date: 2026-09-22
-related: CR-108, CR-109, CR-119, CR-121, CR-122, CR-123
+decision: E
+related: CR-108, CR-109, CR-119, CR-121, CR-122, CR-123, CR-124
 ---
+
+Decision (2026-09-22): ship **E**. Employer names, section-header fragments, and methodology nouns are chrome. They do not withhold. Implemented as CR-124.
+
+Superseded in part (CR-125, 2026-09-23): a missing required product no longer withholds. The name can stay in the reason list. Authoring continues and does not claim it. A card exists only when that tool is why a job never went out.
 
 # Decision brief: conversion_risk after CR-122
 
-As of 2026-09-22. For Jason to decide before more size-1 queue runs.
+As of 2026-09-22. Decided the same day: option E, CR-124.
 
 ## The question
 

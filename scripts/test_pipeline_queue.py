@@ -326,12 +326,12 @@ class TestClaimPack(QueueHarness):
 
     def test_ac449_needs_disposition_stays_paused_without_newer_dispositions(self) -> None:
         _seed(self.conn, "needsdisp")
-        paused_at = (
-            datetime.now(timezone.utc) - timedelta(minutes=5)
-        ).replace(microsecond=0).isoformat()
-        _set_paused(self.conn, "needsdisp", paused_at=paused_at)
         folder = self.data / "pending_review" / "needsdisp"
         _stage1_ready(folder)
+        paused_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=5)
+        ).replace(microsecond=0).isoformat()
+        _set_paused(self.conn, "needsdisp", paused_at=paused_at)
         (folder / "workflow_state.json").write_text(
             json.dumps({"status": "NEEDS_DISPOSITION", "active_stage": "stage2"}),
             encoding="utf-8",
@@ -366,6 +366,253 @@ class TestClaimPack(QueueHarness):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["slug"], "disposed")
         self.assertEqual(rows[0]["status"], "leased")
+
+    def test_hm_left_open_promotes_when_the_warning_is_gone(self) -> None:
+        _seed(self.conn, "stalehm")
+        folder = self.data / "pending_review" / "stalehm"
+        _stage1_ready(folder)
+        (folder / "Resume.md").write_text(
+            "## PROFESSIONAL SUMMARY\n\nBrought the teams into a unified roadmap.\n",
+            encoding="utf-8",
+        )
+        (folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nThe roadmap is the proof.\n",
+            encoding="utf-8",
+        )
+        (folder / "workflow_state.json").write_text(
+            json.dumps(
+                {
+                    "status": "NEEDS_DISPOSITION",
+                    "active_stage": "stage2",
+                    "metadata": {"hm_queue_settle": "left_open"},
+                    "stages": {
+                        "stage2": {
+                            "status": "NEEDS_DISPOSITION",
+                            "subphases": {"hm": {"status": "NEEDS_DISPOSITION"}},
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        reviews = folder / "reviews"
+        reviews.mkdir()
+        (reviews / "hm_findings.json").write_text(
+            json.dumps(
+                {
+                    "findings": [
+                        {
+                            "id": "hm.lint.warn.wrong-job company bleed.LW-032.0",
+                            "severity": "WARN",
+                            "message": "Wrong-job content bleed: documents name 'Unified'",
+                        },
+                        {
+                            "id": "hm.critical_read",
+                            "severity": "WARN",
+                            "message": "Confirm a hiring-manager read",
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (reviews / "dispositions.json").write_text(
+            json.dumps({"by_finding_id": {}, "updated_at": "2026-09-22T00:00:00Z"}),
+            encoding="utf-8",
+        )
+        _set_paused(
+            self.conn,
+            "stalehm",
+            paused_at=(datetime.now(timezone.utc) + timedelta(seconds=5))
+            .replace(microsecond=0)
+            .isoformat(),
+        )
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in rows], ["stalehm"])
+
+    def test_hm_left_open_stays_when_the_warning_is_still_live(self) -> None:
+        _seed(self.conn, "livehm")
+        folder = self.data / "pending_review" / "livehm"
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps(
+                {
+                    "status": "NEEDS_DISPOSITION",
+                    "metadata": {"hm_queue_settle": "left_open"},
+                    "stages": {
+                        "stage2": {
+                            "status": "NEEDS_DISPOSITION",
+                            "subphases": {"hm": {"status": "NEEDS_DISPOSITION"}},
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        reviews = folder / "reviews"
+        reviews.mkdir()
+        (reviews / "hm_findings.json").write_text(
+            json.dumps(
+                {
+                    "findings": [
+                        {
+                            "id": "hm.lint.warn.wrong-job company bleed.LW-032.0",
+                            "severity": "WARN",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        (reviews / "dispositions.json").write_text(
+            json.dumps({"updated_at": "2026-09-22T00:00:00Z"}),
+            encoding="utf-8",
+        )
+        _set_paused(
+            self.conn,
+            "livehm",
+            paused_at=(datetime.now(timezone.utc) + timedelta(seconds=5))
+            .replace(microsecond=0)
+            .isoformat(),
+        )
+
+        class _Hit:
+            rule_id = "LW-032"
+
+        class _Result:
+            warns = [_Hit()]
+            blocks: list[object] = []
+
+        with mock.patch(
+            "submission_linter.lint_folder",
+            return_value=[{"result": _Result()}],
+        ):
+            rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(rows, [])
+
+    def test_stage1_rollback_promotes_once_more(self) -> None:
+        _seed(self.conn, "retryrepair")
+        folder = self.data / "pending_review" / "retryrepair"
+        _stage1_ready(folder)
+        (folder / "workflow_state.json").write_text(
+            json.dumps(
+                {
+                    "status": "FAILED",
+                    "active_stage": "stage1",
+                    "stages": {"stage1": {"status": "FAILED"}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (folder / "stage1_repair_state.json").write_text(
+            json.dumps(
+                {
+                    "last_outcome": "no_progress_blocking",
+                    "no_progress_streak": 1,
+                }
+            ),
+            encoding="utf-8",
+        )
+        later = (
+            datetime.now(timezone.utc) + timedelta(seconds=5)
+        ).replace(microsecond=0).isoformat()
+        _set_paused(self.conn, "retryrepair", paused_at=later)
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in rows], ["retryrepair"])
+
+        _seed(self.conn, "stoprepair")
+        stopped = self.data / "pending_review" / "stoprepair"
+        _stage1_ready(stopped)
+        (stopped / "workflow_state.json").write_text(
+            (folder / "workflow_state.json").read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        (stopped / "stage1_repair_state.json").write_text(
+            json.dumps(
+                {
+                    "last_outcome": "no_progress_blocking",
+                    "no_progress_streak": 2,
+                }
+            ),
+            encoding="utf-8",
+        )
+        _set_paused(self.conn, "stoprepair", paused_at=later)
+        again = pq.claim_pack("w2", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(again, [])
+
+    def test_timeout_waits_then_retries_and_stops_at_four(self) -> None:
+        """FR-378: a provider timeout is claimed after the wait, not four times in a row."""
+        from datetime import datetime, timedelta, timezone
+
+        def _failed_draft(slug: str) -> Path:
+            _seed(self.conn, slug)
+            folder = self.data / "pending_review" / slug
+            _stage1_ready(folder)
+            (folder / "workflow_state.json").write_text(
+                json.dumps(
+                    {
+                        "status": "FAILED",
+                        "active_stage": "stage1",
+                        "stages": {"stage1": {"status": "FAILED"}},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return folder
+
+        waiting = _failed_draft("timeoutwait")
+        future = (datetime.now(timezone.utc) + timedelta(minutes=5)).replace(microsecond=0)
+        (waiting / "stage1_repair_state.json").write_text(
+            json.dumps(
+                {
+                    "last_outcome": "repair_timeout",
+                    "timeout_attempts": 1,
+                    "no_progress_streak": 0,
+                    "next_retry_at": future.isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+        _set_paused(self.conn, "timeoutwait", paused_at=future.isoformat())
+        self.assertEqual(
+            pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data),
+            [],
+        )
+
+        ready = _failed_draft("timeoutready")
+        past = (datetime.now(timezone.utc) - timedelta(minutes=1)).replace(microsecond=0)
+        (ready / "stage1_repair_state.json").write_text(
+            json.dumps(
+                {
+                    "last_outcome": "repair_timeout",
+                    "timeout_attempts": 1,
+                    "no_progress_streak": 0,
+                    "next_retry_at": past.isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+        _set_paused(self.conn, "timeoutready", paused_at=past.isoformat())
+        claimed = pq.claim_pack("w2", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in claimed], ["timeoutready"])
+
+        stopped = _failed_draft("timeoutstop")
+        (stopped / "stage1_repair_state.json").write_text(
+            json.dumps(
+                {
+                    "last_outcome": "repair_timeout",
+                    "timeout_attempts": 4,
+                    "no_progress_streak": 0,
+                    "next_retry_at": past.isoformat(),
+                }
+            ),
+            encoding="utf-8",
+        )
+        _set_paused(self.conn, "timeoutstop", paused_at=past.isoformat())
+        self.assertEqual(
+            pq.claim_pack("w3", size=1, conn=self.conn, data_root=self.data),
+            [],
+        )
 
     def test_needs_disposition_does_not_promote_on_same_second_mtime_noise(self) -> None:
         """FIXQUEUE 2026-09-18 item #5 regression: a real production bug where a
@@ -430,6 +677,102 @@ class TestClaimPack(QueueHarness):
         self.assertEqual(second, [])
         self.assertEqual(pq.get_row(self.conn, "rentana")["status"], "paused")
 
+    def test_conversion_risk_promotes_when_stored_reasons_are_chrome(self) -> None:
+        _seed(self.conn, "amplify")
+        _set_paused(self.conn, "amplify")
+        folder = self._write_waiting_for_input("amplify", "conversion_risk")
+        (folder / "stage0_fit_gate.json").write_text(
+            json.dumps(
+                {
+                    "company": "Amplify",
+                    "decision": "PASS",
+                    "required": [
+                        {
+                            "item": "ideally within EdTech or a B2B2C environment",
+                            "evidence_level": 0,
+                        }
+                    ],
+                    "not_present_named_tools": [
+                        {"skill_key": "edtech", "display_name": "EdTech"},
+                        {"skill_key": "b2b2c", "display_name": "B2B2C"},
+                    ],
+                    "conversion_feasibility": {
+                        "verdict": "risk",
+                        "reasons": ["not_present_required_tool:EdTech"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in rows], ["amplify"])
+
+    def test_conversion_risk_promotes_when_example_list_is_anchored(self) -> None:
+        _seed(self.conn, "eso")
+        _set_paused(self.conn, "eso")
+        folder = self._write_waiting_for_input("eso", "conversion_risk")
+        (folder / "stage0_fit_gate.json").write_text(
+            json.dumps(
+                {
+                    "company": "ESO",
+                    "decision": "PASS",
+                    "required": [
+                        {
+                            "item": (
+                                "Hands-on experience using AI tools (for example, "
+                                "Claude, Magic Patterns, or similar platforms)."
+                            ),
+                            "evidence_level": 0,
+                        }
+                    ],
+                    "conversion_feasibility": {
+                        "verdict": "risk",
+                        "reasons": [
+                            "not_present_required_tool:Magic Patterns",
+                            "required_unproven_named_tool:Magic Patterns",
+                        ],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        with mock.patch(
+            "build_stage0_fit_gate._load_skills_catalog_terms_shared",
+            return_value=frozenset({"Claude"}),
+        ):
+            rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in rows], ["eso"])
+
+    def test_conversion_risk_missing_tool_promotes(self) -> None:
+        """A required product missing from work experience is a card, not a pause."""
+        _seed(self.conn, "velera")
+        _set_paused(self.conn, "velera")
+        folder = self._write_waiting_for_input("velera", "conversion_risk")
+        (folder / "stage0_fit_gate.json").write_text(
+            json.dumps(
+                {
+                    "company": "Velera",
+                    "decision": "PASS",
+                    "required": [
+                        {
+                            "item": "Experience with Microsoft Dynamics 365",
+                            "evidence_level": 0,
+                        }
+                    ],
+                    "not_present_named_tools": [
+                        {"skill_key": "dynamics", "display_name": "Dynamics"},
+                    ],
+                    "conversion_feasibility": {
+                        "verdict": "risk",
+                        "reasons": ["required_unproven_named_tool:Dynamics"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual([row["slug"] for row in rows], ["velera"])
+
     def test_conversion_risk_stays_paused_without_apply_anyway(self) -> None:
         _seed(self.conn, "velosio")
         _set_paused(self.conn, "velosio")
@@ -453,7 +796,8 @@ class TestClaimPack(QueueHarness):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["slug"], "omnissa")
 
-    def test_waiting_for_input_review_center_stays_paused_while_questions_open(self) -> None:
+    def test_open_hard_gate_card_does_not_hold_the_queue(self) -> None:
+        """FR-381: an open hard-gate card is not a reason to stay paused."""
         _seed(self.conn, "casper_studios")
         _set_paused(self.conn, "casper_studios")
         self._write_waiting_for_input("casper_studios", "review_center")
@@ -469,8 +813,68 @@ class TestClaimPack(QueueHarness):
         )
         self.conn.commit()
         rows = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
-        self.assertEqual(rows, [])
-        self.assertEqual(pq.get_row(self.conn, "casper_studios")["status"], "paused")
+        self.assertEqual([row["slug"] for row in rows], ["casper_studios"])
+
+    def test_decide_holds_skips_under_40_and_queues_a_pass(self) -> None:
+        """FR-381: a stored score under 40 is a skip. 55 goes back to queued."""
+        _seed(self.conn, "lowfit")
+        _set_paused(self.conn, "lowfit")
+        low = self._write_waiting_for_input("lowfit", "review_center")
+        (low / "stage0_fit_gate.json").write_text(
+            json.dumps({"decision": "PASS", "fit_score": 38, "required": []}),
+            encoding="utf-8",
+        )
+        _seed(self.conn, "okfit")
+        _set_paused(self.conn, "okfit")
+        ok = self._write_waiting_for_input("okfit", "review_center")
+        (ok / "stage0_fit_gate.json").write_text(
+            json.dumps({"decision": "PASS", "fit_score": 55, "required": []}),
+            encoding="utf-8",
+        )
+        _seed(self.conn, "broken")
+        _set_paused(self.conn, "broken")
+        self._write_waiting_for_input("broken", "review_center")
+        self.conn.execute(
+            "UPDATE pipeline_queue SET last_workflow_status = 'FAILED' WHERE slug = 'broken'"
+        )
+        self.conn.execute(
+            "CREATE TABLE pending_skill_confirmations (id TEXT PRIMARY KEY)"
+        )
+        self.conn.commit()
+        outcome = pq.decide_queue_holds(conn=self.conn, data_root=self.data)
+        self.assertIn("lowfit", outcome["skip"])
+        self.assertEqual(pq.get_row(self.conn, "lowfit")["paused_reason"], "decided_skip")
+        self.assertIn("okfit", outcome["continue"])
+        self.assertEqual(pq.get_row(self.conn, "okfit")["status"], "queued")
+        self.assertIn("broken", outcome["leave"])
+        self.assertEqual(pq.get_row(self.conn, "broken")["status"], "paused")
+        claimed = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertNotIn("lowfit", [row["slug"] for row in claimed])
+
+    def test_domain_years_on_the_jd_skips_without_a_stored_score(self) -> None:
+        """FR-381: healthcare years on the posting skip even when the gate is empty."""
+        _seed(self.conn, "healthco")
+        _set_paused(self.conn, "healthco")
+        folder = self._write_waiting_for_input("healthco", "review_center")
+        (folder / "Original_JD.txt").write_text(
+            "Minimum of 3 years of experience in healthcare technology is required.\n",
+            encoding="utf-8",
+        )
+        (folder / "stage0_fit_gate.json").write_text("{}", encoding="utf-8")
+        _seed(self.conn, "paymentsco")
+        _set_paused(self.conn, "paymentsco")
+        self._write_waiting_for_input("paymentsco", "review_center")
+        self.conn.execute(
+            "CREATE TABLE pending_skill_confirmations (id TEXT PRIMARY KEY)"
+        )
+        self.conn.commit()
+        outcome = pq.decide_queue_holds(conn=self.conn, data_root=self.data)
+        self.assertIn("healthco", outcome["skip"])
+        self.assertEqual(
+            pq.get_row(self.conn, "healthco")["paused_reason"], "decided_skip"
+        )
+        self.assertIn("paymentsco", outcome["continue"])
+        self.assertEqual(pq.get_row(self.conn, "paymentsco")["status"], "queued")
 
     def test_waiting_for_input_review_center_promotes_when_only_skill_cards_open(self) -> None:
         """CR-122 / AC-469: open skill_presence does not hold the CSV queue."""
@@ -551,6 +955,28 @@ class TestClaimPack(QueueHarness):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["slug"], "raya")
         self.assertEqual(rows[0]["status"], "leased")
+
+    def test_review_center_resume_marker_blocks_another_claim(self) -> None:
+        _seed(self.conn, "raya")
+        _set_paused(self.conn, "raya")
+        folder = self._write_waiting_for_input("raya", "review_center")
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS pending_skill_confirmations ("
+            "id TEXT PRIMARY KEY, opportunity_key TEXT, status TEXT, "
+            "question_type TEXT, resolved_at TEXT, updated_at TEXT)"
+        )
+        answered = "2026-09-22T12:00:00+00:00"
+        self.conn.execute(
+            "INSERT INTO pending_skill_confirmations "
+            "(id, opportunity_key, status, question_type, resolved_at, updated_at) "
+            "VALUES ('q-marker', 'raya', 'completed', 'skill_presence', ?, ?)",
+            (answered, answered),
+        )
+        self.conn.commit()
+        pq.write_review_center_resumed_marker(folder)
+        rows = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(rows, [])
+        self.assertEqual(pq.get_row(self.conn, "raya")["status"], "paused")
 
     def test_failed_never_auto_promotes(self) -> None:
         _seed(self.conn, "failedjob")
@@ -654,7 +1080,26 @@ class TestClaimPack(QueueHarness):
         self.assertEqual(first, [])
         self.assertEqual(pq.get_row(self.conn, "missingexcerpt")["status"], "paused")
 
-    def test_ready_to_finalize_never_auto_promotes(self) -> None:
+    def test_failed_text_to_id_provenance_is_claimed(self) -> None:
+        """A cite map is not a finished failure. Verify can store it as rows."""
+        _seed(self.conn, "amplify")
+        _set_paused(self.conn, "amplify")
+        folder = self.data / "pending_review" / "amplify"
+        folder.mkdir(parents=True)
+        (folder / "Resume.md").write_text("# Name\n\n* Shipped the workflow.\n", encoding="utf-8")
+        (folder / "claim_provenance.json").write_text(
+            json.dumps({"resume": {"Shipped the workflow.": "ACC-101"}}),
+            encoding="utf-8",
+        )
+        (folder / "workflow_state.json").write_text(
+            json.dumps({"status": "FAILED", "active_stage": "stage1"}),
+            encoding="utf-8",
+        )
+        first = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(len(first), 1)
+        self.assertEqual(first[0]["slug"], "amplify")
+
+    def test_ready_to_finalize_is_claimed_so_it_can_be_saved(self) -> None:
         _seed(self.conn, "rentana")
         _set_paused(self.conn, "rentana")
         self.conn.execute(
@@ -679,11 +1124,11 @@ class TestClaimPack(QueueHarness):
             encoding="utf-8",
         )
         first = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
-        self.assertEqual(first, [])
+        self.assertEqual([row["slug"] for row in first], ["rentana"])
         row = pq.get_row(self.conn, "rentana")
         assert row is not None
-        self.assertEqual(row["status"], "paused")
-        self.assertEqual(row["paused_reason"], pq.PAUSED_REASON_READY_TO_FINALIZE)
+        self.assertEqual(row["status"], "leased")
+        self.assertIsNone(row["paused_reason"])
 
     def test_mark_done_from_ready_to_finalize(self) -> None:
         _seed(self.conn, "rentana")
@@ -955,6 +1400,34 @@ class TestManualRequeue(QueueHarness):
         self.assertIn("apply_anyway", str(err.exception))
         self.assertEqual(pq.get_row(self.conn, "velosio")["status"], "paused")
 
+    def test_requeue_chrome_only_conversion_risk_failed_does_not_need_apply_anyway(self) -> None:
+        self._paused_failed("amplify")
+        self._write_stage0_pause(
+            "amplify",
+            {"status": "COMPLETE", "result": {"pause_kind": "conversion_risk"}},
+        )
+        folder = self.data / "pending_review" / "amplify"
+        (folder / "stage0_fit_gate.json").write_text(
+            json.dumps(
+                {
+                    "company": "Amplify",
+                    "conversion_feasibility": {
+                        "verdict": "risk",
+                        "reasons": ["not_present_required_tool:EdTech"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        row = pq.requeue_paused(
+            "amplify",
+            reason="stage 1 verify failed after chrome hold",
+            conn=self.conn,
+            data_root=self.data,
+        )
+        self.assertEqual(row["status"], "queued")
+        self.assertFalse((folder / "conversion_risk_apply_anyway.json").exists())
+
     def test_requeue_conversion_risk_apply_anyway_writes_marker(self) -> None:
         self._paused_waiting("omnissa")
         self._write_stage0_pause(
@@ -1078,14 +1551,13 @@ class TestManualRequeue(QueueHarness):
             "VALUES ('open_cards', 'open', 'hard_gate_review', NULL, NULL)"
         )
         self.conn.commit()
-        with self.assertRaises(pq.RequeueRefused) as open_cards:
-            pq.requeue_paused(
-                "open_cards",
-                reason="no",
-                conn=self.conn,
-                data_root=self.data,
-            )
-        self.assertIn("not an eligible pause", str(open_cards.exception))
+        released = pq.requeue_paused(
+            "open_cards",
+            reason="no",
+            conn=self.conn,
+            data_root=self.data,
+        )
+        self.assertEqual(released["status"], "queued")
 
     def test_requeue_refuses_leased_in_progress_done_and_ready_to_finalize(self) -> None:
         _seed(self.conn, "leased_job")

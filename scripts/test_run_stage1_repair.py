@@ -271,7 +271,9 @@ class TestRepairStreamCaps(unittest.TestCase):
             )
             self.assertEqual(state["last_outcome"], "repair_timeout")
             self.assertEqual(state["last_repair_reason"], "event_count")
-            self.assertEqual(state["no_progress_streak"], 1)
+            self.assertEqual(state["no_progress_streak"], 0)
+            self.assertEqual(state["timeout_attempts"], 1)
+            self.assertTrue(state.get("next_retry_at"))
             self.assertFalse(result.get("wrote_files"))
 
     def test_valid_artifacts_are_written_then_requeued(self) -> None:
@@ -381,6 +383,106 @@ class TestRepairStreamCaps(unittest.TestCase):
             saved = (folder / repair.ATTEMPTS_DIR / "1.txt").read_text(encoding="utf-8")
             self.assertEqual(saved, text)
 
+    def test_v2_file_without_company_is_filled_from_the_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "amplify"
+            folder.mkdir()
+            (folder / "authoring_packet.json").write_text(
+                json.dumps({"company": "Amplify"}),
+                encoding="utf-8",
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "resume_claims": [
+                            {"bullet": "Shipped it.", "claim_ids": ["ACC-102-LEAD"]}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            self.assertTrue(repair.heal_provenance_file(folder))
+            stored = json.loads((folder / "claim_provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(stored["company"], "Amplify")
+            self.assertFalse(repair.heal_provenance_file(folder))
+
+    def test_text_to_id_map_is_stored_as_v2_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "amplify"
+            folder.mkdir()
+            (folder / "Resume.md").write_text("OLD\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("OLD\n", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text("{}\n", encoding="utf-8")
+            text = (
+                "```Resume.md\n# Name\nRepaired resume body\n```\n"
+                "```CoverLetter.md\nDear Hiring Manager,\nRepaired letter body\n```\n"
+                "```claim_provenance.json\n"
+                '{"resume": {"Repaired resume body": "ACC-117-PENDO"}, '
+                '"cover_letter": {"Repaired letter body": "ACC-102-LEAD"}}\n'
+                "```\n"
+            )
+            result = repair.apply_repair_result(
+                folder,
+                {"outcome": "ok", "reason": None, "event_count": 1, "wall_seconds": 1, "text": text},
+            )
+            self.assertEqual(result["outcome"], "ok")
+            stored = json.loads((folder / "claim_provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(stored["resume_claims"][0]["claim_ids"], ["ACC-117-PENDO"])
+            self.assertNotIn("resume", stored)
+
+    def test_flat_text_to_id_map_is_split_across_documents(self) -> None:
+        """Live miss: nisum_2 returned cites with no resume or cover_letter key."""
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "nisum_2"
+            folder.mkdir()
+            (folder / "Resume.md").write_text("OLD\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("OLD\n", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text("{}\n", encoding="utf-8")
+            text = (
+                "```Resume.md\n# Name\n\n## PROFESSIONAL EXPERIENCE\n"
+                "- Organized the roadmap under strategic pillars.\n```\n"
+                "```CoverLetter.md\nDear Hiring Manager,\n\n"
+                "I organized the roadmap under strategic pillars.\n```\n"
+                "```claim_provenance.json\n"
+                '{"Organized the roadmap under strategic pillars.": "ACC-179-ROADMAP", '
+                '"I organized the roadmap under strategic pillars.": "ACC-179-ROADMAP"}\n'
+                "```\n"
+            )
+            result = repair.apply_repair_result(
+                folder,
+                {"outcome": "ok", "reason": None, "event_count": 1, "wall_seconds": 1, "text": text},
+            )
+            self.assertNotEqual(result.get("reason"), "invalid_provenance")
+            self.assertTrue(result.get("wrote_files"))
+            stored = json.loads((folder / "claim_provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(stored["resume_claims"][0]["claim_ids"], ["ACC-179-ROADMAP"])
+            self.assertEqual(
+                stored["cover_letter_claims"][0]["sentence"],
+                "I organized the roadmap under strategic pillars.",
+            )
+
+    def test_empty_provenance_object_does_not_replace_the_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory) / "amplify"
+            folder.mkdir()
+            (folder / "Resume.md").write_text("OLD RESUME\n", encoding="utf-8")
+            (folder / "CoverLetter.md").write_text("OLD LETTER\n", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text(
+                '{"resume_claims": [{"bullet": "old", "claim_ids": ["ACC-101"]}]}\n',
+                encoding="utf-8",
+            )
+            text = (
+                "```Resume.md\n# Name\nRepaired resume body\n```\n"
+                "```CoverLetter.md\nDear Hiring Manager,\nRepaired letter body\n```\n"
+                "```claim_provenance.json\n{}\n```\n"
+            )
+            result = repair.apply_repair_result(
+                folder,
+                {"outcome": "ok", "reason": None, "event_count": 1, "wall_seconds": 1, "text": text},
+            )
+            self.assertEqual(result["reason"], "invalid_provenance")
+            self.assertEqual((folder / "Resume.md").read_text(encoding="utf-8"), "OLD RESUME\n")
+
     def test_malformed_response_is_rejected_and_raw_saved(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory) / "binance"
@@ -473,7 +575,9 @@ class TestRepairStreamCaps(unittest.TestCase):
                 self.assertEqual(row["status"], "paused")
                 self.assertEqual(row["last_workflow_status"], "FAILED")
                 state = json.loads((folder / "stage1_repair_state.json").read_text(encoding="utf-8"))
-                self.assertEqual(state["no_progress_streak"], 1)
+                self.assertEqual(state["no_progress_streak"], 0)
+                self.assertEqual(state["timeout_attempts"], 1)
+                self.assertTrue(state.get("next_retry_at"))
             finally:
                 conn.close()
 

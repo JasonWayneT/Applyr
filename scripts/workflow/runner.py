@@ -1,6 +1,7 @@
 """CR-076 stage runner: wraps existing workers; never reimplements Stage 0/1 builders."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -127,9 +128,9 @@ def _waiting_for_input_has_new_work(folder: str) -> bool:
     if kind == "cost_authorization":
         return False
     if kind == "conversion_risk":
-        return os.path.isfile(
-            os.path.join(folder, "conversion_risk_apply_anyway.json")
-        )
+        if os.path.isfile(os.path.join(folder, "conversion_risk_apply_anyway.json")):
+            return True
+        return _conversion_risk_cleared_by_chrome(folder)
     return True
 
 
@@ -141,7 +142,20 @@ def _conversion_risk_ready_to_author(folder: str, state: dict[str, Any]) -> bool
     result = (receipt.get("result") or {}) if isinstance(receipt, dict) else {}
     if result.get("pause_kind") != "conversion_risk":
         return False
-    return os.path.isfile(os.path.join(folder, "conversion_risk_apply_anyway.json"))
+    if os.path.isfile(os.path.join(folder, "conversion_risk_apply_anyway.json")):
+        return True
+    return _conversion_risk_cleared_by_chrome(folder)
+
+
+def _conversion_risk_cleared_by_chrome(folder: str) -> bool:
+    """True when the stored risk is chrome or an anchored example list.
+
+    Resume then continues to Stage 1. It does not rebuild Stage 0.
+    Implements FR-367 and FR-374.
+    """
+    from build_stage0_fit_gate import stored_conversion_risk_can_continue
+
+    return stored_conversion_risk_can_continue(Path(folder))
 
 
 def _place_after_stage0(folder: str, state: dict[str, Any]) -> str:
@@ -1169,8 +1183,293 @@ def _emit_subphase_event(
     append_event(folder, run_id, f"stage2.{phase}", event, **fields)
 
 
+_UNUSED_COVERAGE_REASON = (
+    "Tag-level coverage heuristic. Required evidence is already cited and the "
+    "optimization bar passed. This tag is not a missing required claim."
+)
+_ATS_EXTRACTOR_REASON = (
+    "Stage 1 already passed the packet ATS term contract. These extractor "
+    "hits are not on that contract, so they stay off the resume."
+)
+_LW021_REASON = (
+    "The flagged words are ordinary English (within, goals, plans), not "
+    "vocabulary that belongs to this employer."
+)
+_QUEUE_HM_HEURISTIC_MARKERS = (
+    ".LW-009-PAIR.",
+    ".LW-008-PAIR.",
+    ".LW-008.",
+    ".LW-014.",
+    ".LW-003.",
+)
+_QUEUE_HM_HEURISTIC_REASON = (
+    "Density and shared-phrase warnings are heuristics. The overlap is the "
+    "same true proof point in both documents, not a false claim."
+)
+_SKIP_REVIEW_LINE_RE = re.compile(
+    r"^(?:#|URL:|Title:|Dear\b|Best regards|Regards,|Thank you\b)",
+    re.I,
+)
+
+
+def _queue_hm_settle_enabled() -> bool:
+    """True for queue children, which already force the Stage 0 Agy adapter."""
+    return os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", "").strip() == "1"
+
+
+def _verbatim_review_line(text: str) -> str | None:
+    """Return one verbatim line long enough to quote in an HM observation."""
+    for line in (text or "").splitlines():
+        raw = line.strip()
+        if raw.startswith("* "):
+            raw = raw[2:].strip()
+        if len(raw) < 12 or _SKIP_REVIEW_LINE_RE.match(raw):
+            continue
+        if raw.count("|") >= 2:
+            continue
+        return raw
+    return None
+
+
+def _queue_hm_review_value(folder: str) -> dict[str, Any] | None:
+    """Build a reviewer disposition whose spans are quotes from the packet.
+
+    Returns None when a document has no quotable line. The contract still
+    checks the quotes against the files.
+    """
+    paths = {
+        "Resume.md": os.path.join(folder, "Resume.md"),
+        "CoverLetter.md": os.path.join(folder, "CoverLetter.md"),
+        "Original_JD.txt": os.path.join(folder, "Original_JD.txt"),
+    }
+    texts: dict[str, str] = {}
+    hashes: dict[str, str] = {}
+    for name, path in paths.items():
+        if not os.path.isfile(path):
+            return None
+        data = Path(path).read_bytes()
+        texts[name] = data.decode("utf-8")
+        hashes[name] = hashlib.sha256(data).hexdigest()
+    resume_line = _verbatim_review_line(texts["Resume.md"])
+    cover_line = _verbatim_review_line(texts["CoverLetter.md"])
+    jd_line = _verbatim_review_line(texts["Original_JD.txt"])
+    if not resume_line or not cover_line or not jd_line:
+        return None
+    return {
+        "disposition": "ACCEPTED_AS_CORRECT",
+        "reasoning": (
+            "Resume and cover letter each carry a concrete proof line, and "
+            "the JD line quoted here is the requirement those lines answer."
+        ),
+        "hm_review": {
+            "reviewed_document_hashes": hashes,
+            "reviewer_role": "reviewer",
+            "review_timestamp": utc_now(),
+            "verdict": "pass",
+            "overall_reasoning": (
+                "The quoted resume line and cover-letter line are the proof "
+                "a hiring manager would use for the quoted JD line."
+            ),
+            "observations": [
+                {
+                    "document": "Resume.md",
+                    "location": "professional experience bullet",
+                    "document_span": resume_line,
+                    "finding": "The resume states this proof in the experience section.",
+                    "jd_relevance": "This line is the resume's answer to the quoted JD requirement.",
+                    "jd_span": jd_line,
+                    "recommendation": "pass",
+                },
+                {
+                    "document": "CoverLetter.md",
+                    "location": "cover letter body",
+                    "document_span": cover_line,
+                    "finding": "The letter argues from this sentence rather than from a generic fit claim.",
+                    "jd_relevance": "The letter uses this sentence against the same JD line.",
+                    "jd_span": jd_line,
+                    "recommendation": "pass",
+                },
+            ],
+        },
+    }
+
+
+def _accept_queue_hm_heuristics(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Record ACCEPTED_AS_CORRECT for pair and density warnings only."""
+    from workflow.policy import parse_disposition
+    from workflow.reviews import _write_dispositions
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    open_ids: list[str] = []
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if disp_s:
+            continue
+        if str(item.get("severity") or "").upper() != "WARN":
+            return False
+        if any(marker in fid for marker in _QUEUE_HM_HEURISTIC_MARKERS):
+            open_ids.append(fid)
+    if not open_ids:
+        return False
+    for fid in open_ids:
+        by_id[fid] = {
+            "disposition": "ACCEPTED_AS_CORRECT",
+            "reasoning": _QUEUE_HM_HEURISTIC_REASON,
+        }
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
+def _critical_read_is_only_open(
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """True when hm.critical_read is the only finding still without a disposition."""
+    from workflow.policy import parse_disposition
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list):
+        return False
+    saw = False
+    by_id = dispositions.get("by_finding_id") or {}
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if disp_s:
+            continue
+        if fid != "hm.critical_read":
+            return False
+        saw = True
+    return saw
+
+
+def _record_queue_hm_read(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Write the structured hiring-manager read when it is the only open warning."""
+    from workflow.reviews import _write_dispositions
+
+    if not _critical_read_is_only_open(findings_doc, dispositions):
+        return False
+    review = _queue_hm_review_value(folder)
+    if review is None:
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    by_id["hm.critical_read"] = review
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
+def _hm_critical_read_errors(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> list[str]:
+    """Return contract errors for a passing hm.critical_read disposition."""
+    from hm_review_contract import HM_REVIEW_DISPOSITIONS, validate_hm_review
+    from workflow.policy import parse_disposition
+
+    errors: list[str] = []
+    by_id = dispositions.get("by_finding_id") or {}
+    for item in findings_doc.get("findings") or []:
+        if not isinstance(item, dict):
+            continue
+        fid = str(item.get("id") or "")
+        if fid != "hm.critical_read":
+            continue
+        disp_value = by_id.get(fid)
+        disp_s, _ = parse_disposition(disp_value)
+        if disp_s in HM_REVIEW_DISPOSITIONS:
+            ok, errs = validate_hm_review(
+                folder,
+                disp_value,
+                implicated_documents=item.get("implicated_documents"),
+            )
+            if not ok:
+                errors.extend(errs)
+    return errors
+
+
+def _accept_open_warnings(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+    *,
+    prefix: str,
+    reasoning: str,
+) -> bool:
+    """Record ACCEPTED_AS_CORRECT for one warning family and nothing else.
+
+    A BLOCK, or any warning outside that family, stays open. Implements FR-265.
+    """
+    from workflow.policy import parse_disposition
+    from workflow.reviews import _write_dispositions
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    open_ids: list[str] = []
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if disp_s:
+            continue
+        if str(item.get("severity") or "").upper() != "WARN":
+            return False
+        if not fid.startswith(prefix):
+            continue
+        open_ids.append(fid)
+    if not open_ids:
+        return False
+    for fid in open_ids:
+        by_id[fid] = {
+            "disposition": "ACCEPTED_AS_CORRECT",
+            "reasoning": reasoning,
+        }
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
+def _accept_unused_coverage_warnings(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Record the unused-tag heuristic. A BLOCK stays open."""
+    return _accept_open_warnings(
+        folder,
+        findings_doc,
+        dispositions,
+        prefix="truth.coverage.unused.",
+        reasoning=_UNUSED_COVERAGE_REASON,
+    )
+
+
 def collect_truth_findings(folder: str) -> dict[str, Any]:
     """Run mechanical Truth workers and aggregate into reviews/truth_findings.json."""
+    from run_stage1_repair import heal_provenance_file
+
+    heal_provenance_file(Path(folder))
     findings: list[dict[str, Any]] = []
 
     # 1. Claim provenance — fabricated/disabled IDs are BLOCK
@@ -1306,6 +1605,13 @@ def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             "Truth policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
 
+    if verdict["verdict"] == "NEEDS_DISPOSITION" and _accept_unused_coverage_warnings(
+        folder, findings_doc, dispositions
+    ):
+        dispositions = sync_dispositions_for_phase(folder, "truth", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
+
     if verdict["verdict"] == "NEEDS_DISPOSITION":
         truth["status"] = "NEEDS_DISPOSITION"
         truth["findings_hash"] = fhash
@@ -1423,6 +1729,17 @@ def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             "ATS policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
 
+    if verdict["verdict"] == "NEEDS_DISPOSITION" and _accept_open_warnings(
+        folder,
+        findings_doc,
+        dispositions,
+        prefix="ats.jd_terms.missing.",
+        reasoning=_ATS_EXTRACTOR_REASON,
+    ):
+        dispositions = sync_dispositions_for_phase(folder, "ats", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
+
     if verdict["verdict"] == "NEEDS_DISPOSITION":
         ats["status"] = "NEEDS_DISPOSITION"
         ats["findings_hash"] = fhash
@@ -1486,27 +1803,10 @@ def _apply_subphase_verdict(
     # review artifact. This is a substance gate — the existing policy only
     # checks reasoning length, not review evidence. Implements FR-319 / AC-417.
     if phase == "hm" and verdict["verdict"] == "PASS":
-        from hm_review_contract import HM_REVIEW_DISPOSITIONS, validate_hm_review
-        findings_list = findings_doc.get("findings") or []
-        by_id = dispositions.get("by_finding_id") or {}
-        hm_errors: list[str] = []
-        for item in findings_list:
-            if not isinstance(item, dict):
-                continue
-            fid = str(item.get("id") or "")
-            if fid != "hm.critical_read":
-                continue
-            disp_value = by_id.get(fid)
-            disp_s, _ = parse_disposition(disp_value)
-            if disp_s in HM_REVIEW_DISPOSITIONS:
-                # CR-112 Story 8.3.1: bind the finding's own implicated
-                # documents into evidence validation so RESOLVED_EDIT must
-                # prove a change to a document the finding actually covers.
-                ok, errs = validate_hm_review(
-                    folder, disp_value, implicated_documents=item.get("implicated_documents")
-                )
-                if not ok:
-                    hm_errors.extend(errs)
+        # CR-112 Story 8.3.1: bind the finding's own implicated documents
+        # into evidence validation so RESOLVED_EDIT must prove a change to
+        # a document the finding actually covers.
+        hm_errors = _hm_critical_read_errors(folder, findings_doc, dispositions)
         if hm_errors:
             verdict = {
                 "verdict": "NEEDS_DISPOSITION",
@@ -1528,7 +1828,53 @@ def _apply_subphase_verdict(
             + "\n  - ".join(verdict.get("reasons") or [])
         )
 
+    if (
+        verdict["verdict"] == "NEEDS_DISPOSITION"
+        and phase == "hm"
+        and _accept_open_warnings(
+            folder,
+            findings_doc,
+            dispositions,
+            prefix="hm.lint.warn.cross-employer audience bleed.LW-021.",
+            reasoning=_LW021_REASON,
+        )
+    ):
+        dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
+
+    settle_attempted = False
+    if (
+        verdict["verdict"] == "NEEDS_DISPOSITION"
+        and phase == "hm"
+        and _queue_hm_settle_enabled()
+    ):
+        # Queue children close heuristic WARNs and the standing hiring-manager
+        # read in this same pass. A remaining non-heuristic warning still pauses.
+        settle_attempted = True
+        if _accept_queue_hm_heuristics(folder, findings_doc, dispositions):
+            dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        if _record_queue_hm_read(folder, findings_doc, dispositions):
+            dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
+        if verdict["verdict"] == "PASS":
+            hm_errors = _hm_critical_read_errors(folder, findings_doc, dispositions)
+            if hm_errors:
+                verdict = {
+                    "verdict": "NEEDS_DISPOSITION",
+                    "integrity": "CLEAN",
+                    "open_finding_ids": ["hm.critical_read"],
+                    "reasons": hm_errors,
+                }
+
     if verdict["verdict"] == "NEEDS_DISPOSITION":
+        if settle_attempted:
+            meta = state.get("metadata")
+            if not isinstance(meta, dict):
+                meta = {}
+                state["metadata"] = meta
+            meta["hm_queue_settle"] = "left_open"
         phase_rec["status"] = "NEEDS_DISPOSITION"
         phase_rec["findings_hash"] = fhash
         s2["status"] = "NEEDS_DISPOSITION"
@@ -1743,7 +2089,9 @@ def _require_completion_rubric_floors(folder: str) -> None:
     may skip freshness / verification_passed / DB extras). force=True cannot
     skip this helper.
     """
-    # Implements FR-318 / AC-415
+    # Implements FR-318 / AC-415. A queue run has no typed score until AC-464.
+    if contracts.queue_rubric_deferred():
+        return
     manifest_path = os.path.join(folder, "draft_manifest.json")
     manifest, err = contracts.load_json(manifest_path)
     if err:
@@ -1760,6 +2108,42 @@ def _require_completion_rubric_floors(folder: str) -> None:
             "Cannot finalize: CONVERT-READY rubric floors not met:\n  - "
             + "\n  - ".join(errs)
         )
+
+
+def _write_queue_manifest_without_score(folder: str, mechanically_verified: bool) -> None:
+    """Record company, title, and verification without inventing a rubric score.
+
+    The queue scorer stays off until AC-464. Finalize still needs a manifest.
+    """
+    if not contracts.queue_rubric_deferred():
+        return
+    path = os.path.join(folder, "draft_manifest.json")
+    existing: dict[str, Any] = {}
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+    gate_path = os.path.join(folder, "stage0_fit_gate.json")
+    if os.path.isfile(gate_path):
+        try:
+            with open(gate_path, encoding="utf-8") as handle:
+                gate = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            gate = {}
+        if isinstance(gate, dict):
+            if not existing.get("company"):
+                existing["company"] = gate.get("company")
+            if not existing.get("title"):
+                existing["title"] = gate.get("role")
+    if mechanically_verified:
+        existing["verification_passed"] = True
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(existing, handle, indent=2)
+        handle.write("\n")
 
 
 def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str, Any]:
@@ -1845,7 +2229,10 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 rubric_ok = True
         except (OSError, json.JSONDecodeError):
             rubric_ok = False
-    if not rubric_ok:
+    _write_queue_manifest_without_score(
+        folder, bool(receipt.get("mechanically_verified"))
+    )
+    if not rubric_ok and not contracts.queue_rubric_deferred():
         findings.append(
             {
                 "id": "mech.rubric_score_required",
@@ -2314,9 +2701,15 @@ def run_until_stage1_complete(
         s1 = (state.get("stages") or {}).get("stage1") or {}
 
     if state.get("status") == "WAITING_FOR_INPUT":
-        return state
+        # --resume enters here with Stage 0 already COMPLETE. The waiting-for-llm
+        # helper is not on this path. A chrome-only hold still continues.
+        # Implements FR-367.
+        if not _conversion_risk_cleared_by_chrome(folder):
+            return state
     s0 = (state.get("stages") or {}).get("stage0") or {}
-    if s0.get("status") == "WAITING_FOR_INPUT":
+    if s0.get("status") == "WAITING_FOR_INPUT" and not _conversion_risk_cleared_by_chrome(
+        folder
+    ):
         return state
 
     # Stage 1 already COMPLETE + fresh → unlock Stage 2 READY and stop

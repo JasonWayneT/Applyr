@@ -220,12 +220,13 @@ def _load_anchor_vocab() -> set[str]:
 from blocked_tools import HARD_BLOCKED_TOOLS as _HARD_BLOCKED_TOOLS  # noqa: E402
 from blocked_tools import hard_blocked_tool_pattern as _shared_hard_tool_pattern  # noqa: E402
 from blocked_tools import load_skills_catalog_terms as _load_skills_catalog_terms_shared  # noqa: E402
+from blocked_tools import is_posting_employer_name as _is_posting_employer_name  # noqa: E402
 from blocked_tools import looks_like_named_tool as _looks_like_named_tool  # noqa: E402
+from blocked_tools import (  # noqa: E402
+    named_tool_surface_is_chrome as _named_tool_surface_is_chrome,
+)
 from stage0_confirmations import (  # noqa: E402
     canonical_skill_key,
-    create_hard_gate_review,
-    create_skill_confirmation,
-    get_hard_gate_decision,
     get_skill_memory,
     model_flagged_named_skill,
     named_skill_candidates,
@@ -303,7 +304,7 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
     ("preferred", re.compile(
         r"^(?:#+\s*)?"
         r"(?:preferred\s+(?:qualifications?|skills?|experience|requirements?)|"
-        r"nice\s+to\s+have|also\s+great\s+to\s+have|great\s+to\s+have|"
+        r"nice\s+to\s+haves?|also\s+great\s+to\s+have|great\s+to\s+have|"
         r"bonus\s+(?:points?|if|qualifications?)|"
         r"additional\s+qualifications?|plus(?:es?)?|"
         r"preferred|ideally\s+you|you\s+may\s+also\s+have|"
@@ -1139,7 +1140,7 @@ _QUAL_LEADIN_RE = re.compile(
     r"^(?:"
     r"a\s+track\s+record|"
     r"proven\s+(?:ability|experience|track)|"
-    r"strong\s+(?:opinions?|understanding|communication|golf|problem)|"
+    r"strong\s+\w+|"
     r"excellent\s+(?:written|verbal|communication|business)|"
     r"exceptional\s+(?:soft\s+skills|problem|communication)|"
     r"comfortable\b|"
@@ -2100,6 +2101,7 @@ def _prepare_skill_confirmations(
         items,
         known_terms=set(_load_skills_catalog_terms_shared()),
         internal_terms=internal_terms,
+        employer=company,
     )
     pending: list[dict[str, str]] = []
     confirmed_terms: dict[str, str] = {}
@@ -2120,41 +2122,10 @@ def _prepare_skill_confirmations(
                 # named tool. Persist absence so the packet can refuse it.
                 absent_terms[candidate.skill_key] = candidate.display_name
             continue
+        # Absence is the closed world. A card is not created here. A card
+        # exists only later, for a tool that is why a job never went out.
+        # Implements FR-379.
         absent_terms[candidate.skill_key] = candidate.display_name
-        requirement = next(
-            (
-                line
-                for line in items
-                if re.search(re.escape(candidate.display_name), line, re.IGNORECASE)
-            ),
-            candidate.display_name,
-        )
-        create_skill_confirmation(
-            db_path=db_path,
-            skill_key=candidate.skill_key,
-            display_name=candidate.display_name,
-            requirement=requirement,
-            opportunity_key=folder.name,
-            opportunity_company=company,
-            opportunity_title=role,
-            evidence_excerpt=(
-                "Applyr found this named tool in the job description, but it is not "
-                "in verified work history."
-            ),
-            decision_basis=(
-                "Deterministic named-tool scan of the job description. The tool is "
-                "not in verified work history, so Stage 0 cannot treat it as known."
-            ),
-            uncertainty="unknown_named_tool",
-        )
-        pending.append(
-            {
-                "review_key": f"skill:{candidate.skill_key}",
-                "skill_key": candidate.skill_key,
-                "display_name": candidate.display_name,
-                "requirement": requirement,
-            }
-        )
     return pending, confirmed_terms, absent_terms
 
 
@@ -2229,6 +2200,52 @@ def _apply_skill_memory_caps(
     return _cap_absent_named_tools(capped, item, absent_skill_terms)
 
 
+_YEARS_RE = re.compile(r"\d+\s*(?:\+|[-–]\s*\d+)?\s*years?", re.I)
+_DOMAIN_RE = re.compile(
+    r"\b(?:healthcare|health\s+care|health[\s-]industry|health[\s-]*tech|ceramic|medical)\b",
+    re.I,
+)
+_DOMAIN_NOISE_RE = re.compile(
+    r"\b(?:healthcare|health|medical)\s+(?:benefits?|insurance|coverage|leave|plans?)\b",
+    re.I,
+)
+_REQUIRED_MARK_RE = re.compile(r"\b(?:required|must(?:\s*[- ]have)?|minimum)\b", re.I)
+_PREFERRED_MARK_RE = re.compile(
+    r"\b(?:preferred|nice to have|nice-to-have|a plus|bonus)\b",
+    re.I,
+)
+
+
+def _required_span(sentence: str) -> str:
+    """Drop a preferred tail so it cannot create or cancel a domain skip."""
+    match = _PREFERRED_MARK_RE.search(sentence or "")
+    if match is None:
+        return sentence or ""
+    return sentence[: match.start()]
+
+
+def requirement_is_domain_years(text: str) -> bool:
+    """True when a required line demands a specialized domain Jason does not have.
+
+    Years plus healthcare, health industry, health tech, medical, or ceramic.
+    A sentence that says that domain experience is required also matches, so
+    the years number can sit in the next sentence. Benefits, "healthy," and a
+    preferred-only tail do not. Implements FR-378.
+    """
+    parts = re.split(r"(?<=[.!?])\s+", text or "")
+    for part in parts:
+        sentence = part.strip()
+        if not sentence:
+            continue
+        span = _required_span(sentence)
+        cleaned = _DOMAIN_NOISE_RE.sub(" ", span)
+        if not _DOMAIN_RE.search(cleaned):
+            continue
+        if _YEARS_RE.search(span) or _REQUIRED_MARK_RE.search(span):
+            return True
+    return False
+
+
 def _prepare_hard_gate_reviews(
     classified_required: list[dict],
     classified_preferred: list[dict],
@@ -2239,13 +2256,11 @@ def _prepare_hard_gate_reviews(
     role: str,
     db_path: Path | str | None,
 ) -> list[dict[str, str]]:
-    """Persist model-proposed HARD decisions before allowing a cascade run to skip.
+    """Apply written hard rules and turn every other HARD label into a zero.
 
-    A HARD result is a high-consequence decision. It may be confirmed or
-    rejected in Review Center, but it must never become an automatic Skip
-    merely because a provider returned the label. ``KEEP_ELIGIBLE`` removes
-    the hard gate while retaining the gap as a visible soft gap. A completed
-    ``CONFIRM_HARD`` leaves the original hard result intact.
+    Degree, certification, and domain-years stay HARD and do not open a card.
+    Any other model HARD counts as evidence 0. It does not open a card.
+    Implements FR-378 / FR-381.
     """
     candidates: list[tuple[str, str, dict]] = []
     for bucket, results in (
@@ -2257,54 +2272,41 @@ def _prepare_hard_gate_reviews(
                 candidates.append(
                     (bucket, make_item_key(bucket, str(result.get("item") or ""), ordinal), result)
                 )
+    # The signature stays so callers can pass the folder. This pass does not
+    # write a card. Implements FR-381.
+    del folder, company, role, db_path
     pending: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
-    for bucket, item_key, result in candidates:
+    for bucket, _item_key, result in candidates:
         item = str(result.get("item") or "").strip()
         if not item or (bucket, item) in seen:
             continue
         seen.add((bucket, item))
-        review_key = f"hard:{folder.name}:{item_key}"
-        decision = get_hard_gate_decision(review_key, db_path)
-        if decision is None:
-            create_hard_gate_review(
-                db_path=db_path,
-                item_key=item_key,
-                requirement=item,
-                opportunity_key=folder.name,
-                opportunity_company=company,
-                opportunity_title=role,
-                evidence_excerpt=str(result.get("anchor") or ""),
-                decision_basis=(
-                    f"Stage 0 proposed a HARD gate ({result.get('gap_source') or 'unspecified source'}) "
-                    f"at evidence level {result.get('evidence_level')} with "
-                    f"{result.get('confidence') or 'unknown'} confidence."
-                ),
-                uncertainty=str(result.get("confidence") or "unknown"),
-            )
-            pending.append(
-                {
-                    "review_key": review_key,
-                    "question_type": "hard_gate_review",
-                    "requirement": item,
-                    "item_key": item_key,
-                }
-            )
+        # Degree, certification, and domain-years stay HARD with no card.
+        # Keep eligible cannot soften that class. Implements FR-378.
+        gap_source = str(result.get("gap_source") or "")
+        written_hard = gap_source in {"degree", "certification"} or (
+            bucket == "required" and requirement_is_domain_years(item)
+        )
+        if written_hard:
             continue
-        if decision == "KEEP_ELIGIBLE":
-            result["gap"] = True
-            result["gap_class"] = "SOFT"
-            result["gap_source"] = None
-            result["domain_soft"] = False
-            result["anchor"] = (
-                "User chose KEEP_ELIGIBLE; retain this as a visible gap without "
-                "using it as an automatic hard disqualification."
-            )
-            for flagged in flagged_gaps:
-                if flagged.get("item") == item and flagged.get("gap_class") == "HARD":
-                    flagged["gap_class"] = "SOFT"
-                    flagged["gap_source"] = None
-                    flagged["anchor"] = result["anchor"]
+        # A model HARD that is not a written rule is a zero in the score.
+        # People management, payments ownership, and the other written
+        # exclusions already skipped before this function. Implements FR-381.
+        result["gap"] = True
+        result["gap_class"] = "SOFT"
+        result["evidence_level"] = 0
+        result["gate"] = "NONE"
+        result["domain_soft"] = False
+        result["anchor"] = (
+            "This required line is not in work experience. It counts as zero. "
+            "It does not disqualify the job on its own."
+        )
+        for flagged in flagged_gaps:
+            if flagged.get("item") == item and flagged.get("gap_class") == "HARD":
+                flagged["gap_class"] = "SOFT"
+                flagged["evidence_level"] = 0
+                flagged["anchor"] = result["anchor"]
     return pending
 
 
@@ -2645,6 +2647,25 @@ def _determine_tier(
     return "Tier 1", "PASS"
 
 
+def _count_zero_evidence_required(rows: list) -> int:
+    """Count classified required rows explicitly scored evidence 0.
+
+    A missing evidence_level is not zero. Hire-site lines that were diverted
+    out of required are not in this list. Implements FR-385.
+    """
+    count = 0
+    for row in rows or []:
+        if not isinstance(row, dict) or "evidence_level" not in row:
+            continue
+        try:
+            level = int(row.get("evidence_level"))
+        except (TypeError, ValueError):
+            continue
+        if level == 0:
+            count += 1
+    return count
+
+
 def _apply_fit_score_to_tier(
     *,
     decision: str,
@@ -2653,6 +2674,7 @@ def _apply_fit_score_to_tier(
     skip_floor: int,
     tier1_floor: int,
     qual_required_n: int,
+    zero_evidence_required: int = 0,
 ) -> tuple[str, str]:
     """Apply CR-093 score bands without washing out an empty-required extract.
 
@@ -2660,6 +2682,9 @@ def _apply_fit_score_to_tier(
     that to Skip when hire-site logistics scored evidence 0 (optum 2026-09-21,
     fit 0 below the 40 floor). Empty required stays Tier 2 PASS. A real
     qualification-shaped required list may still Skip below the floor.
+    A classified required row that is explicitly evidence 0 is a real miss
+    even when the qualification regex did not count it (Lumira, score 25).
+    Implements FR-385.
     """
     if disqualified:
         return "Skip", "SKIP"
@@ -2669,7 +2694,7 @@ def _apply_fit_score_to_tier(
         tier = "Tier 1"
     elif fit_score >= skip_floor:
         tier = "Tier 2"
-    elif qual_required_n == 0:
+    elif qual_required_n == 0 and zero_evidence_required == 0:
         return "Tier 2", "PASS"
     else:
         return "Skip", "SKIP"
@@ -2678,11 +2703,128 @@ def _apply_fit_score_to_tier(
     return tier, "PASS"
 
 
+def _conversion_tool_is_chrome(name: str, company: str | None) -> bool:
+    """True when *name* must not withhold authoring (CR-124 / FR-367)."""
+    if _named_tool_surface_is_chrome(name):
+        return True
+    return _is_posting_employer_name(name, company)
+
+
+_ILLUSTRATIVE_MARKER_RE = re.compile(
+    r"\b(?:for example|such as|e\.g\.|including|or similar)\b",
+    re.IGNORECASE,
+)
+
+
+def _enclosing_paren(text: str, index: int) -> str | None:
+    """Return the parenthetical that contains *index*, without the parentheses."""
+    depth = 0
+    start: int | None = None
+    for i, ch in enumerate(text):
+        if ch == "(":
+            if depth == 0:
+                start = i + 1
+            depth += 1
+        elif ch == ")" and depth:
+            depth -= 1
+            if depth == 0 and start is not None and start <= index < i:
+                return text[start:i]
+            start = None
+    return None
+
+
+def illustrative_spans(item: str) -> list[str]:
+    """Return example-list spans. The requirement outside the span stays in force.
+
+    Implements FR-374. A product named on its own, outside these spans, is unchanged.
+    """
+    spans: list[str] = []
+    for match in _ILLUSTRATIVE_MARKER_RE.finditer(item or ""):
+        paren = _enclosing_paren(item, match.start())
+        if paren:
+            spans.append(paren)
+            continue
+        end = len(item)
+        for i in range(match.end(), len(item)):
+            if item[i] in ".!?":
+                end = i
+                break
+        spans.append(item[match.start() : end])
+    return spans
+
+
+def _term_in_text(term: str, text: str) -> bool:
+    """True when *term* appears as its own word or phrase in *text*."""
+    phrase = (term or "").strip()
+    if len(phrase) < 3 or not text:
+        return False
+    return (
+        re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text, re.IGNORECASE) is not None
+    )
+
+
+def catalog_anchors_in_span(span: str, known_terms: object) -> list[str]:
+    """Catalog tools actually written in *span*.
+
+    A longer catalog phrase matches as a phrase. A short first token of a
+    longer phrase (aws inside ``aws s3``) matches that token. ``google
+    analytics`` does not match ``Google Cloud``. Implements FR-374.
+    """
+    found: list[str] = []
+    for term in known_terms or []:
+        raw = str(term or "").strip()
+        if not raw:
+            continue
+        phrase = re.split(r"\s*\(", raw, maxsplit=1)[0].strip()
+        if _term_in_text(phrase, span):
+            found.append(phrase.lower())
+            continue
+        # Catalog terms are stored lowercased, so caps are gone. A short
+        # first token of a longer phrase (aws inside "aws s3") is still
+        # the product. "google" inside "google analytics" is too long to
+        # count as that token, so it does not match Google Cloud.
+        head, _, rest = phrase.partition(" ")
+        if (
+            rest
+            and head.isalpha()
+            and 2 <= len(head) <= 5
+            and _term_in_text(head, span)
+        ):
+            found.append(head.lower())
+    return found
+
+
+def missing_tool_is_anchored_example(
+    item: str,
+    name: str,
+    known_terms: object,
+) -> bool:
+    """True when *name* is only an example beside a different catalog tool.
+
+    Implements FR-374. Dynamics on its own line stays a real withhold.
+    """
+    if not _term_in_text(name, item):
+        return False
+    missing_tokens = set(re.findall(r"[a-z0-9]+", name.lower()))
+    if not missing_tokens:
+        return False
+    for span in illustrative_spans(item):
+        if not _term_in_text(name, span):
+            continue
+        for anchor in catalog_anchors_in_span(span, known_terms):
+            anchor_tokens = set(re.findall(r"[a-z0-9]+", anchor))
+            if anchor_tokens and not anchor_tokens <= missing_tokens:
+                return True
+    return False
+
+
 def evaluate_conversion_feasibility(
     *,
     decision: str,
     required: list,
     not_present_named_tools: list | None = None,
+    company: str | None = None,
+    known_terms: object | None = None,
 ) -> dict:
     """CR-121: whether a Stage 0 PASS can support conversion R2/R3 identity.
 
@@ -2690,12 +2832,18 @@ def evaluate_conversion_feasibility(
     killed 'zero distinctive WE overlap'. All five already have required PM
     items at evidence 3-4. The identity misses that parked honest 70 floors
     with a named tool were required evidence-0 product lines (Dynamics,
-    Workspace ONE, Android). Clinical/pharmacy identity sat in preferred or
-    at evidence 1 and is out of this band. Skip floor is unchanged. This
-    never changes decision/tier.
+    Workspace ONE, Android, Delta Lake). Clinical/pharmacy identity sat in
+    preferred or at evidence 1 and is out of this band. Skip floor is
+    unchanged. This never changes decision/tier.
+
+    CR-124: employer names, section-header fragments, and methodology nouns
+    are chrome. They do not count as the required product this band withholds
+    for, even if an older extract listed them in not_present_named_tools.
     """
     if decision != "PASS":
         return {"verdict": "n/a", "reasons": []}
+    if known_terms is None:
+        known_terms = _load_skills_catalog_terms_shared()
     reasons: list[str] = []
     seen: set[str] = set()
     tools = not_present_named_tools or []
@@ -2705,7 +2853,7 @@ def evaluate_conversion_feasibility(
             name = str(row.get("display_name") or "").strip()
         else:
             name = str(row or "").strip()
-        if name:
+        if name and not _conversion_tool_is_chrome(name, company):
             names.append(name)
     for row in required or []:
         if isinstance(row, dict):
@@ -2718,6 +2866,8 @@ def evaluate_conversion_feasibility(
             continue
         lower = item.lower()
         for name in names:
+            if missing_tool_is_anchored_example(item, name, known_terms):
+                continue  # Implements FR-374
             key = f"not_present_required_tool:{name}"
             if name.lower() in lower and key not in seen:
                 seen.add(key)
@@ -2725,6 +2875,10 @@ def evaluate_conversion_feasibility(
         if evidence == 0:
             present_names = {n.lower() for n in names}
             for hit in _looks_like_named_tool(item):
+                if _conversion_tool_is_chrome(hit, company):
+                    continue
+                if missing_tool_is_anchored_example(item, hit, known_terms):
+                    continue  # Implements FR-374
                 if " " not in hit.strip() and hit.lower() not in present_names:
                     continue
                 key = f"required_unproven_named_tool:{hit}"
@@ -2732,8 +2886,139 @@ def evaluate_conversion_feasibility(
                     seen.add(key)
                     reasons.append(key)
     if reasons:
-        return {"verdict": "risk", "reasons": reasons}
+        # A named tool missing from work experience is a Review Center card,
+        # not a pause. Employer names, time zones, and regions are already
+        # chrome above. Dynamics and Delta Lake stay in the reason list so
+        # the card path can see them, and authoring continues without
+        # claiming them. Jason, 2026-09-22.
+        return {"verdict": "ok", "reasons": reasons}
     return {"verdict": "ok", "reasons": []}
+
+
+def stored_conversion_risk_is_chrome(folder: Path) -> bool:
+    """True when every stored risk reason names market or industry chrome.
+
+    Reads the reason strings already on the gate. Does not rewrite the gate
+    and does not call a model. A missing gate, or any real product such as
+    Dynamics, stays risk. Implements FR-367.
+    """
+    gate_path = Path(folder) / "stage0_fit_gate.json"
+    if not gate_path.is_file():
+        return False
+    try:
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(gate, dict):
+        return False
+    stored = gate.get("conversion_feasibility") or {}
+    if not isinstance(stored, dict) or stored.get("verdict") != "risk":
+        return False
+    reasons = stored.get("reasons") or []
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    company = gate.get("company") if isinstance(gate.get("company"), str) else None
+    names: list[str] = []
+    for reason in reasons:
+        if not isinstance(reason, str) or ":" not in reason:
+            return False
+        name = reason.split(":", 1)[1].strip()
+        if not name:
+            return False
+        names.append(name)
+    return all(_conversion_tool_is_chrome(name, company) for name in names)
+
+
+def stored_conversion_risk_is_anchored_example(
+    folder: Path,
+    known_terms: object | None = None,
+) -> bool:
+    """True when every stored risk name is an example beside a catalog tool.
+
+    Reads the gate already on disk. Does not rebuild Stage 0. A missing gate,
+    or any reason that is a real product, stays risk. Implements FR-374.
+    """
+    gate_path = Path(folder) / "stage0_fit_gate.json"
+    if not gate_path.is_file():
+        return False
+    try:
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(gate, dict):
+        return False
+    stored = gate.get("conversion_feasibility") or {}
+    if not isinstance(stored, dict) or stored.get("verdict") != "risk":
+        return False
+    reasons = stored.get("reasons") or []
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    if known_terms is None:
+        known_terms = _load_skills_catalog_terms_shared()
+    required = gate.get("required") or []
+    if not isinstance(required, list):
+        return False
+    for reason in reasons:
+        if not isinstance(reason, str) or ":" not in reason:
+            return False
+        name = reason.split(":", 1)[1].strip()
+        if not name:
+            return False
+        if not any(
+            missing_tool_is_anchored_example(
+                str(row.get("item") or "") if isinstance(row, dict) else str(row or ""),
+                name,
+                known_terms,
+            )
+            for row in required
+        ):
+            return False
+    return True
+
+
+def stored_conversion_risk_is_tool_absence(folder: Path) -> bool:
+    """True when every stored risk reason is a named tool missing from work experience.
+
+    Those reasons stay on the gate for the Review Center card. They do not
+    withhold authoring. A missing gate, or a reason that is not a tool
+    absence, stays paused. Jason, 2026-09-22.
+    """
+    gate_path = Path(folder) / "stage0_fit_gate.json"
+    if not gate_path.is_file():
+        return False
+    try:
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(gate, dict):
+        return False
+    stored = gate.get("conversion_feasibility") or {}
+    if not isinstance(stored, dict) or stored.get("verdict") != "risk":
+        return False
+    reasons = stored.get("reasons") or []
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    prefixes = ("not_present_required_tool:", "required_unproven_named_tool:")
+    for reason in reasons:
+        if not isinstance(reason, str) or not reason.startswith(prefixes):
+            return False
+        if not reason.split(":", 1)[1].strip():
+            return False
+    return True
+
+
+def stored_conversion_risk_can_continue(folder: Path) -> bool:
+    """True when a parked risk should author without apply_anyway.
+
+    Chrome, an anchored example list, or a named tool missing from work
+    experience all continue. A missing gate stays paused. Implements
+    FR-367 and FR-374. Tool absence no longer withholds as of 2026-09-22.
+    """
+    return (
+        stored_conversion_risk_is_chrome(folder)
+        or stored_conversion_risk_is_anchored_example(folder)
+        or stored_conversion_risk_is_tool_absence(folder)
+    )
 
 
 def _build_exclusion_zone_summary(prefs_result: dict) -> str:
@@ -3519,45 +3804,19 @@ def build_stage0_fit_gate(
         role=role,
         db_path=checkpoint_db_path,
     )
-    # CR-108 Epic 7.2: model-flagged named tools create the same durable
-    # pending item the deterministic extractor path creates -- reuse the
-    # skill-memory rules so an already-decided skill is never re-asked.
-    pending_skill_reviews: list[dict[str, str]] = []
+    # A model-flagged tool is absent. It does not open a card. Implements FR-379.
     for flagged in model_flagged_skills:
         skill_key = canonical_skill_key(flagged["skill_key"])
         if not model_flagged_named_skill(flagged["skill_key"], flagged["requirement"]):
             continue  # Implements CR-114: generic traits are not named-tool cards.
-        if get_skill_memory(skill_key, checkpoint_db_path):
-            continue
         display_name = " ".join(
             word.capitalize() for word in skill_key.split("_")
         )
-        create_skill_confirmation(
-            db_path=checkpoint_db_path,
-            skill_key=skill_key,
-            display_name=display_name,
-            requirement=flagged["requirement"],
-            opportunity_key=folder.name,
-            opportunity_company=company_display,
-            opportunity_title=role,
-            evidence_excerpt=(
-                "The Stage 0 model identified this named tool in the job "
-                "description, but it is not in verified work history."
-            ),
-            decision_basis=(
-                "A Stage 0 evidence model flagged this as a named tool present in "
-                "the job description. It is not in verified work history."
-            ),
-            uncertainty="model_flagged_named_tool",
-        )
-        pending_skill_reviews.append(
-            {
-                "review_key": f"skill:{skill_key}",
-                "skill_key": skill_key,
-                "display_name": display_name,
-                "requirement": flagged["requirement"],
-            }
-        )
+        if _conversion_tool_is_chrome(display_name, company_display):
+            continue  # Implements FR-367: employer, header, and methodology are not tools.
+        if get_skill_memory(skill_key, checkpoint_db_path):
+            continue
+        # Same closed world as the deterministic scan. No card. Implements FR-379.
         absent_skill_terms[skill_key] = display_name
     if pending_hard_reviews:
         mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
@@ -3669,6 +3928,7 @@ def build_stage0_fit_gate(
             skip_floor=skip_floor,
             tier1_floor=tier1_floor,
             qual_required_n=qual_required_n,
+            zero_evidence_required=_count_zero_evidence_required(classified_required),
         )
 
     # --- Step 6: Build skip_reason if needed ---
@@ -3804,6 +4064,7 @@ def build_stage0_fit_gate(
         decision=decision,
         required=classified_required,
         not_present_named_tools=output["not_present_named_tools"],
+        company=company_display,
     )
 
     if skip_reason:

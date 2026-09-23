@@ -1,6 +1,9 @@
 import { createHash, randomUUID } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import type Database from 'better-sqlite3';
 import { db } from '../db.js';
+import { PROJECT_ROOT, WORK_EXPERIENCE_PATH } from '../shared.js';
 
 export type ReviewQuestionType = 'skill_presence' | 'evidence_enrichment' | 'hard_gate_review';
 export type ReviewStatus = 'open' | 'completed';
@@ -207,6 +210,7 @@ function groupRows(
 export function listReviewItems(
   status: ReviewStatus | 'all' = 'all',
   database: Database.Database = db,
+  dataRoot: string = path.join(PROJECT_ROOT, 'data'),
 ): ReviewItem[] {
   const clauses: string[] = [];
   const params: unknown[] = [];
@@ -239,7 +243,123 @@ export function listReviewItems(
   for (const promotion of promotions) {
     if (!promotionBySkill.has(promotion.skill_key)) promotionBySkill.set(promotion.skill_key, promotion);
   }
-  return groupRows(rows, memories, promotionBySkill);
+  return groupRows(rows, memories, promotionBySkill).flatMap(item =>
+    keepStoppedToolCard(item, database, dataRoot),
+  );
+}
+
+const APPLIED_STATUSES = new Set([
+  'Applied',
+  'Recruiter Screen',
+  'Core Interviews',
+  'Offer and Negotiation',
+]);
+
+function tableExists(database: Database.Database, name: string): boolean {
+  const row = database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+  ).get(name);
+  return Boolean(row);
+}
+
+function keepStoppedToolCard(
+  item: ReviewItem,
+  database: Database.Database,
+  dataRoot: string,
+): ReviewItem[] {
+  if (item.type !== 'skill_presence') return [item];
+  if (!tableExists(database, 'pipeline_queue')) return [item];
+  const stopped = item.affectedOpportunities.filter(opportunity =>
+    jobStoppedForTool(database, dataRoot, opportunity.jobId, item.title),
+  );
+  if (stopped.length === 0) return [];
+  return [{ ...item, affectedOpportunities: stopped }];
+}
+
+function jobStoppedForTool(
+  database: Database.Database,
+  dataRoot: string,
+  slug: string,
+  toolName: string,
+): boolean {
+  if (appliedJob(database, slug)) return false;
+  const queue = database.prepare(
+    'SELECT status, paused_reason, company, title FROM pipeline_queue WHERE slug = ?',
+  ).get(slug) as {
+    status: string;
+    paused_reason: string | null;
+    company: string;
+    title: string;
+  } | undefined;
+  if (!queue || queue.status !== 'paused' || queue.paused_reason !== 'conversion_risk') {
+    return false;
+  }
+  if (appliedCompany(database, queue.company, queue.title)) return false;
+  return gateNamesTool(dataRoot, slug, toolName);
+}
+
+function appliedJob(database: Database.Database, slug: string): boolean {
+  if (!tableExists(database, 'jobs')) return false;
+  const row = database.prepare(
+    'SELECT status FROM jobs WHERE id = ?',
+  ).get(slug) as { status: string } | undefined;
+  return Boolean(row && APPLIED_STATUSES.has(row.status));
+}
+
+function appliedCompany(
+  database: Database.Database,
+  company: string,
+  title: string,
+): boolean {
+  if (!tableExists(database, 'jobs')) return false;
+  const row = database.prepare(
+    `SELECT 1 AS found FROM jobs
+     WHERE lower(company) = lower(?) AND lower(title) = lower(?)
+       AND status IN ('Applied', 'Recruiter Screen', 'Core Interviews', 'Offer and Negotiation')
+     LIMIT 1`,
+  ).get(company, title) as { found: number } | undefined;
+  return Boolean(row);
+}
+
+function gateNamesTool(dataRoot: string, slug: string, toolName: string): boolean {
+  const name = toolName.trim().toLowerCase();
+  if (!name) return false;
+  for (const root of ['pending_review', 'submissions']) {
+    const gatePath = path.join(dataRoot, root, slug, 'stage0_fit_gate.json');
+    if (!fs.existsSync(gatePath)) continue;
+    try {
+      const gate = JSON.parse(fs.readFileSync(gatePath, 'utf8')) as {
+        conversion_feasibility?: { reasons?: unknown };
+      };
+      const reasons = gate.conversion_feasibility?.reasons;
+      if (!Array.isArray(reasons)) return false;
+      return reasons.some(reason =>
+        typeof reason === 'string' && reason.toLowerCase().includes(name),
+      );
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+export function appendConfirmedTool(
+  displayName: string,
+  filePath: string = WORK_EXPERIENCE_PATH,
+): void {
+  const name = displayName.trim();
+  if (!name || name.length > 80 || /[\r\n\\/]/.test(name)) {
+    throw new Error('Tool name cannot be written to work experience');
+  }
+  const current = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`\\b${escaped}\\b`, 'i').test(current)) return;
+  const heading = '## Confirmed tools';
+  const bullet = `- ${name}\n`;
+  const next = current.includes(heading)
+    ? current.replace(heading, `${heading}\n${bullet.trimEnd()}`)
+    : `${current.endsWith('\n') || current.length === 0 ? current : `${current}\n`}\n${heading}\n\n${bullet}`;
+  fs.writeFileSync(filePath, next, 'utf8');
 }
 
 export function createSkillConfirmation(
@@ -282,7 +402,7 @@ export function createSkillConfirmation(
     reviewKey,
     skillKey,
     clean(input.title) || skillKey,
-    clean(input.question) || `${clean(input.title) || skillKey} is not in work experience, so this JD will not use it as evidence. Add it there if we missed it.`,
+    clean(input.question) || `Stopped because ${clean(input.title) || skillKey} is not in work experience.`,
     clean(input.summary) || 'Optional correction. Stage 0 is not waiting on this card.',
     clean(input.requirement) || null,
     clean(input.evidenceExcerpt) || null,
@@ -415,6 +535,7 @@ export function answerReviewItem(
   rawDetails: unknown,
   promoteToVerifiedEvidence: boolean,
   database: Database.Database = db,
+  workExperiencePath: string = WORK_EXPERIENCE_PATH,
 ): { ok: true; status: ReviewStatus; promotionId?: string } | { ok: false; error: string; notFound?: boolean } {
   const rows = database.prepare(`
     SELECT id, review_key, question_type, skill_key, status, title, question, summary,
@@ -433,6 +554,17 @@ export function answerReviewItem(
   }
 
   const details = detailsObject(rawDetails);
+  const writeWorkExperience = Boolean(
+    (details as { writeWorkExperience?: boolean }).writeWorkExperience,
+  );
+  if (writeWorkExperience && isSkill && answer === 'CONFIRMED_USE') {
+    try {
+      appendConfirmedTool(rows[0].title, workExperiencePath);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Work experience could not be updated';
+      return { ok: false, error: message };
+    }
+  }
   if (promoteToVerifiedEvidence && (!isSkill || answer !== 'CONFIRMED_USE' || !hasMinimumEvidence(details))) {
     return { ok: false, error: 'Verified evidence requires a Yes answer plus context, activity, and timeframe' };
   }
@@ -494,7 +626,7 @@ export function answerReviewItem(
         );
       }
     }
-    if (answer === 'CONFIRMED_USE' && !promoteToVerifiedEvidence) {
+    if (answer === 'CONFIRMED_USE' && !promoteToVerifiedEvidence && !writeWorkExperience) {
       for (const row of rows) createEvidenceEnrichment(row, database);
     }
     if (answer === 'NOT_PRESENT' || answer === 'UNSURE_NO_REASK' || answer === 'BAD_DATA') {

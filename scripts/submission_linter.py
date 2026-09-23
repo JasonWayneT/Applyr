@@ -900,6 +900,27 @@ def _word_count(text: str) -> int:
     return len(re.findall(r"\b\w+\b", text))
 
 
+_SAME_FUNCTION_ROLE_RE = re.compile(
+    r"\b(?:product managers?|product owners?)\b",
+    re.IGNORECASE,
+)
+_DEPARTMENT_BESIDE_ROLE_RE = re.compile(
+    r"\b(?:design|ux|marketing|finance|recruit(?:ing|er)?|human resources|data science)\b",
+    re.IGNORECASE,
+)
+
+
+def _mention_is_same_function_role(mention: str) -> bool:
+    """True when the phrase names a peer PM, not an outside department.
+
+    Live miss (iperium, 2026-09-22): 'partnered with a peer product manager'
+    is the same function. Design beside that role still warns.
+    """
+    if not _SAME_FUNCTION_ROLE_RE.search(mention or ""):
+        return False
+    return _DEPARTMENT_BESIDE_ROLE_RE.search(mention or "") is None
+
+
 def _check_unverified_partner(text: str) -> Optional[str]:
     """Warn when a cross-functional partner is mentioned that isn't on the verified list."""
     text_l = text.lower()
@@ -922,6 +943,8 @@ def _check_unverified_partner(text: str) -> Optional[str]:
 
     bad = []
     for mention in mentioned:
+        if _mention_is_same_function_role(mention):
+            continue
         if not any(partner in mention for partner in _VERIFIED_PARTNERS):
             bad.append(mention)
     return ", ".join(bad[:3]) if bad else None
@@ -1302,7 +1325,10 @@ def find_shared_phrases(resume_text: str, cover_letter_text: str, min_len: int =
 
     # Keep maximal only (drop phrases contained in a longer hit).
     maximal: List[str] = []
-    for phrase in sorted(set(candidates), key=len, reverse=True):
+    # Equal-length phrases must sort by text. set() order is per-process, and the
+    # first three phrases are copied into the LW-009-PAIR finding. A changing
+    # message changes the HM findings hash and wipes dispositions on the next resume.
+    for phrase in sorted(set(candidates), key=lambda item: (-len(item), item)):
         if not any(phrase in longer for longer in maximal):
             maximal.append(phrase)
     return maximal
@@ -2005,8 +2031,13 @@ def _has_unattributed_verb(unit_lower: str, verb: str, near_positions: List[int]
     unit as a whole.
     """
     for m in re.finditer(rf"\b{re.escape(verb)}\b", unit_lower):
-        preceding_tokens = re.findall(r"[a-z']+", unit_lower[: m.start()])[-3:]
-        if any(t in ("who", "that", "which") for t in preceding_tokens):
+        preceding_tokens = re.findall(r"[a-z']+", unit_lower[: m.start()])[-5:]
+        if any(t in ("who", "that", "which") for t in preceding_tokens[-3:]):
+            continue
+        # "an adjacent team at Cision built" is that team's verb. "I built"
+        # still counts. Live miss: hsi cover letter, 2026-09-22.
+        other_subjects = {"team", "teams", "engineering", "engineer", "engineers"}
+        if "i" not in preceding_tokens and any(t in other_subjects for t in preceding_tokens):
             continue
         if near_positions is not None and not any(
             abs(m.start() - pos) <= _ANCHOR_PROXIMITY_CHARS for pos in near_positions
@@ -2028,6 +2059,516 @@ def _split_sentences(text: str) -> List[str]:
     # Doesn't need to be a perfect sentence splitter, only needs to keep a
     # metric/verb pair inside the same unit they actually co-occur in.
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+
+
+# LR-038 / FR-369: the 40% contact-data fix is a decision Jason drove after an
+# engineer proposed the bypass (ACC-102). These shapes claim he performed the
+# technical connection, or they rename that story as ingestion / frontend work.
+_ACC102_METRIC_RE = re.compile(r"\b40\s*(?:%|percent\b)", re.IGNORECASE)
+_ACC102_STORY_RE = re.compile(r"drop-?off|data-?loss|stale", re.IGNORECASE)
+_ACC102_MEANS_RE = re.compile(
+    r"\b(?:by|and)\s+(?:connecting|bypassing)\b",
+    re.IGNORECASE,
+)
+_ACC102_FRONTEND_RE = re.compile(r"\bfrontend screens?\b", re.IGNORECASE)
+_ACC102_INGESTION_RE = re.compile(
+    r"\bingestion\s+(?:path|pipelines?|loss)\b",
+    re.IGNORECASE,
+)
+_ACC102_OWNED_INTEGRATION_RE = re.compile(
+    r"\bown(?:ed|s|ing)? the integration\b",
+    re.IGNORECASE,
+)
+_ACC102_CONCEIVED_RE = re.compile(r"\b(?:conceived|invented)\b", re.IGNORECASE)
+_CUSTOMER_DISCOVERY_RE = re.compile(r"\bcustomer discovery\b", re.IGNORECASE)
+_CUSTOMER_DISCOVERY_NEG_RE = re.compile(
+    r"\b(?:no|not|never|without|blocked from|did not|has not|hasn't)\b"
+    r".{0,40}customer discovery|customer discovery.{0,40}"
+    r"\b(?:no|not|never|did not|didn't)\b",
+    re.IGNORECASE,
+)
+
+
+def check_bypass_authorship(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
+    """LR-038: block a 40% drop-off line that claims Jason made the technical connection.
+
+    Args: resume and cover-letter markdown. Returns HARD_BLOCK violations.
+    A decision line ("drove the decision to bypass", "an engineer's proposal")
+    is allowed. The approved story text ("initiative that bypassed") is allowed.
+    """
+    units: List[str] = []
+    if resume_text.strip():
+        units.extend(_split_resume_bullets(resume_text))
+    if cover_letter_text.strip():
+        for para in re.split(r"\n\s*\n", cover_letter_text):
+            units.extend(_split_sentences(para))
+
+    violations: List[LintViolation] = []
+    for unit in units:
+        if not (_ACC102_METRIC_RE.search(unit) and _ACC102_STORY_RE.search(unit)):
+            continue
+        means = _ACC102_MEANS_RE.search(unit)
+        frontend = _ACC102_FRONTEND_RE.search(unit)
+        ingestion = _ACC102_INGESTION_RE.search(unit)
+        owned = _ACC102_OWNED_INTEGRATION_RE.search(unit)
+        conceived = _ACC102_CONCEIVED_RE.search(unit)
+        if not (means or frontend or ingestion or owned or conceived):
+            continue
+        violations.append(LintViolation(
+            rule_id="LR-038",
+            severity="HARD_BLOCK",
+            message=(
+                "40% contact-data drop-off line claims Jason made the technical "
+                f"connection or misnames the story: \"{unit}\""
+            ),
+            suggestion=(
+                "Keep the 40% outcome. Say an engineer proposed the bypass and Jason "
+                "drove that decision. Do not say he connected or bypassed the path "
+                "himself, do not call this story ingestion, and do not add frontend screens."
+            ),
+        ))
+    return violations
+
+
+def ats_term_conflicts_with_hard_block(term: str) -> bool:
+    """True when putting this JD term on the resume would trip LR-039.
+
+    The packet can still list Customer Discovery as supported. The career file
+    says that work did not happen, so the ATS contract cannot require the phrase.
+    Implements FR-370.
+    """
+    return (term or "").strip().casefold() == "customer discovery"
+
+
+def check_customer_discovery(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
+    """LR-039: block a claim that customer discovery already happened.
+
+    Args: resume and cover-letter markdown. Returns HARD_BLOCK violations.
+    The career file says direct customer discovery was attempted and blocked.
+    A sentence that denies it, or that only names the job's ask, is allowed.
+    """
+    violations: List[LintViolation] = []
+    units: List[str] = []
+    if resume_text.strip():
+        units.extend(_split_resume_bullets(resume_text))
+        for line in resume_text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or stripped.startswith("* ") or stripped.startswith("- "):
+                continue
+            if _CUSTOMER_DISCOVERY_RE.search(stripped):
+                units.append(stripped)
+    if cover_letter_text.strip():
+        for para in re.split(r"\n\s*\n", cover_letter_text):
+            for sentence in _split_sentences(para):
+                if re.search(r"\b(I|my|me)\b", sentence) and _CUSTOMER_DISCOVERY_RE.search(sentence):
+                    units.append(sentence)
+    seen: set[str] = set()
+    for unit in units:
+        if unit in seen or not _CUSTOMER_DISCOVERY_RE.search(unit):
+            continue
+        if _CUSTOMER_DISCOVERY_NEG_RE.search(unit):
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-039",
+            severity="HARD_BLOCK",
+            message=f"Customer discovery is claimed as experience: \"{unit}\"",
+            suggestion=(
+                "Direct customer discovery did not happen (ACC-185). "
+                "Use the closed-lost or support evidence that is real, or cut the phrase."
+            ),
+        ))
+    return violations
+
+
+def _competencies_section(resume_text: str) -> str:
+    """Return the Core Competencies block, stopping at the next heading."""
+    match = re.search(
+        r"^##\s+CORE COMPETENCIES\s*\n(.*?)(?=^##\s|\Z)",
+        resume_text or "",
+        re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    return match.group(1) if match else ""
+
+
+def check_competency_process_notes(resume_text: str) -> List[LintViolation]:
+    """LR-040: a repair note or fact id does not belong in Core Competencies.
+
+    Args: resume markdown. Returns HARD_BLOCK violations.
+    LR-039 allows a denial so the author can avoid claiming the work. Pasting
+    that denial into the skills line is how the note reached the PDF.
+    Implements FR-384.
+    """
+    section = _competencies_section(resume_text)
+    if not section.strip():
+        return []
+    if not re.search(r"\bACC-\d+\b|did not happen", section, re.IGNORECASE):
+        return []
+    return [LintViolation(
+        rule_id="LR-040",
+        severity="HARD_BLOCK",
+        message=f"Core Competencies contains a process note: \"{section.strip()}\"",
+        suggestion="Remove the note. Do not put a denial or a fact id in the skills line.",
+    )]
+
+
+_PLACEHOLDER_COMPANY_RE = re.compile(
+    r"\bConfidential is\b|\bat Confidential\b|\brole at Confidential\b"
+)
+
+
+def check_placeholder_company(cover_letter_text: str) -> List[LintViolation]:
+    """LR-041: a redacted posting name is not the company in the letter.
+
+    Args: cover-letter markdown. Returns HARD_BLOCK violations.
+    Implements FR-384.
+    """
+    match = _PLACEHOLDER_COMPANY_RE.search(cover_letter_text or "")
+    if not match:
+        return []
+    return [LintViolation(
+        rule_id="LR-041",
+        severity="HARD_BLOCK",
+        message=f"Cover letter uses a placeholder company name: \"{match.group(0)}\"",
+        suggestion="Use the real company, or do not name the company when the posting redacts it.",
+    )]
+
+
+_DRAFT_CURRENCY_RE = re.compile(r"\$\d[\d,]*(?:\.\d+)?(?:\s*[KMB])?")
+_DRAFT_PERCENT_RE = re.compile(r"\b\d+(?:\.\d+)?\s*%")
+_DRAFT_UNIT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("quarter", ("per quarter", "quarterly", "a quarter", "each quarter")),
+    ("year", ("annually", "per year", "a year", "each year", "annual", "arr")),
+    ("month", ("per month", "monthly", "a month", "each month")),
+)
+_DRAFT_OTHER_ACTOR_RE = re.compile(
+    r"\b(?:engineering|an engineer|the engineer)\s+(?:\w+\s+){0,3}"
+    r"(?:built|created|wrote|deployed|automated)\b",
+    re.IGNORECASE,
+)
+_DRAFT_ACTOR_OBJECT_RE = re.compile(r"\b(funnel)\b", re.IGNORECASE)
+_DRAFT_OWNERSHIP_RE = re.compile(
+    r"\b(?:built|build|building|created|creating|wrote|deployed|automated)\b",
+    re.IGNORECASE,
+)
+
+
+def _draft_unit_group(window: str) -> str | None:
+    """Return the earliest unit group in *window*."""
+    lowered = (window or "").lower()
+    best: str | None = None
+    best_at = 10**9
+    for group, phrases in _DRAFT_UNIT_GROUPS:
+        for phrase in phrases:
+            found = re.search(rf"\b{re.escape(phrase)}\b", lowered)
+            if found and found.start() < best_at:
+                best_at = found.start()
+                best = group
+    return best
+
+
+def _draft_unit_for_match(text: str, match: re.Match[str]) -> str | None:
+    """Return the unit attached to a currency match in *text*."""
+    after = _draft_unit_group(text[match.end(): match.end() + 48])
+    if after:
+        return after
+    return _draft_unit_group(text[max(0, match.start() - 32): match.start()])
+
+
+_OF_HEAD_STOP = frozenset({
+    "the", "a", "an", "only", "about", "roughly", "approximately", "nearly",
+    "their", "our", "its", "this", "that", "these", "those", "who", "which",
+    "just", "some", "more", "most", "than",
+})
+_FOLLOWER_SKIP = _OF_HEAD_STOP | frozenset({
+    "through", "while", "over", "under", "near", "never", "then", "and",
+    "by", "to", "for", "with", "from", "into", "after", "before", "during",
+})
+# Account and user are the same buyers as customer in these spans. "95% of
+# active accounts" is the migration sentence, not a different referent.
+_CUSTOMER_STEMS = frozenset({"customer", "account", "user"})
+_CONTEXT_STOP = _OF_HEAD_STOP | frozenset({
+    "data", "used", "using", "use", "have", "must", "were", "was", "been",
+    "widely", "assumed", "custom", "broadly", "critical", "took", "priority",
+    "example", "feature", "needed", "while", "from", "with", "that", "this",
+    "only", "into", "across", "their", "about", "after", "before",
+})
+
+
+def _referent_stem(word: str) -> str:
+    """Return a comparison stem for a referent word."""
+    cleaned = re.sub(r"[^a-z]", "", (word or "").lower())
+    if len(cleaned) > 3 and cleaned.endswith("s") and not cleaned.endswith("ss"):
+        cleaned = cleaned[:-1]
+    if cleaned in _CUSTOMER_STEMS:
+        return "customer"
+    return cleaned
+
+
+def _content_stems(phrase: str, *, skip: frozenset[str], limit: int) -> set[str]:
+    """Return stems for the first content words in *phrase*."""
+    stems: set[str] = set()
+    for word in re.findall(r"[A-Za-z][A-Za-z'-]*", phrase or ""):
+        if word.lower() in skip:
+            if not stems:
+                continue
+            break
+        stem = _referent_stem(word)
+        if len(stem) < 3 or stem in skip:
+            continue
+        stems.add(stem)
+        if len(stems) >= limit:
+            break
+    return stems
+
+
+def _of_head_stems(text: str, match: re.Match[str]) -> set[str]:
+    """Return the stems of the 'of …' phrase immediately after a percent."""
+    window = text[match.end(): match.end() + 48]
+    found = re.match(r"\s*of\b", window, re.IGNORECASE)
+    if not found:
+        return set()
+    phrase = window[found.end():]
+    phrase = re.split(r"[,.;:]", phrase, maxsplit=1)[0]
+    phrase = re.split(
+        r"\b(?:was|were|used|and|while|by|to|for|with|that|who|which)\b",
+        phrase,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+    return _content_stems(phrase, skip=_OF_HEAD_STOP, limit=4)
+
+
+def _span_of_head_sets(spans: List[str], token: str) -> list[set[str]]:
+    """Return each span's of-head for *token*. Spans with no of-head are omitted."""
+    found: list[set[str]] = []
+    for span in spans:
+        for match in _DRAFT_PERCENT_RE.finditer(span or ""):
+            if re.sub(r"\s+", "", match.group(0)) != token:
+                continue
+            heads = _of_head_stems(span, match)
+            if heads:
+                found.append(heads)
+    return found
+
+
+def _percent_context_stems(span: str, match: re.Match[str]) -> set[str]:
+    """Return distinctive stems in the span just before this percent."""
+    window = span[max(0, match.start() - 90): match.start()]
+    stems: set[str] = set()
+    for word in re.findall(r"[A-Za-z][A-Za-z'-]*", window):
+        if word.lower() in _CONTEXT_STOP:
+            continue
+        stem = _referent_stem(word)
+        if len(stem) < 5 or stem in _CONTEXT_STOP or stem in _CUSTOMER_STEMS:
+            continue
+        stems.add(stem)
+    return stems
+
+
+def _line_shares_percent_context(unit: str, spans: List[str], token: str) -> bool:
+    """True when *unit* shares a nearby span word other than the of-head."""
+    line_stems = {_referent_stem(word) for word in re.findall(r"[A-Za-z][A-Za-z'-]*", unit)}
+    for span in spans:
+        for match in _DRAFT_PERCENT_RE.finditer(span or ""):
+            if re.sub(r"\s+", "", match.group(0)) != token:
+                continue
+            if line_stems & _percent_context_stems(span, match):
+                return True
+    return False
+
+
+def _percent_referent_conflict(
+    unit: str,
+    match: re.Match[str],
+    spans: List[str],
+) -> str | None:
+    """Return the conflicting draft wording, or None when the referent agrees.
+
+    A percent may have more than one lawful of-head across spans (90% of the
+    backlog, and 90% of security risks). Conflict requires the draft's of-head
+    to miss every one of them. A line that does not share the span's nearby
+    wording is left alone, so an unrelated 25% does not inherit the customer
+    share. '25% usage' with no 'of' still conflicts when the span's heads
+    agree and the line is about that span. Implements FR-384.
+    """
+    token = re.sub(r"\s+", "", match.group(0))
+    span_sets = _span_of_head_sets(spans, token)
+    if not span_sets:
+        return None
+    if not _line_shares_percent_context(unit, spans, token):
+        return None
+    draft_of = _of_head_stems(unit, match)
+    if draft_of:
+        if any(draft_of & heads for heads in span_sets):
+            return None
+        shown = " ".join(sorted(draft_of))
+        return shown or "a different group"
+    agreed = set.intersection(*span_sets) if span_sets else set()
+    if not agreed:
+        return None
+    follower = unit[match.end(): match.end() + 48]
+    if not re.search(r"\busage\b", follower, re.IGNORECASE):
+        return None
+    follower_stems = _content_stems(follower, skip=_FOLLOWER_SKIP, limit=4)
+    if follower_stems & agreed:
+        return None
+    return "usage"
+
+
+def _licensed_currency_units(spans: List[str]) -> dict[str, str]:
+    """Map a currency token to its unit group when every span agrees."""
+    found: dict[str, set[str]] = {}
+    for span in spans:
+        for match in _DRAFT_CURRENCY_RE.finditer(span or ""):
+            unit = _draft_unit_for_match(span, match)
+            if not unit:
+                continue
+            found.setdefault(match.group(0), set()).add(unit)
+    return {
+        token: next(iter(groups))
+        for token, groups in found.items()
+        if len(groups) == 1
+    }
+
+
+def _load_career_spans() -> List[str]:
+    """Return claim text fields from master_claims.json. Empty when the file is missing."""
+    path = os.path.join(_REPO_ROOT, "data", "master_claims.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            catalog = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return []
+    spans: List[str] = []
+    if isinstance(catalog, dict):
+        records = catalog.values()
+    elif isinstance(catalog, list):
+        records = catalog
+    else:
+        return []
+    for rec in records:
+        if isinstance(rec, dict) and str(rec.get("text") or "").strip():
+            spans.append(str(rec["text"]))
+    return spans
+
+
+def check_cited_span_fidelity(
+    resume_text: str,
+    cover_letter_text: str,
+    spans: List[str],
+) -> List[LintViolation]:
+    """LR-042 and LR-043: the drafted number and actor must match the cited span.
+
+    Args: resume markdown, cover-letter markdown, and career-span strings for
+    the claims those documents cite. Returns HARD_BLOCK violations.
+    A bare $8,500, $8,500 annually, and a 93% that no span contains all fail.
+    $8,500 quarterly and $22,100 annually pass when the span says so.
+    Implements FR-384.
+    """
+    if not spans:
+        return []
+    blob = "\n".join(spans)
+    licensed = _licensed_currency_units(spans)
+    known_percents = {
+        re.sub(r"\s+", "", match.group(0))
+        for match in _DRAFT_PERCENT_RE.finditer(blob)
+    }
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    units: List[str] = []
+    if (resume_text or "").strip():
+        units.extend(_split_resume_bullets(resume_text))
+    if (cover_letter_text or "").strip():
+        for para in re.split(r"\n\s*\n", cover_letter_text):
+            units.extend(_split_sentences(para))
+    for unit in units:
+        for match in _DRAFT_CURRENCY_RE.finditer(unit):
+            token = match.group(0)
+            expected = licensed.get(token)
+            if not expected:
+                continue
+            actual = _draft_unit_for_match(unit, match)
+            if actual == expected:
+                continue
+            key = f"unit:{token}:{unit}"
+            if key in seen:
+                continue
+            seen.add(key)
+            violations.append(LintViolation(
+                rule_id="LR-042",
+                severity="HARD_BLOCK",
+                message=(
+                    f"{token} is {expected} in the career span, and this line "
+                    f"says {actual or 'no unit'}: \"{unit}\""
+                ),
+                suggestion=f"Keep {token} with the {expected} unit from the career span, or cut the number.",
+            ))
+        for match in _DRAFT_PERCENT_RE.finditer(unit):
+            token = re.sub(r"\s+", "", match.group(0))
+            if token in known_percents:
+                conflict = _percent_referent_conflict(unit, match, spans)
+                if not conflict:
+                    continue
+                key = f"pct-ref:{token}:{unit}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                violations.append(LintViolation(
+                    rule_id="LR-042",
+                    severity="HARD_BLOCK",
+                    message=(
+                        f"{token} is a share of a named group in the career span, "
+                        f"and this line applies it to {conflict}: \"{unit}\""
+                    ),
+                    suggestion=(
+                        "Keep the percent attached to the same group the career "
+                        "span names, or cut the figure."
+                    ),
+                ))
+                continue
+            key = f"pct:{token}:{unit}"
+            if key in seen:
+                continue
+            seen.add(key)
+            violations.append(LintViolation(
+                rule_id="LR-042",
+                severity="HARD_BLOCK",
+                message=f"{token} is not in the cited career spans: \"{unit}\"",
+                suggestion="Use the percent the career span states, or cut this figure.",
+            ))
+        if _DRAFT_OTHER_ACTOR_RE.search(unit) or not _DRAFT_OWNERSHIP_RE.search(unit):
+            continue
+        actor_objects: set[str] = set()
+        for span in spans:
+            for actor in _DRAFT_OTHER_ACTOR_RE.finditer(span or ""):
+                tail = span[actor.end(): actor.end() + 80]
+                actor_objects.update(obj.lower() for obj in _DRAFT_ACTOR_OBJECT_RE.findall(tail))
+        def _owns_nearby(obj: str) -> bool:
+            for verb in _DRAFT_OWNERSHIP_RE.finditer(unit):
+                window = unit[max(0, verb.start() - 80): verb.end() + 80]
+                if obj in window.lower():
+                    return True
+            return False
+
+        if not any(_owns_nearby(obj) for obj in actor_objects):
+            continue
+        key = f"actor:{unit}"
+        if key in seen:
+            continue
+        seen.add(key)
+        violations.append(LintViolation(
+            rule_id="LR-043",
+            severity="HARD_BLOCK",
+            message=(
+                "This line gives Jason an action the career span assigns to "
+                f"engineering: \"{unit}\""
+            ),
+            suggestion="Credit Jason with the landing page. Credit engineering with the funnel.",
+        ))
+    return violations
 
 
 def check_attribution_verb_strength(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
@@ -2103,17 +2644,16 @@ def check_attribution_verb_strength(resume_text: str, cover_letter_text: str) ->
                 # Do not treat Jason's explicitly allowed landing-page object
                 # as ownership of engineering's funnel.
                 if pid == "ACC-303" and "built" in verb_hits:
+                    # Jason built the landing page. Engineering owns the funnel.
+                    # "Built ... landing page that enabled engineering to deploy"
+                    # is the allowed shape even when engineering is not the
+                    # subject of "built". Live miss (highmark_health, 2026-09-22).
                     owns_landing_page = re.search(
                         r"\b(?:i\s+)?built\b[^.!?]{0,80}\blanding page\b"
                         r"|\blanding page\b[^.!?]{0,40}\bi built\b",
                         unit_lower,
                     )
-                    engineering_owns_funnel = re.search(
-                        r"\bengineering(?:\s*-\s*|\s+)[^.!?]{0,40}\bbuilt\b"
-                        r"[^.!?]{0,60}\b(?:funnel|flow)\b",
-                        unit_lower,
-                    )
-                    if owns_landing_page and engineering_owns_funnel:
+                    if owns_landing_page:
                         verb_hits = [v for v in verb_hits if v != "built"]
 
             if not verb_hits or (pid, unit) in seen:
@@ -2223,6 +2763,22 @@ def known_company_names(
     return names
 
 
+def _own_company_aliases(own_company: str) -> set[str]:
+    """Names that mean this folder's employer, including a duplicate suffix.
+
+    Stage 0 labels a second posting "Medrisk 2". That is still Medrisk.
+    Implements FR-265.
+    """
+    raw = (own_company or "").strip().lower()
+    if not raw:
+        return set()
+    aliases = {raw}
+    stripped = re.sub(r"\s+\d+$", "", raw).strip()
+    if stripped:
+        aliases.add(stripped)
+    return aliases
+
+
 def check_wrong_job_company_bleed(
     resume: str,
     cover_letter: str,
@@ -2235,7 +2791,7 @@ def check_wrong_job_company_bleed(
     Precision first: match the known-name index only, never guess at proper nouns.
     """
     names = known_names if known_names is not None else known_company_names()
-    own = (own_company or "").strip().lower()
+    own_aliases = _own_company_aliases(own_company)
     jd_lower = (jd_text or "").lower()
     combined = _application_body(resume, cover_letter)
     hits: List[LintViolation] = []
@@ -2256,7 +2812,7 @@ def check_wrong_job_company_bleed(
             lower in seen
             or lower in _OWN_EMPLOYERS
             or lower in _AMBIGUOUS_COMPANY_NAMES
-            or lower == own
+            or lower in own_aliases
         ):
             continue
         if lower in jd_lower:
@@ -2272,6 +2828,7 @@ def check_wrong_job_company_bleed(
         # "The Standard" collides with ordinary English ("the standard line",
         # "the standard queue"). Live miss 2026-09-21 omnissa: cover letter
         # "skip the standard line" flagged the insurance company.
+        flags = re.IGNORECASE
         if lower == "workday":
             pattern = rf"\b{re.escape(trimmed)}\b(?![\s-]*hours?\b)"
         elif lower == "the standard":
@@ -2280,9 +2837,16 @@ def check_wrong_job_company_bleed(
                 rf"(line|queue|way|practice|set|issue|approach|process|bar|"
                 rf"fare|procedure)s?\b)"
             )
+        elif lower == "unified":
+            # The company is the capitalized proper noun. Lowercase "unified"
+            # is the adjective ("a unified roadmap", "unified Agile delivery").
+            # Live misses: modern_campus 2026-09-22, highmark/keyfactor/medrisk
+            # 2026-09-22. Implements FR-265.
+            pattern = r"\bUnified\b"
+            flags = 0
         else:
             pattern = r"\b" + re.escape(trimmed) + r"\b"
-        if not re.search(pattern, combined, re.IGNORECASE):
+        if not re.search(pattern, combined, flags):
             continue
         seen.add(lower)
         hits.append(
@@ -2497,6 +3061,81 @@ def lint_folder(folder: str) -> List[dict]:
                 "warns": len(specificity_warns),
                 "infos": 0,
                 "result": LintResult(passed=True, warns=specificity_warns, document_type="specificity"),
+            })
+
+    # LR-038: 40% bypass authorship. HARD_BLOCK so a repair must edit the sentence.
+    # Implements FR-369.
+    if "resume" in texts_by_doc_type or "cover_letter" in texts_by_doc_type:
+        bypass_blocks = check_bypass_authorship(
+            texts_by_doc_type.get("resume", ""),
+            texts_by_doc_type.get("cover_letter", ""),
+        )
+        if bypass_blocks:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "40% bypass authorship",
+                "doc_type": "attribution",
+                "status": "BLOCK",
+                "blocks": len(bypass_blocks),
+                "warns": 0,
+                "infos": 0,
+                "result": LintResult(
+                    passed=False,
+                    blocks=bypass_blocks,
+                    document_type="attribution",
+                ),
+            })
+
+    # LR-039: customer discovery claimed as experience. Implements FR-370.
+    if "resume" in texts_by_doc_type or "cover_letter" in texts_by_doc_type:
+        discovery_blocks = check_customer_discovery(
+            texts_by_doc_type.get("resume", ""),
+            texts_by_doc_type.get("cover_letter", ""),
+        )
+        if discovery_blocks:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "customer discovery claim",
+                "doc_type": "attribution",
+                "status": "BLOCK",
+                "blocks": len(discovery_blocks),
+                "warns": 0,
+                "infos": 0,
+                "result": LintResult(
+                    passed=False,
+                    blocks=discovery_blocks,
+                    document_type="attribution",
+                ),
+            })
+
+    # LR-040 / LR-041 / LR-042 / LR-043. Implements FR-384.
+    if "resume" in texts_by_doc_type or "cover_letter" in texts_by_doc_type:
+        fidelity_blocks: List[LintViolation] = []
+        fidelity_blocks.extend(check_competency_process_notes(
+            texts_by_doc_type.get("resume", ""),
+        ))
+        fidelity_blocks.extend(check_placeholder_company(
+            texts_by_doc_type.get("cover_letter", ""),
+        ))
+        fidelity_blocks.extend(check_cited_span_fidelity(
+            texts_by_doc_type.get("resume", ""),
+            texts_by_doc_type.get("cover_letter", ""),
+            _load_career_spans(),
+        ))
+        if fidelity_blocks:
+            results.append({
+                "submission": os.path.basename(folder),
+                "document": "cited span fidelity",
+                "doc_type": "attribution",
+                "status": "BLOCK",
+                "blocks": len(fidelity_blocks),
+                "warns": 0,
+                "infos": 0,
+                "result": LintResult(
+                    passed=False,
+                    blocks=fidelity_blocks,
+                    document_type="attribution",
+                ),
             })
 
     # LW-028: claim-attribution vs. ownership-verb mismatch check (no JD needed).

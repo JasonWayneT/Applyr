@@ -72,6 +72,32 @@ class TestLocationPlaceholder(unittest.TestCase):
             self.assertIn("CL-009", str(ctx.exception))
             self.assertIn("[Location]", str(ctx.exception))
 
+    def test_cover_letter_missing_thanks_is_repaired(self):
+        body = _MIN_COVER.replace(
+            "I want to discuss how my work maps to this role and thank you for your consideration of the application materials included here for review today with care.\n\n",
+            "The platform work is the part I would carry into this role.\n\n",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "CoverLetter.md"
+            path.write_text(body, encoding="utf-8")
+            ok, _message = check_and_repair_cover_letter(str(path))
+            self.assertTrue(ok)
+            self.assertIn("Thank you for your time and consideration.", path.read_text(encoding="utf-8"))
+
+    def test_resume_em_dash_is_rewritten(self):
+        text = _MIN_RESUME.replace("[Location]", "Chicago, IL").replace(
+            "Did a thing with a metric of 40%.",
+            "Did a thing — with a metric of 40%.",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Resume.md"
+            path.write_text(text, encoding="utf-8")
+            try:
+                check_resume(str(path))
+            except SelfCorrectionError:
+                pass
+            self.assertNotIn("—", path.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

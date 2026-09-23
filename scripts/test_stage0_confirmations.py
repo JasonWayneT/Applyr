@@ -174,6 +174,29 @@ class TestStage0Confirmations(unittest.TestCase):
         self.assertIn("Microsoft Dynamics 365", names)
         self.assertNotIn("PSA", names)
         self.assertNotIn("ERP", names)
+
+    def test_employer_header_and_methodology_are_not_tools(self) -> None:
+        """CR-124 / FR-367. Live 2026-09-22 parks: Businessolver (the employer),
+        'And Experience' (header fragment), and OKRs (methodology) are not
+        products. Delta Lake on the same class of JD still is."""
+        employer = named_skill_candidates(
+            ["Use AI tools while following Businessolver data handling."],
+            employer="Businessolver",
+        )
+        self.assertEqual(employer, [])
+        header = named_skill_candidates(
+            ["Background And Experience/Expertise in product management"],
+        )
+        self.assertEqual(header, [])
+        methodology = named_skill_candidates(
+            ["Experience with OKRs and quarterly planning."],
+        )
+        self.assertEqual(methodology, [])
+        product = named_skill_candidates(
+            ["Hands-on experience with Delta Lake pipelines."],
+            employer="Employers",
+        )
+        self.assertEqual([item.display_name for item in product], ["Delta Lake"])
         certara = named_skill_candidates(
             [
                 "Proficiency in shaping an idea in way that delivers immediate "
@@ -449,8 +472,36 @@ class TestStage0Confirmations(unittest.TestCase):
         self.assertIsNone(get_skill_memory("ibm_cloud", self.db_path))
         self.assertEqual(list_pending_for_opportunity("ssc", self.db_path), [])
 
+    def test_not_present_replaces_an_earlier_confirmed_use(self) -> None:
+        """A later No clears a Yes. The note on the Yes is not what scoring reads."""
+        create_skill_confirmation(
+            db_path=self.db_path,
+            skill_key="gcp",
+            display_name="GCP",
+            requirement="Experience with GCP",
+            opportunity_key="digicert",
+            opportunity_company="Digicert",
+            opportunity_title="Senior Product Manager",
+        )
+        answer_confirmation(
+            db_path=self.db_path,
+            review_key="skill:gcp",
+            answer="CONFIRMED_USE",
+            details={"activity": "approved a migration, no hands-on"},
+        )
+        self.assertEqual(get_skill_memory("gcp", self.db_path)["decision"], "CONFIRMED_USE")
+        answer_confirmation(
+            db_path=self.db_path,
+            review_key="skill:gcp",
+            answer="NOT_PRESENT",
+            details={"reason": "No hands-on GCP experience"},
+        )
+        memory = get_skill_memory("gcp", self.db_path)
+        self.assertEqual(memory["decision"], "NOT_PRESENT")
+        self.assertEqual(memory["evidence_level"], 0)
+
     def test_stage0_builder_does_not_pause_for_unknown_named_skill(self) -> None:
-        """CR-122 / AC-465: unknown tools create a card and auto-absent, no WAITING_FOR_INPUT."""
+        """FR-379: an unknown tool is absent and does not open a card."""
         with tempfile.TemporaryDirectory() as folder:
             Path(folder, "Original_JD.txt").write_text(
                 "Product Manager\n\nRequirements\n- Experience with Acme Platform\n",
@@ -491,9 +542,7 @@ class TestStage0Confirmations(unittest.TestCase):
                         confirmation_db_path=self.db_path,
                     )
             pending = list_pending_for_opportunity(Path(folder).name, self.db_path)
-            self.assertEqual(pending[0]["skill_key"], "acme_platform")
-            self.assertEqual(pending[0]["title"], "Acme Platform")
-            self.assertEqual(pending[0]["status"], "open")
+            self.assertEqual(pending, [])
             names = [
                 row["display_name"]
                 for row in result.get("not_present_named_tools") or []
@@ -650,14 +699,14 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                     with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
                         with patch("utils.load_llm_settings", return_value=settings):
                             with patch("utils.call_llm", side_effect=provider_response):
-                                with self.assertRaises(Stage0NeedsInput) as raised:
-                                    build_stage0_fit_gate(
-                                        folder_path,
-                                        db_gate_result={"action": "clear"},
-                                        prefs={"blocked_companies": []},
-                                        confirmation_db_path=db_path,
-                                    )
-                self.assertEqual(raised.exception.pending[0]["question_type"], "hard_gate_review")
+                                first = build_stage0_fit_gate(
+                                    folder_path,
+                                    db_gate_result={"action": "clear"},
+                                    prefs={"blocked_companies": []},
+                                    confirmation_db_path=db_path,
+                                )
+                self.assertEqual(first["decision"], "SKIP")
+                self.assertEqual(first.get("skip_reason_code"), "hard_gap")
                 spool_files = list((folder_path / ".stage0_spool").glob("*.json"))
                 self.assertEqual({path.name.split(".")[-3] for path in spool_files}, {"request", "response"})
                 self.assertEqual(len(calls), 1)
@@ -680,11 +729,6 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                 self.assertEqual(telemetry["stage0_cascade_provider_calls"], 1)
                 self.assertEqual(telemetry["stage0_cascade_fallbacks"], 0)
 
-                answer_hard_gate_review(
-                    db_path=db_path,
-                    review_key=raised.exception.pending[0]["review_key"],
-                    answer="KEEP_ELIGIBLE",
-                )
                 with patch.dict(os.environ, {"STAGE0_EVIDENCE_CASCADE": "1", "APPLYR_STAGE0_CLOUD_LLM": "1"}):
                     with patch("build_stage0_fit_gate._extract_sections_nlp", return_value=sections):
                         with patch("utils.load_llm_settings", return_value=settings):
@@ -695,14 +739,14 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                                     prefs={"blocked_companies": []},
                                     confirmation_db_path=db_path,
                                 )
-                self.assertFalse(result["decision"] == "SKIP" and result.get("skip_reason_code") == "hard_gap")
+                self.assertEqual(result["decision"], "SKIP")
+                self.assertEqual(result.get("skip_reason_code"), "hard_gap")
                 self.assertEqual(len(calls), 1)
             finally:
                 os.unlink(db_path)
 
     def test_model_flagged_unknown_tool_creates_pending_without_pausing(self) -> None:
-        """CR-108 Epic 7.2 + CR-122: model-flagged named tools still create a
-        durable pending item. Stage 0 does not WAITING_FOR_INPUT for skill cards."""
+        """FR-379: a model-flagged named tool is absent and does not open a card."""
         with tempfile.TemporaryDirectory() as folder:
             folder_path = Path(folder)
             (folder_path / "Original_JD.txt").write_text(
@@ -764,10 +808,7 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                                         confirmation_db_path=db_path,
                                     )
                 pending = list_pending_for_opportunity(folder_path.name, db_path)
-                self.assertEqual(len(pending), 1)
-                self.assertEqual(pending[0]["question_type"], "skill_presence")
-                self.assertEqual(pending[0]["skill_key"], "acme_platform")
-                self.assertEqual(pending[0]["status"], "open")
+                self.assertEqual(pending, [])
                 names = [
                     row["display_name"]
                     for row in result.get("not_present_named_tools") or []
@@ -851,7 +892,8 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
             finally:
                 os.unlink(db_path)
 
-    def test_workflow_pauses_then_resumes_after_hard_gate_answer(self) -> None:
+    def test_certification_hard_gate_skips_without_a_card(self) -> None:
+        """FR-381: a required certification skips. It does not wait on a card."""
         import json
 
         with tempfile.TemporaryDirectory() as folder:
@@ -913,39 +955,12 @@ class TestEnabledCascadeBuilder(unittest.TestCase):
                                 with patch("stage0_skip_ledger.lookup_skip", return_value=None):
                                     with patch("utils.call_llm", side_effect=provider_response):
                                         paused = run_stage0(folder, init_state(folder))
-                self.assertEqual(paused["status"], "WAITING_FOR_INPUT")
+                self.assertEqual(paused["status"], "SKIPPED")
                 receipt = load_receipt(folder, "stage0")
                 self.assertIsNotNone(receipt)
-                self.assertEqual(receipt["result"]["pause_kind"], "review_center")
-                review_key = receipt["result"]["pending_confirmations"][0]["review_key"]
-                answer_hard_gate_review(
-                    db_path=db_path,
-                    review_key=review_key,
-                    answer="KEEP_ELIGIBLE",
-                )
-                with patch.dict(
-                    os.environ,
-                    {
-                        "STAGE0_EVIDENCE_CASCADE": "1",
-                        "APPLYR_STAGE0_CLOUD_LLM": "1",
-                        "STAGE0_SECTION_MODE": "deterministic",
-                        "APPLYR_STAGE0_REVIEW_DB": db_path,
-                    },
-                ):
-                    with patch("build_stage0_fit_gate._extract_sections", return_value=sections):
-                        with patch("utils.load_llm_settings", return_value=settings):
-                            with patch(
-                                "stage0_db_gate.evaluate_db_gate",
-                                return_value={"action": "clear"},
-                            ):
-                                with patch("stage0_skip_ledger.lookup_skip", return_value=None):
-                                    with patch(
-                                        "utils.call_llm",
-                                        side_effect=AssertionError("resume did not reuse checkpoint"),
-                                    ):
-                                        resumed = run_stage0(folder, paused)
-                self.assertEqual(resumed["status"], "IN_PROGRESS")
-                self.assertEqual(resumed["stages"]["stage0"]["status"], "COMPLETE")
+                self.assertEqual(receipt["status"], "SKIPPED")
+                pending = list_pending_for_opportunity(folder_path.name, db_path)
+                self.assertEqual(pending, [])
             finally:
                 os.unlink(db_path)
 

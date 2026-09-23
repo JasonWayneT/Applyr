@@ -7,6 +7,8 @@ related: CR-108, CR-109, CR-119, CR-121
 
 # CR-122: Unknown JD tools default to work experience, Review Center does not pause Stage 0
 
+**Superseded in part (CR-125, 2026-09-23):** Stage 0 no longer opens a skill card for every unknown tool. A card exists only when that tool is why a job never went out. "I have used this" writes the tool into work experience. Open hard-gate cards do not hold the queue. Missing tools still do not pause Stage 0, and a No is still not stored.
+
 ## Decision sought
 
 Stop treating "this posting named a tool that is not in `workExperience.md`" as a Stage 0 human gate. Default to WE. Do not speak to that tool on this JD. Keep a Review Center row so a missed WE entry can be added later. Do not write `No` as a permanent career fact.
@@ -30,10 +32,10 @@ Stage 0 uses WE and the skills catalog as the closed world.
 - Unknown named tool: not evidence for this JD. No `claim_ids`. Evidence level 0. Packet must not copy the JD tool name onto a transferable bridge (existing `AC-456` cap, applied automatically, no tap required).
 - Stage 0 does **not** raise `WAITING_FOR_INPUT` / `Stage0NeedsInput` for `skill_presence` cards.
 - The CSV worker does **not** leave the pack paused `review_center` because those cards are open.
-- Review Center still lists each unknown tool, grouped by canonical `skill_key`, with affected opportunities. That inbox is how a missed WE fact gets added later.
-- `Yes` / `CONFIRMED_USE` still cannot author a claim (`FR-284`). The correction is: write the tool into WE (and catalog when it is a verified tool), then later runs treat it as known.
+- Review Center lists a tool only when that tool is why a job never went out (CR-125). It does not list every unknown tool.
+- `Yes` / `CONFIRMED_USE` still cannot author a claim (`FR-284`). "I have used this" writes the tool into work experience (CR-125). Later runs treat it as known. Nothing reruns on its own.
 - `BAD_DATA` stays durable and suppresses junk extraction (`FR-287`).
-- Required unknown named tools still withhold via CR-121 `conversion_risk`. They do not Skip. They do not become a "have you used IBM Cloud" pause.
+- A required unknown tool is unused. It does not withhold and it does not Skip (CR-125).
 
 Unanswered is the same as not in WE. Tapping `No` is not required and must not mint a forever `skill_memory` row.
 

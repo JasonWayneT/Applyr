@@ -1189,5 +1189,36 @@ class TestValidateHMReviewUnit(unittest.TestCase):
         self.assertTrue(any("no-op" in e for e in errors), errors)
 
 
+class TestQueueHmReviewQuotesLiveLines(unittest.TestCase):
+    """The queue hiring-manager read must quote the files it claims to have read."""
+
+    def test_review_spans_match_the_documents(self) -> None:
+        from hm_review_contract import validate_hm_review
+        from workflow.runner import _queue_hm_review_value
+
+        folder = Path(tempfile.mkdtemp(prefix="hm-queue-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        (folder / "Resume.md").write_text(
+            "# Name\nSan Diego, CA | 555 | a@b.c\n\n"
+            "* Owned the roadmap for a data platform used by enterprise accounts.\n",
+            encoding="utf-8",
+        )
+        (folder / "CoverLetter.md").write_text(
+            "# Name\n\nDear Hiring Manager,\n\n"
+            "The platform work was sequencing a data remediation before the renewal date.\n\n"
+            "Best regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        (folder / "Original_JD.txt").write_text(
+            "URL: https://example.test/job\n\n"
+            "Experience owning a product area and roadmap.\n",
+            encoding="utf-8",
+        )
+        review = _queue_hm_review_value(str(folder))
+        self.assertIsNotNone(review)
+        ok, errors = validate_hm_review(str(folder), review)
+        self.assertTrue(ok, errors)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

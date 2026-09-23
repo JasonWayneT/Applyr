@@ -18,6 +18,12 @@ export interface PipelineLease {
   leaseAgeMinutes: number;
 }
 
+export interface PipelineWaitingItem {
+  slug: string;
+  company: string;
+  reason: string;
+}
+
 export interface PipelineStuckItem {
   slug: string;
   company: string;
@@ -36,9 +42,19 @@ export interface PipelineQuarantineRow {
   quarantineReason: string;
 }
 
+export interface PipelineDecisionItem {
+  slug: string;
+  company: string;
+  state: 'Continuing' | 'Skipped' | 'Running' | 'Failed';
+  reason: string;
+  canRetry: boolean;
+}
+
 export interface PipelineQueueStats {
   counts: PipelineQueueCounts;
   leases: PipelineLease[];
+  waiting: PipelineWaitingItem[];
+  decisions: PipelineDecisionItem[];
   stuck: PipelineStuckItem[];
 }
 

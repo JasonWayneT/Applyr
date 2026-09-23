@@ -2280,6 +2280,71 @@ class TestExcerptShrinkKeepsWeSpan(unittest.TestCase):
         self.assertNotIn("certificate", broken)
 
 
+class TestConstraintOmission(unittest.TestCase):
+    """A shortened card that keeps $8,500 and drops "per quarter", or keeps the
+    landing page and drops "engineering built", is omitted. Implements FR-383.
+    """
+
+    def test_sliced_unit_omits_the_card(self) -> None:
+        from build_authoring_packet import _EXCERPT_MIN_CHARS, _truncate_excerpt_card
+
+        header = "Lens automation of ACC-301. Employer: zero_to_sixty. Prohibited: none listed."
+        body = (
+            "Managed a laptop fulfillment program governing $288,000 in vendor contracts, "
+            "replacing a manual setup process with a custom automated deployment script, "
+            + ("scaling daily setup work across the account team " * 8)
+            + "and saving $8,500 per quarter."
+        )
+        card = f"{header}\n{body}"
+        cut = len(header) + 1 + body.index("$8,500") + len("$8,500 ")
+        self.assertGreater(cut, _EXCERPT_MIN_CHARS)
+        self.assertEqual(_truncate_excerpt_card(card, cut), "")
+
+    def test_full_quarter_sentence_stays(self) -> None:
+        from build_authoring_packet import _truncate_excerpt_card
+
+        card = (
+            "Lens automation of ACC-301. Prohibited: none listed.\n"
+            "Saving $8,500 per quarter on the deployment script."
+        )
+        self.assertIn("per quarter", _truncate_excerpt_card(card, 900))
+
+    def test_dropped_actor_clause_omits_the_card(self) -> None:
+        from build_authoring_packet import _truncate_excerpt_card
+
+        header = "Lens conversion of ACC-303. Prohibited: none listed."
+        body = (
+            "Built the company's first professional landing page. "
+            "Once it proved out, engineering built the funnel around it."
+        )
+        card = f"{header}\n{body}"
+        # Budget fits the header and the first sentence only.
+        budget = len(header) + len("Built the company's first professional landing page. ") + 5
+        self.assertEqual(_truncate_excerpt_card(card, budget), "")
+
+    def test_shrink_drops_the_sliced_claim(self) -> None:
+        from build_authoring_packet import _EXCERPT_MIN_CHARS, _shrink_excerpts_to_budget
+
+        header = "Lens automation of ACC-301. Prohibited: none listed."
+        body_budget = _EXCERPT_MIN_CHARS - len(header) - 1
+        number = "$8,500 "
+        pad = "x" * (body_budget - len(number))
+        body = pad + number + "per quarter."
+        card = f"{header}\n{body}"
+        self.assertLess(body.index("$8,500") + len("$8,500"), body_budget)
+        self.assertGreaterEqual(body.index("per quarter"), body_budget)
+        kept = (
+            "Lens automation of ACC-302. Prohibited: none listed.\n"
+            "Saved $22,100 annually."
+        )
+        shrunk = _shrink_excerpts_to_budget(
+            {"ACC-301-AUTO": card, "ACC-302-OPS": kept},
+            overage_tokens=5000,
+        )
+        self.assertNotIn("ACC-301-AUTO", shrunk)
+        self.assertIn("ACC-302-OPS", shrunk)
+
+
 class TestEmploymentLogisticsNonClaimable(unittest.TestCase):
     """Found 2026-09-19 on binance: a contract-length/location-flexibility JD line
     was scored `required` and matched ACC-220-CLOUDERAEXIT on the shared word

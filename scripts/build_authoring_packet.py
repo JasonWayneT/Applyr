@@ -338,6 +338,9 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "been",
         "before",
         "between",
+        # Live miss 2026-09-23 nisum_2: a Voice of Customer line matched an ETL
+        # investigation on the single word "cause".
+        "cause",
         "during",
         "equipped",
         "excellent",
@@ -455,7 +458,7 @@ _NON_CLAIMABLE_BRIDGE_LOGISTICS = (
 )
 
 _NON_CLAIMABLE_BRIDGE_TRAVEL = (
-    "Not a skill claim (travel-percentage disclosure) -- already handled by "
+    "Not a skill claim (travel or remote posting term) -- already handled by "
     "Stage 0's deterministic travel-ceiling gate, no accomplishment evidence required."
 )
 
@@ -468,10 +471,15 @@ _NON_CLAIMABLE_BRIDGE_TRAVEL = (
 # gate (stage0_prefs_gate._check_travel) the same way education is
 # administratively satisfied by the degree-line check above -- neither is a
 # skill claim needing a resume bridge.
+# Found 2026-09-23 on intech: "fully remote" plus "Quarterly travel may be
+# required for planning sessions" matched product-planning claims on the word
+# "planning". Same class. A remote or travel posting term is not a skill.
 _TRAVEL_LOGISTICS_RE = re.compile(
     r"travel\s+of\s+approximately\s+\d{1,3}\s*[-–]\s*\d{1,3}\s*%|"
     r"\b\d{1,3}\s*[-–]\s*\d{1,3}\s*%\s+travel|"
-    r"travel\s+(?:of\s+)?(?:up\s+to\s+)?\d{1,3}\s*%\s+(?:may\s+be\s+)?required",
+    r"travel\s+(?:of\s+)?(?:up\s+to\s+)?\d{1,3}\s*%\s+(?:may\s+be\s+)?required|"
+    r"\b(?:fully\s+remote|remote\s+within|quarterly\s+travel|"
+    r"travel\s+may\s+be\s+required)\b",
     re.I,
 )
 
@@ -1019,6 +1027,77 @@ def _strip_markdown_decoration(text: str) -> str:
 
 _SENTENCE_END_RE = re.compile(r"[.!?][\"')\]]*(?:\s|$)")
 
+# A sliced card that keeps the number and drops its unit, or keeps the first
+# clause and drops "engineering built …", is how $8,500 became "annually" and
+# the landing page became Jason's funnel. Implements FR-383.
+_CURRENCY_RE = re.compile(r"\$\d[\d,]*(?:\.\d+)?(?:\s*[KMB])?")
+_UNIT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("quarter", ("per quarter", "quarterly", "a quarter", "each quarter")),
+    ("year", ("annually", "per year", "a year", "each year", "annual", "arr")),
+    ("month", ("per month", "monthly", "a month", "each month")),
+)
+_OTHER_ACTOR_RE = re.compile(
+    r"\b(?:engineering|an engineer|the engineer)\s+(?:\w+\s+){0,3}"
+    r"(?:built|created|wrote|deployed|automated)\b",
+    re.IGNORECASE,
+)
+_CONSTRAINT_OMIT_REASON = (
+    "Excerpt omitted because shortening it would drop the unit on a number "
+    "or an engineering-built clause from the career sentence."
+)
+
+
+def _first_unit_group(window: str) -> str | None:
+    """Return the unit group of the earliest unit phrase in *window*."""
+    lowered = (window or "").lower()
+    best_group: str | None = None
+    best_at = 10**9
+    for group, phrases in _UNIT_GROUPS:
+        for phrase in phrases:
+            found = re.search(rf"\b{re.escape(phrase)}\b", lowered)
+            if found and found.start() < best_at:
+                best_at = found.start()
+                best_group = group
+    return best_group
+
+
+def _unit_after_number(text: str, match: re.Match[str]) -> str | None:
+    """Return the unit attached to this currency match, looking after it first."""
+    after = _first_unit_group(text[match.end(): match.end() + 48])
+    if after:
+        return after
+    before = text[max(0, match.start() - 32): match.start()]
+    return _first_unit_group(before)
+
+
+def _constraint_dropped(full: str, kept: str) -> bool:
+    """True when *kept* loses a unit or an other-actor clause that *full* had.
+
+    A later sentence that only adds a second metric can be dropped. A cut that
+    leaves $8,500 in place and removes "per quarter", or that leaves the
+    landing-page sentence and removes "engineering built", cannot.
+    """
+    source = full or ""
+    remain = kept or ""
+    if source.strip() == remain.strip():
+        return False
+    if _OTHER_ACTOR_RE.search(source) and not _OTHER_ACTOR_RE.search(remain):
+        return True
+    for match in _CURRENCY_RE.finditer(source):
+        unit = _unit_after_number(source, match)
+        if not unit:
+            continue
+        kept_match = None
+        for candidate in _CURRENCY_RE.finditer(remain):
+            if candidate.group(0) == match.group(0):
+                kept_match = candidate
+                break
+        if kept_match is None:
+            continue
+        if _unit_after_number(remain, kept_match) != unit:
+            return True
+    return False
+
 
 def _truncate_at_sentence(text: str, max_chars: int) -> str:
     """Truncate *text* to at most max_chars, preferring the nearest sentence
@@ -1066,8 +1145,10 @@ def _truncate_excerpt_card(text: str, max_chars: int) -> str:
         return clean
     kept_body = _truncate_at_sentence(body, body_budget)
     if not kept_body.strip():
-        return clean
+        return "" if _constraint_dropped(clean, header) else clean
     out = f"{header}\n{kept_body}"
+    if _constraint_dropped(clean, out):
+        return ""
     if len(out) > max_chars and kept_body == body:
         return clean
     return out
@@ -1169,7 +1250,10 @@ def _format_excerpt_card(
             f"{lens} lens. Do not copy excerpt sentences."
         )
         return _truncate_at_sentence(body, max_chars)
-    return _truncate_at_sentence(f"{header}\n{span}", max_chars)
+    # Card-aware cut. A sliced unit or actor clause comes back empty so the
+    # caller can omit the claim instead of handing the author a half fact.
+    # Implements FR-383.
+    return _truncate_excerpt_card(f"{header}\n{span}", max_chars)
 
 
 def _excerpt_for_claim(
@@ -1666,7 +1750,9 @@ def _shrink_excerpts_to_budget(
                 for cid, text in non_required.items():
                     share = len(text) / total_nr
                     target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
-                    shrunk_nr[cid] = _truncate_excerpt_card(text, target) if target < len(text) else text
+                    kept = _kept_excerpt(text, target)
+                    if kept:
+                        shrunk_nr[cid] = kept
                 # Recalculate overage after phase 1
                 phase1_savings = sum(len(v) for v in non_required.values()) - sum(len(v) for v in shrunk_nr.values())
                 remaining_overage_chars = max(0, overage_chars - phase1_savings)
@@ -1683,8 +1769,20 @@ def _shrink_excerpts_to_budget(
     for cid, text in excerpts.items():
         share = len(text) / total_chars
         target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
-        shrunk[cid] = _truncate_excerpt_card(text, target) if target < len(text) else text
+        kept = _kept_excerpt(text, target)
+        if kept:
+            shrunk[cid] = kept
     return shrunk
+
+
+def _kept_excerpt(text: str, target: int) -> str:
+    """Return *text* shortened to *target*, or "" when that cut drops a constraint.
+
+    Empty means omit the claim. Implements FR-383.
+    """
+    if target >= len(text):
+        return text
+    return _truncate_excerpt_card(text, target)
 
 
 def _drop_trailing_sentence(text: str, min_chars: int) -> str | None:
@@ -1699,7 +1797,11 @@ def _drop_trailing_sentence(text: str, min_chars: int) -> str | None:
     matches = list(_SENTENCE_END_RE.finditer(clean))
     if len(matches) < 2:
         cut = _truncate_at_sentence(clean, min_chars)
-        return cut if cut and len(cut) < len(clean) else None
+        if not cut or len(cut) >= len(clean):
+            return None
+        if _constraint_dropped(clean, cut):
+            return ""
+        return cut
     trimmed = clean[: matches[-2].end()].rstrip()
     if len(trimmed) < min_chars or not trimmed or trimmed == clean:
         return None
@@ -1707,6 +1809,8 @@ def _drop_trailing_sentence(text: str, min_chars: int) -> str | None:
     # `_truncate_excerpt_card` (velosio ACC-203-TECH).
     if "\n" in clean and "\n" not in trimmed:
         return None
+    if _constraint_dropped(clean, trimmed):
+        return ""
     return trimmed
 
 
@@ -1739,6 +1843,10 @@ def _trim_excerpts_until_under_budget(
         trimmed = _drop_trailing_sentence(excerpts[cid], _EXCERPT_MIN_CHARS)
         if trimmed is None:
             skipped.add(cid)
+            continue
+        if trimmed == "":
+            excerpts, draft = _omit_constraint_excerpt(excerpts, draft, cid)
+            estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
             continue
         excerpts = {**excerpts, cid: trimmed}
         draft["excerpts"] = excerpts
@@ -1793,6 +1901,27 @@ def _drop_excerpt_and_constraint(
         draft["claim_constraints"] = {
             key: value for key, value in constraints.items() if key != cid
         }
+    return excerpts, draft
+
+
+def _omit_constraint_excerpt(
+    excerpts: dict[str, str],
+    draft: dict,
+    cid: str,
+) -> tuple[dict[str, str], dict]:
+    """Drop one claim whose shortened card would lose a unit or actor clause.
+
+    Strips the id from the evidence map so Rule 4 does not fail the rest of
+    the packet. Implements FR-383.
+    """
+    excerpts, draft = _drop_excerpt_and_constraint(excerpts, draft, cid)
+    draft["evidence_map"] = _strip_claim_id_from_rows(
+        list(draft.get("evidence_map") or []), cid
+    )
+    omissions = list(draft.get("constraint_omissions") or [])
+    if not any(row.get("claim_id") == cid for row in omissions if isinstance(row, dict)):
+        omissions.append({"claim_id": cid, "reason": _CONSTRAINT_OMIT_REASON})
+    draft["constraint_omissions"] = omissions
     return excerpts, draft
 
 
@@ -2086,6 +2215,11 @@ def assemble_packet(
         shrunk_excerpts = _shrink_excerpts_to_budget(
             excerpts, estimated_tokens - _TOKEN_BUDGET, required_cids
         )
+        for cid in [key for key in excerpts if key not in shrunk_excerpts]:
+            shrunk_excerpts, draft = _omit_constraint_excerpt(
+                shrunk_excerpts, draft, cid
+            )
+            evidence_map = list(draft.get("evidence_map") or evidence_map)
         if shrunk_excerpts != excerpts:
             excerpts = shrunk_excerpts
             draft["excerpts"] = excerpts

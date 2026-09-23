@@ -118,5 +118,38 @@ class TestEpicAgileFalsePositive(unittest.TestCase):
         self.assertTrue(epic_match_is_agile_noun(line, m.start(), m.end()))
 
 
+class TestNamedToolChrome(unittest.TestCase):
+    """Live misses from the 2026-09-22 queue. Category acronyms and geography
+    are not products. Reltio IDE still is."""
+
+    def test_category_acronyms_and_member_360_are_not_tools(self) -> None:
+        from blocked_tools import looks_like_named_tool
+
+        text = (
+            "Familiarity with systems such as ERP, EHR, MMIS, and CMMS. "
+            "Delivering MDM solutions. MCP-style interfaces. "
+            "Understanding of structured data, analytics, AI/NLP, and data governance. "
+            "Understanding of Member 360 and LTV. "
+            "Overlap with the Eastern Time zone and customers in North America."
+        )
+        hits = [hit.lower() for hit in looks_like_named_tool(text)]
+        for banned in (
+            "mmis", "mdm", "mcp", "nlp", "member 360", "ltv",
+            "eastern time", "north america",
+        ):
+            self.assertNotIn(banned, hits, hits)
+        from blocked_tools import named_tool_surface_is_chrome
+
+        self.assertTrue(named_tool_surface_is_chrome("NLP"))
+        self.assertTrue(named_tool_surface_is_chrome("Nlp"))
+
+    def test_reltio_ide_still_looks_like_a_tool(self) -> None:
+        from blocked_tools import looks_like_named_tool
+
+        text = "Hands-on experience with entity configuration and Reltio IDE behavior."
+        hits = looks_like_named_tool(text)
+        self.assertIn("Reltio IDE", hits)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

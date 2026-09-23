@@ -22,6 +22,12 @@ export interface ActiveLease {
   leaseAgeMinutes: number;
 }
 
+export interface WaitingItem {
+  slug: string;
+  company: string;
+  reason: string;
+}
+
 export interface StuckItem {
   slug: string;
   company: string;
@@ -113,6 +119,160 @@ export function queueCounts(database: Database.Database = db): QueueCounts {
   ).get() as { n: number };
   counts.quarantined = quarantined.n;
   return counts;
+}
+
+export function plainWaitingReason(
+  pausedReason: string | null | undefined,
+  workflowStatus: string | null | undefined,
+): string {
+  // Implements FR-372 / AC-482. One sentence a person can read.
+  if (pausedReason === 'ready_to_finalize') {
+    return 'Finished packet. The next run saves it into the app for review.';
+  }
+  if (pausedReason === 'finalize_failed') {
+    return 'The packet could not be saved into the app.';
+  }
+  if (pausedReason === 'conversion_risk') {
+    return 'A required tool in the ad is not in your history.';
+  }
+  if (workflowStatus === 'NEEDS_DISPOSITION') {
+    return 'The draft has warnings that still need a decision.';
+  }
+  if (workflowStatus === 'WAITING_FOR_INPUT') {
+    return 'The job ad still needs a reading check.';
+  }
+  if (workflowStatus === 'WAITING_FOR_LLM') {
+    return 'The resume write is waiting.';
+  }
+  if (workflowStatus === 'FAILED') {
+    return 'The last run failed.';
+  }
+  return 'Waiting on a check before the packet can continue.';
+}
+
+export function waitingItems(database: Database.Database = db): WaitingItem[] {
+  const hasReason = tableHasColumn(database, 'pipeline_queue', 'paused_reason');
+  const reasonSelect = hasReason ? ', paused_reason' : '';
+  const orderColumn = tableHasColumn(database, 'pipeline_queue', 'paused_at')
+    ? 'paused_at'
+    : 'updated_at';
+  const rows = database.prepare(
+    `SELECT slug, company, last_workflow_status${reasonSelect}
+     FROM pipeline_queue
+     WHERE status = 'paused'
+     ORDER BY ${orderColumn}`,
+  ).all() as Array<{
+    slug: string;
+    company: string;
+    last_workflow_status: string | null;
+    paused_reason?: string | null;
+  }>;
+  return rows.map(row => ({
+    slug: row.slug,
+    company: row.company,
+    reason: plainWaitingReason(row.paused_reason ?? null, row.last_workflow_status),
+  }));
+}
+
+export type DecisionState = 'Continuing' | 'Skipped' | 'Running' | 'Failed';
+
+export interface DecisionItem {
+  slug: string;
+  company: string;
+  state: DecisionState;
+  reason: string;
+  canRetry: boolean;
+}
+
+export function decisionItems(
+  database: Database.Database = db,
+  now: number = Date.now(),
+): DecisionItem[] {
+  const hasReason = tableHasColumn(database, 'pipeline_queue', 'paused_reason');
+  const hasWorkflow = tableHasColumn(database, 'pipeline_queue', 'last_workflow_status');
+  const hasLease = tableHasColumn(database, 'pipeline_queue', 'lease_expires_at');
+  const rows = database.prepare(
+    `SELECT slug, company, status
+       ${hasReason ? ', paused_reason' : ''}
+       ${hasWorkflow ? ', last_workflow_status' : ''}
+       ${hasLease ? ', lease_expires_at' : ''}
+     FROM pipeline_queue
+     WHERE status IN ('queued', 'leased', 'in_progress', 'paused')
+     ORDER BY id`,
+  ).all() as Array<{
+    slug: string;
+    company: string;
+    status: string;
+    paused_reason?: string | null;
+    last_workflow_status?: string | null;
+    lease_expires_at?: string | null;
+  }>;
+  return rows.map(row => classifyDecision(row, now));
+}
+
+function classifyDecision(
+  row: {
+    slug: string;
+    company: string;
+    status: string;
+    paused_reason?: string | null;
+    last_workflow_status?: string | null;
+    lease_expires_at?: string | null;
+  },
+  now: number,
+): DecisionItem {
+  const leaseAt = row.lease_expires_at ? Date.parse(row.lease_expires_at) : Number.NaN;
+  const leaseExpired = Number.isFinite(leaseAt) && leaseAt <= now;
+  const base = { slug: row.slug, company: row.company };
+  if ((row.status === 'leased' || row.status === 'in_progress') && leaseExpired) {
+    return {
+      ...base,
+      state: 'Failed',
+      reason: 'The worker stopped halfway. It can be tried again.',
+      canRetry: true,
+    };
+  }
+  if (row.status === 'leased' || row.status === 'in_progress') {
+    return { ...base, state: 'Running', reason: 'A run is in progress.', canRetry: false };
+  }
+  if (row.paused_reason === 'decided_skip') {
+    return {
+      ...base,
+      state: 'Skipped',
+      reason: 'Skipped from today\'s work experience. Nothing is waiting on you.',
+      canRetry: false,
+    };
+  }
+  if (row.paused_reason === 'finalize_failed' || row.last_workflow_status === 'FAILED') {
+    return {
+      ...base,
+      state: 'Failed',
+      reason: 'The last run failed. It can be tried again.',
+      canRetry: row.status === 'paused',
+    };
+  }
+  if (row.last_workflow_status === 'NEEDS_DISPOSITION') {
+    return {
+      ...base,
+      state: 'Failed',
+      reason: 'The draft has warnings from the last run.',
+      canRetry: false,
+    };
+  }
+  if (row.paused_reason === 'ready_to_finalize') {
+    return {
+      ...base,
+      state: 'Continuing',
+      reason: 'Finished packet. The next run saves it into the app for review.',
+      canRetry: false,
+    };
+  }
+  return {
+    ...base,
+    state: 'Continuing',
+    reason: 'Continuing from today\'s work experience.',
+    canRetry: false,
+  };
 }
 
 export function activeLeases(database: Database.Database = db): ActiveLease[] {

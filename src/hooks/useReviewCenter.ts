@@ -53,7 +53,7 @@ export function useReviewCenter() {
   }, []);
 
   const pendingCount = useMemo(
-    () => items.filter(item => item.status === 'open').length,
+    () => items.filter(item => item.status === 'open' && item.type === 'skill_presence').length,
     [items],
   );
 

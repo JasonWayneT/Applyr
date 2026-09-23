@@ -89,7 +89,8 @@ class TestStage1RepairPrompt(unittest.TestCase):
         state = json.loads((self.folder / repair.REPAIR_STATE_NAME).read_text(encoding="utf-8"))
         self.assertEqual(state["attempts"], 1)
         self.assertEqual(state["last_outcome"], "no_progress_blocking")
-        self.assertEqual(state["no_progress_streak"], 1)
+        self.assertEqual(state["no_progress_streak"], 2)
+        self.assertEqual(state["timeout_attempts"], 1)
 
     def test_wrote_prompt_does_not_requeue(self) -> None:
         with mock.patch.object(repair, "_maybe_requeue_repair") as requeue:

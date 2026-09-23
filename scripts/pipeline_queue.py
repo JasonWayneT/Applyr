@@ -9,7 +9,9 @@ authority (CR-119 Decision 2). Status on pipeline_queue is a mirror.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -291,9 +293,12 @@ MAX_PACK_SIZE = 10
 DEFAULT_PACK_SIZE = 8
 DEFAULT_LEASE_MINUTES = 20
 CONVERSION_RISK_OVERRIDE_NAME = "conversion_risk_apply_anyway.json"
+REVIEW_CENTER_RESUMED_NAME = "stage0_review_center_resumed.json"
 PAUSE_KIND_CONVERSION_RISK = "conversion_risk"
 PAUSED_REASON_CONVERSION_RISK = "conversion_risk"
 PAUSED_REASON_READY_TO_FINALIZE = "ready_to_finalize"
+PAUSED_REASON_DECIDED_SKIP = "decided_skip"
+PAUSED_REASON_FINALIZE_FAILED = "finalize_failed"
 MIRROR_READY_TO_FINALIZE = "READY_TO_FINALIZE"
 STAGE1_BUDGET_RETRY_NAME = "stage1_budget_retry.json"
 
@@ -553,7 +558,14 @@ def requeue_paused(
         failed = row.get("last_workflow_status") == "FAILED"
         folder = _resolve_row_folder(row, (data_root or DATA_ROOT).resolve())
         kind = _pause_kind(folder) if folder is not None else None
-        if kind == PAUSE_KIND_CONVERSION_RISK:
+        chrome_only = False
+        if kind == PAUSE_KIND_CONVERSION_RISK and folder is not None:
+            # Implements FR-367 / FR-374. Chrome, an anchored example list,
+            # and a named tool missing from work experience are not a hold.
+            from build_stage0_fit_gate import stored_conversion_risk_can_continue
+
+            chrome_only = stored_conversion_risk_can_continue(folder)
+        if kind == PAUSE_KIND_CONVERSION_RISK and not chrome_only:
             if note.strip().lower() != "apply_anyway":
                 raise RequeueRefused(
                     "refused: conversion_risk requires reason apply_anyway"
@@ -604,7 +616,7 @@ def _resolve_row_folder(row: dict[str, Any], data_root: Path) -> Path | None:
     return None
 
 
-def _workflow_status(folder: Path) -> str | None:
+def _workflow_payload(folder: Path) -> dict[str, Any] | None:
     path = folder / "workflow_state.json"
     if not path.exists():
         return None
@@ -612,8 +624,155 @@ def _workflow_status(folder: Path) -> str | None:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _workflow_status(folder: Path) -> str | None:
+    payload = _workflow_payload(folder)
+    if payload is None:
+        return None
     status = payload.get("status")
     return status if isinstance(status, str) else None
+
+
+def _mech_rubric_hold(folder: Path) -> bool:
+    """True when mech is waiting only because the rubric score was not typed.
+
+    The queue scorer stays off until AC-464. Resume re-runs mech without that
+    warning when the worker's child has the queue adapter set. A real verify
+    block stays paused. The parent process does not have that env var, so
+    this check does not read it.
+    """
+    payload = _workflow_payload(folder)
+    if payload is None or payload.get("status") != "NEEDS_DISPOSITION":
+        return False
+    stages = payload.get("stages") if isinstance(payload.get("stages"), dict) else {}
+    stage2 = stages.get("stage2") if isinstance(stages.get("stage2"), dict) else {}
+    sub = stage2.get("subphases") if isinstance(stage2.get("subphases"), dict) else {}
+    mech = sub.get("mech") if isinstance(sub.get("mech"), dict) else {}
+    if mech.get("status") != "NEEDS_DISPOSITION":
+        return False
+    path = folder / "reviews" / "mech_findings.json"
+    if not path.is_file():
+        return False
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    findings = doc.get("findings") if isinstance(doc, dict) else None
+    if not isinstance(findings, list) or not findings:
+        return False
+    return all(
+        isinstance(item, dict) and item.get("id") == "mech.rubric_score_required"
+        for item in findings
+    )
+
+
+# Keep aligned with workflow.runner settle markers. These warnings are closed
+# in the same queue pass as the hiring-manager read.
+_HM_SETTLE_MARKERS = (
+    ".LW-009-PAIR.",
+    ".LW-008-PAIR.",
+    ".LW-008.",
+    ".LW-014.",
+    ".LW-003.",
+    ".LW-021.",
+)
+_HM_RULE_ID_RE = re.compile(r"\b((?:LW|LR)-\d+)")
+
+
+def _hm_open_findings(folder: Path) -> list[dict[str, Any]]:
+    """Return hiring-manager findings that still have no disposition."""
+    path = folder / "reviews" / "hm_findings.json"
+    if not path.is_file():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    findings = payload.get("findings") if isinstance(payload, dict) else None
+    if not isinstance(findings, list):
+        return []
+    by_id: dict[str, Any] = {}
+    disp_path = folder / "reviews" / "dispositions.json"
+    if disp_path.is_file():
+        try:
+            disp = json.loads(disp_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            disp = {}
+        if isinstance(disp, dict) and isinstance(disp.get("by_finding_id"), dict):
+            by_id = disp["by_finding_id"]
+    open_items: list[dict[str, Any]] = []
+    for item in findings:
+        if not isinstance(item, dict):
+            continue
+        fid = str(item.get("id") or "")
+        if fid and by_id.get(fid):
+            continue
+        open_items.append(item)
+    return open_items
+
+
+def _live_lint_rule_ids(folder: Path) -> set[str]:
+    """Return rule ids a fresh lint of the current drafts still emits."""
+    from submission_linter import lint_folder
+
+    rules: set[str] = set()
+    for row in lint_folder(str(folder)):
+        result = row.get("result") if isinstance(row, dict) else None
+        if result is None:
+            continue
+        for bucket in ("warns", "blocks"):
+            for item in getattr(result, bucket, []) or []:
+                rule_id = getattr(item, "rule_id", None)
+                if isinstance(rule_id, str) and rule_id:
+                    rules.add(rule_id)
+    return rules
+
+
+def _hm_left_open_can_retry(folder: Path) -> bool:
+    """True when the warnings that froze the hiring-manager pass are gone.
+
+    A still-live BLOCK or a still-live warning the settle does not close
+    stays paused. A stale warning, or only the hiring-manager read, is
+    claimed again. Implements FR-265 / FR-319.
+    """
+    open_items = _hm_open_findings(folder)
+    if not open_items:
+        return True
+    live = _live_lint_rule_ids(folder)
+    for item in open_items:
+        fid = str(item.get("id") or "")
+        if fid == "hm.critical_read":
+            continue
+        if any(marker in fid for marker in _HM_SETTLE_MARKERS):
+            continue
+        match = _HM_RULE_ID_RE.search(fid)
+        rule_id = match.group(1) if match else ""
+        if not rule_id or rule_id in live:
+            return False
+    return True
+
+
+def _hm_needs_queue_settle(folder: Path) -> bool:
+    """True when Stage 2 HM is waiting and a queue resume can close it.
+
+    A settle that left a still-live warning open is not claimed again.
+    A warning the current lint no longer emits is claimed. Implements FR-319.
+    """
+    payload = _workflow_payload(folder)
+    if payload is None or payload.get("status") != "NEEDS_DISPOSITION":
+        return False
+    stages = payload.get("stages") if isinstance(payload.get("stages"), dict) else {}
+    stage2 = stages.get("stage2") if isinstance(stages.get("stage2"), dict) else {}
+    sub = stage2.get("subphases") if isinstance(stage2.get("subphases"), dict) else {}
+    hm = sub.get("hm") if isinstance(sub.get("hm"), dict) else {}
+    if hm.get("status") != "NEEDS_DISPOSITION":
+        return False
+    meta = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    if meta.get("hm_queue_settle") == "left_open":
+        return _hm_left_open_can_retry(folder)
+    return True
 
 
 def _parse_paused_at(value: object) -> datetime | None:
@@ -726,25 +885,19 @@ def _extraction_review_is_no_provider(folder: Path) -> bool:
 def _review_center_open_count(
     conn: sqlite3.Connection | None, slug: str
 ) -> int | None:
-    """Return open blocking Review Center count, or None if unread.
+    """Return 0 when Review Center can be read. None when it cannot.
 
-    CR-122 / FR-360: only ``hard_gate_review`` holds the queue. Open
-    ``skill_presence`` cards are a later correction inbox.
+    A question card does not hold the queue. A missing table still cannot
+    be read, so that pause stays. Implements FR-381.
     """
-    if conn is None or not slug:
+    del slug
+    if conn is None:
         return None
     try:
-        open_n = conn.execute(
-            """
-            SELECT COUNT(*) FROM pending_skill_confirmations
-            WHERE opportunity_key = ? AND status = 'open'
-              AND question_type = 'hard_gate_review'
-            """,
-            (slug,),
-        ).fetchone()[0]
+        conn.execute("SELECT 1 FROM pending_skill_confirmations LIMIT 1").fetchone()
     except sqlite3.OperationalError:
         return None
-    return int(open_n)
+    return 0
 
 
 def _requeue_pause_allowed(
@@ -771,15 +924,107 @@ def _requeue_pause_allowed(
     return False
 
 
+def write_review_center_resumed_marker(folder: Path) -> None:
+    """Record that this pause was already handed back to the worker once."""
+    payload = {"resumed_at": utc_now()}
+    (folder / REVIEW_CENTER_RESUMED_NAME).write_text(
+        json.dumps(payload, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _review_center_marker_time(folder: Path) -> datetime | None:
+    path = folder / REVIEW_CENTER_RESUMED_NAME
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return _parse_paused_at(payload.get("resumed_at"))
+
+
+def _review_center_latest_card_touch(
+    conn: sqlite3.Connection | None, slug: str
+) -> datetime | None:
+    if conn is None or not slug:
+        return None
+    try:
+        row = conn.execute(
+            """
+            SELECT MAX(updated_at) AS touched
+            FROM pending_skill_confirmations
+            WHERE opportunity_key = ?
+            """,
+            (slug,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if row is None:
+        return None
+    touched = row["touched"] if isinstance(row, sqlite3.Row) else row[0]
+    return _parse_paused_at(touched)
+
+
+def _open_hard_gates_are_already_skips(
+    conn: sqlite3.Connection,
+    slug: str,
+    folder: Path,
+) -> bool:
+    """True when a fresh Stage 0 run would skip without a new human answer.
+
+    People management, product-line profitability, and a hands-on KYC must-have
+    are preference exclusions. A card that only restates a years-plus-domain
+    requirement is the same skip the fit score already applies.
+    """
+    from build_stage0_fit_gate import requirement_is_domain_years
+    from stage0_prefs_gate import (
+        _check_kyc_must_have,
+        _check_people_management,
+        _check_revenue_billing,
+    )
+
+    jd_path = folder / "Original_JD.txt"
+    try:
+        jd_text = jd_path.read_text(encoding="utf-8") if jd_path.is_file() else ""
+    except OSError:
+        jd_text = ""
+    if jd_text and (
+        _check_people_management(jd_text)
+        or _check_revenue_billing(jd_text)
+        or _check_kyc_must_have(jd_text)
+    ):
+        return True
+    try:
+        rows = conn.execute(
+            """
+            SELECT requirement FROM pending_skill_confirmations
+            WHERE opportunity_key = ? AND status = 'open'
+              AND question_type = 'hard_gate_review'
+            """,
+            (slug,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return False
+    requirements = [
+        str(row["requirement"] if isinstance(row, sqlite3.Row) else row[0] or "")
+        for row in rows
+    ]
+    return bool(requirements) and all(requirement_is_domain_years(item) for item in requirements)
+
+
 def _review_center_should_promote(
     conn: sqlite3.Connection | None,
     slug: str,
     paused_at: datetime | None,
+    folder: Path | None = None,
 ) -> bool:
-    """Promote when this slug has no open hard-gate Review Center questions.
+    """Promote when no hard-gate question is open and this pause was not already resumed.
 
     CR-122 / AC-469: skill_presence may stay open. Missing table stays paused.
-    paused_at is unused; kept so callers do not change.
+    A later card update after the resume marker promotes again. Implements FR-373.
     """
     del paused_at
     if conn is None or not slug:
@@ -787,7 +1032,26 @@ def _review_center_should_promote(
     open_n = _review_center_open_count(conn, slug)
     if open_n is None:
         return False
-    return open_n == 0
+    if open_n != 0:
+        # One resume when the posting is already a deterministic skip, or every
+        # open card is a required domain-plus-years line. A second pass stays
+        # paused so a failed resume cannot spin. Implements FR-287 / FR-338.
+        if (
+            folder is not None
+            and _review_center_marker_time(folder) is None
+            and _open_hard_gates_are_already_skips(conn, slug, folder)
+        ):
+            return True
+        return False
+    if folder is None:
+        return True
+    marker_at = _review_center_marker_time(folder)
+    if marker_at is None:
+        return True
+    touched = _review_center_latest_card_touch(conn, slug)
+    if touched is None:
+        return False
+    return touched > marker_at
 
 
 def _waiting_for_input_should_promote(
@@ -806,9 +1070,15 @@ def _waiting_for_input_should_promote(
     if kind == "cost_authorization":
         return False
     if kind == "conversion_risk":
-        return _newer_than_paused(folder / CONVERSION_RISK_OVERRIDE_NAME, paused_at)
+        if _newer_than_paused(folder / CONVERSION_RISK_OVERRIDE_NAME, paused_at):
+            return True
+        # A later rule can clear chrome or an anchored example list without
+        # apply_anyway and without another Stage 0 extract. Implements FR-367 / FR-374.
+        from build_stage0_fit_gate import stored_conversion_risk_can_continue
+
+        return stored_conversion_risk_can_continue(folder)
     return _review_center_should_promote(
-        conn, str((row or {}).get("slug") or folder.name), paused_at
+        conn, str((row or {}).get("slug") or folder.name), paused_at, folder
     )
 
 
@@ -853,17 +1123,165 @@ def write_stage1_budget_retry_marker(folder: Path) -> None:
     )
 
 
+def _unused_coverage_waiting(folder: Path) -> bool:
+    """True when the only open Truth findings are unused-tag warnings.
+
+    Those are a heuristic note. The worker records the disposition and
+    continues. A BLOCK stays paused. Implements FR-265.
+    """
+    path = folder / "reviews" / "truth_findings.json"
+    if not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    findings = payload.get("findings") if isinstance(payload, dict) else None
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id: dict[str, Any] = {}
+    disp_path = folder / "reviews" / "dispositions.json"
+    if disp_path.is_file():
+        try:
+            disp = json.loads(disp_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            disp = {}
+        if isinstance(disp, dict) and isinstance(disp.get("by_finding_id"), dict):
+            by_id = disp["by_finding_id"]
+    saw_open = False
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        if by_id.get(fid):
+            continue
+        message = str(item.get("message") or "")
+        if (
+            fid.startswith("truth.provenance.")
+            and "missing or empty 'company'" in message
+        ):
+            from run_stage1_repair import provenance_company_missing
+
+            if not provenance_company_missing(folder):
+                continue
+            return False
+        if str(item.get("severity") or "").upper() != "WARN":
+            return False
+        if not fid.startswith("truth.coverage.unused."):
+            return False
+        saw_open = True
+    return saw_open
+
+
+def _ats_extractor_waiting(folder: Path) -> bool:
+    """True when the only open ATS findings are extractor terms off the contract."""
+    path = folder / "reviews" / "ats_findings.json"
+    if not path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    findings = payload.get("findings") if isinstance(payload, dict) else None
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id: dict[str, Any] = {}
+    disp_path = folder / "reviews" / "dispositions.json"
+    if disp_path.is_file():
+        try:
+            disp = json.loads(disp_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            disp = {}
+        if isinstance(disp, dict) and isinstance(disp.get("by_finding_id"), dict):
+            by_id = disp["by_finding_id"]
+    saw_open = False
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        if by_id.get(fid):
+            continue
+        if str(item.get("severity") or "").upper() != "WARN":
+            return False
+        if not fid.startswith("ats.jd_terms.missing."):
+            return False
+        saw_open = True
+    return saw_open
+
+
+def _draft_newer_than_pause(folder: Path, paused_at: datetime | None) -> bool:
+    """True when Resume.md or CoverLetter.md changed after the pause."""
+    if paused_at is None:
+        return False
+    for name in ("Resume.md", "CoverLetter.md"):
+        path = folder / name
+        if not path.is_file():
+            continue
+        modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        if modified > paused_at:
+            return True
+    return False
+
+
+def _customer_discovery_claim_is_gone(folder: Path) -> bool:
+    """True when an LR-039 block quotes a phrase the resume no longer has."""
+    path = folder / "reviews" / "hm_findings.json"
+    resume_path = folder / "Resume.md"
+    if not path.is_file() or not resume_path.is_file():
+        return False
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        resume = resume_path.read_text(encoding="utf-8")
+    except (OSError, json.JSONDecodeError):
+        return False
+    findings = payload.get("findings") if isinstance(payload, dict) else None
+    if not isinstance(findings, list):
+        return False
+    blocked = False
+    for item in findings:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "").startswith("hm.lint.block.customer discovery claim.LR-039"):
+            blocked = True
+            break
+    if not blocked:
+        return False
+    return "customer discovery" not in resume.casefold()
+
+
 def _paused_should_promote(
     folder: Path,
     row: dict[str, Any] | None = None,
     conn: sqlite3.Connection | None = None,
 ) -> bool:
-    if (row or {}).get("paused_reason") == PAUSED_REASON_READY_TO_FINALIZE:
-        return False
+    # Implements FR-371 / AC-481. A finished packet is claimed so the worker
+    # can save it into the app. A failed save stays put.
+    reason = (row or {}).get("paused_reason")
+    if reason == PAUSED_REASON_FINALIZE_FAILED:
+        # A missing company or title on the manifest is filled from the packet.
+        # Once those fields are present, save the packet. Implements FR-371.
+        from contracts import check_draft_manifest
+
+        ready, _errors = check_draft_manifest(str(folder))
+        return ready
+    if reason == PAUSED_REASON_READY_TO_FINALIZE:
+        return True
     if (row or {}).get("last_workflow_status") == MIRROR_READY_TO_FINALIZE:
-        return False
+        return True
     status = _workflow_status(folder)
     if status == "NEEDS_DISPOSITION":
+        if _hm_needs_queue_settle(folder) or _mech_rubric_hold(folder):
+            return True
+        from run_stage1_repair import provenance_company_missing
+
+        if provenance_company_missing(folder):
+            return True
+        if _unused_coverage_waiting(folder) or _ats_extractor_waiting(folder):
+            return True
+        if _customer_discovery_claim_is_gone(folder):
+            return True
+        if _draft_newer_than_pause(folder, _parse_paused_at((row or {}).get("paused_at"))):
+            return True
         paused_at = _parse_paused_at((row or {}).get("paused_at"))
         dispositions_at = _dispositions_mtime(folder)
         if paused_at is None or dispositions_at is None:
@@ -872,7 +1290,38 @@ def _paused_should_promote(
     if status == "WAITING_FOR_INPUT":
         return _waiting_for_input_should_promote(folder, row, conn)
     if status == "FAILED":
-        return is_retryable_stage1_budget_failure(folder)
+        # A provider timeout uses its own attempt cap and wait. The packet
+        # budget shortcut must not claim it early. Implements FR-378.
+        repair_path = folder / "stage1_repair_state.json"
+        if repair_path.is_file():
+            try:
+                repair_doc = json.loads(repair_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                repair_doc = None
+            if isinstance(repair_doc, dict) and repair_doc.get("last_outcome") == "repair_timeout":
+                from run_queue_worker import needs_stage1_repair
+
+                return needs_stage1_repair(folder)
+        if is_retryable_stage1_budget_failure(folder):
+            return True
+        if _draft_newer_than_pause(folder, _parse_paused_at((row or {}).get("paused_at"))):
+            return True
+        from run_stage1_repair import saved_repair_can_replay
+
+        if saved_repair_can_replay(folder):
+            return True
+        # A repair that stored cites as a text-to-id map left every bullet
+        # looking uncited. Claim it so verify can store those cites as rows.
+        # Implements FR-265.
+        from run_stage1_repair import provenance_needs_coerce
+
+        if provenance_needs_coerce(folder):
+            return True
+        # One restored draft can be repaired again. A second miss stays paused.
+        # Implements FR-344 / FR-375.
+        from run_queue_worker import needs_stage1_repair
+
+        return needs_stage1_repair(folder)
     if status in (
         "COMPLETE",
         "COMPLETE_WITH_OVERRIDE",
@@ -899,6 +1348,8 @@ def _promotable_paused_slugs(conn: sqlite3.Connection, data_root: Path) -> list[
     )
     slugs: list[str] = []
     for row in rows:
+        if row.get("paused_reason") == PAUSED_REASON_DECIDED_SKIP:
+            continue
         folder = _resolve_row_folder(row, data_root)
         if folder is None:
             continue
@@ -1095,6 +1546,7 @@ def claim_pack(
     data_root: Path | None = None,
     archive_submissions_root: Path | None = None,
     archive_skipped_root: Path | None = None,
+    skip_slugs: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     if size < 1 or size > MAX_PACK_SIZE:
         raise PackSizeError(f"size must be 1..{MAX_PACK_SIZE}, got {size}")
@@ -1112,10 +1564,11 @@ def claim_pack(
             archive_submissions_root=archive_submissions_root,
             archive_skipped_root=archive_skipped_root,
         )
+        skipped = {slug for slug in (skip_slugs or set()) if slug}
         promotable = [
             slug
             for slug in _promotable_paused_slugs(conn, root)
-            if slug not in already_handled
+            if slug not in already_handled and slug not in skipped
         ]
         now = utc_now()
         old_level = conn.isolation_level
@@ -1153,6 +1606,7 @@ def claim_pack(
                 exclude.extend(
                     slug for slug in already_handled if slug not in exclude
                 )
+                exclude.extend(slug for slug in skipped if slug not in exclude)
                 where_sql = """
                     status = 'queued'
                     OR (
@@ -1268,4 +1722,281 @@ def release(
     finally:
         if close_after:
             conn.close()
+
+
+def _stored_gate(folder: Path | None) -> dict[str, Any]:
+    """Return the stored Stage 0 gate, or an empty dict when it is unreadable."""
+    if folder is None:
+        return {}
+    path = folder / "stage0_fit_gate.json"
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _written_skip_reason(folder: Path | None, gate: dict[str, Any]) -> str | None:
+    """Return a skip sentence when a written rule already decided the job."""
+    from build_stage0_fit_gate import requirement_is_domain_years
+    from stage0_prefs_gate import (
+        _check_ai_ml_ownership,
+        _check_kyc_must_have,
+        _check_people_management,
+        _check_revenue_billing,
+        _check_zero_to_one,
+    )
+
+    jd_text = ""
+    if folder is not None:
+        jd_path = folder / "Original_JD.txt"
+        try:
+            jd_text = jd_path.read_text(encoding="utf-8") if jd_path.is_file() else ""
+        except OSError:
+            jd_text = ""
+    if jd_text and (
+        _check_people_management(jd_text)
+        or _check_revenue_billing(jd_text)
+        or _check_zero_to_one(jd_text)
+        or _check_ai_ml_ownership(jd_text)
+        or _check_kyc_must_have(jd_text)
+    ):
+        return "Skipped. A written exclusion already applies."
+    if jd_text and requirement_is_domain_years(jd_text):
+        return "Skipped. The ad requires years in a domain that is not in work experience."
+    required = gate.get("required") or []
+    if isinstance(required, list):
+        for row in required:
+            item = str(row.get("item") or "") if isinstance(row, dict) else str(row or "")
+            if requirement_is_domain_years(item):
+                return "Skipped. The ad requires years in a domain that is not in work experience."
+    if str(gate.get("decision") or "") == "SKIP":
+        return "Skipped from the stored fit gate."
+    return None
+
+
+def classify_paused_hold(row: dict[str, Any], folder: Path | None) -> str:
+    """Return skip, continue, or leave for one paused row.
+
+    Does not read a model and does not start a worker. Implements FR-381.
+    """
+    if row.get("status") != "paused":
+        return "leave"
+    reason = row.get("paused_reason")
+    workflow = row.get("last_workflow_status")
+    if reason in {
+        PAUSED_REASON_DECIDED_SKIP,
+        PAUSED_REASON_READY_TO_FINALIZE,
+        PAUSED_REASON_FINALIZE_FAILED,
+    }:
+        return "leave"
+    if workflow in {"FAILED", "NEEDS_DISPOSITION"}:
+        return "leave"
+    kind = _pause_kind(folder) if folder is not None else None
+    if kind in {"subscription_review", "requirement_extraction_review", "cost_authorization"}:
+        return "leave"
+    gate = _stored_gate(folder)
+    written = _written_skip_reason(folder, gate)
+    if written:
+        return "skip"
+    fit = gate.get("fit_score")
+    try:
+        fit_value = int(fit) if fit is not None else None
+    except (TypeError, ValueError):
+        fit_value = None
+    if fit_value is None:
+        # A question pause with no stored score is not a hold. The next Stage 0
+        # run scores it. A written skip already returned above. Implements FR-381.
+        if kind == "review_center":
+            return "continue"
+        return "leave"
+    from evidence_scale import load_score_bands
+
+    skip_floor, _tier1 = load_score_bands()
+    if fit_value < skip_floor:
+        return "skip"
+    return "continue"
+
+
+def mark_decided_skip(
+    conn: sqlite3.Connection,
+    slug: str,
+) -> bool:
+    """Set paused_reason to decided_skip without changing status."""
+    row = get_row(conn, slug)
+    if row is None or row.get("status") != "paused" or row.get("locked_by"):
+        return False
+    cur = conn.execute(
+        """
+        UPDATE pipeline_queue
+        SET paused_reason = ?, updated_at = ?
+        WHERE slug = ? AND status = 'paused' AND locked_by IS NULL
+        """,
+        (PAUSED_REASON_DECIDED_SKIP, utc_now(), slug),
+    )
+    conn.commit()
+    return cur.rowcount == 1
+
+
+def decide_queue_holds(
+    conn: sqlite3.Connection | None = None,
+    *,
+    db_path: Path | str | None = None,
+    data_root: Path | None = None,
+) -> dict[str, list[str]]:
+    """Move question holds to queued or decided_skip. Does not start a worker.
+
+    Failed runs, disposition holds, and an in-progress lease stay put.
+    Implements FR-381.
+    """
+    close_after = False
+    if conn is None:
+        conn = connect(db_path)
+        close_after = True
+    root = data_root if data_root is not None else DATA_ROOT
+    outcome: dict[str, list[str]] = {"skip": [], "continue": [], "leave": []}
+    try:
+        for row in list_rows(conn, status="paused"):
+            folder = _resolve_row_folder(row, root)
+            action = classify_paused_hold(row, folder)
+            slug = str(row["slug"])
+            if action == "skip":
+                if mark_decided_skip(conn, slug):
+                    outcome["skip"].append(slug)
+                else:
+                    outcome["leave"].append(slug)
+                continue
+            if action == "continue":
+                try:
+                    requeue_paused(
+                        slug,
+                        reason="decide_forward",
+                        worker="decide-holds",
+                        conn=conn,
+                        data_root=root,
+                    )
+                except RequeueRefused:
+                    outcome["leave"].append(slug)
+                    continue
+                outcome["continue"].append(slug)
+                continue
+            outcome["leave"].append(slug)
+        return outcome
+    finally:
+        if close_after:
+            conn.close()
+
+
+def redo_one(
+    slug: str,
+    *,
+    conn: sqlite3.Connection | None = None,
+    db_path: Path | str | None = None,
+    data_root: Path | None = None,
+) -> dict[str, Any]:
+    """Queue one stopped or failed job again. Does not start a worker.
+
+    Implements FR-380. Already-applied rows stay applied.
+    """
+    close_after = False
+    if conn is None:
+        conn = connect(db_path)
+        close_after = True
+    root = data_root if data_root is not None else DATA_ROOT
+    try:
+        row = get_row(conn, slug)
+        if row is None:
+            raise RequeueRefused(f"refused: no pipeline_queue row for {slug}")
+        if _slug_matches_applied_job(conn, row):
+            raise RequeueRefused("refused: already applied")
+        status = row.get("status")
+        if status == "paused" and row.get("last_workflow_status") == "FAILED":
+            return requeue_paused(
+                slug,
+                reason="retry_failed",
+                worker="redo-one",
+                conn=conn,
+                data_root=root,
+            )
+        if status == "paused" and row.get("paused_reason") == PAUSED_REASON_DECIDED_SKIP:
+            return transition(
+                slug,
+                "queued",
+                worker=row.get("locked_by") or "",
+                token=int(row.get("fencing_token") or 0),
+                conn=conn,
+                requeued_by="redo-one",
+                requeue_reason="redo_one",
+            )
+        if status == "paused":
+            return requeue_paused(
+                slug,
+                reason="redo_one",
+                worker="redo-one",
+                conn=conn,
+                data_root=root,
+            )
+        if status == "in_progress":
+            expires = _parse_paused_at(row.get("lease_expires_at"))
+            if expires is not None and expires > datetime.now(timezone.utc):
+                raise RequeueRefused("refused: lease is still active")
+            return transition(
+                slug,
+                "queued",
+                worker=str(row.get("locked_by") or ""),
+                token=int(row.get("fencing_token") or 0),
+                conn=conn,
+                requeued_by="redo-one",
+                requeue_reason="expired_lease",
+            )
+        raise RequeueRefused(f"refused: status={status}")
+    finally:
+        if close_after:
+            conn.close()
+
+
+def _slug_matches_applied_job(conn: sqlite3.Connection, row: dict[str, Any]) -> bool:
+    """True when a jobs row for this posting is already Applied or later."""
+    try:
+        conn.execute("SELECT 1 FROM jobs LIMIT 1").fetchone()
+    except sqlite3.OperationalError:
+        return False
+    applied = (
+        "Applied",
+        "Recruiter Screen",
+        "Core Interviews",
+        "Offer and Negotiation",
+    )
+    company = str(row.get("company") or "")
+    title = str(row.get("title") or "")
+    found = conn.execute(
+        """
+        SELECT 1 FROM jobs
+        WHERE status IN (?, ?, ?, ?)
+          AND lower(company) = lower(?)
+          AND lower(title) = lower(?)
+        LIMIT 1
+        """,
+        (*applied, company, title),
+    ).fetchone()
+    return found is not None
+
+
+def main(argv: list[str] | None = None) -> int:
+    """CLI for decide-holds and redo-one. Does not start the queue worker."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if len(args) == 1 and args[0] == "decide-holds":
+        print(json.dumps(decide_queue_holds()))
+        return 0
+    if len(args) == 2 and args[0] == "redo-one":
+        print(json.dumps(redo_one(args[1]), default=str))
+        return 0
+    print("usage: pipeline_queue.py decide-holds | redo-one SLUG", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 

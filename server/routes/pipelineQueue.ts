@@ -5,9 +5,11 @@ import { requireApiToken } from '../middleware.js';
 import {
   STUCK_STALE_MINUTES,
   activeLeases,
+  decisionItems,
   quarantineRows,
   queueCounts,
   stuckItems,
+  waitingItems,
 } from '../repository/pipelineQueueRepository.js';
 import {
   CSV_INBOX_DIR,
@@ -18,6 +20,7 @@ import {
   writeCsvUpload,
   type IngestCounts,
 } from '../services/pipelineQueueUpload.js';
+import { pythonScriptPath, runBuffered } from '../pipeline/processRunner.js';
 
 export type PipelineQueueRouterDeps = {
   inboxDir?: string;
@@ -43,6 +46,8 @@ export function createPipelineQueueRouter(
       return res.json({
         counts: queueCounts(database),
         leases: activeLeases(database),
+        waiting: waitingItems(database),
+        decisions: decisionItems(database),
         stuck: stuckItems(STUCK_STALE_MINUTES, database),
       });
     } catch (err) {
@@ -57,6 +62,26 @@ export function createPipelineQueueRouter(
     } catch (err) {
       console.error(err);
       return res.status(500).json({ error: 'Failed to fetch pipeline quarantine' });
+    }
+  });
+
+  router.post('/api/pipeline-queue/:slug/redo', async (req, res) => {
+    const slug = String(req.params.slug || '');
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(slug)) {
+      return res.status(400).json({ error: 'Invalid slug' });
+    }
+    try {
+      const result = await runBuffered([
+        pythonScriptPath('pipeline_queue.py'),
+        'redo-one',
+        slug,
+      ]);
+      if (result.code !== 0) {
+        return res.status(400).json({ error: result.stderr.trim() || 'Could not retry this job' });
+      }
+      return res.json({ ok: true });
+    } catch {
+      return res.status(500).json({ error: 'Could not retry this job' });
     }
   });
 

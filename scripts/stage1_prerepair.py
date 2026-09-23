@@ -200,6 +200,82 @@ def _resync_provenance(folder: Path, doc_type: str, line_changes: list[dict[str,
     return changed
 
 
+def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
+    """Remove factual lines that have no cite when the rest of the draft is cited.
+
+    A text-to-id map must already be coerced to v2. An empty cite file deletes
+    nothing. Implements FR-265.
+    """
+    from author_from_packet import (
+        _cover_factual_sentences,
+        _normalize_provenance_unit,
+        _professional_experience_bullets,
+    )
+    from run_stage1_repair import heal_provenance_file
+
+    heal_provenance_file(folder)
+    prov_path = folder / "claim_provenance.json"
+    resume_path = folder / "Resume.md"
+    letter_path = folder / "CoverLetter.md"
+    if not prov_path.is_file() or not resume_path.is_file() or not letter_path.is_file():
+        return []
+    try:
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(provenance, dict):
+        return []
+
+    def _covered(section: str, field: str) -> set[str]:
+        covered: set[str] = set()
+        for row in provenance.get(section) or []:
+            if not isinstance(row, dict) or not row.get("claim_ids"):
+                continue
+            value = row.get(field)
+            if isinstance(value, str) and value.strip():
+                covered.add(_normalize_provenance_unit(value))
+        return covered
+
+    resume_text = resume_path.read_text(encoding="utf-8")
+    letter_text = letter_path.read_text(encoding="utf-8")
+    covered_resume = _covered("resume_claims", "bullet")
+    covered_letter = _covered("cover_letter_claims", "sentence")
+    if not covered_resume and not covered_letter:
+        return []
+    applied: list[dict[str, str]] = []
+    resume_lines = resume_text.splitlines()
+    kept_resume: list[str] = []
+    in_experience = False
+    for line in resume_lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_experience = stripped[3:].strip().casefold() == "professional experience"
+        if (
+            in_experience
+            and stripped.startswith(("* ", "- "))
+            and _normalize_provenance_unit(stripped) not in covered_resume
+        ):
+            applied.append({"rule_id": "sentence_provenance", "file": "Resume.md", "from": stripped, "to": ""})
+            continue
+        kept_resume.append(line)
+    if applied:
+        resume_path.write_text("\n".join(kept_resume).rstrip() + "\n", encoding="utf-8")
+    for sentence in _cover_factual_sentences(letter_text):
+        if _normalize_provenance_unit(sentence) in covered_letter:
+            continue
+        if sentence not in letter_text:
+            continue
+        letter_text = letter_text.replace(sentence, "", 1)
+        applied.append(
+            {"rule_id": "sentence_provenance", "file": "CoverLetter.md", "from": sentence, "to": ""}
+        )
+    if any(row["file"] == "CoverLetter.md" for row in applied):
+        letter_text = re.sub(r"[ \t]{2,}", " ", letter_text)
+        letter_text = re.sub(r"\n{3,}", "\n\n", letter_text)
+        letter_path.write_text(letter_text if letter_text.endswith("\n") else letter_text + "\n", encoding="utf-8")
+    return applied
+
+
 def apply_mechanical_fixes(
     folder: Path,
     *,
@@ -244,6 +320,8 @@ def apply_mechanical_fixes(
             path.write_text(text, encoding="utf-8")
         if doc_line_changes:
             _resync_provenance(folder, doc_type, doc_line_changes)
+    for change in drop_uncited_units(folder):
+        applied.append(change)
     return {
         "applied": applied,
         "skipped": skipped,

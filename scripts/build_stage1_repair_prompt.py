@@ -114,6 +114,8 @@ def load_repair_state(folder: Path) -> dict:
         "auto_fixes": [],
         "auto_fix_skipped": [],
         "no_progress_streak": 0,
+        "timeout_attempts": 0,
+        "next_retry_at": None,
     }
     if not path.is_file():
         return default
@@ -131,6 +133,10 @@ def load_repair_state(folder: Path) -> dict:
         streak = int(payload.get("no_progress_streak") or 0)
     except (TypeError, ValueError):
         streak = 0
+    try:
+        timeout_attempts = int(payload.get("timeout_attempts") or 0)
+    except (TypeError, ValueError):
+        timeout_attempts = 0
     default.update(
         {
             "attempts": max(0, attempts),
@@ -142,6 +148,8 @@ def load_repair_state(folder: Path) -> dict:
             "auto_fixes": list(payload.get("auto_fixes") or []),
             "auto_fix_skipped": list(payload.get("auto_fix_skipped") or []),
             "no_progress_streak": max(0, streak),
+            "timeout_attempts": max(0, timeout_attempts),
+            "next_retry_at": payload.get("next_retry_at"),
         }
     )
     return default
@@ -675,6 +683,14 @@ def build_for_folder(
         state["last_outcome"] = "no_progress_blocking" if blocking else "no_progress_forward"
         state["blocking"] = blocking
         state["forwarded"] = forwarded
+        if blocking:
+            # The findings did not change, so another identical repair will not
+            # either. Park the job instead of claiming it again. Implements FR-378.
+            try:
+                streak = int(state.get("no_progress_streak") or 0)
+            except (TypeError, ValueError):
+                streak = 0
+            state["no_progress_streak"] = max(streak, 2)
         save_repair_state(folder, state)
         if blocking:
             return 2, (

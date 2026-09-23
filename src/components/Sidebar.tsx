@@ -37,6 +37,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, jobs, review
     { name: 'Opportunities', icon: 'view_kanban' },
     { name: 'Job Search', icon: 'radar' },
     { name: 'Review Center', icon: 'fact_check' },
+    { name: 'Pipeline', icon: 'account_tree' },
     { name: 'Tuning Log', icon: 'tune' },
     { name: 'Settings', icon: 'account_circle' },
   ];

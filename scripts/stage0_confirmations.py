@@ -11,7 +11,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from blocked_tools import HARD_BLOCKED_TOOLS, load_skills_catalog_terms, looks_like_named_tool
+from blocked_tools import (
+    HARD_BLOCKED_TOOLS,
+    is_posting_employer_name,
+    load_skills_catalog_terms,
+    looks_like_named_tool,
+)
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -100,8 +105,12 @@ def named_skill_candidates(
     *,
     known_terms: set[str] | None = None,
     internal_terms: list[str] | None = None,
+    employer: str | None = None,
 ) -> list[NamedSkillCandidate]:
-    """Find explicit, unverified named tools without treating role prose as tools."""
+    """Find explicit, unverified named tools without treating role prose as tools.
+
+    *employer* drops this posting's own company name (CR-124 / FR-367).
+    """
     known_keys = _catalog_keys(known_terms)
     internal_keys = {
         canonical_skill_key(term)
@@ -122,6 +131,8 @@ def named_skill_candidates(
             display_name = surface.strip()
             skill_key = canonical_skill_key(display_name)
             if not skill_key or skill_key in seen:
+                continue
+            if is_posting_employer_name(display_name, employer):
                 continue
             # A longer candidate may include a verified base product plus an
             # employer-specific suffix. Keep it out of the confirmation queue
@@ -577,6 +588,20 @@ def answer_confirmation(
                         now,
                         now,
                     ),
+                )
+            elif is_presence and answer == "NOT_PRESENT":
+                # A later No replaces a mistaken Yes. A first No still does not
+                # create career memory. Implements FR-283.
+                connection.execute(
+                    """
+                    UPDATE skill_memory
+                    SET decision = 'NOT_PRESENT',
+                        evidence_level = 0,
+                        details_json = ?,
+                        updated_at = ?
+                    WHERE skill_key = ? AND decision = 'CONFIRMED_USE'
+                    """,
+                    (serialized, now, skill_key),
                 )
             if promote_to_verified_evidence:
                 promotion_id = (

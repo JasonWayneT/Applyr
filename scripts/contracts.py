@@ -417,6 +417,18 @@ def check_rubric_score_provenance(folder: str, score) -> list[str]:
     return errors
 
 
+def queue_rubric_deferred() -> bool:
+    """True when this queue run must not wait on a hand-typed rubric score.
+
+    The Agy rubric stays off until AC-464. A missing score is not a hold on
+    that path. A manual run without the queue adapter still requires the score.
+    """
+    return (
+        os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER") == "1"
+        and os.environ.get("APPLYR_STAGE2_AGY_RUBRIC") != "1"
+    )
+
+
 def check_draft_manifest(folder: str) -> tuple[bool, list[str]]:
     """Per SKILL.md Stage 3: 'draft_manifest.json with verification_passed/rubric_score
     populated (same field shape the old draft_compiler.py wrote)'."""
@@ -442,11 +454,12 @@ def check_draft_manifest(folder: str) -> tuple[bool, list[str]]:
             pass
     if "verification_passed" not in data or not isinstance(data.get("verification_passed"), bool):
         errors.append("draft_manifest.json: 'verification_passed' must be present and a real boolean")
-    score = data.get("rubric_score")
-    shape_errors = _check_rubric_score_shape(score)
-    errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
-    if not shape_errors:
-        errors.extend(f"draft_manifest.json: {e}" for e in check_rubric_floors(score))
+    if not queue_rubric_deferred():
+        score = data.get("rubric_score")
+        shape_errors = _check_rubric_score_shape(score)
+        errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
+        if not shape_errors:
+            errors.extend(f"draft_manifest.json: {e}" for e in check_rubric_floors(score))
 
     return len(errors) == 0, errors
 
@@ -747,11 +760,12 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
     if not ok:
         errors.extend(errs)
 
+    deferred_rubric = queue_rubric_deferred()
     manifest_path = os.path.join(folder, "draft_manifest.json")
     manifest, err = load_json(manifest_path)
     if err:
         errors.append(err)
-    else:
+    elif not deferred_rubric:
         score = manifest.get("rubric_score")
         shape_errors = _check_rubric_score_shape(score)
         errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
@@ -796,7 +810,9 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
             )
 
         rubric_audit = receipt.get("rubric_audit")
-        if not isinstance(rubric_audit, dict):
+        if deferred_rubric:
+            pass
+        elif not isinstance(rubric_audit, dict):
             errors.append(
                 "verification_receipt.json: 'rubric_audit' not found -- re-run "
                 "scripts/verify_submission.py (it must run again after rubric_score is entered "

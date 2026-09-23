@@ -22,26 +22,26 @@ function stringValue(value: unknown, fallback = ''): string {
 
 /** CR-122 / AC-468: skill cards are a later correction, not a Stage 0 wait. */
 export const SKILL_REVIEW_SUMMARY =
-  'Optional correction. Stage 0 is not waiting on this card.';
+  'Later correction. This does not hold the job.';
 
 export const SKILL_ANSWER_HELPERS = {
-  CONFIRMED_USE: 'Add it to work experience. This does not write a resume claim.',
-  NOT_PRESENT: 'Same as leaving this unanswered. Not a forever no.',
+  CONFIRMED_USE: 'Write it into work experience. Later jobs can use it.',
+  NOT_PRESENT: 'Leave this unanswered. Nothing is stored.',
   UNSURE_NO_REASK: 'Leave undocumented for now',
   BAD_DATA: 'Bad extraction, never ask again',
 } as const;
 
 export function skillReviewQuestion(displayName: string): string {
   const name = displayName.trim() || 'This tool';
-  return `${name} is not in work experience, so this JD will not use it as evidence. Add it there if we missed it.`;
+  return `Stopped because ${name} is not in work experience.`;
 }
 
-export function holdsStage0(type: ItemType): boolean {
-  return type === 'hard_gate_review';
+export function holdsStage0(_type: ItemType): boolean {
+  return false;
 }
 
-export function decisionBasisLabel(type: ItemType): string {
-  return holdsStage0(type) ? 'Why this paused' : 'Why this was flagged';
+export function decisionBasisLabel(_type: ItemType): string {
+  return 'Why this was flagged';
 }
 
 function normalizeType(value: unknown): ReviewItemType {

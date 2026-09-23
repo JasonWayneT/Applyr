@@ -8,6 +8,8 @@ import {
   quarantineRows,
   queueCounts,
   stuckItems,
+  waitingItems,
+  decisionItems,
 } from '../../server/repository/pipelineQueueRepository.js';
 
 const migration = readFileSync(
@@ -165,5 +167,40 @@ describe('pipelineQueueRepository', () => {
       quarantined: 0,
     });
     expect(stuckItems(120, database).map(row => row.slug)).toEqual(['needs_human']);
+    const waiting = waitingItems(database);
+    expect(waiting.map(row => row.slug).sort()).toEqual(['needs_human', 'rentana']);
+    expect(waiting.find(row => row.slug === 'rentana')?.reason).toBe(
+      'Finished packet. The next run saves it into the app for review.',
+    );
+    const decisions = decisionItems(database, Date.parse('2026-09-18T13:00:00+00:00'));
+    expect(decisions.find(row => row.slug === 'rentana')?.state).toBe('Continuing');
+  });
+
+  it('labels a score skip, a live run, a failed draft, and an expired lease', () => {
+    const database = createDatabase();
+    insertQueue(database, { slug: 'kept', status: 'queued' });
+    insertQueue(database, {
+      slug: 'healthcare',
+      status: 'paused',
+      pausedReason: 'decided_skip',
+    });
+    insertQueue(database, {
+      slug: 'running',
+      status: 'in_progress',
+      lockedBy: 'worker',
+      leaseExpiresAt: '2026-09-18T13:30:00+00:00',
+    });
+    insertQueue(database, {
+      slug: 'allstate',
+      status: 'in_progress',
+      lockedBy: 'worker',
+      leaseExpiresAt: '2026-09-18T12:00:00+00:00',
+    });
+    const decisions = decisionItems(database, Date.parse('2026-09-18T13:00:00+00:00'));
+    expect(decisions.find(row => row.slug === 'kept')?.state).toBe('Continuing');
+    expect(decisions.find(row => row.slug === 'healthcare')?.state).toBe('Skipped');
+    expect(decisions.find(row => row.slug === 'running')?.state).toBe('Running');
+    expect(decisions.find(row => row.slug === 'allstate')?.state).toBe('Failed');
+    expect(decisions.some(row => row.state === 'Waiting' as string)).toBe(false);
   });
 });

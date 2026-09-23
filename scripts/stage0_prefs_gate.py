@@ -96,6 +96,8 @@ _PEOPLE_MGT_REQUIRED_RE = re.compile(
     r"hiring\s+(?:and\s+)?(firing|performance\s+reviews?)|"
     r"grow\s+and\s+manage\s+a\s+team|"
     r"build\s+(?:and\s+lead\s+)?a\s+team\s+of|"
+    r"lead\s+(?:a\s+)?(?:small\s+)?team\s+of\s+(?:\d+\s*[\u2013\-]\s*\d+\s+)?"
+    r"(?:[\w]+\s+){0,4}?(?:analysts?|specialists?|engineers?|developers?|designers?|people|reports?)|"
     r"headcount\s+(?:planning|management|decisions?)|"
     r"performance\s+reviews?\s+(?:and|for)\s+(?:engineers?|developers?|designers?|pms?|staff)"
     r")",
@@ -202,7 +204,10 @@ _REVENUE_OWN_RE = re.compile(
     # amphenol_rf/hale: "Manage product line performance. Including revenue and margin"
     r"(?:manage|drive|own|lead)\s+product\s+line\s+(?:performance|revenue|margin|growth|profitability)|"
     r"revenue\s+and\s+margin|"
-    r"product\s+line\s+(?:growth\s+and\s+)?profitability|"
+    r"product[- ]line\s+(?:growth\s+and\s+)?profitability|"
+    r"profitability\s+of\s+(?:a\s+|the\s+)?(?:key\s+)?product[- ]line|"
+    r"full\s+product[- ]line\s+business|"
+    r"product[- ]line(?:'s|’s)?\s+commercial\s+performance|"
     # beyond: "define and evolve how dynamic pricing works"
     r"define\s+and\s+evolve\s+.*dynamic\s+pricing|"
     r"owning\s+.*pricing\s+algorithm|"
@@ -228,6 +233,29 @@ def _check_revenue_billing(jd_text: str) -> list[dict]:
             "reason": "JD requires revenue/billing/P&L ownership — Exclusion Zone",
         }]
     return []
+
+
+# Hands-on KYC / KYB implementation the posting itself marks as mandatory.
+# A model evidence score of 0 does not hard-gate this, because the domain rule
+# also wants a years number. Kraken 2026-09-22: the must-have line was scored
+# 0, then a nice-to-have founder line opened a review card and the fit-floor
+# skip never ran. Familiarity, or KYC as one option among others, does not skip.
+_KYC_MUST_HAVE_RE = re.compile(
+    r"hands[\s-]on experience implementing (?:kyc|kyb)|"
+    r"implementing (?:kyc|kyb).{0,120}must have|"
+    r"(?:kyc|kyb).{0,80}must have,\s*not a nice to have",
+    re.I | re.S,
+)
+
+
+def _check_kyc_must_have(jd_text: str) -> list[dict]:
+    """Skip a posting that requires hands-on KYC or KYB implementation."""
+    if not jd_text or not _KYC_MUST_HAVE_RE.search(jd_text):
+        return []
+    return [{
+        "code": "exclusion_zone_kyc_implementation",
+        "reason": "JD requires hands-on KYC or KYB implementation — Exclusion Zone",
+    }]
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +521,7 @@ def run_prefs_gate(
     rejects.extend(_check_people_management(jd_text))
     rejects.extend(_check_revenue_billing(jd_text))
     rejects.extend(_check_ai_ml_ownership(jd_text))
+    rejects.extend(_check_kyc_must_have(jd_text))
 
     # 8b. Required non-English language fluency (live miss, binance, 2026-09-19)
     lang_rejects, lang_flags = _check_required_language(jd_text)

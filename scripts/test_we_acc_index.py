@@ -86,6 +86,20 @@ class HedgeExtractionTests(unittest.TestCase):
             any("etl" in p.lower() for p in h102["prohibited_claims"])
         )
 
+    def test_unbracketed_ban_attaches_and_section_header_stops_the_walk(self):
+        we = textwrap.dedent("""
+            * **[ACC-102] Data Remediation**: Drove the fix.
+                * *DO NOT CLAIM (ACC-102):* conceived or invented the bypass.
+                * *Attribution:* **OWNED** for the decision.
+            #### Factual Anti-Claims & Boundaries (DO NOT CLAIM)
+            * *DO NOT claim direct management or hiring of engineering team members.*
+            * **[ACC-103] Next story**: Something else.
+        """)
+        hedges = wai.hedges_for_project(we, "ACC-102")
+        self.assertEqual(hedges["attribution"], "OWNED")
+        self.assertTrue(any("conceived" in p.lower() for p in hedges["prohibited_claims"]))
+        self.assertFalse(any("hiring" in p.lower() for p in hedges["prohibited_claims"]))
+
     def test_unknown_project_returns_empty_hedges(self):
         empty = wai.hedges_for_project(_WE, "ACC-999")
         self.assertEqual(empty["attribution"], "")

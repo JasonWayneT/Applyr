@@ -11,10 +11,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,6 +27,8 @@ _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
 RUN_SUBMISSION = _SCRIPT_DIR / "run_submission.py"
 RUN_STAGE1_AUTHOR = _SCRIPT_DIR / "run_stage1_author.py"
+RUN_STAGE1_REPAIR = _SCRIPT_DIR / "run_stage1_repair.py"
+BUILD_STAGE1_REPAIR_PROMPT = _SCRIPT_DIR / "build_stage1_repair_prompt.py"
 RUN_STAGE2_RUBRIC = _SCRIPT_DIR / "run_stage2_rubric.py"
 DEFAULT_HEARTBEAT_S = 300
 
@@ -276,6 +280,24 @@ def build_author_command(
     return [python_exe or sys.executable, str(RUN_STAGE1_AUTHOR), str(folder)]
 
 
+def build_repair_prompt_command(
+    folder: Path,
+    *,
+    python_exe: str | None = None,
+) -> list[str]:
+    """Build the Stage 1 repair prompt for a verify failure. Implements FR-344."""
+    return [python_exe or sys.executable, str(BUILD_STAGE1_REPAIR_PROMPT), str(folder)]
+
+
+def build_repair_command(
+    folder: Path,
+    *,
+    python_exe: str | None = None,
+) -> list[str]:
+    """Invoke the sandboxed Stage 1 repair call. Implements FR-344."""
+    return [python_exe or sys.executable, str(RUN_STAGE1_REPAIR), str(folder)]
+
+
 def build_rubric_command(
     folder: Path,
     *,
@@ -283,6 +305,21 @@ def build_rubric_command(
 ) -> list[str]:
     """Invoke run_stage2_rubric.py for a folder waiting on a scorecard."""
     return [python_exe or sys.executable, str(RUN_STAGE2_RUBRIC), str(folder)]
+
+
+def build_finalize_command(
+    folder: Path,
+    *,
+    python_exe: str | None = None,
+    script_path: Path | None = None,
+) -> list[str]:
+    """Save a finished packet into the app. Implements FR-371."""
+    return [
+        python_exe or sys.executable,
+        str(script_path or RUN_SUBMISSION),
+        str(folder),
+        "--finalize",
+    ]
 
 
 def needs_stage2_rubric(folder: Path | None) -> bool:
@@ -301,6 +338,179 @@ def needs_stage2_rubric(folder: Path | None) -> bool:
     from run_stage2_rubric import has_current_hash_scorecard
 
     return not has_current_hash_scorecard(folder)
+
+
+_REPAIR_STOP_OUTCOMES = frozenset()
+
+
+def _repair_state(folder: Path) -> dict[str, Any]:
+    path = folder / "stage1_repair_state.json"
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+_PRE_REPAIR_DIR = "stage1_pre_repair"
+_PRE_REPAIR_FILES = ("Resume.md", "CoverLetter.md", "claim_provenance.json")
+
+
+def _snapshot_pre_repair(folder: Path) -> None:
+    """Copy the current draft before an in-lease repair can replace it."""
+    dest = folder / _PRE_REPAIR_DIR
+    dest.mkdir(exist_ok=True)
+    for name in _PRE_REPAIR_FILES:
+        src = folder / name
+        if src.is_file():
+            shutil.copy2(src, dest / name)
+
+
+def _stage1_still_failed(folder: Path) -> bool:
+    """True when workflow Stage 1 is still FAILED after a repair resume."""
+    state = read_workflow_state(folder)
+    if state.get("status") != "FAILED":
+        return False
+    stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
+    stage1 = stages.get("stage1") if isinstance(stages.get("stage1"), dict) else {}
+    return stage1.get("status") == "FAILED" or state.get("active_stage") == "stage1"
+
+
+def _restore_pre_repair(folder: Path) -> bool:
+    """Put the pre-repair draft back when the repair left different bytes.
+
+    Returns True only when a file changed. Implements FR-375.
+    """
+    src_dir = folder / _PRE_REPAIR_DIR
+    if not (src_dir / "Resume.md").is_file():
+        return False
+    changed = False
+    for name in _PRE_REPAIR_FILES:
+        src = src_dir / name
+        if not src.is_file():
+            continue
+        dest = folder / name
+        if dest.is_file() and dest.read_bytes() == src.read_bytes():
+            continue
+        shutil.copy2(src, dest)
+        changed = True
+    return changed
+
+
+def _block_further_repair(folder: Path) -> None:
+    """Count a rollback. The first one can be claimed again. Implements FR-375."""
+    from build_stage1_repair_prompt import load_repair_state, save_repair_state
+
+    state = load_repair_state(folder)
+    try:
+        streak = int(state.get("no_progress_streak") or 0)
+    except (TypeError, ValueError):
+        streak = 0
+    state["last_outcome"] = "no_progress_blocking"
+    state["no_progress_streak"] = streak + 1
+    state["last_repair_reason"] = "repair left stage 1 failed; previous draft restored"
+    save_repair_state(folder, state)
+
+
+def _repair_blocking(folder: Path) -> list[str]:
+    """Blocking lines stored for the current repair round."""
+    repair = _repair_state(folder)
+    return [str(item) for item in (repair.get("blocking") or [])]
+
+
+def _repair_findings_unchanged(before: list[str], after: list[str]) -> bool:
+    """True when a repair did not change the blocking lines. FR-375."""
+    return list(before) == list(after)
+
+
+def _release_repair_progress(folder: Path) -> None:
+    """Keep a repair that changed the blocking findings. Implements FR-375."""
+    from build_stage1_repair_prompt import load_repair_state, save_repair_state
+
+    state = load_repair_state(folder)
+    state["no_progress_streak"] = 0
+    state["last_repair_reason"] = (
+        "repair changed the blocking findings; new draft kept"
+    )
+    save_repair_state(folder, state)
+
+
+def _parse_retry_at(value: object) -> datetime | None:
+    """Parse a repair next_retry_at stamp. A blank value means try now."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _timeout_repair_can_run(repair: dict[str, Any]) -> bool:
+    """True when a provider timeout still has attempts and the wait has elapsed.
+
+    Four tries, then stop. A future next_retry_at leaves the row paused so the
+    worker can claim a different job. Implements FR-378.
+    """
+    from run_stage1_repair import TIMEOUT_RETRY_CAP
+
+    raw_attempts = repair.get("timeout_attempts")
+    if raw_attempts is None:
+        try:
+            attempts = int(repair.get("no_progress_streak") or 1)
+        except (TypeError, ValueError):
+            attempts = 1
+    else:
+        try:
+            attempts = int(raw_attempts)
+        except (TypeError, ValueError):
+            attempts = TIMEOUT_RETRY_CAP
+    if attempts >= TIMEOUT_RETRY_CAP:
+        return False
+    retry_at = _parse_retry_at(repair.get("next_retry_at"))
+    if retry_at is not None and datetime.now(timezone.utc) < retry_at:
+        return False
+    return True
+
+
+def needs_stage1_repair(folder: Path | None) -> bool:
+    """True when Stage 1 verify failed on an existing draft and repair can still run.
+
+    A provider timeout can run again until four attempts, after its wait.
+    Identical findings and a second content miss stay paused. Implements FR-344 / FR-378.
+    """
+    if folder is None or not (folder / "Resume.md").is_file():
+        return False
+    state = read_workflow_state(folder)
+    if state.get("status") != "FAILED":
+        return False
+    stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
+    stage1 = stages.get("stage1") if isinstance(stages.get("stage1"), dict) else {}
+    stage1_status = stage1.get("status")
+    if stage1_status != "FAILED" and state.get("active_stage") != "stage1":
+        return False
+    if stage1_status not in (None, "", "FAILED"):
+        return False
+    repair = _repair_state(folder)
+    outcome = repair.get("last_outcome")
+    if outcome == "repair_timeout":
+        return _timeout_repair_can_run(repair)
+    if outcome in _REPAIR_STOP_OUTCOMES:
+        return False
+    try:
+        streak = int(repair.get("no_progress_streak") or 0)
+    except (TypeError, ValueError):
+        streak = 0
+    if streak >= 2:
+        return False
+    return True
 
 
 def needs_stage1_author(folder: Path | None) -> bool:
@@ -339,7 +549,7 @@ def wait_for_runner(
 
 
 def is_ready_to_finalize(state: dict[str, Any]) -> bool:
-    """Stage 2 COMPLETE / Stage 3 READY: waiting for Jason's --finalize, not stuck."""
+    """Stage 2 COMPLETE and Stage 3 READY: the packet can be saved into the app."""
     if not isinstance(state, dict):
         return False
     stages = state.get("stages") if isinstance(state.get("stages"), dict) else {}
@@ -361,9 +571,21 @@ def map_workflow_status(workflow_status: str | None) -> str | None:
     return None
 
 
-def map_run_result(state: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+def map_run_result(
+    state: dict[str, Any],
+    *,
+    finalize_attempted: bool = False,
+) -> tuple[str | None, str | None, str | None]:
     """Return (queue_status, paused_reason, last_workflow_status)."""
     if is_ready_to_finalize(state):
+        # Implements FR-371 / AC-481. After a save attempt that left the packet
+        # ready, stop. Do not hand the same packet back to the next claim.
+        if finalize_attempted:
+            return (
+                "paused",
+                pq.PAUSED_REASON_FINALIZE_FAILED,
+                pq.MIRROR_READY_TO_FINALIZE,
+            )
         return (
             "paused",
             pq.PAUSED_REASON_READY_TO_FINALIZE,
@@ -431,6 +653,7 @@ def apply_run_result(
     data_root: Path,
     original: Path | None,
     exit_code: int | None,
+    finalize_attempted: bool = False,
 ) -> dict[str, Any] | None:
     _ = exit_code  # recorded by caller; never the mapping key
     folder = find_folder(slug, data_root, original)
@@ -441,7 +664,9 @@ def apply_run_result(
     wf_status = state.get("status") if isinstance(state.get("status"), str) else None
     last_stage = state.get("active_stage") if isinstance(state.get("active_stage"), str) else None
     folder_root = folder_root_label(folder, data_root) if folder is not None else None
-    mapped, paused_reason, mirror_status = map_run_result(state)
+    mapped, paused_reason, mirror_status = map_run_result(
+        state, finalize_attempted=finalize_attempted
+    )
     if mapped is None:
         update_mirror(
             conn,
@@ -451,6 +676,10 @@ def apply_run_result(
             folder_root=folder_root,
         )
         return pq.get_row(conn, slug)
+    current = pq.get_row(conn, slug)
+    # Finalize already marks the row done. A second done write is not a transition.
+    if current is not None and current["status"] == "done" and mapped == "done":
+        return current
     return pq.transition(
         slug,
         mapped,
@@ -528,6 +757,9 @@ def process_slug(
                 conn=conn,
             )
             folder = find_folder(slug, data_root)
+            if folder is not None and pq._pause_kind(folder) == "review_center":
+                # Implements FR-373. One resume of this pause per answer change.
+                pq.write_review_center_resumed_marker(folder)
             cmd = build_runner_command(
                 slug, folder, python_exe=python_exe, script_path=script_path
             )
@@ -567,6 +799,117 @@ def process_slug(
                             worker=worker,
                         )
                 folder = find_folder(slug, data_root, folder)
+                if needs_stage1_repair(folder):
+                    # Implements FR-344. A verify miss on an existing draft
+                    # repairs in this lease, then resumes. A failed or
+                    # no-progress repair still pauses FAILED. A rewrite that
+                    # leaves Stage 1 failed with the same blocking findings is put
+                    # back. A repair that changes those findings is kept. FR-375.
+                    from author_from_packet import attach_unsupported_ats_cites
+
+                    if attach_unsupported_ats_cites(folder):
+                        # A present term was missing its cite. Resume before
+                        # a full rewrite. Implements FR-377.
+                        cite_cmd = build_runner_command(
+                            slug,
+                            folder,
+                            python_exe=python_exe,
+                            script_path=script_path,
+                        )
+                        cite_handle = spawn(cite_cmd)
+                        lock.set_runner_pid(cite_handle.pid)
+                        exit_code = wait_for_runner(
+                            cite_handle,
+                            heartbeat_s=heartbeat_s,
+                            conn=conn,
+                            worker=worker,
+                        )
+                        folder = find_folder(slug, data_root, folder)
+                    prompt_handle = None
+                    if folder is not None and needs_stage1_repair(folder):
+                        _snapshot_pre_repair(folder)
+                        prompt_handle = spawn(
+                            build_repair_prompt_command(folder, python_exe=python_exe)
+                        )
+                        lock.set_runner_pid(prompt_handle.pid)
+                        wait_for_runner(
+                            prompt_handle,
+                            heartbeat_s=heartbeat_s,
+                            conn=conn,
+                            worker=worker,
+                        )
+                    if prompt_handle is not None and not _abort_requested:
+                        folder = find_folder(slug, data_root, folder)
+                        prompt_ready = (
+                            folder is not None
+                            and (folder / "stage1_repair_prompt.md").is_file()
+                            and needs_stage1_repair(folder)
+                        )
+                        if prompt_ready:
+                            repair_handle = spawn(
+                                build_repair_command(folder, python_exe=python_exe)
+                            )
+                            lock.set_runner_pid(repair_handle.pid)
+                            wait_for_runner(
+                                repair_handle,
+                                heartbeat_s=heartbeat_s,
+                                conn=conn,
+                                worker=worker,
+                            )
+                            if not _abort_requested:
+                                folder = find_folder(slug, data_root, folder)
+                                trigger_blocking = (
+                                    _repair_blocking(folder) if folder is not None else []
+                                )
+                                resume_cmd = build_runner_command(
+                                    slug,
+                                    folder,
+                                    python_exe=python_exe,
+                                    script_path=script_path,
+                                )
+                                handle = spawn(resume_cmd)
+                                lock.set_runner_pid(handle.pid)
+                                exit_code = wait_for_runner(
+                                    handle,
+                                    heartbeat_s=heartbeat_s,
+                                    conn=conn,
+                                    worker=worker,
+                                )
+                                folder = find_folder(slug, data_root, folder)
+                                new_blocking = (
+                                    _repair_blocking(folder) if folder is not None else []
+                                )
+                                findings_unchanged = _repair_findings_unchanged(
+                                    trigger_blocking, new_blocking
+                                )
+                                if (
+                                    folder is not None
+                                    and _stage1_still_failed(folder)
+                                    and findings_unchanged
+                                    and _restore_pre_repair(folder)
+                                ):
+                                    _block_further_repair(folder)
+                                    resume_cmd = build_runner_command(
+                                        slug,
+                                        folder,
+                                        python_exe=python_exe,
+                                        script_path=script_path,
+                                    )
+                                    handle = spawn(resume_cmd)
+                                    lock.set_runner_pid(handle.pid)
+                                    exit_code = wait_for_runner(
+                                        handle,
+                                        heartbeat_s=heartbeat_s,
+                                        conn=conn,
+                                        worker=worker,
+                                    )
+                                elif (
+                                    folder is not None
+                                    and _stage1_still_failed(folder)
+                                    and not findings_unchanged
+                                ):
+                                    _release_repair_progress(folder)
+                folder = find_folder(slug, data_root, folder)
                 if needs_stage2_rubric(folder):
                     # Implements AC-463: off-default in-lease rubric, then resume.
                     rubric_handle = spawn(
@@ -595,6 +938,27 @@ def process_slug(
                             conn=conn,
                             worker=worker,
                         )
+            finalize_attempted = False
+            if not _abort_requested:
+                folder = find_folder(slug, data_root, folder)
+                if folder is not None and is_ready_to_finalize(read_workflow_state(folder)):
+                    # Implements FR-371 / AC-481. Save into the app in this same run.
+                    finalize_attempted = True
+                    finalize_handle = spawn(
+                        build_finalize_command(
+                            folder,
+                            python_exe=python_exe,
+                            script_path=script_path,
+                        )
+                    )
+                    lock.set_runner_pid(finalize_handle.pid)
+                    exit_code = wait_for_runner(
+                        finalize_handle,
+                        heartbeat_s=heartbeat_s,
+                        conn=conn,
+                        worker=worker,
+                    )
+                    folder = find_folder(slug, data_root, folder)
             if not _abort_requested:
                 try:
                     apply_run_result(
@@ -605,6 +969,7 @@ def process_slug(
                         data_root=data_root,
                         original=folder,
                         exit_code=exit_code,
+                        finalize_attempted=finalize_attempted,
                     )
                 except pq.FenceRejected:
                     pass
@@ -625,6 +990,7 @@ def run_pack(
     heartbeat_s: float = DEFAULT_HEARTBEAT_S,
     python_exe: str | None = None,
     script_path: Path | None = None,
+    skip_slugs: set[str] | None = None,
 ) -> dict[str, Any]:
     spawn_fn = spawn or spawn_runner
     claimed = pq.claim_pack(
@@ -633,6 +999,7 @@ def run_pack(
         lease_minutes=lease_minutes,
         conn=conn,
         data_root=data_root,
+        skip_slugs=skip_slugs,
     )
     unstarted = list(claimed)
     results: list[str] = []
@@ -660,6 +1027,48 @@ def run_pack(
     return {"claimed": [row["slug"] for row in claimed], "results": results}
 
 
+def drain_until_idle(
+    worker: str,
+    *,
+    conn: Any,
+    data_root: Path,
+    lock_dir: Path,
+    size: int = pq.DEFAULT_PACK_SIZE,
+    lease_minutes: int = pq.DEFAULT_LEASE_MINUTES,
+    spawn: Callable[[list[str]], RunnerHandle] | None = None,
+    heartbeat_s: float = DEFAULT_HEARTBEAT_S,
+    python_exe: str | None = None,
+    script_path: Path | None = None,
+    once: bool = False,
+) -> list[dict[str, Any]]:
+    """Keep claiming the next batch until nothing left can move. Implements FR-373.
+
+    A slug already run in this process is not claimed again, so a job that
+    pauses for the same reason does not spin. ``once`` stops after one batch.
+    """
+    attempted: set[str] = set()
+    summaries: list[dict[str, Any]] = []
+    while not _abort_requested:
+        summary = run_pack(
+            worker,
+            conn=conn,
+            data_root=data_root,
+            lock_dir=lock_dir,
+            size=size,
+            lease_minutes=lease_minutes,
+            spawn=spawn,
+            heartbeat_s=heartbeat_s,
+            python_exe=python_exe,
+            script_path=script_path,
+            skip_slugs=attempted,
+        )
+        summaries.append(summary)
+        attempted.update(summary["claimed"])
+        if once or not summary["claimed"]:
+            break
+    return summaries
+
+
 def request_abort(_signum: int | None = None, _frame: Any = None) -> None:
     global _abort_requested
     _abort_requested = True
@@ -684,26 +1093,32 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, request_abort)
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, request_abort)
+    # Claim runs in this process. A missing rubric is not a hold on a queue
+    # run, and that decision has to be visible here, not only in the child.
+    # Implements FR-371. The Agy rubric stays off until AC-464.
+    os.environ.setdefault("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", "1")
     conn = pq.connect(args.db)
     try:
-        while not _abort_requested:
-            summary = run_pack(
-                args.worker,
-                conn=conn,
-                data_root=Path(args.data_root),
-                lock_dir=Path(args.lock_dir),
-                size=args.size,
-                lease_minutes=args.lease_minutes,
-                heartbeat_s=args.heartbeat_seconds,
-            )
+        # A dead run with this same worker id leaves unstarted rows leased.
+        # Heartbeats would keep those leases alive. Put them back first.
+        pq.release(args.worker, conn=conn)
+        summaries = drain_until_idle(
+            args.worker,
+            conn=conn,
+            data_root=Path(args.data_root),
+            lock_dir=Path(args.lock_dir),
+            size=args.size,
+            lease_minutes=args.lease_minutes,
+            heartbeat_s=args.heartbeat_seconds,
+            once=args.once,
+        )
+        for summary in summaries:
             print(
                 "claimed={n} results={results}".format(
                     n=len(summary["claimed"]),
                     results=",".join(summary["results"]) or "none",
                 )
             )
-            if args.once or not summary["claimed"]:
-                break
     finally:
         conn.close()
     return 0

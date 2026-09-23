@@ -161,7 +161,7 @@ Complete these steps in order before running your first scout.
 
 ### Pipeline LLM (CSV queue / `run_submission.py`)
 
-Stage 0 and Stage 1 use **Agy**. The queue worker sets `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`. Groq and Gemini API keys in Settings are leftover cascade code (`utils.call_llm`). Those keys are free-tier and do not currently serve production pipeline calls. That is expected. It is not "the LLM is off." Do not run a live worker pack with `APPLYR_STAGE0_CLOUD_LLM=1`. After Stage 0 PASS, required named-tool evidence 0 / `NOT_PRESENT` withholds authoring (`conversion_risk`). Agy rubric scoring stays off until frozen parks fail closed (AC-464).
+Stage 0 and Stage 1 use **Agy**. The queue worker sets `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`. Groq and Gemini API keys in Settings are leftover cascade code (`utils.call_llm`). Those keys are free-tier and do not currently serve production pipeline calls. That is expected. It is not "the LLM is off." Do not run a live worker pack with `APPLYR_STAGE0_CLOUD_LLM=1`. After Stage 0 PASS, a missing named tool is unused and does not pause. The employer name, a section-header fragment, and methodology nouns are chrome (CR-124). Dynamics and Delta Lake can stay in the reason list and are not claimed. They do not withhold the job (CR-125). Agy rubric scoring stays off until frozen parks fail closed (AC-464).
 
 The Settings → API table below is for scout research, Gmail, and the document editor, not the CSV queue.
 

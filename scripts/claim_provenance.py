@@ -125,7 +125,38 @@ def load_valid_claim_ids() -> tuple[set, set]:
     return valid, disabled
 
 
+def ensure_provenance_company(folder: str) -> bool:
+    """Fill a blank provenance company from the Stage 0 gate.
+
+    The author often omits the field. The gate already has the company.
+    Returns True when it wrote. Does not invent a name. A missing gate
+    leaves the file alone.
+    """
+    path = os.path.join(folder, "claim_provenance.json")
+    gate_path = os.path.join(folder, "stage0_fit_gate.json")
+    if not os.path.isfile(path) or not os.path.isfile(gate_path):
+        return False
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        with open(gate_path, encoding="utf-8") as handle:
+            gate = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict) or data.get("company"):
+        return False
+    company = str((gate or {}).get("company") or "").strip() if isinstance(gate, dict) else ""
+    if not company:
+        return False
+    data["company"] = company
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+    return True
+
+
 def check_claim_provenance(folder: str) -> tuple[bool, list[str]]:
+    ensure_provenance_company(folder)
     path = os.path.join(folder, "claim_provenance.json")
     if not os.path.exists(path):
         return False, ["claim_provenance.json not found"]

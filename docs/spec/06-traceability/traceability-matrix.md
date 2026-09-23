@@ -428,6 +428,46 @@ Extends CR-119 `FR-342` / `AC-440`. Those IDs stay as written.
 | `FR-365` / `AC-474` | CR-123 | Stage 0 same-posting Applied+ already-handled; different-role flag stays; cooldown/Self-Rejected stay | `scripts/test_stage0_db_gate.py`, `scripts/test_build_stage0_fit_gate.py`, `scripts/test_workflow_authority.py`, `scripts/test_run_queue_worker.py`, `scripts/test_stage0_skip_ledger.py` | implemented |
 | `FR-366` / `AC-475` | CR-123 | Reconcile Applied+ / archive / SKIPPED ghosts without a new CSV | `scripts/test_pipeline_queue.py`, `scripts/test_ingest_csv_queue.py` | implemented |
 
+## CR-124 Conversion-risk chrome
+
+Narrows which nouns CR-121 `FR-355` treats as a required product. CR-125 supersedes the withhold.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-367` / `AC-477` | CR-124 | Employer, section header, and OKR/MVP are not named tools and do not `risk` | `scripts/test_stage0_confirmations.py`, `scripts/test_build_stage0_fit_gate.py` | implemented |
+| `FR-368` / `AC-478` | CR-124 | Dynamics and Delta Lake stay in the reason list. The withhold is superseded by CR-125 | `scripts/test_build_stage0_fit_gate.py` | superseded |
+| `FR-369` / `AC-479` | 2026-09-22 | 40% bypass line blocks only the overclaim sentence | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+| `FR-370` / `AC-480` | 2026-09-22 | Story bans attach, customer discovery claim blocks | `scripts/we_acc_index.py`, `scripts/submission_linter.py`, `scripts/test_we_acc_index.py`, `scripts/test_submission_linter.py` | implemented |
+| `FR-371` / `AC-481` | 2026-09-22 | Finished packet saves itself into the app | `scripts/run_queue_worker.py`, `scripts/pipeline_queue.py`, `scripts/test_run_queue_worker.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-372` / `AC-482` | 2026-09-22 | One sentence per row. Waiting labels superseded by FR-382 | `server/repository/pipelineQueueRepository.ts`, `src/components/PipelineQueuePanel.tsx` | superseded |
+| `FR-373` / `AC-483` | 2026-09-22 | Worker keeps going until nothing can move | `scripts/run_queue_worker.py`, `scripts/pipeline_queue.py`, `scripts/test_run_queue_worker.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-374` / `AC-484` | 2026-09-22 | Example lists anchored by a catalog tool do not withhold | `scripts/build_stage0_fit_gate.py`, `scripts/pipeline_queue.py`, `scripts/workflow/runner.py`, `scripts/test_build_stage0_fit_gate.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-375` / `AC-485` | 2026-09-23 | Same blocking findings restore the previous draft. Changed findings keep the new draft | `scripts/author_from_packet.py`, `scripts/run_queue_worker.py`, `scripts/test_run_queue_worker.py` | implemented |
+| `FR-376` / `AC-486` | 2026-09-22 | Blank provenance company is copied from the Stage 0 gate | `scripts/claim_provenance.py`, `scripts/test_claim_provenance.py` | implemented |
+| `FR-377` / `AC-487` | 2026-09-22 | Present ATS term gets its packet cite before a repair rewrite | `scripts/author_from_packet.py`, `scripts/run_queue_worker.py`, `scripts/test_author_from_packet.py` | implemented |
+| `FR-378` / `AC-488` | 2026-09-23 | Domain-years skips without a card. A timeout retries four times after a wait. Identical findings park | `scripts/build_stage0_fit_gate.py`, `scripts/run_stage1_repair.py`, `scripts/run_queue_worker.py`, `scripts/build_stage1_repair_prompt.py`, `scripts/test_build_stage0_fit_gate.py`, `scripts/test_pipeline_queue.py`, `scripts/test_run_stage1_repair.py` | implemented |
+
+## CR-125 Decide now, correct later
+
+The queue decides from today's work experience. Review Center does not hold it.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-379` / `AC-489` | CR-125 | Unknown tools stay unused and do not open a card | `scripts/build_stage0_fit_gate.py`, `scripts/test_stage0_confirmations.py` | implemented |
+| `FR-380` / `AC-490` | CR-125 | One card per tool that stopped jobs. I have used this writes work experience | `server/repository/reviewCenterRepository.ts`, `src/pages/ReviewCenterView.tsx`, `tests/unit/reviewCenterRepository.test.ts` | implemented |
+| `FR-381` / `AC-491` | CR-125 | Missing lines count as zero. Written gates skip. Questions do not hold the queue | `scripts/evidence_scale.py`, `scripts/build_stage0_fit_gate.py`, `scripts/pipeline_queue.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-382` / `AC-492` | CR-125 | Pipeline shows Continuing, Skipped, Running, or Failed | `server/repository/pipelineQueueRepository.ts`, `src/components/PipelineQueuePanel.tsx`, `src/pages/ReviewCenterView.tsx` | implemented |
+
+## CR-126 Cited spans stay whole
+
+A shortened career card no longer ships a number without its unit or a landing page without the engineering-built clause. The draft is checked against those spans. Evidence 0 on a required line counts under the fit floor.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-383` / `AC-493` | CR-126 | Omit an excerpt that would drop a unit or an engineering-built clause | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py` | implemented |
+| `FR-384` / `AC-494` | CR-126 | Hard-block a wrong unit, an unseen percent, a taken funnel, a competencies note, and a placeholder company | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+| `FR-385` / `AC-495` | CR-126 | Evidence 0 on a classified required row skips below the floor. Logistics-only still passes | `scripts/build_stage0_fit_gate.py`, `scripts/test_build_stage0_fit_gate.py` | implemented |
+
 ## Coverage checklist
 
 - [x] Every P0 requirement has acceptance criteria.

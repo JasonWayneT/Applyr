@@ -338,6 +338,32 @@ def extract_job_title_line(jd_text: str) -> str:
     return ""
 
 
+_LEVEL_LIST_RE = re.compile(r"\(([^)]*\bstaff\b[^)]*)\)", re.I)
+_OPEN_IC_LEVEL_RE = re.compile(
+    r"\b(?:apm|\bpm\b|sr\.?\s*pm|senior|product manager)\b",
+    re.I,
+)
+
+
+def _staff_is_role_designation(title: str) -> bool:
+    """Block Staff as the role, not as one option in a level menu.
+
+    'Staff Product Manager' is the role. 'Product Manager (APM/PM/Sr PM/Staff PM)'
+    also hires PM and Sr PM (Stord, 2026-09-22), so Staff inside that list does not
+    block the posting.
+    """
+    match = _LEVEL_LIST_RE.search(title or "")
+    if not match:
+        return True
+    without_staff = re.sub(
+        r"\bstaff\s*(?:pm|product manager)?\b",
+        " ",
+        match.group(1),
+        flags=re.I,
+    )
+    return _OPEN_IC_LEVEL_RE.search(without_staff) is None
+
+
 def _lead_is_role_designation(title: str) -> bool:
     """Block Lead only as a role title, not verb uses like 'leaders lead with'."""
     patterns = (
@@ -442,6 +468,8 @@ def title_blocked(title: str, prefs: dict | None) -> Optional[str]:
                 if all_matches and len(all_matches) == len(product_matches):
                     continue
             if term.lower() == "lead" and not _lead_is_role_designation(title):
+                continue
+            if term.lower() == "staff" and not _staff_is_role_designation(title):
                 continue
             if term.lower() == "first" and not _first_is_role_designation(title):
                 continue

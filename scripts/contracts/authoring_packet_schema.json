@@ -163,6 +163,19 @@
     "example_bank_version": {
       "type": "string",
       "description": "sha256[:16] of data/authoring_example_bank.json at packet-build time. Stale-bank is WARN, not hard fail."
+    },
+    "constraint_omissions": {
+      "type": "array",
+      "description": "FR-383: claims omitted because shortening the excerpt would drop a unit or an engineering-built clause.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["claim_id", "reason"],
+        "properties": {
+          "claim_id": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
     }
   },
   "allOf": [

@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { usePipelineQueue } from '../hooks/usePipelineQueue';
-import { uploadPipelineCsv } from '../lib/pipelineQueue';
-import type { PipelineLease, PipelineStuckItem } from '../types/pipelineQueue';
+import { redoPipelineJob, uploadPipelineCsv } from '../lib/pipelineQueue';
+import WorkflowOperator from './WorkflowOperator';
+import type { PipelineDecisionItem } from '../types/pipelineQueue';
 
 interface PipelineQueuePanelProps {
   onOpenJob: (jobId: string) => void;
@@ -16,45 +17,35 @@ function CountChip({ label, value }: { label: string; value: number }) {
   );
 }
 
-function LeaseRow({
+function DecisionRow({
   row,
   onOpenJob,
+  onRetry,
 }: {
-  row: PipelineLease;
+  row: PipelineDecisionItem;
   onOpenJob: (jobId: string) => void;
+  onRetry: (slug: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onOpenJob(row.slug)}
-      className="w-full text-left p-3 rounded-xl outlined-surface bg-surface-container-lowest hover:bg-surface-container transition-colors"
-    >
-      <p className="text-sm font-bold text-on-surface">{row.slug}</p>
-      <p className="text-xs text-on-surface-variant mt-1">
-        {row.lockedBy || 'unknown worker'} · {row.leaseAgeMinutes} min
-      </p>
-    </button>
-  );
-}
-
-function StuckRow({
-  row,
-  onOpenJob,
-}: {
-  row: PipelineStuckItem;
-  onOpenJob: (jobId: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onOpenJob(row.slug)}
-      className="w-full text-left p-3 rounded-xl outlined-surface bg-warning-container text-on-warning-container hover:opacity-90 transition-colors"
-    >
-      <p className="text-sm font-bold">{row.slug}</p>
-      <p className="text-xs mt-1">
-        {row.reason === 'expired_lease' ? 'Expired lease' : 'Stale receipt'} · {row.ageMinutes} min
-      </p>
-    </button>
+    <div className="w-full p-3 rounded-xl outlined-surface bg-surface-container-lowest">
+      <button
+        type="button"
+        onClick={() => onOpenJob(row.slug)}
+        className="w-full text-left"
+      >
+        <p className="text-sm font-bold text-on-surface">{row.company || row.slug}</p>
+        <p className="text-xs text-on-surface-variant mt-1">{row.state}. {row.reason}</p>
+      </button>
+      {row.canRetry && (
+        <button
+          type="button"
+          onClick={() => onRetry(row.slug)}
+          className="btn-secondary min-h-10 mt-2 px-3 rounded-lg text-xs"
+        >
+          Try again
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -84,6 +75,21 @@ export default function PipelineQueuePanel({ onOpenJob }: PipelineQueuePanelProp
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  const decisions = items?.decisions ?? [];
+  const countState = (state: PipelineDecisionItem['state']) =>
+    decisions.filter(row => row.state === state).length;
+
+  async function retryJob(slug: string) {
+    setUploadMessage(null);
+    try {
+      await redoPipelineJob(slug);
+      setUploadMessage(`${slug} is queued again. The worker was not started.`);
+      await refresh();
+    } catch (err) {
+      setUploadMessage(err instanceof Error ? err.message : 'This job could not be tried again.');
     }
   }
 
@@ -144,41 +150,36 @@ export default function PipelineQueuePanel({ onOpenJob }: PipelineQueuePanelProp
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 mb-4">
-        <CountChip label="Queued" value={counts?.queued ?? 0} />
-        <CountChip label="Leased" value={counts?.leased ?? 0} />
-        <CountChip label="In progress" value={counts?.in_progress ?? 0} />
-        <CountChip label="Paused" value={counts?.paused ?? 0} />
-        <CountChip label="Ready to finalize" value={counts?.ready_to_finalize ?? 0} />
-        <CountChip label="Done" value={counts?.done ?? 0} />
-        <CountChip label="Quarantined" value={counts?.quarantined ?? 0} />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <CountChip label="Continuing" value={countState('Continuing')} />
+        <CountChip label="Skipped" value={countState('Skipped')} />
+        <CountChip label="Running" value={countState('Running')} />
+        <CountChip label="Failed" value={countState('Failed')} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div>
-          <p className="text-xs font-bold text-on-surface mb-2">Active leases</p>
-          {items?.leases.length ? (
-            <div className="space-y-2">
-              {items.leases.map(row => (
-                <LeaseRow key={row.slug} row={row} onOpenJob={onOpenJob} />
-              ))}
+      <div className="space-y-4">
+        {(['Continuing', 'Skipped', 'Running', 'Failed'] as const).map(state => {
+          const rows = decisions.filter(row => row.state === state);
+          return (
+            <div key={state}>
+              <p className="text-xs font-bold text-on-surface mb-2">{state}</p>
+              {rows.length ? (
+                <div className="space-y-2">
+                  {rows.map(row => (
+                    <DecisionRow
+                      key={row.slug}
+                      row={row}
+                      onOpenJob={onOpenJob}
+                      onRetry={slug => { void retryJob(slug); }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-on-surface-variant">None.</p>
+              )}
             </div>
-          ) : (
-            <p className="text-xs text-on-surface-variant">No active leases.</p>
-          )}
-        </div>
-        <div>
-          <p className="text-xs font-bold text-on-surface mb-2">Stuck</p>
-          {items?.stuck.length ? (
-            <div className="space-y-2">
-              {items.stuck.map(row => (
-                <StuckRow key={row.slug} row={row} onOpenJob={onOpenJob} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-on-surface-variant">Nothing stuck.</p>
-          )}
-        </div>
+          );
+        })}
       </div>
 
       <div className="mt-4">
@@ -209,6 +210,13 @@ export default function PipelineQueuePanel({ onOpenJob }: PipelineQueuePanelProp
           </div>
         )}
       </div>
+
+      <details className="mt-4">
+        <summary className="text-xs font-bold text-on-surface cursor-pointer">Folder form</summary>
+        <div className="mt-3">
+          <WorkflowOperator />
+        </div>
+      </details>
     </section>
   );
 }

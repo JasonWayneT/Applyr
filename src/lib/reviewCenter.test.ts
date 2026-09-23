@@ -69,16 +69,15 @@ describe('Review Center data contract', () => {
     expect(item.summary).not.toMatch(/is waiting for your review|Do not ask again|before Stage 0 can continue/i);
   });
 
-  it('treats only hard-gate cards as a Stage 0 hold', () => {
-    expect(holdsStage0('hard_gate_review')).toBe(true);
+  it('treats no review card as a Stage 0 hold', () => {
+    expect(holdsStage0('hard_gate_review')).toBe(false);
     expect(holdsStage0('skill_presence')).toBe(false);
     expect(holdsStage0('evidence_enrichment')).toBe(false);
-    expect(decisionBasisLabel('hard_gate_review')).toBe('Why this paused');
+    expect(decisionBasisLabel('hard_gate_review')).toBe('Why this was flagged');
     expect(decisionBasisLabel('skill_presence')).toBe('Why this was flagged');
-    expect(SKILL_ANSWER_HELPERS.NOT_PRESENT).toBe(
-      'Same as leaving this unanswered. Not a forever no.',
+    expect(skillReviewQuestion('Microsoft 365')).toBe(
+      'Stopped because Microsoft 365 is not in work experience.',
     );
-    expect(SKILL_ANSWER_HELPERS.NOT_PRESENT).not.toMatch(/Do not ask again/i);
   });
 
   it('drops malformed review items instead of rendering unsafe partial records', () => {

@@ -23,6 +23,7 @@ export interface EvidenceDetails {
   timeframe: string;
   scope: string;
   outcome: string;
+  writeWorkExperience?: boolean;
 }
 
 export interface ReviewItem {

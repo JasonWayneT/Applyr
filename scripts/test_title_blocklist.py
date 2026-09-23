@@ -35,6 +35,14 @@ class TestTitleGateMergedLists(unittest.TestCase):
     def test_real_pm_title_not_blocked(self):
         self.assertIsNone(title_blocked("Product Manager", self._PREFS))
 
+    def test_staff_inside_level_menu_does_not_block(self):
+        """Live miss (stord, 2026-09-22): Staff is one option beside PM and Sr PM."""
+        title = "Product Manager (APM/PM/Sr PM/Staff PM)"
+        self.assertIsNone(title_blocked(title, PREFS))
+
+    def test_staff_product_manager_still_blocks(self):
+        self.assertEqual(title_blocked("Staff Product Manager", PREFS), "Staff")
+
 
 def _assert(name: str, title: str, expect_blocked: bool) -> int:
     hit = title_blocked(title, PREFS)

@@ -378,6 +378,63 @@ class TestCheckStage0FitGate(unittest.TestCase):
 
 class TestCheckDraftManifest(unittest.TestCase):
 
+    def test_queue_run_does_not_require_a_typed_rubric(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = {
+                "company": "Kipu Health",
+                "title": "Product Manager",
+                "verification_passed": True,
+            }
+            _write_json(Path(tmpdir), "draft_manifest.json", data)
+            previous_adapter = os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER")
+            previous_rubric = os.environ.get("APPLYR_STAGE2_AGY_RUBRIC")
+            os.environ["APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"] = "1"
+            os.environ.pop("APPLYR_STAGE2_AGY_RUBRIC", None)
+            try:
+                ok, errors = check_draft_manifest(tmpdir)
+            finally:
+                if previous_adapter is None:
+                    os.environ.pop("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", None)
+                else:
+                    os.environ["APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"] = previous_adapter
+                if previous_rubric is None:
+                    os.environ.pop("APPLYR_STAGE2_AGY_RUBRIC", None)
+                else:
+                    os.environ["APPLYR_STAGE2_AGY_RUBRIC"] = previous_rubric
+            self.assertTrue(ok, errors)
+
+    def test_queue_finalize_does_not_require_a_typed_rubric(self):
+        from workflow.runner import WorkflowError, _require_completion_rubric_floors
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _write_json(
+                Path(tmpdir),
+                "draft_manifest.json",
+                {
+                    "company": "Kipu Health",
+                    "title": "Product Manager",
+                    "verification_passed": True,
+                },
+            )
+            previous_adapter = os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER")
+            previous_rubric = os.environ.get("APPLYR_STAGE2_AGY_RUBRIC")
+            os.environ["APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"] = "1"
+            os.environ.pop("APPLYR_STAGE2_AGY_RUBRIC", None)
+            try:
+                _require_completion_rubric_floors(tmpdir)
+            finally:
+                if previous_adapter is None:
+                    os.environ.pop("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", None)
+                else:
+                    os.environ["APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"] = previous_adapter
+                if previous_rubric is None:
+                    os.environ.pop("APPLYR_STAGE2_AGY_RUBRIC", None)
+                else:
+                    os.environ["APPLYR_STAGE2_AGY_RUBRIC"] = previous_rubric
+            os.environ.pop("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", None)
+            with self.assertRaises(WorkflowError):
+                _require_completion_rubric_floors(tmpdir)
+
     def test_missing_file_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             ok, errors = check_draft_manifest(tmpdir)

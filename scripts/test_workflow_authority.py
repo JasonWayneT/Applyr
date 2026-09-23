@@ -497,6 +497,96 @@ class RunUntilWaitingTests(unittest.TestCase):
         self.assertEqual(receipt["result"]["pause_kind"], "conversion_risk")
         self.assertEqual(receipt["result"]["decision"], "PASS")
 
+    def test_chrome_conversion_risk_resumes_without_reextract(self):
+        """FR-367. A parked EdTech/B2B2C hold continues to Stage 1."""
+        gate = _valid_stage0(
+            company="Amplify",
+            required=[
+                {
+                    "item": "ideally within EdTech or a B2B2C environment",
+                    "evidence_level": 0,
+                }
+            ],
+            not_present_named_tools=[
+                {"skill_key": "edtech", "display_name": "EdTech"},
+                {"skill_key": "b2b2c", "display_name": "B2B2C"},
+            ],
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["not_present_required_tool:EdTech"],
+            },
+        )
+        _write(self.folder, "stage0_fit_gate.json", gate)
+        from workflow.invalidate import sha256_file
+
+        digest = sha256_file(str(self.folder / "stage0_fit_gate.json"))
+        state = init_state(str(self.folder), mode="production")
+        receipt = build_receipt(
+            stage="stage0",
+            status="COMPLETE",
+            mode="production",
+            input_hashes={},
+            output_hashes={"stage0_fit_gate.json": digest},
+            result={
+                "decision": "PASS",
+                "tier": "Tier 2",
+                "pause_kind": "conversion_risk",
+                "conversion_feasibility": gate["conversion_feasibility"],
+            },
+        )
+        state = commit_stage(
+            str(self.folder),
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        state["metadata"] = {"pause_kind": "conversion_risk"}
+        write_state(str(self.folder), state)
+        packet = {
+            "schema_version": "1.0",
+            "company": "Amplify",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 2",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Amplify", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as rebuild:
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt", side_effect=fake_prompt
+                ):
+                    with mock.patch("workflow.runner.require_stage_ready"):
+                        with mock.patch(
+                            "workflow.runner.hashes_match", return_value=(True, [])
+                        ):
+                            resumed = run_until_stage1_complete(
+                                str(self.folder),
+                                mode="production",
+                                adopt=False,
+                                no_hook=True,
+                            )
+        rebuild.assert_not_called()
+        self.assertEqual(resumed["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "authoring_prompt.md").exists())
+
     def test_already_handled_does_not_lock_as_skip_or_start_stage1(self):
         """FR-365 / AC-474: orchestrator stops; not SKIPPED; no Stage 1 prompt."""
         gate = _valid_stage0(

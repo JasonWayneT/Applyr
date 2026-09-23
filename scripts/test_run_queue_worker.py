@@ -262,8 +262,76 @@ class TestMapping(WorkerHarness):
         self.assertIsNone(row["locked_by"])
         self.assertEqual(row["last_workflow_status"], "FAILED")
         self.assertTrue(self.cmds[0][-1] == "--resume")
+        self.assertEqual(len(self.cmds), 1)
 
-    def test_stage2_complete_stage3_ready_maps_to_ready_to_finalize(self) -> None:
+    def test_stage1_verify_fail_with_resume_runs_repair_then_resume(self) -> None:
+        _seed(self.conn, "repairco")
+        folder = self._write_state("repairco", "FAILED", "stage1")
+        state = {
+            "status": "FAILED",
+            "active_stage": "stage1",
+            "stages": {"stage1": {"status": "FAILED"}},
+        }
+        (folder / "workflow_state.json").write_text(json.dumps(state), encoding="utf-8")
+        (folder / "Resume.md").write_text("# Name\n", encoding="utf-8")
+
+        def spawn(cmd: list[str]) -> ImmediateHandle:
+            self.cmds.append(cmd)
+            if any(part.endswith("build_stage1_repair_prompt.py") for part in cmd):
+                (folder / "stage1_repair_prompt.md").write_text("repair\n", encoding="utf-8")
+            return ImmediateHandle(cmd)
+
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=spawn,
+            heartbeat_s=0.05,
+        )
+        joined = [" ".join(cmd) for cmd in self.cmds]
+        self.assertEqual(len(self.cmds), 4)
+        self.assertIn("run_submission.py", joined[0])
+        self.assertIn("build_stage1_repair_prompt.py", joined[1])
+        self.assertIn("run_stage1_repair.py", joined[2])
+        self.assertTrue(self.cmds[3][-1] == "--resume")
+
+    def test_worse_repair_restores_previous_draft_and_resumes(self) -> None:
+        _seed(self.conn, "repairco")
+        folder = self._write_state("repairco", "FAILED", "stage1")
+        state = {
+            "status": "FAILED",
+            "active_stage": "stage1",
+            "stages": {"stage1": {"status": "FAILED"}},
+        }
+        (folder / "workflow_state.json").write_text(json.dumps(state), encoding="utf-8")
+        (folder / "Resume.md").write_text("original draft\n", encoding="utf-8")
+
+        def spawn(cmd: list[str]) -> ImmediateHandle:
+            self.cmds.append(cmd)
+            if any(part.endswith("build_stage1_repair_prompt.py") for part in cmd):
+                (folder / "stage1_repair_prompt.md").write_text("repair\n", encoding="utf-8")
+            if any(part.endswith("run_stage1_repair.py") for part in cmd):
+                (folder / "Resume.md").write_text("rewritten draft\n", encoding="utf-8")
+            return ImmediateHandle(cmd)
+
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=spawn,
+            heartbeat_s=0.05,
+        )
+        self.assertEqual((folder / "Resume.md").read_text(encoding="utf-8"), "original draft\n")
+        self.assertEqual(len(self.cmds), 5)
+        self.assertTrue(self.cmds[4][-1] == "--resume")
+        repair_state = json.loads(
+            (folder / "stage1_repair_state.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(repair_state["last_outcome"], "no_progress_blocking")
+
+    def test_stage2_complete_stage3_ready_tries_to_save_then_stops(self) -> None:
         _seed(self.conn, "rentana")
         folder = self.pending / "rentana"
         folder.mkdir(parents=True)
@@ -291,11 +359,83 @@ class TestMapping(WorkerHarness):
         row = pq.get_row(self.conn, "rentana")
         assert row is not None
         self.assertEqual(row["status"], "paused")
-        self.assertEqual(row["paused_reason"], pq.PAUSED_REASON_READY_TO_FINALIZE)
+        self.assertEqual(row["paused_reason"], pq.PAUSED_REASON_FINALIZE_FAILED)
         self.assertIsNone(row["locked_by"])
         self.assertIsNone(row["lease_expires_at"])
         self.assertEqual(row["last_workflow_status"], pq.MIRROR_READY_TO_FINALIZE)
         self.assertEqual(row["last_stage"], "stage3")
+        self.assertTrue(any(cmd[-1] == "--finalize" for cmd in self.cmds))
+        again = pq.claim_pack("w1", size=8, conn=self.conn, data_root=self.data)
+        self.assertEqual(again, [])
+
+    def test_finished_packet_is_marked_done_when_save_completes(self) -> None:
+        _seed(self.conn, "savedco")
+        folder = self.pending / "savedco"
+        folder.mkdir(parents=True)
+        state = {
+            "status": "IN_PROGRESS",
+            "active_stage": "stage3",
+            "stages": {
+                "stage2": {"status": "COMPLETE"},
+                "stage3": {"status": "READY"},
+            },
+        }
+        (folder / "workflow_state.json").write_text(json.dumps(state), encoding="utf-8")
+
+        def spawn(cmd: list[str]) -> ImmediateHandle:
+            self.cmds.append(cmd)
+            if cmd[-1] == "--finalize":
+                done = dict(state)
+                done["status"] = "COMPLETE"
+                (folder / "workflow_state.json").write_text(
+                    json.dumps(done), encoding="utf-8"
+                )
+            return ImmediateHandle(cmd)
+
+        worker.run_pack(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            spawn=spawn,
+            heartbeat_s=0.05,
+        )
+        row = pq.get_row(self.conn, "savedco")
+        assert row is not None
+        self.assertEqual(row["status"], "done")
+        self.assertEqual(row["last_workflow_status"], "COMPLETE")
+
+    def test_finalize_already_done_does_not_transition_again(self) -> None:
+        _seed(self.conn, "twice")
+        folder = self._write_state("twice", "COMPLETE", "stage3")
+        leased = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)[0]
+        running = pq.transition(
+            "twice",
+            "in_progress",
+            worker="w1",
+            token=int(leased["fencing_token"]),
+            conn=self.conn,
+        )
+        pq.transition(
+            "twice",
+            "done",
+            worker="w1",
+            token=int(running["fencing_token"]),
+            conn=self.conn,
+            last_workflow_status="COMPLETE",
+        )
+        row = worker.apply_run_result(
+            "twice",
+            conn=self.conn,
+            worker="w1",
+            token=int(running["fencing_token"]),
+            data_root=self.data,
+            original=folder,
+            exit_code=0,
+            finalize_attempted=True,
+        )
+        assert row is not None
+        self.assertEqual(row["status"], "done")
 
     def test_generic_in_progress_does_not_map_to_paused(self) -> None:
         _seed(self.conn, "midco")
@@ -646,6 +786,75 @@ def _terminate_process(pid: int) -> None:
             kernel32.CloseHandle(handle)
         return
     os.kill(pid, 9)
+
+
+class TestDrain(WorkerHarness):
+    def test_drain_takes_the_next_batch_until_nothing_can_move(self) -> None:
+        _seed(self.conn, "firstco")
+        _seed(self.conn, "secondco")
+        self._write_state("firstco", "WAITING_FOR_LLM", "stage1")
+        self._write_state("secondco", "WAITING_FOR_LLM", "stage1")
+        summaries = worker.drain_until_idle(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            size=1,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+        )
+        claimed = [slug for summary in summaries for slug in summary["claimed"]]
+        self.assertEqual(claimed, ["firstco", "secondco"])
+        self.assertEqual(summaries[-1]["claimed"], [])
+        self.assertEqual(pq.get_row(self.conn, "firstco")["status"], "paused")
+        self.assertEqual(pq.get_row(self.conn, "secondco")["status"], "paused")
+
+    def test_once_stops_while_another_job_can_still_move(self) -> None:
+        _seed(self.conn, "firstco")
+        _seed(self.conn, "secondco")
+        self._write_state("firstco", "WAITING_FOR_LLM", "stage1")
+        self._write_state("secondco", "WAITING_FOR_LLM", "stage1")
+        summaries = worker.drain_until_idle(
+            "w1",
+            conn=self.conn,
+            data_root=self.data,
+            lock_dir=self.lock_dir,
+            size=1,
+            spawn=self._spawn,
+            heartbeat_s=0.05,
+            once=True,
+        )
+        self.assertEqual(len(summaries), 1)
+        self.assertEqual(summaries[0]["claimed"], ["firstco"])
+        self.assertEqual(pq.get_row(self.conn, "secondco")["status"], "queued")
+
+    def test_release_returns_unstarted_rows_before_the_next_run(self) -> None:
+        _seed(self.conn, "heldco")
+        leased = pq.claim_pack("w1", size=1, conn=self.conn, data_root=self.data)
+        self.assertEqual(leased[0]["status"], "leased")
+        released = pq.release("w1", conn=self.conn)
+        self.assertEqual([row["slug"] for row in released], ["heldco"])
+        self.assertEqual(pq.get_row(self.conn, "heldco")["status"], "queued")
+
+
+class TestRepairRollback(unittest.TestCase):
+    """A repair that changes the blocking findings is kept. FR-375."""
+
+    def test_unchanged_findings_roll_back(self) -> None:
+        self.assertTrue(
+            worker._repair_findings_unchanged(
+                ["FAIL [optimization_bar]: required evidence unused"],
+                ["FAIL [optimization_bar]: required evidence unused"],
+            )
+        )
+
+    def test_changed_findings_are_kept(self) -> None:
+        self.assertFalse(
+            worker._repair_findings_unchanged(
+                ["FAIL [optimization_bar]: required evidence unused"],
+                ["FAIL [stage1_quality]: summary stacks proof sentences"],
+            )
+        )
 
 
 if __name__ == "__main__":

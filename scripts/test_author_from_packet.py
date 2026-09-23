@@ -485,6 +485,103 @@ class TestOptimizationBarSoftGapHonesty(unittest.TestCase):
             self.assertFalse(ok)
             self.assertTrue(any("soft_gap has no claim_ids" in ln for ln in lines))
 
+    def test_remote_travel_line_does_not_require_a_cite(self):
+        from author_from_packet import _check_optimization_bar_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "soft_gaps": [],
+                "evidence_map": [
+                    {
+                        "jd_item": (
+                            "This position is fully remote within the United States. "
+                            "Quarterly travel may be required for planning sessions."
+                        ),
+                        "bucket": "required",
+                        "claim_ids": ["ACC-187-PRODUCT-PLANNING"],
+                    }
+                ],
+                "excerpts": {
+                    "ACC-187-PRODUCT-PLANNING": (
+                        "Jason's own term is product planning for quarterly cycles."
+                    )
+                },
+            }
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(packet), encoding="utf-8"
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_optimization_bar_provenance(folder)
+            self.assertTrue(ok, lines)
+
+    def test_zero_overlap_mapping_does_not_require_a_cite(self):
+        from author_from_packet import _check_optimization_bar_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "soft_gaps": [],
+                "evidence_map": [
+                    {
+                        "jd_item": "Experience working cross-functionally in startup environments.",
+                        "bucket": "required",
+                        "claim_ids": ["ACC-113-ADOPTION"],
+                    }
+                ],
+                "excerpts": {
+                    "ACC-113-ADOPTION": (
+                        "Owned a Google Analytics product integration migration."
+                    )
+                },
+            }
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(packet), encoding="utf-8"
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_optimization_bar_provenance(folder)
+            self.assertTrue(ok, lines)
+
+    def test_distinctive_overlap_still_requires_a_cite(self):
+        from author_from_packet import _check_optimization_bar_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "soft_gaps": [],
+                "evidence_map": [
+                    {
+                        "jd_item": "Own the Google Analytics migration cutover.",
+                        "bucket": "required",
+                        "claim_ids": ["ACC-113-MIGRATION"],
+                    }
+                ],
+                "excerpts": {
+                    "ACC-113-MIGRATION": (
+                        "Owned a Google Analytics integration migration with a fixed cutover."
+                    )
+                },
+            }
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(packet), encoding="utf-8"
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_optimization_bar_provenance(folder)
+            self.assertFalse(ok)
+            self.assertTrue(any("required evidence unused" in ln for ln in lines))
+
 
 class TestPacketEvidenceUtilization(unittest.TestCase):
     """Repeated high-value packet evidence must be used, not merely retrieved."""
@@ -561,6 +658,42 @@ class TestPacketAtsTermContract(unittest.TestCase):
             self.assertFalse(ok)
             self.assertIn("Engagement", lines[0])
 
+    def test_customer_discovery_is_not_an_ats_miss(self):
+        from author_from_packet import _check_packet_ats_term_contract
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(
+                    {
+                        **_READY_PACKET,
+                        "ats_term_contract": [
+                            {"term": "Customer Discovery", "claim_ids": ["ACC-117-PENDO"]}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text(
+                "Analyzed user workflows with Pendo.",
+                encoding="utf-8",
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "resume_claims": [
+                            {
+                                "bullet": "Analyzed user workflows with Pendo.",
+                                "claim_ids": ["ACC-117-PENDO"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_ats_term_contract(folder)
+            self.assertTrue(ok, lines)
+
     def test_inflected_packet_term_passes(self):
         from author_from_packet import _check_packet_ats_term_contract
 
@@ -614,6 +747,66 @@ class TestPacketAtsTermContract(unittest.TestCase):
             ok, lines = _check_packet_ats_term_contract(folder)
             self.assertFalse(ok)
             self.assertIn("Engagement", lines[0])
+
+    def test_term_in_a_cited_bullet_passes_without_the_contract_id(self):
+        from author_from_packet import _check_packet_ats_term_contract
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(
+                    {
+                        **_READY_PACKET,
+                        "ats_term_contract": [
+                            {"term": "Security", "claim_ids": ["ACC-111-ENTERPRISE"]}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text(
+                "Resolved a bottleneck for a macOS security product.",
+                encoding="utf-8",
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "resume_claims": [
+                            {
+                                "bullet": "Resolved a bottleneck for a macOS security product.",
+                                "claim_ids": ["ACC-201-CERT"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_ats_term_contract(folder)
+            self.assertTrue(ok, lines)
+
+    def test_missing_term_passes_when_its_claim_is_unused(self):
+        from author_from_packet import _check_packet_ats_term_contract
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(
+                    {
+                        **_READY_PACKET,
+                        "ats_term_contract": [
+                            {"term": "CRM", "claim_ids": ["ACC-302-SALESFORCE"]}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "Resume.md").write_text("Customer adoption work.", encoding="utf-8")
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_packet_ats_term_contract(folder)
+            self.assertTrue(ok, lines)
 
 
 class TestAuthoringDefectCategories(unittest.TestCase):
@@ -1082,6 +1275,56 @@ class TestAuthoringExamplePriority(unittest.TestCase):
             entries=entries,
         )
         self.assertIn("solace-specificity", [entry["id"] for entry in selected])
+
+
+class AttachUnsupportedAtsCitesTests(unittest.TestCase):
+    def test_adds_same_employer_support_id_to_the_bullet_that_has_the_term(self) -> None:
+        from author_from_packet import attach_unsupported_ats_cites
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(
+                    {
+                        "ats_term_contract": [
+                            {
+                                "term": "User Stories",
+                                "claim_ids": ["ACC-401-AITOOLS", "ACC-111-SCOPE"],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "company": "Example",
+                        "resume_claims": [
+                            {
+                                "bullet": "Drafted requirements and user stories for the gateway.",
+                                "claim_ids": ["ACC-179-ROADMAP"],
+                            }
+                        ],
+                        "cover_letter_claims": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            attached = attach_unsupported_ats_cites(
+                folder,
+                employers={
+                    "ACC-401-AITOOLS": "",
+                    "ACC-111-SCOPE": "cision",
+                    "ACC-179-ROADMAP": "cision",
+                },
+            )
+            saved = json.loads((folder / "claim_provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(attached, ["User Stories"])
+            self.assertEqual(
+                saved["resume_claims"][0]["claim_ids"],
+                ["ACC-179-ROADMAP", "ACC-111-SCOPE"],
+            )
 
 
 if __name__ == "__main__":

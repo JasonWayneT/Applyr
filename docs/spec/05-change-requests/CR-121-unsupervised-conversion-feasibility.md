@@ -7,6 +7,8 @@ related: CR-087, CR-093, CR-112, CR-114, CR-119, CR-120
 
 # CR-121: Unsupervised conversion feasibility and Agy rubric scoring
 
+**Superseded in part (CR-125, 2026-09-23):** a `risk` reason no longer withholds authoring. The name can stay on the gate. The draft does not claim it. The skip floor is unchanged.
+
 ## Decision sought
 
 Stop authoring jobs that Stage 0 already knows WE cannot make look native, and score finished drafts through Agy instead of a Cursor agent sitting on Mech. Do not raise the fit skip floor. Do not Skip those jobs. Do not point `eval_submission.py` at Agy.
@@ -56,6 +58,8 @@ After fit PASS, before packet/authoring, write `conversion_feasibility` on `stag
 Story 2.2 killed "zero distinctive required overlap with WE." All five parked gates already have required PM items at evidence 3–4. Clinical/pharmacy identity sat in preferred or at evidence 1 and stays out of this band. Do not add a domain gazetteer in the same change.
 
 `ok` when no required identity tool is `NOT_PRESENT` and no required named-tool evidence 0 hit fires. Outschool (fit 62) and certara/goodrx stay `ok` and can still park below 70. v1 accepts that miss rather than a noun list that false-risks transferable PM jobs.
+
+CR-124 narrows which nouns count. Employer names, section-header fragments, and methodology (OKRs, MVP) are chrome and stay `ok`. CR-125 keeps Dynamics and Delta Lake in the reason list and does not withhold on them.
 
 Not `risk`: hire-site chrome, preferred-only tools, culture lines, empty-required Tier 2 washout (Optum-shaped).
 

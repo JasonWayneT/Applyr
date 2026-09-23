@@ -7,7 +7,7 @@ implementation_plan: ../08-implementation/IMP-CR-108-stage0-evidence-cascade.md
 
 # CR-108 - Stage 0 evidence cascade, durable checkpoints, and skill confirmations
 
-**Partial supersession (CR-122, 2026-09-21):** `AC-363` pause-on-unknown-tool and durable `NOT_PRESENT` / `UNSURE_NO_REASK` as forever-No are superseded. Unknown tools still create grouped Review Center cards. They default to WE (not evidence for that JD) and do not pause Stage 0. Required named tools withhold via CR-121 `conversion_risk`. `BAD_DATA`, `CONFIRMED_USE` / `FR-284`, and `hard_gate_review` pauses remain.
+**Partial supersession (CR-122, 2026-09-21; CR-125, 2026-09-23):** `AC-363` pause-on-unknown-tool and durable `NOT_PRESENT` as a forever-No are superseded. CR-125 also removes the grouped skill card for every unknown tool and the `conversion_risk` withhold. A card exists only when that tool is why a job never went out. "I have used this" writes work experience. Requirement-extraction review still pauses.
 
 ## Decision summary
 

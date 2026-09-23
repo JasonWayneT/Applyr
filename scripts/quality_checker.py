@@ -12,6 +12,22 @@ def _header_block() -> str:
     return format_contact_header_block()
 
 
+def _rewrite_em_dashes(content: str) -> str:
+    """Replace em dashes and double hyphens with comma breaks. Implements FR-344."""
+    if "—" not in content and "--" not in content:
+        return content
+    return content.replace("—", ", ").replace("--", ", ")
+
+
+def _write_if_changed(file_path: str, original: str, updated: str) -> str:
+    """Write *updated* when it differs from *original*. Returns the text to keep checking."""
+    if updated == original:
+        return original
+    with open(file_path, "w", encoding="utf-8") as handle:
+        handle.write(updated)
+    return updated
+
+
 def _candidate_name_upper() -> str:
     from utils import IdentityError, load_identity_profile
     name = (load_identity_profile().get("name") or "").strip()
@@ -33,6 +49,8 @@ def check_and_repair_cover_letter(file_path):
         
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
+
+    content = _write_if_changed(file_path, content, _rewrite_em_dashes(content))
 
     messages = []
     repaired = False
@@ -61,10 +79,11 @@ def check_and_repair_cover_letter(file_path):
             f"{', '.join(sorted(set(tone_hits)))}"
         )
 
-    # Check for em-dashes (Rule CL-008: Authentic Voice and Anti-AI fingerprint)
-    if '—' in content or '--' in content:
-        messages.append("[CL-008 FAIL] Forbidden em-dash (—) or '--' found. Violates the Anti-AI fingerprint standard.")
-        
+    if "—" in content or "--" in content:
+        messages.append(
+            "[CL-008 FAIL] Forbidden em-dash or double hyphen remains after rewrite."
+        )
+
     # Check for header (Rule H-001/H-002: Contact Header in body)
     if f"# {_candidate_name_upper()}" not in content.upper():
         messages.append("[H-001 WARNING] Missing standard header block. Auto-repairing...")
@@ -129,10 +148,18 @@ def check_and_repair_cover_letter(file_path):
         for w in ["thank you", "thanks", "consideration", "time"]
     )
     if not has_cta and not has_thanks:
-        messages.append(
-            "[CL-012 FAIL] Cover letter is missing a professional closing transition. "
-            "Ensure the body concludes with an expression of interest in speaking/discussing the role and thanks them for their time/consideration."
-        )
+        # Stage 1 was parking drafts on this one missing sentence. Implements FR-344.
+        closing = "Thank you for your time and consideration."
+        if "Best regards," in content:
+            content = content.replace("Best regards,", f"{closing}\n\nBest regards,", 1)
+        elif "Regards," in content:
+            content = content.replace("Regards,", f"{closing}\n\nRegards,", 1)
+        else:
+            content = content.rstrip() + f"\n\n{closing}\n"
+        with open(file_path, "w", encoding="utf-8") as handle:
+            handle.write(content)
+        repaired = True
+        messages.append("[CL-012] Added a closing thanks so the letter can continue.")
 
     from drafting_errors import SelfCorrectionError
     
@@ -169,6 +196,8 @@ def check_resume(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
+    content = _write_if_changed(file_path, content, _rewrite_em_dashes(content))
+
     messages = []
     
     from tone_guard import tone_violations
@@ -180,9 +209,10 @@ def check_resume(file_path):
             f"{', '.join(sorted(set(tone_hits)))}"
         )
 
-    # Check for em-dashes (Rule R-008 / Claim Verifier Anti-AI fingerprint)
-    if '—' in content or '--' in content:
-        messages.append("[R-008 FAIL] Forbidden em-dash (—) or '--' found. Violates the Anti-AI fingerprint standard.")
+    if "—" in content or "--" in content:
+        messages.append(
+            "[R-008 FAIL] Forbidden em-dash or double hyphen remains after rewrite."
+        )
 
     # Check required sections (Rule R-005: Use Standard Section Headings)
     required_sections = {

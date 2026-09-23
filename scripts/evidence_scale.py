@@ -1135,7 +1135,12 @@ def compute_fit_score(classified_required: list[dict], classified_preferred: lis
         for it in items:
             level = it.get("evidence_level")
             if level is None:
-                continue  # item never reached evidence scoring (e.g. a synthetic flagged_gaps-only row)
+                # A named line with no score is a zero. Dropping it would
+                # raise the average. A blank synthetic row still stays out.
+                # Implements FR-381.
+                if not str(it.get("item") or "").strip():
+                    continue
+                level = 0
             conf = _CONFIDENCE_MULTIPLIER.get(it.get("confidence"), 0.85)
             s = level / 4.0
             num += weight * s * conf

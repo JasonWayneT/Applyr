@@ -63,6 +63,34 @@ class ProvenanceAccClassTests(unittest.TestCase):
         self.assertNotIn("ACC-114-INGEST", disabled)
 
 
+class ProvenanceCompanyFillTests(unittest.TestCase):
+    def test_blank_company_is_filled_from_the_gate(self) -> None:
+        import json
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            (folder / "claim_provenance.json").write_text(
+                json.dumps(
+                    {
+                        "resume_claims": [{"bullet": "x", "claim_ids": ["ACC-101"]}],
+                        "cover_letter_claims": [{"sentence": "y", "claim_ids": ["ACC-101"]}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (folder / "stage0_fit_gate.json").write_text(
+                json.dumps({"company": "Amplify"}),
+                encoding="utf-8",
+            )
+            with patch.object(cp, "load_valid_claim_ids", return_value=({"ACC-101"}, set())):
+                ok, errors = cp.check_claim_provenance(str(folder))
+            self.assertTrue(ok, errors)
+            saved = json.loads((folder / "claim_provenance.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["company"], "Amplify")
+
+
 class EmployerAttributionTests(unittest.TestCase):
     """CR-108 follow-up (2026-08-31, Papigen): a bullet drafted under one employer's role
     section citing a claim attributed to a different employer is a mechanical mismatch,

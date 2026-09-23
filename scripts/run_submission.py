@@ -24,6 +24,7 @@ import json
 import os
 import sqlite3
 import sys
+from pathlib import Path
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _SCRIPT_DIR)
@@ -235,6 +236,10 @@ def main() -> None:
         # Epic D (observability design): count events already on disk before this invocation
         # advances anything, so the console summary below prints only what *this* run produced.
         _folder_for_events = _resolve_folder(args.folder)
+        if not args.status:
+            from run_stage1_repair import replay_coercible_repair_attempt
+
+            replay_coercible_repair_attempt(Path(_folder_for_events))
         try:
             from agy_quota_tracker import RECEIPTS_ENV, bind_active_job
 

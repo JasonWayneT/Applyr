@@ -2,7 +2,7 @@
 
 ## HANDOFF
 
-Holdout 1 is still running. No pipeline change. One hiring-manager park was cleared by editing the letter: the warning was a false capture of "technical teams", and the same letter named compliance stakeholders as partners. Those names are now engineering and customer support. That folder reached PRACTICE_COMPLETE. It is not an unsupervised document. One mechanical BLOCK remains: header placeholders and an unapproved metric. Do not dispose that block. The driver's counts file still lists the cleared folder as parked until that process exits. Census workflow_state for the real totals. Queue snapshot still matches. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 is still running. No pipeline change. Census: 2 practice complete (one was a hand edit), 2 skip, 2 already handled, 2 stage 1 FAILED, 1 mechanical BLOCK. The failures are LR-048, a disruption claim missing its hedge, and LR-026, an unverified tool. Each had one repair that did not change the findings. The previous draft was restored. Streak is 1, so one more repair is allowed and that retry is running. Calls were 99 at folder 9. The driver counts file is stale. Do not dispose the block. Do not change the pipeline during this run. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Holdout 1 — started
 

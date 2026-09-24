@@ -2,9 +2,8 @@
 
 ## HANDOFF
 
-Iteration 1 is confirmed. ait_global_inc_ is PRACTICE_COMPLETE. An unhedged $1M to $3M sentence kept estimated and its cite. No repair call. Evaluator findings 0.
-Iteration 2 is next. The pipeline still does not block a without-disruption claim that drops the ACC-113 hedge. Failing test before any change.
-Definition of done is not met. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 2 is in. A no-disruption sentence is a hard block unless it keeps the estimate that about 5 percent never flipped. The check caught all 5 of those lines in the before-fix copies, and no extra line there.
+Definition of done is not met. Next observation is the next contradiction the pipeline still lets through. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -61,9 +60,17 @@ Definition of done is not met. Cumulative Agy calls 44. Do not open holdout job 
 7. CONFIRM: the live verify failed LR-047 on an unhedged $1M to $3M sentence, the mechanical pass inserted estimated, the sentence stayed cited, and the second verify passed with no repair call. Evaluator findings 0. PRACTICE_COMPLETE. The week-and-day arm did not appear in this draft. The unit test covers it. Evidence: `docs/loop/evidence/01-i1/ait_global_inc_-stage3.txt`.
 8. Not reverted.
 
-## Iteration 2 — not started
+## Iteration 2 — disruption hedge
 
-The pipeline still has no block for a "without disruption" claim that drops the ACC-113 hedge. `submission_linter.py` has no such check. That is the next observation, with a failing test before any change.
+1. OBSERVE: the before-fix letters say a migration finished without disruption. Work experience says about 5 percent of customers never flipped, and it never uses the word disruption.
+2. ROOT CAUSE: CONFIRMED. `submission_linter.py` had no check for that phrase. Stage 1 verify uses `collect_fidelity_hard_blocks`, so the gap was in that list.
+3. EXPLORE: do nothing, or hard-block a no-disruption sentence that omits the 5 percent.
+4. CHOOSE: hard-block. Do nothing leaves the known-bad sentence able to pass. The block is a tightening.
+5. IMPLEMENT: `check_disruption_hedge` as LR-048, called from `collect_fidelity_hard_blocks`. The new test failed, then passed. The linter script's other tests passed. One pre-existing error remains: the rentana geography test looks for a submission folder that is not in this checkout.
+6. EVALUATE: the check flags 5 sentences on the before-fix copies, one each in obie_2, classlink, nisum, securitize, and very_good_security. Those are the five no-disruption lines from the review. No extra hit in that folder.
+7. CONFIRM: a bare "without service disruption" sentence is now a hard block. A sentence that keeps "5 percent" is not. A plain rollout sentence is not.
+8. Not reverted.
+
 
 
 

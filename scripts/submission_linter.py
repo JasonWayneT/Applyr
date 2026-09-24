@@ -3041,7 +3041,41 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_letter_names_employer(cover_letter_text))
     blocks.extend(check_data_model_phrase(resume_text, cover_letter_text))
     blocks.extend(check_required_hedges(resume_text, cover_letter_text))
+    blocks.extend(check_disruption_hedge(resume_text, cover_letter_text))
     return blocks
+
+
+_DISRUPT_RE = re.compile(r"\bwithout(?:\s+\w+){0,3}\s+disrupt", re.IGNORECASE)
+_FIVE_PERCENT_RE = re.compile(r"\b5\s*(?:%|percent)\b", re.IGNORECASE)
+
+
+def check_disruption_hedge(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
+    """LR-048: a no-disruption claim has to keep the share that never flipped.
+
+    ACC-113 says about 5 percent of customers never flipped. Work experience
+    does not use the word disruption. Implements FR-386.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if not _DISRUPT_RE.search(unit) or _FIVE_PERCENT_RE.search(unit):
+            continue
+        if unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-048",
+            severity="HARD_BLOCK",
+            message=(
+                "A no-disruption claim drops the share that never flipped: "
+                f"\"{unit[:180]}\""
+            ),
+            suggestion=(
+                "Keep the estimate that about 5 percent never flipped, "
+                "or cut the no-disruption claim."
+            ),
+        ))
+    return violations
 
 
 def lint_folder(folder: str) -> List[dict]:

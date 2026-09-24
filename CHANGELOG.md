@@ -12,6 +12,7 @@
 - An uncited sentence is no longer deleted when that deletion creates a new hard block, such as removing the only sentence that names a past employer (CR-127 / FR-386).
 - When the letter names no past employer, Stage 1 copies one cited resume bullet into a sentence that names that employer and cites the same claim. The repair prompt also forbids deleting the only employer mention (CR-127 / FR-386).
 - When a drafting-time line or a $1M to $3M line is missing the word estimated, Stage 1 inserts it on that same sentence and updates the cite. The proof is no longer dropped as uncited after a repair rewrites it (CR-127 / FR-386).
+- A sentence that says a migration finished without disruption is blocked unless it keeps the estimate that about 5 percent of customers never flipped (CR-127 / FR-386).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

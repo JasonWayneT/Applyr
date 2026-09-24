@@ -1,6 +1,8 @@
 """Tests for submission_linter.py — Epic 1, Story 1.8."""
+import shutil
 import sys
 import os
+import tempfile
 import unittest
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -15,6 +17,11 @@ from submission_linter import (
     check_competency_process_notes,
     check_placeholder_company,
     check_cited_span_fidelity,
+    check_experience_role_bullets,
+    check_letter_names_employer,
+    check_data_model_phrase,
+    check_required_hedges,
+    collect_fidelity_hard_blocks,
     check_cross_employer_audience_bleed,
     check_generic_hook_self_reference,
     check_jd_specificity_floor,
@@ -1179,6 +1186,111 @@ def test_LR043_blocks_taking_the_funnel_and_allows_the_split():
     assert check_cited_span_fidelity("", split, spans) == []
     intake = "* Built an intake and incident prioritization model in Jira."
     assert check_cited_span_fidelity(intake, "", spans) == []
+
+
+def _repo_root() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def test_LR044_blocks_nisum_2_empty_roles():
+    """Fixture matches nisum_2 stage1_pre_repair: three role headings, zero bullets."""
+    path = os.path.join(_repo_root(), "tests", "fixtures", "cr127_empty_roles_resume.md")
+    text = open(path, encoding="utf-8").read()
+    violations = check_experience_role_bullets(text)
+    assert len(violations) == 3
+    assert all(v.rule_id == "LR-044" for v in violations)
+    filled = text.replace(
+        "### Product Manager | Cision | September 2021 - January 2026\n",
+        "### Product Manager | Cision | September 2021 - January 2026\n* Kept the contact records current.\n",
+        1,
+    ).replace(
+        "### Product Manager / Product Owner | Sterkly | February 2019 - August 2021\n",
+        "### Product Manager / Product Owner | Sterkly | February 2019 - August 2021\n* Wrote the certificate workflow.\n",
+        1,
+    ).replace(
+        "### Account Manager / Product Owner | Zero To Sixty | June 2017 - January 2019\n",
+        "### Account Manager / Product Owner | Zero To Sixty | June 2017 - January 2019\n* Built the landing page.\n",
+        1,
+    )
+    assert check_experience_role_bullets(filled) == []
+
+
+def test_LR045_requires_a_past_employer_paragraph():
+    bare = (
+        "Dear Hiring Manager,\n\n"
+        "Investigating the pipeline mechanics revealed a silent data loss pattern.\n\n"
+        "Best regards,\n"
+    )
+    assert any(v.rule_id == "LR-045" for v in check_letter_names_employer(bare))
+    named = bare.replace(
+        "Investigating the pipeline",
+        "At Cision, investigating the pipeline",
+    )
+    assert check_letter_names_employer(named) == []
+
+
+def test_LR046_blocks_data_model_and_allows_schema():
+    bad = "I authored the requirements to restructure the underlying data model."
+    assert any(v.rule_id == "LR-046" for v in check_data_model_phrase("", bad))
+    ok = "I specified splitting the values into two columns and reading the schema directly."
+    assert check_data_model_phrase(ok, "") == []
+
+
+def test_LR047_requires_estimated_on_the_range_and_the_drafting_line():
+    bare_money = "Earlier at Sterkly, I unlocked between $1M and $3M in blocked revenue."
+    kept_money = "Sustained an estimated $1M to $3M in blocked product revenue."
+    bare_time = (
+        "Used AI to draft epics, reducing drafting time from two weeks to several days."
+    )
+    kept_time = (
+        "Used AI to draft epics, reducing drafting time from about two weeks to a few days, "
+        "his own estimate."
+    )
+    assert any(v.rule_id == "LR-047" for v in check_required_hedges("", bare_money))
+    assert check_required_hedges("* " + kept_money, "") == []
+    assert any(v.rule_id == "LR-047" for v in check_required_hedges("* " + bare_time, ""))
+    assert check_required_hedges("* " + kept_time, "") == []
+
+
+def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
+    bare = "The migration finished without service disruption."
+    hedged = (
+        "An estimated 95 percent of customers flipped, and about 5 percent never did, "
+        "so the cutover was not without disruption for every account."
+    )
+    plain = "I aligned engineering on the rollout plan."
+    bare_blocks = collect_fidelity_hard_blocks("", bare)
+    assert any(v.rule_id == "LR-048" for v in bare_blocks)
+    assert not any(v.rule_id == "LR-048" for v in collect_fidelity_hard_blocks("", hedged))
+    assert not any(v.rule_id == "LR-048" for v in collect_fidelity_hard_blocks("* " + plain, ""))
+
+
+def test_LR046_and_LR047_on_a_before_fix_copy():
+    """Copy from data/review_evidence, never from data/submissions."""
+    evidence = os.path.join(
+        _repo_root(), "data", "review_evidence", "2026-09-23-before-fix"
+    )
+    medrisk = os.path.join(evidence, "bak_medrisk_CoverLetter.md")
+    highmark = os.path.join(evidence, "bak_highmark_health_CoverLetter.md")
+    candor = os.path.join(evidence, "bak_candor_health_Resume.md")
+    if not (os.path.isfile(medrisk) and os.path.isfile(highmark) and os.path.isfile(candor)):
+        raise unittest.SkipTest("before-fix evidence is not in this checkout")
+    with tempfile.TemporaryDirectory() as tmp:
+        medrisk_copy = os.path.join(tmp, "CoverLetter.md")
+        highmark_copy = os.path.join(tmp, "HighmarkCover.md")
+        candor_copy = os.path.join(tmp, "Resume.md")
+        shutil.copyfile(medrisk, medrisk_copy)
+        shutil.copyfile(highmark, highmark_copy)
+        shutil.copyfile(candor, candor_copy)
+        medrisk_text = open(medrisk_copy, encoding="utf-8").read()
+        highmark_text = open(highmark_copy, encoding="utf-8").read()
+        candor_text = open(candor_copy, encoding="utf-8").read()
+    assert any(v.rule_id == "LR-046" for v in check_data_model_phrase("", medrisk_text))
+    assert any(v.rule_id == "LR-047" for v in check_required_hedges("", highmark_text))
+    candor_hits = check_required_hedges(candor_text, "")
+    assert any("drafting-time line" in v.message for v in candor_hits)
+    kept = "* Sustained an estimated $1M to $3M in blocked product revenue."
+    assert check_required_hedges(kept, "") == []
 
 
 def load_tests(loader, tests, pattern):

@@ -2,7 +2,7 @@
   "iteration": 11,
   "phase": "LOOP",
   "current_issue_id": null,
-  "next_action": "Holdout 1 is running. No pipeline change. Read docs/loop/evidence/h1/counts.json only. Do not open holdout job text.",
+  "next_action": "Holdout 1 is still running. One folder is parked on a mechanical BLOCK. One folder is in flight at stage 1 FAILED. Leave both to the driver. Do not change the pipeline. Read docs/loop/evidence/h1/counts.json only.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

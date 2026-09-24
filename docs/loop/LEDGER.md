@@ -2,7 +2,7 @@
 
 ## HANDOFF
 
-Holdout 1 is running. No pipeline change since iteration 10. Outputs are under data/loop_holdout/h1. Aggregates only, in docs/loop/evidence/h1/counts.json. Cumulative Agy calls were 44 at the start. The driver stops before the 200-call cap. Four queue rows share a holdout slug. If a practice finalize marks one done, the driver restores that row. Definition of done is not met. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 is still running. No pipeline change. Recorded so far: 1 skip, 1 practice complete, 2 already handled, 1 parked at NEEDS_DISPOSITION. The park is a mechanical BLOCK in stage 2 mech. Both documents have a header placeholder, and unapproved_metrics_clean is false. Do not dispose that block. A sixth folder is in flight at stage 1 FAILED. Leave it to the driver. Calls were 65 before that folder. The four shared queue rows still matched the start snapshot. Definition of done is not met. Aggregates only, in docs/loop/evidence/h1/counts.json. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Holdout 1 — started
 

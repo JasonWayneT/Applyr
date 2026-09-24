@@ -1,8 +1,8 @@
 {
-  "iteration": 1,
+  "iteration": 2,
   "phase": "LOOP",
-  "current_issue_id": "LR-047-hedge-deleted",
-  "next_action": "Confirmation run is data/loop_runs/i1/ait_global_inc_. Next clear DEV slug after the jobs already run. See whether a cited drafting-time line keeps estimated. Do not rewrite affinity_co. Do not open holdout job text.",
+  "current_issue_id": null,
+  "next_action": "Iteration 2. Observe the missing disruption hedge. A sentence that says the migration finished without disruption, and drops the share that never flipped, is not blocked by submission_linter.py. Write a failing test before any change. Do not open holdout job text.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",
@@ -450,10 +450,12 @@
       "i1_stage0_accertify": 9,
       "i1_stage0_affinity_co": 11,
       "i1_stage1_author_affinity_co": 1,
-      "i1_stage1_repair_affinity_co": 1
+      "i1_stage1_repair_affinity_co": 1,
+      "i1_stage0_ait_global_inc_": 10,
+      "i1_stage1_author_ait_global_inc_": 1
     }
   },
-  "cumulative_llm_calls": 33,
+  "cumulative_llm_calls": 44,
   "budget_cap": {
     "max_llm_calls": 200,
     "max_hours": 8,

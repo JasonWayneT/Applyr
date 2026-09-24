@@ -2,9 +2,9 @@
 
 ## HANDOFF
 
-Iteration 1 fix is in. Confirmation run is `data/loop_runs/i1/ait_global_inc_`, the next DEV slug clear of cooldown, already-handled, and the skip ledger.
-See whether a cited drafting-time line keeps estimated. Do not rewrite affinity_co.
-Definition of done is not met. Cumulative Agy calls 33. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 1 is confirmed. ait_global_inc_ is PRACTICE_COMPLETE. An unhedged $1M to $3M sentence kept estimated and its cite. No repair call. Evaluator findings 0.
+Iteration 2 is next. The pipeline still does not block a without-disruption claim that drops the ACC-113 hedge. Failing test before any change.
+Definition of done is not met. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -57,9 +57,13 @@ Definition of done is not met. Cumulative Agy calls 33. Do not open holdout job 
 3. EXPLORE: leave the deletion, or insert "estimated" on the existing line and resync the cite before uncited lines are dropped.
 4. CHOOSE: insert the hedge in place. Do nothing leaves a true proof on the cutting-room floor. Another repair call is what broke the cite.
 5. IMPLEMENT: `keep_required_hedges` in `scripts/stage1_prerepair.py`, called before uncited lines are dropped. Test `test_missing_estimate_hedge_is_inserted_without_dropping_the_cite` failed, then passed. The other 7 pre-repair tests passed.
-6. EVALUATE: the failing case is that unit test. A full DEV sweep is not this step. The finished affinity_co pair stays as the before case. Its drafting line is already gone.
-7. CONFIRM: the mechanism is covered by the test. The live pair was not rewritten. Next observation should be a new DEV run, to see the hedge survive on a real draft.
+6. EVALUATE: unit test, then a live DEV run on ait_global_inc_.
+7. CONFIRM: the live verify failed LR-047 on an unhedged $1M to $3M sentence, the mechanical pass inserted estimated, the sentence stayed cited, and the second verify passed with no repair call. Evaluator findings 0. PRACTICE_COMPLETE. The week-and-day arm did not appear in this draft. The unit test covers it. Evidence: `docs/loop/evidence/01-i1/ait_global_inc_-stage3.txt`.
 8. Not reverted.
+
+## Iteration 2 — not started
+
+The pipeline still has no block for a "without disruption" claim that drops the ACC-113 hedge. `submission_linter.py` has no such check. That is the next observation, with a failing test before any change.
 
 
 

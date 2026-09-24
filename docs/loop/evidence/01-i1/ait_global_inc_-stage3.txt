@@ -1,0 +1,14 @@
+slug: ait_global_inc_
+mode: practice
+final_status: PRACTICE_COMPLETE
+stage0: COMPLETE, Tier 2, fit_score 60
+llm_calls: 11 (stage0 10, author 1, repair 0)
+quota_after_stage0: five_hour 92, weekly 89
+evaluator_findings: 0
+
+First verify failed LR-047 on a $1M to $3M sentence with no estimated.
+Mechanical pass ran. Second verify passed. No repair model call.
+The finished letter still has that money sentence, it contains estimated, and the provenance row for it still has claim ids.
+Two money sentences in the pair are hedged. This draft had no week-and-day drafting line, so that arm was not exercised live. The unit test covers it.
+
+Stage 2 completed. Finalize wrote PRACTICE_COMPLETE. No jobs-table write.

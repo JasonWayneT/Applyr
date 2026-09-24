@@ -2,7 +2,7 @@
   "iteration": 0,
   "phase": "F0",
   "current_issue_id": null,
-  "next_action": "Stage 1 author for 1uphealth wrote Resume.md and CoverLetter.md. Run python scripts/run_submission.py data/loop_runs/f0/1uphealth --resume --mode practice. If it stops for repair, call the repair scripts the queue worker uses. Do not hand-paste.",
+  "next_action": "1uphealth Stage 1 verify now FAILs on LR-045 and LR-047 and workflow status is FAILED. Build the repair prompt if needed, run scripts/run_stage1_repair.py on data/loop_runs/f0/1uphealth, then run_submission.py --resume --mode practice. Do not dispose the blocks.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

@@ -1252,6 +1252,56 @@ def test_LR047_requires_estimated_on_the_range_and_the_drafting_line():
     assert check_required_hedges("* " + kept_time, "") == []
 
 
+def test_LR049_blocks_a_cited_sentence_that_contradicts_the_fact():
+    """FR-390: the cite is real and the sentence says something the fact does not."""
+    inversion = "I prioritized profile portability over custom tagging."
+    usage = "That change reached 25 percent of active usage."
+    true_line = "Custom tagging took priority over making profiles portable."
+    cited = {
+        "cover_letter_claims": [
+            {"sentence": inversion, "claim_ids": ["ACC-155"]},
+            {"sentence": usage, "claim_ids": ["ACC-115"]},
+            {"sentence": true_line, "claim_ids": ["ACC-155"]},
+        ]
+    }
+    blocks = collect_fidelity_hard_blocks("", "\n\n".join([inversion, usage, true_line]), cited)
+    assert any(v.rule_id == "LR-049" and "ACC-155" in v.message for v in blocks)
+    assert any(v.rule_id == "LR-049" and "ACC-115" in v.message for v in blocks)
+    assert not any(true_line[:40] in v.message for v in blocks if v.rule_id == "LR-049")
+    other_fact = {
+        "cover_letter_claims": [
+            {"sentence": inversion, "claim_ids": ["ACC-104"]},
+        ]
+    }
+    assert not any(
+        v.rule_id == "LR-049"
+        for v in collect_fidelity_hard_blocks("", inversion, other_fact)
+    )
+    assert not any(
+        v.rule_id == "LR-049"
+        for v in collect_fidelity_hard_blocks("", inversion)
+    )
+    credited = (
+        "I influenced the landing page that enabled engineering to deploy "
+        "an automated Salesforce onboarding funnel."
+    )
+    credited_prov = {
+        "cover_letter_claims": [{"sentence": credited, "claim_ids": ["ACC-303"]}]
+    }
+    assert not any(
+        v.rule_id == "LR-049"
+        for v in collect_fidelity_hard_blocks("", credited, credited_prov)
+    )
+    took_funnel = "I automated lead capture and built the onboarding funnel."
+    took_prov = {
+        "cover_letter_claims": [{"sentence": took_funnel, "claim_ids": ["ACC-303"]}]
+    }
+    assert any(
+        v.rule_id == "LR-049" and "ACC-303" in v.message
+        for v in collect_fidelity_hard_blocks("", took_funnel, took_prov)
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

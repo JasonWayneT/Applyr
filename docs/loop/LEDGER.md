@@ -2,8 +2,9 @@
 
 ## HANDOFF
 
-Iteration 2 is in. A no-disruption sentence is a hard block unless it keeps the estimate that about 5 percent never flipped. The check caught all 5 of those lines in the before-fix copies, and no extra line there.
-Definition of done is not met. Next observation is the next contradiction the pipeline still lets through. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 3 is in. A sentence that cites a fact and says something that fact does not say is a hard block. The same words on a different fact are not. Crediting engineering with the funnel is not.
+The Obie portability line cites a neighboring id, so this rule does not catch that file.
+Definition of done is not met. Next observation is the next contradiction that still gets through, including a sentence that cites the wrong fact id. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -70,6 +71,18 @@ Definition of done is not met. Next observation is the next contradiction the pi
 6. EVALUATE: the check flags 5 sentences on the before-fix copies, one each in obie_2, classlink, nisum, securitize, and very_good_security. Those are the five no-disruption lines from the review. No extra hit in that folder.
 7. CONFIRM: a bare "without service disruption" sentence is now a hard block. A sentence that keeps "5 percent" is not. A plain rollout sentence is not.
 8. Not reverted.
+
+## Iteration 3 — cited contradiction
+
+1. OBSERVE: an uncommitted check was already in the tree. A sentence can cite a real fact id and say something that fact does not say. Provenance only checks that the id exists.
+2. ROOT CAUSE: CONFIRMED. Before this check, `collect_fidelity_hard_blocks` did not compare the sentence to the cited id.
+3. EXPLORE: do nothing, or hard-block the known pairs when that id is cited.
+4. CHOOSE: keep the check, and do not block a funnel sentence that credits engineering with deploying it. That sentence was a false block.
+5. IMPLEMENT: LR-049 in `check_cited_contradiction`. Stage 1 verify and Stage 2 both pass the folder provenance. The test passed, including the engineering-credit case.
+6. EVALUATE: 102 linter tests, one pre-existing rentana error. On the before-fix copies the check caught 11 gold quotes whose cite matched the pair.
+7. CONFIRM: ACC-155 inversion blocks. The same words cited to ACC-104 do not. No provenance does not. The Obie file cites ACC-115 for the portability line, so this rule does not catch that file. Evidence: `docs/loop/evidence/03-i3/cited.txt`.
+8. Not reverted.
+
 
 
 

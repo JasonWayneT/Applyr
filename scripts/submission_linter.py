@@ -3019,13 +3019,14 @@ def check_wrong_job_company_bleed(
 def collect_fidelity_hard_blocks(
     resume_text: str,
     cover_letter_text: str,
+    provenance: Optional[dict] = None,
 ) -> List[LintViolation]:
-    """Return the span, role, employer, phrase, and hedge hard blocks.
+    """Return the span, role, employer, phrase, hedge, and cited-contradiction blocks.
 
     Stage 2 HM already blocks on these. Stage 1 verify calls the same list
     so a repair can edit the draft before the hiring-manager pass. A block
     that first appears after Stage 1 is COMPLETE cannot be repaired.
-    Implements FR-386.
+    Implements FR-386 / FR-390.
     """
     blocks: List[LintViolation] = []
     blocks.extend(check_competency_process_notes(resume_text))
@@ -3042,7 +3043,124 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_data_model_phrase(resume_text, cover_letter_text))
     blocks.extend(check_required_hedges(resume_text, cover_letter_text))
     blocks.extend(check_disruption_hedge(resume_text, cover_letter_text))
+    blocks.extend(check_cited_contradiction(resume_text, cover_letter_text, provenance))
     return blocks
+
+
+# A cited fact id plus a phrase that fact does not support. The id must be
+# cited. The same words on a different fact do not block. Implements FR-390.
+_CITED_CONTRADICTION: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("ACC-107", re.compile(
+        r"\bregulatory\b|\bdata governance\b|\baudit requirements\b|\bcompliance frameworks\b",
+        re.I,
+    )),
+    ("ACC-113", re.compile(
+        r"\b(?:owned the end-to-end|end-to-end migration|leading the migration)\b",
+        re.I,
+    )),
+    ("ACC-102", re.compile(
+        r"\bled the technical implementation\b|\btechnical implementation\b",
+        re.I,
+    )),
+    ("ACC-220", re.compile(
+        r"\bleading the platform migration\b|\bled the (?:technical|platform) migration\b",
+        re.I,
+    )),
+    ("ACC-103", re.compile(r"\b(?:cleared|resolved)\b.{0,40}\bbacklog\b", re.I)),
+    ("ACC-125", re.compile(r"\b(?:cleared|resolved)\b.{0,40}\bbacklog\b", re.I)),
+    ("ACC-209", re.compile(r"\bqa lead\b", re.I)),
+    ("ACC-155", re.compile(r"\bover custom tagging\b|\bportability over\b", re.I)),
+    ("ACC-115", re.compile(r"\b(?:active usage|feature usage)\b", re.I)),
+    ("ACC-303", re.compile(r"\bautomating lead capture\b|\bonboarding funnel\b", re.I)),
+    ("ACC-203", re.compile(
+        r"\bfunctional specifications\b|\bendpoint protection rules\b|\bnegotiated technical\b",
+        re.I,
+    )),
+)
+
+
+def _fact_prefix(claim_id: str) -> str:
+    """Return ACC-155 from a cite, or empty when the token is not a fact id."""
+    match = re.match(r"(ACC|MET|VOC)-\d+", claim_id or "")
+    return match.group(0) if match else ""
+
+
+def _normalize_cited_text(text: str) -> str:
+    """Fold whitespace and trailing punctuation so a cite can match its sentence."""
+    return re.sub(r"\s+", " ", text or "").strip().rstrip(".!?").lower()
+
+
+def _claim_ids_for_unit(unit: str, provenance: dict) -> List[str]:
+    """Return fact ids whose stored sentence or bullet contains this unit."""
+    target = _normalize_cited_text(unit)
+    if not target:
+        return []
+    found: List[str] = []
+    for section, field in (("resume_claims", "bullet"), ("cover_letter_claims", "sentence")):
+        for row in provenance.get(section) or []:
+            if not isinstance(row, dict):
+                continue
+            value = _normalize_cited_text(str(row.get(field) or ""))
+            if value and (value in target or target in value):
+                found.extend(str(item) for item in (row.get("claim_ids") or []))
+    return found
+
+
+def _load_folder_provenance(folder: str) -> Optional[dict]:
+    """Return claim_provenance.json for a folder, or None when it is missing or invalid."""
+    path = os.path.join(folder, "claim_provenance.json")
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def check_cited_contradiction(
+    resume_text: str,
+    cover_letter_text: str,
+    provenance: Optional[dict] = None,
+) -> List[LintViolation]:
+    """LR-049: block a sentence that cites a fact and says something that fact does not say.
+
+    Args: resume markdown, cover-letter markdown, and claim_provenance.json.
+    Returns HARD_BLOCK violations. No provenance means no finding.
+    Implements FR-390.
+    """
+    if not isinstance(provenance, dict):
+        return []
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        prefixes = {_fact_prefix(item) for item in _claim_ids_for_unit(unit, provenance)}
+        for prefix, pattern in _CITED_CONTRADICTION:
+            if prefix not in prefixes or not pattern.search(unit):
+                continue
+            # ACC-303: Jason influenced the page. Engineering deployed the funnel.
+            if prefix == "ACC-303" and re.search(
+                r"\bengineering\b.{0,48}\b(?:built|deployed|automated)\b",
+                unit,
+                re.IGNORECASE,
+            ):
+                continue
+            key = f"{prefix}:{unit}"
+            if key in seen:
+                continue
+            seen.add(key)
+            violations.append(LintViolation(
+                rule_id="LR-049",
+                severity="HARD_BLOCK",
+                message=(
+                    f"Cited {prefix} does not support this sentence: \"{unit[:180]}\""
+                ),
+                suggestion=(
+                    f"Rewrite the sentence so it says what {prefix} says, or remove the cite."
+                ),
+            ))
+    return violations
 
 
 _DISRUPT_RE = re.compile(r"\bwithout(?:\s+\w+){0,3}\s+disrupt", re.IGNORECASE)
@@ -3325,6 +3443,7 @@ def lint_folder(folder: str) -> List[dict]:
         fidelity_blocks = collect_fidelity_hard_blocks(
             texts_by_doc_type.get("resume", ""),
             texts_by_doc_type.get("cover_letter", ""),
+            _load_folder_provenance(folder),
         )
         if fidelity_blocks:
             results.append({

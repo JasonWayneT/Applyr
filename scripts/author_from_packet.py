@@ -743,7 +743,10 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                 if not geo_any:
                     lines.append("PASS [lint/LW-039 geography]")
 
-                from submission_linter import collect_fidelity_hard_blocks
+                from submission_linter import (
+                    _load_folder_provenance,
+                    collect_fidelity_hard_blocks,
+                )
 
                 # These hard blocks used to appear first in the hiring-manager
                 # pass. That pass cannot repair, so an unsupervised run stops.
@@ -751,6 +754,7 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                 fidelity_blocks = collect_fidelity_hard_blocks(
                     texts.get("resume", ""),
                     texts.get("cover_letter", ""),
+                    _load_folder_provenance(folder),
                 )
                 if fidelity_blocks:
                     passed = False

@@ -1,0 +1,10 @@
+LR-049 blocks a sentence when the cited fact id is one of the known contradiction pairs and the sentence matches that pair.
+
+Test scripts/test_submission_linter.py test_LR049_blocks_a_cited_sentence_that_contradicts_the_fact passed.
+The linter script ran 102 tests. The only error is the pre-existing rentana geography test, which looks for a submission folder that is not in this checkout.
+
+On the before-fix copies, with their provenance files:
+caught 11 gold quotes where the cited id matched the pair.
+A sentence that credits engineering with deploying the onboarding funnel was matching ACC-303. That skip is now in the check, and the test covers it.
+The Obie portability sentence cites ACC-115, not ACC-155, so this rule does not catch that file. The unit test cites ACC-155, which is the case the rule is for.
+No holdout file was opened.

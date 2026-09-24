@@ -476,3 +476,11 @@ A shortened career card no longer ships a number without its unit or a landing p
 - [x] Every accepted requirement maps to tests or an explicit manual verification method.
 - [x] Every bug fix has a regression test or documented exception.
 - [x] Every ADR maps to affected requirements or constraints.
+
+## CR-130 Cited sentence must match the fact
+
+A conversion score cannot offset a sentence that cites a real fact and says something that fact does not say. Stage 1 verify and Stage 2 both block it.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-390` / `AC-500` | CR-130 | Hard-block a cited contradiction. A different fact id, or no provenance, does not block | `scripts/submission_linter.py`, `scripts/author_from_packet.py`, `scripts/test_submission_linter.py` | implemented |

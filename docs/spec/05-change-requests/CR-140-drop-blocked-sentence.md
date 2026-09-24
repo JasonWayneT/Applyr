@@ -6,11 +6,11 @@
 
 ## Product outcome
 
-Stage 1 removes a cited experience bullet or cover-letter sentence that is itself a hard block, then re-checks the draft. The sentence stays when removing it would create a new hard block. A line whose only blocked-tool hit is the word epic stays. No missing hedge is invented.
+Stage 1 removes a cited experience bullet or cover-letter sentence that is itself a hard block, then re-checks the draft. That includes a cover sentence that states no personal fact. The sentence stays when removing it would create a new hard block. A line whose only blocked-tool hit is the word epic stays. No missing hedge is invented.
 
 ## Why
 
-Holdout 1 left four Stage 1 failures. Two of them were a data-model phrase and an unverified tool. Repair saw the same findings again and stopped. The block stays a block. The line that already fails is removed so the rest of the draft can continue.
+Holdout 1 left four Stage 1 failures. Two of them were a data-model phrase and an unverified tool. Repair saw the same findings again and stopped. The block stays a block. The line that already fails is removed so the rest of the draft can continue. The first drop missed a cover sentence that stated no personal fact, so a forbidden buzzword stayed and the repair made no progress. Those sentences are removed too.
 
 ## Out of scope
 

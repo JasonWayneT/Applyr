@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 12 removes a cited hard-block sentence before repair (FR-402 / CR-140). Holdout 1 does not qualify: 44 of 60 started, four Stage 1 failures, several practice-complete documents were hand-edited, and it stopped at the old cap. Cumulative Agy calls at that stop were 195. Jason said continue until definition of done is met, which lifts the 200-call cap. The driver default stays 200. The next run is holdout 2 with APPLYR_LOOP_HOLDOUT=h2 and APPLYR_LOOP_CALL_CAP set above 200. Do not change the pipeline again until two full holdouts both pass. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 13 extends the blocked-sentence drop to a cover sentence that states no personal fact (AC-513). Holdout 2 does not qualify. It was stopped after one Stage 1 failure: a forbidden buzzword in that kind of sentence, and the repair made no progress. Queue restore count was 0. Cumulative calls at the holdout 1 stop were 195. Start holdout 3 after this commit, then holdout 4 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 13 — non-factual blocked sentence
+
+1. OBSERVE: holdout 2 failed one folder at Stage 1. Live rule LR-009. The repair outcome was no progress. Mechanical fixes applied nothing.
+2. ROOT CAUSE: CONFIRMED. The buzzword sat in a cover sentence that states no personal fact. The drop only walked personal-fact sentences.
+3. EXPLORE: leave the sentence for repair, or delete every body sentence that is itself a hard block.
+4. CHOOSE: delete the body sentence. The refusal when deletion creates a new hard block stays.
+5. IMPLEMENT: `_cover_body_sentences` in `scripts/stage1_prerepair.py`.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 11 tests.
+7. CONFIRM: the local check behaves as tested. Holdout 3 has not run. This is not definition of done.
 
 ## Iteration 12 — drop a blocked sentence
 

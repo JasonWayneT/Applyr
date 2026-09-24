@@ -1064,6 +1064,7 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-511` | acceptance | P0 | implemented | "tradeoffs Visible to enable" blocks with a cite and with no provenance. "visible in the usage data" does not | `FR-401` | CR-139 |
 | `FR-402` | functional | P0 | implemented | Stage 1 removes a cited experience bullet or cover-letter sentence that is itself a hard block. The removal is refused when it creates a new fidelity hard block. A line whose only blocked-tool hit is the word epic is left in place. No hedge is inserted to clear the block | `AC-512` | CR-140 |
 | `AC-512` | acceptance | P0 | implemented | A cited data-model bullet is removed and a neighboring cited bullet stays. A cited blocked tool sentence is removed and the past-employer sentence stays. The only past-employer sentence is kept when it is also a hard block. A cited drafting line that says epic keeps the inserted estimate | `FR-402` | CR-140 |
+| `AC-513` | acceptance | P0 | implemented | A cover sentence that states no personal fact is removed when it contains a forbidden buzzword. A neighboring sentence that names a past employer stays | `FR-402` | CR-140 |
 
 ### Data Traceability (DATA-006)
 

@@ -306,6 +306,36 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertIn("Cision", updated)
         self.assertIn("data model", updated.lower())
 
+    def test_nonfactual_buzzword_sentence_is_removed(self) -> None:
+        """A cover sentence with no personal fact still drops when it is a hard block. Implements AC-513."""
+        blocked = "The posting describes a robust platform for operators."
+        kept = "At Cision, I kept the contact records current for enterprise users."
+        letter = f"Dear Hiring Manager,\n\n{blocked}\n\n{kept}\n\nBest regards,\n\nName\n"
+        (self.folder / "Resume.md").write_text(
+            "## PROFESSIONAL EXPERIENCE\n* I kept the cleanup bullet for stale records.\n",
+            encoding="utf-8",
+        )
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {
+                            "bullet": "I kept the cleanup bullet for stale records.",
+                            "claim_ids": ["ACC-102"],
+                        }
+                    ],
+                    "cover_letter_claims": [{"sentence": kept, "claim_ids": ["ACC-102"]}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(any(row["rule_id"] == "LR-009" for row in result["applied"]))
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertNotIn("robust", updated.lower())
+        self.assertIn("Cision", updated)
+
 
 if __name__ == "__main__":
     unittest.main()

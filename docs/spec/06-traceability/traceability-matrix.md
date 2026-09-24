@@ -556,3 +556,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-402` / `AC-512` | CR-140 | Remove the blocked unit. Keep the unit when removal creates a new hard block | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `AC-513` | CR-140 | Remove a non-factual cover sentence that is itself a hard block | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |

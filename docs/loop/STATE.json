@@ -1,8 +1,8 @@
 {
-  "iteration": 12,
+  "iteration": 13,
   "phase": "LOOP",
   "current_issue_id": "CR-140",
-  "next_action": "FR-402 removes a cited hard-block sentence before repair. Jason said continue until definition of done is met, which lifts the 200-call cap for the next holdouts. The driver default stays 200. Start holdout 2 with APPLYR_LOOP_HOLDOUT=h2 and APPLYR_LOOP_CALL_CAP set above 200. Holdout 1 does not qualify. Do not change the pipeline again until two full holdouts both pass. Definition of done is not met.",
+  "next_action": "Holdout 2 stopped after one failure. The blocked cover sentence stated no personal fact, so the drop skipped it. AC-513 removes those sentences too. Holdout 2 does not qualify. Start holdout 3 after this commit, then holdout 4 with no pipeline change. Definition of done is not met.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

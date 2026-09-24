@@ -349,14 +349,24 @@ def _snippet_hits_unit(unit: str, snippet: str) -> bool:
     return left in right or right in left
 
 
+def _cover_body_sentences(text: str) -> list[str]:
+    """Return cover-letter body sentences, including lines that state no personal fact."""
+    body = (text or "").split("Dear Hiring Manager,", 1)[-1]
+    body = re.split(r"\n\s*(?:Best regards|Regards|Sincerely),", body, maxsplit=1)[0]
+    return [
+        sentence.strip()
+        for sentence in re.split(r"(?<=[.!?])\s+", re.sub(r"\n+", " ", body))
+        if sentence.strip()
+    ]
+
+
 def drop_blocked_units(folder: Path) -> list[dict[str, str]]:
     """Remove a cited bullet or sentence that is itself a hard block.
 
     A removal that creates a new fidelity hard block is refused. The blocked
     phrase stays a hard block. This only deletes the line that already fails.
-    Implements FR-402.
+    Cover sentences that do not state a personal fact are included. Implements FR-402.
     """
-    from author_from_packet import _cover_factual_sentences
     from submission_linter import collect_fidelity_hard_blocks
 
     resume_path = folder / "Resume.md"
@@ -389,7 +399,7 @@ def drop_blocked_units(folder: Path) -> list[dict[str, str]]:
     if any(row["file"] == "Resume.md" for row in applied):
         new_resume = "\n".join(kept_resume).rstrip() + "\n"
     new_letter = letter_text
-    for sentence in _cover_factual_sentences(letter_text):
+    for sentence in _cover_body_sentences(letter_text):
         rule_id = ""
         for candidate, snippet in snippets:
             if _snippet_hits_unit(sentence, snippet):

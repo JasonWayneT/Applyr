@@ -2,10 +2,9 @@
 
 ## HANDOFF
 
-accertify practice run is SKIPPED. Fit 36 is below the 40 floor. 9 Agy calls. Not a defect.
-Next observation is `data/loop_runs/i1/nisum`, a DEV slug from the before-fix set, so a job that used to draft can show whether the current pipeline still emits a critical defect.
-Definition of done is not met. F2 seed 20260923, dev 366, holdout 60. Do not open holdout job text.
-Cumulative Agy calls 20. Do not loosen a gate. Do not apply the preloop patch. Do not stage the parallel CR-128/CR-129 edits.
+nisum practice run SKIPPED in 0.05s on a 30-day jobs-table cooldown. 0 Agy calls. The jobs row was not updated by this run.
+Next observation is `data/loop_runs/i1/accion_labs`, the next DEV slug clear of that gate.
+Definition of done is not met. Cumulative Agy calls 20. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 

@@ -1,0 +1,11 @@
+slug: nisum
+mode: practice
+folder: data/loop_runs/i1/nisum
+command: python scripts/run_submission.py data/loop_runs/i1/nisum --mode practice
+exit: 2
+workflow_status: SKIPPED
+duration_seconds: 0.046
+llm_calls: 0
+reason: Nisum is within a 30-day cooldown (no_signal, 0 days elapsed versus 30)
+db_write: jobs status_changed_at for this company is 2026-09-24 05:20:27, before this run
+judgment: recorded Skip with a reason. The practice run read the jobs table and did not draft. Not a defect.

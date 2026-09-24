@@ -532,3 +532,11 @@ Work experience does not say release cadence. That phrase is a hard block on any
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-399` / `AC-509` | CR-137 | Hard-block that phrase even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-138 Testing analytics
+
+Work experience does not say testing analytics. That phrase is a hard block on any cite. Pendo product analytics stays.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-400` / `AC-510` | CR-138 | Hard-block that phrase even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |

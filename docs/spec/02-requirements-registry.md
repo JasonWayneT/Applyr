@@ -1058,6 +1058,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-505` | acceptance | P0 | implemented | "significantly reduced customer support escalations" cited to ACC-102 blocks. The same sentence with no provenance blocks. "streamline Customer Support escalations" does not. "reduced stale-data complaints to zero" does not | `FR-395` | CR-135 |
 | `FR-399` | functional | P0 | implemented | A sentence that says release cadence is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. A deletion cadence does not block | `AC-509` | CR-137 |
 | `AC-509` | acceptance | P0 | implemented | "Guided release cadence" cited to ACC-204 blocks. The same bullet with no provenance blocks. Defect triage with QA engineering does not. A rolling deletion cadence does not | `FR-399` | CR-137 |
+| `FR-400` | functional | P0 | implemented | A sentence that says testing analytics is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. Pendo product analytics does not block | `AC-510` | CR-138 |
+| `AC-510` | acceptance | P0 | implemented | "applying product analytics and testing analytics" cited to ACC-214 blocks. The same bullet with no provenance blocks. "Pendo product analytics" does not | `FR-400` | CR-138 |
 
 ### Data Traceability (DATA-006)
 

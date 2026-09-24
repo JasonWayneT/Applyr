@@ -3049,6 +3049,7 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_hundreds_of_client_databases(resume_text, cover_letter_text))
     blocks.extend(check_support_escalation_reduction(resume_text, cover_letter_text))
     blocks.extend(check_release_cadence(resume_text, cover_letter_text))
+    blocks.extend(check_testing_analytics(resume_text, cover_letter_text))
     return blocks
 
 
@@ -3069,6 +3070,8 @@ _SUPPORT_ESCALATION_REDUCTION_RE = re.compile(
 )
 # Work experience never says release cadence. Implements FR-399.
 _RELEASE_CADENCE_RE = re.compile(r"\brelease cadence\b", re.IGNORECASE)
+# Work experience never says testing analytics. Pendo product analytics stays. Implements FR-400.
+_TESTING_ANALYTICS_RE = re.compile(r"\btesting analytics\b", re.IGNORECASE)
 
 # A cited fact id plus a phrase that fact does not support. The id must be
 # cited. The same words on a different fact do not block. Implements FR-390.
@@ -3236,6 +3239,31 @@ def check_release_cadence(
             severity="HARD_BLOCK",
             message="This sentence claims a release cadence",
             suggestion="Describe the first-pass QA work. Leave release cadence out.",
+        ))
+    return violations
+
+
+def check_testing_analytics(
+    resume_text: str,
+    cover_letter_text: str,
+) -> List[LintViolation]:
+    """LR-055: block a testing-analytics claim on any cite.
+
+    Work experience does not use that phrase. The Classlink bullet cites
+    the Parallels fact and still says it. Pendo product analytics does
+    not match. Implements FR-400.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if not _TESTING_ANALYTICS_RE.search(unit) or unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-055",
+            severity="HARD_BLOCK",
+            message="This sentence claims testing analytics",
+            suggestion="Describe the virtual-machine test work. Leave testing analytics out.",
         ))
     return violations
 

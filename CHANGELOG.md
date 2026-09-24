@@ -19,6 +19,7 @@
 - "Hundreds of client databases" is a hard block on any cite. The career entry is roughly 200 SQL databases (CR-133 / FR-393).
 - A sentence that says support escalations were reduced is a hard block on any cite. The career file does not say that. A Jira priority formula that says streamline does not match this check (CR-135 / FR-395).
 - "Release cadence" is a hard block on any cite. The career file does not use that phrase. A deletion cadence does not match (CR-137 / FR-399).
+- "Testing analytics" is a hard block on any cite. The career file does not use that phrase. Pendo product analytics does not match (CR-138 / FR-400).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

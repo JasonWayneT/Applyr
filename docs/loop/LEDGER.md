@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-Iteration 8 is in. "Release cadence" is a hard block on any cite. The Classlink resume and the Keyfactor letter were the two cases in the before-fix copies. A deletion cadence does not match.
-Definition of done is not met. Next observation is the Classlink "testing analytics" line. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129/CR-134/CR-136 edits.
+Iteration 9 is in. "Testing analytics" is a hard block on any cite. The Classlink resume was the one case in the before-fix copies. Pendo product analytics does not match.
+Definition of done is not met. The before-fix gold quotes are now blocked except the Visible codename. Next observation is that codename. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129/CR-134/CR-136 edits.
 
 ## Iteration 0 — setup
 
@@ -136,6 +136,18 @@ Definition of done is not met. Next observation is the Classlink "testing analyt
 6. EVALUATE: 107 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires on the Classlink resume and the Keyfactor letter.
 7. CONFIRM: the phrase blocks with an ACC-204 cite and with no provenance. Defect triage does not. A rolling deletion cadence does not. Evidence: `docs/loop/evidence/08-i8/cadence.txt`.
 8. Not reverted.
+
+## Iteration 9 — testing analytics
+
+1. OBSERVE: the Classlink resume says the Parallels test work applied testing analytics and cites ACC-214.
+2. ROOT CAUSE: CONFIRMED. Work experience does not use that phrase. No linter rule blocked it.
+3. EXPLORE: do nothing, or hard-block the phrase with no cite requirement.
+4. CHOOSE: hard-block the phrase. Do nothing leaves the invented outcome able to pass. Pendo product analytics stays allowed.
+5. IMPLEMENT: LR-055. The new test failed, then passed.
+6. EVALUATE: 108 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Classlink resume.
+7. CONFIRM: the phrase blocks with an ACC-214 cite and with no provenance. A Pendo product-analytics sentence does not. Evidence: `docs/loop/evidence/09-i9/testing-analytics.txt`.
+8. Not reverted.
+
 
 
 

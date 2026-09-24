@@ -1425,6 +1425,29 @@ def test_LR054_blocks_release_cadence():
     )
 
 
+def test_LR055_blocks_testing_analytics():
+    """Work experience never says testing analytics. Pendo product analytics stays."""
+    bullet = (
+        "Configured virtual machine test environments, applying product analytics "
+        "and testing analytics to verify build stability."
+    )
+    resume = "* " + bullet
+    cited = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-214"]}]}
+    assert any(
+        v.rule_id == "LR-055"
+        for v in collect_fidelity_hard_blocks(resume, "", cited)
+    )
+    assert any(
+        v.rule_id == "LR-055"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    pendo = "* I used Pendo product analytics to see where engagement was weak."
+    assert not any(
+        v.rule_id == "LR-055"
+        for v in collect_fidelity_hard_blocks(pendo, "")
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

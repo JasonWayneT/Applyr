@@ -2,9 +2,9 @@
 
 ## HANDOFF
 
-affinity_co verify FAILED. Two drafting-time lines are missing the estimate hedge (LR-047). Status FAILED, so repair can run.
-Next is build_stage1_repair_prompt.py then run_stage1_repair.py on `data/loop_runs/i1/affinity_co`.
-Definition of done is not met. Cumulative Agy calls 32. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 1 observation is recorded. affinity_co is PRACTICE_COMPLETE. Evaluator findings 0. The cited drafting-time line was deleted after repair broke its cite.
+Issue LR-047-hedge-deleted is confirmed. Next change inserts the hedge in place and resyncs provenance before uncited lines are dropped. Failing test first.
+Definition of done is not met. Cumulative Agy calls 33. Quota after stage 0 was five_hour 94, weekly 90. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -49,5 +49,17 @@ Definition of done is not met. Cumulative Agy calls 32. Do not open holdout job 
 6. EVALUATE: `python scripts/check_loop_split.py` printed MATCH, dev 366, holdout 60.
 7. CONFIRM: overlap 0. Evidence: `docs/loop/evidence/f2/split.txt`.
 8. Not a failed fix.
+
+## Iteration 1 — hedge line deleted
+
+1. OBSERVE: accertify SKIPPED on fit 36. nisum SKIPPED on a 30-day cooldown. accion_labs and adly were ALREADY_HANDLED. affinity_co reached PRACTICE_COMPLETE. Evidence: `docs/loop/evidence/01-i1/`.
+2. ROOT CAUSE: CONFIRMED. The author left a cited drafting-time line without "estimated". Repair added the word and changed the sentence, so provenance no longer matched. `drop_uncited_units` then removed it. That deletion does not create LR-047, so the guard allowed it. The first draft still has the week-and-day line. The finished draft does not.
+3. EXPLORE: leave the deletion, or insert "estimated" on the existing line and resync the cite before uncited lines are dropped.
+4. CHOOSE: insert the hedge in place. Do nothing leaves a true proof on the cutting-room floor. Another repair call is what broke the cite.
+5. IMPLEMENT: not started. Failing test first.
+6. EVALUATE: not started.
+7. CONFIRM: not resolved. The practice pair is PRACTICE_COMPLETE with 0 evaluator findings, and the proof is gone.
+8. No code change yet. Nothing to revert.
+
 
 

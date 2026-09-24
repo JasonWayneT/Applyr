@@ -1,0 +1,17 @@
+slug: affinity_co
+mode: practice
+final_status: PRACTICE_COMPLETE
+evaluator_findings: 0
+stage2: truth WARN 11, ats WARN 3, hm WARN 3, mech complete, policy CLEAN
+llm_calls_this_slug: 13 (stage0 11, author 1, repair 1)
+cumulative_llm_calls: 33
+
+What happened:
+- Stage 0 passed, fit 48, Tier 2.
+- Author wrote drafts. Verify failed LR-047 on two drafting-time lines.
+- Repair added the word estimated and rewrote the lines. The new text no longer matched claim_provenance, so the next verify failed sentence_provenance.
+- The mechanical pass then deleted those uncited lines. Deleting them does not create LR-047, so the deletion guard kept the drop.
+- Second verify passed. Stage 2 completed. Finalize wrote PRACTICE_COMPLETE and did not write the jobs table.
+- The finished drafts contain "estimated" and do not contain the week-and-day drafting line. The first-draft copies still have that line.
+
+Judgment: confirmed. A cited drafting-time line loses its cite when repair rewords it, and the uncited-line deletion then removes the proof. The finished pair has no critical evaluator finding. The proof was deleted rather than hedged in place.

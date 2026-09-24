@@ -5,7 +5,7 @@
 Phase F0, iteration 0. Branch `loop/2026-09-23` at `6c68377`. No pipeline code changed yet.
 Uncommitted main WIP was reverted. It mixed allowlist additions and suppressions. Do not apply `docs/loop/evidence/00-preloop/uncommitted.patch`.
 FINDINGS-2026-09-24-entailment-gap.md does not exist. Known-bad copies are in `data/review_evidence/2026-09-23-before-fix/` (17 slugs).
-Stage 0 for `1uphealth` is COMPLETE (7 Agy calls, no human pause). Workflow is WAITING_FOR_LLM. Next command is `python scripts/run_stage1_author.py data/loop_runs/f0/1uphealth`. Log: `data/loop_runs/f0/1uphealth-author.log`. Do not hand-paste the prompt.
+Stage 1 author for `1uphealth` returned ok in 56s and wrote the three artifacts. Next: `python scripts/run_submission.py data/loop_runs/f0/1uphealth --resume --mode practice`. Log: `data/loop_runs/f0/1uphealth-resume.log`.
 Cap: 200 LLM calls or 8 hours. Agy is on PATH. Stage 1 author is `scripts/run_stage1_author.py` after `WAITING_FOR_LLM`.
 Trap: a pause for requirement-extraction review or a human paste means F0 failed unattended. Record it. Do not shop for an easier JD.
 

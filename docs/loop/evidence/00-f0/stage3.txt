@@ -1,0 +1,12 @@
+slug: 1uphealth
+workflow_status: PRACTICE_COMPLETE
+stage3: COMPLETE
+verify: python printed PRACTICE_COMPLETE
+lr045_after_mechanical_fill: no violations
+first_verify_in_resume5: FAIL LR-045
+second_verify_in_resume5: PASS
+stage2: truth WARN:9, ats WARN:3, hm complete WARN:3, mech complete, policy CLEAN
+finalize: PRACTICE_COMPLETE, console said no DB write
+jobs_table: one existing 1upHealth row, status Applied. No new row.
+llm_calls_this_step: 0
+commit: 56fc3c8

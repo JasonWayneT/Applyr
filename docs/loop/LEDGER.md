@@ -2,10 +2,9 @@
 
 ## HANDOFF
 
-Jason overrode the red-line stop. Continue until the definition of done. Do not merge.
-`1uphealth` is still FAILED at Stage 1. Commit `56fc3c8` fills LR-045 from a cited resume bullet during mechanical fix. Next: `python scripts/run_submission.py data/loop_runs/f0/1uphealth --resume --mode practice`. Do not call the repair model unless that resume still fails verify.
-11 Agy calls so far. Cap 200. Evaluator and the DEV/HOLDOUT split are still ahead.
-Trap: do not apply `docs/loop/evidence/00-preloop/uncommitted.patch`. Other uncommitted files in the tree belong to a parallel edit. Do not stage them.
+F0 is done for one job. `1uphealth` is PRACTICE_COMPLETE under `data/loop_runs/f0/1uphealth`. No new jobs-table row.
+Phase is F1. Build the independent evaluator and validate it on `data/review_evidence/2026-09-23-before-fix/` before any more pipeline edits.
+11 Agy calls. Cap 200. Do not apply the preloop patch. Do not stage the parallel CR-128/CR-129 working-tree edits.
 
 ## Iteration 0 — setup
 

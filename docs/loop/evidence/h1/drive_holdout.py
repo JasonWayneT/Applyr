@@ -36,9 +36,11 @@ from run_queue_worker import (  # noqa: E402
 )
 
 BASELINE_CALLS = 44
-CALL_CAP = 200
-OUT = ROOT / "data" / "loop_holdout" / "h1"
-COUNTS = ROOT / "docs" / "loop" / "evidence" / "h1" / "counts.json"
+# Default stays 200. A later run sets APPLYR_LOOP_CALL_CAP only after an explicit lift.
+CALL_CAP = int(os.environ.get("APPLYR_LOOP_CALL_CAP", "200"))
+HOLD = os.environ.get("APPLYR_LOOP_HOLDOUT", "h1")
+OUT = ROOT / "data" / "loop_holdout" / HOLD
+COUNTS = ROOT / "docs" / "loop" / "evidence" / HOLD / "counts.json"
 DB = ROOT / "data" / "jobagent.sqlite"
 PY = sys.executable
 DONE = frozenset(
@@ -131,6 +133,7 @@ def _publish(by_status: dict[str, int], calls: int, stopped: str | None) -> None
         "calls": calls,
         "stopped": stopped,
     }
+    COUNTS.parent.mkdir(parents=True, exist_ok=True)
     COUNTS.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     parts = " ".join(f"{key}={by_status[key]}" for key in sorted(by_status))
     print(

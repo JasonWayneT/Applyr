@@ -305,6 +305,120 @@ def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
     return applied
 
 
+def _only_agile_epic_tool(line: str) -> bool:
+    """True when LR-026's only hit on this line is the word epic. Implements FR-402."""
+    from blocked_tools import hard_blocked_tools_lint_alternation
+
+    tokens = [
+        match.group(0).lower().rstrip("s")
+        for match in re.finditer(hard_blocked_tools_lint_alternation(), line, re.IGNORECASE)
+    ]
+    return bool(tokens) and all(token == "epic" for token in tokens)
+
+
+def _blocked_snippets(resume_text: str, letter_text: str) -> list[tuple[str, str]]:
+    """Return (rule id, snippet) for hard blocks that name a line. Implements FR-402."""
+    from submission_linter import collect_fidelity_hard_blocks, lint_document
+
+    found: list[tuple[str, str]] = []
+    for item in collect_fidelity_hard_blocks(resume_text, letter_text):
+        for quoted in re.findall(r'"([^"]{12,})"', item.message or ""):
+            found.append((item.rule_id, quoted))
+    for doc_type, text in (("resume", resume_text), ("cover_letter", letter_text)):
+        lines = text.splitlines()
+        for item in lint_document(text, doc_type).blocks:
+            if not item.line or not (1 <= item.line <= len(lines)):
+                continue
+            raw = lines[item.line - 1]
+            if raw.strip().startswith("#"):
+                continue
+            if item.rule_id == "LR-026" and _only_agile_epic_tool(raw):
+                continue
+            found.append((item.rule_id, raw))
+    return found
+
+
+def _snippet_hits_unit(unit: str, snippet: str) -> bool:
+    """True when a hard-block snippet and a draft unit are the same line."""
+    from author_from_packet import _normalize_provenance_unit
+
+    left = _normalize_provenance_unit(unit)
+    right = _normalize_provenance_unit(snippet)
+    if len(left) < 12 or len(right) < 12:
+        return False
+    return left in right or right in left
+
+
+def drop_blocked_units(folder: Path) -> list[dict[str, str]]:
+    """Remove a cited bullet or sentence that is itself a hard block.
+
+    A removal that creates a new fidelity hard block is refused. The blocked
+    phrase stays a hard block. This only deletes the line that already fails.
+    Implements FR-402.
+    """
+    from author_from_packet import _cover_factual_sentences
+    from submission_linter import collect_fidelity_hard_blocks
+
+    resume_path = folder / "Resume.md"
+    letter_path = folder / "CoverLetter.md"
+    if not resume_path.is_file() or not letter_path.is_file():
+        return []
+    resume_text = resume_path.read_text(encoding="utf-8")
+    letter_text = letter_path.read_text(encoding="utf-8")
+    snippets = _blocked_snippets(resume_text, letter_text)
+    if not snippets:
+        return []
+    applied: list[dict[str, str]] = []
+    kept_resume: list[str] = []
+    in_experience = False
+    for line in resume_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_experience = stripped[3:].strip().casefold() == "professional experience"
+        rule_id = ""
+        if in_experience and stripped.startswith(("* ", "- ")):
+            for candidate, snippet in snippets:
+                if _snippet_hits_unit(stripped, snippet):
+                    rule_id = candidate
+                    break
+        if rule_id:
+            applied.append({"rule_id": rule_id, "file": "Resume.md", "from": stripped, "to": ""})
+            continue
+        kept_resume.append(line)
+    new_resume = resume_text
+    if any(row["file"] == "Resume.md" for row in applied):
+        new_resume = "\n".join(kept_resume).rstrip() + "\n"
+    new_letter = letter_text
+    for sentence in _cover_factual_sentences(letter_text):
+        rule_id = ""
+        for candidate, snippet in snippets:
+            if _snippet_hits_unit(sentence, snippet):
+                rule_id = candidate
+                break
+        if not rule_id or sentence not in new_letter:
+            continue
+        new_letter = new_letter.replace(sentence, "", 1)
+        applied.append(
+            {"rule_id": rule_id, "file": "CoverLetter.md", "from": sentence, "to": ""}
+        )
+    if any(row["file"] == "CoverLetter.md" for row in applied):
+        new_letter = re.sub(r"[ \t]{2,}", " ", new_letter)
+        new_letter = re.sub(r"\n{3,}", "\n\n", new_letter)
+        if not new_letter.endswith("\n"):
+            new_letter += "\n"
+    if not applied:
+        return []
+    before_ids = {item.rule_id for item in collect_fidelity_hard_blocks(resume_text, letter_text)}
+    after_ids = {item.rule_id for item in collect_fidelity_hard_blocks(new_resume, new_letter)}
+    if after_ids - before_ids:
+        return []
+    if new_resume != resume_text:
+        resume_path.write_text(new_resume, encoding="utf-8")
+    if new_letter != letter_text:
+        letter_path.write_text(new_letter, encoding="utf-8")
+    return applied
+
+
 _PAST_EMPLOYER_HEADS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("Cision", re.compile(r"\bCision\b")),
     ("Sterkly", re.compile(r"\bSterkly\b")),
@@ -548,6 +662,8 @@ def apply_mechanical_fixes(
     for change in keep_required_hedges(folder):
         applied.append(change)
     for change in drop_uncited_units(folder):
+        applied.append(change)
+    for change in drop_blocked_units(folder):
         applied.append(change)
     for change in name_past_employer(folder):
         applied.append(change)

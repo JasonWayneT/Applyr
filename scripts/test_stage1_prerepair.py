@@ -233,6 +233,79 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertIn("estimated", provenance["cover_letter_claims"][0]["sentence"].lower())
         self.assertEqual(provenance["cover_letter_claims"][0]["claim_ids"], ["ACC-179"])
 
+    def test_cited_hard_block_sentence_is_removed(self) -> None:
+        """A cited data-model bullet and a cited blocked tool are removed. Implements FR-402."""
+        blocked = "I built a data model for the contact platform."
+        kept = "I kept the cleanup bullet for stale records."
+        tool = "I used Snowflake to query the warehouse."
+        kept_letter = "At Cision, I kept the contact records current for enterprise users."
+        resume = (
+            "## PROFESSIONAL EXPERIENCE\n\n"
+            "### Product Manager | Cision | September 2021 - January 2026\n"
+            f"* {blocked}\n"
+            f"* {kept}\n"
+        )
+        letter = (
+            "Dear Hiring Manager,\n\n"
+            f"{kept_letter}\n\n"
+            f"{tool}\n\n"
+            "Best regards,\n\nName\n"
+        )
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {"bullet": blocked, "claim_ids": ["ACC-102"]},
+                        {"bullet": kept, "claim_ids": ["ACC-102"]},
+                    ],
+                    "cover_letter_claims": [
+                        {"sentence": kept_letter, "claim_ids": ["ACC-102"]},
+                        {"sentence": tool, "claim_ids": ["ACC-121"]},
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(any(row["rule_id"] == "LR-046" for row in result["applied"]))
+        self.assertTrue(any(row["rule_id"] == "LR-026" for row in result["applied"]))
+        new_resume = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        new_letter = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertNotIn("data model", new_resume.lower())
+        self.assertIn(kept, new_resume)
+        self.assertNotIn("Snowflake", new_letter)
+        self.assertIn("Cision", new_letter)
+
+    def test_only_employer_hard_block_sentence_is_kept(self) -> None:
+        """Removing the only past-employer sentence is refused. Implements FR-402."""
+        sentence = "At Cision, I built a data model for the contact platform."
+        letter = f"Dear Hiring Manager,\n\n{sentence}\n\nBest regards,\n\nName\n"
+        (self.folder / "Resume.md").write_text(
+            "## PROFESSIONAL EXPERIENCE\n* I kept the cleanup bullet for stale records.\n",
+            encoding="utf-8",
+        )
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {
+                            "bullet": "I kept the cleanup bullet for stale records.",
+                            "claim_ids": ["ACC-102"],
+                        }
+                    ],
+                    "cover_letter_claims": [{"sentence": sentence, "claim_ids": ["ACC-102"]}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn("Cision", updated)
+        self.assertIn("data model", updated.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

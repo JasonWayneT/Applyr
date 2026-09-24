@@ -1062,6 +1062,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-510` | acceptance | P0 | implemented | "applying product analytics and testing analytics" cited to ACC-214 blocks. The same bullet with no provenance blocks. "Pendo product analytics" does not | `FR-400` | CR-138 |
 | `FR-401` | functional | P0 | implemented | A capitalized Visible after a space is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. Lowercase visible does not block | `AC-511` | CR-139 |
 | `AC-511` | acceptance | P0 | implemented | "tradeoffs Visible to enable" blocks with a cite and with no provenance. "visible in the usage data" does not | `FR-401` | CR-139 |
+| `FR-402` | functional | P0 | implemented | Stage 1 removes a cited experience bullet or cover-letter sentence that is itself a hard block. The removal is refused when it creates a new fidelity hard block. A line whose only blocked-tool hit is the word epic is left in place. No hedge is inserted to clear the block | `AC-512` | CR-140 |
+| `AC-512` | acceptance | P0 | implemented | A cited data-model bullet is removed and a neighboring cited bullet stays. A cited blocked tool sentence is removed and the past-employer sentence stays. The only past-employer sentence is kept when it is also a hard block. A cited drafting line that says epic keeps the inserted estimate | `FR-402` | CR-140 |
 
 ### Data Traceability (DATA-006)
 

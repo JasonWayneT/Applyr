@@ -548,3 +548,11 @@ A capitalized Visible after a space is the codename. That is a hard block on any
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-401` / `AC-511` | CR-139 | Hard-block that codename even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-140 Drop a blocked sentence
+
+A cited bullet or cover sentence that is itself a hard block is removed before repair. The removal is refused when it would create a new hard block. The word epic in a drafting line stays. No hedge is invented.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-402` / `AC-512` | CR-140 | Remove the blocked unit. Keep the unit when removal creates a new hard block | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |

@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Holdout 1 stopped at the call cap. No pipeline change. 44 of 60 folders were started. Cumulative Agy calls are 195. The driver will not start another folder because one more drafting pass could pass 200. The last folder was a skip, fit 36. Live census: 9 practice complete (several were hand edits), 20 skips, 11 already handled, 4 stage 1 failures. Nothing is parked for a human. The four failures are LR-048, LR-026, invalid provenance, and LR-046. The driver counts file still lists cleared parks as NEEDS_DISPOSITION. Census workflow_state. Queue snapshot still matched at the last check. Definition of done is not met. Do not raise the cap silently. Do not loosen a gate. Do not stage the parallel edits.
+Iteration 12 removes a cited hard-block sentence before repair (FR-402 / CR-140). Holdout 1 does not qualify: 44 of 60 started, four Stage 1 failures, several practice-complete documents were hand-edited, and it stopped at the old cap. Cumulative Agy calls at that stop were 195. Jason said continue until definition of done is met, which lifts the 200-call cap. The driver default stays 200. The next run is holdout 2 with APPLYR_LOOP_HOLDOUT=h2 and APPLYR_LOOP_CALL_CAP set above 200. Do not change the pipeline again until two full holdouts both pass. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 12 — drop a blocked sentence
+
+1. OBSERVE: four Stage 1 failures. Two were the same findings after one repair, so a second repair was refused. The sentences were cited hard blocks.
+2. ROOT CAUSE: CONFIRMED. `drop_uncited_units` keeps a cited sentence. Repair cannot clear a sentence that is itself the block, and it must not invent a hedge.
+3. EXPLORE: invent the missing hedge, allow the tool, or delete the blocked sentence.
+4. CHOOSE: delete the sentence. Refuse the delete when it creates a new hard block. Leave a line whose only blocked-tool hit is the word epic.
+5. IMPLEMENT: `drop_blocked_units` in `scripts/stage1_prerepair.py`, called after `drop_uncited_units`.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 10 tests.
+7. CONFIRM: the local checks behave as tested. Holdout 2 has not run. This is not definition of done.
 
 ## Holdout 1 — started
 

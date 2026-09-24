@@ -73,6 +73,7 @@
 | CR-137 | "Release cadence" is a hard block on any cite | **Implemented** (2026-09-24) — `FR-399`, `AC-509` — [spec](CR-137-release-cadence.md) |
 | CR-138 | "Testing analytics" is a hard block on any cite | **Implemented** (2026-09-24) — `FR-400`, `AC-510` — [spec](CR-138-testing-analytics.md) |
 | CR-139 | A capitalized Visible codename is a hard block on any cite | **Implemented** (2026-09-24) — `FR-401`, `AC-511` — [spec](CR-139-visible-codename.md) |
+| CR-140 | A cited sentence that is itself a hard block is removed before repair | **Implemented** (2026-09-24) — `FR-402`, `AC-512` — [spec](CR-140-drop-blocked-sentence.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

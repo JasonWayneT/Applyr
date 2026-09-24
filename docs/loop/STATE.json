@@ -1,8 +1,8 @@
 {
-  "iteration": 11,
+  "iteration": 12,
   "phase": "LOOP",
-  "current_issue_id": null,
-  "next_action": "Holdout 1 stopped at the call cap after 44 of 60 folders. Cumulative calls 195. 16 folders were not started. Nothing is parked for a human. Four stage 1 failures remain. Do not raise the cap silently. Do not change the pipeline. Census workflow_state.",
+  "current_issue_id": "CR-140",
+  "next_action": "FR-402 removes a cited hard-block sentence before repair. Jason said continue until definition of done is met, which lifts the 200-call cap for the next holdouts. The driver default stays 200. Start holdout 2 with APPLYR_LOOP_HOLDOUT=h2 and APPLYR_LOOP_CALL_CAP set above 200. Holdout 1 does not qualify. Do not change the pipeline again until two full holdouts both pass. Definition of done is not met.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",
@@ -461,7 +461,9 @@
     "max_hours": 8,
     "max_iterations": 25,
     "consecutive_no_progress_limit": 3,
-    "note": "The mission left the nightly cap as a placeholder. 200 Agy calls or 8 hours, whichever comes first. A full DEV sweep of the remaining eligible JDs is not inside this cap."
+    "note": "The mission left the nightly cap as a placeholder. 200 Agy calls or 8 hours, whichever comes first. A full DEV sweep of the remaining eligible JDs is not inside this cap.",
+    "lifted_at": "2026-09-24",
+    "lifted_by": "Jason said continue until definition of done is met. The driver default stays 200. The next holdout sets APPLYR_LOOP_CALL_CAP. Stop if Agy quota actually exhausts."
   },
   "stop_reason": null,
   "needs_human": [],

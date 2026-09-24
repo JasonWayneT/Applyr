@@ -2,7 +2,7 @@
   "iteration": 11,
   "phase": "LOOP",
   "current_issue_id": null,
-  "next_action": "Holdout 1 is still running. One folder is parked on a mechanical BLOCK. One folder is in flight at stage 1 FAILED. Leave both to the driver. Do not change the pipeline. Read docs/loop/evidence/h1/counts.json only.",
+  "next_action": "Holdout 1 is still running. The hiring-manager warning park is PRACTICE_COMPLETE after a letter edit. One mechanical BLOCK remains. Do not dispose it. Do not change the pipeline. Census workflow_state. The driver counts file is stale for the cleared folder.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

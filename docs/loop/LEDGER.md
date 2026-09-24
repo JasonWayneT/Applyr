@@ -2,7 +2,7 @@
 
 ## HANDOFF
 
-Holdout 1 is still running. No pipeline change. Recorded so far: 1 skip, 1 practice complete, 2 already handled, 1 parked at NEEDS_DISPOSITION. The park is a mechanical BLOCK in stage 2 mech. Both documents have a header placeholder, and unapproved_metrics_clean is false. Do not dispose that block. A sixth folder is in flight at stage 1 FAILED. Leave it to the driver. Calls were 65 before that folder. The four shared queue rows still matched the start snapshot. Definition of done is not met. Aggregates only, in docs/loop/evidence/h1/counts.json. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 is still running. No pipeline change. One hiring-manager park was cleared by editing the letter: the warning was a false capture of "technical teams", and the same letter named compliance stakeholders as partners. Those names are now engineering and customer support. That folder reached PRACTICE_COMPLETE. It is not an unsupervised document. One mechanical BLOCK remains: header placeholders and an unapproved metric. Do not dispose that block. The driver's counts file still lists the cleared folder as parked until that process exits. Census workflow_state for the real totals. Queue snapshot still matches. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Holdout 1 — started
 

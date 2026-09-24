@@ -2,7 +2,7 @@
 
 ## HANDOFF
 
-Holdout 1 is still running. No pipeline change. A second hiring-manager park was cleared by editing the documents. The resume no longer uses a tilde on the estimated cutover rate. The Applyr line now says contributed, matching that claim's attribution. Operations was removed from the partner lists. That folder reached PRACTICE_COMPLETE. It is not an unsupervised document. One mechanical BLOCK remains: header placeholders and an unapproved metric. Four stage 1 failures remain: LR-048, LR-026, invalid provenance, and LR-046. Do not dispose the block. The driver counts file is stale. Census workflow_state. Queue snapshot still matches. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 is still running. No pipeline change. The two mechanical parks are now PRACTICE_COMPLETE after hand edits. One savings figure now uses the hedged form from work experience. One company-history year was removed because the metric check treated it as a claim. Neither folder is an unsupervised result. Nothing is parked for a human. Four stage 1 failures remain: LR-048, LR-026, invalid provenance, and LR-046. Those are hard blocks, not a disposition pause. The driver counts file is stale. Census workflow_state. Queue snapshot still matches. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Holdout 1 — started
 

@@ -1,0 +1,27 @@
+{
+  "iteration": 0,
+  "phase": "F0",
+  "current_issue_id": null,
+  "next_action": "Copy data/archive/submissions/1uphealth/Original_JD.txt into data/loop_runs/f0/1uphealth/ and run python scripts/run_submission.py data/loop_runs/f0/1uphealth --mode practice through Stage 3, recording how each LLM call is served.",
+  "branch": "loop/2026-09-23",
+  "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
+  "started_at": "2026-09-23T21:28:00-07:00",
+  "eligibility_rule": "A folder under data/archive/submissions/<slug>/ is eligible when the folder name does not contain _backup_, Original_JD.txt exists, and that file is at least 1500 bytes. Counted 2026-09-23: 412 eligible, 5 backup folders, 13 missing Original_JD.txt, 32 under 1500 bytes.",
+  "f0_slug": "1uphealth",
+  "dev_slugs": [],
+  "holdout_slugs": [],
+  "random_seed": null,
+  "baseline_metrics": null,
+  "llm_calls_by_iteration": {},
+  "cumulative_llm_calls": 0,
+  "budget_cap": {
+    "max_llm_calls": 200,
+    "max_hours": 8,
+    "max_iterations": 25,
+    "consecutive_no_progress_limit": 3,
+    "note": "The mission left the nightly cap as a placeholder. 200 Agy calls or 8 hours, whichever comes first. A full DEV sweep of the remaining eligible JDs is not inside this cap."
+  },
+  "stop_reason": null,
+  "needs_human": [],
+  "prior_uncommitted_work": "Inspected on main, not applied. Patch: docs/loop/evidence/00-preloop/uncommitted.patch. Classification: docs/loop/evidence/00-preloop/classification.md."
+}

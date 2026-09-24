@@ -2,7 +2,7 @@
 
 ## HANDOFF
 
-Holdout 1 is still running. No pipeline change. The two mechanical parks are now PRACTICE_COMPLETE after hand edits. One savings figure now uses the hedged form from work experience. One company-history year was removed because the metric check treated it as a claim. Neither folder is an unsupervised result. Nothing is parked for a human. Four stage 1 failures remain: LR-048, LR-026, invalid provenance, and LR-046. Those are hard blocks, not a disposition pause. The driver counts file is stale. Census workflow_state. Queue snapshot still matches. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 stopped at the call cap. No pipeline change. 44 of 60 folders were started. Cumulative Agy calls are 195. The driver will not start another folder because one more drafting pass could pass 200. The last folder was a skip, fit 36. Live census: 9 practice complete (several were hand edits), 20 skips, 11 already handled, 4 stage 1 failures. Nothing is parked for a human. The four failures are LR-048, LR-026, invalid provenance, and LR-046. The driver counts file still lists cleared parks as NEEDS_DISPOSITION. Census workflow_state. Queue snapshot still matched at the last check. Definition of done is not met. Do not raise the cap silently. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Holdout 1 — started
 

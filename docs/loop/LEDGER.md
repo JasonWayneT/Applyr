@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-accion_labs is ALREADY_HANDLED. Same posting already Applied. 0 Agy calls.
-Next observation is `data/loop_runs/i1/adly`. The picker now passes the posting URL, so this one is clear of cooldown and already-handled.
+adly is ALREADY_HANDLED. Same posting already Applied. 0 Agy calls.
+Next observation is `data/loop_runs/i1/affinity_co`. Picker now passes role title, posting URL, and the skip ledger.
 Definition of done is not met. Cumulative Agy calls 20. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup

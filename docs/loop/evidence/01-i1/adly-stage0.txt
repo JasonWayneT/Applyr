@@ -1,0 +1,9 @@
+slug: adly
+mode: practice
+folder: data/loop_runs/i1/adly
+exit: 0
+workflow_status: ALREADY_HANDLED
+duration_seconds: 0.029
+llm_calls: 0
+reason: same posting already Applied
+judgment: recorded already-handled terminal. Not a defect. The company-only check missed it because the match needs the role title.

@@ -2,7 +2,7 @@
   "iteration": 1,
   "phase": "LOOP",
   "current_issue_id": null,
-  "next_action": "accion_labs is ALREADY_HANDLED (same posting already Applied), 0 Agy calls. Next observation is adly, the next DEV slug clear of cooldown and already-handled when the posting URL is included. Practice folder data/loop_runs/i1/adly. Do not open holdout job text.",
+  "next_action": "adly is ALREADY_HANDLED, 0 Agy calls. Next observation is affinity_co. The picker now includes the role title, the posting URL, and the skip ledger. Practice folder data/loop_runs/i1/affinity_co. Do not open holdout job text.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

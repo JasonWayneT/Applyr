@@ -742,6 +742,27 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                             )
                 if not geo_any:
                     lines.append("PASS [lint/LW-039 geography]")
+
+                from submission_linter import collect_fidelity_hard_blocks
+
+                # These hard blocks used to appear first in the hiring-manager
+                # pass. That pass cannot repair, so an unsupervised run stops.
+                # Stage 1 repair is the retry. Implements FR-386.
+                fidelity_blocks = collect_fidelity_hard_blocks(
+                    texts.get("resume", ""),
+                    texts.get("cover_letter", ""),
+                )
+                if fidelity_blocks:
+                    passed = False
+                    lines.append(
+                        "FAIL [lint/span fidelity]: "
+                        f"{len(fidelity_blocks)} hard block(s)"
+                    )
+                    for block in fidelity_blocks:
+                        lines.append(f"FAIL [{block.rule_id}]: {block.message}")
+                        violations.append(_violation_row(block, "submission"))
+                else:
+                    lines.append("PASS [lint/span fidelity]")
         except ImportError:
             lines.append("SKIP [lint] — submission_linter not importable; run manually")
         except Exception as exc:

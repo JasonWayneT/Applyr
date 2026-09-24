@@ -2234,6 +2234,156 @@ def check_placeholder_company(cover_letter_text: str) -> List[LintViolation]:
     )]
 
 
+def check_experience_role_bullets(resume_text: str) -> List[LintViolation]:
+    """LR-044: every professional-experience role needs at least one bullet.
+
+    Args: resume markdown. Returns HARD_BLOCK violations.
+    A role heading with no bullet reached COMPLETE. Implements FR-386.
+    """
+    text = resume_text or ""
+    match = re.search(
+        r"^##\s+PROFESSIONAL EXPERIENCE\s*\n(.*?)(?=^##\s|\Z)",
+        text,
+        re.IGNORECASE | re.MULTILINE | re.DOTALL,
+    )
+    if not match:
+        return []
+    roles = re.split(r"(?m)^###\s+", match.group(1))[1:]
+    if not roles:
+        return []
+    violations: List[LintViolation] = []
+    for role in roles:
+        lines = role.splitlines()
+        title = (lines[0].strip() if lines else "role") or "role"
+        body = "\n".join(lines[1:])
+        if re.search(r"(?m)^\s*[\*\-]\s+\S", body):
+            continue
+        violations.append(LintViolation(
+            rule_id="LR-044",
+            severity="HARD_BLOCK",
+            message=f"Experience role has no bullets: \"{title}\"",
+            suggestion="Add at least one bullet under this role, or remove the heading.",
+        ))
+    return violations
+
+
+_PAST_EMPLOYER_RE = re.compile(
+    r"\b(?:cision|sterkly|zero[\s-]+to[\s-]+sixty)\b",
+    re.IGNORECASE,
+)
+
+
+def check_letter_names_employer(cover_letter_text: str) -> List[LintViolation]:
+    """LR-045: a cover letter needs one prose paragraph that names a past employer.
+
+    Args: cover-letter markdown. Returns HARD_BLOCK violations.
+    The employer is Cision, Sterkly, or Zero To Sixty. Implements FR-386.
+    """
+    text = (cover_letter_text or "").strip()
+    if not text:
+        return []
+    prose = []
+    for paragraph in re.split(r"\n\s*\n", text):
+        stripped = paragraph.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "." not in stripped and "?" not in stripped:
+            continue
+        prose.append(stripped)
+    if any(_PAST_EMPLOYER_RE.search(paragraph) for paragraph in prose):
+        return []
+    return [LintViolation(
+        rule_id="LR-045",
+        severity="HARD_BLOCK",
+        message="Cover letter has no paragraph naming Cision, Sterkly, or Zero To Sixty.",
+        suggestion="Name the past employer in the paragraph that carries the proof.",
+    )]
+
+
+_DATA_MODEL_RE = re.compile(r"\bdata models?\b|\bdata modeling\b", re.IGNORECASE)
+
+
+def check_data_model_phrase(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
+    """LR-046: block the banned data-model phrases from work experience.
+
+    Args: resume and cover-letter markdown. Returns HARD_BLOCK violations.
+    Section 6 forbids claiming a data model. "schema" stays allowed. Implements FR-386.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for label, text in (("resume", resume_text or ""), ("cover letter", cover_letter_text or "")):
+        for line in text.splitlines():
+            match = _DATA_MODEL_RE.search(line)
+            if not match:
+                continue
+            key = line.strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            violations.append(LintViolation(
+                rule_id="LR-046",
+                severity="HARD_BLOCK",
+                message=f"{label} uses a banned data-model phrase: \"{key[:180]}\"",
+                suggestion=(
+                    "Cut the phrase. Querying or reading an existing schema is the allowed wording."
+                ),
+            ))
+    return violations
+
+
+_MET13_PAIR_RE = re.compile(
+    r"(?:\$\s*1\s*m\b|1\s+million).{0,48}(?:\$\s*3\s*m\b|3\s+million)",
+    re.IGNORECASE,
+)
+_DRAFT_WEEK_RE = re.compile(r"\bweeks?\b", re.IGNORECASE)
+_DRAFT_DAY_RE = re.compile(r"\bdays?\b", re.IGNORECASE)
+_DRAFTING_CONTEXT_RE = re.compile(r"\b(?:draft\w*|epics?|stories|story)\b", re.IGNORECASE)
+
+
+def _hedge_units(resume_text: str, cover_letter_text: str) -> List[str]:
+    """Return resume bullets and cover sentences to check for a dropped hedge."""
+    units: List[str] = []
+    if (resume_text or "").strip():
+        units.extend(_split_resume_bullets(resume_text))
+    if (cover_letter_text or "").strip():
+        for paragraph in re.split(r"\n\s*\n", cover_letter_text):
+            units.extend(_split_sentences(paragraph))
+    return units
+
+
+def check_required_hedges(resume_text: str, cover_letter_text: str) -> List[LintViolation]:
+    """LR-047: MET-13 and the drafting-time line must keep the word estimated.
+
+    Args: resume and cover-letter markdown. Returns HARD_BLOCK violations.
+    "$1M to $3M" and "two weeks to a few days" of drafting are estimates in
+    work experience. Implements FR-386.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if re.search(r"estimat", unit, re.IGNORECASE):
+            continue
+        reason = ""
+        if _MET13_PAIR_RE.search(unit):
+            reason = "the $1M to $3M figure"
+        elif (
+            _DRAFT_WEEK_RE.search(unit)
+            and _DRAFT_DAY_RE.search(unit)
+            and _DRAFTING_CONTEXT_RE.search(unit)
+        ):
+            reason = "the drafting-time line"
+        if not reason or unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-047",
+            severity="HARD_BLOCK",
+            message=f"A required estimate hedge is missing on {reason}: \"{unit[:180]}\"",
+            suggestion="Keep \"estimated\" on the $1M to $3M figure and on the drafting-time line.",
+        ))
+    return violations
+
+
 _DRAFT_CURRENCY_RE = re.compile(r"\$\d[\d,]*(?:\.\d+)?(?:\s*[KMB])?")
 _DRAFT_PERCENT_RE = re.compile(r"\b\d+(?:\.\d+)?\s*%")
 _DRAFT_UNIT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -2866,6 +3016,34 @@ def check_wrong_job_company_bleed(
     return hits
 
 
+def collect_fidelity_hard_blocks(
+    resume_text: str,
+    cover_letter_text: str,
+) -> List[LintViolation]:
+    """Return the span, role, employer, phrase, and hedge hard blocks.
+
+    Stage 2 HM already blocks on these. Stage 1 verify calls the same list
+    so a repair can edit the draft before the hiring-manager pass. A block
+    that first appears after Stage 1 is COMPLETE cannot be repaired.
+    Implements FR-386.
+    """
+    blocks: List[LintViolation] = []
+    blocks.extend(check_competency_process_notes(resume_text))
+    blocks.extend(check_placeholder_company(cover_letter_text))
+    blocks.extend(
+        check_cited_span_fidelity(
+            resume_text,
+            cover_letter_text,
+            _load_career_spans(),
+        )
+    )
+    blocks.extend(check_experience_role_bullets(resume_text))
+    blocks.extend(check_letter_names_employer(cover_letter_text))
+    blocks.extend(check_data_model_phrase(resume_text, cover_letter_text))
+    blocks.extend(check_required_hedges(resume_text, cover_letter_text))
+    return blocks
+
+
 def lint_folder(folder: str) -> List[dict]:
     """Lint Resume.md and CoverLetter.md in a submission folder (not process sidecars)."""
     results = []
@@ -3108,20 +3286,12 @@ def lint_folder(folder: str) -> List[dict]:
                 ),
             })
 
-    # LR-040 / LR-041 / LR-042 / LR-043. Implements FR-384.
+    # LR-040 through LR-047. Same list Stage 1 verify fails on. Implements FR-384 / FR-386.
     if "resume" in texts_by_doc_type or "cover_letter" in texts_by_doc_type:
-        fidelity_blocks: List[LintViolation] = []
-        fidelity_blocks.extend(check_competency_process_notes(
-            texts_by_doc_type.get("resume", ""),
-        ))
-        fidelity_blocks.extend(check_placeholder_company(
-            texts_by_doc_type.get("cover_letter", ""),
-        ))
-        fidelity_blocks.extend(check_cited_span_fidelity(
+        fidelity_blocks = collect_fidelity_hard_blocks(
             texts_by_doc_type.get("resume", ""),
             texts_by_doc_type.get("cover_letter", ""),
-            _load_career_spans(),
-        ))
+        )
         if fidelity_blocks:
             results.append({
                 "submission": os.path.basename(folder),

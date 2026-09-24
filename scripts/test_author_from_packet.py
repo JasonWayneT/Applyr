@@ -10,11 +10,13 @@ No cloud LLM calls. All I/O uses temp directories.
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -961,6 +963,48 @@ class TestStage1VerifyHistory(unittest.TestCase):
                 (folder / "stage1_first_draft" / "Resume.md").read_text(encoding="utf-8"),
                 first_snap,
             )
+
+    def test_verify_only_fails_when_letter_names_no_employer_or_hedge_drops(self):
+        """Stage 2 hard blocks must fail Stage 1 so repair can run. Implements FR-386."""
+        from author_from_packet import run_verify_only
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self._seed_folder(
+                folder,
+                (
+                    "## PROFESSIONAL EXPERIENCE\n"
+                    "### Product Manager | Cision | 2021 - 2026\n"
+                    "* Accelerated epic and story drafting from two weeks to three days.\n"
+                ),
+                "Dear Hiring Manager,\n\nThe role needs platform work.\n",
+            )
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                passed = run_verify_only(folder, record_to=folder)
+            text = buf.getvalue()
+            self.assertFalse(passed)
+            self.assertIn("LR-045", text)
+            self.assertIn("LR-047", text)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            self._seed_folder(
+                folder,
+                (
+                    "## PROFESSIONAL EXPERIENCE\n"
+                    "### Product Manager | Cision | 2021 - 2026\n"
+                    "* Kept an estimated drafting window of two weeks to a few days "
+                    "for epic and story work.\n"
+                ),
+                "Dear Hiring Manager,\n\nAt Cision the work was the platform.\n",
+            )
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                run_verify_only(folder, record_to=folder)
+            text = buf.getvalue()
+            self.assertNotIn("LR-045", text)
+            self.assertNotIn("LR-047", text)
 
     def test_record_to_none_writes_nothing(self):
         from author_from_packet import run_verify_only

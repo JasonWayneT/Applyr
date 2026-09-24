@@ -3046,6 +3046,7 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_cited_contradiction(resume_text, cover_letter_text, provenance))
     blocks.extend(check_portability_inversion(resume_text, cover_letter_text))
     blocks.extend(check_qa_lead_claim(resume_text, cover_letter_text))
+    blocks.extend(check_hundreds_of_client_databases(resume_text, cover_letter_text))
     return blocks
 
 
@@ -3057,6 +3058,8 @@ _PORTABILITY_INVERSION_RE = re.compile(
 )
 # He was not a QA lead. The before-fix Candor bullet cites ACC-204. Implements FR-392.
 _QA_LEAD_RE = re.compile(r"\bqa lead\b", re.IGNORECASE)
+# MET-09 is roughly 200 SQL databases. "Hundreds" drops that count. Implements FR-393.
+_HUNDREDS_OF_CLIENT_RE = re.compile(r"\bhundreds of client\b", re.IGNORECASE)
 
 # A cited fact id plus a phrase that fact does not support. The id must be
 # cited. The same words on a different fact do not block. Implements FR-390.
@@ -3150,6 +3153,30 @@ def check_qa_lead_claim(
             severity="HARD_BLOCK",
             message="This sentence claims a QA lead role",
             suggestion="Describe the test work without the QA lead title.",
+        ))
+    return violations
+
+
+def check_hundreds_of_client_databases(
+    resume_text: str,
+    cover_letter_text: str,
+) -> List[LintViolation]:
+    """LR-052: block "hundreds of client databases" on any cite.
+
+    MET-09 is roughly 200 SQL databases. The Classlink letter cites
+    ACC-102 and ACC-121 and still says hundreds. Implements FR-393.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if not _HUNDREDS_OF_CLIENT_RE.search(unit) or unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-052",
+            severity="HARD_BLOCK",
+            message="This sentence replaces roughly 200 SQL databases with hundreds",
+            suggestion="Say roughly 200 SQL databases, or leave the count out.",
         ))
     return violations
 

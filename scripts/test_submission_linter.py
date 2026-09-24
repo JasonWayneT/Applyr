@@ -1344,6 +1344,32 @@ def test_LR051_blocks_qa_lead_on_any_cite():
     )
 
 
+def test_LR052_blocks_hundreds_of_client_databases():
+    """MET-09 is roughly 200 SQL databases. Hundreds is a different scale."""
+    sentence = (
+        "Bypassing the brittle transformation layer restored consistency "
+        "across hundreds of client databases."
+    )
+    neighbor = {
+        "cover_letter_claims": [
+            {"sentence": sentence, "claim_ids": ["ACC-102", "ACC-121"]}
+        ]
+    }
+    assert any(
+        v.rule_id == "LR-052"
+        for v in collect_fidelity_hard_blocks("", sentence, neighbor)
+    )
+    assert any(
+        v.rule_id == "LR-052"
+        for v in collect_fidelity_hard_blocks("", sentence)
+    )
+    true_line = "I queried roughly 200 SQL databases during ticket triage."
+    assert not any(
+        v.rule_id == "LR-052"
+        for v in collect_fidelity_hard_blocks("", true_line)
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

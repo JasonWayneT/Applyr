@@ -500,3 +500,19 @@ He walked test suites. He was not a QA lead. The title is a hard block on any ci
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-392` / `AC-502` | CR-132 | Hard-block a QA-lead claim even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-133 Hundreds of client databases
+
+The career entry is roughly 200 SQL databases. "Hundreds" is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-393` / `AC-503` | CR-133 | Hard-block that scale even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-134 Soft specialty skip
+
+A specialty line skips when it says ideally or highly preferred, or when it is clinical work or a design-control certification. Write this job queues that posting once.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-394` / `AC-504` | CR-134 | Skip those lines. Show the sentence. Refute queues one write | `scripts/build_stage0_fit_gate.py`, `scripts/refute_once.py`, `scripts/pipeline_queue.py`, `src/components/PipelineQueuePanel.tsx` | implemented |

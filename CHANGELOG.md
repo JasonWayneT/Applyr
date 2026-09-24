@@ -16,6 +16,7 @@
 - A sentence that cites a real fact and says something that fact does not say is a hard block at Stage 1 and Stage 2. "Portability over custom tagging" cited to ACC-155 fails. The same words cited to a different fact do not. A high resume score does not clear it (CR-130 / FR-390).
 - "Profile portability over custom tagging" is a hard block even when the sentence cites a different fact, or cites nothing. The true line is that custom tagging took priority (CR-131 / FR-391).
 - "QA lead" is a hard block even when the sentence cites a different fact, or cites nothing. He walked test suites. He did not hold that title (CR-132 / FR-392).
+- "Hundreds of client databases" is a hard block on any cite. The career entry is roughly 200 SQL databases (CR-133 / FR-393).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

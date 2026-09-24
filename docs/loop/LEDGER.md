@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-Iteration 5 is in. A QA-lead claim is a hard block even when the cite is a different fact. The Candor resume was the one case in the before-fix copies.
-Definition of done is not met. Next observation is "hundreds of client databases." Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 6 is in. "Hundreds of client databases" is a hard block on any cite. The Classlink letter was the one case in the before-fix copies. The career entry is roughly 200 SQL databases.
+Definition of done is not met. Next observation is the same letter's claim that customer support escalations were significantly reduced. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -103,6 +103,18 @@ Definition of done is not met. Next observation is "hundreds of client databases
 6. EVALUATE: 104 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Candor resume.
 7. CONFIRM: the title blocks with an ACC-204 cite and with no provenance. A test-suite sentence without the title does not. Evidence: `docs/loop/evidence/05-i5/qa-lead.txt`.
 8. Not reverted.
+
+## Iteration 6 — hundreds of client databases
+
+1. OBSERVE: the Classlink letter says consistency was restored across hundreds of client databases. The cite is ACC-102 and ACC-121.
+2. ROOT CAUSE: CONFIRMED. MET-09 is roughly 200 SQL databases. No linter rule blocked the phrase.
+3. EXPLORE: do nothing, or hard-block the phrase with no cite requirement.
+4. CHOOSE: hard-block the phrase. Do nothing leaves the changed scale able to pass.
+5. IMPLEMENT: LR-052. The new test failed, then passed.
+6. EVALUATE: 105 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Classlink letter.
+7. CONFIRM: the phrase blocks with that cite and with no provenance. "Roughly 200 SQL databases" does not. Evidence: `docs/loop/evidence/06-i6/hundreds.txt`.
+8. Not reverted.
+
 
 
 

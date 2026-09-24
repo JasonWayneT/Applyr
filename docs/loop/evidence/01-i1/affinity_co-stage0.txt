@@ -1,0 +1,16 @@
+slug: affinity_co
+mode: practice
+folder: data/loop_runs/i1/affinity_co
+command: python scripts/run_submission.py data/loop_runs/i1/affinity_co --mode practice
+exit: 0
+workflow_status: WAITING_FOR_LLM
+stage0: COMPLETE
+tier: Tier 2
+fit_score: 48
+confidence_score: 97
+duration: about 7m
+llm_calls: 11 (1 extraction, 10 evidence)
+model: gemini-3.8-flash-medium
+quota_after: five_hour 94, weekly 90
+human_paste: not used
+next: python -u scripts/run_stage1_author.py data/loop_runs/i1/affinity_co --wall-seconds 500

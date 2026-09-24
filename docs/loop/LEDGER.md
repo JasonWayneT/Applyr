@@ -2,9 +2,9 @@
 
 ## HANDOFF
 
-adly is ALREADY_HANDLED. Same posting already Applied. 0 Agy calls.
-Next observation is `data/loop_runs/i1/affinity_co`. Picker now passes role title, posting URL, and the skip ledger.
-Definition of done is not met. Cumulative Agy calls 20. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+affinity_co Stage 0 is COMPLETE. Fit 48, Tier 2. Status WAITING_FOR_LLM. 11 Agy calls. Quota five_hour 94, weekly 90.
+Next is the unattended author script on `data/loop_runs/i1/affinity_co`. Do not paste the prompt.
+Definition of done is not met. Cumulative Agy calls 31. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 

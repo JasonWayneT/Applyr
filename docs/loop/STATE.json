@@ -2,7 +2,7 @@
   "iteration": 1,
   "phase": "LOOP",
   "current_issue_id": null,
-  "next_action": "adly is ALREADY_HANDLED, 0 Agy calls. Next observation is affinity_co. The picker now includes the role title, the posting URL, and the skip ledger. Practice folder data/loop_runs/i1/affinity_co. Do not open holdout job text.",
+  "next_action": "affinity_co Stage 0 is COMPLETE, fit 48, Tier 2, WAITING_FOR_LLM. Run scripts/run_stage1_author.py on data/loop_runs/i1/affinity_co. Do not paste the prompt. Do not open holdout job text.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",
@@ -447,10 +447,11 @@
       "f0_stage1_repair_1uphealth": 3
     },
     "1": {
-      "i1_stage0_accertify": 9
+      "i1_stage0_accertify": 9,
+      "i1_stage0_affinity_co": 11
     }
   },
-  "cumulative_llm_calls": 20,
+  "cumulative_llm_calls": 31,
   "budget_cap": {
     "max_llm_calls": 200,
     "max_hours": 8,

@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-Iteration 1 fix is in. `keep_required_hedges` inserts estimated on the cited line before uncited lines are dropped. The new test passed with the other pre-repair tests.
-The finished affinity_co pair stays as the before case. Next observation is a new DEV practice run, to see the hedge survive on a real draft.
+Iteration 1 fix is in. Confirmation run is `data/loop_runs/i1/ait_global_inc_`, the next DEV slug clear of cooldown, already-handled, and the skip ledger.
+See whether a cited drafting-time line keeps estimated. Do not rewrite affinity_co.
 Definition of done is not met. Cumulative Agy calls 33. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup

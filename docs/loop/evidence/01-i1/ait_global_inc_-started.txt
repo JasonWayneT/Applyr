@@ -1,0 +1,7 @@
+slug: ait_global_inc_
+why: next DEV slug clear of the skip ledger, cooldown, and already-handled. Confirmation run for the estimate-hedge insert.
+mode: practice
+folder: data/loop_runs/i1/ait_global_inc_
+copied_bytes: 5715
+command: python scripts/run_submission.py data/loop_runs/i1/ait_global_inc_ --mode practice
+job text: not printed

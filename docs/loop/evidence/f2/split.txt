@@ -1,0 +1,22 @@
+F2 split. Slugs are in docs/loop/STATE.json only. This file has the draw, not the names.
+
+Counted 2026-09-24, same eligibility rule, file size only, no job text opened.
+dirs 475
+backup 5
+missing Original_JD.txt 13
+under 1500 bytes 31
+eligible 426
+The 2026-09-23 census was 412 eligible and 32 under 1500 bytes. Fourteen more folders now clear the size floor. One folder left the under-1500 bucket.
+
+Seed 20260923. Python 3.12.1 random.Random.
+Sort eligible folder names. Remove the reserved names below. Shuffle the rest. Holdout is the first 60. Both lists are then sorted.
+Holdout 60. Dev 366. Overlap 0. No reserved name landed in holdout.
+
+Reserved for dev, because they were already read:
+- 1uphealth, the F0 practice run
+- the before-fix review slugs the evaluator was scored on
+
+Reserved names that are not archive folders, so the removal did nothing for them:
+classlink, highmark_health, makai_labs, massive_bio, medrisk, torentify, very_good_security
+
+Verify by rebuilding the draw and comparing it to STATE.json dev_slugs and holdout_slugs.

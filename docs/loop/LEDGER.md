@@ -2,10 +2,9 @@
 
 ## HANDOFF
 
-Paused 2026-09-23 at Jason's request. Continue tomorrow. Definition of done is not met.
-F0 is done for one job. `1uphealth` is PRACTICE_COMPLETE under `data/loop_runs/f0/1uphealth`.
-F1 passed. Evaluator recall 0.939 (31/33) and false-positive rate 0.028 (6/215) on the before-fix bak files. Evidence: `docs/loop/evidence/f1/validation.txt`. Two classlink Sterkly bullets stay unflagged.
-Next action is F2. Freeze DEV and HOLDOUT from eligible slugs. Holdout at least 60. Record slugs and the seed in STATE.json. Do not open holdout job text.
+F2 is frozen. Seed 20260923. Dev 366, holdout 60, overlap 0. Eligible recount on 2026-09-24 is 426. Slugs are only in STATE.json. Evidence: `docs/loop/evidence/f2/split.txt`.
+Definition of done is not met. Next is iteration 1: observe one defect on DEV. Do not open a holdout job file. Do not change the evaluator and the pipeline in the same iteration.
+F0 `1uphealth` is PRACTICE_COMPLETE. F1 recall 0.939, false-positive rate 0.028.
 11 Agy calls. Do not loosen a gate. Do not apply the preloop patch. Do not stage the parallel CR-128/CR-129 working-tree edits.
 
 ## Iteration 0 — setup
@@ -40,4 +39,16 @@ Next action is F2. Freeze DEV and HOLDOUT from eligible slugs. Holdout at least 
 6. EVALUATE: `python scripts/validate_loop_eval.py` printed recall 0.939 and false-positive rate 0.028. Unit tests passed.
 7. CONFIRM: both bars hold. Two classlink Sterkly bullets stay unflagged on purpose. Evidence: `docs/loop/evidence/f1/validation.txt`.
 8. Not a failed fix. No pipeline revert.
+
+## Iteration 0 — F2 split
+
+1. OBSERVE: DEV and HOLDOUT were empty. Eligible folders are now 426, up from 412 on 2026-09-23.
+2. ROOT CAUSE: not a defect. The split had not been frozen.
+3. EXPLORE: a pure shuffle of all 426, or hold the already-read slugs in DEV.
+4. CHOOSE: seed 20260923, holdout 60 from the unread pool. `1uphealth` and the before-fix review slugs that still exist as archive folders stay in DEV. Seven review names are not archive folders.
+5. IMPLEMENT: slugs in STATE.json. Draw check in `scripts/check_loop_split.py`. No pipeline edit. No job text opened.
+6. EVALUATE: `python scripts/check_loop_split.py` printed MATCH, dev 366, holdout 60.
+7. CONFIRM: overlap 0. Evidence: `docs/loop/evidence/f2/split.txt`.
+8. Not a failed fix.
+
 

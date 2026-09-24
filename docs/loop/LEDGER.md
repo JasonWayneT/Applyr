@@ -2,10 +2,10 @@
 
 ## HANDOFF
 
-Iteration 1 observation is running. Practice folder `data/loop_runs/i1/accertify` (first unread DEV slug). Do not open a holdout job file. Do not start a second job until this one is terminal.
-F2 is frozen. Seed 20260923. Dev 366, holdout 60. Slugs only in STATE.json.
-Definition of done is not met. F1 recall 0.939, false-positive rate 0.028.
-11 Agy calls before this run. Do not loosen a gate. Do not apply the preloop patch. Do not stage the parallel CR-128/CR-129 edits.
+accertify practice run is SKIPPED. Fit 36 is below the 40 floor. 9 Agy calls. Not a defect.
+Next observation is `data/loop_runs/i1/nisum`, a DEV slug from the before-fix set, so a job that used to draft can show whether the current pipeline still emits a critical defect.
+Definition of done is not met. F2 seed 20260923, dev 366, holdout 60. Do not open holdout job text.
+Cumulative Agy calls 20. Do not loosen a gate. Do not apply the preloop patch. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 

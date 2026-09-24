@@ -1,0 +1,16 @@
+slug: accertify
+mode: practice
+folder: data/loop_runs/i1/accertify
+command: python scripts/run_submission.py data/loop_runs/i1/accertify --mode practice
+exit: 2
+workflow_status: SKIPPED
+active_stage: stage0
+reason: Fit score 36 is below the 40 floor
+duration_seconds: 460
+integrity: CLEAN
+llm_calls: 9 (1 extraction, 8 evidence)
+model: gemini-3.8-flash-medium
+quota_last_row: five_hour_after 100, weekly_after 100
+drafts: none
+db_write: not requested
+judgment: recorded Skip with a reason. Not a defect. Not a crash.

@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-Iteration 6 is in. "Hundreds of client databases" is a hard block on any cite. The Classlink letter was the one case in the before-fix copies. The career entry is roughly 200 SQL databases.
-Definition of done is not met. Next observation is the same letter's claim that customer support escalations were significantly reduced. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 7 is in. A sentence that says support escalations were reduced is a hard block on any cite. The Classlink letter was the one case in the before-fix copies. The Jira formula that says streamline does not match.
+Definition of done is not met. Next observation is the Classlink "Guided release cadence" line. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129/CR-134 edits.
 
 ## Iteration 0 — setup
 
@@ -114,6 +114,18 @@ Definition of done is not met. Next observation is the same letter's claim that 
 6. EVALUATE: 105 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Classlink letter.
 7. CONFIRM: the phrase blocks with that cite and with no provenance. "Roughly 200 SQL databases" does not. Evidence: `docs/loop/evidence/06-i6/hundreds.txt`.
 8. Not reverted.
+
+## Iteration 7 — support escalation reduction
+
+1. OBSERVE: the Classlink letter says the data-remediation work significantly reduced customer support escalations. The cite is ACC-102.
+2. ROOT CAUSE: CONFIRMED. Work experience does not use the word escalation. ACC-102 is the 40 percent drop-off. No linter rule blocked the reduction.
+3. EXPLORE: do nothing, or hard-block the reduction with no cite requirement.
+4. CHOOSE: hard-block the reduction. Do nothing leaves the invented outcome able to pass. The Jira formula that says streamline stays allowed, because that formula is real.
+5. IMPLEMENT: LR-053. The new test failed, then passed.
+6. EVALUATE: 106 linter tests, one pre-existing rentana error. On the before-fix copies the check fires only on the Classlink letter.
+7. CONFIRM: the reduction blocks with an ACC-102 cite and with no provenance. Streamline does not. Stale-data complaints do not. Evidence: `docs/loop/evidence/07-i7/escalations.txt`.
+8. Not reverted.
+
 
 
 

@@ -17,6 +17,7 @@
 - "Profile portability over custom tagging" is a hard block even when the sentence cites a different fact, or cites nothing. The true line is that custom tagging took priority (CR-131 / FR-391).
 - "QA lead" is a hard block even when the sentence cites a different fact, or cites nothing. He walked test suites. He did not hold that title (CR-132 / FR-392).
 - "Hundreds of client databases" is a hard block on any cite. The career entry is roughly 200 SQL databases (CR-133 / FR-393).
+- A sentence that says support escalations were reduced is a hard block on any cite. The career file does not say that. A Jira priority formula that says streamline does not match this check (CR-135 / FR-395).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

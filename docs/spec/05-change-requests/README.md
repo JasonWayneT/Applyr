@@ -69,6 +69,7 @@
 | CR-132 | A QA-lead claim is a hard block on any cite | **Implemented** (2026-09-24) — `FR-392`, `AC-502` — [spec](CR-132-qa-lead.md) |
 | CR-133 | "Hundreds of client databases" is a hard block on any cite | **Implemented** (2026-09-24) — `FR-393`, `AC-503` — [spec](CR-133-hundreds-of-client-databases.md) |
 | CR-134 | Soft specialty wording skips. Write this job queues that posting once and does not pause the queue | **Implemented** (2026-09-24) — `FR-394`, `AC-504` — [spec](CR-134-soft-specialty-skip.md) |
+| CR-135 | A reduced-support-escalations claim is a hard block on any cite | **Implemented** (2026-09-24) — `FR-395`, `AC-505` — [spec](CR-135-support-escalations.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

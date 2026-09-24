@@ -516,3 +516,11 @@ A specialty line skips when it says ideally or highly preferred, or when it is c
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-394` / `AC-504` | CR-134 | Skip those lines. Show the sentence. Refute queues one write | `scripts/build_stage0_fit_gate.py`, `scripts/refute_once.py`, `scripts/pipeline_queue.py`, `src/components/PipelineQueuePanel.tsx` | implemented |
+
+## CR-135 Support escalation reduction
+
+Work experience does not say support escalations were reduced. That claim is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-395` / `AC-505` | CR-135 | Hard-block that reduction even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |

@@ -3047,6 +3047,7 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_portability_inversion(resume_text, cover_letter_text))
     blocks.extend(check_qa_lead_claim(resume_text, cover_letter_text))
     blocks.extend(check_hundreds_of_client_databases(resume_text, cover_letter_text))
+    blocks.extend(check_support_escalation_reduction(resume_text, cover_letter_text))
     return blocks
 
 
@@ -3060,6 +3061,11 @@ _PORTABILITY_INVERSION_RE = re.compile(
 _QA_LEAD_RE = re.compile(r"\bqa lead\b", re.IGNORECASE)
 # MET-09 is roughly 200 SQL databases. "Hundreds" drops that count. Implements FR-393.
 _HUNDREDS_OF_CLIENT_RE = re.compile(r"\bhundreds of client\b", re.IGNORECASE)
+# Work experience never says support escalations were reduced. Implements FR-395.
+_SUPPORT_ESCALATION_REDUCTION_RE = re.compile(
+    r"\breduc(?:e|ed|ing)\b.{0,60}\bsupport escalat",
+    re.IGNORECASE,
+)
 
 # A cited fact id plus a phrase that fact does not support. The id must be
 # cited. The same words on a different fact do not block. Implements FR-390.
@@ -3177,6 +3183,31 @@ def check_hundreds_of_client_databases(
             severity="HARD_BLOCK",
             message="This sentence replaces roughly 200 SQL databases with hundreds",
             suggestion="Say roughly 200 SQL databases, or leave the count out.",
+        ))
+    return violations
+
+
+def check_support_escalation_reduction(
+    resume_text: str,
+    cover_letter_text: str,
+) -> List[LintViolation]:
+    """LR-053: block a claim that support escalations were reduced.
+
+    Work experience does not use that outcome. The Classlink letter cites
+    the data-remediation fact and still says it. A Jira priority formula
+    that says streamline does not match. Implements FR-395.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if not _SUPPORT_ESCALATION_REDUCTION_RE.search(unit) or unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-053",
+            severity="HARD_BLOCK",
+            message="This sentence says support escalations were reduced",
+            suggestion="Keep the data-remediation result. Leave support escalations out.",
         ))
     return violations
 

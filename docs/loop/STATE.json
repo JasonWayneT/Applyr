@@ -1,8 +1,8 @@
 {
-  "iteration": 7,
+  "iteration": 8,
   "phase": "LOOP",
   "current_issue_id": null,
-  "next_action": "Iteration 7. Observe the Classlink claim that customer support escalations were significantly reduced. Failing test before any change. Do not open holdout job text.",
+  "next_action": "Iteration 8. Observe the Classlink Guided release cadence line. Failing test before any change. Do not open holdout job text.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

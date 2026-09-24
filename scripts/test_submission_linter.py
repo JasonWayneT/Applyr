@@ -1370,6 +1370,37 @@ def test_LR052_blocks_hundreds_of_client_databases():
     )
 
 
+def test_LR053_blocks_a_reduced_support_escalation_claim():
+    """Work experience never says support escalations were reduced."""
+    sentence = (
+        "Bypassing the brittle transformation layer eliminated the data loss "
+        "and significantly reduced customer support escalations."
+    )
+    cited = {
+        "cover_letter_claims": [{"sentence": sentence, "claim_ids": ["ACC-102"]}]
+    }
+    assert any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", sentence, cited)
+    )
+    assert any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", sentence)
+    )
+    formula = (
+        "I built a weighted priority formula to streamline Customer Support escalations."
+    )
+    assert not any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", formula)
+    )
+    complaints = "The bypass reduced stale-data complaints to zero."
+    assert not any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", complaints)
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

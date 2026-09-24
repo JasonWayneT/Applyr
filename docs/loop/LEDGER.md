@@ -2,12 +2,10 @@
 
 ## HANDOFF
 
-Stopped on a red line. Phase is still F0. Branch `loop/2026-09-23`. Do not merge.
-`1uphealth` practice run is FAILED at Stage 1. The letter does not name a past employer (LR-045). Do not launch another repair on `data/loop_runs/f0/1uphealth`.
-Stage 0 and the Stage 1 author ran unattended on Agy (11 calls total). Stage 3 was not reached. No evaluator, no DEV/HOLDOUT split.
-Two tightenings stay in the branch: Stage 1 verify fails the Stage 2 fidelity blocks (702d2e6), and a drop that would create a new hard block is refused (330115b). The repair model then deleted the employer sentence on its own.
-Next reader: read `docs/loop/evidence/00-f0/stop.txt`. Cap was 200 calls or 8 hours. Used 11 calls. Definition of done was not met.
-Trap: do not apply `docs/loop/evidence/00-preloop/uncommitted.patch`. It loosens gates.
+Jason overrode the red-line stop. Continue until the definition of done. Do not merge.
+`1uphealth` is still FAILED at Stage 1. Commit `56fc3c8` fills LR-045 from a cited resume bullet during mechanical fix. Next: `python scripts/run_submission.py data/loop_runs/f0/1uphealth --resume --mode practice`. Do not call the repair model unless that resume still fails verify.
+11 Agy calls so far. Cap 200. Evaluator and the DEV/HOLDOUT split are still ahead.
+Trap: do not apply `docs/loop/evidence/00-preloop/uncommitted.patch`. Other uncommitted files in the tree belong to a parallel edit. Do not stage them.
 
 ## Iteration 0 — setup
 

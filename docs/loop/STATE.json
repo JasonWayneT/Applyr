@@ -2,7 +2,7 @@
   "iteration": 0,
   "phase": "F0",
   "current_issue_id": "F0-LR-045-repair-loop",
-  "next_action": "Stopped. Do not run another repair on data/loop_runs/f0/1uphealth. LR-045 returned after two code fixes. Read docs/loop/evidence/00-f0/stop.txt. Definition of done was not met.",
+  "next_action": "Jason said continue until the definition of done. Stage 1 now copies a cited bullet into the letter when LR-045 fires. Resume data/loop_runs/f0/1uphealth --mode practice. Do not call the repair model unless verify still fails after that mechanical fix.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",
@@ -27,7 +27,7 @@
     "consecutive_no_progress_limit": 3,
     "note": "The mission left the nightly cap as a placeholder. 200 Agy calls or 8 hours, whichever comes first. A full DEV sweep of the remaining eligible JDs is not inside this cap."
   },
-  "stop_reason": "Red line: LR-045 reappeared after two code fixes (Stage 1 now fails the block; mechanical deletion no longer removes the only past-employer sentence). The third repair deleted that sentence itself. F0 did not reach Stage 3. Evaluator not built. DEV and HOLDOUT not split. Definition of done not met.",
+  "stop_reason": null,
   "needs_human": [],
   "prior_uncommitted_work": "Inspected on main, not applied. Patch: docs/loop/evidence/00-preloop/uncommitted.patch. Classification: docs/loop/evidence/00-preloop/classification.md."
 }

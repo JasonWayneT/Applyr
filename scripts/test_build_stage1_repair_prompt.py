@@ -216,6 +216,7 @@ class TestStage1RepairPrompt(unittest.TestCase):
         self.assertIn("ACC-101-SCOPE excerpt:", prompt)
         self.assertIn("must be backed by one of the excerpts below", prompt)
         self.assertIn("do not invent a citation", prompt)
+        self.assertIn("do not remove it", prompt)
 
     def test_non_uncited_finding_only_pulls_named_claim_excerpts(self) -> None:
         # A finding that already names a claim ID (e.g. an attribution or

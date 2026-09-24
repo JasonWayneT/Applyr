@@ -298,6 +298,130 @@ def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
     return applied
 
 
+_PAST_EMPLOYER_HEADS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("Cision", re.compile(r"\bCision\b")),
+    ("Sterkly", re.compile(r"\bSterkly\b")),
+    ("Zero To Sixty", re.compile(r"\bZero[\s-]+To[\s-]+Sixty\b", re.IGNORECASE)),
+)
+
+
+def _experience_roles(resume_text: str) -> list[tuple[str, list[str]]]:
+    """Return (heading, bullets) for each role under Professional Experience."""
+    roles: list[tuple[str, list[str]]] = []
+    heading = ""
+    bullets: list[str] = []
+    in_experience = False
+    for line in (resume_text or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            if in_experience and heading:
+                roles.append((heading, bullets))
+            in_experience = stripped[3:].strip().casefold() == "professional experience"
+            heading = ""
+            bullets = []
+            continue
+        if not in_experience:
+            continue
+        if stripped.startswith("### "):
+            if heading:
+                roles.append((heading, bullets))
+            heading = stripped[4:].strip()
+            bullets = []
+            continue
+        if stripped.startswith(("* ", "- ")):
+            bullets.append(stripped[2:].strip())
+    if in_experience and heading:
+        roles.append((heading, bullets))
+    return roles
+
+
+def _cited_ids_for_bullet(provenance: dict[str, Any], bullet: str) -> list[str]:
+    """Return claim ids already attached to this resume bullet."""
+    target = _normalize_provenance_unit(bullet)
+    for row in provenance.get("resume_claims") or []:
+        if not isinstance(row, dict):
+            continue
+        if _normalize_provenance_unit(str(row.get("bullet") or "")) != target:
+            continue
+        return [str(item) for item in (row.get("claim_ids") or []) if str(item).strip()]
+    return []
+
+
+def _employer_sentence(employer: str, bullet: str) -> str:
+    """Turn a cited bullet into one letter sentence that names the employer."""
+    text = bullet.strip().rstrip(".")
+    if re.search(re.escape(employer), text, re.IGNORECASE):
+        sentence = text
+    else:
+        sentence = f"At {employer}, I {text[0].lower()}{text[1:]}"
+    if not sentence.endswith("."):
+        sentence += "."
+    return sentence
+
+
+def name_past_employer(folder: Path) -> list[dict[str, str]]:
+    """Add one cited sentence when the letter names no past employer.
+
+    The sentence is a cited resume bullet with the employer named. It does
+    not invent a fact. Implements FR-386.
+    """
+    from submission_linter import check_letter_names_employer, collect_fidelity_hard_blocks
+
+    letter_path = folder / "CoverLetter.md"
+    resume_path = folder / "Resume.md"
+    prov_path = folder / "claim_provenance.json"
+    if not letter_path.is_file() or not resume_path.is_file() or not prov_path.is_file():
+        return []
+    letter = letter_path.read_text(encoding="utf-8")
+    if not check_letter_names_employer(letter):
+        return []
+    if "Dear Hiring Manager," not in letter:
+        return []
+    try:
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(provenance, dict):
+        return []
+    resume = resume_path.read_text(encoding="utf-8")
+    chosen: tuple[str, str, list[str]] | None = None
+    roles = _experience_roles(resume)
+    for employer, pattern in _PAST_EMPLOYER_HEADS:
+        for heading, bullets in roles:
+            if not pattern.search(heading):
+                continue
+            for bullet in bullets:
+                claim_ids = _cited_ids_for_bullet(provenance, bullet)
+                if claim_ids:
+                    chosen = (employer, bullet, claim_ids)
+                    break
+            if chosen:
+                break
+        if chosen:
+            break
+    if chosen is None:
+        return []
+    employer, bullet, claim_ids = chosen
+    sentence = _employer_sentence(employer, bullet)
+    head, tail = letter.split("Dear Hiring Manager,", 1)
+    rest = tail.lstrip("\n")
+    new_letter = head + "Dear Hiring Manager,\n\n" + sentence + "\n\n" + rest
+    if not new_letter.endswith("\n"):
+        new_letter += "\n"
+    before_ids = {item.rule_id for item in collect_fidelity_hard_blocks(resume, letter)}
+    after_ids = {item.rule_id for item in collect_fidelity_hard_blocks(resume, new_letter)}
+    if "LR-045" in after_ids or (after_ids - before_ids):
+        return []
+    rows = provenance.get("cover_letter_claims")
+    if not isinstance(rows, list):
+        rows = []
+    rows.insert(0, {"sentence": sentence, "claim_ids": claim_ids})
+    provenance["cover_letter_claims"] = rows
+    letter_path.write_text(new_letter, encoding="utf-8")
+    prov_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+    return [{"rule_id": "LR-045", "file": "CoverLetter.md", "from": "", "to": sentence}]
+
+
 def apply_mechanical_fixes(
     folder: Path,
     *,
@@ -343,6 +467,8 @@ def apply_mechanical_fixes(
         if doc_line_changes:
             _resync_provenance(folder, doc_type, doc_line_changes)
     for change in drop_uncited_units(folder):
+        applied.append(change)
+    for change in name_past_employer(folder):
         applied.append(change)
     return {
         "applied": applied,

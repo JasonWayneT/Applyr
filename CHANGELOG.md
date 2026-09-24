@@ -10,6 +10,7 @@
 - A required line that demands deep or strong understanding of a vertical outside his background, such as wealth-management pricing, skips at Stage 0. "Develop a deep understanding," a preferred-only line, and a vertical already in domain experience do not. AUM is assets under management, not a product name (CR-128 / FR-387).
 - Those same hard blocks now fail Stage 1 verify, so repair runs before the hiring-manager pass. A block that first appeared at Stage 2 left the unsupervised run parked, because that pass cannot rewrite the draft (CR-127 / FR-386).
 - An uncited sentence is no longer deleted when that deletion creates a new hard block, such as removing the only sentence that names a past employer (CR-127 / FR-386).
+- When the letter names no past employer, Stage 1 copies one cited resume bullet into a sentence that names that employer and cites the same claim. The repair prompt also forbids deleting the only employer mention (CR-127 / FR-386).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

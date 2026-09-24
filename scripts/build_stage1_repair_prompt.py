@@ -609,7 +609,9 @@ def build_repair_prompt(
         "If a finding is an uncited bullet or sentence: find the claim ID below whose excerpt actually supports it, "
         "and include claim_provenance.json as a third fenced block adding or updating that sentence's citation to "
         "that claim ID. If no excerpt below actually supports it, remove the sentence -- do not invent a citation "
-        "and do not leave it uncited. The same rule applies to any other sentence you add or reword: it must be "
+        "and do not leave it uncited. If that sentence is the only mention of Cision, Sterkly, or Zero To Sixty, "
+        "do not remove it. Replace it with a sentence that still names that employer, is supported by an excerpt, "
+        "and cites that excerpt. The same rule applies to any other sentence you add or reword: it must be "
         "backed by one of the excerpts below, and its citation must be in your claim_provenance.json output.",
         "If you did not touch any previously-cited or new factual sentence, omit claim_provenance.json to keep the current file.",
         "Don't use tools or files.",

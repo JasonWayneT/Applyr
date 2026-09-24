@@ -101,6 +101,53 @@ class TestStage1Prerepair(unittest.TestCase):
         updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
         self.assertIn("At Cision", updated)
 
+    def test_missing_employer_name_is_filled_from_a_cited_bullet(self) -> None:
+        """LR-045 is filled from a cited Cision bullet, not left for the model to delete. Implements FR-386."""
+        resume = (
+            "# Name\n\n## PROFESSIONAL EXPERIENCE\n"
+            "### Product Manager | Cision | 2021 - 2026\n"
+            "* Addressed renewal risk with a cited remediation plan.\n"
+            "### Product Manager | Sterkly | 2019 - 2021\n"
+            "* Kept the second role on a security product.\n"
+            "### Account Manager | Zero To Sixty | 2017 - 2019\n"
+            "* Kept the third role on onboarding.\n\n"
+            "## EDUCATION\nBachelor of Business Administration\n"
+        )
+        letter = (
+            "Dear Hiring Manager,\n\n"
+            "The posting is about platform work.\n\n"
+            "Best regards,\n\nName\n"
+        )
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {
+                            "bullet": "Addressed renewal risk with a cited remediation plan.",
+                            "claim_ids": ["ACC-102-LEAD"],
+                        }
+                    ],
+                    "cover_letter_claims": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn("At Cision, I addressed renewal risk", updated)
+        provenance = json.loads(
+            (self.folder / "claim_provenance.json").read_text(encoding="utf-8")
+        )
+        cited = [
+            row
+            for row in provenance.get("cover_letter_claims") or []
+            if "At Cision, I addressed renewal risk" in str(row.get("sentence") or "")
+        ]
+        self.assertEqual(len(cited), 1)
+        self.assertEqual(cited[0]["claim_ids"], ["ACC-102-LEAD"])
+
     def test_clean_draft_stays_byte_identical(self) -> None:
         resume = "Product Manager with seven years of experience in B2B platforms.\n"
         letter = "Dear Hiring Manager,\n\nHello there.\n"

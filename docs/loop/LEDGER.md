@@ -2,9 +2,8 @@
 
 ## HANDOFF
 
-Iteration 3 is in. A sentence that cites a fact and says something that fact does not say is a hard block. The same words on a different fact are not. Crediting engineering with the funnel is not.
-The Obie portability line cites a neighboring id, so this rule does not catch that file.
-Definition of done is not met. Next observation is the next contradiction that still gets through, including a sentence that cites the wrong fact id. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 4 is in. The sentence that puts profile portability over custom tagging is a hard block even when the cite is a different fact. The Obie letter was the one case in the before-fix copies.
+Definition of done is not met. Next observation is "QA lead" when the sentence cites a different fact. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -82,6 +81,18 @@ Definition of done is not met. Next observation is the next contradiction that s
 6. EVALUATE: 102 linter tests, one pre-existing rentana error. On the before-fix copies the check caught 11 gold quotes whose cite matched the pair.
 7. CONFIRM: ACC-155 inversion blocks. The same words cited to ACC-104 do not. No provenance does not. The Obie file cites ACC-115 for the portability line, so this rule does not catch that file. Evidence: `docs/loop/evidence/03-i3/cited.txt`.
 8. Not reverted.
+
+## Iteration 4 — portability inversion
+
+1. OBSERVE: the Obie letter reverses the tagging priority and cites ACC-115. LR-049 does not fire.
+2. ROOT CAUSE: CONFIRMED. The check requires the cite to be ACC-155. The phrase is false on any cite.
+3. EXPLORE: do nothing, or hard-block the phrase with no cite requirement.
+4. CHOOSE: hard-block the phrase. Do nothing leaves the reversed sentence able to pass.
+5. IMPLEMENT: LR-050. The new test failed, then passed. LR-049 still does not fire when the cite is ACC-104.
+6. EVALUATE: 103 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Obie letter.
+7. CONFIRM: the inversion blocks with an ACC-115 cite and with no provenance. The true direction does not. Evidence: `docs/loop/evidence/04-i4/portability.txt`.
+8. Not reverted.
+
 
 
 

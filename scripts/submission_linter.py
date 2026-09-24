@@ -3044,8 +3044,16 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_required_hedges(resume_text, cover_letter_text))
     blocks.extend(check_disruption_hedge(resume_text, cover_letter_text))
     blocks.extend(check_cited_contradiction(resume_text, cover_letter_text, provenance))
+    blocks.extend(check_portability_inversion(resume_text, cover_letter_text))
     return blocks
 
+
+# The tagging inversion is false on any cite. ACC-155 says custom tagging
+# took priority. Implements FR-391.
+_PORTABILITY_INVERSION_RE = re.compile(
+    r"\bover custom tagging\b|\bportability over\b",
+    re.IGNORECASE,
+)
 
 # A cited fact id plus a phrase that fact does not support. The id must be
 # cited. The same words on a different fact do not block. Implements FR-390.
@@ -3069,7 +3077,7 @@ _CITED_CONTRADICTION: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("ACC-103", re.compile(r"\b(?:cleared|resolved)\b.{0,40}\bbacklog\b", re.I)),
     ("ACC-125", re.compile(r"\b(?:cleared|resolved)\b.{0,40}\bbacklog\b", re.I)),
     ("ACC-209", re.compile(r"\bqa lead\b", re.I)),
-    ("ACC-155", re.compile(r"\bover custom tagging\b|\bportability over\b", re.I)),
+    ("ACC-155", _PORTABILITY_INVERSION_RE),
     ("ACC-115", re.compile(r"\b(?:active usage|feature usage)\b", re.I)),
     ("ACC-303", re.compile(r"\bautomating lead capture\b|\bonboarding funnel\b", re.I)),
     ("ACC-203", re.compile(
@@ -3117,6 +3125,30 @@ def _load_folder_provenance(folder: str) -> Optional[dict]:
     except (OSError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def check_portability_inversion(
+    resume_text: str,
+    cover_letter_text: str,
+) -> List[LintViolation]:
+    """LR-050: block the tagging inversion no matter which fact is cited.
+
+    ACC-155 says custom tagging took priority. A neighboring cite still
+    leaves the reversed sentence in the draft. Implements FR-391.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if not _PORTABILITY_INVERSION_RE.search(unit) or unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-050",
+            severity="HARD_BLOCK",
+            message="This sentence reverses the tagging priority",
+            suggestion="Custom tagging took priority over making profiles portable.",
+        ))
+    return violations
 
 
 def check_cited_contradiction(

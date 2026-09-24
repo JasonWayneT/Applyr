@@ -484,3 +484,11 @@ A conversion score cannot offset a sentence that cites a real fact and says some
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-390` / `AC-500` | CR-130 | Hard-block a cited contradiction. A different fact id, or no provenance, does not block | `scripts/submission_linter.py`, `scripts/author_from_packet.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-131 Portability inversion
+
+The sentence that puts profile portability ahead of custom tagging is false on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-391` / `AC-501` | CR-131 | Hard-block that inversion even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |

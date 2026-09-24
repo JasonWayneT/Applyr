@@ -1302,6 +1302,28 @@ def test_LR049_blocks_a_cited_sentence_that_contradicts_the_fact():
     )
 
 
+def test_LR050_blocks_the_portability_inversion_on_any_cite():
+    """The portability inversion is false even when the cite is a different fact."""
+    inversion = "I prioritized profile portability over custom tagging."
+    neighbor = {
+        "cover_letter_claims": [{"sentence": inversion, "claim_ids": ["ACC-115"]}]
+    }
+    blocks = collect_fidelity_hard_blocks("", inversion, neighbor)
+    assert any(v.rule_id == "LR-050" for v in blocks)
+    assert any(
+        v.rule_id == "LR-050"
+        for v in collect_fidelity_hard_blocks("", inversion)
+    )
+    true_line = "Custom tagging took priority over making profiles portable."
+    true_prov = {
+        "cover_letter_claims": [{"sentence": true_line, "claim_ids": ["ACC-155"]}]
+    }
+    assert not any(
+        v.rule_id == "LR-050"
+        for v in collect_fidelity_hard_blocks("", true_line, true_prov)
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

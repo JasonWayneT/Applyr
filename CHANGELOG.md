@@ -14,6 +14,7 @@
 - When a drafting-time line or a $1M to $3M line is missing the word estimated, Stage 1 inserts it on that same sentence and updates the cite. The proof is no longer dropped as uncited after a repair rewrites it (CR-127 / FR-386).
 - A sentence that says a migration finished without disruption is blocked unless it keeps the estimate that about 5 percent of customers never flipped (CR-127 / FR-386).
 - A sentence that cites a real fact and says something that fact does not say is a hard block at Stage 1 and Stage 2. "Portability over custom tagging" cited to ACC-155 fails. The same words cited to a different fact do not. A high resume score does not clear it (CR-130 / FR-390).
+- "Profile portability over custom tagging" is a hard block even when the sentence cites a different fact, or cites nothing. The true line is that custom tagging took priority (CR-131 / FR-391).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

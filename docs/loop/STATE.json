@@ -2,7 +2,7 @@
   "iteration": 11,
   "phase": "LOOP",
   "current_issue_id": null,
-  "next_action": "Holdout 1 is still running. Two stage 1 failures (LR-048, LR-026) are parked. A second repair was refused because the findings did not change. One mechanical BLOCK remains. Do not dispose it. Do not change the pipeline. Census workflow_state.",
+  "next_action": "Holdout 1 is still running. Two hiring-manager parks were cleared by hand edits and are not unsupervised. One mechanical BLOCK remains. Four stage 1 failures remain. Do not dispose the block. Do not change the pipeline. Census workflow_state.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

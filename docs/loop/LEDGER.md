@@ -2,7 +2,7 @@
 
 ## HANDOFF
 
-Holdout 1 is still running. No pipeline change. Census: 2 practice complete (one was a hand edit), 2 skip, 2 already handled, 2 stage 1 FAILED, 1 mechanical BLOCK. The failures are LR-048, a disruption claim missing its hedge, and LR-026, an unverified tool. One repair on each did not change the findings, and the previous draft was restored. A second repair was refused because the findings matched the previous round. No extra model call. Streak is now 2. Calls were 99 at folder 9. The driver counts file is stale. Do not dispose the block. Do not change the pipeline during this run. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 is still running. No pipeline change. A second hiring-manager park was cleared by editing the documents. The resume no longer uses a tilde on the estimated cutover rate. The Applyr line now says contributed, matching that claim's attribution. Operations was removed from the partner lists. That folder reached PRACTICE_COMPLETE. It is not an unsupervised document. One mechanical BLOCK remains: header placeholders and an unapproved metric. Four stage 1 failures remain: LR-048, LR-026, invalid provenance, and LR-046. Do not dispose the block. The driver counts file is stale. Census workflow_state. Queue snapshot still matches. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Holdout 1 — started
 

@@ -2,7 +2,7 @@
   "iteration": 0,
   "phase": "F0",
   "current_issue_id": null,
-  "next_action": "1uphealth Stage 1 verify now FAILs on LR-045 and LR-047 and workflow status is FAILED. Build the repair prompt if needed, run scripts/run_stage1_repair.py on data/loop_runs/f0/1uphealth, then run_submission.py --resume --mode practice. Do not dispose the blocks.",
+  "next_action": "Deletion guard is committed. Rebuild the 1uphealth repair prompt and run scripts/run_stage1_repair.py, then --resume --mode practice. The letter currently has no past-employer sentence.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",
@@ -15,10 +15,11 @@
   "llm_calls_by_iteration": {
     "0": {
       "f0_stage0_1uphealth": 7,
-      "f0_stage1_author_1uphealth": 1
+      "f0_stage1_author_1uphealth": 1,
+      "f0_stage1_repair_1uphealth": 1
     }
   },
-  "cumulative_llm_calls": 8,
+  "cumulative_llm_calls": 9,
   "budget_cap": {
     "max_llm_calls": 200,
     "max_hours": 8,

@@ -71,6 +71,9 @@ data/archive/
 # specifically checking for this; was untracked but not yet ignored, one `git add -A` away from
 # committing real candidate data, directly violating CLAUDE.md's own PII rule.
 data/authored_drafts/
+# Practice runs for the unsupervised pipeline loop. Same PII class as authored_drafts.
+data/loop_runs/
+data/loop_holdout/
 # CR-074 local before/after fixtures (Resume/CL headers carry real contact chrome) — keep on disk,
 # never commit. Same PII class as authored_drafts / submissions.
 data/context_pack_validation/

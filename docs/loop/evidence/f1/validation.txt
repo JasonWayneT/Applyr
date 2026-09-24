@@ -1,0 +1,27 @@
+F1 validation of scripts/loop_eval.py against data/review_evidence/2026-09-23-before-fix/.
+
+Command: python scripts/validate_loop_eval.py
+present 33
+hit 31
+recall 0.939
+known_good 215
+false_pos 6
+fp_rate 0.028
+Bar is recall at least 0.90 and false positives under 0.10. Both hold. Exit code 0.
+
+Unit check: python -m unittest scripts.test_loop_eval
+2 tests, OK. A synthetic "$8,500 annually" line is flagged. A "per quarter" line is not. "without service disruption" is flagged. An experience heading with no bullet is flagged.
+
+Gold file: docs/loop/evidence/f1/gold.json
+The 33 quotes are the pile 1 and pile 2 sentences from FINDINGS-2026-09-24-entailment-gap.md that actually sit in the bak files, plus the classlink escalation clause on the same sentence as "hundreds of client databases", plus the two classlink Sterkly bullets that review named.
+
+Misses, not flagged:
+- bak_classlink_Resume.md "Guided release cadence"
+- bak_classlink_Resume.md "testing analytics"
+Those two are invented Sterkly outcomes in the findings note. They are not a unit, a hedge, a codename, or a cited-entry pattern the other rules cover. A one-document phrase list was not added. 31 of 33 is still above 90 percent.
+
+$8,500 lines in this folder say "per quarter" or "quarterly". The "annually" copies live in stage1_first_draft files outside this folder, so they are not in the denominator.
+
+The judge is deterministic. It does not call a second model. When the draft cited a neighboring id, a small set of phrase checks still fires. That is a limit of this evaluator, not a model entailment pass.
+
+No pipeline file changed in this step.

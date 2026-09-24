@@ -1,8 +1,8 @@
 {
   "iteration": 0,
-  "phase": "F1",
+  "phase": "F2",
   "current_issue_id": null,
-  "next_action": "Build the independent evaluator and validate it on data/review_evidence/2026-09-23-before-fix/. Do not change pipeline code in this phase.",
+  "next_action": "Paused 2026-09-23 at Jason's request. Resume at F2. Freeze DEV and HOLDOUT from eligible archive slugs with a recorded seed. HOLDOUT at least 60. Write slugs only into STATE.json. Do not read holdout job text. Do not change pipeline code in that step.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

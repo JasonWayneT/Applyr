@@ -3048,6 +3048,7 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_qa_lead_claim(resume_text, cover_letter_text))
     blocks.extend(check_hundreds_of_client_databases(resume_text, cover_letter_text))
     blocks.extend(check_support_escalation_reduction(resume_text, cover_letter_text))
+    blocks.extend(check_release_cadence(resume_text, cover_letter_text))
     return blocks
 
 
@@ -3066,6 +3067,8 @@ _SUPPORT_ESCALATION_REDUCTION_RE = re.compile(
     r"\breduc(?:e|ed|ing)\b.{0,60}\bsupport escalat",
     re.IGNORECASE,
 )
+# Work experience never says release cadence. Implements FR-399.
+_RELEASE_CADENCE_RE = re.compile(r"\brelease cadence\b", re.IGNORECASE)
 
 # A cited fact id plus a phrase that fact does not support. The id must be
 # cited. The same words on a different fact do not block. Implements FR-390.
@@ -3208,6 +3211,31 @@ def check_support_escalation_reduction(
             severity="HARD_BLOCK",
             message="This sentence says support escalations were reduced",
             suggestion="Keep the data-remediation result. Leave support escalations out.",
+        ))
+    return violations
+
+
+def check_release_cadence(
+    resume_text: str,
+    cover_letter_text: str,
+) -> List[LintViolation]:
+    """LR-054: block a release-cadence claim on any cite.
+
+    Work experience does not use that phrase. The Classlink bullet cites
+    the first-pass QA fact and still says it. A deletion cadence does not
+    match. Implements FR-399.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if not _RELEASE_CADENCE_RE.search(unit) or unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-054",
+            severity="HARD_BLOCK",
+            message="This sentence claims a release cadence",
+            suggestion="Describe the first-pass QA work. Leave release cadence out.",
         ))
     return violations
 

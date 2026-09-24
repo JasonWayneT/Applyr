@@ -524,3 +524,11 @@ Work experience does not say support escalations were reduced. That claim is a h
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-395` / `AC-505` | CR-135 | Hard-block that reduction even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-137 Release cadence
+
+Work experience does not say release cadence. That phrase is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-399` / `AC-509` | CR-137 | Hard-block that phrase even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |

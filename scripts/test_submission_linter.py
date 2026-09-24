@@ -1401,6 +1401,30 @@ def test_LR053_blocks_a_reduced_support_escalation_claim():
     )
 
 
+def test_LR054_blocks_release_cadence():
+    """Work experience never says release cadence."""
+    bullet = (
+        "Guided release cadence and first-pass QA for a macOS security product "
+        "within an Agile framework."
+    )
+    resume = "* " + bullet
+    cited = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-204"]}]}
+    assert any(
+        v.rule_id == "LR-054"
+        for v in collect_fidelity_hard_blocks(resume, "", cited)
+    )
+    assert any(
+        v.rule_id == "LR-054"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    triage = "* I coordinated testing and defect triage with QA engineering teams."
+    deletion = "* I drove the rolling deletion cadence with Legal sign-off."
+    assert not any(
+        v.rule_id == "LR-054"
+        for v in collect_fidelity_hard_blocks(triage + "\n" + deletion, "")
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

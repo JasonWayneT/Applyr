@@ -1056,6 +1056,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-504` | acceptance | P0 | implemented | Endovascular ideally, clinical acumen, ISO 13485 highly preferred, and healthcare highly preferred skip. SQL highly preferred, healthcare as a plus, and ideally SaaS or healthcare tech do not. A refute clears that slug's skip row, arms one Stage 0 pass, and queues the row | `FR-394` | CR-134 |
 | `FR-395` | functional | P0 | implemented | A sentence that says support escalations were reduced is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. A Jira formula that says streamline, and a stale-data complaint sentence, do not block | `AC-505` | CR-135 |
 | `AC-505` | acceptance | P0 | implemented | "significantly reduced customer support escalations" cited to ACC-102 blocks. The same sentence with no provenance blocks. "streamline Customer Support escalations" does not. "reduced stale-data complaints to zero" does not | `FR-395` | CR-135 |
+| `FR-399` | functional | P0 | implemented | A sentence that says release cadence is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. A deletion cadence does not block | `AC-509` | CR-137 |
+| `AC-509` | acceptance | P0 | implemented | "Guided release cadence" cited to ACC-204 blocks. The same bullet with no provenance blocks. Defect triage with QA engineering does not. A rolling deletion cadence does not | `FR-399` | CR-137 |
 
 ### Data Traceability (DATA-006)
 

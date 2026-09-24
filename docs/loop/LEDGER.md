@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-Iteration 7 is in. A sentence that says support escalations were reduced is a hard block on any cite. The Classlink letter was the one case in the before-fix copies. The Jira formula that says streamline does not match.
-Definition of done is not met. Next observation is the Classlink "Guided release cadence" line. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129/CR-134 edits.
+Iteration 8 is in. "Release cadence" is a hard block on any cite. The Classlink resume and the Keyfactor letter were the two cases in the before-fix copies. A deletion cadence does not match.
+Definition of done is not met. Next observation is the Classlink "testing analytics" line. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129/CR-134/CR-136 edits.
 
 ## Iteration 0 — setup
 
@@ -125,6 +125,18 @@ Definition of done is not met. Next observation is the Classlink "Guided release
 6. EVALUATE: 106 linter tests, one pre-existing rentana error. On the before-fix copies the check fires only on the Classlink letter.
 7. CONFIRM: the reduction blocks with an ACC-102 cite and with no provenance. Streamline does not. Stale-data complaints do not. Evidence: `docs/loop/evidence/07-i7/escalations.txt`.
 8. Not reverted.
+
+## Iteration 8 — release cadence
+
+1. OBSERVE: the Classlink resume says he guided release cadence and cites ACC-204.
+2. ROOT CAUSE: CONFIRMED. Work experience does not use the phrase release cadence. No linter rule blocked it.
+3. EXPLORE: do nothing, or hard-block the phrase with no cite requirement.
+4. CHOOSE: hard-block the phrase. Do nothing leaves the invented outcome able to pass. A deletion cadence stays allowed.
+5. IMPLEMENT: LR-054. The new test failed, then passed.
+6. EVALUATE: 107 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires on the Classlink resume and the Keyfactor letter.
+7. CONFIRM: the phrase blocks with an ACC-204 cite and with no provenance. Defect triage does not. A rolling deletion cadence does not. Evidence: `docs/loop/evidence/08-i8/cadence.txt`.
+8. Not reverted.
+
 
 
 

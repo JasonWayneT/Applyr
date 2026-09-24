@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-Iteration 9 is in. "Testing analytics" is a hard block on any cite. The Classlink resume was the one case in the before-fix copies. Pendo product analytics does not match.
-Definition of done is not met. The before-fix gold quotes are now blocked except the Visible codename. Next observation is that codename. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129/CR-134/CR-136 edits.
+Iteration 10 is in. A capitalized Visible after a space is a hard block. The Obie resume was the one case in the before-fix copies. Lowercase visible does not match.
+Definition of done is not met. The before-fix gold quotes are now blocked. That does not bound the holdout. Next step is holdout 1, aggregates only, no code change. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Iteration 0 — setup
 
@@ -147,6 +147,18 @@ Definition of done is not met. The before-fix gold quotes are now blocked except
 6. EVALUATE: 108 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Classlink resume.
 7. CONFIRM: the phrase blocks with an ACC-214 cite and with no provenance. A Pendo product-analytics sentence does not. Evidence: `docs/loop/evidence/09-i9/testing-analytics.txt`.
 8. Not reverted.
+
+## Iteration 10 — Visible codename
+
+1. OBSERVE: the Obie resume prints Visible in the middle of a sentence.
+2. ROOT CAUSE: CONFIRMED. Work experience says never print that name. No linter rule blocked the capitalized form.
+3. EXPLORE: do nothing, or hard-block a capitalized Visible after a space.
+4. CHOOSE: hard-block that form. Do nothing leaves the codename able to pass. Lowercase visible stays allowed.
+5. IMPLEMENT: LR-056. The new test failed, then passed.
+6. EVALUATE: 109 linter tests, one pre-existing rentana error. On the before-fix copies the check fires only on the Obie resume. The before-fix gold quotes now each sit in a blocked sentence.
+7. CONFIRM: the codename blocks with a cite and with no provenance. Lowercase visible does not. Evidence: `docs/loop/evidence/10-i10/visible.txt`.
+8. Not reverted.
+
 
 
 

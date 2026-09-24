@@ -1448,6 +1448,26 @@ def test_LR055_blocks_testing_analytics():
     )
 
 
+def test_LR056_blocks_the_visible_codename():
+    """Capital Visible mid-sentence is the codename. Lowercase visible is not."""
+    bullet = "I made the architectural tradeoffs Visible to enable engineering."
+    resume = "* " + bullet
+    cited = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-101"]}]}
+    assert any(
+        v.rule_id == "LR-056"
+        for v in collect_fidelity_hard_blocks(resume, "", cited)
+    )
+    assert any(
+        v.rule_id == "LR-056"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    plain = "* The results were visible in the usage data."
+    assert not any(
+        v.rule_id == "LR-056"
+        for v in collect_fidelity_hard_blocks(plain, "")
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

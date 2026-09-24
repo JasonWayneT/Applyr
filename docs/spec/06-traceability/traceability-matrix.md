@@ -540,3 +540,11 @@ Work experience does not say testing analytics. That phrase is a hard block on a
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-400` / `AC-510` | CR-138 | Hard-block that phrase even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-139 Visible codename
+
+A capitalized Visible after a space is the codename. That is a hard block on any cite. Lowercase visible stays.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-401` / `AC-511` | CR-139 | Hard-block that codename even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |

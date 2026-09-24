@@ -1060,6 +1060,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-509` | acceptance | P0 | implemented | "Guided release cadence" cited to ACC-204 blocks. The same bullet with no provenance blocks. Defect triage with QA engineering does not. A rolling deletion cadence does not | `FR-399` | CR-137 |
 | `FR-400` | functional | P0 | implemented | A sentence that says testing analytics is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. Pendo product analytics does not block | `AC-510` | CR-138 |
 | `AC-510` | acceptance | P0 | implemented | "applying product analytics and testing analytics" cited to ACC-214 blocks. The same bullet with no provenance blocks. "Pendo product analytics" does not | `FR-400` | CR-138 |
+| `FR-401` | functional | P0 | implemented | A capitalized Visible after a space is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. Lowercase visible does not block | `AC-511` | CR-139 |
+| `AC-511` | acceptance | P0 | implemented | "tradeoffs Visible to enable" blocks with a cite and with no provenance. "visible in the usage data" does not | `FR-401` | CR-139 |
 
 ### Data Traceability (DATA-006)
 

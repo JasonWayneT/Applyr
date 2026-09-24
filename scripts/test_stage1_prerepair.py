@@ -66,6 +66,41 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertNotIn("grounded roadmap", updated)
         self.assertIn("contact records were stale", updated)
 
+    def test_sole_employer_sentence_is_not_dropped_when_uncited(self) -> None:
+        """Deleting the only past-employer sentence creates LR-045. Implements FR-386."""
+        letter = (
+            "Dear Hiring Manager,\n\n"
+            "At Cision, enterprise users kept reporting that contact records were stale.\n\n"
+            "Support tickets grounded the roadmap decisions for the platform.\n\n"
+            "Best regards,\n\nJason Taylor\n"
+        )
+        (self.folder / "Resume.md").write_text(
+            "# Name\n\n## PROFESSIONAL EXPERIENCE\n* Kept the cited bullet.\n",
+            encoding="utf-8",
+        )
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {"bullet": "Kept the cited bullet.", "claim_ids": ["ACC-102-LEAD"]}
+                    ],
+                    "cover_letter_claims": [
+                        {
+                            "sentence": (
+                                "Support tickets grounded the roadmap decisions for the platform."
+                            ),
+                            "claim_ids": ["ACC-102-LEAD"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn("At Cision", updated)
+
     def test_clean_draft_stays_byte_identical(self) -> None:
         resume = "Product Manager with seven years of experience in B2B platforms.\n"
         letter = "Dear Hiring Manager,\n\nHello there.\n"

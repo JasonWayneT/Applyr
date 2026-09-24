@@ -1,5 +1,5 @@
 ## [Unreleased] - 2026-09-23
-[DRAFT] A finished queue row is not a send decision. The author no longer receives a career sentence that was cut in front of its unit or its "engineering built" clause. A draft that changes that unit, invents a percent, takes the funnel, pastes a process note into Core Competencies, or calls the company Confidential is blocked. A required line scored zero no longer slips under the fit floor. An empty role, a letter that names no past employer, a data-model phrase, and a dropped "estimated" on the hedged figures are blocked.
+[DRAFT] A finished queue row is not a send decision. The author no longer receives a career sentence that was cut in front of its unit or its "engineering built" clause. A draft that changes that unit, invents a percent, takes the funnel, pastes a process note into Core Competencies, or calls the company Confidential is blocked. A required line scored zero no longer slips under the fit floor. An empty role, a letter that names no past employer, a data-model phrase, and a dropped "estimated" on the hedged figures are blocked. A required demand for depth in a field he has not worked in, such as wealth-management pricing, is skipped.
 
 ### Fixed
 - Stage 1 no longer parks a draft for an unused claim when that claim does not share distinctive wording with the job line. A remote or travel posting term is not a proof obligation. A JD term already inside a cited bullet counts as supported. A term whose story was left out does not have to be stuffed into the resume. A repair that changes the blocking findings is kept. The previous draft is put back only when those findings did not change (FR-375 / FR-381).
@@ -9,6 +9,7 @@
 - An experience role with no bullet, a cover letter that never names Cision, Sterkly, or Zero To Sixty, a "data model" phrase, and a $1M to $3M or drafting-time line that drops "estimated" are hard blocks at Stage 2 (CR-127 / FR-386). The $8,500 unit check stays the one already added in CR-126.
 - A required line that demands deep or strong understanding of a vertical outside his background, such as wealth-management pricing, skips at Stage 0. "Develop a deep understanding," a preferred-only line, and a vertical already in domain experience do not. AUM is assets under management, not a product name (CR-128 / FR-387).
 - Those same hard blocks now fail Stage 1 verify, so repair runs before the hiring-manager pass. A block that first appeared at Stage 2 left the unsupervised run parked, because that pass cannot rewrite the draft (CR-127 / FR-386).
+- An uncited sentence is no longer deleted when that deletion creates a new hard block, such as removing the only sentence that names a past employer (CR-127 / FR-386).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

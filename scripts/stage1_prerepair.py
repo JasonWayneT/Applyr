@@ -238,6 +238,7 @@ def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
 
     resume_text = resume_path.read_text(encoding="utf-8")
     letter_text = letter_path.read_text(encoding="utf-8")
+    original_letter = letter_text
     covered_resume = _covered("resume_claims", "bullet")
     covered_letter = _covered("cover_letter_claims", "sentence")
     if not covered_resume and not covered_letter:
@@ -258,8 +259,9 @@ def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
             applied.append({"rule_id": "sentence_provenance", "file": "Resume.md", "from": stripped, "to": ""})
             continue
         kept_resume.append(line)
-    if applied:
-        resume_path.write_text("\n".join(kept_resume).rstrip() + "\n", encoding="utf-8")
+    new_resume = resume_text
+    if any(row["file"] == "Resume.md" for row in applied):
+        new_resume = "\n".join(kept_resume).rstrip() + "\n"
     for sentence in _cover_factual_sentences(letter_text):
         if _normalize_provenance_unit(sentence) in covered_letter:
             continue
@@ -269,10 +271,30 @@ def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
         applied.append(
             {"rule_id": "sentence_provenance", "file": "CoverLetter.md", "from": sentence, "to": ""}
         )
+    new_letter = letter_text
     if any(row["file"] == "CoverLetter.md" for row in applied):
-        letter_text = re.sub(r"[ \t]{2,}", " ", letter_text)
-        letter_text = re.sub(r"\n{3,}", "\n\n", letter_text)
-        letter_path.write_text(letter_text if letter_text.endswith("\n") else letter_text + "\n", encoding="utf-8")
+        new_letter = re.sub(r"[ \t]{2,}", " ", letter_text)
+        new_letter = re.sub(r"\n{3,}", "\n\n", new_letter)
+        if not new_letter.endswith("\n"):
+            new_letter += "\n"
+    if not applied:
+        return []
+    # A drop that creates a new hard block is not a fix. The uncited line
+    # stays so repair can cite it. Implements FR-386.
+    from submission_linter import collect_fidelity_hard_blocks
+
+    before_ids = {
+        item.rule_id for item in collect_fidelity_hard_blocks(resume_text, original_letter)
+    }
+    after_ids = {
+        item.rule_id for item in collect_fidelity_hard_blocks(new_resume, new_letter)
+    }
+    if after_ids - before_ids:
+        return []
+    if new_resume != resume_text:
+        resume_path.write_text(new_resume, encoding="utf-8")
+    if new_letter != original_letter:
+        letter_path.write_text(new_letter, encoding="utf-8")
     return applied
 
 

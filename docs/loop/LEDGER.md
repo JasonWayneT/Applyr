@@ -2,8 +2,11 @@
 
 ## HANDOFF
 
-Iteration 10 is in. A capitalized Visible after a space is a hard block. The Obie resume was the one case in the before-fix copies. Lowercase visible does not match.
-Definition of done is not met. The before-fix gold quotes are now blocked. That does not bound the holdout. Next step is holdout 1, aggregates only, no code change. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 is running. No pipeline change since iteration 10. Outputs are under data/loop_holdout/h1. Aggregates only, in docs/loop/evidence/h1/counts.json. Cumulative Agy calls were 44 at the start. The driver stops before the 200-call cap. Four queue rows share a holdout slug. If a practice finalize marks one done, the driver restores that row. Definition of done is not met. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel edits.
+
+## Holdout 1 — started
+
+No pipeline change. Driver: `docs/loop/evidence/h1/drive_holdout.py`. Practice mode on every orchestrator call, including resume and finalize. Rubric stays off. Cloud LLM stays off. Do not open the holdout folders.
 
 ## Iteration 0 — setup
 

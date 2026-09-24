@@ -1065,6 +1065,10 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `FR-402` | functional | P0 | implemented | Stage 1 removes a cited experience bullet or cover-letter sentence that is itself a hard block. The removal is refused when it creates a new fidelity hard block. A line whose only blocked-tool hit is the word epic is left in place. No hedge is inserted to clear the block | `AC-512` | CR-140 |
 | `AC-512` | acceptance | P0 | implemented | A cited data-model bullet is removed and a neighboring cited bullet stays. A cited blocked tool sentence is removed and the past-employer sentence stays. The only past-employer sentence is kept when it is also a hard block. A cited drafting line that says epic keeps the inserted estimate | `FR-402` | CR-140 |
 | `AC-513` | acceptance | P0 | implemented | A cover sentence that states no personal fact is removed when it contains a forbidden buzzword. A neighboring sentence that names a past employer stays | `FR-402` | CR-140 |
+| `FR-403` | functional | P0 | implemented | A sentence that already hedges `$100,000` is rewritten to `$100K` before the metric check. A sentence with no hedge word is left unchanged. The precise number is not added to the approved list | `AC-514` | CR-141 |
+| `AC-514` | acceptance | P0 | implemented | "roughly $100,000" and "About $100,000" become `$100K`. A bullet that says `$100,000` with no hedge stays | `FR-403` | CR-141 |
+| `FR-404` | functional | P0 | implemented | When every past-employer sentence in the letter is uncited, Stage 1 adds one cited resume sentence that names that employer and then removes the uncited sentence | `AC-515` | CR-141 |
+| `AC-515` | acceptance | P0 | implemented | An uncited "At Cision" sentence is removed. A cited Cision bullet from the resume is added in its place | `FR-404` | CR-141 |
 
 ### Data Traceability (DATA-006)
 

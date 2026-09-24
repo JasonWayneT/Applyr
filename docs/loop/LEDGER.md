@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 13 extends the blocked-sentence drop to a cover sentence that states no personal fact (AC-513). Holdout 2 does not qualify. It was stopped after one Stage 1 failure: a forbidden buzzword in that kind of sentence, and the repair made no progress. Queue restore count was 0. Cumulative calls at the holdout 1 stop were 195. Start holdout 3 after this commit, then holdout 4 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 14 covers two mechanical failures from holdout 3. A hedged `$100,000` is rewritten to `$100K` before the metric check (FR-403). An uncited sentence that is the only past-employer mention is replaced by a cited resume sentence (FR-404). Holdout 3 does not qualify. Queue restore count was 0. Start holdout 4 after this commit, then holdout 5 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 14 — hedged figure and uncited employer sentence
+
+1. OBSERVE: holdout 3 had one Stage 1 failure and one mechanical park. The park was a 6-digit dollar amount that is the hedged career figure written in precise form. The failure was invalid provenance. The only employer sentence was uncited, and deleting it would leave no past employer.
+2. ROOT CAUSE: CONFIRMED for both. The metric check runs after Stage 1, so the precise form parked at Stage 2. The employer drop is refused when it would create that new hard block, so repair ran and its provenance was rejected.
+3. EXPLORE: allow the precise number, drop the whole sentence, or rewrite only the hedged form. For the letter, invent a cite, or copy a cited resume sentence and then drop the uncited one.
+4. CHOOSE: rewrite only when a hedge word is already in the sentence. Copy one cited resume sentence, then let the existing uncited drop remove the old sentence.
+5. IMPLEMENT: `collapse_hedged_100k` and `anchor_uncited_employer` in `scripts/stage1_prerepair.py`. The metric rewrite also runs before Stage 2 verify.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 13 tests.
+7. CONFIRM: the local checks behave as tested. Holdout 4 has not run. This is not definition of done.
 
 ## Iteration 13 — non-factual blocked sentence
 

@@ -336,6 +336,57 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertNotIn("robust", updated.lower())
         self.assertIn("Cision", updated)
 
+    def test_hedged_precise_100k_becomes_100k(self) -> None:
+        """A hedged $100,000 becomes $100K. An unhedged one stays. Implements FR-403."""
+        resume = (
+            "## PROFESSIONAL EXPERIENCE\n"
+            "* Saved roughly $100,000 on the migration.\n"
+            "* Booked $100,000 with no hedge in this bullet.\n"
+        )
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nAbout $100,000 was the planning figure.\n\nBest regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(any(row["rule_id"] == "FR-403" for row in result["applied"]))
+        updated = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        letter = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn("roughly $100K", updated)
+        self.assertIn("$100,000", updated)
+        self.assertIn("About $100K", letter)
+        self.assertNotIn("$100,000", letter)
+
+    def test_uncited_only_employer_sentence_is_replaced(self) -> None:
+        """An uncited sole employer sentence is replaced by a cited one. Implements FR-404."""
+        resume = (
+            "# Name\n\n## PROFESSIONAL EXPERIENCE\n"
+            "### Product Manager | Cision | 2021 - 2026\n"
+            "* Addressed renewal risk with a cited remediation plan.\n"
+        )
+        uncited = "At Cision, I kept an uncited account of the renewal work."
+        letter = f"Dear Hiring Manager,\n\n{uncited}\n\nBest regards,\n\nName\n"
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {
+                            "bullet": "Addressed renewal risk with a cited remediation plan.",
+                            "claim_ids": ["ACC-102-LEAD"],
+                        }
+                    ],
+                    "cover_letter_claims": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn("At Cision, I addressed renewal risk", updated)
+        self.assertNotIn("uncited account", updated)
+
 
 if __name__ == "__main__":
     unittest.main()

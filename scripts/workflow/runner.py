@@ -2182,6 +2182,9 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
             return payload
         _pdf_compile_seconds = round(time.time() - _compile_t0, 3)
 
+    from stage1_prerepair import collapse_hedged_100k
+
+    collapse_hedged_100k(Path(folder))
     receipt = verify_one(folder)
     receipt_path = os.path.join(folder, "verification_receipt.json")
     with open(receipt_path, "w", encoding="utf-8") as f:

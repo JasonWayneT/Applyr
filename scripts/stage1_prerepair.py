@@ -305,6 +305,52 @@ def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
     return applied
 
 
+def collapse_hedged_100k(folder: Path) -> list[dict[str, str]]:
+    """Rewrite a hedged $100,000 to $100K.
+
+    The career figure is roughly $100K. A precise $100,000 is unapproved.
+    A sentence with no hedge word is left alone. Implements FR-403.
+    """
+    applied: list[dict[str, str]] = []
+    for name in ("Resume.md", "CoverLetter.md"):
+        path = folder / name
+        if not path.is_file():
+            continue
+        original = path.read_text(encoding="utf-8")
+        updated = _collapse_hedged_100k_text(original)
+        if updated == original:
+            continue
+        path.write_text(updated, encoding="utf-8")
+        applied.append(
+            {"rule_id": "FR-403", "file": name, "from": "$100,000", "to": "$100K"}
+        )
+    return applied
+
+
+def _collapse_hedged_100k_text(text: str) -> str:
+    """Return text with a hedged $100,000 written as $100K."""
+    hedge = re.compile(r"\b(?:roughly|about|estimated|approximately)\b", re.IGNORECASE)
+
+    def _span(index: int) -> str:
+        breaks = [text.rfind(mark, 0, index) for mark in ".!?\n"]
+        start = max(breaks) + 1
+        ends = [text.find(mark, index) for mark in ".!?\n"]
+        ends = [pos for pos in ends if pos >= 0]
+        stop = min(ends) + 1 if ends else len(text)
+        return text[start:stop]
+
+    pieces: list[str] = []
+    cursor = 0
+    for match in re.finditer(r"\$100,000\b", text):
+        if not hedge.search(_span(match.start())):
+            continue
+        pieces.append(text[cursor:match.start()])
+        pieces.append("$100K")
+        cursor = match.end()
+    pieces.append(text[cursor:])
+    return "".join(pieces)
+
+
 def _only_agile_epic_tool(line: str) -> bool:
     """True when LR-026's only hit on this line is the word epic. Implements FR-402."""
     from blocked_tools import hard_blocked_tools_lint_alternation
@@ -490,11 +536,12 @@ def _employer_sentence(employer: str, bullet: str) -> str:
     return sentence
 
 
-def name_past_employer(folder: Path) -> list[dict[str, str]]:
+def name_past_employer(folder: Path, *, force: bool = False) -> list[dict[str, str]]:
     """Add one cited sentence when the letter names no past employer.
 
     The sentence is a cited resume bullet with the employer named. It does
-    not invent a fact. Implements FR-386.
+    not invent a fact. force=True adds the sentence even when an uncited
+    employer mention is already present. Implements FR-386.
     """
     from submission_linter import check_letter_names_employer, collect_fidelity_hard_blocks
 
@@ -504,7 +551,7 @@ def name_past_employer(folder: Path) -> list[dict[str, str]]:
     if not letter_path.is_file() or not resume_path.is_file() or not prov_path.is_file():
         return []
     letter = letter_path.read_text(encoding="utf-8")
-    if not check_letter_names_employer(letter):
+    if not force and not check_letter_names_employer(letter):
         return []
     if "Dear Hiring Manager," not in letter:
         return []
@@ -551,6 +598,44 @@ def name_past_employer(folder: Path) -> list[dict[str, str]]:
     letter_path.write_text(new_letter, encoding="utf-8")
     prov_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
     return [{"rule_id": "LR-045", "file": "CoverLetter.md", "from": "", "to": sentence}]
+
+
+def anchor_uncited_employer(folder: Path) -> list[dict[str, str]]:
+    """Add a cited employer sentence when every employer mention is uncited.
+
+    The uncited sentence can then be removed without leaving the letter with
+    no past employer. Implements FR-404.
+    """
+    from author_from_packet import _cover_factual_sentences, _normalize_provenance_unit
+
+    letter_path = folder / "CoverLetter.md"
+    prov_path = folder / "claim_provenance.json"
+    if not letter_path.is_file() or not prov_path.is_file():
+        return []
+    try:
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(provenance, dict):
+        return []
+    covered = set()
+    for row in provenance.get("cover_letter_claims") or []:
+        if not isinstance(row, dict) or not row.get("claim_ids"):
+            continue
+        sentence = row.get("sentence")
+        if isinstance(sentence, str) and sentence.strip():
+            covered.add(_normalize_provenance_unit(sentence))
+    letter = letter_path.read_text(encoding="utf-8")
+    employer_sentences = [
+        sentence
+        for sentence in _cover_factual_sentences(letter)
+        if any(pattern.search(sentence) for _name, pattern in _PAST_EMPLOYER_HEADS)
+    ]
+    if not employer_sentences:
+        return []
+    if any(_normalize_provenance_unit(sentence) in covered for sentence in employer_sentences):
+        return []
+    return name_past_employer(folder, force=True)
 
 
 def _with_estimate_hedge(unit: str) -> str:
@@ -641,6 +726,10 @@ def apply_mechanical_fixes(
         years = None
     applied: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    for change in collapse_hedged_100k(folder):
+        applied.append(change)
+    for change in anchor_uncited_employer(folder):
+        applied.append(change)
     for name, doc_type in _DOCS:
         path = folder / name
         if not path.is_file():

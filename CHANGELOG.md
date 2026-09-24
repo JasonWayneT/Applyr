@@ -23,6 +23,8 @@
 - A capitalized Visible after a space is a hard block on any cite. That is the codename. Lowercase visible does not match (CR-139 / FR-401).
 - A cited resume bullet or cover-letter sentence that is itself a hard block is removed before repair. The line stays if removing it would create a new hard block, such as the only sentence that names a past employer. A line whose only blocked tool word is epic stays. The check is not loosened and no hedge is invented (CR-140 / FR-402).
 - A cover sentence that states no personal fact is removed when it is a hard block, including a forbidden buzzword. A neighboring sentence that names a past employer stays (CR-140 / AC-513).
+- A hedged `$100,000` is rewritten to `$100K` before the metric check. An unhedged `$100,000` stays. The precise number is not added to the approved list (CR-141 / FR-403).
+- When the only past-employer sentence is uncited, Stage 1 adds a cited resume sentence that names that employer and removes the uncited sentence (CR-141 / FR-404).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

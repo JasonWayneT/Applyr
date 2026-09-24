@@ -2,10 +2,10 @@
 
 ## HANDOFF
 
-F2 is frozen. Seed 20260923. Dev 366, holdout 60, overlap 0. Eligible recount on 2026-09-24 is 426. Slugs are only in STATE.json. Evidence: `docs/loop/evidence/f2/split.txt`.
-Definition of done is not met. Next is iteration 1: observe one defect on DEV. Do not open a holdout job file. Do not change the evaluator and the pipeline in the same iteration.
-F0 `1uphealth` is PRACTICE_COMPLETE. F1 recall 0.939, false-positive rate 0.028.
-11 Agy calls. Do not loosen a gate. Do not apply the preloop patch. Do not stage the parallel CR-128/CR-129 working-tree edits.
+Iteration 1 observation is running. Practice folder `data/loop_runs/i1/accertify` (first unread DEV slug). Do not open a holdout job file. Do not start a second job until this one is terminal.
+F2 is frozen. Seed 20260923. Dev 366, holdout 60. Slugs only in STATE.json.
+Definition of done is not met. F1 recall 0.939, false-positive rate 0.028.
+11 Agy calls before this run. Do not loosen a gate. Do not apply the preloop patch. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 

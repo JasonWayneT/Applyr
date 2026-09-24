@@ -1,0 +1,14 @@
+{
+  "name": "Applyr",
+  "install": "sudo apt-get update && sudo apt-get install -y python3.12-venv pandoc && npm ci && python3 scripts/setup_python_env.py && node scripts/invoke_applyr_python.mjs scripts/bootstrap_local_data.py",
+  "terminals": [
+    {
+      "name": "applyr-dev",
+      "command": "APPLYR_HOST=0.0.0.0 npm run dev"
+    }
+  ],
+  "ports": [
+    { "name": "Vite frontend", "port": 5173 },
+    { "name": "Express API", "port": 3000 }
+  ]
+}

@@ -1,0 +1,5 @@
+command: python -u scripts/run_stage1_author.py data/loop_runs/i1/affinity_co --wall-seconds 500
+result: ok events=1 wall=50.391s wrote_files=True
+human_paste: not used
+llm_calls: 1
+artifacts: Resume.md, CoverLetter.md, claim_provenance.json

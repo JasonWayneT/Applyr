@@ -2,9 +2,9 @@
 
 ## HANDOFF
 
-affinity_co Stage 0 is COMPLETE. Fit 48, Tier 2. Status WAITING_FOR_LLM. 11 Agy calls. Quota five_hour 94, weekly 90.
-Next is the unattended author script on `data/loop_runs/i1/affinity_co`. Do not paste the prompt.
-Definition of done is not met. Cumulative Agy calls 31. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+affinity_co verify FAILED. Two drafting-time lines are missing the estimate hedge (LR-047). Status FAILED, so repair can run.
+Next is build_stage1_repair_prompt.py then run_stage1_repair.py on `data/loop_runs/i1/affinity_co`.
+Definition of done is not met. Cumulative Agy calls 32. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 

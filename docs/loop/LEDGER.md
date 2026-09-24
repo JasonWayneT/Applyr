@@ -2,9 +2,9 @@
 
 ## HANDOFF
 
-Iteration 1 observation is recorded. affinity_co is PRACTICE_COMPLETE. Evaluator findings 0. The cited drafting-time line was deleted after repair broke its cite.
-Issue LR-047-hedge-deleted is confirmed. Next change inserts the hedge in place and resyncs provenance before uncited lines are dropped. Failing test first.
-Definition of done is not met. Cumulative Agy calls 33. Quota after stage 0 was five_hour 94, weekly 90. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 1 fix is in. `keep_required_hedges` inserts estimated on the cited line before uncited lines are dropped. The new test passed with the other pre-repair tests.
+The finished affinity_co pair stays as the before case. Next observation is a new DEV practice run, to see the hedge survive on a real draft.
+Definition of done is not met. Cumulative Agy calls 33. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -56,10 +56,10 @@ Definition of done is not met. Cumulative Agy calls 33. Quota after stage 0 was 
 2. ROOT CAUSE: CONFIRMED. The author left a cited drafting-time line without "estimated". Repair added the word and changed the sentence, so provenance no longer matched. `drop_uncited_units` then removed it. That deletion does not create LR-047, so the guard allowed it. The first draft still has the week-and-day line. The finished draft does not.
 3. EXPLORE: leave the deletion, or insert "estimated" on the existing line and resync the cite before uncited lines are dropped.
 4. CHOOSE: insert the hedge in place. Do nothing leaves a true proof on the cutting-room floor. Another repair call is what broke the cite.
-5. IMPLEMENT: not started. Failing test first.
-6. EVALUATE: not started.
-7. CONFIRM: not resolved. The practice pair is PRACTICE_COMPLETE with 0 evaluator findings, and the proof is gone.
-8. No code change yet. Nothing to revert.
+5. IMPLEMENT: `keep_required_hedges` in `scripts/stage1_prerepair.py`, called before uncited lines are dropped. Test `test_missing_estimate_hedge_is_inserted_without_dropping_the_cite` failed, then passed. The other 7 pre-repair tests passed.
+6. EVALUATE: the failing case is that unit test. A full DEV sweep is not this step. The finished affinity_co pair stays as the before case. Its drafting line is already gone.
+7. CONFIRM: the mechanism is covered by the test. The live pair was not rewritten. Next observation should be a new DEV run, to see the hedge survive on a real draft.
+8. Not reverted.
 
 
 

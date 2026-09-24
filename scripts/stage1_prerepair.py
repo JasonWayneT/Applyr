@@ -9,7 +9,14 @@ from typing import Any
 
 from author_from_packet import _normalize_provenance_unit
 from pm_years import parse_pm_years_of_experience, pm_years_hard_constraint
-from submission_linter import lint_document
+from submission_linter import (
+    _DRAFT_DAY_RE,
+    _DRAFT_WEEK_RE,
+    _DRAFTING_CONTEXT_RE,
+    _MET13_PAIR_RE,
+    _hedge_units,
+    lint_document,
+)
 
 _YEAR_WORDS = {
     4: "four",
@@ -422,6 +429,78 @@ def name_past_employer(folder: Path) -> list[dict[str, str]]:
     return [{"rule_id": "LR-045", "file": "CoverLetter.md", "from": "", "to": sentence}]
 
 
+def _with_estimate_hedge(unit: str) -> str:
+    """Return the unit with an estimate hedge inserted ahead of the figure."""
+    updated = unit
+    if re.search(r"estimat", updated, re.IGNORECASE):
+        return updated
+    drafting = (
+        _DRAFT_WEEK_RE.search(updated)
+        and _DRAFT_DAY_RE.search(updated)
+        and _DRAFTING_CONTEXT_RE.search(updated)
+    )
+    if drafting:
+        counted = re.search(
+            r"(?i)\b(?:one|two|three|four|five|several|\d+)\s+weeks?\b",
+            updated,
+        )
+        week = counted or _DRAFT_WEEK_RE.search(updated)
+        if week:
+            updated = f"{updated[:week.start()]}an estimated {updated[week.start():]}"
+    if not re.search(r"estimat", updated, re.IGNORECASE) and _MET13_PAIR_RE.search(updated):
+        money = _MET13_PAIR_RE.search(updated)
+        if money:
+            updated = f"{updated[:money.start()]}an estimated {updated[money.start():]}"
+    return updated
+
+
+def keep_required_hedges(folder: Path) -> list[dict[str, str]]:
+    """Insert the estimate hedge on the existing line and keep its cite.
+
+    Repair was rewriting the line, which broke the provenance match, and the
+    uncited-line deletion then removed the proof. Implements FR-386.
+    """
+    resume_path = folder / "Resume.md"
+    letter_path = folder / "CoverLetter.md"
+    resume = resume_path.read_text(encoding="utf-8") if resume_path.is_file() else ""
+    letter = letter_path.read_text(encoding="utf-8") if letter_path.is_file() else ""
+    texts = {"resume": resume, "cover_letter": letter}
+    changes: dict[str, list[dict[str, str]]] = {"resume": [], "cover_letter": []}
+    applied: list[dict[str, str]] = []
+    for unit in _hedge_units(resume, letter):
+        if re.search(r"estimat", unit, re.IGNORECASE):
+            continue
+        drafting = (
+            _DRAFT_WEEK_RE.search(unit)
+            and _DRAFT_DAY_RE.search(unit)
+            and _DRAFTING_CONTEXT_RE.search(unit)
+        )
+        if not drafting and not _MET13_PAIR_RE.search(unit):
+            continue
+        revised = _with_estimate_hedge(unit)
+        if revised == unit:
+            continue
+        if unit in texts["resume"]:
+            doc = "resume"
+            filename = "Resume.md"
+        elif unit in texts["cover_letter"]:
+            doc = "cover_letter"
+            filename = "CoverLetter.md"
+        else:
+            continue
+        texts[doc] = texts[doc].replace(unit, revised, 1)
+        changes[doc].append({"from": unit, "to": revised})
+        applied.append({"rule_id": "LR-047", "file": filename, "from": unit, "to": revised})
+    if texts["resume"] != resume and resume_path.is_file():
+        resume_path.write_text(texts["resume"], encoding="utf-8")
+    if texts["cover_letter"] != letter and letter_path.is_file():
+        letter_path.write_text(texts["cover_letter"], encoding="utf-8")
+    for doc_type, doc_changes in changes.items():
+        if doc_changes:
+            _resync_provenance(folder, doc_type, doc_changes)
+    return applied
+
+
 def apply_mechanical_fixes(
     folder: Path,
     *,
@@ -466,6 +545,8 @@ def apply_mechanical_fixes(
             path.write_text(text, encoding="utf-8")
         if doc_line_changes:
             _resync_provenance(folder, doc_type, doc_line_changes)
+    for change in keep_required_hedges(folder):
+        applied.append(change)
     for change in drop_uncited_units(folder):
         applied.append(change)
     for change in name_past_employer(folder):

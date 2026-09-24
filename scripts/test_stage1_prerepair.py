@@ -201,6 +201,38 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertIn(stored_bullet.rstrip(".!? "), new_resume)
         self.assertNotEqual(stored_bullet, bullet)
 
+    def test_missing_estimate_hedge_is_inserted_without_dropping_the_cite(self) -> None:
+        """A cited drafting line keeps its cite when the hedge word is added. Implements FR-386."""
+        bullet = "Used AI to accelerate epic drafting from two weeks to a few days."
+        sentence = "I accelerated story drafting from two weeks to a few days."
+        resume = f"## PROFESSIONAL EXPERIENCE\n\n* {bullet}\n"
+        letter = f"Dear Hiring Manager,\n\n{sentence}\n\nBest regards,\n\nName\n"
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-179"]}],
+                    "cover_letter_claims": [{"sentence": sentence, "claim_ids": ["ACC-179"]}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(result["changed"])
+        new_resume = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        new_letter = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn("estimated", new_resume.lower())
+        self.assertIn("weeks", new_resume.lower())
+        self.assertIn("days", new_resume.lower())
+        self.assertIn("estimated", new_letter.lower())
+        self.assertIn("weeks", new_letter.lower())
+        provenance = json.loads((self.folder / "claim_provenance.json").read_text(encoding="utf-8"))
+        self.assertIn("estimated", provenance["resume_claims"][0]["bullet"].lower())
+        self.assertEqual(provenance["resume_claims"][0]["claim_ids"], ["ACC-179"])
+        self.assertIn("estimated", provenance["cover_letter_claims"][0]["sentence"].lower())
+        self.assertEqual(provenance["cover_letter_claims"][0]["claim_ids"], ["ACC-179"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,10 @@
+slug: accion_labs
+mode: practice
+folder: data/loop_runs/i1/accion_labs
+command: python scripts/run_submission.py data/loop_runs/i1/accion_labs --mode practice
+exit: 0
+workflow_status: ALREADY_HANDLED
+duration_seconds: 0.033
+llm_calls: 0
+reason: same posting already Applied
+judgment: recorded already-handled terminal. Not a defect. The company-only gate check missed it because the match is the posting URL.

@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-nisum practice run SKIPPED in 0.05s on a 30-day jobs-table cooldown. 0 Agy calls. The jobs row was not updated by this run.
-Next observation is `data/loop_runs/i1/accion_labs`, the next DEV slug clear of that gate.
+accion_labs is ALREADY_HANDLED. Same posting already Applied. 0 Agy calls.
+Next observation is `data/loop_runs/i1/adly`. The picker now passes the posting URL, so this one is clear of cooldown and already-handled.
 Definition of done is not met. Cumulative Agy calls 20. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup

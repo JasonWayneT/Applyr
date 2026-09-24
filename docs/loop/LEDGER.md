@@ -2,7 +2,13 @@
 
 ## HANDOFF
 
-Iteration 14 covers two mechanical failures from holdout 3. A hedged `$100,000` is rewritten to `$100K` before the metric check (FR-403). An uncited sentence that is the only past-employer mention is replaced by a cited resume sentence (FR-404). Holdout 3 does not qualify. Queue restore count was 0. Start holdout 4 after this commit, then holdout 5 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Holdout 4 does not qualify. The folder that failed provenance in holdout 3 completed. One folder parked at the hiring-manager pass. The open warning is LW-005. The resume says it partnered with operational stakeholders. That is not a verified team. The critical read stayed open beside it. LW-021 was also present and is the warning the queue already accepts. Queue restore count was 0. Do not start the next holdout until the pipeline removes that partner claim before the hiring-manager pass. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits.
+
+## Iteration 15 — hiring-manager park
+
+1. OBSERVE: holdout 4 reached a practice-complete folder, then parked the next drafted folder at hiring manager. Mech had not run.
+2. ROOT CAUSE: not yet a code change. The warning names a partner group that is not on the verified list.
+3. Next change has to delete or rewrite that claim. Accepting the warning without an edit is forbidden.
 
 ## Iteration 14 — hedged figure and uncited employer sentence
 

@@ -492,3 +492,11 @@ The sentence that puts profile portability ahead of custom tagging is false on a
 | Requirement / AC | Change | Implementation | Verification | Status |
 |---|---|---|---|---|
 | `FR-391` / `AC-501` | CR-131 | Hard-block that inversion even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-132 QA lead
+
+He walked test suites. He was not a QA lead. The title is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-392` / `AC-502` | CR-132 | Hard-block a QA-lead claim even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |

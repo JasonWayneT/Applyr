@@ -2,8 +2,8 @@
 
 ## HANDOFF
 
-Iteration 4 is in. The sentence that puts profile portability over custom tagging is a hard block even when the cite is a different fact. The Obie letter was the one case in the before-fix copies.
-Definition of done is not met. Next observation is "QA lead" when the sentence cites a different fact. Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
+Iteration 5 is in. A QA-lead claim is a hard block even when the cite is a different fact. The Candor resume was the one case in the before-fix copies.
+Definition of done is not met. Next observation is "hundreds of client databases." Cumulative Agy calls 44. Do not open holdout job text. Do not loosen a gate. Do not stage the parallel CR-128/CR-129 edits.
 
 ## Iteration 0 — setup
 
@@ -92,6 +92,18 @@ Definition of done is not met. Next observation is "QA lead" when the sentence c
 6. EVALUATE: 103 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Obie letter.
 7. CONFIRM: the inversion blocks with an ACC-115 cite and with no provenance. The true direction does not. Evidence: `docs/loop/evidence/04-i4/portability.txt`.
 8. Not reverted.
+
+## Iteration 5 — QA lead
+
+1. OBSERVE: the Candor resume says he served as first-pass QA lead and cites ACC-204. LR-049 does not fire.
+2. ROOT CAUSE: CONFIRMED. The check requires the cite to be ACC-209. He was not a QA lead on any cite.
+3. EXPLORE: do nothing, or hard-block the title with no cite requirement.
+4. CHOOSE: hard-block the title. Do nothing leaves the claim able to pass.
+5. IMPLEMENT: LR-051. The new test failed, then passed.
+6. EVALUATE: 104 linter tests, one pre-existing rentana error. On the before-fix copies the phrase fires only on the Candor resume.
+7. CONFIRM: the title blocks with an ACC-204 cite and with no provenance. A test-suite sentence without the title does not. Evidence: `docs/loop/evidence/05-i5/qa-lead.txt`.
+8. Not reverted.
+
 
 
 

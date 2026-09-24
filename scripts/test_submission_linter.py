@@ -1324,6 +1324,26 @@ def test_LR050_blocks_the_portability_inversion_on_any_cite():
     )
 
 
+def test_LR051_blocks_qa_lead_on_any_cite():
+    """A QA-lead claim is false even when the cite is a different fact."""
+    bullet = "Served as first-pass QA lead on a macOS security product."
+    resume = "* " + bullet
+    neighbor = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-204"]}]}
+    assert any(
+        v.rule_id == "LR-051"
+        for v in collect_fidelity_hard_blocks(resume, "", neighbor)
+    )
+    assert any(
+        v.rule_id == "LR-051"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    plain = "* I walked manual test suites and routed defects to engineering."
+    assert not any(
+        v.rule_id == "LR-051"
+        for v in collect_fidelity_hard_blocks(plain, "")
+    )
+
+
 def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
     bare = "The migration finished without service disruption."
     hedged = (

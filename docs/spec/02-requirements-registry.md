@@ -1048,6 +1048,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-500` | acceptance | P0 | implemented | "profile portability over custom tagging" cited to ACC-155 blocks. "25 percent of active usage" cited to ACC-115 blocks. The same inversion cited to ACC-104 does not. A sentence with no provenance file does not. "Custom tagging took priority" cited to ACC-155 does not | `FR-390` | CR-130 |
 | `FR-391` | functional | P0 | implemented | The sentence that puts profile portability over custom tagging is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. The sentence that says custom tagging took priority does not block | `AC-501` | CR-131 |
 | `AC-501` | acceptance | P0 | implemented | "profile portability over custom tagging" cited to ACC-115 blocks. The same sentence with no provenance blocks. "Custom tagging took priority over making profiles portable" cited to ACC-155 does not | `FR-391` | CR-131 |
+| `FR-392` | functional | P0 | implemented | A sentence that calls him a QA lead is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. A test-suite sentence that does not use that title does not block | `AC-502` | CR-132 |
+| `AC-502` | acceptance | P0 | implemented | "Served as first-pass QA lead" cited to ACC-204 blocks. The same bullet with no provenance blocks. "Walked manual test suites and routed defects to engineering" does not | `FR-392` | CR-132 |
 
 ### Data Traceability (DATA-006)
 

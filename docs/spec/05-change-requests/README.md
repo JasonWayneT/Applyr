@@ -66,6 +66,7 @@
 | CR-123 | Already-applied and archived postings close the CSV queue — ingest and claim treat `jobs` Applied+ and `archive/submissions/` / `archive/skipped/` as already-handled; `applyJobStatusUpdate` closes matching queue rows; Stage 0 same-posting Applied+ is terminal, not PASS-with-flag; reconcile stale paused mirrors | **Implemented** (2026-09-21) — EM APPROVED, stories 1.1–5.2 — `FR-361`–`FR-366`, `AC-470`–`AC-476` — [spec](CR-123-already-applied-queue-dedup.md), [epics](../08-implementation/CR-123-already-applied-queue-dedup-epics.md) |
 | CR-130 | A sentence that cites a fact and contradicts it is a hard block. The conversion score does not clear it | **Implemented** (2026-09-24) — `FR-390`, `AC-500` — [spec](CR-130-cited-contradiction.md) |
 | CR-131 | The portability-over-tagging sentence is a hard block on any cite | **Implemented** (2026-09-24) — `FR-391`, `AC-501` — [spec](CR-131-portability-inversion.md) |
+| CR-132 | A QA-lead claim is a hard block on any cite | **Implemented** (2026-09-24) — `FR-392`, `AC-502` — [spec](CR-132-qa-lead.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

@@ -3045,6 +3045,7 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_disruption_hedge(resume_text, cover_letter_text))
     blocks.extend(check_cited_contradiction(resume_text, cover_letter_text, provenance))
     blocks.extend(check_portability_inversion(resume_text, cover_letter_text))
+    blocks.extend(check_qa_lead_claim(resume_text, cover_letter_text))
     return blocks
 
 
@@ -3054,6 +3055,8 @@ _PORTABILITY_INVERSION_RE = re.compile(
     r"\bover custom tagging\b|\bportability over\b",
     re.IGNORECASE,
 )
+# He was not a QA lead. The before-fix Candor bullet cites ACC-204. Implements FR-392.
+_QA_LEAD_RE = re.compile(r"\bqa lead\b", re.IGNORECASE)
 
 # A cited fact id plus a phrase that fact does not support. The id must be
 # cited. The same words on a different fact do not block. Implements FR-390.
@@ -3076,7 +3079,7 @@ _CITED_CONTRADICTION: tuple[tuple[str, re.Pattern[str]], ...] = (
     )),
     ("ACC-103", re.compile(r"\b(?:cleared|resolved)\b.{0,40}\bbacklog\b", re.I)),
     ("ACC-125", re.compile(r"\b(?:cleared|resolved)\b.{0,40}\bbacklog\b", re.I)),
-    ("ACC-209", re.compile(r"\bqa lead\b", re.I)),
+    ("ACC-209", _QA_LEAD_RE),
     ("ACC-155", _PORTABILITY_INVERSION_RE),
     ("ACC-115", re.compile(r"\b(?:active usage|feature usage)\b", re.I)),
     ("ACC-303", re.compile(r"\bautomating lead capture\b|\bonboarding funnel\b", re.I)),
@@ -3125,6 +3128,30 @@ def _load_folder_provenance(folder: str) -> Optional[dict]:
     except (OSError, json.JSONDecodeError):
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def check_qa_lead_claim(
+    resume_text: str,
+    cover_letter_text: str,
+) -> List[LintViolation]:
+    """LR-051: block a QA-lead claim no matter which fact is cited.
+
+    He was not a QA lead. The Candor bullet cites ACC-204, so the
+    cite-matched check does not fire. Implements FR-392.
+    """
+    violations: List[LintViolation] = []
+    seen: set[str] = set()
+    for unit in _hedge_units(resume_text, cover_letter_text):
+        if not _QA_LEAD_RE.search(unit) or unit in seen:
+            continue
+        seen.add(unit)
+        violations.append(LintViolation(
+            rule_id="LR-051",
+            severity="HARD_BLOCK",
+            message="This sentence claims a QA lead role",
+            suggestion="Describe the test work without the QA lead title.",
+        ))
+    return violations
 
 
 def check_portability_inversion(

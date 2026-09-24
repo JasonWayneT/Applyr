@@ -2,7 +2,7 @@
 
 ## HANDOFF
 
-Holdout 1 is still running. No pipeline change. Census: 2 practice complete (one was a hand edit), 2 skip, 2 already handled, 2 stage 1 FAILED, 1 mechanical BLOCK. The failures are LR-048, a disruption claim missing its hedge, and LR-026, an unverified tool. Each had one repair that did not change the findings. The previous draft was restored. Streak is 1, so one more repair is allowed and that retry is running. Calls were 99 at folder 9. The driver counts file is stale. Do not dispose the block. Do not change the pipeline during this run. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
+Holdout 1 is still running. No pipeline change. Census: 2 practice complete (one was a hand edit), 2 skip, 2 already handled, 2 stage 1 FAILED, 1 mechanical BLOCK. The failures are LR-048, a disruption claim missing its hedge, and LR-026, an unverified tool. One repair on each did not change the findings, and the previous draft was restored. A second repair was refused because the findings matched the previous round. No extra model call. Streak is now 2. Calls were 99 at folder 9. The driver counts file is stale. Do not dispose the block. Do not change the pipeline during this run. Definition of done is not met. Do not open the other holdout documents. Do not loosen a gate. Do not stage the parallel edits.
 
 ## Holdout 1 — started
 

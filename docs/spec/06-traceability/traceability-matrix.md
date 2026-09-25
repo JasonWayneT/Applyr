@@ -563,3 +563,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | `FR-406` / `AC-517` | CR-143 | Rewrite the 40% drop-off ingestion phrase and fail Stage 1 on that block | `scripts/stage1_prerepair.py`, `scripts/submission_linter.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-407` / `AC-518` | CR-144 | Reword designed or built on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-408` / `AC-519` | CR-145 | Remove a cited contradiction the drop could not see | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-409` / `AC-520` | CR-146 | Treat ownership alone as generic overlap | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py`, `scripts/test_author_from_packet.py` | implemented |

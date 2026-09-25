@@ -1130,6 +1130,13 @@ class TestItemOverlapPrecision(unittest.TestCase):
             ),
             set(),
         )
+        self.assertEqual(
+            _distinctive_overlap(
+                {"ownership", "ambiguity", "execution"},
+                {"ownership", "roadmap", "scope"},
+            ),
+            set(),
+        )
 
     def test_camunda_epics_line_does_not_select_acc120(self):
         """Regression: 'equip team for epics' must not map to ACC-120 via 'team'."""

@@ -369,6 +369,9 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "other",
         "others",
         "over",
+        # Live miss 2026-09-24: a scope excerpt matched "driving initiatives from
+        # ambiguity to execution" on the single word "ownership".
+        "ownership",
         "product",
         "products",
         "related",

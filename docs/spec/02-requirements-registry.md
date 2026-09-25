@@ -1077,6 +1077,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-518` | acceptance | P0 | implemented | "I designed and built the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-407` | CR-144 |
 | `FR-408` | functional | P0 | implemented | A resume bullet that cites a fact and says something that fact does not say is removed. A neighboring bullet stays. The check still fires on the original wording | `AC-519` | CR-145 |
 | `AC-519` | acceptance | P0 | implemented | A bullet cited as ACC-103 that says the security backlog was resolved is removed. A neighboring bullet stays | `FR-408` | CR-145 |
+| `FR-409` | functional | P0 | implemented | A required line that shares only the word ownership with a mapped claim does not fail Stage 1 when that claim is unused. A line that shares a real term still requires the cite | `AC-520` | CR-146 |
+| `AC-520` | acceptance | P0 | implemented | Overlap of only ownership is empty. A Google Analytics migration line still requires its cite | `FR-409` | CR-146 |
 
 ### Data Traceability (DATA-006)
 

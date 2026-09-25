@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 19 removes a cited contradiction the drop could not see (FR-408). A neighboring bullet stays. Holdout 7 does not qualify. It failed Stage 1 because a bullet cited a fact and said that fact resolved a backlog. Queue restore count was 0. Start holdout 8 after this commit, then holdout 9 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 20 treats the single word ownership as generic overlap (FR-409). A required line that shares a real term still requires the cite. Holdout 8 does not qualify. It failed Stage 1 because a leadership line and a scope excerpt shared only that word. The earlier cited-contradiction folder completed. Queue restore count was 0. Start holdout 9 after this commit, then holdout 10 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 20 — ownership overlap
+
+1. OBSERVE: holdout 8 failed Stage 1. The block was unused required evidence for ACC-111-SCOPE and ACC-101-SCOPE.
+2. ROOT CAUSE: CONFIRMED. The only shared word was ownership.
+3. EXPLORE: attach the unused id to an existing sentence, or stop treating that one word as proof.
+4. CHOOSE: stop treating that one word as proof. A real shared term still requires the cite.
+5. IMPLEMENT: ownership is a generic overlap token in `scripts/build_authoring_packet.py`.
+6. EVALUATE: the overlap test and the optimization-bar tests passed. The failed folder's cite check now passes.
+7. CONFIRM: holdout 9 has not run. This is not definition of done.
 
 ## Iteration 19 — cited contradiction
 

@@ -571,3 +571,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | `FR-414` / `AC-525` | CR-151 | Remove an unverified tool from a competencies row | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-415` / `AC-526` | CR-152 | Remove high-leverage and rewrite standalone leverage to use | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-416` / `AC-527` | CR-153 | Reword design on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-417` / `AC-528` | CR-154 | Rebuild a hiring-manager read after this pass rewrites the files | `scripts/workflow/runner.py`, `scripts/test_hm_critical_read_contract.py` | implemented |

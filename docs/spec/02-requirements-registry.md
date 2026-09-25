@@ -1093,6 +1093,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-526` | acceptance | P0 | implemented | "structured, high-leverage product solutions" becomes "structured product solutions". "data-driven" stays. "leverage the support tickets" becomes "use the support tickets" | `FR-415` | CR-152 |
 | `FR-416` | functional | P0 | implemented | A contributed claim that says design is reworded to contributed to. An owned claim that says built stays. The warning still fires on the original wording | `AC-527` | CR-153 |
 | `AC-527` | acceptance | P0 | implemented | "I design the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-416` | CR-153 |
+| `FR-417` | functional | P0 | implemented | A hiring-manager read bound to the previous file bytes is rebuilt after this pass rewrites the documents. The hash check stays. An open warning other than the read is not closed here | `AC-528` | CR-154 |
+| `AC-528` | acceptance | P0 | implemented | A read whose resume hash no longer matches is replaced by a read that validates. A valid read is left as it is. An open pair warning blocks the rebuild | `FR-417` | CR-154 |
 
 ### Data Traceability (DATA-006)
 

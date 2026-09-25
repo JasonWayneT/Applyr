@@ -87,6 +87,7 @@
 | CR-151 | An unverified tool leaves the competencies row | **Implemented** (2026-09-24) — `FR-414`, `AC-525` — [spec](CR-151-unverified-tool-removed.md) |
 | CR-152 | high-leverage is not plain language | **Implemented** (2026-09-24) — `FR-415`, `AC-526` — [spec](CR-152-high-leverage-removed.md) |
 | CR-153 | A contributed claim does not say design | **Implemented** (2026-09-24) — `FR-416`, `AC-527` — [spec](CR-153-contributed-not-design.md) |
+| CR-154 | A rewritten document gets a new hiring-manager read | **Implemented** (2026-09-24) — `FR-417`, `AC-528` — [spec](CR-154-refresh-stale-hm-read.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

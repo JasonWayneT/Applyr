@@ -37,6 +37,7 @@
 - A competencies row that names a tool outside the career history loses that token. The other tools stay (CR-151 / FR-414).
 - A summary that says high-leverage loses that compound. Standalone leverage becomes use. data-driven stays (CR-152 / FR-415).
 - A contributed claim that says design is reworded to contributed to. An owned claim that says built stays (CR-153 / FR-416).
+- A hiring-manager read bound to the previous file bytes is rebuilt after this pass rewrites the documents. The hash check stays (CR-154 / FR-417).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

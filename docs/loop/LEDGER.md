@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 27 rewords design on a contributed claim to contributed to (FR-416). An owned claim that says built stays. Holdout 15 does not qualify. It parked because a letter used design for that claim. The pair warning and the audience warning on that folder are the ones the hiring-manager pass already accepts once this warning is gone. Queue restore count was 0. Start holdout 16 after this commit, then holdout 17 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 28 rebuilds a hiring-manager read when this pass rewrote the files and the stored hashes no longer match (FR-417). The hash check stays. Holdout 16 does not qualify. It parked with the pair warning and the audience warnings already accepted. Policy passed. The stored read still hashed the previous resume bytes. Queue restore count was 0. Start holdout 17 after this commit, then holdout 18 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 28 — stale hiring-manager read
+
+1. OBSERVE: holdout 16 parked at the hiring-manager pass on the 3rd folder. The open items were the pair warning, three audience warnings, and the hiring-manager read.
+2. ROOT CAUSE: CONFIRMED. Those warnings were already accepted. Policy passed. The stored read hashed the previous resume bytes. This pass rewrites the documents, and the finding ids do not change, so the old read stays bound.
+3. EXPLORE: accept the stale hash, or rebuild the read from the current files.
+4. CHOOSE: rebuild the read. The hash check stays. An open warning other than the read is not closed here. A review that fails for any other reason stays parked.
+5. IMPLEMENT: `_refresh_stale_queue_hm_read` in `scripts/workflow/runner.py`.
+6. EVALUATE: the three new contract tests passed. A copy of the parked folder rebuilt a read that validates.
+7. CONFIRM: holdout 17 has not run. This is not definition of done.
 
 ## Iteration 27 — design
 

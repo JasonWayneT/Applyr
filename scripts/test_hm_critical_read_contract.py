@@ -1220,5 +1220,106 @@ class TestQueueHmReviewQuotesLiveLines(unittest.TestCase):
         self.assertTrue(ok, errors)
 
 
+class TestRefreshStaleQueueHmRead(unittest.TestCase):
+    """A rewritten document must not leave a bound hiring-manager read stale."""
+
+    def setUp(self) -> None:
+        self.folder = Path(tempfile.mkdtemp(prefix="hm-refresh-"))
+        self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
+        (self.folder / "Resume.md").write_text(
+            "# Name\nSan Diego, CA | 555 | a@b.c\n\n"
+            "* Owned the roadmap for a data platform used by enterprise accounts.\n",
+            encoding="utf-8",
+        )
+        (self.folder / "CoverLetter.md").write_text(
+            "# Name\n\nDear Hiring Manager,\n\n"
+            "The platform work was sequencing a data remediation before the renewal date.\n\n"
+            "Best regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        (self.folder / "Original_JD.txt").write_text(
+            "URL: https://example.test/job\n\n"
+            "Experience owning a product area and roadmap.\n",
+            encoding="utf-8",
+        )
+        self.findings = {
+            "findings": [
+                {
+                    "id": "hm.lint.warn.resume+cover_letter (pair).LW-009-PAIR.0",
+                    "severity": "WARN",
+                },
+                {"id": "hm.critical_read", "severity": "WARN"},
+            ]
+        }
+
+    def _write_review(self) -> dict:
+        from workflow.reviews import _write_dispositions
+        from workflow.runner import _queue_hm_review_value
+
+        review = _queue_hm_review_value(str(self.folder))
+        self.assertIsNotNone(review)
+        _write_dispositions(
+            str(self.folder),
+            {
+                "hm.lint.warn.resume+cover_letter (pair).LW-009-PAIR.0": {
+                    "disposition": "ACCEPTED_AS_CORRECT",
+                    "reasoning": "The shared phrasing is the same true proof point.",
+                },
+                "hm.critical_read": review,
+            },
+            {"hm": "bound"},
+        )
+        return review
+
+    def test_stale_resume_hash_is_rebuilt(self) -> None:
+        from hm_review_contract import validate_hm_review
+        from workflow.reviews import load_dispositions
+        from workflow.runner import _refresh_stale_queue_hm_read
+
+        self._write_review()
+        resume = self.folder / "Resume.md"
+        resume.write_text(resume.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        dispositions = load_dispositions(str(self.folder))
+        self.assertTrue(
+            _refresh_stale_queue_hm_read(str(self.folder), self.findings, dispositions)
+        )
+        stored = load_dispositions(str(self.folder))["by_finding_id"]["hm.critical_read"]
+        ok, errors = validate_hm_review(str(self.folder), stored)
+        self.assertTrue(ok, errors)
+
+    def test_open_warning_blocks_refresh(self) -> None:
+        from workflow.reviews import load_dispositions
+        from workflow.runner import _refresh_stale_queue_hm_read
+
+        review = self._write_review()
+        resume = self.folder / "Resume.md"
+        resume.write_text(resume.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        dispositions = load_dispositions(str(self.folder))
+        dispositions["by_finding_id"]["hm.lint.warn.resume+cover_letter (pair).LW-009-PAIR.0"] = None
+        self.assertFalse(
+            _refresh_stale_queue_hm_read(str(self.folder), self.findings, dispositions)
+        )
+        stored = load_dispositions(str(self.folder))["by_finding_id"]["hm.critical_read"]
+        self.assertEqual(
+            stored["hm_review"]["reviewed_document_hashes"],
+            review["hm_review"]["reviewed_document_hashes"],
+        )
+
+    def test_valid_review_is_not_rewritten(self) -> None:
+        from workflow.reviews import load_dispositions
+        from workflow.runner import _refresh_stale_queue_hm_read
+
+        review = self._write_review()
+        dispositions = load_dispositions(str(self.folder))
+        self.assertFalse(
+            _refresh_stale_queue_hm_read(str(self.folder), self.findings, dispositions)
+        )
+        stored = load_dispositions(str(self.folder))["by_finding_id"]["hm.critical_read"]
+        self.assertEqual(
+            stored["hm_review"]["reviewed_document_hashes"],
+            review["hm_review"]["reviewed_document_hashes"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

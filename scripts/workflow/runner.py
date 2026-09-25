@@ -1376,6 +1376,72 @@ def _record_queue_hm_read(
     return True
 
 
+def _other_hm_findings_disposed(
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """True when every finding except hm.critical_read already has a disposition."""
+    from workflow.policy import parse_disposition
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id = dispositions.get("by_finding_id") or {}
+    saw_critical = False
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        if fid == "hm.critical_read":
+            saw_critical = True
+            continue
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if not disp_s:
+            return False
+    return saw_critical
+
+
+def _refresh_stale_queue_hm_read(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Rebuild a queue hiring-manager read after this pass rewrote the files.
+
+    collect_hm_findings edits the documents before the contract check. A read
+    recorded on the previous bytes stays bound, because the finding ids did
+    not change, and the hash check then parks the folder. This replaces that
+    read only when the stored hashes no longer match and a fresh read validates.
+    An open warning other than the read is left alone. A review that fails for
+    any other reason is left alone.
+    """
+    # Implements FR-417
+    from hm_review_contract import validate_hm_review
+    from workflow.policy import parse_disposition
+    from workflow.reviews import _write_dispositions
+
+    if not _other_hm_findings_disposed(findings_doc, dispositions):
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    stored = by_id.get("hm.critical_read")
+    disp_s, _existing = parse_disposition(stored)
+    if not disp_s:
+        return False
+    ok, errors = validate_hm_review(folder, stored)
+    if ok or not any("does not match on-disk file" in err for err in errors):
+        return False
+    review = _queue_hm_review_value(folder)
+    if review is None:
+        return False
+    fresh_ok, _fresh_errors = validate_hm_review(folder, review)
+    if not fresh_ok:
+        return False
+    by_id["hm.critical_read"] = review
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
 def _hm_critical_read_errors(
     folder: str,
     findings_doc: dict[str, Any],
@@ -1855,6 +1921,8 @@ def _apply_subphase_verdict(
         if _accept_queue_hm_heuristics(folder, findings_doc, dispositions):
             dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
         if _record_queue_hm_read(folder, findings_doc, dispositions):
+            dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        if _refresh_stale_queue_hm_read(folder, findings_doc, dispositions):
             dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
         verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
         fhash = findings_content_hash(findings_doc)

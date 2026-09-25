@@ -1,8 +1,8 @@
 {
-  "iteration": 27,
+  "iteration": 28,
   "phase": "LOOP",
-  "current_issue_id": "CR-153",
-  "next_action": "FR-416 rewords design on a contributed claim to contributed to. Holdout 15 does not qualify. Start holdout 16 after this commit, then holdout 17 with no pipeline change. Definition of done is not met.",
+  "current_issue_id": "CR-154",
+  "next_action": "FR-417 rebuilds a hiring-manager read when this pass rewrote the files and the stored hashes no longer match. Holdout 16 does not qualify. The pair warning and the audience warnings were already accepted. Start holdout 17 after this commit, then holdout 18 with no pipeline change. Definition of done is not met.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

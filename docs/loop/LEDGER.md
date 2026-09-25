@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 22 adds a cited resume sentence when a cover letter is under 220 words (FR-411). The floor stays. The letter does not pass 450 words or 2800 characters. Holdout 10 does not qualify. It parked at the hiring-manager pass on a 172-word letter. Queue restore count was 0. Start holdout 11 after this commit, then holdout 12 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 23 keeps distributed data systems out of the geography check (FR-412). A team distributed across offices still fails when the job description never asked for that. Holdout 11 does not qualify. Its first failure was that technical line. Later folders also failed, and one parked. Those are not fixed here. Queue restore count was 0. Start holdout 12 after this commit, then holdout 13 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 23 — distributed systems
+
+1. OBSERVE: holdout 11 failed Stage 1 at the 11th folder. The block was LW-039. The token was distributed.
+2. ROOT CAUSE: CONFIRMED. The line said distributed data systems. The check treats that word as team geography.
+3. EXPLORE: delete the line, or stop matching the technical use.
+4. CHOOSE: stop matching the technical use. A team distributed across offices still fails.
+5. IMPLEMENT: the geography pattern in `scripts/submission_linter.py`.
+6. EVALUATE: the two new geography tests passed. The failed resume no longer trips the check. The older rentana file test still cannot find its folder. That miss was already there.
+7. CONFIRM: holdout 12 has not run. This is not definition of done.
 
 ## Iteration 22 — thin letter
 

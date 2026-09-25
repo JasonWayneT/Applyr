@@ -564,6 +564,28 @@ def test_LW039_global_teams_jd_does_not_fire():
     assert check_unsolicited_geography(_RENTANA_GEO_LETTER, jd, "cover_letter") == []
 
 
+def test_LW039_distributed_data_systems_does_not_fire():
+    """Architecture is not team geography. Implements FR-412."""
+    jd = "Title: Product Manager\n\nRemote (USA)\n\nOwn the product roadmap.\n"
+    resume = (
+        "## PROFESSIONAL EXPERIENCE\n"
+        "* Led work across distributed data systems and backend architecture.\n"
+    )
+    assert check_unsolicited_geography(resume, jd, "resume") == []
+
+
+def test_LW039_distributed_across_locations_still_fires():
+    """A team spread across offices is still unsolicited geography. Implements FR-412."""
+    jd = "Title: Product Manager\n\nRemote (USA)\n\nOwn the product roadmap.\n"
+    resume = (
+        "## PROFESSIONAL EXPERIENCE\n"
+        "* Engineering was distributed across offices.\n"
+    )
+    warns = check_unsolicited_geography(resume, jd, "resume")
+    assert len(warns) == 1
+    assert warns[0].rule_id == "LW-039"
+
+
 # ---------------------------------------------------------------------------
 # LW-021 / LW-026 -- added 2026-08-18. No prior test coverage existed for
 # either rule despite both being live in lint_folder(); a same-day change

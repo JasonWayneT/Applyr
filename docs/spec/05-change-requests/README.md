@@ -82,6 +82,7 @@
 | CR-146 | Ownership alone is not unused evidence | **Implemented** (2026-09-24) — `FR-409`, `AC-520` — [spec](CR-146-ownership-not-proof.md) |
 | CR-147 | An overlong letter loses an uncited sentence | **Implemented** (2026-09-24) — `FR-410`, `AC-521` — [spec](CR-147-cover-fits-one-page.md) |
 | CR-148 | A thin letter gains a cited sentence | **Implemented** (2026-09-24) — `FR-411`, `AC-522` — [spec](CR-148-thin-letter-cited-sentence.md) |
+| CR-149 | Distributed data systems are not team geography | **Implemented** (2026-09-24) — `FR-412`, `AC-523` — [spec](CR-149-distributed-systems-not-geography.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

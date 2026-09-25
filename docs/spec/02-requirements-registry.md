@@ -1083,6 +1083,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-521` | acceptance | P0 | implemented | An overlong letter that has an uncited sentence ends at or under 2800 characters and still names the past employer | `FR-410` | CR-147 |
 | `FR-411` | functional | P0 | implemented | A cover letter under 220 words gains a cited resume sentence until it reaches that floor. It does not pass 450 words or 2800 characters | `AC-522` | CR-148 |
 | `AC-522` | acceptance | P0 | implemented | A letter under 220 words that has an unused cited resume bullet ends between 220 and 450 words | `FR-411` | CR-148 |
+| `FR-412` | functional | P0 | implemented | A resume line about distributed data systems does not fail the geography check. A line that says a team was distributed across offices still fails when the job description never asked for that | `AC-523` | CR-149 |
+| `AC-523` | acceptance | P0 | implemented | "distributed data systems" does not fire. "distributed across offices" still fires | `FR-412` | CR-149 |
 
 ### Data Traceability (DATA-006)
 

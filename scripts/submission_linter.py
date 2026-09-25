@@ -1593,7 +1593,11 @@ _JD_GEOGRAPHY_ASKED_RE = re.compile(
 )
 _UNSOLICITED_GEOGRAPHY_RE = re.compile(
     r"\b("
-    r"global|worldwide|distributed|international|"
+    r"global|worldwide|"
+    # "distributed data systems" is architecture. "distributed across" is geography.
+    r"distributed(?!\s+(?:data|systems?|computing|architectures?|databases?|"
+    r"storage|queues?|processing|workloads?|services?|applications?|infrastructure))|"
+    r"international|"
     r"multi[-\s]?region|"
     r"time[-\s]?zones?|timezones?"
     r")\b"

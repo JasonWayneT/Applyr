@@ -25,6 +25,7 @@
 - A cover sentence that states no personal fact is removed when it is a hard block, including a forbidden buzzword. A neighboring sentence that names a past employer stays (CR-140 / AC-513).
 - A hedged `$100,000` is rewritten to `$100K` before the metric check. An unhedged `$100,000` stays. The precise number is not added to the approved list (CR-141 / FR-403).
 - When the only past-employer sentence is uncited, Stage 1 adds a cited resume sentence that names that employer and removes the uncited sentence (CR-141 / FR-404).
+- A clause that names a partner group outside the verified list is removed before the hiring-manager pass. A clause that names engineering stays. The warning still fires on the original wording (CR-142 / FR-405).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

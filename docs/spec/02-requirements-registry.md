@@ -1069,6 +1069,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-514` | acceptance | P0 | implemented | "roughly $100,000" and "About $100,000" become `$100K`. A bullet that says `$100,000` with no hedge stays | `FR-403` | CR-141 |
 | `FR-404` | functional | P0 | implemented | When every past-employer sentence in the letter is uncited, Stage 1 adds one cited resume sentence that names that employer and then removes the uncited sentence | `AC-515` | CR-141 |
 | `AC-515` | acceptance | P0 | implemented | An uncited "At Cision" sentence is removed. A cited Cision bullet from the resume is added in its place | `FR-404` | CR-141 |
+| `FR-405` | functional | P0 | implemented | Before the hiring-manager pass, a clause that names a partner group outside the verified list is removed. A clause that names a verified partner stays. The warning still fires on the original wording | `AC-516` | CR-142 |
+| `AC-516` | acceptance | P0 | implemented | "partnering with operational stakeholders" is removed and the rest of the bullet stays. "Partnered with engineering" stays. The cite follows the shortened bullet | `FR-405` | CR-142 |
 
 ### Data Traceability (DATA-006)
 

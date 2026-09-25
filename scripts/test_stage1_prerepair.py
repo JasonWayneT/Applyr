@@ -387,6 +387,47 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertIn("At Cision, I addressed renewal risk", updated)
         self.assertNotIn("uncited account", updated)
 
+    def test_unverified_partner_clause_is_removed(self) -> None:
+        """A partner group that is not on the verified list is cut out. Implements FR-405."""
+        kept = "Optimized customer data ingestion workflows into Salesforce."
+        bullet = (
+            "Optimized customer data ingestion workflows into Salesforce, "
+            "partnering with operational stakeholders to standardize intake schemas."
+        )
+        engineering = "Partnered with engineering to ship the intake fix."
+        resume = (
+            "## PROFESSIONAL EXPERIENCE\n"
+            "### Product Manager | Cision | 2021 - 2026\n"
+            f"* {bullet}\n"
+            f"* {engineering}\n"
+        )
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nAt Cision, I kept the contact records current.\n\nBest regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {"bullet": bullet, "claim_ids": ["ACC-102"]},
+                        {"bullet": engineering, "claim_ids": ["ACC-104"]},
+                    ],
+                    "cover_letter_claims": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(any(row["rule_id"] == "LW-005" for row in result["applied"]))
+        updated = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn(kept, updated)
+        self.assertNotIn("operational stakeholders", updated)
+        self.assertIn(engineering, updated)
+        provenance = json.loads((self.folder / "claim_provenance.json").read_text(encoding="utf-8"))
+        cited = [row["bullet"] for row in provenance["resume_claims"]]
+        self.assertIn(kept, cited)
+
 
 if __name__ == "__main__":
     unittest.main()

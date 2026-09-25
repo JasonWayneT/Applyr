@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Holdout 4 does not qualify. The folder that failed provenance in holdout 3 completed. One folder parked at the hiring-manager pass. The open warning is LW-005. The resume says it partnered with operational stakeholders. That is not a verified team. The critical read stayed open beside it. LW-021 was also present and is the warning the queue already accepts. Queue restore count was 0. Do not start the next holdout until the pipeline removes that partner claim before the hiring-manager pass. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits.
+Iteration 16 removes a partner clause that names a group outside the verified list before the hiring-manager pass (FR-405). Engineering stays. The warning still fires on the original wording. Holdout 4 does not qualify. Start holdout 5 after this commit, then holdout 6 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 16 — unverified partner clause
+
+1. OBSERVE: holdout 4 parked at the hiring-manager pass. The resume said it partnered with operational stakeholders. That group is not a verified team.
+2. ROOT CAUSE: CONFIRMED. The warning is a WARN, so Stage 1 did not rewrite the sentence, and the hiring-manager pass cannot accept it without an edit.
+3. EXPLORE: add the group to the verified list, accept the warning, or cut the clause.
+4. CHOOSE: cut the clause. A verified partner stays.
+5. IMPLEMENT: `strip_unverified_partner_clauses` in `scripts/stage1_prerepair.py`, also called at the start of the hiring-manager pass.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 14 tests.
+7. CONFIRM: the local check behaves as tested. Holdout 5 has not run. This is not definition of done.
 
 ## Iteration 15 — hiring-manager park
 

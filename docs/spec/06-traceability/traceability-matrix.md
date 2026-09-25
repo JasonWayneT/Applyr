@@ -559,3 +559,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | `AC-513` | CR-140 | Remove a non-factual cover sentence that is itself a hard block | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-403` / `AC-514` | CR-141 | Rewrite a hedged $100,000 to $100K before the metric check | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-404` / `AC-515` | CR-141 | Replace an uncited sole employer sentence with a cited resume sentence | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-405` / `AC-516` | CR-142 | Remove an unverified partner clause before the hiring-manager pass | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |

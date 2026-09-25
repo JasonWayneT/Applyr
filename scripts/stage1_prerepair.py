@@ -351,6 +351,74 @@ def _collapse_hedged_100k_text(text: str) -> str:
     return "".join(pieces)
 
 
+def strip_unverified_partner_clauses(folder: Path) -> list[dict[str, str]]:
+    """Remove a partner clause that names a group outside the verified list.
+
+    A verified partner such as engineering stays. The warning still fires on
+    the original wording. Implements FR-405.
+    """
+    from submission_linter import _check_unverified_partner, collect_fidelity_hard_blocks
+
+    applied: list[dict[str, str]] = []
+    resume_path = folder / "Resume.md"
+    letter_path = folder / "CoverLetter.md"
+    originals = {
+        "Resume.md": resume_path.read_text(encoding="utf-8") if resume_path.is_file() else "",
+        "CoverLetter.md": letter_path.read_text(encoding="utf-8") if letter_path.is_file() else "",
+    }
+    updated = dict(originals)
+    doc_changes: dict[str, list[dict[str, str]]] = {"Resume.md": [], "CoverLetter.md": []}
+    for name, text in originals.items():
+        if not text or not _check_unverified_partner(text):
+            continue
+        kept_lines: list[str] = []
+        for line in text.splitlines():
+            if not _check_unverified_partner(line):
+                kept_lines.append(line)
+                continue
+            stripped = _UNVERIFIED_PARTNER_CLAUSE.sub("", line)
+            stripped = re.sub(r"\s{2,}", " ", stripped)
+            stripped = re.sub(r"\s+([.!?])", r"\1", stripped).rstrip()
+            body = re.sub(r"^\s*[*-]\s+", "", stripped).strip(" .")
+            if len(body.split()) < 4:
+                applied.append({"rule_id": "LW-005", "file": name, "from": line.strip(), "to": ""})
+                continue
+            if stripped == line:
+                kept_lines.append(line)
+                continue
+            if not stripped.endswith((".", "!", "?")):
+                stripped += "."
+            kept_lines.append(stripped)
+            applied.append({"rule_id": "LW-005", "file": name, "from": line.strip(), "to": stripped.strip()})
+            doc_changes[name].append({"from": line.strip(), "to": stripped.strip()})
+        updated[name] = "\n".join(kept_lines).rstrip() + "\n"
+    if not applied:
+        return []
+    before_ids = {
+        item.rule_id
+        for item in collect_fidelity_hard_blocks(originals["Resume.md"], originals["CoverLetter.md"])
+    }
+    after_ids = {
+        item.rule_id
+        for item in collect_fidelity_hard_blocks(updated["Resume.md"], updated["CoverLetter.md"])
+    }
+    if after_ids - before_ids:
+        return []
+    for name, path in (("Resume.md", resume_path), ("CoverLetter.md", letter_path)):
+        if updated[name] != originals[name] and path.is_file():
+            path.write_text(updated[name], encoding="utf-8")
+            doc_type = "resume" if name == "Resume.md" else "cover_letter"
+            _resync_provenance(folder, doc_type, doc_changes[name])
+    return applied
+
+
+_UNVERIFIED_PARTNER_CLAUSE = re.compile(
+    r",?\s*(?:partner(?:ed|ing)?\s+with\s+|collaborat(?:ed|ing)\s+with\s+"
+    r"|work(?:ed|ing)?\s+with\s+the\s+)[^.!?\n]*",
+    re.IGNORECASE,
+)
+
+
 def _only_agile_epic_tool(line: str) -> bool:
     """True when LR-026's only hit on this line is the word epic. Implements FR-402."""
     from blocked_tools import hard_blocked_tools_lint_alternation
@@ -763,6 +831,8 @@ def apply_mechanical_fixes(
     for change in drop_uncited_units(folder):
         applied.append(change)
     for change in drop_blocked_units(folder):
+        applied.append(change)
+    for change in strip_unverified_partner_clauses(folder):
         applied.append(change)
     for change in name_past_employer(folder):
         applied.append(change)

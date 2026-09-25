@@ -501,6 +501,45 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertNotIn("security backlog", resume)
         self.assertIn(kept, resume)
 
+    def test_overlong_letter_drops_an_uncited_sentence(self) -> None:
+        """A letter over one page loses an uncited sentence. The employer sentence stays. Implements FR-410."""
+        cited = "At Cision, I kept the planning cadence for the platform team."
+        uncited = (
+            "The extra context in this sentence is not a cited fact "
+            + "and the weekly notes stayed in the folder " * 70
+        ).strip()
+        if not uncited.endswith("."):
+            uncited += "."
+        letter = (
+            "# Name\nline\n\n"
+            "Dear Hiring Manager,\n\n"
+            f"{cited}\n\n{uncited}\n\n"
+            "Best regards,\n\nName\n"
+        )
+        self.assertGreater(len(letter), 2800)
+        (self.folder / "Resume.md").write_text(
+            "## PROFESSIONAL EXPERIENCE\n* Kept a resume bullet.\n",
+            encoding="utf-8",
+        )
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {"bullet": "Kept a resume bullet.", "claim_ids": ["ACC-102"]}
+                    ],
+                    "cover_letter_claims": [{"sentence": cited, "claim_ids": ["ACC-102"]}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        applied = prerepair.trim_cover_to_page(self.folder)
+        self.assertTrue(any(row["rule_id"] == "CL-006" for row in applied))
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertLessEqual(len(updated), 2800)
+        self.assertIn(cited, updated)
+        self.assertNotIn("not a cited fact", updated)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,7 @@
 - A contributed claim that says designed or built is reworded to contributed to before the hiring-manager pass. An owned claim that says built stays (CR-144 / FR-407).
 - A resume bullet that cites a fact and contradicts it is removed. A neighboring bullet stays (CR-145 / FR-408).
 - A required line that shares only the word ownership with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite (CR-146 / FR-409).
+- A cover letter over 2800 characters loses an uncited sentence until it fits one page. The limit stays (CR-147 / FR-410).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

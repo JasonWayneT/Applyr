@@ -812,6 +812,141 @@ def name_past_employer(folder: Path, *, force: bool = False) -> list[dict[str, s
     return [{"rule_id": "LR-045", "file": "CoverLetter.md", "from": "", "to": sentence}]
 
 
+_EMPLOYER_TOKEN = re.compile(r"\b(?:cision|sterkly|zero[\s-]+to[\s-]+sixty)\b", re.IGNORECASE)
+
+
+def _covered_letter_sentences(provenance: dict[str, Any]) -> set[str]:
+    """Return normalized cover sentences that already carry a cite."""
+    covered: set[str] = set()
+    for row in provenance.get("cover_letter_claims") or []:
+        if not isinstance(row, dict) or not row.get("claim_ids"):
+            continue
+        sentence = row.get("sentence")
+        if isinstance(sentence, str) and sentence.strip():
+            covered.add(_normalize_provenance_unit(sentence))
+    return covered
+
+
+def _sole_required_sentences(folder: Path, provenance: dict[str, Any]) -> set[str]:
+    """Return normalized sentences that are the only cite for a required claim."""
+    packet_path = folder / "authoring_packet.json"
+    if not packet_path.is_file():
+        return set()
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set()
+    required: set[str] = set()
+    for row in packet.get("evidence_map") or []:
+        if isinstance(row, dict) and row.get("bucket") == "required":
+            required.update(
+                claim_id
+                for claim_id in (row.get("claim_ids") or [])
+                if isinstance(claim_id, str) and claim_id.strip()
+            )
+    counts: dict[str, int] = {}
+    owners: dict[str, str] = {}
+    for row in provenance.get("cover_letter_claims") or []:
+        if not isinstance(row, dict):
+            continue
+        sentence = row.get("sentence")
+        if not isinstance(sentence, str) or not sentence.strip():
+            continue
+        key = _normalize_provenance_unit(sentence)
+        for claim_id in row.get("claim_ids") or []:
+            if not isinstance(claim_id, str) or claim_id not in required:
+                continue
+            counts[claim_id] = counts.get(claim_id, 0) + 1
+            owners[claim_id] = key
+    return {owners[claim_id] for claim_id, count in counts.items() if count == 1}
+
+
+def trim_cover_to_page(folder: Path) -> list[dict[str, str]]:
+    """Drop cover sentences until the letter fits one page.
+
+    Uncited sentences go first. The only past-employer sentence stays, and so
+    does the only cite for a required claim. The character limit is unchanged.
+    Implements FR-410.
+    """
+    from cover_phrasing import CHAR_MAX
+    from submission_linter import collect_fidelity_hard_blocks
+
+    letter_path = folder / "CoverLetter.md"
+    resume_path = folder / "Resume.md"
+    if not letter_path.is_file():
+        return []
+    letter = letter_path.read_text(encoding="utf-8")
+    if len(letter) <= CHAR_MAX:
+        return []
+    provenance = _load_provenance(folder) or {}
+    resume = resume_path.read_text(encoding="utf-8") if resume_path.is_file() else ""
+    applied: list[dict[str, str]] = []
+    refused: set[str] = set()
+    while len(letter) > CHAR_MAX:
+        sentences = _cover_body_sentences(letter)
+        employer_keys = [
+            _normalize_provenance_unit(sentence)
+            for sentence in sentences
+            if _EMPLOYER_TOKEN.search(sentence)
+        ]
+        only_employer = employer_keys[0] if len(employer_keys) == 1 else ""
+        covered = _covered_letter_sentences(provenance)
+        protected = _sole_required_sentences(folder, provenance)
+        if only_employer:
+            protected.add(only_employer)
+        ranked = sorted(sentences, key=len, reverse=True)
+        uncited = [
+            sentence
+            for sentence in ranked
+            if _normalize_provenance_unit(sentence) not in covered
+            and _normalize_provenance_unit(sentence) not in protected
+            and sentence not in refused
+        ]
+        cited = [
+            sentence
+            for sentence in ranked
+            if _normalize_provenance_unit(sentence) in covered
+            and _normalize_provenance_unit(sentence) not in protected
+            and sentence not in refused
+        ]
+        choice = uncited[0] if uncited else (cited[0] if cited else "")
+        if not choice:
+            break
+        new_letter = re.sub(r"[ \t]{2,}", " ", letter.replace(choice, "", 1))
+        new_letter = re.sub(r"\n{3,}", "\n\n", new_letter)
+        if not new_letter.endswith("\n"):
+            new_letter += "\n"
+        before_ids = {
+            item.rule_id for item in collect_fidelity_hard_blocks(resume, letter, provenance)
+        }
+        after_ids = {
+            item.rule_id for item in collect_fidelity_hard_blocks(resume, new_letter, provenance)
+        }
+        if after_ids - before_ids:
+            refused.add(choice)
+            continue
+        letter = new_letter
+        key = _normalize_provenance_unit(choice)
+        rows = provenance.get("cover_letter_claims")
+        if isinstance(rows, list):
+            provenance["cover_letter_claims"] = [
+                row
+                for row in rows
+                if not (
+                    isinstance(row, dict)
+                    and _normalize_provenance_unit(str(row.get("sentence") or "")) == key
+                )
+            ]
+        applied.append({"rule_id": "CL-006", "file": "CoverLetter.md", "from": choice, "to": ""})
+    if not applied:
+        return []
+    letter_path.write_text(letter, encoding="utf-8")
+    prov_path = folder / "claim_provenance.json"
+    if prov_path.is_file():
+        prov_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+    return applied
+
+
 def anchor_uncited_employer(folder: Path) -> list[dict[str, str]]:
     """Add a cited employer sentence when every employer mention is uncited.
 
@@ -983,6 +1118,8 @@ def apply_mechanical_fixes(
     for change in strip_unverified_partner_clauses(folder):
         applied.append(change)
     for change in name_past_employer(folder):
+        applied.append(change)
+    for change in trim_cover_to_page(folder):
         applied.append(change)
     return {
         "applied": applied,

@@ -1079,6 +1079,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-519` | acceptance | P0 | implemented | A bullet cited as ACC-103 that says the security backlog was resolved is removed. A neighboring bullet stays | `FR-408` | CR-145 |
 | `FR-409` | functional | P0 | implemented | A required line that shares only the word ownership with a mapped claim does not fail Stage 1 when that claim is unused. A line that shares a real term still requires the cite | `AC-520` | CR-146 |
 | `AC-520` | acceptance | P0 | implemented | Overlap of only ownership is empty. A Google Analytics migration line still requires its cite | `FR-409` | CR-146 |
+| `FR-410` | functional | P0 | implemented | A cover letter over 2800 characters loses an uncited sentence until it fits one page. The only past-employer sentence stays. The character limit stays 2800 | `AC-521` | CR-147 |
+| `AC-521` | acceptance | P0 | implemented | An overlong letter that has an uncited sentence ends at or under 2800 characters and still names the past employer | `FR-410` | CR-147 |
 
 ### Data Traceability (DATA-006)
 

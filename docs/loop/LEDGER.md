@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 20 treats the single word ownership as generic overlap (FR-409). A required line that shares a real term still requires the cite. Holdout 8 does not qualify. It failed Stage 1 because a leadership line and a scope excerpt shared only that word. The earlier cited-contradiction folder completed. Queue restore count was 0. Start holdout 9 after this commit, then holdout 10 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 21 drops an uncited cover sentence when the letter is over one page (FR-410). The 2800 character limit stays. The only past-employer sentence stays. Holdout 9 does not qualify. It failed Stage 1 at 2976 characters. Queue restore count was 0. Start holdout 10 after this commit, then holdout 11 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 21 — cover length
+
+1. OBSERVE: holdout 9 failed Stage 1. The block was CL-006. The letter was 2976 characters.
+2. ROOT CAUSE: CONFIRMED. Three body sentences had no cite. One of them was long enough to bring the letter under the limit.
+3. EXPLORE: raise the character limit, or remove an uncited sentence.
+4. CHOOSE: remove an uncited sentence. The limit stays 2800.
+5. IMPLEMENT: `trim_cover_to_page` in `scripts/stage1_prerepair.py`, after the employer sentence is added.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 18 tests. A copy of the failed letter went from 2976 to 2750.
+7. CONFIRM: holdout 10 has not run. This is not definition of done.
 
 ## Iteration 20 — ownership overlap
 

@@ -1075,6 +1075,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-517` | acceptance | P0 | implemented | "40% drop-off" plus "ingestion pipeline" becomes "ETL path" and the block clears. "ingestion pipeline" with no 40% drop-off story stays | `FR-406` | CR-143 |
 | `FR-407` | functional | P0 | implemented | Before the hiring-manager pass, a contributed claim that says designed or built is reworded to contributed to. An owned claim that says built stays. The warning still fires on the original wording | `AC-518` | CR-144 |
 | `AC-518` | acceptance | P0 | implemented | "I designed and built the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-407` | CR-144 |
+| `FR-408` | functional | P0 | implemented | A resume bullet that cites a fact and says something that fact does not say is removed. A neighboring bullet stays. The check still fires on the original wording | `AC-519` | CR-145 |
+| `AC-519` | acceptance | P0 | implemented | A bullet cited as ACC-103 that says the security backlog was resolved is removed. A neighboring bullet stays | `FR-408` | CR-145 |
 
 ### Data Traceability (DATA-006)
 

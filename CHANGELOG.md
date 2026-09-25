@@ -28,6 +28,7 @@
 - A clause that names a partner group outside the verified list is removed before the hiring-manager pass. A clause that names engineering stays. The warning still fires on the original wording (CR-142 / FR-405).
 - A 40% contact-data drop-off sentence that calls the story an ingestion pipeline is rewritten to ETL path. The 40% outcome stays. The same block now fails Stage 1 (CR-143 / FR-406).
 - A contributed claim that says designed or built is reworded to contributed to before the hiring-manager pass. An owned claim that says built stays (CR-144 / FR-407).
+- A resume bullet that cites a fact and contradicts it is removed. A neighboring bullet stays (CR-145 / FR-408).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

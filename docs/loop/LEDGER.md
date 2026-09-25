@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 18 rewords designed or built on a contributed claim to contributed to (FR-407). An owned claim that says built stays. Holdout 6 does not qualify. It parked because a letter used designed and built for that claim. Queue restore count was 0. Start holdout 7 after this commit, then holdout 8 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 19 removes a cited contradiction the drop could not see (FR-408). A neighboring bullet stays. Holdout 7 does not qualify. It failed Stage 1 because a bullet cited a fact and said that fact resolved a backlog. Queue restore count was 0. Start holdout 8 after this commit, then holdout 9 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 19 — cited contradiction
+
+1. OBSERVE: holdout 7 failed Stage 1. The remaining block was LR-049 on ACC-103.
+2. ROOT CAUSE: CONFIRMED. The drop looked for hard blocks without the cite file, so a cited contradiction was invisible.
+3. EXPLORE: leave the line for another repair pass, or load the cite file and remove the line.
+4. CHOOSE: load the cite file and remove the line. A neighboring bullet stays.
+5. IMPLEMENT: `drop_blocked_units` in `scripts/stage1_prerepair.py` now loads `claim_provenance.json`.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 17 tests.
+7. CONFIRM: the local check behaves as tested. Holdout 8 has not run. This is not definition of done.
 
 ## Iteration 18 — contributed claim
 

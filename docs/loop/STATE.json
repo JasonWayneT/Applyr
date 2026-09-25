@@ -1,8 +1,8 @@
 {
-  "iteration": 18,
+  "iteration": 19,
   "phase": "LOOP",
-  "current_issue_id": "CR-144",
-  "next_action": "FR-407 rewords designed or built on a contributed claim to contributed to. Holdout 6 does not qualify. Start holdout 7 after this commit, then holdout 8 with no pipeline change. Definition of done is not met.",
+  "current_issue_id": "CR-145",
+  "next_action": "FR-408 removes a cited contradiction the drop could not see. Holdout 7 does not qualify. Start holdout 8 after this commit, then holdout 9 with no pipeline change. Definition of done is not met.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

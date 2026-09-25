@@ -463,6 +463,44 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertNotIn("designed and built", updated)
         self.assertIn(owned, resume_text)
 
+    def test_cited_backlog_claim_is_dropped(self) -> None:
+        """A bullet that cites ACC-103 and says the backlog was resolved is removed. Implements FR-408."""
+        blocked = "Resolved an inherited penetration-test security backlog by grouping the open items."
+        kept = "Kept the weekly planning bullet that names no backlog."
+        (self.folder / "Resume.md").write_text(
+            "## PROFESSIONAL EXPERIENCE\n"
+            "### Product Manager | Cision | 2018 - 2024\n"
+            f"* {blocked}\n"
+            f"* {kept}\n",
+            encoding="utf-8",
+        )
+        (self.folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nAt Cision, the cited planning work stayed.\n\nBest regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [
+                        {"bullet": blocked, "claim_ids": ["ACC-103"]},
+                        {"bullet": kept, "claim_ids": ["ACC-102"]},
+                    ],
+                    "cover_letter_claims": [
+                        {
+                            "sentence": "At Cision, the cited planning work stayed.",
+                            "claim_ids": ["ACC-102"],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        applied = prerepair.drop_blocked_units(self.folder)
+        self.assertTrue(any(row["rule_id"] == "LR-049" for row in applied))
+        resume = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertNotIn("security backlog", resume)
+        self.assertIn(kept, resume)
+
 
 if __name__ == "__main__":
     unittest.main()

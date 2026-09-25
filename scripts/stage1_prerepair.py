@@ -556,12 +556,28 @@ def _only_agile_epic_tool(line: str) -> bool:
     return bool(tokens) and all(token == "epic" for token in tokens)
 
 
-def _blocked_snippets(resume_text: str, letter_text: str) -> list[tuple[str, str]]:
+def _load_provenance(folder: Path) -> dict[str, Any] | None:
+    """Return claim_provenance.json, or None when it is missing or invalid."""
+    path = folder / "claim_provenance.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _blocked_snippets(
+    resume_text: str,
+    letter_text: str,
+    provenance: dict[str, Any] | None = None,
+) -> list[tuple[str, str]]:
     """Return (rule id, snippet) for hard blocks that name a line. Implements FR-402."""
     from submission_linter import collect_fidelity_hard_blocks, lint_document
 
     found: list[tuple[str, str]] = []
-    for item in collect_fidelity_hard_blocks(resume_text, letter_text):
+    for item in collect_fidelity_hard_blocks(resume_text, letter_text, provenance):
         for quoted in re.findall(r'"([^"]{12,})"', item.message or ""):
             found.append((item.rule_id, quoted))
     for doc_type, text in (("resume", resume_text), ("cover_letter", letter_text)):
@@ -605,7 +621,8 @@ def drop_blocked_units(folder: Path) -> list[dict[str, str]]:
 
     A removal that creates a new fidelity hard block is refused. The blocked
     phrase stays a hard block. This only deletes the line that already fails.
-    Cover sentences that do not state a personal fact are included. Implements FR-402.
+    Cover sentences that do not state a personal fact are included. A cited
+    contradiction is visible because the cite file is loaded. Implements FR-402 / FR-408.
     """
     from submission_linter import collect_fidelity_hard_blocks
 
@@ -615,7 +632,8 @@ def drop_blocked_units(folder: Path) -> list[dict[str, str]]:
         return []
     resume_text = resume_path.read_text(encoding="utf-8")
     letter_text = letter_path.read_text(encoding="utf-8")
-    snippets = _blocked_snippets(resume_text, letter_text)
+    provenance = _load_provenance(folder)
+    snippets = _blocked_snippets(resume_text, letter_text, provenance)
     if not snippets:
         return []
     applied: list[dict[str, str]] = []
@@ -658,8 +676,8 @@ def drop_blocked_units(folder: Path) -> list[dict[str, str]]:
             new_letter += "\n"
     if not applied:
         return []
-    before_ids = {item.rule_id for item in collect_fidelity_hard_blocks(resume_text, letter_text)}
-    after_ids = {item.rule_id for item in collect_fidelity_hard_blocks(new_resume, new_letter)}
+    before_ids = {item.rule_id for item in collect_fidelity_hard_blocks(resume_text, letter_text, provenance)}
+    after_ids = {item.rule_id for item in collect_fidelity_hard_blocks(new_resume, new_letter, provenance)}
     if after_ids - before_ids:
         return []
     if new_resume != resume_text:

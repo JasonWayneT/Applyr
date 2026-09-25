@@ -428,6 +428,25 @@ class TestStage1Prerepair(unittest.TestCase):
         cited = [row["bullet"] for row in provenance["resume_claims"]]
         self.assertIn(kept, cited)
 
+    def test_dropoff_ingestion_pipeline_is_renamed(self) -> None:
+        """The 40% drop-off story is not an ingestion pipeline. Implements FR-406."""
+        bad = "The stale contact drop-off fell 40% after the ingestion pipeline was retired."
+        kept = "The migration used an ingestion pipeline for a different feed."
+        letter = f"Dear Hiring Manager,\n\n{bad}\n\nBest regards,\n\nName\n"
+        resume = f"## PROFESSIONAL EXPERIENCE\n* {kept}\n"
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(any(row["rule_id"] == "LR-038" for row in result["applied"]))
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        resume_text = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn("ETL path", updated)
+        self.assertNotIn("ingestion pipeline", updated)
+        self.assertIn("ingestion pipeline", resume_text)
+        from submission_linter import check_bypass_authorship
+
+        self.assertEqual(check_bypass_authorship(resume_text, updated), [])
+
 
 if __name__ == "__main__":
     unittest.main()

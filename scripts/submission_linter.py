@@ -3051,6 +3051,7 @@ def collect_fidelity_hard_blocks(
     blocks.extend(check_release_cadence(resume_text, cover_letter_text))
     blocks.extend(check_testing_analytics(resume_text, cover_letter_text))
     blocks.extend(check_visible_codename(resume_text, cover_letter_text))
+    blocks.extend(check_bypass_authorship(resume_text, cover_letter_text))
     return blocks
 
 

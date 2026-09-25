@@ -1071,6 +1071,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-515` | acceptance | P0 | implemented | An uncited "At Cision" sentence is removed. A cited Cision bullet from the resume is added in its place | `FR-404` | CR-141 |
 | `FR-405` | functional | P0 | implemented | Before the hiring-manager pass, a clause that names a partner group outside the verified list is removed. A clause that names a verified partner stays. The warning still fires on the original wording | `AC-516` | CR-142 |
 | `AC-516` | acceptance | P0 | implemented | "partnering with operational stakeholders" is removed and the rest of the bullet stays. "Partnered with engineering" stays. The cite follows the shortened bullet | `FR-405` | CR-142 |
+| `FR-406` | functional | P0 | implemented | A 40% contact-data drop-off sentence that says ingestion pipeline, ingestion path, or ingestion loss is rewritten before the hiring-manager pass. The 40% outcome stays. The same block fails Stage 1. A sentence that is not that story is unchanged | `AC-517` | CR-143 |
+| `AC-517` | acceptance | P0 | implemented | "40% drop-off" plus "ingestion pipeline" becomes "ETL path" and the block clears. "ingestion pipeline" with no 40% drop-off story stays | `FR-406` | CR-143 |
 
 ### Data Traceability (DATA-006)
 

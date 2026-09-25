@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 16 removes a partner clause that names a group outside the verified list before the hiring-manager pass (FR-405). Engineering stays. The warning still fires on the original wording. Holdout 4 does not qualify. Start holdout 5 after this commit, then holdout 6 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 17 rewrites a 40% drop-off sentence that calls the story an ingestion pipeline (FR-406). The 40% outcome stays. That block now fails Stage 1. Holdout 5 does not qualify. It parked on this block at the hiring-manager pass. Queue restore count was 0. Start holdout 6 after this commit, then holdout 7 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 17 — drop-off story is not an ingestion pipeline
+
+1. OBSERVE: holdout 5 parked at the hiring-manager pass. The block was LR-038. The letter called the 40% drop-off story an ingestion pipeline.
+2. ROOT CAUSE: CONFIRMED. That block was not in the Stage 1 fidelity list, so the hiring-manager pass was the first place it could stop the draft, and that pass cannot rewrite it.
+3. EXPLORE: drop the sentence, allow the phrase, or rename the phrase and fail Stage 1 on the same check.
+4. CHOOSE: rename the phrase to ETL path. The 40% outcome stays. Stage 1 now fails on the same check.
+5. IMPLEMENT: `rewrite_bypass_ingestion` in `scripts/stage1_prerepair.py`. `check_bypass_authorship` is in `collect_fidelity_hard_blocks`.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 15 tests.
+7. CONFIRM: the local check behaves as tested. Holdout 6 has not run. This is not definition of done.
 
 ## Iteration 16 — unverified partner clause
 

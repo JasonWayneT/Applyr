@@ -351,6 +351,71 @@ def _collapse_hedged_100k_text(text: str) -> str:
     return "".join(pieces)
 
 
+def rewrite_bypass_ingestion(folder: Path) -> list[dict[str, str]]:
+    """Rename an ingestion phrase in the 40% drop-off story.
+
+    That story is not an ingestion pipeline. The 40% outcome stays.
+    A sentence without that story is left unchanged. Implements FR-406.
+    """
+    from submission_linter import (
+        _ACC102_INGESTION_RE,
+        _ACC102_METRIC_RE,
+        _ACC102_STORY_RE,
+        _split_resume_bullets,
+        _split_sentences,
+    )
+
+    def _replacement(match: re.Match[str]) -> str:
+        word = match.group(0).lower()
+        if word.endswith("pipelines"):
+            return "ETL paths"
+        if word.endswith("loss"):
+            return "data loss"
+        return "ETL path"
+
+    def _rewrite_unit(unit: str) -> str:
+        if not (_ACC102_METRIC_RE.search(unit) and _ACC102_STORY_RE.search(unit)):
+            return unit
+        if not _ACC102_INGESTION_RE.search(unit):
+            return unit
+        return _ACC102_INGESTION_RE.sub(_replacement, unit)
+
+    applied: list[dict[str, str]] = []
+    resume_path = folder / "Resume.md"
+    letter_path = folder / "CoverLetter.md"
+    resume = resume_path.read_text(encoding="utf-8") if resume_path.is_file() else ""
+    letter = letter_path.read_text(encoding="utf-8") if letter_path.is_file() else ""
+    new_resume = resume
+    new_letter = letter
+    resume_changes: list[dict[str, str]] = []
+    letter_changes: list[dict[str, str]] = []
+    for unit in _split_resume_bullets(resume):
+        revised = _rewrite_unit(unit)
+        if revised == unit or unit not in new_resume:
+            continue
+        new_resume = new_resume.replace(unit, revised, 1)
+        resume_changes.append({"from": unit, "to": revised})
+        applied.append({"rule_id": "LR-038", "file": "Resume.md", "from": unit, "to": revised})
+    if letter:
+        for paragraph in re.split(r"\n\s*\n", letter):
+            for unit in _split_sentences(paragraph):
+                revised = _rewrite_unit(unit)
+                if revised == unit or unit not in new_letter:
+                    continue
+                new_letter = new_letter.replace(unit, revised, 1)
+                letter_changes.append({"from": unit, "to": revised})
+                applied.append(
+                    {"rule_id": "LR-038", "file": "CoverLetter.md", "from": unit, "to": revised}
+                )
+    if new_resume != resume and resume_path.is_file():
+        resume_path.write_text(new_resume, encoding="utf-8")
+        _resync_provenance(folder, "resume", resume_changes)
+    if new_letter != letter and letter_path.is_file():
+        letter_path.write_text(new_letter, encoding="utf-8")
+        _resync_provenance(folder, "cover_letter", letter_changes)
+    return applied
+
+
 def strip_unverified_partner_clauses(folder: Path) -> list[dict[str, str]]:
     """Remove a partner clause that names a group outside the verified list.
 
@@ -829,6 +894,8 @@ def apply_mechanical_fixes(
     for change in keep_required_hedges(folder):
         applied.append(change)
     for change in drop_uncited_units(folder):
+        applied.append(change)
+    for change in rewrite_bypass_ingestion(folder):
         applied.append(change)
     for change in drop_blocked_units(folder):
         applied.append(change)

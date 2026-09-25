@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 23 keeps distributed data systems out of the geography check (FR-412). A team distributed across offices still fails when the job description never asked for that. Holdout 11 does not qualify. Its first failure was that technical line. Later folders also failed, and one parked. Those are not fixed here. Queue restore count was 0. Start holdout 12 after this commit, then holdout 13 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 24 treats the single word knowledge as generic overlap (FR-413). A required line that shares a real term still requires the cite. Holdout 12 does not qualify. It failed Stage 1 because a software-analysis line and a scaling excerpt shared only that word. The geography folder from the previous run completed. Queue restore count was 0. Start holdout 13 after this commit, then holdout 14 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 24 — knowledge overlap
+
+1. OBSERVE: holdout 12 failed Stage 1 at the 19th folder. The block was unused required evidence. The only shared word was knowledge.
+2. ROOT CAUSE: CONFIRMED. That word is not proof the claim belongs on the line.
+3. EXPLORE: attach the unused id, or stop treating that one word as proof.
+4. CHOOSE: stop treating that one word as proof. A real shared term still requires the cite.
+5. IMPLEMENT: knowledge is a generic overlap token in `scripts/build_authoring_packet.py`.
+6. EVALUATE: the overlap test and the optimization-bar tests passed. The failed folder's cite check now passes.
+7. CONFIRM: holdout 13 has not run. This is not definition of done.
 
 ## Iteration 23 — distributed systems
 

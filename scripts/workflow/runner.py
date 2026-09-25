@@ -1901,9 +1901,14 @@ def _apply_subphase_verdict(
 
 def collect_hm_findings(folder: str) -> dict[str, Any]:
     """HM-facing mechanical signals: lint WARNs + hard blocks (should be rare post-Stage1)."""
-    from stage1_prerepair import rewrite_bypass_ingestion, strip_unverified_partner_clauses
+    from stage1_prerepair import (
+        rewrite_bypass_ingestion,
+        soften_contributed_ownership,
+        strip_unverified_partner_clauses,
+    )
 
     rewrite_bypass_ingestion(Path(folder))
+    soften_contributed_ownership(Path(folder))
     strip_unverified_partner_clauses(Path(folder))
     findings: list[dict[str, Any]] = []
     lint_results = submission_linter.lint_folder(folder)

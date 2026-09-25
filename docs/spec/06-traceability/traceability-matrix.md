@@ -561,3 +561,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | `FR-404` / `AC-515` | CR-141 | Replace an uncited sole employer sentence with a cited resume sentence | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-405` / `AC-516` | CR-142 | Remove an unverified partner clause before the hiring-manager pass | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-406` / `AC-517` | CR-143 | Rewrite the 40% drop-off ingestion phrase and fail Stage 1 on that block | `scripts/stage1_prerepair.py`, `scripts/submission_linter.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-407` / `AC-518` | CR-144 | Reword designed or built on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |

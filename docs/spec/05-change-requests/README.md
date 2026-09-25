@@ -77,6 +77,7 @@
 | CR-141 | A hedged $100,000 becomes $100K, and an uncited sole employer sentence is replaced by a cited one | **Implemented** (2026-09-24) — `FR-403`, `FR-404`, `AC-514`, `AC-515` — [spec](CR-141-hedged-figure-and-uncited-employer.md) |
 | CR-142 | A partner clause outside the verified list is removed before the hiring-manager pass | **Implemented** (2026-09-24) — `FR-405`, `AC-516` — [spec](CR-142-unverified-partner-clause.md) |
 | CR-143 | The 40% drop-off story is not called an ingestion pipeline | **Implemented** (2026-09-24) — `FR-406`, `AC-517` — [spec](CR-143-dropoff-not-ingestion.md) |
+| CR-144 | A contributed claim does not say designed and built | **Implemented** (2026-09-24) — `FR-407`, `AC-518` — [spec](CR-144-contributed-not-designed.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

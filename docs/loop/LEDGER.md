@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 17 rewrites a 40% drop-off sentence that calls the story an ingestion pipeline (FR-406). The 40% outcome stays. That block now fails Stage 1. Holdout 5 does not qualify. It parked on this block at the hiring-manager pass. Queue restore count was 0. Start holdout 6 after this commit, then holdout 7 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 18 rewords designed or built on a contributed claim to contributed to (FR-407). An owned claim that says built stays. Holdout 6 does not qualify. It parked because a letter used designed and built for that claim. Queue restore count was 0. Start holdout 7 after this commit, then holdout 8 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 18 — contributed claim
+
+1. OBSERVE: holdout 6 parked at the hiring-manager pass. The warning was LW-028 on ACC-120. The verbs were built and designed.
+2. ROOT CAUSE: CONFIRMED. That claim is tagged contributed. The approved wording is contributed to. The hiring-manager pass cannot accept the warning without an edit.
+3. EXPLORE: accept the warning, or reword the verbs.
+4. CHOOSE: reword the verbs. An owned built line stays.
+5. IMPLEMENT: `soften_contributed_ownership` in `scripts/stage1_prerepair.py`, also called at the start of the hiring-manager pass.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 16 tests.
+7. CONFIRM: the local check behaves as tested. Holdout 7 has not run. This is not definition of done.
 
 ## Iteration 17 — drop-off story is not an ingestion pipeline
 

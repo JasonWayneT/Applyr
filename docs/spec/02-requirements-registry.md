@@ -1073,6 +1073,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-516` | acceptance | P0 | implemented | "partnering with operational stakeholders" is removed and the rest of the bullet stays. "Partnered with engineering" stays. The cite follows the shortened bullet | `FR-405` | CR-142 |
 | `FR-406` | functional | P0 | implemented | A 40% contact-data drop-off sentence that says ingestion pipeline, ingestion path, or ingestion loss is rewritten before the hiring-manager pass. The 40% outcome stays. The same block fails Stage 1. A sentence that is not that story is unchanged | `AC-517` | CR-143 |
 | `AC-517` | acceptance | P0 | implemented | "40% drop-off" plus "ingestion pipeline" becomes "ETL path" and the block clears. "ingestion pipeline" with no 40% drop-off story stays | `FR-406` | CR-143 |
+| `FR-407` | functional | P0 | implemented | Before the hiring-manager pass, a contributed claim that says designed or built is reworded to contributed to. An owned claim that says built stays. The warning still fires on the original wording | `AC-518` | CR-144 |
+| `AC-518` | acceptance | P0 | implemented | "I designed and built the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-407` | CR-144 |
 
 ### Data Traceability (DATA-006)
 

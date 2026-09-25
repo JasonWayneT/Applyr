@@ -447,6 +447,22 @@ class TestStage1Prerepair(unittest.TestCase):
 
         self.assertEqual(check_bypass_authorship(resume_text, updated), [])
 
+    def test_contributed_claim_does_not_say_designed_and_built(self) -> None:
+        """A contributed claim loses designed and built. An owned built line stays. Implements FR-407."""
+        owned = "Built the landing page that cut the drop-off."
+        contributed = "I designed and built the prompt orchestration for content generation."
+        letter = f"Dear Hiring Manager,\n\n{contributed}\n\nBest regards,\n\nName\n"
+        resume = f"## PROFESSIONAL EXPERIENCE\n* {owned}\n"
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(any(row["rule_id"] == "LW-028" for row in result["applied"]))
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        resume_text = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn("I contributed to the prompt orchestration", updated)
+        self.assertNotIn("designed and built", updated)
+        self.assertIn(owned, resume_text)
+
 
 if __name__ == "__main__":
     unittest.main()

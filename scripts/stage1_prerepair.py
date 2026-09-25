@@ -351,6 +351,67 @@ def _collapse_hedged_100k_text(text: str) -> str:
     return "".join(pieces)
 
 
+_OWNERSHIP_TO_CONTRIBUTED = re.compile(
+    r"\b(?:designed and built|built and designed|designed|built)\b",
+    re.IGNORECASE,
+)
+
+
+def soften_contributed_ownership(folder: Path) -> list[dict[str, str]]:
+    """Reword a contributed claim that uses designed or built.
+
+    The warning still fires on the original wording. An owned claim is left
+    unchanged. Implements FR-407.
+    """
+    from submission_linter import check_attribution_verb_strength, collect_fidelity_hard_blocks
+
+    resume_path = folder / "Resume.md"
+    letter_path = folder / "CoverLetter.md"
+    resume = resume_path.read_text(encoding="utf-8") if resume_path.is_file() else ""
+    letter = letter_path.read_text(encoding="utf-8") if letter_path.is_file() else ""
+    hits = check_attribution_verb_strength(resume, letter)
+    if not hits:
+        return []
+    new_resume = resume
+    new_letter = letter
+    applied: list[dict[str, str]] = []
+    resume_changes: list[dict[str, str]] = []
+    letter_changes: list[dict[str, str]] = []
+    for hit in hits:
+        match = re.search(r'"([^"]+)"\s*$', hit.message or "")
+        if not match:
+            continue
+        unit = match.group(1)
+        if not _OWNERSHIP_TO_CONTRIBUTED.search(unit):
+            continue
+        revised = _OWNERSHIP_TO_CONTRIBUTED.sub("contributed to", unit)
+        if revised == unit:
+            continue
+        if unit in new_resume:
+            new_resume = new_resume.replace(unit, revised, 1)
+            resume_changes.append({"from": unit, "to": revised})
+            applied.append({"rule_id": "LW-028", "file": "Resume.md", "from": unit, "to": revised})
+        elif unit in new_letter:
+            new_letter = new_letter.replace(unit, revised, 1)
+            letter_changes.append({"from": unit, "to": revised})
+            applied.append(
+                {"rule_id": "LW-028", "file": "CoverLetter.md", "from": unit, "to": revised}
+            )
+    if not applied:
+        return []
+    before_ids = {item.rule_id for item in collect_fidelity_hard_blocks(resume, letter)}
+    after_ids = {item.rule_id for item in collect_fidelity_hard_blocks(new_resume, new_letter)}
+    if after_ids - before_ids:
+        return []
+    if new_resume != resume and resume_path.is_file():
+        resume_path.write_text(new_resume, encoding="utf-8")
+        _resync_provenance(folder, "resume", resume_changes)
+    if new_letter != letter and letter_path.is_file():
+        letter_path.write_text(new_letter, encoding="utf-8")
+        _resync_provenance(folder, "cover_letter", letter_changes)
+    return applied
+
+
 def rewrite_bypass_ingestion(folder: Path) -> list[dict[str, str]]:
     """Rename an ingestion phrase in the 40% drop-off story.
 
@@ -896,6 +957,8 @@ def apply_mechanical_fixes(
     for change in drop_uncited_units(folder):
         applied.append(change)
     for change in rewrite_bypass_ingestion(folder):
+        applied.append(change)
+    for change in soften_contributed_ownership(folder):
         applied.append(change)
     for change in drop_blocked_units(folder):
         applied.append(change)

@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 30 drops an opening sentence that repeats six or more words from the posting when another opening sentence stays (FR-419). A one-sentence hook is left alone. The warning still fires on the original wording. Holdout 18 does not qualify. It parked at the hiring-manager pass on the 10th folder. The pair warning and the audience warnings were already accepted. The open warning was the hook. Queue restore count was 0. Start holdout 19 after this commit, then holdout 20 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 31 rewords build on a contributed claim to contributed to (FR-420). An owned claim that says built stays. Holdout 19 does not qualify. It parked at the hiring-manager pass on the 2nd folder. The verb was build, on a contributed claim. Queue restore count was 0. Start holdout 20 after this commit, then holdout 21 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 31 — build
+
+1. OBSERVE: holdout 19 parked at the hiring-manager pass on the 2nd folder. The warning was LW-028. The verb was build.
+2. ROOT CAUSE: CONFIRMED. The rewrite caught built and design. It did not catch build.
+3. EXPLORE: accept the warning, or reword the verb.
+4. CHOOSE: reword the verb. An owned built line stays.
+5. IMPLEMENT: the ownership rewrite in `scripts/stage1_prerepair.py` now includes build.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 27 tests. A copy of the parked letter no longer trips the warning.
+7. CONFIRM: holdout 20 has not run. This is not definition of done.
 
 ## Iteration 30 — hook paraphrase
 

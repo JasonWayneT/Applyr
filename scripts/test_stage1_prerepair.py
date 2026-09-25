@@ -479,6 +479,22 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertNotIn("design", updated.lower())
         self.assertIn(owned, resume_text)
 
+    def test_contributed_claim_does_not_say_build(self) -> None:
+        """A contributed claim loses build. An owned built line stays. Implements FR-420."""
+        owned = "Built the landing page that cut the drop-off."
+        contributed = "I build the prompt orchestration for content generation."
+        letter = f"Dear Hiring Manager,\n\n{contributed}\n\nBest regards,\n\nName\n"
+        resume = f"## PROFESSIONAL EXPERIENCE\n* {owned}\n"
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        result = prerepair.apply_mechanical_fixes(self.folder, we_text=_WE)
+        self.assertTrue(any(row["rule_id"] == "LW-028" for row in result["applied"]))
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        resume_text = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn("I contributed to the prompt orchestration", updated)
+        self.assertNotIn("build", updated.lower())
+        self.assertIn(owned, resume_text)
+
     def test_cited_backlog_claim_is_dropped(self) -> None:
         """A bullet that cites ACC-103 and says the backlog was resolved is removed. Implements FR-408."""
         blocked = "Resolved an inherited penetration-test security backlog by grouping the open items."

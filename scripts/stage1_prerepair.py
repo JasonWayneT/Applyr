@@ -381,16 +381,16 @@ def _collapse_hedged_100k_text(text: str) -> str:
 
 
 _OWNERSHIP_TO_CONTRIBUTED = re.compile(
-    r"\b(?:designed and built|built and designed|designing|designed|design|built)\b",
+    r"\b(?:designed and built|built and designed|designing|designed|design|built|build)\b",
     re.IGNORECASE,
 )
 
 
 def soften_contributed_ownership(folder: Path) -> list[dict[str, str]]:
-    """Reword a contributed claim that uses designed or built.
+    """Reword a contributed claim that uses design, built, or build.
 
     The warning still fires on the original wording. An owned claim is left
-    unchanged. Implements FR-407.
+    unchanged. Implements FR-407 / FR-420.
     """
     from submission_linter import check_attribution_verb_strength, collect_fidelity_hard_blocks
 

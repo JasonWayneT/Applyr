@@ -40,6 +40,7 @@
 - A hiring-manager read bound to the previous file bytes is rebuilt after this pass rewrites the documents. The hash check stays (CR-154 / FR-417).
 - A country list and a geography use of distributed are removed when the posting never asks. A line about distributed data systems stays (CR-155 / FR-418).
 - An opening sentence that repeats six or more words from the posting is dropped when another opening sentence stays. A one-sentence hook stays (CR-156 / FR-419).
+- A contributed claim that says build is reworded to contributed to. An owned claim that says built stays (CR-157 / FR-420).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

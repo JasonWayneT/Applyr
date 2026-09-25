@@ -1097,6 +1097,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-528` | acceptance | P0 | implemented | A read whose resume hash no longer matches is replaced by a read that validates. A valid read is left as it is. An open pair warning blocks the rebuild | `FR-417` | CR-154 |
 | `FR-418` | functional | P0 | implemented | A country list and a geography use of distributed are removed when the posting never asks. A line about distributed data systems stays. A posting that asks for distributed work keeps the line. The warning still fires on the original wording | `AC-529` | CR-155 |
 | `AC-529` | acceptance | P0 | implemented | Engineering teams across the U.S., Israel, and India becomes engineering teams on the delivery expectations. Distributed stakeholders becomes stakeholders. Distributed data systems stays | `FR-418` | CR-155 |
+| `FR-419` | functional | P0 | implemented | An opening sentence that repeats six or more words from the posting is dropped when another opening sentence stays. A one-sentence hook is left alone. The warning still fires on the original wording | `AC-530` | CR-156 |
+| `AC-530` | acceptance | P0 | implemented | A two-sentence opening loses the sentence that repeats the posting. The other sentence stays. A one-sentence opening is unchanged | `FR-419` | CR-156 |
 
 ### Data Traceability (DATA-006)
 

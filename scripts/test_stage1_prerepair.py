@@ -695,6 +695,53 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertEqual(applied, [])
         self.assertIn("Israel", (self.folder / "Resume.md").read_text(encoding="utf-8"))
 
+    def test_paraphrased_hook_sentence_is_dropped(self) -> None:
+        """An opening sentence that repeats the posting is dropped. Implements FR-419."""
+        from submission_linter import check_hook_jd_paraphrase
+
+        kept = "The renewal date was the real constraint on the roadmap."
+        copied = (
+            "The team ships event marketing content and operational "
+            "experiences across the lifecycle."
+        )
+        letter = (
+            "Dear Hiring Manager,\n\n"
+            f"{kept} {copied}\n\n"
+            "At Cision, the contact records stayed current.\n\n"
+            "Best regards,\n\nName\n"
+        )
+        jd = (
+            "Own event marketing content and operational experiences across "
+            "the lifecycle for the platform.\n"
+        )
+        (self.folder / "Resume.md").write_text("# Name\n\n## PROFESSIONAL SUMMARY\nStay.\n", encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "Original_JD.txt").write_text(jd, encoding="utf-8")
+        self.assertTrue(check_hook_jd_paraphrase(letter, jd))
+        applied = prerepair.break_hook_jd_paraphrase(self.folder)
+        self.assertTrue(any(row["rule_id"] == "LW-011" for row in applied))
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertIn(kept, updated)
+        self.assertNotIn("event marketing content", updated)
+        self.assertEqual(check_hook_jd_paraphrase(updated, jd), [])
+
+    def test_one_sentence_hook_is_left_alone(self) -> None:
+        """A hook with only the copied sentence is not cut down to nothing. Implements FR-419."""
+        copied = (
+            "The team ships event marketing content and operational "
+            "experiences across the lifecycle."
+        )
+        letter = f"Dear Hiring Manager,\n\n{copied}\n\nBest regards,\n\nName\n"
+        jd = (
+            "Own event marketing content and operational experiences across "
+            "the lifecycle for the platform.\n"
+        )
+        (self.folder / "Resume.md").write_text("# Name\n", encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "Original_JD.txt").write_text(jd, encoding="utf-8")
+        self.assertEqual(prerepair.break_hook_jd_paraphrase(self.folder), [])
+        self.assertIn("event marketing content", (self.folder / "CoverLetter.md").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

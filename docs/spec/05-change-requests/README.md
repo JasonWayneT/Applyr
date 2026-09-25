@@ -89,6 +89,7 @@
 | CR-153 | A contributed claim does not say design | **Implemented** (2026-09-24) — `FR-416`, `AC-527` — [spec](CR-153-contributed-not-design.md) |
 | CR-154 | A rewritten document gets a new hiring-manager read | **Implemented** (2026-09-24) — `FR-417`, `AC-528` — [spec](CR-154-refresh-stale-hm-read.md) |
 | CR-155 | Unasked geography leaves the draft | **Implemented** (2026-09-24) — `FR-418`, `AC-529` — [spec](CR-155-unasked-geography-removed.md) |
+| CR-156 | A copied opening sentence is dropped | **Implemented** (2026-09-24) — `FR-419`, `AC-530` — [spec](CR-156-copied-hook-sentence-dropped.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

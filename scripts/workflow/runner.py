@@ -1974,11 +1974,13 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
         soften_contributed_ownership,
         strip_unverified_partner_clauses,
         extend_thin_cover,
+        break_hook_jd_paraphrase,
     )
 
     rewrite_bypass_ingestion(Path(folder))
     soften_contributed_ownership(Path(folder))
     strip_unverified_partner_clauses(Path(folder))
+    break_hook_jd_paraphrase(Path(folder))
     extend_thin_cover(Path(folder))
     findings: list[dict[str, Any]] = []
     lint_results = submission_linter.lint_folder(folder)

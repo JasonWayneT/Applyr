@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 29 removes a country list and a geography use of distributed when the posting never asks (FR-418). A line about distributed data systems stays. The warning still fires on the original wording. Holdout 17 does not qualify. It failed Stage 1 on the 10th folder. Queue restore count was 0. Start holdout 18 after this commit, then holdout 19 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 30 drops an opening sentence that repeats six or more words from the posting when another opening sentence stays (FR-419). A one-sentence hook is left alone. The warning still fires on the original wording. Holdout 18 does not qualify. It parked at the hiring-manager pass on the 10th folder. The pair warning and the audience warnings were already accepted. The open warning was the hook. Queue restore count was 0. Start holdout 19 after this commit, then holdout 20 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 30 — hook paraphrase
+
+1. OBSERVE: holdout 18 parked at the hiring-manager pass on the 10th folder. The open warning was LW-011.
+2. ROOT CAUSE: CONFIRMED. The opening repeats seven words from the posting. The hook has a second sentence that does not.
+3. EXPLORE: accept the warning, or drop the copied sentence.
+4. CHOOSE: drop the copied sentence. A one-sentence hook stays. The warning still fires on the original wording.
+5. IMPLEMENT: `break_hook_jd_paraphrase` in `scripts/stage1_prerepair.py`, also called at the start of the hiring-manager pass.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 26 tests. A copy of the parked letter no longer trips the check and stays at 234 words.
+7. CONFIRM: holdout 19 has not run. This is not definition of done.
 
 ## Iteration 29 — unasked geography
 

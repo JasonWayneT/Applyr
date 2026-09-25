@@ -1352,6 +1352,47 @@ _GEO_SCOPE_WORD = re.compile(
 )
 
 
+def break_hook_jd_paraphrase(folder: Path) -> list[dict[str, str]]:
+    """Drop an opening sentence that repeats six or more words from the posting.
+
+    Another opening sentence stays. A one-sentence hook is left alone. The
+    warning still fires on the original wording. Implements FR-419.
+    """
+    from submission_linter import (
+        _extract_hook,
+        check_hook_jd_paraphrase,
+        find_shared_phrases,
+    )
+
+    letter_path = folder / "CoverLetter.md"
+    jd_path = folder / "Original_JD.txt"
+    if not letter_path.is_file() or not jd_path.is_file():
+        return []
+    letter = letter_path.read_text(encoding="utf-8")
+    jd_text = jd_path.read_text(encoding="utf-8")
+    if not check_hook_jd_paraphrase(letter, jd_text):
+        return []
+    hook = _extract_hook(letter)
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", hook) if part.strip()]
+    if len(sentences) < 2:
+        return []
+    kept = [
+        sentence
+        for sentence in sentences
+        if not find_shared_phrases(sentence, jd_text, min_len=6)
+    ]
+    if not kept or len(kept) == len(sentences):
+        return []
+    new_hook = " ".join(kept)
+    if hook not in letter:
+        return []
+    updated = letter.replace(hook, new_hook, 1)
+    if check_hook_jd_paraphrase(updated, jd_text):
+        return []
+    letter_path.write_text(updated, encoding="utf-8")
+    return [{"rule_id": "LW-011", "file": "CoverLetter.md", "from": hook, "to": new_hook}]
+
+
 def apply_mechanical_fixes(
     folder: Path,
     *,
@@ -1417,6 +1458,8 @@ def apply_mechanical_fixes(
     for change in strip_unverified_partner_clauses(folder):
         applied.append(change)
     for change in strip_unsolicited_geography(folder):
+        applied.append(change)
+    for change in break_hook_jd_paraphrase(folder):
         applied.append(change)
     for change in name_past_employer(folder):
         applied.append(change)

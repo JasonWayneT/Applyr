@@ -758,6 +758,21 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertEqual(prerepair.break_hook_jd_paraphrase(self.folder), [])
         self.assertIn("event marketing content", (self.folder / "CoverLetter.md").read_text(encoding="utf-8"))
 
+    def test_tilde_before_a_number_becomes_about(self) -> None:
+        """A tilde in front of a number becomes about. The digits stay. Implements FR-421."""
+        resume = "## PROFESSIONAL EXPERIENCE\n* Kept roughly the footprint at ~200 databases and ~25,000 rows.\n"
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nAt Cision, the work stayed.\n\nBest regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        applied = prerepair.expand_tilde_numbers(self.folder)
+        self.assertTrue(any(row["rule_id"] == "LW-009" for row in applied))
+        updated = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn("about 200", updated)
+        self.assertIn("about 25,000", updated)
+        self.assertNotIn("~", updated)
+
 
 if __name__ == "__main__":
     unittest.main()

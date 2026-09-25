@@ -1393,6 +1393,25 @@ def break_hook_jd_paraphrase(folder: Path) -> list[dict[str, str]]:
     return [{"rule_id": "LW-011", "file": "CoverLetter.md", "from": hook, "to": new_hook}]
 
 
+def expand_tilde_numbers(folder: Path) -> list[dict[str, str]]:
+    """Rewrite a tilde in front of a number to about.
+
+    The digits stay. The warning still fires on the tilde. Implements FR-421.
+    """
+    applied: list[dict[str, str]] = []
+    for name in ("Resume.md", "CoverLetter.md"):
+        path = folder / name
+        if not path.is_file():
+            continue
+        original = path.read_text(encoding="utf-8")
+        updated = re.sub(r"~(?=\d)", "about ", original)
+        if updated == original:
+            continue
+        path.write_text(updated, encoding="utf-8")
+        applied.append({"rule_id": "LW-009", "file": name, "from": "~", "to": "about "})
+    return applied
+
+
 def apply_mechanical_fixes(
     folder: Path,
     *,
@@ -1460,6 +1479,8 @@ def apply_mechanical_fixes(
     for change in strip_unsolicited_geography(folder):
         applied.append(change)
     for change in break_hook_jd_paraphrase(folder):
+        applied.append(change)
+    for change in expand_tilde_numbers(folder):
         applied.append(change)
     for change in name_past_employer(folder):
         applied.append(change)

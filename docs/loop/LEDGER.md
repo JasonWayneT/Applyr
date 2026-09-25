@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 31 rewords build on a contributed claim to contributed to (FR-420). An owned claim that says built stays. Holdout 19 does not qualify. It parked at the hiring-manager pass on the 2nd folder. The verb was build, on a contributed claim. Queue restore count was 0. Start holdout 20 after this commit, then holdout 21 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 32 rewrites a tilde in front of a number to about (FR-421). The digits stay. Holdout 20 does not qualify. It parked at the hiring-manager pass on the 19th folder. The warning was LW-009. The tokens were ~200 and ~25,000. Queue restore count was 0. Start holdout 21 after this commit, then holdout 22 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 32 — tilde
+
+1. OBSERVE: holdout 20 parked at the hiring-manager pass on the 19th folder. The open warning was LW-009.
+2. ROOT CAUSE: CONFIRMED. The resume put a tilde in front of 200 and in front of 25,000.
+3. EXPLORE: accept the warning, or write the number as about.
+4. CHOOSE: write about. The digits stay. The warning still fires on the tilde.
+5. IMPLEMENT: `expand_tilde_numbers` in `scripts/stage1_prerepair.py`, also called at the start of the hiring-manager pass.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 28 tests. A copy of the parked resume no longer has a tilde in front of a number.
+7. CONFIRM: holdout 21 has not run. This is not definition of done.
 
 ## Iteration 31 — build
 

@@ -1,8 +1,8 @@
 {
-  "iteration": 31,
+  "iteration": 32,
   "phase": "LOOP",
-  "current_issue_id": "CR-157",
-  "next_action": "FR-420 rewords build on a contributed claim to contributed to. An owned claim that says built stays. Holdout 19 does not qualify. It parked on that verb. Start holdout 20 after this commit, then holdout 21 with no pipeline change. Definition of done is not met.",
+  "current_issue_id": "CR-158",
+  "next_action": "FR-421 rewrites a tilde in front of a number to about. The digits stay. Holdout 20 does not qualify. It parked on that warning at the 19th folder. Start holdout 21 after this commit, then holdout 22 with no pipeline change. Definition of done is not met.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

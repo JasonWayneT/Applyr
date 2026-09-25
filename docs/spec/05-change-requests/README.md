@@ -81,6 +81,7 @@
 | CR-145 | A cited contradiction is removed | **Implemented** (2026-09-24) — `FR-408`, `AC-519` — [spec](CR-145-cited-contradiction-removed.md) |
 | CR-146 | Ownership alone is not unused evidence | **Implemented** (2026-09-24) — `FR-409`, `AC-520` — [spec](CR-146-ownership-not-proof.md) |
 | CR-147 | An overlong letter loses an uncited sentence | **Implemented** (2026-09-24) — `FR-410`, `AC-521` — [spec](CR-147-cover-fits-one-page.md) |
+| CR-148 | A thin letter gains a cited sentence | **Implemented** (2026-09-24) — `FR-411`, `AC-522` — [spec](CR-148-thin-letter-cited-sentence.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

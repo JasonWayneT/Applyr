@@ -1,8 +1,8 @@
 {
-  "iteration": 21,
+  "iteration": 22,
   "phase": "LOOP",
-  "current_issue_id": "CR-147",
-  "next_action": "FR-410 drops an uncited cover sentence when the letter is over 2800 characters. The limit stays. Holdout 9 does not qualify. Start holdout 10 after this commit, then holdout 11 with no pipeline change. Definition of done is not met.",
+  "current_issue_id": "CR-148",
+  "next_action": "FR-411 adds a cited resume sentence when a cover letter is under 220 words. The floor stays. Holdout 10 does not qualify. Start holdout 11 after this commit, then holdout 12 with no pipeline change. Definition of done is not met.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

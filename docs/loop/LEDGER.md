@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 21 drops an uncited cover sentence when the letter is over one page (FR-410). The 2800 character limit stays. The only past-employer sentence stays. Holdout 9 does not qualify. It failed Stage 1 at 2976 characters. Queue restore count was 0. Start holdout 10 after this commit, then holdout 11 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 22 adds a cited resume sentence when a cover letter is under 220 words (FR-411). The floor stays. The letter does not pass 450 words or 2800 characters. Holdout 10 does not qualify. It parked at the hiring-manager pass on a 172-word letter. Queue restore count was 0. Start holdout 11 after this commit, then holdout 12 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 22 — thin letter
+
+1. OBSERVE: holdout 10 parked at the hiring-manager pass. The warning was LW-001. The body was 172 words.
+2. ROOT CAUSE: CONFIRMED. The letter was under the 220-word floor. Eleven cited resume bullets were unused.
+3. EXPLORE: lower the floor, or add a cited sentence from the resume.
+4. CHOOSE: add a cited sentence. The floor stays 220.
+5. IMPLEMENT: `extend_thin_cover` in `scripts/stage1_prerepair.py`, also called at the start of the hiring-manager pass.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 19 tests. A copy of the parked letter went from 172 words to 244.
+7. CONFIRM: holdout 11 has not run. This is not definition of done.
 
 ## Iteration 21 — cover length
 

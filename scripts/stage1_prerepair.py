@@ -947,6 +947,94 @@ def trim_cover_to_page(folder: Path) -> list[dict[str, str]]:
     return applied
 
 
+def _cover_body_words(letter: str) -> int:
+    """Return the cover-letter word count the length warning uses."""
+    from submission_linter import _word_count
+
+    body = letter.split("Dear Hiring Manager,", 1)[-1] if "Dear Hiring Manager," in letter else letter
+    return _word_count(body)
+
+
+def extend_thin_cover(folder: Path) -> list[dict[str, str]]:
+    """Add a cited resume sentence when the letter is under 220 words.
+
+    The sentence is a bullet that already has a cite. The letter stops at the
+    first sentence that reaches the floor, and it does not pass 450 words or
+    2800 characters. Implements FR-411.
+    """
+    from cover_phrasing import CHAR_MAX
+    from submission_linter import collect_fidelity_hard_blocks
+
+    letter_path = folder / "CoverLetter.md"
+    resume_path = folder / "Resume.md"
+    prov_path = folder / "claim_provenance.json"
+    if not letter_path.is_file() or not resume_path.is_file() or not prov_path.is_file():
+        return []
+    letter = letter_path.read_text(encoding="utf-8")
+    if "Best regards," not in letter or _cover_body_words(letter) >= 220:
+        return []
+    provenance = _load_provenance(folder)
+    if not provenance:
+        return []
+    resume = resume_path.read_text(encoding="utf-8")
+    applied: list[dict[str, str]] = []
+    used: set[str] = set()
+    while _cover_body_words(letter) < 220:
+        choice: tuple[str, list[str]] | None = None
+        for row in provenance.get("resume_claims") or []:
+            if not isinstance(row, dict):
+                continue
+            bullet = str(row.get("bullet") or "").strip()
+            claim_ids = [str(item) for item in (row.get("claim_ids") or []) if str(item).strip()]
+            key = _normalize_provenance_unit(bullet)
+            if not bullet or not claim_ids or not key or key in used:
+                continue
+            if key in _normalize_provenance_unit(letter):
+                used.add(key)
+                continue
+            employer = ""
+            for heading, bullets in _experience_roles(resume):
+                if any(_normalize_provenance_unit(item) == key for item in bullets):
+                    for name, pattern in _PAST_EMPLOYER_HEADS:
+                        if pattern.search(heading):
+                            employer = name
+                            break
+            sentence = _employer_sentence(employer, bullet) if employer else bullet.strip()
+            if not sentence.endswith("."):
+                sentence += "."
+            trial = letter.replace("Best regards,", sentence + "\n\nBest regards,", 1)
+            if _cover_body_words(trial) > 450 or len(trial) > CHAR_MAX:
+                used.add(key)
+                continue
+            before_ids = {
+                item.rule_id for item in collect_fidelity_hard_blocks(resume, letter, provenance)
+            }
+            after_ids = {
+                item.rule_id for item in collect_fidelity_hard_blocks(resume, trial, provenance)
+            }
+            if after_ids - before_ids:
+                used.add(key)
+                continue
+            choice = (sentence, claim_ids)
+            used.add(key)
+            break
+        if choice is None:
+            break
+        sentence, claim_ids = choice
+        letter = letter.replace("Best regards,", sentence + "\n\nBest regards,", 1)
+        rows = provenance.get("cover_letter_claims")
+        if not isinstance(rows, list):
+            rows = []
+            provenance["cover_letter_claims"] = rows
+        rows.append({"sentence": sentence, "claim_ids": claim_ids})
+        applied.append({"rule_id": "LW-001", "file": "CoverLetter.md", "from": "", "to": sentence})
+    if not applied:
+        return []
+    letter_path.write_text(letter, encoding="utf-8")
+    prov_path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+    return applied
+
+
 def anchor_uncited_employer(folder: Path) -> list[dict[str, str]]:
     """Add a cited employer sentence when every employer mention is uncited.
 
@@ -1120,6 +1208,8 @@ def apply_mechanical_fixes(
     for change in name_past_employer(folder):
         applied.append(change)
     for change in trim_cover_to_page(folder):
+        applied.append(change)
+    for change in extend_thin_cover(folder):
         applied.append(change)
     return {
         "applied": applied,

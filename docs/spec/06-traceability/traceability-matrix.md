@@ -565,3 +565,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | `FR-408` / `AC-519` | CR-145 | Remove a cited contradiction the drop could not see | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-409` / `AC-520` | CR-146 | Treat ownership alone as generic overlap | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py`, `scripts/test_author_from_packet.py` | implemented |
 | `FR-410` / `AC-521` | CR-147 | Drop an uncited cover sentence when the letter exceeds 2800 characters | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-411` / `AC-522` | CR-148 | Add a cited resume sentence when the letter is under 220 words | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |

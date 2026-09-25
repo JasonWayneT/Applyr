@@ -31,6 +31,7 @@
 - A resume bullet that cites a fact and contradicts it is removed. A neighboring bullet stays (CR-145 / FR-408).
 - A required line that shares only the word ownership with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite (CR-146 / FR-409).
 - A cover letter over 2800 characters loses an uncited sentence until it fits one page. The limit stays (CR-147 / FR-410).
+- A cover letter under 220 words gains a cited resume sentence. The floor stays (CR-148 / FR-411).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

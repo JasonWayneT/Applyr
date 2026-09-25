@@ -540,6 +540,41 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertIn(cited, updated)
         self.assertNotIn("not a cited fact", updated)
 
+    def test_thin_letter_gains_a_cited_sentence(self) -> None:
+        """A letter under 220 words gains one cited resume sentence. Implements FR-411."""
+        bullet = "Kept the planning cadence " + "for the platform team " * 55
+        bullet = bullet.strip()
+        if not bullet.endswith("."):
+            bullet += "."
+        cited = "At Cision, the short line stays."
+        letter = (
+            "Dear Hiring Manager,\n\n"
+            f"{cited}\n\n"
+            "Best regards,\n\nName\n"
+        )
+        resume = (
+            "## PROFESSIONAL EXPERIENCE\n"
+            "### Product Manager | Cision | 2018 - 2024\n"
+            f"* {bullet}\n"
+        )
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        (self.folder / "claim_provenance.json").write_text(
+            json.dumps(
+                {
+                    "resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-102"]}],
+                    "cover_letter_claims": [{"sentence": cited, "claim_ids": ["ACC-101"]}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        applied = prerepair.extend_thin_cover(self.folder)
+        self.assertTrue(any(row["rule_id"] == "LW-001" for row in applied))
+        updated = (self.folder / "CoverLetter.md").read_text(encoding="utf-8")
+        self.assertGreaterEqual(prerepair._cover_body_words(updated), 220)
+        self.assertLessEqual(prerepair._cover_body_words(updated), 450)
+        self.assertIn("planning cadence", updated)
+
 
 if __name__ == "__main__":
     unittest.main()

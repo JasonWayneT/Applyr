@@ -570,3 +570,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | `FR-413` / `AC-524` | CR-150 | Treat knowledge alone as generic overlap | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py`, `scripts/test_author_from_packet.py` | implemented |
 | `FR-414` / `AC-525` | CR-151 | Remove an unverified tool from a competencies row | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-415` / `AC-526` | CR-152 | Remove high-leverage and rewrite standalone leverage to use | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-416` / `AC-527` | CR-153 | Reword design on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |

@@ -1091,6 +1091,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-525` | acceptance | P0 | implemented | "Data Extraction, Python, QA, SQL" becomes a row without Python. A roadmap epics bullet stays | `FR-414` | CR-151 |
 | `FR-415` | functional | P0 | implemented | A summary that says high-leverage loses that compound. Standalone leverage becomes use. data-driven stays | `AC-526` | CR-152 |
 | `AC-526` | acceptance | P0 | implemented | "structured, high-leverage product solutions" becomes "structured product solutions". "data-driven" stays. "leverage the support tickets" becomes "use the support tickets" | `FR-415` | CR-152 |
+| `FR-416` | functional | P0 | implemented | A contributed claim that says design is reworded to contributed to. An owned claim that says built stays. The warning still fires on the original wording | `AC-527` | CR-153 |
+| `AC-527` | acceptance | P0 | implemented | "I design the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-416` | CR-153 |
 
 ### Data Traceability (DATA-006)
 

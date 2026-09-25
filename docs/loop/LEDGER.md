@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 26 removes high-leverage and rewrites standalone leverage to use (FR-415). data-driven stays. Holdout 14 does not qualify. It failed Stage 1 because a summary said high-leverage. Queue restore count was 0. Start holdout 15 after this commit, then holdout 16 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 27 rewords design on a contributed claim to contributed to (FR-416). An owned claim that says built stays. Holdout 15 does not qualify. It parked because a letter used design for that claim. The pair warning and the audience warning on that folder are the ones the hiring-manager pass already accepts once this warning is gone. Queue restore count was 0. Start holdout 16 after this commit, then holdout 17 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 27 — design
+
+1. OBSERVE: holdout 15 parked at the hiring-manager pass on the 3rd folder. The warning was LW-028. The verb was design.
+2. ROOT CAUSE: CONFIRMED. The rewrite caught designed and built. It did not catch design.
+3. EXPLORE: accept the warning, or reword the verb.
+4. CHOOSE: reword the verb. An owned built line stays.
+5. IMPLEMENT: the ownership rewrite in `scripts/stage1_prerepair.py` now includes design.
+6. EVALUATE: the contributed-claim tests passed. A copy of the parked letter no longer trips the warning.
+7. CONFIRM: holdout 16 has not run. This is not definition of done.
 
 ## Iteration 26 — leverage
 

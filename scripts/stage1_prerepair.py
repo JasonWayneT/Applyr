@@ -381,7 +381,7 @@ def _collapse_hedged_100k_text(text: str) -> str:
 
 
 _OWNERSHIP_TO_CONTRIBUTED = re.compile(
-    r"\b(?:designed and built|built and designed|designed|built)\b",
+    r"\b(?:designed and built|built and designed|designing|designed|design|built)\b",
     re.IGNORECASE,
 )
 

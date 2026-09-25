@@ -1095,6 +1095,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-527` | acceptance | P0 | implemented | "I design the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-416` | CR-153 |
 | `FR-417` | functional | P0 | implemented | A hiring-manager read bound to the previous file bytes is rebuilt after this pass rewrites the documents. The hash check stays. An open warning other than the read is not closed here | `AC-528` | CR-154 |
 | `AC-528` | acceptance | P0 | implemented | A read whose resume hash no longer matches is replaced by a read that validates. A valid read is left as it is. An open pair warning blocks the rebuild | `FR-417` | CR-154 |
+| `FR-418` | functional | P0 | implemented | A country list and a geography use of distributed are removed when the posting never asks. A line about distributed data systems stays. A posting that asks for distributed work keeps the line. The warning still fires on the original wording | `AC-529` | CR-155 |
+| `AC-529` | acceptance | P0 | implemented | Engineering teams across the U.S., Israel, and India becomes engineering teams on the delivery expectations. Distributed stakeholders becomes stakeholders. Distributed data systems stays | `FR-418` | CR-155 |
 
 ### Data Traceability (DATA-006)
 

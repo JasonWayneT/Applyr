@@ -1258,6 +1258,100 @@ def keep_required_hedges(folder: Path) -> list[dict[str, str]]:
     return applied
 
 
+def strip_unsolicited_geography(folder: Path) -> list[dict[str, str]]:
+    """Remove geography the posting never asked for.
+
+    A line about distributed data systems stays. The warning still fires on
+    the original wording. Implements FR-418.
+    """
+    from submission_linter import (
+        _JD_GEOGRAPHY_ASKED_RE,
+        _UNSOLICITED_GEOGRAPHY_RE,
+        _geography_body_start_line,
+        collect_fidelity_hard_blocks,
+    )
+
+    jd_path = folder / "Original_JD.txt"
+    if not jd_path.is_file():
+        return []
+    jd_text = jd_path.read_text(encoding="utf-8")
+    if _JD_GEOGRAPHY_ASKED_RE.search(jd_text):
+        return []
+    applied: list[dict[str, str]] = []
+    resume_path = folder / "Resume.md"
+    letter_path = folder / "CoverLetter.md"
+    originals = {
+        "Resume.md": resume_path.read_text(encoding="utf-8") if resume_path.is_file() else "",
+        "CoverLetter.md": letter_path.read_text(encoding="utf-8") if letter_path.is_file() else "",
+    }
+    updated = dict(originals)
+    doc_changes: dict[str, list[dict[str, str]]] = {"Resume.md": [], "CoverLetter.md": []}
+    doc_types = {"Resume.md": "resume", "CoverLetter.md": "cover_letter"}
+    for name, text in originals.items():
+        if not text or not _UNSOLICITED_GEOGRAPHY_RE.search(text):
+            continue
+        start = _geography_body_start_line(text, doc_types[name])
+        kept_lines: list[str] = []
+        for index, line in enumerate(text.splitlines(), start=1):
+            if index < start or not _UNSOLICITED_GEOGRAPHY_RE.search(line):
+                kept_lines.append(line)
+                continue
+            stripped = _GEO_LOCATION_PHRASE.sub("", line)
+            stripped = _GEO_DISTRIBUTED.sub("", stripped)
+            stripped = _GEO_COUNTRY.sub("", stripped)
+            stripped = _GEO_SCOPE_WORD.sub("", stripped)
+            stripped = re.sub(r"\s{2,}", " ", stripped)
+            stripped = re.sub(r"\s+,", ",", stripped)
+            stripped = re.sub(r",\s*,", ",", stripped)
+            stripped = re.sub(r"\s+([.!?])", r"\1", stripped).rstrip()
+            if stripped == line:
+                kept_lines.append(line)
+                continue
+            if not stripped.endswith((".", "!", "?")) and line.rstrip().endswith((".", "!", "?")):
+                stripped += "."
+            kept_lines.append(stripped)
+            applied.append({"rule_id": "LW-039", "file": name, "from": line.strip(), "to": stripped.strip()})
+            doc_changes[name].append({"from": line.strip(), "to": stripped.strip()})
+        updated[name] = "\n".join(kept_lines).rstrip() + "\n"
+    if not applied:
+        return []
+    before_ids = {
+        item.rule_id
+        for item in collect_fidelity_hard_blocks(originals["Resume.md"], originals["CoverLetter.md"])
+    }
+    after_ids = {
+        item.rule_id
+        for item in collect_fidelity_hard_blocks(updated["Resume.md"], updated["CoverLetter.md"])
+    }
+    if after_ids - before_ids:
+        return []
+    for name, path in (("Resume.md", resume_path), ("CoverLetter.md", letter_path)):
+        if updated[name] != originals[name] and path.is_file():
+            path.write_text(updated[name], encoding="utf-8")
+            _resync_provenance(folder, doc_types[name], doc_changes[name])
+    return applied
+
+
+_GEO_LOCATION_PHRASE = re.compile(
+    r"\s+across(?:\s+the\s+U\.S\.)?"
+    r"(?:,?\s*(?:and\s+)?(?:Budapest|India|Israel|Hungary))+",
+    re.IGNORECASE,
+)
+_GEO_DISTRIBUTED = re.compile(
+    r"\bdistributed\s+(?!(?:data|systems?|computing|architectures?|databases?|"
+    r"storage|queues?|processing|workloads?|services?|applications?|infrastructure)\b)",
+    re.IGNORECASE,
+)
+_GEO_COUNTRY = re.compile(
+    r"(?:,\s*|\s+and\s+)?\b(?:Budapest|India|Israel|Hungary)\b",
+    re.IGNORECASE,
+)
+_GEO_SCOPE_WORD = re.compile(
+    r"\b(?:global|worldwide|international)\s+",
+    re.IGNORECASE,
+)
+
+
 def apply_mechanical_fixes(
     folder: Path,
     *,
@@ -1321,6 +1415,8 @@ def apply_mechanical_fixes(
     for change in drop_blocked_units(folder):
         applied.append(change)
     for change in strip_unverified_partner_clauses(folder):
+        applied.append(change)
+    for change in strip_unsolicited_geography(folder):
         applied.append(change)
     for change in name_past_employer(folder):
         applied.append(change)

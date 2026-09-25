@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 28 rebuilds a hiring-manager read when this pass rewrote the files and the stored hashes no longer match (FR-417). The hash check stays. Holdout 16 does not qualify. It parked with the pair warning and the audience warnings already accepted. Policy passed. The stored read still hashed the previous resume bytes. Queue restore count was 0. Start holdout 17 after this commit, then holdout 18 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 29 removes a country list and a geography use of distributed when the posting never asks (FR-418). A line about distributed data systems stays. The warning still fires on the original wording. Holdout 17 does not qualify. It failed Stage 1 on the 10th folder. Queue restore count was 0. Start holdout 18 after this commit, then holdout 19 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 29 — unasked geography
+
+1. OBSERVE: holdout 17 failed Stage 1 on the 10th folder. The block was LW-039.
+2. ROOT CAUSE: CONFIRMED. The posting never asked for geography. One line named a country list. Another called stakeholders distributed.
+3. EXPLORE: exempt the wording, or remove it.
+4. CHOOSE: remove it. A line about distributed data systems stays. A posting that asks for distributed work keeps the line.
+5. IMPLEMENT: `strip_unsolicited_geography` in `scripts/stage1_prerepair.py`.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 24 tests. A copy of the failed resume no longer trips the check.
+7. CONFIRM: holdout 18 has not run. This is not definition of done.
 
 ## Iteration 28 — stale hiring-manager read
 

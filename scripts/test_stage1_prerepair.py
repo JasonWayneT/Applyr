@@ -631,6 +631,70 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertIn("data-driven", updated)
         self.assertIn("use the support tickets", updated)
 
+    def test_unsolicited_geography_is_removed(self) -> None:
+        """A posting that never asks for geography loses that wording. Implements FR-418."""
+        from submission_linter import _UNSOLICITED_GEOGRAPHY_RE, check_unsolicited_geography
+
+        location = (
+            "Translated business requirements into user stories, aligning "
+            "engineering teams across the U.S., Israel, and India on "
+            "standardized delivery expectations."
+        )
+        distributed = (
+            "Worked cross-functionally to align distributed stakeholders "
+            "and evaluate vendor solutions."
+        )
+        architecture = "Owned the roadmap for distributed data systems."
+        resume = (
+            "## PROFESSIONAL SUMMARY\n"
+            f"{distributed}\n"
+            "The second sentence stays.\n"
+            "The third sentence stays.\n"
+            "## PROFESSIONAL EXPERIENCE\n"
+            f"* {location}\n"
+            f"* {architecture}\n"
+        )
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nAt Cision, the work stayed.\n\nBest regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        (self.folder / "Original_JD.txt").write_text(
+            "Remote (USA). Product manager for a software platform.\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(_UNSOLICITED_GEOGRAPHY_RE.search(location))
+        self.assertTrue(_UNSOLICITED_GEOGRAPHY_RE.search(distributed))
+        applied = prerepair.strip_unsolicited_geography(self.folder)
+        self.assertTrue(any(row["rule_id"] == "LW-039" for row in applied))
+        updated = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertIn("aligning engineering teams on standardized delivery expectations.", updated)
+        self.assertNotIn("Israel", updated)
+        self.assertNotIn("India", updated)
+        self.assertIn("align stakeholders", updated)
+        self.assertNotIn("distributed stakeholders", updated)
+        self.assertIn("distributed data systems", updated)
+        self.assertEqual(check_unsolicited_geography(updated, "Remote (USA).", "resume"), [])
+
+    def test_geography_stays_when_the_posting_asks(self) -> None:
+        """A posting that asks for distributed work keeps the line. Implements FR-418."""
+        line = "Aligned engineering teams across the U.S., Israel, and India."
+        (self.folder / "Resume.md").write_text(
+            "## PROFESSIONAL EXPERIENCE\n" f"* {line}\n",
+            encoding="utf-8",
+        )
+        (self.folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nAt Cision, the work stayed.\n\nBest regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        (self.folder / "Original_JD.txt").write_text(
+            "Distributed teams across regions.\n",
+            encoding="utf-8",
+        )
+        applied = prerepair.strip_unsolicited_geography(self.folder)
+        self.assertEqual(applied, [])
+        self.assertIn("Israel", (self.folder / "Resume.md").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -92,6 +92,7 @@
 | CR-156 | A copied opening sentence is dropped | **Implemented** (2026-09-24) — `FR-419`, `AC-530` — [spec](CR-156-copied-hook-sentence-dropped.md) |
 | CR-157 | A contributed claim does not say build | **Implemented** (2026-09-24) — `FR-420`, `AC-531` — [spec](CR-157-contributed-not-build.md) |
 | CR-158 | A tilde in front of a number becomes about | **Implemented** (2026-09-24) — `FR-421`, `AC-532` — [spec](CR-158-tilde-number-becomes-about.md) |
+| CR-159 | Communication alone is not proof | **Implemented** (2026-09-24) — `FR-422`, `AC-533` — [spec](CR-159-communication-overlap.md) |
 
 **Note:** CR-053/054/055 supersede the scoring policy set by CR-039 (transferable-skills-over-domain
 gate) — domain fit is being reinstated as a bounded scored signal rather than ignored. If CR-039's

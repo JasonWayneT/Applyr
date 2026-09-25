@@ -363,6 +363,9 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         # Live miss 2026-09-24: a scaling excerpt matched a software-analysis line
         # on the single word "knowledge".
         "knowledge",
+        # Live miss 2026-09-24: an executive excerpt matched a required line
+        # on the single word "communication".
+        "communication",
         "make",
         "made",
         "managed",

@@ -622,6 +622,36 @@ class TestOptimizationBarSoftGapHonesty(unittest.TestCase):
             ok, lines = _check_optimization_bar_provenance(folder)
             self.assertTrue(ok, lines)
 
+    def test_communication_alone_does_not_require_a_cite(self):
+        """A required line that shares only communication is not unused evidence. Implements FR-422."""
+        from author_from_packet import _check_optimization_bar_provenance
+
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            packet = {
+                **_READY_PACKET,
+                "soft_gaps": [],
+                "evidence_map": [
+                    {
+                        "jd_item": "Strong communication with stakeholders across the organization.",
+                        "bucket": "required",
+                        "claim_ids": ["ACC-109-EXEC"],
+                    }
+                ],
+                "excerpts": {
+                    "ACC-109-EXEC": "Executive communication on the roadmap priorities."
+                },
+            }
+            (folder / "authoring_packet.json").write_text(
+                json.dumps(packet), encoding="utf-8"
+            )
+            (folder / "claim_provenance.json").write_text(
+                json.dumps({"resume_claims": [], "cover_letter_claims": []}),
+                encoding="utf-8",
+            )
+            ok, lines = _check_optimization_bar_provenance(folder)
+            self.assertTrue(ok, lines)
+
     def test_distinctive_overlap_still_requires_a_cite(self):
         from author_from_packet import _check_optimization_bar_provenance
 

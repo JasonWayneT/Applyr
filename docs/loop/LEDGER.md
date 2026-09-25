@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 32 rewrites a tilde in front of a number to about (FR-421). The digits stay. Holdout 20 does not qualify. It parked at the hiring-manager pass on the 19th folder. The warning was LW-009. The tokens were ~200 and ~25,000. Queue restore count was 0. Start holdout 21 after this commit, then holdout 22 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 33 treats the single word communication as generic overlap (FR-422). A real shared term still requires the cite. Holdout 21 does not qualify. It failed Stage 1 on the 6th folder. The only shared word was communication. Queue restore count was 0. Start holdout 22 after this commit, then holdout 23 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 33 — communication overlap
+
+1. OBSERVE: holdout 21 failed Stage 1 on the 6th folder. The block was unused required evidence for ACC-109-EXEC.
+2. ROOT CAUSE: CONFIRMED. The only shared word was communication.
+3. EXPLORE: attach the unused id, or stop treating that one word as proof.
+4. CHOOSE: stop treating that one word as proof. A real shared term still requires the cite.
+5. IMPLEMENT: communication is a generic overlap token in `scripts/build_authoring_packet.py`.
+6. EVALUATE: the communication test, the knowledge test, and the distinctive-overlap test passed. The failed folder's cite check now passes.
+7. CONFIRM: holdout 22 has not run. This is not definition of done.
 
 ## Iteration 32 — tilde
 

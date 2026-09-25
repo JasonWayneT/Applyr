@@ -1103,6 +1103,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-531` | acceptance | P0 | implemented | "I build the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-420` | CR-157 |
 | `FR-421` | functional | P0 | implemented | A tilde in front of a number is rewritten to about. The digits stay. The warning still fires on the tilde | `AC-532` | CR-158 |
 | `AC-532` | acceptance | P0 | implemented | ~200 becomes about 200. ~25,000 becomes about 25,000 | `FR-421` | CR-158 |
+| `FR-422` | functional | P0 | implemented | A required line that shares only the word communication with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite | `AC-533` | CR-159 |
+| `AC-533` | acceptance | P0 | implemented | A required line whose only shared word is communication passes. A line that shares a real term still fails when that claim is unused | `FR-422` | CR-159 |
 
 ### Data Traceability (DATA-006)
 

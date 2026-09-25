@@ -42,6 +42,7 @@
 - An opening sentence that repeats six or more words from the posting is dropped when another opening sentence stays. A one-sentence hook stays (CR-156 / FR-419).
 - A contributed claim that says build is reworded to contributed to. An owned claim that says built stays (CR-157 / FR-420).
 - A tilde in front of a number is rewritten to about. The digits stay (CR-158 / FR-421).
+- A required line that shares only the word communication with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite (CR-159 / FR-422).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

@@ -576,3 +576,4 @@ A cited bullet or cover sentence that is itself a hard block is removed before r
 | `FR-419` / `AC-530` | CR-156 | Drop an opening sentence that repeats the posting | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-420` / `AC-531` | CR-157 | Reword build on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
 | `FR-421` / `AC-532` | CR-158 | Rewrite a tilde in front of a number to about | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-422` / `AC-533` | CR-159 | Treat communication alone as generic overlap | `scripts/build_authoring_packet.py`, `scripts/test_author_from_packet.py` | implemented |

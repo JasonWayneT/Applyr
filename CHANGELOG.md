@@ -34,6 +34,7 @@
 - A cover letter under 220 words gains a cited resume sentence. The floor stays (CR-148 / FR-411).
 - A line about distributed data systems does not fail the geography check. A team distributed across offices still does (CR-149 / FR-412).
 - A required line that shares only the word knowledge with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite (CR-150 / FR-413).
+- A competencies row that names a tool outside the career history loses that token. The other tools stay (CR-151 / FR-414).
 
 ### Changed
 - Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).

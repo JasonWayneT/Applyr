@@ -575,6 +575,25 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertLessEqual(prerepair._cover_body_words(updated), 450)
         self.assertIn("planning cadence", updated)
 
+    def test_competency_row_loses_an_unverified_tool(self) -> None:
+        """Python leaves the competencies row. The other tools stay. Implements FR-414."""
+        resume = (
+            "## CORE COMPETENCIES\n"
+            "Data Extraction, Python, QA, SQL\n"
+            "## PROFESSIONAL EXPERIENCE\n"
+            "* Drafted roadmap epics for the release.\n"
+        )
+        letter = "Dear Hiring Manager,\n\nAt Cision, the planning work stayed.\n\nBest regards,\n\nName\n"
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(letter, encoding="utf-8")
+        applied = prerepair.strip_unverified_tools(self.folder)
+        self.assertTrue(any(row["rule_id"] == "LR-026" for row in applied))
+        updated = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertNotIn("Python", updated)
+        self.assertIn("QA", updated)
+        self.assertIn("SQL", updated)
+        self.assertIn("roadmap epics", updated)
+
 
 if __name__ == "__main__":
     unittest.main()

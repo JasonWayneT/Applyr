@@ -1087,6 +1087,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-523` | acceptance | P0 | implemented | "distributed data systems" does not fire. "distributed across offices" still fires | `FR-412` | CR-149 |
 | `FR-413` | functional | P0 | implemented | A required line that shares only the word knowledge with a mapped claim does not fail Stage 1 when that claim is unused. A line that shares a real term still requires the cite | `AC-524` | CR-150 |
 | `AC-524` | acceptance | P0 | implemented | Overlap of only knowledge is empty. A Google Analytics migration line still requires its cite | `FR-413` | CR-150 |
+| `FR-414` | functional | P0 | implemented | A competencies row that names a tool outside the career history loses that token. The other tools stay. The agile noun epic stays | `AC-525` | CR-151 |
+| `AC-525` | acceptance | P0 | implemented | "Data Extraction, Python, QA, SQL" becomes a row without Python. A roadmap epics bullet stays | `FR-414` | CR-151 |
 
 ### Data Traceability (DATA-006)
 

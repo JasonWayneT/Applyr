@@ -616,6 +616,90 @@ def _cover_body_sentences(text: str) -> list[str]:
     ]
 
 
+def _tidy_tool_gap(line: str) -> str:
+    """Close the hole left when a tool token is removed from a line."""
+    text = re.sub(r"[ \t]{2,}", " ", line)
+    text = re.sub(r"\s+,", ",", text)
+    text = re.sub(r",(?:\s*,)+", ",", text)
+    text = re.sub(r"\(\s*\)", "", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    text = re.sub(r",\s*$", "", text.rstrip())
+    text = re.sub(r"^(\s*(?:[\*\-]\s+)?)[,\s]+", r"\1", text)
+    return text.rstrip()
+
+
+def strip_unverified_tools(folder: Path) -> list[dict[str, str]]:
+    """Remove a tool the career history does not contain.
+
+    A competencies row loses the token and keeps the other tools. The agile
+    noun epic stays. Implements FR-414.
+    """
+    from blocked_tools import epic_match_is_agile_noun, hard_blocked_tools_lint_alternation
+    from submission_linter import collect_fidelity_hard_blocks
+
+    pattern = re.compile(
+        rf"\b({hard_blocked_tools_lint_alternation()})\b",
+        re.IGNORECASE,
+    )
+    applied: list[dict[str, str]] = []
+    originals: dict[str, str] = {}
+    updated: dict[str, str] = {}
+    for name in ("Resume.md", "CoverLetter.md"):
+        path = folder / name
+        if not path.is_file():
+            continue
+        original = path.read_text(encoding="utf-8")
+        originals[name] = original
+        kept: list[str] = []
+        for line in original.splitlines():
+            revised = line
+            while True:
+                match = None
+                for candidate in pattern.finditer(revised):
+                    token = candidate.group(0)
+                    if token.lower().rstrip("s") == "epic" and epic_match_is_agile_noun(
+                        revised, candidate.start(), candidate.end()
+                    ):
+                        continue
+                    match = candidate
+                    break
+                if match is None:
+                    break
+                revised = _tidy_tool_gap(revised[: match.start()] + revised[match.end() :])
+            if revised.strip() in {"*", "-", "* *", "- -"} or (
+                line.strip().startswith(("* ", "- ")) and len(revised.split()) < 4
+            ):
+                applied.append({"rule_id": "LR-026", "file": name, "from": line, "to": ""})
+                continue
+            if revised != line:
+                applied.append({"rule_id": "LR-026", "file": name, "from": line, "to": revised})
+            kept.append(revised)
+        text = "\n".join(kept)
+        if original.endswith("\n"):
+            text += "\n"
+        updated[name] = text
+    if not applied:
+        return []
+    resume = updated.get("Resume.md", originals.get("Resume.md", ""))
+    letter = updated.get("CoverLetter.md", originals.get("CoverLetter.md", ""))
+    provenance = _load_provenance(folder)
+    before_ids = {
+        item.rule_id
+        for item in collect_fidelity_hard_blocks(
+            originals.get("Resume.md", ""), originals.get("CoverLetter.md", ""), provenance
+        )
+    }
+    after_ids = {
+        item.rule_id for item in collect_fidelity_hard_blocks(resume, letter, provenance)
+    }
+    if after_ids - before_ids:
+        return []
+    for name, text in updated.items():
+        if text != originals.get(name):
+            (folder / name).write_text(text, encoding="utf-8")
+    return applied
+
+
 def drop_blocked_units(folder: Path) -> list[dict[str, str]]:
     """Remove a cited bullet or sentence that is itself a hard block.
 
@@ -1200,6 +1284,8 @@ def apply_mechanical_fixes(
     for change in rewrite_bypass_ingestion(folder):
         applied.append(change)
     for change in soften_contributed_ownership(folder):
+        applied.append(change)
+    for change in strip_unverified_tools(folder):
         applied.append(change)
     for change in drop_blocked_units(folder):
         applied.append(change)

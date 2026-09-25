@@ -1,8 +1,8 @@
 {
-  "iteration": 24,
+  "iteration": 25,
   "phase": "LOOP",
-  "current_issue_id": "CR-150",
-  "next_action": "FR-413 treats knowledge alone as generic overlap. Holdout 12 does not qualify. The geography folder completed. Start holdout 13 after this commit, then holdout 14 with no pipeline change. Definition of done is not met.",
+  "current_issue_id": "CR-151",
+  "next_action": "FR-414 removes an unverified tool from a competencies row. The other tools stay. Holdout 13 does not qualify. Start holdout 14 after this commit, then holdout 15 with no pipeline change. Definition of done is not met.",
   "branch": "loop/2026-09-23",
   "branch_point": "6c6837759667009d65253d471fca562d0b309eba",
   "started_at": "2026-09-23T21:28:00-07:00",

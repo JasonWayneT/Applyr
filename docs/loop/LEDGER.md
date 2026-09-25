@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 24 treats the single word knowledge as generic overlap (FR-413). A required line that shares a real term still requires the cite. Holdout 12 does not qualify. It failed Stage 1 because a software-analysis line and a scaling excerpt shared only that word. The geography folder from the previous run completed. Queue restore count was 0. Start holdout 13 after this commit, then holdout 14 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 25 removes an unverified tool from a competencies row (FR-414). The other tools stay. The agile noun epic stays. Holdout 13 does not qualify. It failed Stage 1 because a competencies row named Python. The same draft also had a geography warning and a specificity warning. Those are not fixed here. Queue restore count was 0. Start holdout 14 after this commit, then holdout 15 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 25 — unverified tool
+
+1. OBSERVE: holdout 13 failed Stage 1 at the 9th folder. One block was LR-026. The token was Python, in the competencies row.
+2. ROOT CAUSE: CONFIRMED. That tool is not in the career history. The row also named tools that are allowed.
+3. EXPLORE: add the tool to the career history, or remove the token.
+4. CHOOSE: remove the token. The other tools stay.
+5. IMPLEMENT: `strip_unverified_tools` in `scripts/stage1_prerepair.py`.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 20 tests. A copy of the failed row lost Python and kept SQL. LR-026 was clear after that.
+7. CONFIRM: holdout 14 has not run. This is not definition of done.
 
 ## Iteration 24 — knowledge overlap
 

@@ -7,17 +7,39 @@ from workflow.reviews import (
     ALL_DISPOSITIONS,
     BLOCKING_SEVERITIES,
     OVERRIDE_DISPOSITIONS,
+    REASONING_REQUIRED,
+    REASONING_MIN_CHARS,
+    parse_disposition,
 )
+from hm_review_contract import HM_DISALLOWED_DISPOSITIONS
+
+# hm.critical_read-specific: these dispositions are not allowed because
+# a hiring-manager read is always required and is not a mechanical check
+# that can misfire. Implements FR-319 / AC-417 (CR-112 Story 8.3).
+# Single source of truth: HM_DISALLOWED_DISPOSITIONS in hm_review_contract.py.
+HM_CRITICAL_READ_DISALLOWED = HM_DISALLOWED_DISPOSITIONS
 
 
 def evaluate_stage0(gate: dict[str, Any]) -> dict[str, Any]:
     """Map stage0_fit_gate.json business fields to a policy verdict.
 
-    Returns dict with keys: verdict (PASS|SKIP|FAIL), tier, decision, reasons.
+    Returns dict with keys: verdict (PASS|SKIP|FAIL|ALREADY_HANDLED), tier, decision, reasons.
     """
     tier = str(gate.get("tier") or "")
     decision = str(gate.get("decision") or "").upper()
     reasons: list[str] = []
+
+    # Implements FR-365 / AC-474. Decision wins over leftover tier=Skip on
+    # the Story 4.2 stub. Remapping ALREADY_HANDLED to SKIP is the hole.
+    if decision == "ALREADY_HANDLED":
+        reason = gate.get("notes") or "Same posting already handled"
+        reasons.append(str(reason))
+        return {
+            "verdict": "ALREADY_HANDLED",
+            "tier": tier,
+            "decision": "ALREADY_HANDLED",
+            "reasons": reasons,
+        }
 
     if tier == "Skip" or decision == "SKIP":
         reason = gate.get("skip_reason") or gate.get("notes") or "Stage 0 Skip"
@@ -113,13 +135,27 @@ def evaluate_truth_findings(
                 "reasons": reasons,
             }
         severity = str(item.get("severity") or "WARN").upper()
-        disp = by_id.get(fid)
-        if disp is None or disp == "":
+        disp_s, reasoning = parse_disposition(by_id.get(fid))
+        if disp_s is None or disp_s == "":
             open_ids.append(str(fid))
             continue
-        disp_s = str(disp).strip().upper()
         if disp_s not in ALL_DISPOSITIONS:
-            reasons.append(f"{fid}: invalid disposition {disp!r}")
+            reasons.append(f"{fid}: invalid disposition {by_id.get(fid)!r}")
+            return {
+                "verdict": "FAIL",
+                "integrity": "CLEAN",
+                "open_finding_ids": open_ids,
+                "reasons": reasons,
+            }
+        # hm.critical_read-specific: disallow NOT_APPLICABLE and FALSE_POSITIVE
+        # because a hiring-manager read is always required and is not a
+        # mechanical check that can misfire. Implements FR-319 / AC-417.
+        if str(fid) == "hm.critical_read" and disp_s in HM_CRITICAL_READ_DISALLOWED:
+            reasons.append(
+                f"{fid}: {disp_s} is not allowed for hm.critical_read — "
+                "a hiring-manager read is always required; use "
+                "ACCEPTED_AS_CORRECT with a structured hm_review artifact"
+            )
             return {
                 "verdict": "FAIL",
                 "integrity": "CLEAN",
@@ -140,15 +176,28 @@ def evaluate_truth_findings(
                 "open_finding_ids": open_ids,
                 "reasons": reasons,
             }
+        # Require substantive reasoning for dispositions that claim the
+        # finding was wrong or accept a risk (CR-110).
+        if disp_s in REASONING_REQUIRED:
+            if not reasoning or len(reasoning) < REASONING_MIN_CHARS:
+                open_ids.append(str(fid))
+                reasons.append(
+                    f"{fid}: {disp_s} requires reasoning "
+                    f"(>= {REASONING_MIN_CHARS} chars); "
+                    "use {\"disposition\": \"...\", \"reasoning\": \"...\"}"
+                )
+                continue
         if disp_s in OVERRIDE_DISPOSITIONS:
             any_override = True
 
     if open_ids:
+        detail = list(reasons)
+        detail.append(f"{len(open_ids)} finding(s) need disposition")
         return {
             "verdict": "NEEDS_DISPOSITION",
             "integrity": "CLEAN",
             "open_finding_ids": open_ids,
-            "reasons": [f"{len(open_ids)} finding(s) need disposition"],
+            "reasons": detail,
         }
 
     if reasons:

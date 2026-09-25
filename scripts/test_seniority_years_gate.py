@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Years boundary tests — FR-109 / CR-036 AC-119: 7 pass, 8 fail."""
+"""Years boundary tests. Implements FR-332 / AC-430 / CR-117.
+
+A range gates on its low end, the minimum the posting will accept.
+A single stated figure stays as-is. Age, company history, and tenure
+are not years-of-experience hits.
+"""
 from __future__ import annotations
 
 import os
 import sys
+import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -12,80 +18,122 @@ from seniority_gate import check_years_gate, parse_max_years_required
 PREFS = {"experience_range": {"min": 2, "max": 7}}
 
 
-def _assert(name: str, cond: bool, detail: str = "") -> int:
-    if cond:
-        print(f"  [PASS] {name}")
-        return 0
-    print(f"  [FAIL] {name} {detail}")
-    return 1
-
-
-def main() -> int:
-    print("VERIFY-YEARS: experience_range.max boundary (7 pass, 8 fail)")
-    failed = 0
-
-    cases_pass = [
-        ("4-7 years of product management experience", 7),
-        ("minimum 7 years of experience", 7),
-        ("7+ years of PM experience", 7),
-        ("3 or more years", 3),
-    ]
-    cases_fail = [
-        ("8 years of product management experience", 8),
-        ("minimum 8 years required", 8),
-        ("10+ years of experience", 10),
-        ("requires 8-12 years", 12),
-    ]
-
-    for jd, expected in cases_pass:
-        parsed = parse_max_years_required(jd)
+class TestYearsRangeLowEnd(unittest.TestCase):
+    def test_range_3_7_parses_low_end_and_passes(self) -> None:
+        """3-7 years is mid-level. The floor is 3, not 7."""
+        jd = "3-7 years of product management experience"
+        self.assertEqual(parse_max_years_required(jd), 3)
         ok, _ = check_years_gate(jd, PREFS)
-        failed += _assert(
-            f"pass: {jd[:40]!r}…",
-            ok and parsed == expected,
-            f"parsed={parsed} ok={ok}",
-        )
+        self.assertTrue(ok)
 
-    for jd, expected in cases_fail:
-        parsed = parse_max_years_required(jd)
+    def test_range_4_7_passes(self) -> None:
+        jd = "4-7 years of product management experience"
+        self.assertEqual(parse_max_years_required(jd), 4)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_range_5_7_passes(self) -> None:
+        jd = "5-7 years of product management experience"
+        self.assertEqual(parse_max_years_required(jd), 5)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_range_5_8_passes(self) -> None:
+        jd = "5-8 years of experience in product management"
+        self.assertEqual(parse_max_years_required(jd), 5)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_range_6_10_passes(self) -> None:
+        jd = "6-10 years of Product Management experience"
+        self.assertEqual(parse_max_years_required(jd), 6)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_range_4_6_parses_four_not_six(self) -> None:
+        jd = "4-6 years of product management experience"
+        self.assertEqual(parse_max_years_required(jd), 4)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_range_7_10_skips(self) -> None:
+        jd = "7-10 years of experience in product management"
+        self.assertEqual(parse_max_years_required(jd), 7)
         ok, reason = check_years_gate(jd, PREFS)
-        failed += _assert(
-            f"reject: {jd[:40]!r}…",
-            (not ok) and parsed == expected and "exceeds_max" in reason,
-            f"parsed={parsed} ok={ok} reason={reason}",
+        self.assertFalse(ok)
+        self.assertIn("exceeds_max", reason)
+
+    def test_range_8_12_skips_on_low_end(self) -> None:
+        jd = "requires 8-12 years"
+        self.assertEqual(parse_max_years_required(jd), 8)
+        ok, reason = check_years_gate(jd, PREFS)
+        self.assertFalse(ok)
+        self.assertIn("exceeds_max", reason)
+
+    def test_range_2_8_plus_uses_low_end(self) -> None:
+        """2-8+ is a range whose floor is 2, not an 8+ skip."""
+        jd = "2-8+ years of product management or software experience"
+        self.assertEqual(parse_max_years_required(jd), 2)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_single_seven_plus_still_skips(self) -> None:
+        jd = "7+ years of experience"
+        self.assertEqual(parse_max_years_required(jd), 7)
+        self.assertFalse(check_years_gate(jd, PREFS)[0])
+
+
+class TestYearsAgeAndHistory(unittest.TestCase):
+    def test_eighteen_years_of_age_is_not_a_hit(self) -> None:
+        jd = "Minimum Qualifications: Must be eighteen years of age or older."
+        self.assertIsNone(parse_max_years_required(jd))
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_company_tenure_fourteen_years_is_not_a_hit(self) -> None:
+        jd = (
+            "We have been delivering deep energy savings to our customers "
+            "for fourteen years, and we are now growing faster than ever."
         )
+        self.assertIsNone(parse_max_years_required(jd))
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
 
-    # Boundary: exactly 7 passes, 8 fails
-    ok7, _ = check_years_gate("7 years of experience required", PREFS)
-    ok8, reason8 = check_years_gate("8 years of experience required", PREFS)
-    failed += _assert("boundary 7 passes", ok7)
-    failed += _assert("boundary 8 fails", not ok8 and "8" in reason8)
+    def test_company_over_years_boilerplate_is_not_a_hit(self) -> None:
+        jd = (
+            "With over 20 years of experience building long-term client "
+            "relationships, System Soft Technologies is hiring."
+        )
+        self.assertIsNone(parse_max_years_required(jd))
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
 
-    # CR-055: incidental years in prose must not gate-kill
-    jackson = (
-        "The Jackson Laboratory celebrates 90 years of genetics research. "
-        "Requirements: 5+ years of product management experience."
-    )
-    parsed_j = parse_max_years_required(jackson)
-    ok_j, _ = check_years_gate(jackson, PREFS)
-    failed += _assert(
-        "jackson lab ignores 90-year history",
-        parsed_j == 5 and ok_j,
-        f"parsed={parsed_j} ok={ok_j}",
-    )
+    def test_apostrophe_years_experience(self) -> None:
+        jd = "10 years’ experience as a Product Manager"
+        self.assertEqual(parse_max_years_required(jd), 10)
 
-    civica = (
-        "Founded 21 years ago. Qualifications: minimum 4 years of PM experience."
-    )
-    parsed_c = parse_max_years_required(civica)
-    failed += _assert(
-        "civica ignores founded-years prose",
-        parsed_c == 4,
-        f"parsed={parsed_c}",
-    )
+    def test_spelled_out_twelve_years_experience(self) -> None:
+        jd = "Twelve+ years in product management"
+        self.assertEqual(parse_max_years_required(jd), 12)
 
-    return 1 if failed else 0
+    def test_years_in_product_management(self) -> None:
+        jd = "5 years in product management"
+        self.assertEqual(parse_max_years_required(jd), 5)
+
+    def test_word_range_five_to_seven_uses_low_end(self) -> None:
+        jd = "Five to seven years of product management experience"
+        self.assertEqual(parse_max_years_required(jd), 5)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_jackson_lab_ignores_history(self) -> None:
+        jd = (
+            "The Jackson Laboratory celebrates 90 years of genetics research. "
+            "Requirements: 5+ years of product management experience."
+        )
+        self.assertEqual(parse_max_years_required(jd), 5)
+        self.assertTrue(check_years_gate(jd, PREFS)[0])
+
+    def test_civica_ignores_founded_years(self) -> None:
+        jd = "Founded 21 years ago. Qualifications: minimum 4 years of PM experience."
+        self.assertEqual(parse_max_years_required(jd), 4)
+
+    def test_boundary_six_passes_seven_fails(self) -> None:
+        self.assertTrue(check_years_gate("6 years of experience required", PREFS)[0])
+        ok7, reason7 = check_years_gate("7 years of experience required", PREFS)
+        self.assertFalse(ok7)
+        self.assertIn("7", reason7)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    unittest.main()

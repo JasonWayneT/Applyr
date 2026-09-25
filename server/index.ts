@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import { logActivity } from './db.js';
 import { ARCHIVE_DIR, SUBMISSION_DIR } from './shared.js';
@@ -13,6 +15,9 @@ import sourcesRouter  from './routes/sources.js';
 import contactsRouter from './routes/contacts.js';
 import gmailSyncRouter from './routes/gmailSync.js';
 import llmUsageRouter from './routes/llmUsage.js';
+import reviewCenterRouter from './routes/reviewCenter.js';
+import pipelineQueueRouter from './routes/pipelineQueue.js';
+import { runSubmissionRouter } from './routes/runSubmission.js';
 import { startGmailSyncScheduler } from './services/gmailSyncScheduler.js';
 import { resetTheirstackCreditsIfNewMonth } from './services/theirstackCreditLedger.js';
 
@@ -31,10 +36,35 @@ const app  = express();
 const PORT = 3000;
 const HOST = process.env.APPLYR_HOST || '127.0.0.1';
 
+// CR-104 Epic 2: fail-closed when binding to all interfaces without an auth token.
+// Prevents silently running unprotected on a wide bind (0.0.0.0 / Tailscale / LAN).
+if (HOST !== '127.0.0.1' && HOST !== 'localhost' && !process.env.APPLYR_API_TOKEN) {
+  console.error(
+    `\n  FATAL: APPLYR_HOST="${HOST}" binds to a non-localhost address, but APPLYR_API_TOKEN is not set.\n` +
+    `  Set APPLYR_API_TOKEN to protect mutating routes, or unset APPLYR_HOST to bind localhost only.\n`
+  );
+  process.exit(1);
+}
+
 const corsOrigins = [
   /^http:\/\/localhost:\d+$/,
   /^http:\/\/127\.0\.0\.1:\d+$/,
 ];
+
+// CR-104 Epic 3: baseline Express hardening — Helmet for security headers,
+// rate limiting to cap abuse. Sized generously (300 req/min per IP) so the
+// app's own polling (5-10s intervals from multiple components) never trips.
+app.use(helmet());
+app.use(
+  '/api/',
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please slow down.' },
+  }),
+);
 
 app.use(cors({
   origin(origin, callback) {
@@ -55,6 +85,10 @@ app.use('/', sourcesRouter);
 app.use('/', contactsRouter);
 app.use('/', gmailSyncRouter);
 app.use('/', llmUsageRouter);
+app.use('/', reviewCenterRouter);
+app.use('/', pipelineQueueRouter);
+// Implements FR-316 / AC-413: authenticated backend access to the canonical CLI.
+app.use('/', runSubmissionRouter);
 
 app.listen(PORT, HOST, () => {
   console.log(`\n${'='.repeat(48)}`);

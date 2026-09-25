@@ -3,12 +3,19 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
+import tempfile
+import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from verify_submission import _check_packet_ats_contract, _check_pdf_parseability
+from verify_submission import (
+    _check_header_placeholders,
+    _check_packet_ats_contract,
+    _check_pdf_parseability,
+)
 
 
 RESUME = """# Alex Example
@@ -41,6 +48,36 @@ Alex Example
 
 def _pdf_result(text: str, returncode: int = 0):
     return mock.Mock(stdout=text, stderr="", returncode=returncode)
+
+
+class TestHeaderPlaceholders(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.folder)
+
+    def _write_resume(self, contact_line: str):
+        with open(os.path.join(self.folder, "Resume.md"), "w", encoding="utf-8") as f:
+            f.write(f"# Jason Taylor\n{contact_line}\n")
+
+    def test_clean_header_passes(self):
+        self._write_resume(
+            "San Diego, CA | 555-010-0100 | email@test.com | linkedin.com/in/test"
+        )
+        result = _check_header_placeholders(self.folder)
+        self.assertTrue(result["ok"])
+
+    def test_bracket_placeholder_fails(self):
+        self._write_resume("San Diego, CA | [phone] | [email] | [LinkedIn]")
+        result = _check_header_placeholders(self.folder)
+        self.assertFalse(result["ok"])
+
+    def test_blank_line2_fails(self):
+        with open(os.path.join(self.folder, "Resume.md"), "w", encoding="utf-8") as f:
+            f.write("# Jason Taylor\n\n")
+        result = _check_header_placeholders(self.folder)
+        self.assertFalse(result["ok"])
 
 
 def test_pdf_parseability_reports_clean_resume_fields(tmp_path):

@@ -5,7 +5,7 @@
 - Feature ID: `FEAT-005`
 - Status: implemented
 - Source artifacts: `BMAD-SRC-006`, `CR-007`
-- Related requirements: `FR-019`, `FR-020`, `FR-021`, `FR-022`, `FR-073`, `FR-074`, `FR-075`
+- Related requirements: `FR-019`, `FR-020`, `FR-021`, `FR-022`, `FR-073`, `FR-074`, `FR-075`, `FR-281`, `FR-284`, `DATA-002`, `DATA-003`, `DATA-004`
 
 ## Problem statement
 
@@ -33,6 +33,11 @@ AI tends to "hallucinate" or inflate metrics to match JDs. This creates a trust 
 | `FR-075` | `validate_hard_facts()` Document-Type Awareness | `doc_type` param; education check gated; Cision title auto-corrected; placeholder tokens stripped |
 | `FR-266` | ATS Retrieval Evidence | Receipt surfaces packet-supported terms, claim IDs, JD items, and resume presence |
 | `FR-267` | PDF Parser QA | Receipt checks identity, contact, structure, role fields, and letter boundaries in extracted PDF text |
+| `FR-281` | Asymmetric HARD safety | Rollout-flagged CR-108 policy prevents low-confidence or ungrounded Stage 0 HARD decisions from disqualifying |
+| `FR-284` | Attestation boundary | Implemented CR-108 separates user skill confirmation from authorable source-backed evidence |
+| `DATA-002` | Stage 0 checkpoint data | Implemented CR-108 persists item judgments and request hashes for safe resume |
+| `DATA-003` | Skill memory | Implemented CR-108 stores durable canonical skill decisions and evidence level |
+| `DATA-004` | Confirmation occurrences | Implemented CR-108 stores grouped pending questions by opportunity and requirement context |
 
 ## Design notes (CR-007 additions)
 
@@ -56,3 +61,5 @@ Scans the resume line by line. When a `##` or `###` header matches `_FORBIDDEN_S
 | `TEST-074` | `FR-074`, `AC-076` | integration | Guard run on resume with `## Core Competencies` section strips it; `# CANDIDATE NAME` header restored from `## CANDIDATE NAME` variant | verified |
 | `TEST-075` | `FR-075`, `AC-077` | integration | `validate_hard_facts(cl_text, master, doc_type='cover_letter')` produces zero "MISSING FACT: Education" warnings | verified |
 | `TEST-103` | `FR-266`, `FR-267`, `AC-339`–`AC-342` | unit/integration | Clean and missing-field fixtures produce WARN-only receipt details without changing `mechanically_verified` | implemented |
+| `TEST-108A` | `FR-281`, `AC-361` | unit | Low-confidence, invalid, and ungrounded HARD judgments cannot disqualify Stage 0 | proposed |
+| `TEST-108B` | `FR-284`, `AC-364` | integration | A skill confirmation without verified evidence cannot enter the authoring evidence map | proposed |

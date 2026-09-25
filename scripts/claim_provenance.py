@@ -89,7 +89,10 @@ def load_valid_claim_ids() -> tuple[set, set]:
     CR-094: Attribution / DO NOT CLAIM / tools ACC tokens in WE are not citable
     accomplishments. Subtract them so a draft cannot "cover" a DNC line by citing it.
     """
-    import we_acc_index as wai
+    try:
+        from . import we_acc_index as wai
+    except (ImportError, ValueError):
+        import we_acc_index as wai
 
     valid: set = set()
     disabled: set = set()
@@ -122,7 +125,38 @@ def load_valid_claim_ids() -> tuple[set, set]:
     return valid, disabled
 
 
+def ensure_provenance_company(folder: str) -> bool:
+    """Fill a blank provenance company from the Stage 0 gate.
+
+    The author often omits the field. The gate already has the company.
+    Returns True when it wrote. Does not invent a name. A missing gate
+    leaves the file alone.
+    """
+    path = os.path.join(folder, "claim_provenance.json")
+    gate_path = os.path.join(folder, "stage0_fit_gate.json")
+    if not os.path.isfile(path) or not os.path.isfile(gate_path):
+        return False
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        with open(gate_path, encoding="utf-8") as handle:
+            gate = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict) or data.get("company"):
+        return False
+    company = str((gate or {}).get("company") or "").strip() if isinstance(gate, dict) else ""
+    if not company:
+        return False
+    data["company"] = company
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+    return True
+
+
 def check_claim_provenance(folder: str) -> tuple[bool, list[str]]:
+    ensure_provenance_company(folder)
     path = os.path.join(folder, "claim_provenance.json")
     if not os.path.exists(path):
         return False, ["claim_provenance.json not found"]
@@ -175,6 +209,122 @@ def check_claim_provenance(folder: str) -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
+# Company name in a "### Title | Company | Dates" resume header -> master_claims.json's
+# "employer" slug for that same company (CLAUDE.md/AGENTS.md's 3 canonical career history
+# roles). Kept local to this module rather than imported from submission_linter.py's own
+# canonical_employers list (LR-020) since that list is keyed to display names for a lint
+# message, not to master_claims.json's employer slugs -- close enough to look shareable,
+# different enough to be a bug waiting to happen if the two silently drift apart.
+_EMPLOYER_HEADER_ALIASES = [
+    ("cision", ["cision"]),
+    ("sterkly", ["sterkly"]),
+    ("zero_to_sixty", ["zero to sixty", "zero_to_sixty"]),
+]
+
+_SECTION_HEADER_RE = re.compile(r"^###\s+(.+)$", re.MULTILINE)
+
+
+def _resume_sections_by_employer(resume_text: str) -> list[tuple[str, str]]:
+    """Split Resume.md's PROFESSIONAL EXPERIENCE into (employer_slug, section_body) pairs.
+    A "### ..." header whose company field doesn't match a canonical employer is skipped --
+    nothing in master_claims.json to cross-check it against."""
+    sections: list[tuple[str, str]] = []
+    headers = list(_SECTION_HEADER_RE.finditer(resume_text))
+    for i, m in enumerate(headers):
+        header_l = m.group(1).lower()
+        start = m.end()
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(resume_text)
+        employer = next(
+            (slug for slug, terms in _EMPLOYER_HEADER_ALIASES if any(t in header_l for t in terms)),
+            None,
+        )
+        if employer:
+            sections.append((employer, resume_text[start:end]))
+    return sections
+
+
+def _claim_employer(cid: str, claims: dict) -> str | None:
+    """Resolve a cited claim ID (own master_claims.json key, or the coarser project_id base
+    form) to its 'employer' field. None if unresolved or the claim carries no attribution."""
+    entry = claims.get(cid)
+    if not isinstance(entry, dict):
+        entry = next(
+            (
+                rec
+                for rec in claims.values()
+                if isinstance(rec, dict) and rec.get("project_id") == cid and not rec.get("disabled")
+            ),
+            None,
+        )
+    return (entry or {}).get("employer") or None
+
+
+def check_employer_attribution(folder: str) -> tuple[bool, list[str]]:
+    """Does every resume bullet's cited evidence actually belong to the employer whose role
+    section it was drafted under?
+
+    Why this exists (2026-08-31, Papigen): a real submission shipped two Sterkly bullets
+    grounded in claims tagged employer: cision in master_claims.json -- one rewrote a Cision
+    coaching story about one specific engineer into a generic "coached team members ...
+    architecture reviews" line; the other rewrote a Cision claim about studying a teammate's
+    AI system into an invented "applied AI tools to structure ticket creation" line the source
+    claim's own allowed_claims/prohibited_claims doesn't even license. check_claim_provenance()
+    above only confirms a cited ID exists and isn't disabled -- it never checks the ID was
+    cited under the right employer. This catches that specific gap mechanically: employer
+    field vs. resume section, no semantic judgment about bullet content required (that part
+    -- e.g. the ticket-creation invention -- still needs a real read, same limitation this
+    module's docstring already states for claim_provenance.json generally).
+    """
+    resume_path = os.path.join(folder, "Resume.md")
+    prov_path = os.path.join(folder, "claim_provenance.json")
+    if not os.path.exists(resume_path) or not os.path.exists(prov_path):
+        return True, []  # nothing to cross-check yet; check_claim_provenance already covers absence
+
+    resume_text = open(resume_path, encoding="utf-8").read()
+    sections = _resume_sections_by_employer(resume_text)
+    if not sections:
+        return True, []
+
+    try:
+        with open(prov_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return True, []
+    if not isinstance(data, dict):
+        return True, []
+
+    claims = _read_master_claims()
+    errors: list[str] = []
+
+    def _norm(s: str) -> str:
+        return " ".join(s.split())
+
+    for i, entry in enumerate(data.get("resume_claims") or []):
+        if not isinstance(entry, dict):
+            continue
+        bullet = entry.get("bullet")
+        claim_ids = entry.get("claim_ids")
+        if not bullet or not isinstance(claim_ids, list):
+            continue
+        bullet_norm = _norm(bullet)
+        section_employer = next(
+            (slug for slug, body in sections if bullet_norm in _norm(body)), None
+        )
+        if not section_employer:
+            continue  # bullet text drifted from Resume.md, or sits in an unrecognized section
+        for cid in claim_ids:
+            claim_employer = _claim_employer(cid, claims)
+            if claim_employer and claim_employer != section_employer:
+                errors.append(
+                    f"claim_provenance.json: resume_claims[{i}] ('{bullet[:70]}...') is drafted "
+                    f"under {section_employer} but cites '{cid}', whose ground truth in "
+                    f"master_claims.json is attributed to {claim_employer} -- employer "
+                    f"mismatch, likely misattributed to the wrong role"
+                )
+
+    return len(errors) == 0, errors
+
+
 def main() -> None:
     folders = sys.argv[1:]
     if not folders:
@@ -186,8 +336,11 @@ def main() -> None:
         folder = folder.rstrip("/\\")
         company = os.path.basename(folder)
         ok, errors = check_claim_provenance(folder)
+        emp_ok, emp_errors = check_employer_attribution(folder)
+        ok = ok and emp_ok
+        errors = errors + emp_errors
         if ok:
-            print(f"{company}: PASS -- every cited claim ID is real and active")
+            print(f"{company}: PASS -- every cited claim ID is real, active, and attributed to the right employer")
         else:
             any_failed = True
             print(f"{company}: FAIL")

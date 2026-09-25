@@ -1,4 +1,0 @@
-Company: ../../../evil_corp
-Title: Product Manager
-
-Requirements: Standard PM stuff.

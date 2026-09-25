@@ -1,0 +1,7 @@
+slug: accion_labs
+why: next sorted DEV slug after accertify that the jobs-table gate marks clear. nisum was a cooldown skip and did not draft.
+mode: practice
+folder: data/loop_runs/i1/accion_labs
+copied_bytes: 1623
+command: python scripts/run_submission.py data/loop_runs/i1/accion_labs --mode practice
+job text: not printed

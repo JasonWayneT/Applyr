@@ -102,6 +102,8 @@ This starts both the React frontend (Vite, usually port `5173` or `5174` if busy
 
 Open the **Local** URL printed by Vite (e.g. **[http://localhost:5173](http://localhost:5173)**). The UI proxies `/api` to the backend in dev.
 
+**Server bind address and auth (CR-104):** the backend defaults to `127.0.0.1` (localhost only). To bind all interfaces for Tailscale/phone access, set `APPLYR_HOST=0.0.0.0` — but then you **must** also set `APPLYR_API_TOKEN` to protect mutating routes; the server will refuse to start otherwise. When the token is set, the frontend needs `VITE_APPLYR_API_TOKEN` set to the same value so its API calls include the `X-Applyr-Token` header. API keys configured through Settings are masked (`••••••••` + last 4 chars) in API responses so they never leave the server in full.
+
 ### Troubleshooting empty UI or startup errors
 
 | Symptom | Fix |
@@ -156,6 +158,12 @@ Wait for Google Drive to finish syncing `data/`, then `npm run dev`. The app rea
 ## First-time configuration
 
 Complete these steps in order before running your first scout.
+
+### Pipeline LLM (CSV queue / `run_submission.py`)
+
+Stage 0 and Stage 1 use **Agy**. The queue worker sets `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`. Groq and Gemini API keys in Settings are leftover cascade code (`utils.call_llm`). Those keys are free-tier and do not currently serve production pipeline calls. That is expected. It is not "the LLM is off." Do not run a live worker pack with `APPLYR_STAGE0_CLOUD_LLM=1`. After Stage 0 PASS, a missing named tool is unused and does not pause. The employer name, a section-header fragment, and methodology nouns are chrome (CR-124). Dynamics and Delta Lake can stay in the reason list and are not claimed. They do not withhold the job (CR-125). Agy rubric scoring stays off until frozen parks fail closed (AC-464).
+
+The Settings → API table below is for scout research, Gmail, and the document editor, not the CSV queue.
 
 ### 1. Add your LLM provider
 
@@ -242,14 +250,52 @@ Live progress and source metrics (fetched, filtered, and passed counts), along w
 **CR-093 (2026-08-19): the entire fit-scoring engine was rebuilt and every older mechanism removed** — `scripts/structured_fit.py`, `scripts/fit_policy.py`, `scripts/batch_pipeline.py`'s `evaluate_job_fit()`, and `candidate_preferences.json`'s `min_fit_score` field are all gone. There is exactly one fit-scoring path now, and it only runs via `scripts/run_submission.py`'s Stage 0 (`scripts/build_stage0_fit_gate.py`):
 
 1. **Deterministic gates first (zero LLM):** DB cooldown/reapply history, prefs exclusion zones (people management, 0-to-1, revenue/billing, AI/ML ownership), title/location/years gates.
-2. **Per-requirement evidence judgment (`scripts/evidence_scale.py`):** one LLM call per required/preferred JD line, rating a 0–4 behaviorally-anchored evidence scale (no evidence → strong direct evidence) against retrieval-scoped excerpts of `workExperience.md`. A line only hard-gates (disqualifies outright) for an unbridgeable degree, a named regulated-domain requirement with its own years threshold, or a role-category exclusion — named tools/skills never gate on their own (spec-grounded fix for a real miss: a JD was previously rejected sight-unseen over one tool mention).
+2. **Per-requirement evidence judgment (`scripts/evidence_scale.py`):** one LLM call per required/preferred JD line, rating a 0–4 behaviorally-anchored evidence scale (no evidence → strong direct evidence) against retrieval-scoped excerpts of `workExperience.md`. Evidence context retrieval uses TF-IDF (rarity) weighting so chunks sharing rare, specific terms with the requirement rank higher. A line only hard-gates (disqualifies outright) for an unbridgeable degree, a named regulated-domain requirement with its own years threshold, or a role-category exclusion — named tools/skills never gate on their own (spec-grounded fix for a real miss: a JD was previously rejected sight-unseen over one tool mention).
    For multi-role local runs, set `STAGE0_BATCH_KEEP_ALIVE=1` to avoid the
    redundant post-role model purge. The next role still purges before loading
    Qwen, so the VRAM-safe Qwen/Gemma handoff is unchanged.
-3. **Deterministic weighted formula:** `compute_fit_score()` turns those per-item judgments into a single 0–100 score — no second LLM call.
-4. **Score bands from `data/fit_rubric_calibration.json`** (tracked in git, deliberately not `candidate_preferences.json` — a scoring-algorithm calibration constant isn't a personal job-search preference): `skip_floor` 40 and `tier1_floor` 65 decide Skip / Tier 2 / Tier 1. Jason locked those numbers 2026-08-20 (CR-093 Story 3.3). They are research-grounded, not yet calibrated against Applyr interview outcomes — see that file and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md`.
+3. **Deterministic weighted formula:** `compute_fit_score()` turns those per-item judgments into a single 0–100 score — no second LLM call. Includes repetition (+1, capped at 4) and hedge-language (-1, floored at 0) modifiers from spec Sec. 10, with all weights and confidence multipliers driven by `data/fit_rubric_calibration.json`.
+4. **Score bands from `data/fit_rubric_calibration.json`** (tracked in git, deliberately not `candidate_preferences.json` — a scoring-algorithm calibration constant isn't a personal job-search preference): `skip_floor` 40 and `tier1_floor` 65 decide Skip / Tier 2 / Tier 1. The file also holds the weighting model (required/preferred weights, confidence multipliers, repetition/hedge modifier config). Jason locked the score bands 2026-08-20 (CR-093 Story 3.3). They are research-grounded, not yet calibrated against Applyr interview outcomes — see that file and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md`.
 
 Full spec: `data/fit_rubric_spec.html` (the research this implements) and `docs/spec/05-change-requests/CR-093-evidence-scale-fit-engine.md` (the implementation + calibration record). `docs/spec/05-change-requests/CR-053-fit-rubric-overhaul.md` is superseded — read CR-093 instead.
+
+**Current CR-108 / CR-121 rollout:** Applyr's production Stage 0 evidence path is Agy (`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`, forced by `run_queue_worker.py`). A leftover Groq/Gemini `utils.call_llm` cascade still exists for tests (`APPLYR_STAGE0_CLOUD_LLM=1`). Settings free-tier Groq/Gemini keys do not serve production queue calls. That is expected, not a blocker. Review Center still handles skills absent from the profile. Live Groq/Gemini sampling is not the operator path.
+
+**Cost authorization (CR-112 Epic 7):** every model call carries an explicit
+cost class. Groq and Gemini default to `unknown` (never called) until either a
+paid allowlist plus positive budget and known estimate exists, or the operator
+certifies a free-tier-only route with a structured, expiring attestation
+(`freeTierAssertions` in the Settings → AI Usage blob: exact canonical
+statement, strict acknowledgement, 30-day expiry, `groq`/`gemini` only). With
+no eligible provider, Stage 0 pauses at `WAITING_FOR_INPUT` /
+`pause_kind=cost_authorization` without making any API call, and resumes via
+`stage0_cascade_import.json`, a valid attestation, or a paid allowlist. A
+certified free route can never fall back into a paid provider in the same
+chain.
+
+**Stage 0 learning (CR-114):** extraction fallback labels are runtime answers,
+not verified training data. `scripts/retrain_stage0.py` ignores the legacy
+`training_data_feedback.csv`, accepts only human-reviewed rows in
+`data/training_data_approved.csv` with reviewer/timestamp/source provenance,
+using columns `text,label,company,source_file,reviewed_by,reviewed_at`,
+and writes a candidate classifier plus company-held-out report. The live model
+is unchanged unless a separate promotion supplies a 30-JD, zero-false-skip
+human-reviewed replay report bound to the candidate hash. Applyr Stage 0
+classifier rules (buckets including leftover `junk`, checkable vs disposition
+culture split, evidence 0-4, HARD policy, item ids, fail-closed
+JSON) live in `scripts/stage0_classifier_contract.py`. Tools (Cursor, Claude,
+Codex, Agy, Groq, Gemini, local) only transport that packet. A leftover `junk`
+label is ATS chrome only and never becomes a culture hook. AI leftover evidence
+retrieval includes `data/aiProjects.md` when the line is about agents or LLMs.
+A subscription transport (`scripts/stage0_subscription_adapter.py`) defaults to
+native Agy print mode (`agy --print --json-schema --sandbox --new-project`) behind
+`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` and stays off until 5-10 JD actual-schema
+smoke and an adjudicated 30-JD replay pass.
+When the switch is on, leftover extraction and evidence batches use that
+transport and keep the CR-112 review pause; confident NLP routing is
+unchanged. Agy print mode reads the Applyr packet from `prompt.txt` in an
+isolated temp project, not the Applyr repo. Factory is
+excluded. Hosted-tool cost authorization and review pause remain in force.
 
 ### Drafting assets
 
@@ -351,7 +397,9 @@ scripts/
   Stage 0 / fit gates (Python) — workers under run_submission, not the default CLI entry:
     build_stage0_fit_gate.py — deterministic Stage 0 fit gate (orchestrator calls this)
     stage0_skip_ledger.py / stage0_placement.py — skip memory (URL then company+title) + pending_review/submissions/skipped folder moves (CR-091)
-    import_csv_to_submissions.py — CSV → data/pending_review/ (does not write submissions/)
+    import_csv_to_submissions.py — legacy CSV → pending_review wrapper (explicit paths only)
+    ingest_csv_queue.py / csv_ingest.py / pipeline_queue.py — CR-119 drop-folder ingest, quarantine, queued rows; POST /api/pipeline-queue/upload writes the same inbox
+    queue_claim.py / queue_lock.py / run_queue_worker.py — pack claim, per-slug OS lock, invoke run_submission.py {slug} --resume
     stage0_db_gate.py / stage0_prefs_gate.py — DB application-history and preferences sub-gates
     domain_gate.py / industry_gate.py / seniority_gate.py / solo_pm_gate.py / anchor_gate.py — individual hard gates
     evidence_scale.py — CR-093 evidence-scale fit engine (per-requirement 0-4 judgment, weighted formula, score bands from data/fit_rubric_calibration.json)
@@ -403,7 +451,8 @@ scripts/
     batch_pipeline.py       — DB/JD helper library only (CR-093, 2026-08-19: evaluate_job_fit()/process_single()/process_batch() and the whole old fit-scoring + --mode single|batch CLI removed; no longer directly executable)
     local_draft_stages.py   — stage-based local drafting, builds the Core Competencies section (FR-195)
     finalize_submission_job.py / reconcile_submissions.py — job finalization; archive/remove stale submission folders (FR-030)
-    audit_all_submissions.py / audit_and_improve.py / audit_improve_native.py — audit/improvement passes
+    audit_all_submissions.py — audit quality of all generated assets
+    audit_and_improve.py / audit_improve_native.py — legacy audit/improvement passes (retained per "keep code intact", not called by the live run_submission.py path; superseded by CR-074-084 packet authoring + Stage 2 review)
     regenerate_all_resumes.py / regenerate_all_cover_letters.py / regenerate_all_submissions.py — bulk regeneration utilities
     prefs_rollout.py / apply_gate_rollout.py — one-time gate-prefs migration (see Manual utilities below)
     research-engine.py / generate_experience_summary.py / ai_rewrite.py / utils.py / llm_stages.py — company intelligence lookups (Gemini-search, not on taskProviderOverrides), auto-generated scoring brief (overridable via Settings → AI Usage), LLM-powered manual editing (same), shared LLM-call/path/file-I/O helpers, legacy UI Draft per-stage provider map

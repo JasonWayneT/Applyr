@@ -1,3 +1,711 @@
+## [Unreleased] - 2026-09-23
+[DRAFT] A finished queue row is not a send decision. The author no longer receives a career sentence that was cut in front of its unit or its "engineering built" clause. A draft that changes that unit, invents a percent, takes the funnel, pastes a process note into Core Competencies, or calls the company Confidential is blocked. A required line scored zero no longer slips under the fit floor. An empty role, a letter that names no past employer, a data-model phrase, and a dropped "estimated" on the hedged figures are blocked. A required demand for depth in a field he has not worked in, such as wealth-management pricing, is skipped.
+
+### Fixed
+- Stage 1 no longer parks a draft for an unused claim when that claim does not share distinctive wording with the job line. A remote or travel posting term is not a proof obligation. A JD term already inside a cited bullet counts as supported. A term whose story was left out does not have to be stuffed into the resume. A repair that changes the blocking findings is kept. The previous draft is put back only when those findings did not change (FR-375 / FR-381).
+- An excerpt that cannot keep the unit on a number, or an engineering-built clause, is left out of the packet instead of being cut mid-fact. That cut is how $8,500 became "annually" and the landing page became Jason's funnel (CR-126 / FR-383).
+- A drafted $8,500 with the wrong unit or no unit, a percent the career spans do not contain, a percent applied to a different group than the career span (25% of customers written as platform usage or as a usage profile), a funnel line that does not credit engineering, a "did not happen" note in Core Competencies, and "Confidential is" in the letter are hard blocks (CR-126 / FR-384).
+- A classified required line with evidence 0 skips when the fit score is under 40, even if the qualification regex did not count it. A logistics-only extract with no such line still passes (CR-126 / FR-385).
+- An experience role with no bullet, a cover letter that never names Cision, Sterkly, or Zero To Sixty, a "data model" phrase, and a $1M to $3M or drafting-time line that drops "estimated" are hard blocks at Stage 2 (CR-127 / FR-386). The $8,500 unit check stays the one already added in CR-126.
+- A required line that demands deep or strong understanding of a vertical outside his background, such as wealth-management pricing, skips at Stage 0. "Develop a deep understanding," a preferred-only line, and a vertical already in domain experience do not. AUM is assets under management, not a product name (CR-128 / FR-387).
+- Those same hard blocks now fail Stage 1 verify, so repair runs before the hiring-manager pass. A block that first appeared at Stage 2 left the unsupervised run parked, because that pass cannot rewrite the draft (CR-127 / FR-386).
+- An uncited sentence is no longer deleted when that deletion creates a new hard block, such as removing the only sentence that names a past employer (CR-127 / FR-386).
+- When the letter names no past employer, Stage 1 copies one cited resume bullet into a sentence that names that employer and cites the same claim. The repair prompt also forbids deleting the only employer mention (CR-127 / FR-386).
+- When a drafting-time line or a $1M to $3M line is missing the word estimated, Stage 1 inserts it on that same sentence and updates the cite. The proof is no longer dropped as uncited after a repair rewrites it (CR-127 / FR-386).
+- A sentence that says a migration finished without disruption is blocked unless it keeps the estimate that about 5 percent of customers never flipped (CR-127 / FR-386).
+- A sentence that cites a real fact and says something that fact does not say is a hard block at Stage 1 and Stage 2. "Portability over custom tagging" cited to ACC-155 fails. The same words cited to a different fact do not. A high resume score does not clear it (CR-130 / FR-390).
+- "Profile portability over custom tagging" is a hard block even when the sentence cites a different fact, or cites nothing. The true line is that custom tagging took priority (CR-131 / FR-391).
+- "QA lead" is a hard block even when the sentence cites a different fact, or cites nothing. He walked test suites. He did not hold that title (CR-132 / FR-392).
+- "Hundreds of client databases" is a hard block on any cite. The career entry is roughly 200 SQL databases (CR-133 / FR-393).
+- A sentence that says support escalations were reduced is a hard block on any cite. The career file does not say that. A Jira priority formula that says streamline does not match this check (CR-135 / FR-395).
+- "Release cadence" is a hard block on any cite. The career file does not use that phrase. A deletion cadence does not match (CR-137 / FR-399).
+- "Testing analytics" is a hard block on any cite. The career file does not use that phrase. Pendo product analytics does not match (CR-138 / FR-400).
+- A capitalized Visible after a space is a hard block on any cite. That is the codename. Lowercase visible does not match (CR-139 / FR-401).
+- A cited resume bullet or cover-letter sentence that is itself a hard block is removed before repair. The line stays if removing it would create a new hard block, such as the only sentence that names a past employer. A line whose only blocked tool word is epic stays. The check is not loosened and no hedge is invented (CR-140 / FR-402).
+- A cover sentence that states no personal fact is removed when it is a hard block, including a forbidden buzzword. A neighboring sentence that names a past employer stays (CR-140 / AC-513).
+- A hedged `$100,000` is rewritten to `$100K` before the metric check. An unhedged `$100,000` stays. The precise number is not added to the approved list (CR-141 / FR-403).
+- When the only past-employer sentence is uncited, Stage 1 adds a cited resume sentence that names that employer and removes the uncited sentence (CR-141 / FR-404).
+- A clause that names a partner group outside the verified list is removed before the hiring-manager pass. A clause that names engineering stays. The warning still fires on the original wording (CR-142 / FR-405).
+- A 40% contact-data drop-off sentence that calls the story an ingestion pipeline is rewritten to ETL path. The 40% outcome stays. The same block now fails Stage 1 (CR-143 / FR-406).
+- A contributed claim that says designed or built is reworded to contributed to before the hiring-manager pass. An owned claim that says built stays (CR-144 / FR-407).
+- A resume bullet that cites a fact and contradicts it is removed. A neighboring bullet stays (CR-145 / FR-408).
+- A required line that shares only the word ownership with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite (CR-146 / FR-409).
+- A cover letter over 2800 characters loses an uncited sentence until it fits one page. The limit stays (CR-147 / FR-410).
+- A cover letter under 220 words gains a cited resume sentence. The floor stays (CR-148 / FR-411).
+- A line about distributed data systems does not fail the geography check. A team distributed across offices still does (CR-149 / FR-412).
+- A required line that shares only the word knowledge with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite (CR-150 / FR-413).
+- A competencies row that names a tool outside the career history loses that token. The other tools stay (CR-151 / FR-414).
+- A summary that says high-leverage loses that compound. Standalone leverage becomes use. data-driven stays (CR-152 / FR-415).
+- A contributed claim that says design is reworded to contributed to. An owned claim that says built stays (CR-153 / FR-416).
+- A hiring-manager read bound to the previous file bytes is rebuilt after this pass rewrites the documents. The hash check stays (CR-154 / FR-417).
+- A country list and a geography use of distributed are removed when the posting never asks. A line about distributed data systems stays (CR-155 / FR-418).
+- An opening sentence that repeats six or more words from the posting is dropped when another opening sentence stays. A one-sentence hook stays (CR-156 / FR-419).
+- A contributed claim that says build is reworded to contributed to. An owned claim that says built stays (CR-157 / FR-420).
+- A tilde in front of a number is rewritten to about. The digits stay (CR-158 / FR-421).
+- A required line that shares only the word communication with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite (CR-159 / FR-422).
+
+### Changed
+- Backlog after the queue finishes means the mechanical gates passed. It does not mean the pair is safe to send (CR-126).
+
+## [Unreleased] - 2026-09-18
+[DRAFT] CSV drop-folder ingest, leased harness packs, and a pipeline panel in Review Center. Drop a jobs CSV in `data/inbox/csv/` (or upload from the panel), then run `run_queue_worker.py`. Resume each job with the same `run_submission.py {slug} --resume` path as before.
+
+### New
+- Drop `applyr_jobs*.csv` into `data/inbox/csv/` and run `python scripts/ingest_csv_queue.py`. Valid rows become queued opportunities plus `pending_review/{slug}/Original_JD.txt`. Bad rows and broken files go to a durable quarantine list instead of disappearing from the terminal (CR-119 / FR-340–FR-342).
+- Claim a pack with `python scripts/queue_claim.py claim --worker <id> --size 8` (inspection only). The default run path is `python scripts/run_queue_worker.py --worker <id>`, which claims its own pack. Two harnesses can share one SQLite queue. A killed worker does not leave a second runner on the same slug (CR-119 / FR-343–FR-344).
+- Review Center shows queue depth, current leases, stuck items, and quarantine file/line/error codes, and can upload a CSV into the same inbox (CR-119 / FR-345, FR-347).
+
+### Changed
+- A missing required line counts as zero in the fit score. It is not dropped to make the number higher. A written hard gate still skips with no card. Any other required miss only skips when the score is under 40. Review Center no longer holds the queue. A card appears only when a named tool is why a job never went out. "I have used this" writes that tool into work experience and does not rerun the other jobs. The pipeline page shows Continuing, Skipped, Running, or Failed. CR-125 / FR-379 / FR-380 / FR-381 / FR-382.
+- A required healthcare, health-industry, health-tech, medical, or ceramic years line skips without a Review Center card. A sentence that says that domain experience is required skips too. Medical benefits, "healthy," and a preferred-only tail do not. A stored Keep eligible answer does not keep that job alive. A Stage 1 provider timeout can be tried four times, with a wait between tries so the queue can take another job. The same findings still stop that job. FR-378.
+- A requirements line that starts with "Strong …", such as clinical acumen, counts as a real requirement. A fit score under 40 then skips. An empty requirements extract still does not skip on the score alone. Lumira Search had scored 25 and still passed. FR-330.
+- A required healthcare or ceramic years line, a people-manager posting, product-line profitability, and a hands-on KYC must-have skip in Stage 0. "Nice to haves" stays optional, so a founder bonus cannot hold the job. A model hard label that is not one of those counts as zero. It does not open a card and it does not hold the job. Very Good Security's payments-platform line was queued under that rule. CR-125. FR-287 / FR-338.
+- A lowercase "unified" is not the company Unified, and a second posting labeled "Medrisk 2" is still Medrisk. A hiring-manager pause frozen on a warning the current check no longer emits is claimed again. A Stage 1 repair that put the previous draft back can run once more. The second miss stays paused. A missing cover-letter thanks and an em dash are filled in during verify instead of parking the draft. FR-265 / FR-319 / FR-344 / FR-375.
+- A later No on a skill card replaces an earlier Yes in skill memory. A first No still does not create a career-long record. GCP is No: no hands-on use. FR-283.
+- A title that lists Staff beside PM and Senior PM, such as "Product Manager (APM/PM/Sr PM/Staff PM)", is not blocked as a Staff role. "Staff Product Manager" still is.
+- "Lead a small team of analysts" is people management and skips. "Lead a team of stakeholders" does not. NLP in "AI/NLP" is a method, not a product card.
+- Claiming customer discovery fails Stage 1, so repair can remove it before the queue parks. "An adjacent team built" is that team's verb, not an ownership claim. LW-028 / FR-370.
+- A Stage 1 repair that returns cites as a flat sentence-to-id map is stored on the resume or the letter, whichever contains that line. A job already parked because that map was rejected is claimed again and the saved repair is applied. FR-265.
+- A queue run does not wait for a hand-typed rubric score while the Agy rubric is off. The manifest records that verification passed, and the packet can save. The worker sees that rule when it claims and when it writes the job, so a save that failed only for the missing score is picked up again. A manual run still requires the score. AC-464 stays off. FR-371.
+- "Partnered with a peer product manager" is not an unverified department. Design beside that role still warns. LW-005.
+- The lowercase adjective "unified" in front of words like stakeholder or management is not the company Unified. LW-032.
+- A duplicated company label such as "Sourcegraph 2" still counts as the employer Sourcegraph. Eastern Time and North America are not products. LTV, CDP, MMIS, MDM, and MCP are category acronyms, not products. Member 360 is a concept name, not a product. A required tool that is missing from work experience no longer pauses the job, including one already parked on that reason. The draft must not claim it. A card appears only when that tool is why a job never went out. CR-125.
+- A queue run closes hiring-manager pair and density warnings, and records the hiring-manager read from lines that are actually in the resume, letter, and job description. A warning that is not one of those heuristics still waits. FR-319.
+- The repeated-phrase warning lists its examples in a stable order. A later resume no longer wipes the hiring-manager dispositions just because the example list shuffled. LW-009-PAIR.
+- A required line that only names a tool as an example ("for example", "such as", "including", "or similar") no longer withholds the job when a different tool in that same list is already in the skills catalog. Claude anchors Magic Patterns. AWS anchors Azure, Google Cloud, and IBM Cloud. Google Analytics does not count as Google Cloud. A missing product stays in the reason list. It does not pause the job. A card appears only when that tool is why a job never went out. CR-125. A job already parked on only that example list continues without `apply_anyway`. FR-374.
+- If a repair leaves Stage 1 failed with the same blocking findings, the previous draft is put back. A repair that changes those findings is kept. The same findings then park the job. FR-375.
+- A blank company on `claim_provenance.json` is filled from the Stage 0 gate. Truth no longer blocks on a label the gate already has. FR-376.
+- When a resume bullet already uses a packet JD term but the cite is missing, that cite is added from the packet when the employer matches, and the draft is checked again before a full rewrite. FR-377.
+- A paused Stage 1 failure can be requeued when the only conversion hold is a market or industry label (EdTech, B2B2C). A missing product does not require `apply_anyway`. FR-367.
+- A Stage 1 repair that returns citations as a bullet-text map is stored as `resume_claims` rows, including the company name. A job parked on that map, or on a cite file with no company, is claimed so verify can repair the file. Unused-tag coverage warnings are recorded and the packet continues. An empty provenance object does not replace the draft. Customer Discovery stays off the ATS miss list because claiming that work is already blocked. FR-265 / FR-370.
+- A Stage 1 verify failure on a draft that already exists now runs one in-lease repair (`build_stage1_repair_prompt.py`, then `run_stage1_repair.py`) and resumes in the same worker pass. A timeout or a repair that never produced a draft stays paused. One rollback can be claimed again. A second rollback stays paused. FR-344 / FR-375.
+- The queue worker keeps taking the next batch until nothing left can move. It does not stop after one batch, and it does not run the same paused job in a circle. FR-373.
+- A finished packet saves itself into the app. The queue no longer waits for a finalize button. The job shows up for review and edits. If the save does not complete, that job stays waiting and is not picked up again. FR-371.
+- The pipeline page lists each job as Continuing, Skipped, Running, or Failed, with one sentence. There is no Waiting state for a question. FR-372 / FR-382.
+- A 40% contact-data line that says Jason connected or bypassed the path himself, says he owned that integration, says he conceived it, calls that story an ingestion path, or adds frontend screens, now blocks that sentence only. The rest of the resume stays. Wording that says he drove the decision, or that an engineer proposed the bypass, still passes. FR-369.
+- Career-file "do not claim" notes that were never given an id now attach to the story above them, and stop at the next section. Claiming customer discovery as something he already did blocks that line. Saying he did not, or only naming what the job asks for, still passes. FR-370.
+- Stage 0 `conversion_risk` no longer treats the employer name, a chopped section header ("And Experience"), or methodology (OKRs, MVP) as a required product gap. Dynamics and Delta Lake stay named in the reason list. They do not withhold the job. CR-124 / FR-367–FR-368.
+- Market labels (B2B2C, SaaS) and industry labels (EdTech) are the same chrome. A job already parked on only those labels continues into Stage 1 without `apply_anyway` and without another Stage 0 extract. A missing product is recorded and the job continues. CR-124 / FR-367.
+- `scripts/import_csv_to_submissions.py` is a legacy wrapper. It no longer hardcodes Downloads paths and requires explicit CSV arguments. Prefer `ingest_csv_queue.py`.
+- Cooldown NULL dates fall back to `applied_at`, then `created_at`, instead of blocking forever.
+- AI/ML hard-skip is train / fine-tune / build models, or an ML engineering / data science background. Product copy like "deploy AI models" and "shipped AI features" no longer skip.
+- `apply_resume_header.py` always overwrites name/contact, role headings and location lines, education, cover-letter greeting, and sign-off from `workExperience.md`. The author writes only summary, competencies, bullets, and letter body.
+- Stage 1 verify failures use a repair prompt (`scripts/build_stage1_repair_prompt.py`) instead of a full fresh authoring resample. Loop until verify passes or a round makes no progress. Truth/format blocks stay blocking; other findings forward to Stage 2.
+- A job paused at `NEEDS_DISPOSITION` stays paused across claims until `reviews/dispositions.json` is newer than `paused_at`. `WAITING_FOR_INPUT` stays paused until Review Center questions for that slug are all completed, or a cascade/extraction-review import is newer than `paused_at`. `WAITING_FOR_LLM` still promotes when Stage 1 files are ready. `FAILED` never auto-promotes (CR-119 / FR-346). `claim_pack` leases ready paused jobs first (oldest `paused_at`), up to pack size, then fills with the oldest queued rows. Extra paused rows stay paused. `WAITING_FOR_INPUT` without new input returns the last Stage 0 receipt instead of re-running Agy.
+- Unused high-priority packet claims are forwarded in `stage1_forwarded_findings.json` instead of failing Stage 1. Cover letters argue 1-2 stories that each cover several top requirements, not one story per requirement.
+- `agy_quota_tracker` now records agent-step count and cache-read tokens. Agy's final `result.usage` is the sum of internal agent steps, not a misread field. Size batches from five-hour percentage-point drops; cache-read is not 1:1 with those drops. Stage 0 Agy calls write `observability/agy_quota.jsonl` receipts (stage, slug, task, cache status, usage, weekly/five-hour before and after). A failed `/usage` read is `missing`, never a silent zero. `run_submission.py` binds the active slug and turns receipts on.
+- Stage 1 is not ready on empty `Resume.md` / `CoverLetter.md` or empty/invalid `claim_provenance.json`. Agy `SUCCESS` with no author artifacts stays `WAITING_FOR_LLM`.
+- Packet `hard_constraints` and the authoring digest self-check now include total PM experience read from `workExperience.md` §1.0 (write seven/7 years; never 4, 5, or 6).
+- Before any Agy Stage 1 repair, mechanical lint findings are auto-fixed in place: wrong years figures become 7/seven, and a single semicolon, em dash, or colon-as-dash is split into two sentences. Unsafe punctuation is skipped. Auto-fixes are logged in `stage1_repair_state.json`. Agy is only called for what remains.
+- Stage 1 repair prompts carry ranked rule/file/line/offending/suggestion rows, the full current Resume.md and CoverLetter.md, the matching digest sections, and packet excerpts for cited claims. They do not re-send the full authoring prompt or the packet. Target is under 16KB. The model returns full corrected documents; `claim_provenance.json` is optional and the existing file is kept when omitted. Raw model output is always saved to `stage1_repair_attempts/{n}.txt`. The repair event cap counts tool/non-text steps, not streaming `agent_response` deltas.
+- Stage 1 validation failure writes workflow `FAILED`. The worker runs one in-lease repair and resume before it pauses that row. A no-progress, timeout, or failed repair stays paused `FAILED` and is not auto-promoted. A later hand repair can still requeue after valid artifacts are written.
+- Stage 1 Agy repair is a sandboxed one-shot `--print` call: text in, text out, no tools, no workspace files. A tool request or permission denial fails the call. Wall time (default 180s) and event count (default 20) caps kill the process and record `repair_timeout`.
+- Stage 2 COMPLETE / Stage 3 READY maps to `paused` with `paused_reason=ready_to_finalize`. The lease is released. Review Center counts it separately from other paused jobs and never auto-promotes it. `--finalize` maps the row to `done`.
+- Cover letters and resumes mention countries, team locations, time zones, or "global/distributed" work only when the JD asks for global, international, distributed, cross-timezone, or multi-region work. Otherwise describe the collaboration itself. `LW-039` WARNs when a draft names that geography and the JD does not.
+- A rebuilt `authoring_packet.json` / `authoring_prompt.md` refreshes the Stage 1 `WAITING_FOR_LLM` receipt hashes instead of leaving `STALE: stage1` on resume.
+- Evidence-first Stage 1 authoring is reserved as CR-120 (`FR-348`–`FR-352`). Years-range keeps CR-117. The production Stage 1 default is unchanged.
+- Stage 0 Agy evidence uses 3-item chunks and retries omitted IDs once. An incomplete Agy evidence batch pauses as `subscription_review`, not cost authorization. Queue `WAITING_FOR_INPUT` and `FAILED` map to `paused` so the lease clears. An omitted-ID pause keeps `.stage0_spool`, writes `missing_item_ids` on the Stage 0 receipt, and continues later chunks instead of aborting the rest of the batch.
+- A paused `FAILED` or `subscription_review` queue row can be put back on the queue only with `python scripts/queue_claim.py requeue --slug SLUG --reason TEXT`. Leased, in-progress, done, and ready-to-finalize rows are refused. The reason and who requeued it are stored on the row.
+- Stage 0 subscription adapter caches each returned item and re-asks only missing IDs once, then fail-closed. Evidence example ids are live-shaped (`required:0:<hex>`), not `req-001`. Replay/smoke Agy sessions are one per job.
+- CSV ingest strips a role title that was appended to the Company cell (bookmarklet first-line company on LinkedIn). `ESO Product Manager` with Position `Product Manager` slugs as `eso`, so cooldown and skip-ledger match. Punctuation-stripped title suffixes (`Product Manager (Remote)`) also strip. False-skip rows from the Agy shakedown were cleared and re-queued (omnissa, optum, origami_risk, goodrx, businessolver, eso, velera, employers, ss_c_technologies).
+- `queue_claim.py requeue` on a `subscription_review` pause caused by a harness item-ID omission now actually re-attempts Stage 0 instead of bouncing back to the same stale `WAITING_FOR_INPUT` receipt. `run_until_waiting_for_llm`'s resume check previously required a manual `stage0_cascade_import.json` for every `subscription_review` pause; it now also resumes when the receipt shows `missing_item_ids` or an "omitted item_ids" reason, since that failure is transient and the evidence cascade already retries just the missing items from cache. A genuine cost-authorization `subscription_review` pause (no omission signal) still requires the manual import. Found live on `casper_studios`, stuck across two explicit requeues.
+- `scripts/run_stage1_author.py` runs the fresh, isolated Stage 1 author call as a real script instead of a hand-typed command: reads `authoring_prompt.md`, sends it to a sandboxed Agy session over stdin as stream-json (the CLI `--print` argument form hits Windows's command-line length limit on a 40-50KB authoring prompt), and writes all three required artifacts (Resume.md, CoverLetter.md, claim_provenance.json). Reuses `run_stage1_repair.py`'s stream-consumption and artifact-extraction helpers.
+- `stage1_prerepair.py`'s deterministic LR-014/LR-006/LR-015 punctuation auto-fixes now also resync the matching `claim_provenance.json` bullet/sentence text when a fix changes a line's wording. Previously a colon/semicolon/em-dash split rewrote the document but left provenance pointing at the old wording, so the next verify pass falsely reported a fully-cited bullet as uncited.
+- `tone_guard.py`'s workforce-reduction guard no longer blocks "customer attrition" (standard churn vocabulary). Bare `attrition` preceded by "customer"/"client"/"subscriber" is excluded; workforce/employee/bare attrition and layoffs/RIF language are still blocked.
+- An over-token-budget `authoring_packet.json` (`packet_status` not `ready`) now persists a `FAILED` Stage 1 receipt before raising, instead of leaving `workflow_state.json` at whatever it was mid-run. Previously the queue worker had no terminal status to map, so the row sat `in_progress` on an active lease until it expired instead of releasing immediately.
+- Named-tool extraction no longer queues Review Center cards for title-cased methodology phrases (`Minimum Viable Product`), scientific fields (`Biostatistics`), or category acronyms (`PSA`, `ERP`). Live miss on certara and velosio. `Microsoft Dynamics 365` on the same line still asks. `FR-286` / CR-109.
+- A Stage 0 evidence-cascade extract failure (`Stage0ExtractError`) now persists `FAILED` on `workflow_state.json` before raising, same as the Stage 1 over-budget path. Live miss on nava_benefits: Groq 429 with no authorized next provider left the row `in_progress` until lease expiry because the worker only maps terminal workflow statuses. `FR-343`.
+- Stage 0 production path is Agy again. `run_queue_worker.py` forces `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1` on the spawned runner, and `run_submission.py` sets it when unset. Groq/Gemini are not the default fallback; they require explicit `APPLYR_STAGE0_CLOUD_LLM=1`. Live miss: a worker pack with the switch unset burned Groq 429s while Agy quota was at weekly 55% / five-hour 91%. `FR-328`.
+- Same-posting Applied+ (`Applied` / `Recruiter Screen` / `Core Interviews` / `Offer and Negotiation`) or a pack already under `archive/submissions/` or `archive/skipped/` is already-handled at CSV ingest, claim, status update, and Stage 0. No new queue row, no new `pending_review/` folder, no skip-ledger write. Unlocked queue rows go `done`. Stage 0 is `ALREADY_HANDLED`, not PASS-with-flag and not Skip. Pre-apply still reuses. Different-role at the same company still only flags. Close stale mirrors with `python scripts/ingest_csv_queue.py --reconcile-already-handled` (no new CSV). Queue close does not fire when a live `pending_review` or `submissions` folder exists for that slug. CR-123 / FR-361–FR-366. Extends FR-342 lookup; does not rewrite it.
+
+### Developer
+- CR-119: additive SQLite tables `pipeline_queue`, `csv_ingest_ledger`, `csv_quarantine` (migration 025 + Python `ensure_schema`). `paused_at` on `pipeline_queue` (migration 026). `paused_reason` on `pipeline_queue` (migration 027, `ready_to_finalize`). Manual requeue audit columns `requeued_by` / `requeue_reason` / `requeued_at` (migration 028). Per-slug OS lock at `data/queue_locks/{slug}.lock`. Windows runner children sit in a Job Object with `KILL_ON_JOB_CLOSE`. `POST /api/pipeline-queue/upload` writes a server-chosen `.csv` under `data/inbox/csv/` then runs ingest. `run_submission.py` remains the canonical runner and marks a `ready_to_finalize` queue row `done` after `--finalize`.
+- CR-123: `resolve_opportunity()` adds `already_handled` (jobs Applied+ and archive trees) after skip ledger and before live reuse. `LEGAL_TRANSITIONS` gains `queued→done` and `leased→done`. Claim, worker, `applyJobStatusUpdate`, and Stage 0 close unlocked matches; live leases stay fenced. `reconcile_already_handled()` plus `--reconcile-already-handled`. Extends FR-342; does not rewrite it.
+
+## [Unreleased] - 2026-09-17
+
+### New
+- Stage 0 now has a bounded, switch-off `claudexor@3.12.1` subscription adapter
+  (`scripts/stage0_subscription_adapter.py`) with separate extraction and
+  evidence schemas, item_id binding, cache keys, readonly spawn, `--prompt-file`
+  (so Windows `npx.cmd` cannot pipe on `|` in the prompt), and
+  `subscription_minutes` tracked separately from `api_cents`. Failed,
+  substituted, or non-readonly runs go to explicit review. When
+  `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` is on, uncertain extraction and
+  uncertain evidence use that adapter and never Groq/Gemini; the production
+  default stays on the existing uncertainty path until replay passes (CR-114).
+- Shadow Stage 0 evidence matching can only return match or abstain from
+  human-reviewed tool aliases. It cannot emit HARD or Skip and is not used
+  in production scoring (CR-114).
+
+### Changed
+- Blocked-company match is exact on the normalized name. `"Remote"` no longer matches `"RemoteHunter"`, and a blank company name no longer matches every blocked entry (CR-118 / FR-337).
+- People-management skip fires only when this role has reports or manages people. Negated-role sentences and coaching other managers' reports do not skip. `network_page` is a flag, not a reject (CR-118 / FR-338).
+- `"Also great to have"` / `"great to have"` are preferred headers. A line that says `"is required"` under a preferred header goes to required. The 30-JD replay records skip-reason agreement, not only skip vs pass (CR-118 / FR-339).
+- Stage 0 extraction fallback responses no longer write into `training_data_feedback.csv`. Retraining ignores that unverified file and accepts only human-reviewed rows with provenance.
+- Retraining uses a company-held-out set without pre-split feedback duplication, writes a candidate model/report, and requires explicit replay acknowledgment for promotion. The first candidate was not promoted (CR-114).
+- Adjudication export (`scripts/export_stage0_adjudication.py`) writes `source=jason` or `source=claude_opus_jason_approved` rows with a non-blank `your_mark`. `source=claude_review` cannot reach `training_data_approved.csv` until rewritten. Claude/Agy/harness names are not human reviewers (CR-114 / CR-118 / FR-327).
+- Years ranges now gate on the low end, the minimum the posting will accept. 3-7 and 5-7 pass; 7-10 and 8-12 still skip; 7+ still skips. Age and company-tenure figures are not experience floors. The years audit flags a winning range-top, age, or history figure instead of blessing self-consistent arithmetic (CR-117 / FR-332).
+- Sitting-1 8-JD review found section headings scoring as required (CR-115). Required/preferred now drop heading, job-board metadata, and truncated-fragment chrome before evidence scoring. Leftover junk semantics stay unchanged. Replay is not a promotion gate until independent QA checks the stories.
+- Evidence retrieval now force-includes corpus-backed distinctive tokens and windows huge inventory chunks so Acquia Jira/Confluence and executive-briefing evidence can reach the scorer. `coverage_ok` is not AI-token-gated (CR-116). Replay is not a promotion gate while that check can fail.
+- Applyr Stage 0 leftover-line rules live in `scripts/stage0_classifier_contract.py`.
+  Tools only transport that packet. Leftover buckets now include `junk` for ATS
+  chrome (visible on the fit gate, never a cover-letter hook). Checkable
+  qualifications with no duty verb are required, not responsibilities.
+  Personality / "you are a person who" lines are culture and are never scored.
+  AI leftover evidence retrieval includes `data/aiProjects.md` when the line is
+  about agents/LLMs (CR-114).
+- Stage 0 leftover-line subscription transport defaults to native Agy
+  print mode (`--json-schema`, `--sandbox`, `--new-project`). The Applyr
+  packet is `prompt.txt` in an isolated temp project, not argv. Denied
+  tool calls fail closed to review. Production switch stays off (CR-114).
+- Review Center cards now store and render why Stage 0 paused (`decision_basis`) and the uncertainty label beside the existing requirement and evidence excerpt (CR-114 / FR-329).
+
+### Fixed
+- Stage 0 model-flagged confirmations now require a tool flag plus named-tool
+  and JD-grounding checks before creating a Review Center question. Generic
+  traits such as "critical thinking" no longer create binary "have you used
+  it?" cards through the model-only path.
+- Re-running the CR-109 confirmation table rebuild no longer drops Review Center
+  basis columns on the next Python connect (CR-114).
+
+## [Unreleased] — 2026-09-15
+[DRAFT] CR-112 consolidation maintenance reconciles the current candidate
+after Stories 8.6 through 8.9. Focused offline checks pass. The supervised
+real-JD dry run remains a future verification step, so readiness stays
+`SUPERVISED_SMALL_BATCH_READY`.
+
+### New
+- CR-112 Story 7.3 (`FR-326` / `AC-424`): an operator can now certify Groq
+  or Gemini as free-tier-only Stage 0 routes through a structured, expiring
+  attestation in the `llm_settings` blob (`freeTierAssertions`, exact
+  canonical statement, strict acknowledgement, 30-day expiry). Default
+  installs are unchanged: without a valid attestation plus a declared
+  `free_only` cost class, both providers stay `unknown` and the run still
+  pauses at `WAITING_FOR_INPUT` / `pause_kind=cost_authorization`. Paid
+  allowlist, budget, estimate, free-to-paid stripping, cascade import, and
+  pause contracts are unchanged. No provider, network, or paid route is
+  called by the mechanism.
+
+### Fixed
+- CR-112 Story 1.2 (`FR-297` / `AC-394`): over-budget authoring packets
+  now remove redundant author-only omitted-candidate summaries before
+  shrinking evidence excerpts. The full ranking audit remains in
+  `evidence_selection_trace.json`, and attribution constraints are never
+  dropped.
+- CR-112 Story 8.7 (`FR-325` / `AC-423`): deterministic identity repair now
+  replaces unbracketed contact placeholders and removes stacked placeholder
+  headers.
+- CR-112 Story 8.8 (`FR-323` / `AC-421`): distributed and event-driven
+  requirements now favor item-specific messaging or architecture evidence
+  over broad savings evidence, while cost and ARR/reliability controls retain
+  their metric-bearing winners.
+- CR-112 Story 8.9 (`FR-324` / `AC-422`): catalog validation now accepts the
+  CR-094 tags-and-constraints claims-index shape while still rejecting
+  unconstrained empty claims and ungrounded metrics.
+
+### Changed
+- CR-113 (`FR-322` / `AC-420`): rubric scorecard metadata gate requires `schema_version: 1`, current `rubric_sha256`, timezone-qualified `scored_at`, non-empty `reviewer_run_id` or `spawned_by`, and complete numeric per-criterion breakdowns (R1-R8, C1-C5) matching total scores with no unknown keys.
+- CR-112 Story 8.6 (`FR-322` / `AC-420`): score provenance is implemented,
+  hash-bound, role-tagged, boundary-band blind-read aware, and fail-closed on
+  current-hash disagreement.
+- CR-112 status records now identify the supervised real-JD dry run as future
+  product proof. No provider, paid API, production SQLite, or submission data
+  was used during this maintenance verification.
+
+## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Vanta blind adjudication, ranking characterization
+corpus, and JD 3 Newsela on the isolated candidate. Blind Vanta resume
+score 71 keeps Vanta `PRACTICE_COMPLETE`. Ranking fixtures characterize
+current behavior, including the known Camunda defect, without changing
+the formula. Score provenance is design-only. Newsela first draft
+Resume 61 stayed below floor after honest recovery (62) and is left
+blocked. No paid APIs. No push. CR-112 remains open. Batch readiness:
+NOT_READY.
+
+### New
+- CR-112 Story 8.5 (`FR-321` / `AC-419`): executable ranking
+  characterization tests for Camunda distributed-systems, Pearl and
+  SupplyHouse REPLACE controls, cost-reduction, ARR/reliability, and
+  near-tie. Camunda SAVINGS-over-messaging is a known-defect report,
+  not a desired rank.
+- CR-112 Story 8.6 (`FR-322` / `AC-420`): score-provenance design.
+  Hash-bound scorecards, reviewer role, 3-point floor band, fail-closed
+  disagreement. Not implemented this pass.
+
+### Notes
+- Vanta corrected resume blind adjudication
+  ([Review](51bee1b0-e969-4cc0-af2e-5b9bfcfa27cc)): Resume **71**.
+  R4 classified ~200 SQL databases as unpaired scale, not an outcome.
+  Floor rule: blind >= 70 retains completion. Manifest 70 is not
+  averaged with 71. Independent 68 is recorded, not selected.
+- JD 3 Newsela (`data/authored_drafts/newsela_cr112_proof/`):
+  independent first-draft Resume **61** / Cover **80**
+  ([Review](adef9c23-397e-4ce3-8744-6eb88b4f6d23)). Mechanical recovery
+  only. Implementer post-edit Resume **62**. `mech.rubric_floor.resume`
+  BLOCK left undisposed. No HAR.
+- Batch-readiness this pass: **NOT_READY**. Durable handoff:
+  `docs/spec/08-implementation/SESSION-HANDOFF-2026-09-13-cr112-jd3-newsela.md`.
+- Header-stack defect recorded, not fixed:
+  `docs/spec/08-implementation/CR-112-unbracketed-placeholder-header-stack-defect.md`.
+
+## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Story 8.4 durable consumed extraction-review on the
+isolated candidate. Stage 0 `--resume` after cost-authorization no longer
+re-asks a review that was already consumed. No paid APIs. No push.
+CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.4 (`FR-320` / `AC-418`): `try_load_review_import` reuses a
+  valid `.consumed.json` when the live import is absent and the JD plus
+  queue still bind. Unreadable consumed JSON fails closed. Live import
+  still wins for a deliberate correction.
+
+### Notes
+- Design review ACCEPT WITH CHANGES
+  ([Review](221eed13-6cf1-45e0-ba82-14c298ba0877)).
+- Vanta JD 2 practice folder reached `PRACTICE_COMPLETE` after an honest
+  resume `RESOLVED_EDIT` (65 → 70). First-draft baseline preserved.
+- Story 8.3 follow-up design review ACCEPT no further digest paragraph
+  ([Review](8b6fe4c0-479a-4ea9-bbd1-3d84be8d488b)).
+- Ranking investigation design review ACCEPT WITH CHANGES, no formula
+  this pass ([Review](0562aa4a-a797-4c15-8663-02c2f2819fb7)).
+
+
+### Changed
+- CR-112 Story 8.3 (`FR-319` / `AC-417`): lean authoring digest §5 now
+  includes the locked keep-fact / change-language line. Generated Stage 1
+  prompt SYSTEM BLOCK carries the same instruction. `LW-009-PAIR`
+  detector and Stage 1 pair FAIL are unchanged.
+
+### Notes
+- Story 8.1 follow-up QA PASS recorded 2026-09-13. Floors stay 70/65.
+- Story 8.2 security CLEAR and QA PASS recorded 2026-09-13.
+- Story 8.3 design review DR-001 ACCEPT WITH CHANGES
+  ([Review](ffcef2c9-5020-4992-9558-c6feb91f7997)). Independent QA PASS
+  ([Review](de184edd-f4e3-4249-88ce-193500cb8161)).
+
+## [Unreleased] — 2026-09-13
+[DRAFT] CR-112 Story 8.2 practice identity on the isolated candidate.
+Silent John Doe fallback is gone from the document pipeline. Identity
+comes from gitignored `workExperience.md` or explicit
+`APPLYR_SYNTHETIC_IDENTITY=1`. No paid APIs. No push. CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.2 (`SEC-006` / `AC-416`): `load_identity_profile` no
+  longer reads SQLite or fills John Doe. Missing identity fails before
+  `WAITING_FOR_LLM` and at `run_verify_only`. Tests use synthetic
+  identity only.
+
+### Notes
+- Story 8.1 follow-up QA PASS recorded 2026-09-13. Floors stay 70/65.
+- Story 8.2 security CLEAR and QA PASS recorded 2026-09-13.
+
+## [Unreleased] — 2026-09-12
+[DRAFT] CR-112 Camunda follow-up on the isolated candidate. CONVERT-READY
+floors (Resume 70, Cover Letter 65) are now completion gates, not
+warnings. Practice finalize can no longer mint `PRACTICE_COMPLETE` at
+Resume 68. No paid APIs. No push. No merge to main. CR-112 remains open.
+
+### Fixed
+- CR-112 Story 8.1 (`FR-318` / `AC-415`): `check_rubric_floors` runs
+  after rubric shape. `check_draft_manifest`, `check_stage2_ready`, and
+  `check_finalize_ready` fail below floor. Practice and `--force` Stage 3
+  cannot skip the helper. Mech emits BLOCK `mech.rubric_floor.resume` /
+  `mech.rubric_floor.cover_letter`. `check_submission_status` DONE fails
+  closed once the manifest floors fail. Follow-up QA PASS
+  ([Review](3cd059c0-ba53-42b7-b66a-a6677a310de5)) 2026-09-13.
+
+### Notes
+- Camunda practice artifacts stay gitignored. Do not re-finalize that
+  folder to inflate the resume score. First-draft baseline remains
+  Resume 64 / Cover Letter 57, classification `FIRST_DRAFT_WEAK`.
+- Practice identity (`SEC-006`) implemented on this candidate, pending
+  security and QA review.
+
+## [Unreleased] — 2026-09-11
+[DRAFT] CR-112 local integration onto clean main. Epic 1 fail-closed
+Stage 0 IDs and packet constraints, Stories 2.1 + 2.3 lean default spawn,
+Story 3.1 closed-world extra-packet completion block (detection only), Story 3.2 omitted_reasons
+plus sibling ranking trace, and Story 3.3 advisory swap report, and Story 3.4 admin-line skip, and Epic 4 adversarial fail-closed, plus Story 5.1 F7 gerund reporter
+(advisory only), and Stories 6.1/6.2 sanitized offline eval harness, plus Story 2.2
+force-added batch runner (never default). Extra-packet detection FAILs
+Stage 1 verify. Recovery (remove / rewrite / widen / human) is Story 3.6
+and is not in this detector. SupplyHouse is not rewritten.
+
+On committed `main` (`8bbc497`) the hash-tail `len >= 8` matcher already
+rejected `req-001`, and `assemble_packet` already omitted the wipe. The
+list-position remap and the constraint wipe lived in an uncommitted
+candidate tree, never on HEAD.
+
+### Fixed
+- CR-112 Story 1.1 (`FR-296` / `AC-393`): `_resolve_item_id` must not map
+  invented sequential ids (`req-001`, `req-002`, `pref-1`) onto the Nth
+  item in the current batch. Unknown ids raise `unknown batch item_id`
+  even under `partial=True`, so the caller falls back instead of retrying
+  a positional guess. Hash-suffix (`len >= 8`) and unique ordinal/suffix
+  fallbacks remain.
+- CR-112 Story 1.2 (`FR-297` / `AC-394`): `assemble_packet` must not wipe
+  `claim_constraints` to `{}` to squeeze under `_TOKEN_BUDGET`. Over-budget
+  after dropping `learned_examples` and shrinking excerpts to
+  `_EXCERPT_MIN_CHARS` stays `incomplete` via Rule 5.
+- CR-112 Story 1.4 (`FR-298` / `AC-395`): read-only
+  `scripts/audit_packet_integrity.py` flags already-shipped ready packets
+  with empty `claim_constraints` while `evidence_map` or `soft_gaps` is
+  non-empty. Live scan 2026-09-10: 7 folders, 1 flagged (`supplyhouse`).
+  Detector writes nothing. A sidecar file is informational and is not
+  authorization. Unreadable packets (including invalid UTF-8), a missing
+  root, and invalid field types are an incomplete inspection (exit 2), not
+  a clean scan. An unreadable informational disposition sidecar does not
+  abort the scan or clear a packet flag.
+  SupplyHouse recovery is not on the active backlog
+  (Jason, 2026-09-10: already corrected; do not rebuild, re-author, or
+  request risk acceptance). General detector and tests remain.
+
+### Notes
+- FINDING 2026-09-10: Cursor (Grok 4.6) wrote a gitignored live
+  `packet_integrity_disposition.json` with `HUMAN_ACCEPTED_RISK` and a
+  reason attributed to the candidate. Origin:
+  `docs/spec/08-implementation/FINDING-2026-09-10-agent-packet-integrity-disposition.md`.
+  Tracked stand-in: `tests/fixtures/packet_integrity_disposition.sanitized.json`.
+  The live original stays local only. No workflow treats that sidecar as
+  human authorization.
+
+### Changed
+- CR-112 Story 7.1 (`FR-316` / `AC-413`): Stage 0 cost-pause status now
+  reads `pause_kind` from the Stage 0 receipt. Cost-authorization copy
+  states that no model API call occurred, Stage 0 is incomplete, and
+  import, certified zero-charge, or paid authorization can resume the
+  run. It prohibits pasting `authoring_prompt.md`. Older receipts without
+  `pause_kind` keep the existing Review Center copy.
+- CR-112 Stories 7.1 / 7.2 (`FR-316` / `FR-317` / `AC-413` / `AC-414` /
+  `NFR-015`): model calls require `offline` / `manual_paste` / `free_only` /
+  `paid_with_budget`. Unknown is not callable. Groq/Gemini stay unknown
+  without a zero-charge adapter assertion. `free_only` cannot fall back
+  to paid. Unknown cost omits `api_cents` instead of recording 0. Eval
+  stays zero-call offline. No live-folder rewrite.
+- CR-112 Story 3.6 (`FR-315` / `AC-412`): extra-packet recovery is a
+  separate step. KEEP and sibling extras `REMOVE_EXTRA`. True AMBIGUOUS
+  pauses for qualitative review. Same-item TRACE REPLACE widens the
+  packet, invalidates the leaked draft, and returns `WAITING_FOR_LLM`.
+  Recovery helpers do not write workflow receipts. No live-folder rewrite.
+- CR-112 Story 3.5 (`FR-313` / `FR-314` / `AC-410` / `AC-411`): after
+  Top-2, a deterministic comparator may REPLACE an omitted eligible
+  claim that clearly dominates the weakest same-item pick.
+  `displaced_by_dominance` is the packet omitted reason. Pearl and
+  SupplyHouse SAVINGS do not REPLACE. No `call_llm`. No live-folder
+  rewrite. Story 3.3 stays read-only.
+- `scripts/run_all_tests.py` now runs `test_stage0_evidence_cascade.py`
+  and `test_audit_packet_integrity.py`.
+- The offline Stage 0 provider golden harness now explicitly certifies
+  its mocked provider as zero-charge instead of relying on provider names.
+- `.codex/skills/generate-submission/SKILL.md`
+- `AGENTS.md` (root trigger paragraph only)
+- `scripts/author_from_packet.py` `run_verify_only` FAILs extra-packet cites
+  (`recovery_state=UNRESOLVED` or `CLOSED_WORLD_UNREADABLE`)
+- `scripts/build_authoring_packet.py` `build_evidence_map` records why
+  scored claims lost Top-2 without changing who wins
+- `scripts/build_stage0_fit_gate.py` `_is_administratively_satisfied`
+- `scripts/build_authoring_packet.py` `_enqueue` skip-scoring for eligibility
+  fingerprint / nights-and-weekends lines
+
+### Added
+- CR-112 Story 7.4 (`FR-316` / `AC-413`): Review Center now includes a
+  compact operator for Stage 0/1/2 status and explicit Start, Resume, and
+  Finalize actions through the authenticated backend routes. Cost-pause copy
+  states that no model API call occurred, no API cost was incurred, and Stage
+  0 remains incomplete until cascade JSON is imported, a zero-charge provider
+  is certified, or paid use is authorized. This slice adds no provider
+  configuration or cascade-import UI.
+- CR-112 Story 7.3 (`FR-316` / `AC-413`): authenticated backend operator
+  routes for starting, resuming, inspecting, and finalizing
+  `scripts/run_submission.py`. The service returns an allowlisted workflow
+  status projection, uses the centralized no-shell process runner, and rejects
+  overlapping mutating commands for the same submission folder. UI remains
+  out of scope.
+- `scripts/cost_eligibility.py`
+- `scripts/test_cr112_story71.py`
+- `scripts/closed_world_recovery.py`
+- `scripts/test_cr112_story36.py`
+- `scripts/evidence_dominance.py`
+- `scripts/test_cr112_story35.py`
+- `scripts/test_cr112_lean_spawn.py` (2.1 + 2.3)
+- `scripts/packet_closed_world.py`
+- `scripts/test_cr112_story31.py`
+- `evidence_selection_trace.json` written by `build_packet`
+- `scripts/test_cr112_story32.py`
+- `scripts/report_evidence_swaps.py`
+- `scripts/test_cr112_story33.py`
+- `scripts/test_cr112_story34.py`
+- `scripts/run_adversarial_pressure_test.py`, `scripts/test_cr112_adversarial.py`
+- `tests/fixtures/adversarial/workflow_cases/`, fixtures README
+- `docs/spec/INVARIANTS_CATALOG.md`
+- `docs/spec/archive/adversarial-payloads/`
+- `scripts/report_resume_gerund_rate.py`
+- `scripts/test_cr112_story51.py`
+- `scripts/run_cr112_eval.py`
+- `scripts/test_cr112_story61.py`
+- `tests/fixtures/cr112_eval/`
+- `.claude/workflows/generate-submission-batch.js` (force-added)
+- `scripts/test_cr112_story22.py`
+
+## [Unreleased] — 2026-09-09
+[DRAFT] Stage 0 cascade cutover complete — live provider validation, archive replay,
+partial-result recovery, proactive batch sizing, and legacy classifier removal.
+The CR-108 evidence cascade is now the sole Stage 0 classification path.
+
+### Changed
+- CR-108 (Epic 7.7): Removed the legacy per-line local classifier and STAGE0_EVIDENCE_CASCADE
+  rollback flag. The cascade is now the only classification path. `stage0_evidence_cascade_enabled()`
+  always returns True, the `cascade_enabled` parameter was removed from `classify_gaps` and
+  `screen_responsibilities_for_exclusion`, and the sequential per-line fallback was removed.
+
+### Fixed
+- CR-108: Groq API calls were missing `max_tokens`, causing truncated JSON responses on
+  21-item batches. Set to 8192.
+- CR-108: Cascade system prompt described required JSON fields in prose but never gave an
+  explicit schema or example. Groq omitted the `reasoning` field on first live run. Added
+  a `RESPONSE FORMAT` section with all required fields and a full example object.
+- CR-108: Golden test did not pass evidence excerpts to the model, so all non-gate items
+  scored evidence_level=0. Added `evidence_excerpt` fields to golden entries expecting
+  evidence_level > 0 and wired them through `_items()`.
+- CR-108: Added `_repair_truncated_json()` to recover individual result objects from
+  truncated provider responses via balanced-brace scan inside the `results` array.
+- CR-108: `validate_batch_response` rejected partial results entirely when items were
+  missing, forcing the fallback provider to re-send the full batch. Added partial mode
+  that returns recovered items + missing set so only the missing items are retried.
+- CR-108: Batch sizing only considered item count (`MAX_BATCH_ITEMS=24`), not output size.
+  Added proactive split based on estimated output tokens derived from prompt size, so
+  batches with long evidence excerpts are split before truncation can happen.
+- CR-108: `_resolve_item_id` couldn't match model-returned ids in three formats: ordinal-only
+  ("0"), mangled prefix ("req-7-hash"), and abbreviated prefix ("req-001"). Added ordinal
+  matching and hash-suffix matching for real JD replay.
+- CR-108: found on review — the same-provider retry call added for partial-result recovery
+  was not wrapped in the same broad `except Exception` as every other `call_llm` call in
+  `classify_requirements_batch`'s provider loop. A transport error during the retry (timeout,
+  connection reset, rate limit) crashed the whole classification instead of falling back to
+  the next configured provider, even when it was available — the exact failure mode this
+  robustness pass was meant to handle. Reproduced live, fixed, added a regression test.
+- CR-108: found on review — Epic 7.7's legacy-classifier removal made a
+  `screen_responsibilities_for_exclusion` batch failure raise, contradicting that function's
+  own still-documented fail-open contract ("one line's LLM error should never abort a Stage 0
+  run"). It also raised the wrong exception type for `workflow/runner.py`'s
+  `run_stage0()` to catch (only `Stage0NeedsInput`/`Stage0ExtractError` are handled there),
+  so it escaped uncaught rather than becoming a clean `WorkflowError`. Reproduced live, fixed
+  by catching the batch failure and returning whatever Phase 1 already found instead of
+  raising — without resurrecting the removed legacy per-line classifier. Added a regression
+  test.
+- CR-104: URL state sync race condition — the sync effect could strip the `job` param
+  before the restore effect read it on initial load. Captured the initial job ID at mount.
+- CR-104: `SyncActivityView` (Job Search tab) ran its own independent `fetchMatchedJobs()`
+  on a 3s interval hitting `/api/jobs` directly, duplicating the shared `useJobs()` query
+  Story 5.2 converted. Now takes `jobs` as a prop and derives `matchedJobs` via `useMemo`;
+  the three spots that called `fetchMatchedJobs()` for an immediate refresh now invalidate
+  the shared query instead.
+
+### Developer
+- CR-108 (Epic 7.3/7.4): Archive replay harness (`test_stage0_archive_replay.py`)
+  validates the cascade against real archived JDs. 5 JDs replayed with Gemini: 27 items
+  classified, 2 HARD gates found. Comparison with legacy per-line classifier on 2 JDs:
+  87% call reduction (15→2), 58% time reduction (25.92s→10.88s), 87% gate agreement
+  (mismatches are legacy errors, not cascade errors).
+- CR-108 (Epic 7.5): Live provider-backed golden validation complete. Both Groq
+  (openai/gpt-oss-120b) and Gemini (gemini-3.5-flash-lite) pass 21/21 against the active
+  CR-093 golden set using credentials stored in SQLite. All seven categories hold.
+  Gemini shows minor non-determinism on tool-002-v2 (20-21/21 across runs). Four fixes
+  were required: explicit JSON schema in prompt, evidence excerpts in golden set, JSON
+  repair for truncated responses, and Groq max_tokens increase. Two robustness improvements
+  added: partial-result acceptance with same-provider retry for missing items, and proactive
+  batch splitting based on estimated output token count. 4 new unit tests cover both.
+- CR-104: Browser verification complete for Stories 1.11 (component decomposition) and
+  2.5 (fail-closed bind + API key masking). All sections exercised, no regressions.
+
+## [Unreleased] — 2026-09-08
+[DRAFT] Generic cover-letter hook guard (CR-098 follow-on): cover letters that open by
+labeling the role ("shows what makes this role interesting") instead of stating a concrete
+company fact are now caught and warned against.
+
+### Changed
+- CR-098: `LW-038` (WARN) fires when the opening hook uses the self-referential "what makes
+  this role/opportunity/position interesting/compelling/exciting" shape. The author prompt's
+  COVER LETTER VOICE block now states the same rule so the shape is prevented at first draft,
+  not only caught in review. The check is narrow by design: a specific hook and the same
+  words outside the opening hook pass.
+
+### Developer
+- CR-098: Registered as `FR-295` / `AC-392`; mapped in `FEAT-013`, the traceability matrix,
+  and the canonical no-ai-slop skill. The rule ID was renumbered from the earlier draft's
+  `LW-036` to `LW-038` because `LW-036` already belongs to the closed-lost jargon rule.
+- CR-108 (Epic 7.1/7.2): Stage 0 cascade golden validation now reports per-category
+  results (`--category` filter added to `test_stage0_provider_golden.py`); the previously
+  dead Layer C model-flagged confirmation tunnel is implemented — the cascade validator
+  honors `needs_user_confirmation` / `canonical_skill` / `skill_kind` (fail-closed when a
+  flag lacks a skill key) and the fit gate creates a durable `skill_presence` pending item
+  for a model-detected tool the extractor missed, pausing that opportunity and resuming on
+  a `CONFIRMED_USE` answer without repeating the provider call. Offline golden fixtures
+  remain 21/21 for Groq and Gemini with one routed batch call each and every category PASS.
+
+## [Unreleased] — 2026-09-03
+[DRAFT] Stage 0 gate escapes and header placeholder fixes — multiple deterministic gates failed to catch roles that should have been skipped, and resume/cover letter headers with partial placeholders were left unfixed in compiled PDFs.
+
+### Fixed
+- CR-110: Title gate now blocks "Junior" and "Associate" titles — blocked_title_lists() merges blocked_role_titles with blocked_titles instead of ignoring the UI list; "Associate" and "Junior" added to blocked_role_titles in candidate_preferences.json
+- CR-110: Years gate now detects "10 years' experience" (apostrophe) and "Twelve+ years" (spelled-out numbers) — regex patterns fixed and word-number mapping added
+- CR-110: Revenue/billing exclusion zone regex broadened to catch real JD phrasings (product line revenue/margin, dynamic pricing, payroll/billing workstreams)
+- CR-110: Header placeholder fix now handles partial placeholders (real name + bracketed contact info) and blank contact lines, not just fully-bracketed headers
+- CR-110: `run_prefs_gate_safe` now logs errors to stderr and includes `_gate_failed` flag — previously caught all exceptions silently and returned passed=True, skipping every deterministic gate with no trace
+- CR-110: Prefs gate rejects and flags now stored in stage0_fit_gate.json output as `prefs_gate_rejects` and `prefs_gate_flags` — previously discarded, making gate auditing impossible
+- CR-110: Header placeholder check now blocking in verify_submission.py — resumes with [phone]/[email]/[LinkedIn] in the header cannot pass mechanical verification
+- CR-110: Text normalization for curly quotes/apostrophes added to seniority_gate.py — prevents future regex misses on smart-quote variants from HTML-exported JDs
+- CR-110: Self-clearing dispositions (FALSE_POSITIVE, ACCEPTED_AS_CORRECT, HUMAN_ACCEPTED_RISK) now require substantive reasoning in dispositions.json — bare strings no longer clear these findings; RESOLVED_EDIT and NOT_APPLICABLE remain bare-string compatible
+- CR-110: LLM-based industry classification added as supplementary gate — uses Groq/Gemini to catch blocked industries the keyword gate misses (e.g., a gambling company that never says "gambling"); high/medium confidence blocks, low confidence flags, LLM failure fails open
+- CR-110: JD content validation now blocks template JDs with bracket placeholders ([Company X], [phone], [email]) and talent-matching network pages ("apply once and get matched") — previously only a 200-char minimum check existed between DB insert and Stage 0
+
+### Changed
+- CR-110: blocked_title_lists() in seniority_gate.py now merges blocked_role_titles and blocked_titles instead of preferring one over the other
+- CR-110: `mechanically_verified` conjunction now includes `header_placeholders.ok` — bracket placeholders in resume/cover letter headers are a blocking failure
+- CR-110: Removed "Junior (1-2 Years)" from `experience_levels` in candidate_preferences.json — field is vestigial (no code reads it since CR-010 decommissioned LinkedIn scouting), removal eliminates cosmetic inconsistency with title blocklist
+
+[DRAFT] **CR-111 — Instruction-authority hygiene (2026-09-07).**
+
+### Changed
+- CR-111: Declared one canonical copy for the four duplicated instruction skills and
+  replaced the other copies with small pointer stubs, preventing cross-harness skill drift.
+
+### Developer
+- CR-111: Added `scripts/check_instruction_drift.py` with fixture tests and wired it into
+  `check_context_pack_freshness.py`; the guard checks pointer size, canonical targets,
+  absolute file URLs, and known stale instruction patterns.
+
+- **Fix: `check_submission_status.py` / `verify_submission.py` / `stage_gate.py` crashed on non-ASCII
+  company folder names (2026-09-03).** A submission folder with a diacritic in its name (e.g.
+  `collēctīvus_holdings`) crashed all three scripts with `UnicodeEncodeError` on a cp1252 Windows
+  console, before any PASS/FAIL/STATUS line printed. A Stop hook reading the crash as "can't verify"
+  correctly refused to accept a completion claim for that folder even though the submission itself
+  was mechanically clean. Fixed by routing the status-line prints through an encode/decode-with-
+  `errors="replace"` helper (the same pattern `run_submission.py`'s event printing already used) in
+  all three files — a non-ASCII name now degrades to `?` characters in console output instead of
+  crashing the process. 40 existing tests across `test_check_submission_status.py`,
+  `test_stage_gate.py`, `test_verify_submission.py` still pass.
+
+[DRAFT] **CR-109 — Review Center queue UX, extraction precision, bad-data loop (2026-09-02).**
+
+### Fixed
+- [BUG-001] Review Center no longer asks "Have you used Spirit/Preferred/Thinking in your
+  work?": named-tool extraction now rejects JD label shapes (a candidate followed by `:` or
+  `)`), knows trait/qualifier/role-title/generic-tech vocabulary as stopwords, and blocks any
+  candidate containing a hard-blocked tool as a token run (closes the "Workday Ecosystem /
+  Workday Web Services / Workday Recruiting" hole, since `workday` itself was always blocked).
+
+### Changed
+- Review Center answers are now single-tap: selecting an answer saves it immediately and the
+  next card in the queue appears with a short transition. There is no "Save answer" step.
+  Mistakes are corrected from the Completed queue, where each card now shows its recorded
+  answer and a Change answer button; every change is preserved in the answer history.
+- Optional where/what/when details for a "Yes" answer now live only on the Strengthen
+  evidence card that a Yes automatically creates, instead of a duplicate inline form.
+
+### New
+- "Not a real skill" (BAD_DATA) answer on skill cards: flags an extraction false positive so
+  Applyr permanently stops asking about that candidate and accumulates a learning record for
+  future extraction improvements. Supported end to end (UI, API, harness, durable memory).
+
+### Developer
+- [CR-109] Migration `022_add_bad_data_answer.sql` adds BAD_DATA to the answer/decision CHECK
+  vocabularies via idempotent table rebuild; review answers/skill memory/history remain only
+  in the gitignored `data/jobagent.sqlite` (DATA-005, verified via `git check-ignore`).
+
+---
+
+- **Stage 0 improvement plan — 10 improvements (2026-09-01).** All 9 Stage 0
+  bugs were previously fixed and verified; this batch covers *improvements*
+  (faster, more accurate, better matching), not bug fixes. All 244 existing
+  tests pass (80 authoring packet + 152 stage0 fit gate + 12 cascade).
+  (1) **Few-shot examples in batch prompt** (`stage0_evidence_cascade.py`):
+  expanded the 6-line `_SYSTEM_PROMPT` to include evidence scale 0-4
+  definitions, OR-alternative handling, forbidden evidence, and HARD gate
+  categories — aligning the batch path with the single-item path's
+  `evidence_scale._SYSTEM_PROMPT`. Added k=2 few-shot example retrieval from
+  `data/fit_rubric_golden_set.json` in `_build_batch_prompt`.
+  (2) **Batched responsibilities exclusion scanner**
+  (`build_stage0_fit_gate.py`): `screen_responsibilities_for_exclusion()`
+  now batches all non-deterministic responsibility lines into a single
+  `classify_requirements_batch()` call when the cascade is enabled, instead
+  of one sequential `classify_requirement()` call per line. Eliminates the
+  primary cause of 100+ second Stage 0 times on JDs with 8+ responsibilities.
+  Falls back to sequential on batch failure.
+  (3) **Track 429 failures and skip rate-limited providers** (`utils.py`):
+  added `_log_rate_limited()` to log real HTTP 429 responses to
+  `activity_log`; `check_rate_limits()` now counts recent RATE_LIMITED
+  entries and skips a provider with >3 in the last 5 minutes (configurable
+  via `data/llm_rate_limits.json`). Replaced the blocking `time.sleep(60)`
+  on RPM approach with `return False` (cascade to next provider).
+  (4) **Automatic chunking for batches >24 items**
+  (`stage0_evidence_cascade.py`): `classify_requirements_batch()` now
+  splits large batches into MAX_BATCH_ITEMS-sized chunks, classifies each
+  independently, and merges results. Failed chunks retry items
+  individually (partial acceptance) so one bad chunk doesn't discard valid
+  results from others.
+  (5) **Expanded deterministic exclusion zone regex**
+  (`build_stage0_fit_gate.py`): `_DETERMINISTIC_0TO1_BUILD_RE` now catches
+  "founding PM", "build from scratch", "greenfield product", "shaping an
+  early-stage product area", and "where none previously existed" — common
+  exclusion-zone phrasing the original regex missed.
+  (6) **TF-IDF-weighted evidence context retrieval** (`evidence_scale.py`):
+  `build_evidence_context()` now applies `_rarity_weight()` from
+  `jd_tailoring.py` to each overlapping token before computing similarity,
+  so a chunk mentioning "roadmap" and "Jira" ranks higher than one
+  mentioning "roadmap" and "cooking". Increased k from 6 to 8 for WE
+  documents >50K chars. Falls back to unweighted Jaccard if the rarity
+  table is unavailable.
+  (7) **Deferred fit-score modifiers** (`evidence_scale.py` +
+  `fit_rubric_calibration.json`): implemented the repetition modifier
+  (+1, capped at 4, when same evidence_level appears 3+ times across
+  required items) and the hedge modifier (-1, floored at 0, when reasoning
+  contains hedge language like "contributed to" / "partnered on"). Moved
+  weights and confidence multipliers from hardcoded constants to
+  `data/fit_rubric_calibration.json`. Lowered "low" confidence multiplier
+  from 0.65 to 0.5.
+  (8) **Anchor-vocabulary matching in specificity scoring**
+  (`build_stage0_fit_gate.py`): `_requirement_specificity_score()` now
+  adds +1.0 for items containing terms from the anchor vocabulary (claims
+  tags + skills catalog), prioritizing specific, decision-bearing
+  requirements over generic ones when capping.
+  (9) **More stage signal patterns** (`build_stage0_fit_gate.py`):
+  `_STAGE_SIGNALS` reordered by priority (enterprise > public > PE-backed >
+  VC-backed > startup > unknown) and expanded with bootstrapped, profitable,
+  hypergrowth, scale-up, post-Series-B, and employee-count-range patterns.
+  (10) **Configurable rate limit thresholds** (`utils.py` +
+  `data/llm_rate_limits.json`): thresholds now loaded from a new config
+  file at import time, with Claude and Perplexity entries added. Hardcoded
+  defaults remain as fallback when the file is absent or a key is missing.
+
+- **Stage 2 parallel PDF compilation + pre-collect findings (2026-09-01).**
+  Two optimizations to `scripts/workflow/runner.py` that reduce Stage 2 wall-clock
+  time and `--resume` cycle friction without changing any verification gate:
+  (1) `_compile_pdfs()` now launches Resume.pdf and CoverLetter.pdf compilation
+  in parallel via `subprocess.Popen` instead of sequentially, with a sequential
+  fallback if either parallel compile fails (resource-contention recovery);
+  (2) when a lightweight Stage 2 subphase (Truth/ATS/HM) returns
+  `NEEDS_DISPOSITION`, the orchestrator pre-collects findings from remaining
+  lightweight subphases and syncs their dispositions in the same pass, so the
+  agent can dispose all WARN findings in one `--resume` cycle instead of one per
+  subphase. Mech is not pre-collected (requires PDF compilation). Documentation
+  updated in `.claude/skills/generate-submission/SKILL.md`,
+  `.codex/skills/generate-submission/SKILL.md`,
+  `.claude/workflows/generate-submission-batch.js`, and
+  `scripts/stabilization_orchestrator_corpus.py`.
+
+- [DRAFT] **CR-108 Stage 0 evidence cascade and Review Center hardening (2026-08-31).**
+  Added the accuracy-first deterministic evidence cascade, batched Groq-to-Gemini
+  classification, explicit Local selection, durable Stage 0 checkpoints, and shared
+  UI/harness confirmation workflows. The Review Center backend and UI are enabled
+  behind the rollout flag. Deterministic Groq and Gemini fixtures cover all 21 active
+  CR-093 entries, Python and TypeScript policy normalization is parity-tested,
+  checkpoint failure injection and isolated API coverage pass, and evidence promotion
+  now waits for exact local source verification. Live provider sampling, archive replay,
+  and default cutover remain deferred until the CR-093 release gate is complete.
+
 - **Stage 0-3 observability MVP (2026-08-30/31).** Ahead of replaying `data/submissions/*`
   through Stages 0-3 to find bugs, added the instrumentation designed in
   `docs/spec/08-implementation/OBSERVABILITY-DESIGN-2026-08-30-stage0-3-replay-reporting.md`:

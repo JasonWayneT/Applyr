@@ -33,3 +33,11 @@ Jason locked the design in chat (2026-08-21) and said build and execute. Stories
 - [x] 4.1 Rebuild packets for the six folders (no Stage 0 redo)
 - [x] 4.2 Rewrite CoverLetter.md only from packet + digest + bank
 - [x] 4.3 Stage 1 verify; do not finalize; do not disposition hm.critical_read
+
+## Epic 5 -- Generic hook escape (2026-09-08)
+
+- [x] 5.1 Add `LW-038` as a WARN-only opening-hook check for the narrow
+  self-referential “what makes this role interesting/compelling/exciting” shape.
+- [x] 5.2 Add regression tests for detection, a specific hook, and a non-hook occurrence.
+- [x] 5.3 Record the canonical no-ai-slop skill mapping and rerun the Form Health production
+  workflow after its opener is rewritten.

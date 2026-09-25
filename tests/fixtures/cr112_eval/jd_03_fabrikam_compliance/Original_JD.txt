@@ -1,0 +1,16 @@
+Product Manager, Compliance Workflows
+
+Fabrikam Civic is a fictional records company. This role owns compliance workflow product work on a shipped platform.
+
+Requirements:
+- Experience with privacy or compliance workflow product work
+- Cross-functional alignment with legal, CX, and engineering
+- Ability to sequence constrained work without people-management authority
+
+Preferred:
+- GDPR or CCPA program experience
+- Background in government software
+
+Responsibilities:
+- Turn audit findings into a sequenced backlog
+- Keep the platform honest about what is owned versus transferable

@@ -1,0 +1,5 @@
+The before-fix Obie letter says profile portability was prioritized over custom tagging, and that sentence cites ACC-115. LR-049 only fires when the cite is ACC-155, so that file still passed.
+
+The new test failed, then passed. The phrase now blocks with an ACC-115 cite and with no provenance. "Custom tagging took priority over making profiles portable" does not block.
+
+On the before-fix copies the check fires on bak_obie_2_CoverLetter.md only. 103 linter tests ran. The only error is the pre-existing rentana geography test.

@@ -2,7 +2,7 @@
 status: closed_moot
 created: 2026-07-07
 closed: 2026-07-08
-related: CR-058 (generation-defect-fixes, same session, immediate predecessor), CR-017 (local-claim-composition-engine — the reason this CR's premise doesn't hold)
+related: CR-058 (generation-defect-fixes, same session, immediate predecessor), CR-017 (local-claim-composition-engine — the reason this CR's premise doesn't hold), CR-070 (claude-native-generation-pipeline — the follow-up that acted on the fit-evaluation and audit_and_improve call sites this CR scoped out of its own closure, see below)
 contains: CR-059 (Local LLM Tuning Loop)
 ---
 
@@ -41,6 +41,13 @@ regex/logic, zero prompt changes) is consistent with this — there was no promp
   belongs to the separate CR-053/054/055 thread; research/cheat-sheet generation are lower-stakes,
   different-purpose artifacts. Bundling them in would blur two work streams that were deliberately kept
   apart.
+
+**Follow-up (2026-07-17, CR-070):** the two live call sites this closure scoped *out* — fit evaluation
+(`structured_fit.py`'s `_call_equivalence_llm`, one Ollama call per JD, CR-053) and the post-draft
+rewrite loop (`audit_and_improve.py`) — were the explicit targets of
+[CR-070](../05-change-requests/CR-070-claude-native-generation-pipeline.md), which rearchitected them
+to Claude-native reasoning (Epic 2 landed; Epic 3 superseded by the 2026-07-19 direct-authoring pivot).
+This note previously lost that nuance; CR-070's problem statement restates it.
 
 **If the underlying goal (higher rubric score / less generic-reading output) is still worth pursuing**,
 the correct framing is a new CR about **deterministic template variety** in `claim_composer.py` /

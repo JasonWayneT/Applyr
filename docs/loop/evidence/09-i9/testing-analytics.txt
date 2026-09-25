@@ -1,0 +1,5 @@
+The before-fix Classlink resume says the Parallels test work applied testing analytics and cites ACC-214. Work experience does not use that phrase. Pendo product analytics is a real Cision fact and is a different phrase.
+
+The new test failed, then passed. The phrase blocks with that cite and with no provenance. A Pendo product-analytics sentence does not block.
+
+On the before-fix copies the check fires on bak_classlink_Resume.md only. 108 linter tests ran. The only error is the pre-existing rentana geography test.

@@ -1,6 +1,8 @@
 """Tests for submission_linter.py — Epic 1, Story 1.8."""
+import shutil
 import sys
 import os
+import tempfile
 import unittest
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -8,8 +10,20 @@ from submission_linter import (
     lint_document,
     LintResult,
     check_b2b_saas_positioning,
+    check_unsolicited_geography,
     check_attribution_verb_strength,
+    check_bypass_authorship,
+    check_customer_discovery,
+    check_competency_process_notes,
+    check_placeholder_company,
+    check_cited_span_fidelity,
+    check_experience_role_bullets,
+    check_letter_names_employer,
+    check_data_model_phrase,
+    check_required_hedges,
+    collect_fidelity_hard_blocks,
     check_cross_employer_audience_bleed,
+    check_generic_hook_self_reference,
     check_jd_specificity_floor,
     check_wrong_job_company_bleed,
     known_company_names,
@@ -293,6 +307,22 @@ def test_LW009_pair_flags_shared_mechanism_phrase():
     assert any(v.rule_id == "LW-009-PAIR" for v in warns)
 
 
+def test_LW009_pair_equal_length_phrases_sort_by_text():
+    from submission_linter import find_shared_phrases
+
+    resume = (
+        "* Monday alpha beta gamma delta epsilon zeta before the review.\n"
+        "* Tuesday kappa lambda mu nu xi omicron after the review.\n"
+    )
+    letter = (
+        "The plan was alpha beta gamma delta epsilon zeta once the numbers landed.\n"
+        "The other plan was kappa lambda mu nu xi omicron once the dates landed.\n"
+    )
+    shared = find_shared_phrases(resume, letter)
+    assert shared == sorted(shared, key=lambda item: (-len(item), item))
+    assert shared[0].startswith("alpha ")
+
+
 def test_LW009_pair_allows_shared_metric_core_only():
     from submission_linter import check_cross_document_repetition, find_shared_phrases
 
@@ -493,6 +523,69 @@ def test_LR031_ignores_b2b_saas_outside_summary():
     assert check_b2b_saas_positioning(resume, jd) == []
 
 
+_RENTANA_GEO_LETTER = """# Jason Taylor
+San Diego, CA | candidate@example.com
+
+Dear Hiring Manager,
+
+Rentana's use of operating data to support decisions caught my attention.
+
+At Cision I owned the customer-facing platform for media monitoring.
+
+I also organized the roadmap around cost efficiency and platform stability.
+
+I have worked across two fully remote companies with engineering distributed across the U.S., Budapest, and India, and I would welcome the chance to bring that approach to Rentana's platform.
+
+Best regards,
+
+Jason Taylor
+"""
+
+
+def test_LW039_rentana_cover_letter_line_12_fires():
+    from pathlib import Path
+
+    folder = Path(__file__).resolve().parent.parent / "data" / "submissions" / "rentana"
+    jd = (folder / "Original_JD.txt").read_text(encoding="utf-8")
+    lines = _RENTANA_GEO_LETTER.splitlines()
+    assert "distributed across the U.S., Budapest, and India" in lines[11]
+    warns = check_unsolicited_geography(_RENTANA_GEO_LETTER, jd, "cover_letter")
+    assert len(warns) == 1
+    assert warns[0].rule_id == "LW-039"
+    assert warns[0].severity == "WARN"
+    assert warns[0].line == 12
+
+
+def test_LW039_global_teams_jd_does_not_fire():
+    jd = (
+        "Title: Product Manager\n\nRemote (USA)\n\n"
+        "You will collaborate with global teams on the product roadmap.\n"
+    )
+    assert check_unsolicited_geography(_RENTANA_GEO_LETTER, jd, "cover_letter") == []
+
+
+def test_LW039_distributed_data_systems_does_not_fire():
+    """Architecture is not team geography. Implements FR-412."""
+    jd = "Title: Product Manager\n\nRemote (USA)\n\nOwn the product roadmap.\n"
+    resume = (
+        "## PROFESSIONAL EXPERIENCE\n"
+        "* Led work across distributed data systems and backend architecture.\n"
+    )
+    assert check_unsolicited_geography(resume, jd, "resume") == []
+
+
+def test_LW039_distributed_across_locations_still_fires():
+    """A team spread across offices is still unsolicited geography. Implements FR-412."""
+    jd = "Title: Product Manager\n\nRemote (USA)\n\nOwn the product roadmap.\n"
+    resume = (
+        "## PROFESSIONAL EXPERIENCE\n"
+        "* Engineering was distributed across offices.\n"
+    )
+    warns = check_unsolicited_geography(resume, jd, "resume")
+    assert len(warns) == 1
+    assert warns[0].rule_id == "LW-039"
+
+
 # ---------------------------------------------------------------------------
 # LW-021 / LW-026 -- added 2026-08-18. No prior test coverage existed for
 # either rule despite both being live in lint_folder(); a same-day change
@@ -563,6 +656,37 @@ def test_LW026_specificity_floor_still_finds_real_hits():
     assert violations == []
 
 
+def test_LW032_equal_length_names_have_deterministic_tie_break():
+    """Two equal-length names ('workday', 'Unified', both 7 chars) must always
+    sort the same way -- reproduces a live bug (crio, 2026-09-20) where
+    `sorted(names, key=len, reverse=True)` had no tie-break, so a length tie
+    let the hash-randomized iteration order of the `names` set (a fresh
+    per-process ordering, since `known_company_names()` returns a set) leak
+    into finding order, flipping the dispositions.json content hash bound to
+    it across separate worker process runs on unchanged documents. The fix
+    adds a lowercased-name tie-break, which is a total order for distinct
+    names and therefore always produces the same output regardless of the
+    input set's iteration order."""
+    # Fixture note (2026-09-21): originally used "workday-hours" as filler
+    # resume text -- that is itself the exact capacity-phrasing false
+    # positive fixed the same day (isolved), so this fixture would have
+    # started silently asserting on excluded text. Switched to a genuine
+    # company mention so the fixture still exercises a real LW-032 match.
+    resume = "Implemented Workday HCM as part of the engineering capacity rollout."
+    cover_letter = "Presented the quarterly plan at Unified to stakeholders."
+    hits = check_wrong_job_company_bleed(
+        resume=resume,
+        cover_letter=cover_letter,
+        jd_text="Product Manager at Crio",
+        own_company="Crio",
+        known_names={"workday", "Unified", "Gravitee"},
+    )
+    matched = [v.message for v in hits if v.rule_id == "LW-032"]
+    assert len(matched) == 2
+    # "unified" < "workday" alphabetically -- the tie-break must be stable.
+    assert "Unified" in matched[0] and "workday" in matched[1]
+
+
 def test_LW032_flags_other_known_company():
     hits = check_wrong_job_company_bleed(
         resume="Worked at Cision on the platform.",
@@ -574,6 +698,65 @@ def test_LW032_flags_other_known_company():
     assert any(v.rule_id == "LW-032" and "Lightcast" in v.message for v in hits)
     assert not any("Gravitee" in v.message for v in hits)
     assert not any("Cision" in v.message for v in hits)
+
+
+def test_LW032_workday_hours_capacity_phrase_not_flagged():
+    """Live false positive (isolved, 2026-09-21): "developer workday-hours"
+    is ordinary capacity-planning phrasing, not a mention of the Workday
+    company -- same collision blocked_tools.hard_blocked_tool_pattern's own
+    workday exclusion already handles, in a separate check that never got
+    the same fix."""
+    hits = check_wrong_job_company_bleed(
+        resume=(
+            "Optimized engineering resource allocation by establishing a "
+            "PTO-adjusted capacity model based on developer workday-hours "
+            "and uncertainty bands."
+        ),
+        cover_letter="",
+        jd_text="Product Manager",
+        own_company="Isolved",
+        known_names={"workday", "Isolved"},
+    )
+    assert hits == []
+
+
+def test_LW032_real_workday_mention_still_flagged():
+    hits = check_wrong_job_company_bleed(
+        resume="Implemented Workday HCM for the client's HR team.",
+        cover_letter="",
+        jd_text="Product Manager",
+        own_company="Isolved",
+        known_names={"workday", "Isolved"},
+    )
+    assert any(v.rule_id == "LW-032" and "workday" in v.message for v in hits)
+
+
+def test_LW032_the_standard_line_phrase_not_flagged():
+    """Live false positive (omnissa, 2026-09-21): 'skip the standard line'
+    is ordinary queue phrasing, not a mention of The Standard."""
+    hits = check_wrong_job_company_bleed(
+        resume="",
+        cover_letter=(
+            "I designed a weighted priority-score formula for Jira issues "
+            "from severity and incident frequency, with a qualitative "
+            "override so premium clients could skip the standard line."
+        ),
+        jd_text="Product Manager at Omnissa",
+        own_company="Omnissa",
+        known_names={"The Standard", "Omnissa"},
+    )
+    assert hits == []
+
+
+def test_LW032_real_the_standard_mention_still_flagged():
+    hits = check_wrong_job_company_bleed(
+        resume="I interviewed at The Standard for their platform PM role.",
+        cover_letter="",
+        jd_text="Product Manager at Omnissa",
+        own_company="Omnissa",
+        known_names={"The Standard", "Omnissa"},
+    )
+    assert any(v.rule_id == "LW-032" and "The Standard" in v.message for v in hits)
 
 
 def test_LW032_own_company_does_not_warn():
@@ -627,6 +810,119 @@ def test_LW021_allows_target_framing_before_past_employer_bridge():
     ) == []
 
 
+def test_LW038_warns_on_generic_self_referential_hook():
+    letter = (
+        "Dear Hiring Manager,\n\n"
+        "Form Health's new care-delivery program shows what makes this role interesting.\n\n"
+        "At Cision, I turned churn signals into product priorities."
+    )
+    findings = check_generic_hook_self_reference(letter)
+    assert any(v.rule_id == "LW-038" for v in findings)
+
+
+def test_LW038_allows_specific_hook():
+    letter = (
+        "Dear Hiring Manager,\n\n"
+        "Form Health's new care-delivery program expands access by reducing the "
+        "administrative work around prescribing.\n\n"
+        "At Cision, I turned churn signals into product priorities."
+    )
+    assert check_generic_hook_self_reference(letter) == []
+
+
+def test_LW038_ignores_self_reference_outside_hook():
+    letter = (
+        "Dear Hiring Manager,\n\n"
+        "Form Health's new care-delivery program expands access by reducing the "
+        "administrative work around prescribing.\n\n"
+        "That work shows what makes this role interesting to me."
+    )
+    assert check_generic_hook_self_reference(letter) == []
+
+
+def test_LR038_blocks_the_stage2_bypass_overclaims():
+    """The three Stage 2 repairs from 2026-09-22 claimed Jason made the connection."""
+    bad = [
+        "After customer reports of outdated records, removed a 40% drop-off in aging ingestion pipelines by connecting intake directly to the upstream system of record, and those reports fell to none.",
+        "Cut a 40% pipeline data-loss rate to zero recurring stale-data complaints by bypassing an unreliable legacy extraction path and connecting the platform directly to the upstream authoritative database.",
+        "Prioritized a production fix on a failing ingestion path that removed a 40% drop-off and ended stale-data complaints, writing user stories for the frontend screens and the backend database connection.",
+    ]
+    for bullet in bad:
+        hits = check_bypass_authorship(f"- {bullet}\n", "")
+        assert any(v.rule_id == "LR-038" and v.severity == "HARD_BLOCK" for v in hits), bullet
+
+
+def test_LR038_allows_decision_wording_and_the_approved_story():
+    good = [
+        "Traced silent contact-data loss hop by hop through a multi-stage ETL pipeline, then prioritized an engineer's proposal to read the upstream database directly, cutting a 40 percent drop-off and ending the stale contact complaints.",
+        "Prioritized a source-database integration after lost-subscription analysis named inaccurate records as a top reason customers left, cutting a 40% data drop-off and bringing stale-data complaints to zero.",
+        "After customer reports of outdated contact records, drove the decision to bypass aging ETL paths into the upstream system of record, which ended the 40% drop-off and brought those reports to zero.",
+        "Prioritized and drove a centralized platform data remediation initiative that bypassed failing legacy ETL paths to integrate directly with the upstream source-of-truth database, eliminating a 40% data drop-off rate and reducing stale-data complaints to zero.",
+        "After an engineer proposed reading the system of record directly, prioritized that path, which removed a 40% contact-data drop-off and ended stale-data complaints.",
+    ]
+    for bullet in good:
+        assert check_bypass_authorship(f"- {bullet}\n", "") == [], bullet
+
+
+def test_LR038_blocks_owned_integration_and_allows_a_decision():
+    bad = (
+        "- Owned the integration between upstream data providers and the platform, "
+        "resolving a 40% data failure rate and eliminating the stale-contact complaints.\n"
+    )
+    good = (
+        "- Drove the decision to replace the legacy path, which ended a 40% drop-off "
+        "and brought stale-data complaints to zero.\n"
+    )
+    assert any(v.rule_id == "LR-038" for v in check_bypass_authorship(bad, ""))
+    assert check_bypass_authorship(good, "") == []
+
+
+def test_LR039_blocks_customer_discovery_and_allows_a_denial():
+    resume = (
+        "## CORE COMPETENCIES\n"
+        "Roadmaps | customer discovery | Jira\n\n"
+        "* Used closed-lost reviews to see why accounts left.\n"
+    )
+    denial = "He did not run customer discovery. The organization blocked it."
+    letter_claim = "I used customer discovery to learn what buyers wanted."
+    letter_jd = "The role asks for customer discovery with buyers."
+    assert any(v.rule_id == "LR-039" for v in check_customer_discovery(resume, ""))
+    assert check_customer_discovery("", denial) == []
+    assert any(v.rule_id == "LR-039" for v in check_customer_discovery("", letter_claim))
+    assert check_customer_discovery("", letter_jd) == []
+
+
+def test_LR038_blocks_ingestion_loss_sentence_and_allows_the_repair():
+    bad = (
+        "The corrected feed cleared the ingestion loss those reviews had measured at 40%, "
+        "and the stale-record complaints stopped."
+    )
+    good = (
+        "The corrected feed cleared the contact-data drop-off those reviews had measured at 40%, "
+        "and the stale-record complaints stopped."
+    )
+    assert any(v.rule_id == "LR-038" for v in check_bypass_authorship("", bad))
+    assert check_bypass_authorship("", good) == []
+
+
+def test_LW028_adjacent_team_built_is_not_jasons_verb():
+    letter = (
+        "When an adjacent team at Cision built an AI-assisted content-generation "
+        "platform, I conducted joint prompt-engineering research with the lead "
+        "product manager to study how per-specialization prompt architectures "
+        "performed under production conditions."
+    )
+    assert not any(
+        v.rule_id == "LW-028"
+        for v in check_attribution_verb_strength("", letter)
+    )
+    claimed = "I built the content-generation platform and its prompt orchestration."
+    assert any(
+        v.rule_id == "LW-028"
+        for v in check_attribution_verb_strength("", claimed)
+    )
+
+
 def test_LW028_allows_acc303_separate_subject_attribution():
     letter = (
         "I built the company's first professional landing page, after which engineering "
@@ -645,6 +941,23 @@ def test_LW028_allows_acc303_separate_subject_attribution():
     assert not any(
         v.rule_id == "LW-028"
         for v in check_attribution_verb_strength("", alternate)
+    )
+    enabled = (
+        "Built the company's first professional landing page that enabled "
+        "engineering to deploy an automated Salesforce onboarding funnel, "
+        "lifting account-manager-reported conversion by roughly 40 percentage points."
+    )
+    assert not any(
+        v.rule_id == "LW-028"
+        for v in check_attribution_verb_strength("", enabled)
+    )
+    owned_funnel = (
+        "I built the Salesforce onboarding funnel and lifted conversion by "
+        "roughly 40 percentage points."
+    )
+    assert any(
+        v.rule_id == "LW-028"
+        for v in check_attribution_verb_strength("", owned_funnel)
     )
 
 
@@ -673,9 +986,549 @@ def test_LW032_jd_mention_does_not_warn():
     assert hits == []
 
 
+def test_LW032_unified_adjective_is_not_the_company():
+    """Live miss (modern_campus, 2026-09-22): 'unified stakeholder' is English."""
+    hits = check_wrong_job_company_bleed(
+        resume=(
+            "## PROFESSIONAL SUMMARY\n\n"
+            "- Maintain unified stakeholder management across planning cycles."
+        ),
+        cover_letter="",
+        jd_text="Product manager for student engagement.",
+        own_company="Modern Campus",
+        known_names={"Unified", "Modern Campus"},
+    )
+    assert hits == []
+    named = check_wrong_job_company_bleed(
+        resume="## PROFESSIONAL SUMMARY\n\nShipped the integration at Unified last year.",
+        cover_letter="",
+        jd_text="Product manager for student engagement.",
+        own_company="Modern Campus",
+        known_names={"Unified", "Modern Campus"},
+    )
+    assert any(v.rule_id == "LW-032" for v in named), named
+    adjective = check_wrong_job_company_bleed(
+        resume=(
+            "## PROFESSIONAL SUMMARY\n\n"
+            "Brought engineering, Legal, and Sales into a unified roadmap."
+        ),
+        cover_letter="",
+        jd_text="Product manager for benefits administration.",
+        own_company="Highmark Health",
+        known_names={"Unified", "Highmark Health"},
+    )
+    assert adjective == []
+
+
+def test_LW032_duplicate_company_suffix_is_the_same_employer():
+    hits = check_wrong_job_company_bleed(
+        resume="## PROFESSIONAL SUMMARY\n\nMedrisk runs the network I would support.",
+        cover_letter="",
+        jd_text="Product manager role.",
+        own_company="Medrisk 2",
+        known_names={"Medrisk", "Lightcast"},
+    )
+    assert hits == []
+    other = check_wrong_job_company_bleed(
+        resume="## PROFESSIONAL SUMMARY\n\nLightcast is a different company.",
+        cover_letter="",
+        jd_text="Product manager role.",
+        own_company="Medrisk 2",
+        known_names={"Medrisk", "Lightcast"},
+    )
+    assert any(v.rule_id == "LW-032" and "Lightcast" in v.message for v in other)
+
+
 def test_LW032_missing_db_does_not_raise():
     names = known_company_names(db_path="/nonexistent/jobagent.sqlite", submissions_root="/nonexistent")
     assert names == set()
+
+
+def test_LW005_devops_partner_is_verified():
+    """Live miss (velosio, 2026-09-21): rstrip('s') turned DevOps into
+    'devop', which is not in _VERIFIED_PARTNERS, so a verified partner
+    warned as unverified."""
+    text = (
+        "In previous roles, partnering with DevOps, quality assurance, "
+        "and customer-facing teams kept each committed increment honest."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert not any(v.rule_id == "LW-005" for v in result.warns), result.warns
+
+
+def test_LW005_still_warns_unverified_design_partner():
+    text = "I partnered with Design to ship the checkout flow."
+    result = lint_document(text, doc_type="cover_letter")
+    assert any(v.rule_id == "LW-005" for v in result.warns), result.warns
+
+
+def test_LW005_peer_product_manager_is_same_function():
+    """Live miss (iperium, 2026-09-22): a peer PM is not an outside department."""
+    text = (
+        "I also partnered with a peer product manager on joint "
+        "prompt-engineering research, analyzing a production prompt-orchestration system."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert not any(v.rule_id == "LW-005" for v in result.warns), result.warns
+
+
+def test_LR026_epic_not_flagged_when_agile_word_precedes_it():
+    """Live miss (peoplefinders, 2026-09-21): "new roadmap epics." -- the
+    qualifying Agile word ("roadmap") comes BEFORE "epics", which
+    blocked_tools.py's regex-only lookahead can't catch (stdlib re has no
+    variable-width lookbehind). lint_document() must not HARD_BLOCK this."""
+    text = (
+        "giving teams realistic bandwidth bands for new roadmap epics. "
+        "In parallel, I evaluated user interaction patterns."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert not any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
+def test_LR026_real_epic_company_still_flagged():
+    text = "Worked extensively with Epic EHR systems for clinical data integration."
+    result = lint_document(text, doc_type="resume")
+    assert any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
+def test_LR026_blocks_dynamics_365_business_central():
+    """Live miss (velosio, 2026-09-21): first-draft cover letter opened on
+    Microsoft Dynamics 365 Business Central. Jason answered NOT_PRESENT.
+    SAP/NetSuite were already hard-blocked; Dynamics was not."""
+    text = (
+        "Expanding proprietary IP solutions across Microsoft Dynamics 365 "
+        "Business Central requires a product manager who can anchor development."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
+def test_LR026_blocks_workspace_one_uem():
+    """Live miss (omnissa, 2026-09-21): Review Center NOT_PRESENT on
+    Workspace ONE UEM, then Stage 0 still mapped a SOFT bridge."""
+    text = (
+        "Hands-on experience with Workspace ONE UEM is how I would "
+        "approach frontline device management at Omnissa."
+    )
+    result = lint_document(text, doc_type="cover_letter")
+    assert any(v.rule_id == "LR-026" for v in result.blocks), result.blocks
+
+
+def test_LR040_blocks_a_process_note_in_competencies():
+    resume = (
+        "## CORE COMPETENCIES\n"
+        "Jira | Direct customer discovery did not happen\n\n"
+        "## PROFESSIONAL EXPERIENCE\n"
+    )
+    assert any(v.rule_id == "LR-040" for v in check_competency_process_notes(resume))
+    clean = (
+        "## CORE COMPETENCIES\n"
+        "Jira | Roadmaps\n\n"
+        "## PROFESSIONAL EXPERIENCE\n"
+        "* He did not run customer discovery.\n"
+    )
+    assert check_competency_process_notes(clean) == []
+
+
+def test_LR041_blocks_placeholder_company():
+    assert any(
+        v.rule_id == "LR-041"
+        for v in check_placeholder_company("Confidential is tackling a growth phase.")
+    )
+    assert check_placeholder_company("Keep the customer list confidential.") == []
+
+
+def test_LR042_binds_the_unit_and_rejects_an_unseen_percent():
+    spans = [
+        "saving $8,500 per quarter ($34,000 annually) with the deployment script.",
+        "saving $22,100 annually by co-creating the onboarding tool.",
+        "churn held near 7%.",
+    ]
+    annually = "* Scaled fulfillment, saving $8,500 annually."
+    bare = "* Scaled fulfillment, saving $8,500."
+    quarterly = "* Scaled fulfillment, cutting $8,500 in quarterly operating spend."
+    onboarding = "* Saved $22,100 annually by co-creating the onboarding tool."
+    annual_phrase = (
+        "* Co-created an onboarding tool, securing $22,100 in annual recurring savings."
+    )
+    derived = "* Supported annual retention near 93% by prioritizing reliability."
+    assert any(v.rule_id == "LR-042" for v in check_cited_span_fidelity(annually, "", spans))
+    assert any(v.rule_id == "LR-042" for v in check_cited_span_fidelity(bare, "", spans))
+    assert check_cited_span_fidelity(quarterly, "", spans) == []
+    assert check_cited_span_fidelity(onboarding, "", spans) == []
+    assert check_cited_span_fidelity(annual_phrase, "", spans) == []
+    arr = "* Directed product scope across two stacks representing $40M ARR."
+    assert check_cited_span_fidelity(arr, "", [
+        "Owned a customer-facing platform, a $40M ARR stack serving 25,000 users.",
+    ]) == []
+    assert any(v.rule_id == "LR-042" for v in check_cited_span_fidelity(derived, "", spans))
+
+
+def test_LR042_blocks_a_swapped_percent_referent():
+    profiles = (
+        "per-client data profiles were widely assumed must-have but used by only "
+        "~25% of customers; custom tagging took priority."
+    )
+    migration = "Estimated at least ~95% of customers flipped."
+    dropoff = "Eliminated a 40% data drop-off rate between sources."
+    backlog = "Resolved 90% of the backlog over a phased period."
+    risks = "Resolved 90% of security risks while balancing new work."
+    swapped = (
+        "Per-client data profiles represented approximately 25% of platform usage."
+    )
+    bare_usage = (
+        "* Analyzing usage data across Pendo and Salesforce to address a "
+        "25% core data usage profile."
+    )
+    customers = "Roughly 25% of customers used per-client data profiles."
+    who_used = "Of the 25% who used per-client data profiles, the rest used it lightly."
+    accounts = "* An estimated 95% of active accounts completed the migration."
+    records = "* The pipeline was dropping 40% of records before the fix."
+    security = "The work resolved 90% of security risks in that year."
+    unrelated = "Travel for this role is about 25% of the time."
+    assert any(v.rule_id == "LR-042" for v in check_cited_span_fidelity("", swapped, [profiles]))
+    assert any(v.rule_id == "LR-042" for v in check_cited_span_fidelity(bare_usage, "", [profiles]))
+    assert check_cited_span_fidelity("", customers, [profiles]) == []
+    assert check_cited_span_fidelity("", who_used, [profiles]) == []
+    assert check_cited_span_fidelity(accounts, "", [migration]) == []
+    assert check_cited_span_fidelity(records, "", [dropoff]) == []
+    assert check_cited_span_fidelity("", security, [backlog, risks]) == []
+    assert check_cited_span_fidelity("", unrelated, [profiles]) == []
+
+
+def test_LR043_blocks_taking_the_funnel_and_allows_the_split():
+    spans = [
+        "Built the landing page. Once it proved out, engineering built the funnel around it."
+    ]
+    taken = "I created a dedicated acquisition funnel and automated lead routing."
+    split = (
+        "I built the landing page, and engineering then built the automated funnel around it."
+    )
+    assert any(v.rule_id == "LR-043" for v in check_cited_span_fidelity("", taken, spans))
+    assert check_cited_span_fidelity("", split, spans) == []
+    intake = "* Built an intake and incident prioritization model in Jira."
+    assert check_cited_span_fidelity(intake, "", spans) == []
+
+
+def _repo_root() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def test_LR044_blocks_nisum_2_empty_roles():
+    """Fixture matches nisum_2 stage1_pre_repair: three role headings, zero bullets."""
+    path = os.path.join(_repo_root(), "tests", "fixtures", "cr127_empty_roles_resume.md")
+    text = open(path, encoding="utf-8").read()
+    violations = check_experience_role_bullets(text)
+    assert len(violations) == 3
+    assert all(v.rule_id == "LR-044" for v in violations)
+    filled = text.replace(
+        "### Product Manager | Cision | September 2021 - January 2026\n",
+        "### Product Manager | Cision | September 2021 - January 2026\n* Kept the contact records current.\n",
+        1,
+    ).replace(
+        "### Product Manager / Product Owner | Sterkly | February 2019 - August 2021\n",
+        "### Product Manager / Product Owner | Sterkly | February 2019 - August 2021\n* Wrote the certificate workflow.\n",
+        1,
+    ).replace(
+        "### Account Manager / Product Owner | Zero To Sixty | June 2017 - January 2019\n",
+        "### Account Manager / Product Owner | Zero To Sixty | June 2017 - January 2019\n* Built the landing page.\n",
+        1,
+    )
+    assert check_experience_role_bullets(filled) == []
+
+
+def test_LR045_requires_a_past_employer_paragraph():
+    bare = (
+        "Dear Hiring Manager,\n\n"
+        "Investigating the pipeline mechanics revealed a silent data loss pattern.\n\n"
+        "Best regards,\n"
+    )
+    assert any(v.rule_id == "LR-045" for v in check_letter_names_employer(bare))
+    named = bare.replace(
+        "Investigating the pipeline",
+        "At Cision, investigating the pipeline",
+    )
+    assert check_letter_names_employer(named) == []
+
+
+def test_LR046_blocks_data_model_and_allows_schema():
+    bad = "I authored the requirements to restructure the underlying data model."
+    assert any(v.rule_id == "LR-046" for v in check_data_model_phrase("", bad))
+    ok = "I specified splitting the values into two columns and reading the schema directly."
+    assert check_data_model_phrase(ok, "") == []
+
+
+def test_LR047_requires_estimated_on_the_range_and_the_drafting_line():
+    bare_money = "Earlier at Sterkly, I unlocked between $1M and $3M in blocked revenue."
+    kept_money = "Sustained an estimated $1M to $3M in blocked product revenue."
+    bare_time = (
+        "Used AI to draft epics, reducing drafting time from two weeks to several days."
+    )
+    kept_time = (
+        "Used AI to draft epics, reducing drafting time from about two weeks to a few days, "
+        "his own estimate."
+    )
+    assert any(v.rule_id == "LR-047" for v in check_required_hedges("", bare_money))
+    assert check_required_hedges("* " + kept_money, "") == []
+    assert any(v.rule_id == "LR-047" for v in check_required_hedges("* " + bare_time, ""))
+    assert check_required_hedges("* " + kept_time, "") == []
+
+
+def test_LR049_blocks_a_cited_sentence_that_contradicts_the_fact():
+    """FR-390: the cite is real and the sentence says something the fact does not."""
+    inversion = "I prioritized profile portability over custom tagging."
+    usage = "That change reached 25 percent of active usage."
+    true_line = "Custom tagging took priority over making profiles portable."
+    cited = {
+        "cover_letter_claims": [
+            {"sentence": inversion, "claim_ids": ["ACC-155"]},
+            {"sentence": usage, "claim_ids": ["ACC-115"]},
+            {"sentence": true_line, "claim_ids": ["ACC-155"]},
+        ]
+    }
+    blocks = collect_fidelity_hard_blocks("", "\n\n".join([inversion, usage, true_line]), cited)
+    assert any(v.rule_id == "LR-049" and "ACC-155" in v.message for v in blocks)
+    assert any(v.rule_id == "LR-049" and "ACC-115" in v.message for v in blocks)
+    assert not any(true_line[:40] in v.message for v in blocks if v.rule_id == "LR-049")
+    other_fact = {
+        "cover_letter_claims": [
+            {"sentence": inversion, "claim_ids": ["ACC-104"]},
+        ]
+    }
+    assert not any(
+        v.rule_id == "LR-049"
+        for v in collect_fidelity_hard_blocks("", inversion, other_fact)
+    )
+    assert not any(
+        v.rule_id == "LR-049"
+        for v in collect_fidelity_hard_blocks("", inversion)
+    )
+    credited = (
+        "I influenced the landing page that enabled engineering to deploy "
+        "an automated Salesforce onboarding funnel."
+    )
+    credited_prov = {
+        "cover_letter_claims": [{"sentence": credited, "claim_ids": ["ACC-303"]}]
+    }
+    assert not any(
+        v.rule_id == "LR-049"
+        for v in collect_fidelity_hard_blocks("", credited, credited_prov)
+    )
+    took_funnel = "I automated lead capture and built the onboarding funnel."
+    took_prov = {
+        "cover_letter_claims": [{"sentence": took_funnel, "claim_ids": ["ACC-303"]}]
+    }
+    assert any(
+        v.rule_id == "LR-049" and "ACC-303" in v.message
+        for v in collect_fidelity_hard_blocks("", took_funnel, took_prov)
+    )
+
+
+def test_LR050_blocks_the_portability_inversion_on_any_cite():
+    """The portability inversion is false even when the cite is a different fact."""
+    inversion = "I prioritized profile portability over custom tagging."
+    neighbor = {
+        "cover_letter_claims": [{"sentence": inversion, "claim_ids": ["ACC-115"]}]
+    }
+    blocks = collect_fidelity_hard_blocks("", inversion, neighbor)
+    assert any(v.rule_id == "LR-050" for v in blocks)
+    assert any(
+        v.rule_id == "LR-050"
+        for v in collect_fidelity_hard_blocks("", inversion)
+    )
+    true_line = "Custom tagging took priority over making profiles portable."
+    true_prov = {
+        "cover_letter_claims": [{"sentence": true_line, "claim_ids": ["ACC-155"]}]
+    }
+    assert not any(
+        v.rule_id == "LR-050"
+        for v in collect_fidelity_hard_blocks("", true_line, true_prov)
+    )
+
+
+def test_LR051_blocks_qa_lead_on_any_cite():
+    """A QA-lead claim is false even when the cite is a different fact."""
+    bullet = "Served as first-pass QA lead on a macOS security product."
+    resume = "* " + bullet
+    neighbor = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-204"]}]}
+    assert any(
+        v.rule_id == "LR-051"
+        for v in collect_fidelity_hard_blocks(resume, "", neighbor)
+    )
+    assert any(
+        v.rule_id == "LR-051"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    plain = "* I walked manual test suites and routed defects to engineering."
+    assert not any(
+        v.rule_id == "LR-051"
+        for v in collect_fidelity_hard_blocks(plain, "")
+    )
+
+
+def test_LR052_blocks_hundreds_of_client_databases():
+    """MET-09 is roughly 200 SQL databases. Hundreds is a different scale."""
+    sentence = (
+        "Bypassing the brittle transformation layer restored consistency "
+        "across hundreds of client databases."
+    )
+    neighbor = {
+        "cover_letter_claims": [
+            {"sentence": sentence, "claim_ids": ["ACC-102", "ACC-121"]}
+        ]
+    }
+    assert any(
+        v.rule_id == "LR-052"
+        for v in collect_fidelity_hard_blocks("", sentence, neighbor)
+    )
+    assert any(
+        v.rule_id == "LR-052"
+        for v in collect_fidelity_hard_blocks("", sentence)
+    )
+    true_line = "I queried roughly 200 SQL databases during ticket triage."
+    assert not any(
+        v.rule_id == "LR-052"
+        for v in collect_fidelity_hard_blocks("", true_line)
+    )
+
+
+def test_LR053_blocks_a_reduced_support_escalation_claim():
+    """Work experience never says support escalations were reduced."""
+    sentence = (
+        "Bypassing the brittle transformation layer eliminated the data loss "
+        "and significantly reduced customer support escalations."
+    )
+    cited = {
+        "cover_letter_claims": [{"sentence": sentence, "claim_ids": ["ACC-102"]}]
+    }
+    assert any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", sentence, cited)
+    )
+    assert any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", sentence)
+    )
+    formula = (
+        "I built a weighted priority formula to streamline Customer Support escalations."
+    )
+    assert not any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", formula)
+    )
+    complaints = "The bypass reduced stale-data complaints to zero."
+    assert not any(
+        v.rule_id == "LR-053"
+        for v in collect_fidelity_hard_blocks("", complaints)
+    )
+
+
+def test_LR054_blocks_release_cadence():
+    """Work experience never says release cadence."""
+    bullet = (
+        "Guided release cadence and first-pass QA for a macOS security product "
+        "within an Agile framework."
+    )
+    resume = "* " + bullet
+    cited = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-204"]}]}
+    assert any(
+        v.rule_id == "LR-054"
+        for v in collect_fidelity_hard_blocks(resume, "", cited)
+    )
+    assert any(
+        v.rule_id == "LR-054"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    triage = "* I coordinated testing and defect triage with QA engineering teams."
+    deletion = "* I drove the rolling deletion cadence with Legal sign-off."
+    assert not any(
+        v.rule_id == "LR-054"
+        for v in collect_fidelity_hard_blocks(triage + "\n" + deletion, "")
+    )
+
+
+def test_LR055_blocks_testing_analytics():
+    """Work experience never says testing analytics. Pendo product analytics stays."""
+    bullet = (
+        "Configured virtual machine test environments, applying product analytics "
+        "and testing analytics to verify build stability."
+    )
+    resume = "* " + bullet
+    cited = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-214"]}]}
+    assert any(
+        v.rule_id == "LR-055"
+        for v in collect_fidelity_hard_blocks(resume, "", cited)
+    )
+    assert any(
+        v.rule_id == "LR-055"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    pendo = "* I used Pendo product analytics to see where engagement was weak."
+    assert not any(
+        v.rule_id == "LR-055"
+        for v in collect_fidelity_hard_blocks(pendo, "")
+    )
+
+
+def test_LR056_blocks_the_visible_codename():
+    """Capital Visible mid-sentence is the codename. Lowercase visible is not."""
+    bullet = "I made the architectural tradeoffs Visible to enable engineering."
+    resume = "* " + bullet
+    cited = {"resume_claims": [{"bullet": bullet, "claim_ids": ["ACC-101"]}]}
+    assert any(
+        v.rule_id == "LR-056"
+        for v in collect_fidelity_hard_blocks(resume, "", cited)
+    )
+    assert any(
+        v.rule_id == "LR-056"
+        for v in collect_fidelity_hard_blocks(resume, "")
+    )
+    plain = "* The results were visible in the usage data."
+    assert not any(
+        v.rule_id == "LR-056"
+        for v in collect_fidelity_hard_blocks(plain, "")
+    )
+
+
+def test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent():
+    bare = "The migration finished without service disruption."
+    hedged = (
+        "An estimated 95 percent of customers flipped, and about 5 percent never did, "
+        "so the cutover was not without disruption for every account."
+    )
+    plain = "I aligned engineering on the rollout plan."
+    bare_blocks = collect_fidelity_hard_blocks("", bare)
+    assert any(v.rule_id == "LR-048" for v in bare_blocks)
+    assert not any(v.rule_id == "LR-048" for v in collect_fidelity_hard_blocks("", hedged))
+    assert not any(v.rule_id == "LR-048" for v in collect_fidelity_hard_blocks("* " + plain, ""))
+
+
+def test_LR046_and_LR047_on_a_before_fix_copy():
+    """Copy from data/review_evidence, never from data/submissions."""
+    evidence = os.path.join(
+        _repo_root(), "data", "review_evidence", "2026-09-23-before-fix"
+    )
+    medrisk = os.path.join(evidence, "bak_medrisk_CoverLetter.md")
+    highmark = os.path.join(evidence, "bak_highmark_health_CoverLetter.md")
+    candor = os.path.join(evidence, "bak_candor_health_Resume.md")
+    if not (os.path.isfile(medrisk) and os.path.isfile(highmark) and os.path.isfile(candor)):
+        raise unittest.SkipTest("before-fix evidence is not in this checkout")
+    with tempfile.TemporaryDirectory() as tmp:
+        medrisk_copy = os.path.join(tmp, "CoverLetter.md")
+        highmark_copy = os.path.join(tmp, "HighmarkCover.md")
+        candor_copy = os.path.join(tmp, "Resume.md")
+        shutil.copyfile(medrisk, medrisk_copy)
+        shutil.copyfile(highmark, highmark_copy)
+        shutil.copyfile(candor, candor_copy)
+        medrisk_text = open(medrisk_copy, encoding="utf-8").read()
+        highmark_text = open(highmark_copy, encoding="utf-8").read()
+        candor_text = open(candor_copy, encoding="utf-8").read()
+    assert any(v.rule_id == "LR-046" for v in check_data_model_phrase("", medrisk_text))
+    assert any(v.rule_id == "LR-047" for v in check_required_hedges("", highmark_text))
+    candor_hits = check_required_hedges(candor_text, "")
+    assert any("drafting-time line" in v.message for v in candor_hits)
+    kept = "* Sustained an estimated $1M to $3M in blocked product revenue."
+    assert check_required_hedges(kept, "") == []
 
 
 def load_tests(loader, tests, pattern):

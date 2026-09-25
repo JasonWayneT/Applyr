@@ -26,6 +26,13 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_build_stage0_fit_gate.py",
     "scripts/test_stage0_model_handoff.py",
     "scripts/test_stage0_skip_ledger.py",
+    "scripts/test_pipeline_queue.py",
+    "scripts/test_csv_ingest.py",
+    "scripts/test_ingest_csv_queue.py",
+    "scripts/test_queue_lock.py",
+    "scripts/test_run_queue_worker.py",
+    "scripts/test_run_stage1_repair.py",
+
     "scripts/test_build_authoring_packet.py",
     "scripts/test_playwright_env.py",
     "scripts/test_audit_claims_coverage.py",
@@ -33,6 +40,7 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_claim_provenance.py",
     "scripts/test_context_pack.py",
     "scripts/test_author_from_packet.py",
+    "scripts/test_generate_authoring_rule_digest.py",
     "scripts/test_submission_linter.py",
     "scripts/test_scan_authoring_defects.py",
     "scripts/test_import_historical_defects.py",
@@ -44,6 +52,9 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_location_gate.py",
     "scripts/test_resume_conversion_eval.py",
     "scripts/test_seniority_years_gate.py",
+    "scripts/test_audit_years_ceiling.py",
+    "scripts/test_cr118_gate_false_skips.py",
+    "scripts/test_export_stage0_adjudication.py",
     "scripts/test_template_lint_sources.py",
     "scripts/test_title_blocklist.py",
     "scripts/test_smoke_regression.py",
@@ -51,10 +62,39 @@ PYTHON_TEST_SCRIPTS = [
     "scripts/test_verify_chain.py",
     "scripts/verify_master_claims.py",
     "scripts/test_llm_provider_cascade.py",
+    "scripts/test_stage0_provider_policy.py",
+    "scripts/test_stage0_provider_golden.py",
+    "scripts/test_stage0_evidence_cascade.py",
+    "scripts/test_audit_packet_integrity.py",
+    "scripts/test_cr112_story32.py",
+    "scripts/test_cr112_lean_spawn.py",
+    "scripts/test_cr112_story31.py",
+    "scripts/test_cr112_story35.py",
+    "scripts/test_cr112_story36.py",
+    "scripts/test_cr112_story33.py",
+    "scripts/test_cr112_story34.py",
+    "scripts/test_cr112_adversarial.py",
+    "scripts/test_stage0_checkpoint_failures.py",
+    "scripts/test_stage0_confirmations.py",
+    "scripts/test_retrain_stage0.py",
+    "scripts/test_stage0_subscription_adapter.py",
+    "scripts/test_replay_stage0_locked30.py",
+    "scripts/test_stage0_classifier_contract.py",
+    "scripts/test_evidence_context.py",
+    "scripts/test_stage0_subscription_extraction.py",
+    "scripts/test_stage0_evidence_matcher.py",
+    "scripts/test_stage0_subscription_evidence.py",
     "scripts/test_resolve_task_providers.py",
     "scripts/test_observability.py",
     "scripts/test_observability_report.py",
+    "scripts/test_cr112_story51.py",
     "scripts/test_run_submission_console_summary.py",
+    "scripts/test_cr112_story61.py",
+    "scripts/test_cr112_story71.py",
+    "scripts/test_cr112_story22.py",
+    "scripts/test_cr112_stage0_extraction_review.py",
+    "scripts/test_practice_identity.py",
+    "scripts/test_cr112_ranking_characterization.py",
 ]
 
 
@@ -70,9 +110,18 @@ def get_subprocess_env() -> dict[str, str]:
     return env
 
 
+PYTHON_TEST_TIMEOUTS = {
+    # These Stage 0 suites unload local models between cases and routinely
+    # exceed the default 180s runner limit on this machine.
+    "scripts/test_cr112_stage0_extraction_review.py": 480,
+    "scripts/test_audit_years_ceiling.py": 480,
+}
+
+
 def run_python_test(script_path: str, verbose: bool) -> Tuple[bool, float, str]:
     """Run a single python test script and return (passed, duration, output)."""
     start_time = time.time()
+    timeout = PYTHON_TEST_TIMEOUTS.get(script_path, 180)
     try:
         args: List[str] = []
         if "verify_master_claims.py" in script_path:
@@ -83,7 +132,7 @@ def run_python_test(script_path: str, verbose: bool) -> Tuple[bool, float, str]:
             text=True,
             errors="replace",
             env=get_subprocess_env(),
-            timeout=180,
+            timeout=timeout,
         )
         duration = time.time() - start_time
         passed = result.returncode == 0
@@ -91,7 +140,7 @@ def run_python_test(script_path: str, verbose: bool) -> Tuple[bool, float, str]:
         return passed, duration, output
     except subprocess.TimeoutExpired:
         duration = time.time() - start_time
-        return False, duration, "TEST TIMED OUT (180s)"
+        return False, duration, f"TEST TIMED OUT ({int(timeout)}s)"
     except Exception as e:
         duration = time.time() - start_time
         return False, duration, f"ERROR EXECUTING TEST: {e}"
@@ -132,6 +181,10 @@ def main() -> int:
 
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     os.chdir(project_root)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
     # Bootstrap data files if missing (required in fresh clones like CI)
     sys.path.insert(0, os.path.join(project_root, "scripts"))

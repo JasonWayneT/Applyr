@@ -1,5 +1,5 @@
 ---
-status: not started
+status: in_progress
 created: 2026-08-28
 related: docs/ROADMAP_BEST_PRACTICES.md (research/rationale for every epic below — read it first)
 contains: CR-104 (frontend & API hardening pass)
@@ -48,27 +48,45 @@ row).
 This is the biggest epic here — treat each story as its own stopping point if a session runs out of
 budget mid-epic.
 
-- [ ] **Story 1.1**: Create `src/components/job-detail/` and extract the "Application Status" section
+- [x] **Story 1.1**: Create `src/components/job-detail/` and extract the "Application Status" section
   into `StatusSection.tsx`, taking exactly the props it needs (not the whole job object by default —
   check what the section actually reads first).
-- [ ] **Story 1.2**: Extract "Interview Schedule" into `InterviewScheduleSection.tsx`.
-- [ ] **Story 1.3**: Extract "Contacts" into `ContactsSection.tsx`.
-- [ ] **Story 1.4**: Extract "Interview Debrief" into `DebriefSection.tsx`.
-- [ ] **Story 1.5**: Extract "Match Summary" into `MatchSummarySection.tsx`.
-- [ ] **Story 1.6**: Extract "Skill Gap Analysis" into `SkillGapSection.tsx`.
-- [ ] **Story 1.7**: Extract "Your Assets & Links" (including the `DocumentEditor` mount point) into
+- [x] **Story 1.1–1.10 done 2026-09-08.** All nine section components extracted and `JobDetailPanel.tsx`
+  reassembled as a thin shell in one pass. State management stays in the parent; each section is
+  purely presentational, receiving only the props it reads. Main panel dropped from 1309 to 603 lines;
+  the 9 extracted components total 1051 lines (prop-interface overhead accounts for the net increase).
+  Verification: `tsc --noEmit` clean, `vitest run` 356/0, `npm run build` success, `npm run lint` 0
+  errors (26 pre-existing warnings unchanged). Story 1.11 (full browser pass) remains the gate before
+  this epic is considered verified — run the dev server and exercise every section per the story's
+  checklist. The "Details" glance section and "Scoring Transparency" score-breakdown section were kept
+  inline in the shell (not named in any story); MatchSummarySection includes both the summary text and
+  the scoring transparency bars since they're adjacent and read the same job fields.
+- [x] **Story 1.2**: Extract "Interview Schedule" into `InterviewScheduleSection.tsx`.
+- [x] **Story 1.3**: Extract "Contacts" into `ContactsSection.tsx`.
+- [x] **Story 1.4**: Extract "Interview Debrief" into `DebriefSection.tsx`.
+- [x] **Story 1.5**: Extract "Match Summary" into `MatchSummarySection.tsx`.
+- [x] **Story 1.6**: Extract "Skill Gap Analysis" into `SkillGapSection.tsx`.
+- [x] **Story 1.7**: Extract "Your Assets & Links" (including the `DocumentEditor` mount point) into
   `AssetsSection.tsx`.
-- [ ] **Story 1.8**: Extract "Pipeline Process Logs" into `LogsSection.tsx`.
-- [ ] **Story 1.9**: Extract the closure modal (Self-Reject / No Longer Available / Confirm Deletion)
+- [x] **Story 1.8**: Extract "Pipeline Process Logs" into `LogsSection.tsx`.
+- [x] **Story 1.9**: Extract the closure modal (Self-Reject / No Longer Available / Confirm Deletion)
   into `ClosureModal.tsx`.
-- [ ] **Story 1.10**: Reassemble `JobDetailPanel.tsx` as a thin shell that composes the sections above
+- [x] **Story 1.10**: Reassemble `JobDetailPanel.tsx` as a thin shell that composes the sections above
   in the original order. Don't add error-boundary wrapping yet — the reusable `ErrorBoundary`
   component doesn't exist until Epic 4; that epic comes back and wraps each of these sections
   individually once it does.
-- [ ] **Story 1.11 — verify**: Full manual pass in the browser — open a job, exercise every section
+- [x] **Story 1.11 — verify**: Full manual pass in the browser — open a job, exercise every section
   (change status, schedule an interview, add a contact, log a debrief, view match summary, run skill
   gap, edit/download an asset, check logs, run the closure flow) and confirm nothing regressed
   visually or functionally compared to before the extraction.
+  **Verified 2026-09-09.** `npm run dev`, opened a real job (Engrain) end to end: Details, Application
+  Status stepper, Interview Schedule, Contacts (Add contact form opened/cancelled), Interview Debrief
+  (form renders, pre-filled date), Match Summary + Scoring Transparency, Skill Gap Analysis
+  ("Analyze Now" returned a real response), Assets & Links (DocumentEditor opened for
+  Original_JD.txt with full rich-text toolbar + AI Copywriter panel, closed cleanly), Pipeline Process
+  Logs, and the Closure modal (opened, cancelled). No console errors, no visual regressions. Mutating
+  interactions (contact add, closure) were opened and cancelled rather than submitted, to avoid writing
+  test data into Jason's real job-search database.
 
 ---
 
@@ -83,26 +101,56 @@ token is off by default, and Settings' API-key fields are never masked when read
 only require the token when a user deliberately opts into wider access (e.g. for their own
 Tailscale/phone use).
 
-- [ ] **Story 2.1**: In `server/index.ts`, replace the hardcoded `app.listen(PORT, '0.0.0.0', ...)`
+- [x] **Story 2.1**: In `server/index.ts`, replace the hardcoded `app.listen(PORT, '0.0.0.0', ...)`
   with a bind address controlled by a new env var, e.g. `APPLYR_BIND_ALL` (unset/false → bind
   `127.0.0.1`; `true` → bind `0.0.0.0`, preserving today's behavior for anyone already relying on it).
   Log which mode it started in.
-- [ ] **Story 2.2**: In `server/middleware.ts`'s `requireApiToken`, when `APPLYR_BIND_ALL` is true and
+  **Done 2026-09-09.** The server already bound to `127.0.0.1` by default via `APPLYR_HOST` env var
+  (not `APPLYR_BIND_ALL` as the story named it — same semantics, already shipped before this CR was
+  written). No code change needed for this story; the existing `APPLYR_HOST` approach is retained.
+- [x] **Story 2.2**: In `server/middleware.ts`'s `requireApiToken`, when `APPLYR_BIND_ALL` is true and
   `APPLYR_API_TOKEN` is unset, fail startup with a clear error message explaining why (don't silently
   run unprotected on a wide bind) rather than just falling through to `next()` as it does today.
-- [ ] **Story 2.3**: Update `README.md` (and `.env.example` / equivalent, if one exists — check first)
+  **Done 2026-09-09.** Added a fail-closed check in `server/index.ts` before `app.listen`: if
+  `APPLYR_HOST` is set to anything other than `127.0.0.1`/`localhost` and `APPLYR_API_TOKEN` is unset,
+  the server prints a FATAL error and exits. Implemented in `index.ts` rather than `middleware.ts`
+  because the check is a startup-time gate, not a per-request middleware — failing at `app.listen`
+  is cleaner than wiring it through `requireApiToken` which runs on every request.
+- [x] **Story 2.3**: Update `README.md` (and `.env.example` / equivalent, if one exists — check first)
   to document both env vars and this default.
-- [ ] **Story 2.4**: Find every GET route that returns stored API key values (start with
+  **Done 2026-09-09.** Added a "Server bind address and auth" paragraph under "### 5. Start the app"
+  documenting `APPLYR_HOST`, `APPLYR_API_TOKEN`, the fail-closed behavior, and the key masking. No
+  `.env.example` exists in the repo (the README already says "No `.env` file required").
+- [x] **Story 2.4**: Find every GET route that returns stored API key values (start with
   `server/routes/profile.ts`'s `api_connections`/`llm_settings` handlers) and mask them before they
   leave the server — return something like `sk-...ab12` (last 4 chars only) instead of the full value.
   Confirm the Settings UI (`src/components/SettingsView.tsx`) still renders sensibly with a masked
   value (it should already treat the field as opaque display text, not something it parses).
-- [ ] **Story 2.5 — verify**: Start the server fresh with no env vars set — confirm it binds to
+  **Done 2026-09-09.** Added `maskSecretsInBlob` and `preserveSecretsOnSave` to `server/routes/profile.ts`.
+  GET `/api/profile/:key` now masks known secret fields (`geminiApiKey`, `claudeApiKey`,
+  `perplexityApiKey`, `groqApiKey` in `llm_settings`; `adzunaAppKey`, `theirstackApiKey` in
+  `api_connections`) to `••••••••` + last 4 chars. POST preserves existing stored values when the
+  client sends a masked value back unchanged (detected via the `••••••••` prefix), so a debounced
+  save that re-submits the masked value doesn't overwrite the real key. The Settings UI renders the
+  masked value in `type="password"` inputs (and `type="text"` for Gemini) without parsing the value —
+  confirmed by code inspection, not yet by browser exercise (Story 2.5).
+- [x] **Story 2.5 — verify**: Start the server fresh with no env vars set — confirm it binds to
   localhost only (`netstat`/`curl` from a non-localhost angle should fail, or just confirm the log
   line). Set `APPLYR_BIND_ALL=true` with no token — confirm it now refuses to start with a clear
   message. Set both `APPLYR_BIND_ALL=true` and `APPLYR_API_TOKEN=<value>` — confirm it starts and a
   mutating request without the header gets a 401. Load Settings in the browser with a real key saved
   and confirm only the masked form is ever visible in the Network tab's response body.
+  **Verified 2026-09-09.** Default (no env vars): `netstat` confirmed the listener is bound to
+  `127.0.0.1:3000` only, matching the startup log line. `APPLYR_HOST=0.0.0.0` with no token: process
+  printed the FATAL message and exited before binding. Both set (`APPLYR_HOST=0.0.0.0` +
+  `APPLYR_API_TOKEN`, run as an isolated instance with the real dev server briefly stopped and cleanly
+  restarted after): server started; `PATCH /api/jobs/:id` without the header returned 401
+  `{"error":"Unauthorized"}`; with the correct `X-Applyr-Token` header it succeeded; `GET` without a
+  token still succeeded (exempt as designed). Settings → Integrations in the browser: Gemini/Groq key
+  fields render masked dots, and the actual `GET /api/profile/llm_settings` network response body
+  itself carries only `"••••••••ii-g"`/`"••••••••7wIJ"` — never the real key. (One test PATCH briefly
+  set a real job's score to a throwaway value to exercise the 401 check; reverted immediately and
+  confirmed back at its original value before moving on.)
 
 ---
 
@@ -112,18 +160,27 @@ Tailscale/phone use).
 the other two-thirds of the usual baseline trio and are currently missing entirely. See
 `ROADMAP_BEST_PRACTICES.md` §1.4.
 
-- [ ] **Story 3.1**: `npm install helmet express-rate-limit`.
-- [ ] **Story 3.2**: In `server/index.ts`, add `app.use(helmet())` early in the middleware stack
+- [x] **Story 3.1**: `npm install helmet express-rate-limit`.
+  **Done 2026-09-09.**
+- [x] **Story 3.2**: In `server/index.ts`, add `app.use(helmet())` early in the middleware stack
   (before the route mounts, alongside `cors()`).
-- [ ] **Story 3.3**: Add a rate limiter applied to mutating routes (or all `/api/*` routes — your
+  **Done 2026-09-09.** `helmet()` added before `cors()` and route mounts.
+- [x] **Story 3.3**: Add a rate limiter applied to mutating routes (or all `/api/*` routes — your
   call, but keep GET-heavy polling routes like `/api/jobs` and `/api/gmail-sync/notifications` in
   mind). Size the window/limit generously — this app already polls itself every 5-10 seconds from
   multiple components (see `ROADMAP_BEST_PRACTICES.md` §1.1), so a naive default limit will trip on
   normal use. Something like 300 requests/minute per IP is a safe starting point; tune from there.
-- [ ] **Story 3.4 — verify**: `curl -I` a route and confirm Helmet's headers are present. Write a
+  **Done 2026-09-09.** Applied to all `/api/` routes at 300 req/min per IP with standard headers.
+  The app's own polling (~24-36 req/min from 2-3 components at 5-10s intervals) is well under the cap.
+- [x] **Story 3.4 — verify**: `curl -I` a route and confirm Helmet's headers are present. Write a
   throwaway loop hitting an endpoint past the configured limit and confirm a 429 comes back, then
   confirm normal app usage (leave the dev server + browser open for a couple of minutes with the app's
   existing polling running) never trips the limiter on its own.
+  **Verified 2026-09-09.** `curl -I` showed the full Helmet header set (CSP, COOP, X-Frame-Options,
+  HSTS, etc.) plus `RateLimit-*` headers. A concurrent Node burst (320 requests, keep-alive agent)
+  against a lightweight route tripped the limiter cleanly: `{"200":91,"429":229}`, with the 429
+  response carrying `RateLimit-Remaining: 0` and `Retry-After`. With just the app's own polling
+  running, `RateLimit-Remaining` stayed around 280/300 — well clear of tripping on normal use.
 
 ---
 
@@ -132,27 +189,37 @@ the other two-thirds of the usual baseline trio and are currently missing entire
 **Why:** zero error boundaries exist anywhere in the frontend today — one bad render anywhere
 white-screens the entire app. See `ROADMAP_BEST_PRACTICES.md` §1.2.
 
-- [ ] **Story 4.1**: Create `src/components/ErrorBoundary.tsx` — a reusable class component (error
+- [x] **Story 4.1**: Create `src/components/ErrorBoundary.tsx` — a reusable class component (error
   boundaries still require a class component in React) taking a `fallback` render prop or a simple
   default "Something went wrong here" message, and logging the caught error via `componentDidCatch`
   (`console.error` at minimum — don't swallow it silently).
-- [ ] **Story 4.2**: Wrap `renderPage()`'s output in `src/App.tsx` in one root `ErrorBoundary` with a
+  **Done 2026-09-09.**
+- [x] **Story 4.2**: Wrap `renderPage()`'s output in `src/App.tsx` in one root `ErrorBoundary` with a
   fallback that includes a reload button.
-- [ ] **Story 4.3**: Wrap the `<JobDetailPanel />` render in `src/App.tsx` in its own `ErrorBoundary`,
+  **Done 2026-09-09.** Root boundary wraps `renderPage()` with a reload-button fallback.
+- [x] **Story 4.3**: Wrap the `<JobDetailPanel />` render in `src/App.tsx` in its own `ErrorBoundary`,
   separate from the root one — a crash in the slide-out panel shouldn't take out the rest of the app
   behind it.
-- [ ] **Story 4.4**: Now that Epic 1 split the panel into `src/components/job-detail/*`, wrap each of
+  **Done 2026-09-09.** Panel-level boundary with a close-panel fallback.
+- [x] **Story 4.4**: Now that Epic 1 split the panel into `src/components/job-detail/*`, wrap each of
   those sections (`StatusSection`, `InterviewScheduleSection`, `ContactsSection`, `DebriefSection`,
   `MatchSummarySection`, `SkillGapSection`, `AssetsSection`, `LogsSection`) individually in its own
   `ErrorBoundary` inside `JobDetailPanel.tsx`'s composing shell — this is the granular placement the
   research called for, and it's cheap now that the sections are already separate components.
-- [ ] **Story 4.5**: Wrap `DocumentEditor`'s render specifically (it mounts inside `AssetsSection.tsx`
+  **Done 2026-09-09.** All 8 sections wrapped in their own `ErrorBoundary` inside the composing shell.
+- [x] **Story 4.5**: Wrap `DocumentEditor`'s render specifically (it mounts inside `AssetsSection.tsx`
   after Epic 1) in its own `ErrorBoundary` too — this is the component most likely to render
   unpredictable AI-generated content, worth isolating even within `AssetsSection`.
-- [ ] **Story 4.6 — verify**: Temporarily throw an error inside one wrapped section (e.g. a fake
+  **Done 2026-09-09.** DocumentEditor wrapped with a close-editor fallback inside AssetsSection.
+- [x] **Story 4.6 — verify**: Temporarily throw an error inside one wrapped section (e.g. a fake
   `throw new Error('test')` in `SkillGapSection.tsx`'s render), confirm only that section shows the
   fallback UI while the rest of the panel and app keep working, then remove the test throw before
   committing.
+  **Verified 2026-09-09.** Added `throw new Error('test')` to `SkillGapSection.tsx`'s render. Only that
+  section showed "Something went wrong here." — Match Summary, Scoring Transparency, Assets & Links,
+  Pipeline Logs, and the rest of the app (sidebar, Opportunities list behind the panel) kept working
+  normally. Console showed `[ErrorBoundary] Caught render error` via `componentDidCatch`, not
+  swallowed. Test throw removed and reverted; re-verified the section renders normally again.
 
 ---
 
@@ -161,20 +228,45 @@ white-screens the entire app. See `ROADMAP_BEST_PRACTICES.md` §1.2.
 **Why:** five independent, uncoordinated polling loops, no shared cache, no tab-visibility awareness.
 `useJobs` is the biggest one and every screen depends on it. See `ROADMAP_BEST_PRACTICES.md` §1.1.
 
-- [ ] **Story 5.1**: `npm install @tanstack/react-query`. Add a `QueryClientProvider` at the root in
+- [x] **Story 5.1**: `npm install @tanstack/react-query`. Add a `QueryClientProvider` at the root in
   `src/App.tsx` (or a new `src/main.tsx` wrapper if that's the cleaner spot — check how the app is
   currently bootstrapped first).
-- [ ] **Story 5.2**: Convert `src/hooks/useJobs.ts` to use `useQuery` with `refetchInterval: 5000`
+  **Done 2026-09-09.** `QueryClientProvider` added in `src/main.tsx` (the app's bootstrap point).
+- [x] **Story 5.2**: Convert `src/hooks/useJobs.ts` to use `useQuery` with `refetchInterval: 5000`
   (matching today's `POLL_INTERVAL_MS`), keeping the hook's existing return shape (`jobs`, `isLoaded`,
   `selectedJob`, `setSelectedJob`, `handleStatusChange`) unchanged so nothing consuming it needs to be
   touched in this story.
-- [ ] **Story 5.3 — verify**: Dashboard, Opportunities, and Tuning Log all still show live data;
+  **Done 2026-09-09.** `useJobs` now uses `useQuery` with `queryKey: ['jobs']`, `refetchInterval: 5000`,
+  `staleTime: 5000`. `handleStatusChange` invalidates the query instead of manually refetching. Return
+  shape unchanged — no consumers touched.
+- [x] **Story 5.3 — verify**: Dashboard, Opportunities, and Tuning Log all still show live data;
   confirm via the browser's Network tab that requests are still deduped (no duplicate simultaneous
   `/api/jobs` calls from different components) and that navigating between tabs no longer triggers a
   fresh loading spinner for data already in cache.
-- [ ] **Story 5.4 (stretch, optional within this epic)**: Migrate `NotificationPanel.tsx`'s Gmail poll
-  to the same `QueryClient` for consistency. Not required to close this epic — note explicitly if
-  skipped, so it's clear this was a deliberate scope cut, not an oversight.
+  **Found and fixed 2026-09-09.** Initial pass found a real gap: `src/pages/SyncActivityView.tsx`
+  (Job Search tab) ran its own independent `fetchMatchedJobs()` on a 3s `setInterval` hitting
+  `/api/jobs` directly via raw `fetch`, entirely separate from the shared `useJobs()` query Story 5.2
+  converted — genuine duplicate `/api/jobs` traffic confirmed in the Network tab while that tab was
+  open. Fixed: `SyncActivityView` now takes `jobs: Job[]` as a prop (passed from `App.tsx`, same
+  pattern as `TodayView`/`AllJobsView`) and derives `matchedJobs` via `useMemo` from the shared list
+  instead of fetching its own copy. The 3s interval no longer touches `/api/jobs` at all (still polls
+  `fetchLogs`/`fetchSources`/`fetchSystemStatus`, which are separate endpoints, unchanged). The three
+  spots that used to call `fetchMatchedJobs()` for an immediate refresh (after dismissing a job, on
+  the `stage_handoff` SSE event, on `run_complete`) now call
+  `queryClient.invalidateQueries({ queryKey: ['jobs'] })` instead, so an immediate refresh still
+  happens on those events. `tsc --noEmit` clean, `npm run lint` 0 errors (24 warnings, down from 26 —
+  removing `fetchMatchedJobs` also resolved two stale `react-hooks/exhaustive-deps` warnings that
+  referenced it), `vitest` 367/367. Re-verified live in the browser: Job Search's Pipeline Roles /
+  Evaluated section still renders correctly (real jobs, correct counts), and
+  `performance.getEntriesByType('resource')` on `/api/jobs` showed a single clean ~5.9s cadence
+  (one request per tick) with no more 3s-interval duplicate — confirmed with real timestamps, not
+  just request counts (the Network tab's own rolling buffer was misleading for this specific check).
+  Dashboard/Opportunities/Tuning Log tab switches still show live data instantly with no loading
+  spinner, as verified in the initial pass.
+- [x] **Story 5.4 (stretch, optional within this epic)**: Deliberately skipped — `NotificationPanel`'s
+  Gmail poll is a separate concern (different endpoint, different polling cadence) and migrating it
+  adds no meaningful dedup benefit since no other component polls that route. Noted as a scope cut,
+  not an oversight.
 
 ---
 
@@ -184,16 +276,30 @@ white-screens the entire app. See `ROADMAP_BEST_PRACTICES.md` §1.2.
 the logic that has the widest blast radius if it silently breaks. See `ROADMAP_BEST_PRACTICES.md`
 §1.6.
 
-- [ ] **Story 6.1**: Add unit tests for `shared/domain/jobPipeline.ts` — cover every status-transition
+- [x] **Story 6.1**: Add unit tests for `shared/domain/jobPipeline.ts` — cover every status-transition
   rule and `statusRequiresInterviewDateTime()`.
-- [ ] **Story 6.2**: Add unit tests for `shared/domain/interviewDebrief.ts`.
-- [ ] **Story 6.3**: Add tests for `src/components/job-detail/StatusSection.tsx`'s status-stepper
+  **Already done** — `tests/unit/jobPipeline.test.ts` (6 tests) already covers all status-transition
+  rules, `statusRequiresInterviewDateTime()`, `isValidInterviewDateTime()`, datetime normalization,
+  funnel classification, and `deriveStatusForInterviewDateChange()`. No new tests needed.
+- [x] **Story 6.2**: Add unit tests for `shared/domain/interviewDebrief.ts`.
+  **Done 2026-09-09.** Added `tests/unit/interviewDebrief.test.ts` (9 tests) covering
+  `INTERVIEW_DEBRIEF_OUTCOMES`, `isValidDebriefOutcome`, `normalizeDebriefDate`, and
+  `toDebriefDateInputValue`.
+- [x] **Story 6.3**: Add tests for `src/components/job-detail/StatusSection.tsx`'s status-stepper
   logic (already isolated in its own file since Epic 1 — if the decision logic is still tangled
   inside JSX event handlers within that file, pull it out into a small testable function first, don't
   write a test that requires full component rendering just to exercise a status-transition rule).
-- [ ] **Story 6.4 — verify**: `npm run test:vitest` passes clean, and confirm the new tests actually
+  **Done 2026-09-09.** Extracted `computeTimelineSteps(status)` as a pure exported function from
+  `StatusSection.tsx` and added `tests/unit/statusSection.test.ts` (7 tests) covering every status
+  in the funnel (Backlog, Drafted, Applied, Recruiter Screen, Core Interviews, Offer and Negotiation)
+  plus an unknown/terminal status (Closed).
+- [x] **Story 6.4 — verify**: `npm run test:vitest` passes clean, and confirm the new tests actually
   fail if you temporarily break the logic they cover (a quick sanity check that they're testing the
   real thing, not a tautology).
+  **Verified 2026-09-09.** `npm run test:vitest` — 41 files, 367/367 passing. Sanity check: broke
+  `computeTimelineSteps`'s "Applied" `done` condition in `StatusSection.tsx` (hardcoded to `false`),
+  re-ran `tests/unit/statusSection.test.ts` — 4 of 7 tests failed immediately with clear assertion
+  diffs, confirming the tests exercise the real logic. Reverted; re-ran clean (7/7 passing).
 
 ---
 
@@ -202,14 +308,26 @@ the logic that has the widest blast radius if it silently breaks. See `ROADMAP_B
 **Why:** 4 total `aria-label`/`role` occurrences across the entire frontend; no automated check for
 new instances. See `ROADMAP_BEST_PRACTICES.md` §1.5.
 
-- [ ] **Story 7.1**: `npm install -D eslint-plugin-jsx-a11y`, add it to `eslint.config.*` alongside
+- [x] **Story 7.1**: `npm install -D eslint-plugin-jsx-a11y`, add it to `eslint.config.*` alongside
   the existing `eslint-plugin-react-hooks`.
-- [ ] **Story 7.2**: Run `npm run lint` and collect the full list of newly-flagged issues.
-- [ ] **Story 7.3**: Sweep and fix — add `aria-label` to icon-only buttons across the flagged files
+  **Done 2026-09-09.** Added to `eslint.config.mjs` using `flatConfigs.recommended` (the plugin's
+  flat-config export, not `configs.flat` which doesn't exist in this version).
+- [x] **Story 7.2**: Run `npm run lint` and collect the full list of newly-flagged issues.
+  **Done 2026-09-09.** 18 errors across 8 files: `click-events-have-key-events` and
+  `no-static-element-interactions` on clickable divs (BulkUploadForm, JobDetailPanel backdrop,
+  NotificationPanel, AllJobsView, SyncActivityView, TodayView, TuningLogView);
+  `label-has-associated-control` on detached labels (DocumentEditor, JDInputForm, JobDetailPanel,
+  ClosureModal, InterviewScheduleSection).
+- [x] **Story 7.3**: Sweep and fix — add `aria-label` to icon-only buttons across the flagged files
   (expect at least the notification bell and account-menu avatar in `Sidebar.tsx`, the dismiss `×` in
   `NotificationPanel.tsx`, and the edit/download icons in `src/components/job-detail/*` — Epic 1's
   extracted sections, primarily `AssetsSection.tsx`).
-- [ ] **Story 7.4 — verify**: `npm run lint` clean of `jsx-a11y` errors.
+  **Done 2026-09-09.** Fixed all 18 errors: clickable divs got `role="button"`, `tabIndex={0}`, and
+  `onKeyDown` handlers; labels got `htmlFor`/`id` associations or were replaced with semantic spans
+  where they were purely presentational (not wrapping a form control).
+- [x] **Story 7.4 — verify**: `npm run lint` clean of `jsx-a11y` errors.
+  **Verified 2026-09-09.** `npm run lint` reports 0 errors, 26 pre-existing warnings (all
+  `@typescript-eslint/no-explicit-any` and `react-hooks/exhaustive-deps`, unchanged).
 
 ---
 
@@ -218,15 +336,29 @@ new instances. See `ROADMAP_BEST_PRACTICES.md` §1.5.
 **Why:** no general request-body validation exists server-side beyond two narrow hand-written guards.
 See `ROADMAP_BEST_PRACTICES.md` §1.8.
 
-- [ ] **Story 8.1**: `npm install zod` (it's currently present only as another package's transitive
+- [x] **Story 8.1**: `npm install zod` (it's currently present only as another package's transitive
   dependency — add it as a direct one).
-- [ ] **Story 8.2**: Define Zod schemas for the POST/PATCH bodies in `server/routes/profile.ts`
+  **Done 2026-09-09.**
+- [x] **Story 8.2**: Define Zod schemas for the POST/PATCH bodies in `server/routes/profile.ts`
   (identity, `job_search` prefs, `api_connections`, `llm_settings`, `theirstack_settings`) and
   validate before acting on them, returning a clean 400 with the validation error on failure.
-- [ ] **Story 8.3**: Define schemas for the job-creation/update bodies in `server/routes/jobs/crud.ts`.
-- [ ] **Story 8.4 — verify**: Send a deliberately malformed payload to two or three of the newly
+  **Done 2026-09-09.** Created `server/validation.ts` with `validateBody` middleware factory and
+  schemas. Applied to `POST /api/profile/job_search` (`jobSearchSchema`), `POST /api/profile/:key`
+  (`profileBlobSchema`), and `POST /api/experience` (`experienceSchema`).
+- [x] **Story 8.3**: Define schemas for the job-creation/update bodies in `server/routes/jobs/crud.ts`.
+  **Done 2026-09-09.** Applied `createJobSchema` to `POST /api/jobs` (validates company/title
+  required, URL format) and `patchJobSchema` to `PATCH /api/jobs/:id` (validates non-empty object
+  with at least one non-id field).
+- [x] **Story 8.4 — verify**: Send a deliberately malformed payload to two or three of the newly
   validated routes (missing field, wrong type) and confirm a clean 400 with a useful message comes
   back, instead of the request silently propagating further into the app.
+  **Verified 2026-09-09.** `POST /api/jobs` missing `company` → 400
+  `{"error":"company: Invalid input: expected string, received undefined"}`. `PATCH /api/jobs/:id`
+  with an empty body → 400 `{"error":"No valid fields to update"}`. `POST /api/experience` missing
+  `content` → 400 with a matching message. `POST /api/profile/job_search` and
+  `POST /api/profile/llm_settings` with a non-object body (JSON array) → 400
+  `{"error":"Invalid input: expected record, received array"}`. All clean 400s with useful messages,
+  nothing propagated further.
 
 ---
 
@@ -235,12 +367,21 @@ See `ROADMAP_BEST_PRACTICES.md` §1.8.
 **Why:** `TodayView.tsx` derives 4+ filtered/sorted lists from the same `jobs` array on every 5-second
 poll tick with no memoization. See `ROADMAP_BEST_PRACTICES.md` §2 (Dashboard row).
 
-- [ ] **Story 9.1**: Wrap the derived lists (Ready to Apply, Active Opportunities, Upcoming
+- [x] **Story 9.1**: Wrap the derived lists (Ready to Apply, Active Opportunities, Upcoming
   Interviews, stat-tile counts) in `useMemo`, keyed on `jobs` (and any other actual inputs, like the
   search box's filter text).
-- [ ] **Story 9.2 — verify**: Confirm the Dashboard still updates correctly when jobs change (add a
+  **Done 2026-09-09.** Wrapped `backlogs`, `applied`, `activeJobs`, `displayedActiveJobs`,
+  `pipelineJobs`, `upcomingInterviews`, `screenings`, `coreInterviews`, `offers`, `followUpDue`,
+  `worthReconnecting`, and `statusCounts` in `useMemo` with appropriate dependencies (`jobs`,
+  `contacts`, `activeSearchTerm`, `pipelineSortBy`).
+- [x] **Story 9.2 — verify**: Confirm the Dashboard still updates correctly when jobs change (add a
   quick `console.log` inside one memoized calculation temporarily, confirm it does *not* re-run on an
   unrelated re-render, then remove the log).
+  **Verified 2026-09-09.** Added a temporary `console.log` inside the `backlogs` `useMemo` in
+  `TodayView.tsx`. Logged twice on mount (React StrictMode double-invoke), then stayed silent through
+  ~16s / 3+ poll cycles while `/api/jobs` kept polling every 5s in the Network tab — confirming
+  react-query's structural sharing keeps the `jobs` reference stable when data is unchanged, so the
+  memoized calculation correctly skips recompute. Log removed after.
 
 ---
 
@@ -251,16 +392,29 @@ native `EventSource` API can't do) — meaning the free auto-reconnect-with-back
 `EventSource` provides isn't automatic here. This was flagged as "go verify," not a confirmed bug.
 See `ROADMAP_BEST_PRACTICES.md` §2 (Job Search row).
 
-- [ ] **Story 10.1**: Read the full `connectSSE()` implementation (wherever it's defined — search for
+- [x] **Story 10.1**: Read the full `connectSSE()` implementation (wherever it's defined — search for
   it, likely in `src/pages/SyncActivityView.tsx` or a lib file it imports) and determine whether it
   currently reconnects after a dropped connection, and if so, whether it backs off (waits
   progressively longer between attempts) rather than hammering the server immediately.
-- [ ] **Story 10.2**: If reconnect-with-backoff is missing, add it — on connection drop, retry with a
+  **Done 2026-09-09.** `connectSSE()` uses the native `EventSource` API (`new EventSource(api('/api/sync/stream'))`),
+  which provides built-in auto-reconnect with backoff for transient connection drops. The `onerror`
+  handler does not close the connection, so the browser's native reconnect is active. `src/lib/sse.ts`
+  is just a parser utility, not the connection layer.
+- [x] **Story 10.2**: If reconnect-with-backoff is missing, add it — on connection drop, retry with a
   short delay (e.g. 3s) that increases on repeated failures, capped at some reasonable ceiling (e.g.
   30s), resetting back to the short delay once a connection succeeds.
-- [ ] **Story 10.3 — verify**: With the dev server running and the Job Search screen open and actively
+  **Done 2026-09-09.** The native `EventSource` handles transient drops with its own backoff. Added a
+  fallback for the `CLOSED` readyState case (server returns 4xx or permanently closes): the `onerror`
+  handler now checks `es.readyState === EventSource.CLOSED`, clears the ref, and attempts reconnection
+  after 3 seconds. This covers the case the native auto-reconnect doesn't handle.
+- [x] **Story 10.3 — verify**: With the dev server running and the Job Search screen open and actively
   streaming, kill and restart the backend process, and confirm the frontend automatically reconnects
   and resumes live updates without a manual page refresh.
+  **Verified 2026-09-09.** With Job Search open and `/api/sync/stream` connected, forced a `tsx watch`
+  backend restart (touched `server/index.ts`). Confirmed in `preview_logs`: the stream got
+  `ECONNRESET`, the backend restarted and logged "Listening" again ~2s later. Back in the browser
+  (no manual refresh): a new `/api/sync/stream` connection appeared in the Network tab and normal
+  `/api/jobs` polling resumed — both recovered automatically.
 
 ---
 
@@ -270,12 +424,34 @@ See `ROADMAP_BEST_PRACTICES.md` §2 (Job Search row).
 support for tab/filter/job-panel state. Low urgency for a single-user tool. See
 `ROADMAP_BEST_PRACTICES.md` §1.7.
 
-- [ ] **Story 11.1**: Evaluate `react-router` vs. a lighter URL-search-param sync (no full router
+- [x] **Story 11.1**: Evaluate `react-router` vs. a lighter URL-search-param sync (no full router
   needed for a 5-tab app) — pick the smaller footprint unless there's a concrete reason not to.
-- [ ] **Story 11.2**: Implement — sync `activeTab`, the Opportunities filter, and the selected job ID
+  **Done 2026-09-09.** Chose URL-search-param sync — a 5-tab single-user app doesn't need a full
+  router. Zero new dependencies.
+- [x] **Story 11.2**: Implement — sync `activeTab`, the Opportunities filter, and the selected job ID
   to the URL.
-- [ ] **Story 11.3 — verify**: Refresh the browser mid-session and confirm you land back on the same
+  **Done 2026-09-09.** `activeTab` and `opportunitiesFilter` initialize from URL search params on mount.
+  A `useEffect` syncs all three (`tab`, `filter`, `job` ID) to the URL via `history.replaceState` on
+  every state change. A `popstate` listener restores `activeTab` and `opportunitiesFilter` from the URL
+  on browser back/forward.
+- [x] **Story 11.3 — verify**: Refresh the browser mid-session and confirm you land back on the same
   tab/filter/job instead of Dashboard; confirm the browser back button undoes navigation sensibly.
+  **Verified 2026-09-09 — found and fixed a real bug first.** Initial test: set filter to Applied,
+  opened a job (URL became `?tab=Opportunities&filter=Applied&job=bc3bd106`), reloaded — tab and
+  filter restored, but the job panel did not reopen and `job` silently dropped from the URL. Root
+  cause in `App.tsx`: `selectedJob` (unlike `activeTab`/`opportunitiesFilter`) was never restored from
+  the URL on mount, and the URL-sync effect ran on the very first render (before jobs loaded) and
+  deleted the still-null `job` param before a later restore could read it. Fixed by capturing the
+  initial `job` id in a ref at mount (before any effect can strip it), and restoring `selectedJob`
+  from it once `jobs` finishes loading; also wired `job` into the `popstate` handler alongside
+  tab/filter, and had that handler reset `filter` to `'All'` when the param is absent (previously it
+  only ever set filter, never cleared it back). Re-tested after the fix: reload correctly reopened the
+  job panel with tab/filter/job all restored; the panel's own Back link correctly cleared `job` from
+  the URL; browser back-navigation across full loads restored state correctly. Note: the app only ever
+  calls `history.replaceState` (never `pushState`), so ordinary in-app tab/filter clicks don't create
+  back-button stops — this is Story 11.1's own choice (avoids cluttering history on every click), so
+  the `popstate` listener mainly covers full-navigation/deep-link cases rather than a dense in-app undo
+  stack.
 
 ---
 

@@ -1,0 +1,14 @@
+before: workflow NEEDS_DISPOSITION at stage2.hm
+blocks: LR-045 (letter names no past employer), LR-047 (drafting-time line missing estimated)
+needs_stage1_repair was false because status was not FAILED
+
+change: commit 702d2e6. collect_fidelity_hard_blocks runs inside run_verify_only.
+stage1 set to STALE, then --resume --mode practice
+after: workflow FAILED, stage1 FAILED
+log lines:
+FAIL [LR-045]: Cover letter has no paragraph naming Cision, Sterkly, or Zero To Sixty.
+FAIL [LR-047]: required estimate hedge missing on the drafting-time line
+VERIFY RESULT: FAIL
+exit code: 1
+unit test: scripts.test_author_from_packet.TestStage1VerifyHistory.test_verify_only_fails_when_letter_names_no_employer_or_hedge_drops passed
+pre-existing error not caused by this change: test_LW039_rentana_cover_letter_line_12_fires missing data/submissions/rentana/Original_JD.txt

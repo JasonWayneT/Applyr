@@ -1,0 +1,16 @@
+Technical Product Manager
+
+Contoso Harbor is a fictional media-data company. This role owns data quality workflows on an existing platform, not a 0-to-1 build.
+
+Requirements:
+- Product management for data remediation and source-of-truth workflows
+- Partner with engineering and DBA teams on sequencing
+- Translate messy operational problems into a backlog
+
+Preferred:
+- Familiarity with SQL investigation
+- Experience with customer-facing reporting quality
+
+Responsibilities:
+- Prioritize data defects against customer impact
+- Keep legal and CX in the loop on high-risk changes

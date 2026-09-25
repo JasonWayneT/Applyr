@@ -5,12 +5,45 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 os.environ["STAGE0_SECTION_MODE"] = "deterministic"
+# CR-108 Epic 7.7 (2026-09-09): the legacy per-line classifier was removed.
+# Mock the cascade's batch function to avoid real network calls. Returns
+# clean-pass results for all items so classification doesn't crash.
+from unittest.mock import patch as _patch  # noqa: E402
+
+def _mock_classify_batch(items, **_kwargs):
+    return {
+        item.item_id: {
+            "item": item.requirement, "anchor": "mock", "gap": False,
+            "gap_class": None, "gap_source": None, "domain_soft": False,
+            "evidence_level": 4, "confidence": "high", "gate": "NONE",
+            "needs_user_confirmation": False, "canonical_skill": None,
+            "skill_kind": None,
+        }
+        for item in items
+    }
+
+_CLASSIFY_PATCHER = None
+
+def setUpModule():
+    global _CLASSIFY_PATCHER
+    _CLASSIFY_PATCHER = _patch(
+        "stage0_evidence_cascade.classify_requirements_batch",
+        side_effect=_mock_classify_batch,
+    )
+    _CLASSIFY_PATCHER.start()
+
+def tearDownModule():
+    global _CLASSIFY_PATCHER
+    if _CLASSIFY_PATCHER is not None:
+        _CLASSIFY_PATCHER.stop()
+        _CLASSIFY_PATCHER = None
 
 from build_stage0_fit_gate import (  # noqa: E402
     STAGE0_EXTRACT_MODEL,
@@ -26,58 +59,52 @@ from test_build_stage0_fit_gate import (  # noqa: E402
 )
 
 
+def _build_with_isolated_checkpoint(folder):
+    """Run Stage 0 with an ephemeral checkpoint database for this unit fixture."""
+    fd, db_path = tempfile.mkstemp(suffix=".sqlite")
+    os.close(fd)
+    try:
+        return build_stage0_fit_gate(
+            folder,
+            db_gate_result=_DB_CLEAR,
+            prefs=_PREFS_MINIMAL,
+            confirmation_db_path=db_path,
+        )
+    finally:
+        try:
+            os.unlink(db_path)
+        except FileNotFoundError:
+            pass
+
+
 class TestScoreModelPin(unittest.TestCase):
     def setUp(self):
         import evidence_scale
         evidence_scale._score_model_ready_for = None
 
-    def test_classify_requirement_pins_score_model(self):
-        payload = json.dumps({
-            "gate": "NONE",
-            "gap_source": "",
-            "evidence_level": 3,
-            "confidence": "high",
-            "reasoning": "documented product management work",
-        })
-        with patch("model_manager.ensure_local_model_available") as avail:
-            with patch("llm_stages.call_llm_stage", return_value=payload) as mock_call:
-                with patch("fit_rubric_examples.retrieve_examples", return_value=[]):
-                    with patch(
-                        "evidence_scale.build_evidence_context",
-                        return_value="Cision product work",
-                    ):
-                        classify_requirement(
-                            "5+ years of product management experience",
-                            "Cision product work",
-                        )
+    def test_prepare_score_model_pins_default_score_model(self):
+        """The local score-model pin moved out of classify_requirement (which
+        became cloud-only on 2026-09-01) into build_stage0_fit_gate's
+        _prepare_stage0_score_model, which still confirms the pinned local
+        score model is installed before Stage 0 scoring when section mode is
+        llm. This test pins that behavior at its new home."""
+        from build_stage0_fit_gate import _prepare_stage0_score_model
+        with patch.dict(os.environ, {"STAGE0_SECTION_MODE": "llm"}):
+            with patch("model_manager.ensure_local_model_available") as avail:
+                _prepare_stage0_score_model()
         avail.assert_called_once_with(STAGE0_SCORE_MODEL)
-        self.assertEqual(mock_call.call_args.kwargs.get("model"), STAGE0_SCORE_MODEL)
 
     def test_fit_model_env_still_overrides_for_bakeoffs(self):
-        payload = json.dumps({
-            "gate": "NONE",
-            "gap_source": "",
-            "evidence_level": 2,
-            "confidence": "medium",
-            "reasoning": "override",
-        })
-        with patch.dict(os.environ, {"FIT_MODEL": "qwen2.5:7b-instruct-q4_K_M"}):
+        """FIT_MODEL bakeoff override still reaches the score-model pin — just
+        through _prepare_stage0_score_model now, not through classify_requirement."""
+        from build_stage0_fit_gate import _prepare_stage0_score_model
+        with patch.dict(os.environ, {
+            "STAGE0_SECTION_MODE": "llm",
+            "FIT_MODEL": "gemma2:2b-instruct-q8_0",
+        }):
             with patch("model_manager.ensure_local_model_available") as avail:
-                with patch("llm_stages.call_llm_stage", return_value=payload) as mock_call:
-                    with patch("fit_rubric_examples.retrieve_examples", return_value=[]):
-                        with patch(
-                            "evidence_scale.build_evidence_context",
-                            return_value="Cision product work",
-                        ):
-                            classify_requirement(
-                                "5+ years of product management experience",
-                                "Cision product work",
-                            )
-        avail.assert_called_once_with("qwen2.5:7b-instruct-q4_K_M")
-        self.assertEqual(
-            mock_call.call_args.kwargs.get("model"),
-            "qwen2.5:7b-instruct-q4_K_M",
-        )
+                _prepare_stage0_score_model()
+        avail.assert_called_once_with("gemma2:2b-instruct-q8_0")
 
 
 class TestDegreeHardGateNormalization(unittest.TestCase):
@@ -198,11 +225,7 @@ class TestExtractToScoreHandoff(unittest.TestCase):
                                 "build_stage0_fit_gate.screen_responsibilities_for_exclusion",
                                 return_value=[],
                             ):
-                                build_stage0_fit_gate(
-                                    folder,
-                                    db_gate_result=_DB_CLEAR,
-                                    prefs=_PREFS_MINIMAL,
-                                )
+                                _build_with_isolated_checkpoint(folder)
         # Same model: no unload:before-score
         self.assertEqual(
             order[:3],
@@ -250,11 +273,7 @@ class TestExtractToScoreHandoff(unittest.TestCase):
                                 "build_stage0_fit_gate.screen_responsibilities_for_exclusion",
                                 return_value=[],
                             ):
-                                build_stage0_fit_gate(
-                                    folder,
-                                    db_gate_result=_DB_CLEAR,
-                                    prefs=_PREFS_MINIMAL,
-                                )
+                                _build_with_isolated_checkpoint(folder)
         # Different model: unload:before-score is present
         self.assertEqual(
             order[:4],

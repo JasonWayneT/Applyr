@@ -7,6 +7,7 @@ Run:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -18,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import contracts  # noqa: E402
+from workflow import runner  # noqa: E402
 from workflow import receipts as receipts_mod  # noqa: E402
 from workflow.policy import evaluate_packet, evaluate_stage0  # noqa: E402
 from workflow.receipts import (  # noqa: E402
@@ -28,10 +30,12 @@ from workflow.receipts import (  # noqa: E402
     write_receipt,
     write_state,
 )
+from build_stage0_fit_gate import Stage0ExtractError  # noqa: E402
 from workflow.runner import (  # noqa: E402
     WorkflowError,
     adopt_existing,
     run_stage0,
+    run_stage1_prompt,
     run_stage1_validate,
     run_until_stage1_complete,
     run_until_waiting_for_llm,
@@ -41,13 +45,118 @@ from workflow.transitions import new_state  # noqa: E402
 from workflow.invalidate import reconcile_state_against_receipts  # noqa: E402
 
 
+def setUpModule():
+    """Story 8.2: existing workflow tests are not identity tests.
+
+    Explicit synthetic mode keeps them off live workExperience.md.
+    """
+    os.environ["APPLYR_SYNTHETIC_IDENTITY"] = "1"
+
+
+def tearDownModule():
+    os.environ.pop("APPLYR_SYNTHETIC_IDENTITY", None)
+
+
 def _write(folder: Path, name: str, content: str | dict) -> Path:
     path = folder / name
-    if isinstance(content, dict):
+    if isinstance(content, (dict, list)):
         path.write_text(json.dumps(content, indent=2), encoding="utf-8")
     else:
         path.write_text(content, encoding="utf-8")
     return path
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _rubric_hashes(folder: Path) -> dict:
+    return {
+        "resume": _sha256_file(folder / "Resume.md"),
+        "cover_letter": _sha256_file(folder / "CoverLetter.md"),
+    }
+
+
+def _rubric_score(folder: Path, resume_total: float = 78, cover_total: float = 70) -> dict:
+    return {
+        "document_sha256": _rubric_hashes(folder),
+        "resume": {"total": resume_total, "breakdown": {}},
+        "cover_letter": {"total": cover_total, "breakdown": {}},
+    }
+
+
+def _rubric_sha() -> str:
+    rubric = Path(__file__).resolve().parents[1] / "data" / "conversion_rubric.md"
+    return hashlib.sha256(rubric.read_bytes()).hexdigest()
+
+
+def _criterion_breakdown(max_values: dict[str, int], total: float) -> dict:
+    remaining = float(total)
+    breakdown = {}
+    for key, max_value in max_values.items():
+        value = min(remaining, float(max_value))
+        breakdown[key] = value
+        remaining -= value
+    return breakdown
+
+
+def _resume_breakdown(total: float = 78) -> dict:
+    return _criterion_breakdown(
+        {"R1": 10, "R2": 15, "R3": 15, "R4": 20, "R5": 15, "R6": 10, "R7": 10, "R8": 5},
+        total,
+    )
+
+
+def _cover_breakdown(total: float = 70) -> dict:
+    return _criterion_breakdown({"C1": 25, "C2": 25, "C3": 20, "C4": 20, "C5": 10}, total)
+
+
+def _score_needs_blind(side: str, total: float) -> bool:
+    if side == "resume":
+        return 67 <= total <= 73
+    return 62 <= total <= 68
+
+
+def _scorecard_row(
+    folder: Path,
+    resume_total: float = 78,
+    cover_total: float = 70,
+    *,
+    role: str = "authoring_session",
+) -> dict:
+    return {
+        "schema_version": 1,
+        "rubric_sha256": _rubric_sha(),
+        "scored_at": "2026-09-15T00:00:00+00:00",
+        "reviewer_run_id": "test-run-001",
+        "reviewer_role": role,
+        "document_sha256": _rubric_hashes(folder),
+        "resume": {"total": resume_total, "breakdown": _resume_breakdown(resume_total), "citations": {}},
+        "cover_letter": {"total": cover_total, "breakdown": _cover_breakdown(cover_total), "citations": {}},
+    }
+
+
+def _write_rubric_scorecards(
+    folder: Path,
+    resume_total: float = 78,
+    cover_total: float = 70,
+    *,
+    rows: list[dict] | None = None,
+) -> None:
+    if rows is None:
+        rows = [_scorecard_row(folder, resume_total, cover_total)]
+        if _score_needs_blind("resume", resume_total) or _score_needs_blind("cover_letter", cover_total):
+            rows.append(
+                _scorecard_row(
+                    folder,
+                    resume_total,
+                    cover_total,
+                    role="independent_blind",
+                )
+            )
+    reviews = folder / "reviews"
+    reviews.mkdir(exist_ok=True)
+    _write(reviews, "rubric_scorecard.json", rows)
 
 
 def _valid_stage0(**overrides) -> dict:
@@ -186,6 +295,80 @@ class WorkflowAuthorityTests(unittest.TestCase):
         self.assertEqual(out["status"], "SKIPPED")
         self.assertEqual(load_receipt(str(self.folder), "stage0")["status"], "SKIPPED")
 
+    def test_policy_already_handled_even_when_tier_is_skip(self):
+        """FR-365 / AC-474: decision ALREADY_HANDLED must not remap to SKIP."""
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        out = evaluate_stage0(gate)
+        self.assertEqual(out["verdict"], "ALREADY_HANDLED")
+        self.assertEqual(out["decision"], "ALREADY_HANDLED")
+        self.assertNotEqual(out["verdict"], "SKIP")
+        self.assertNotEqual(out["verdict"], "FAIL")
+        self.assertNotEqual(out["verdict"], "PASS")
+
+    def test_run_stage0_already_handled_is_not_skipped(self):
+        """FR-365: runner commits ALREADY_HANDLED, not SKIPPED, and does not start Stage 1."""
+        _write(self.folder, "Original_JD.txt", "Whatever\n")
+        state = init_state(str(self.folder))
+        write_state(str(self.folder), state)
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("stage0_skip_ledger.record_skip") as record:
+                out = run_stage0(str(self.folder), state)
+        self.assertEqual(out["status"], "ALREADY_HANDLED")
+        self.assertNotEqual(out["status"], "SKIPPED")
+        self.assertNotEqual(out["status"], "FAILED")
+        self.assertIsNone(out.get("active_stage"))
+        self.assertEqual(out["stages"]["stage1"]["status"], "LOCKED")
+        self.assertEqual(load_receipt(str(self.folder), "stage0")["status"], "ALREADY_HANDLED")
+        record.assert_not_called()
+
+    def test_run_stage0_already_handled_marks_unlocked_queue_done(self):
+        """FR-365: after commit, mark_done an unlocked queue row for this slug."""
+        import pipeline_queue as pq
+
+        _write(self.folder, "Original_JD.txt", "Whatever\n")
+        state = init_state(str(self.folder))
+        write_state(str(self.folder), state)
+        db = Path(self._tmpdir.name) / "jobagent.sqlite"
+        conn = pq.connect(db)
+        self.addCleanup(conn.close)
+        slug = self.folder.name
+        pq.upsert_queued(
+            conn,
+            slug=slug,
+            company="Synth Queue Co",
+            title="Product Manager",
+            url=None,
+            url_key=None,
+            posting_key="synth queue co||product manager",
+            networking_contacts_raw=None,
+            source_sha256=None,
+            source_line=None,
+            folder_root="pending_review",
+        )
+        self.assertEqual(pq.get_row(conn, slug)["status"], "queued")
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        with mock.patch.dict(os.environ, {"APPLYR_SANDBOX_DB": str(db)}):
+            with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+                out = run_stage0(str(self.folder), state)
+        self.assertEqual(out["status"], "ALREADY_HANDLED")
+        row = pq.get_row(conn, slug)
+        assert row is not None
+        self.assertEqual(row["status"], "done")
+        self.assertEqual(row["last_workflow_status"], "ALREADY_HANDLED")
+
     def test_force_reruns_previously_skipped_stage0(self):
         _write(self.folder, "Original_JD.txt", "Whatever\n")
         state = init_state(str(self.folder))
@@ -288,9 +471,626 @@ class RunUntilWaitingTests(unittest.TestCase):
                         )
         self.assertEqual(state["status"], "WAITING_FOR_LLM")
         self.assertTrue((self.folder / "authoring_prompt.md").exists())
+
+    def test_conversion_risk_pass_pauses_before_prompt(self):
+        gate = _valid_stage0(
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["required_unproven_named_tool:Microsoft Dynamics 365"],
+            }
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.require_stage_ready"):
+                with mock.patch("workflow.runner.build_packet") as build_packet:
+                    state = run_until_waiting_for_llm(
+                        str(self.folder),
+                        mode="production",
+                        adopt=False,
+                        no_hook=True,
+                    )
+        self.assertEqual(state["status"], "WAITING_FOR_INPUT")
+        self.assertEqual(state["metadata"]["pause_kind"], "conversion_risk")
+        self.assertFalse((self.folder / "authoring_prompt.md").exists())
+        build_packet.assert_not_called()
+        receipt = load_receipt(str(self.folder), "stage0")
+        self.assertEqual(receipt["status"], "COMPLETE")
+        self.assertEqual(receipt["result"]["pause_kind"], "conversion_risk")
+        self.assertEqual(receipt["result"]["decision"], "PASS")
+
+    def test_chrome_conversion_risk_resumes_without_reextract(self):
+        """FR-367. A parked EdTech/B2B2C hold continues to Stage 1."""
+        gate = _valid_stage0(
+            company="Amplify",
+            required=[
+                {
+                    "item": "ideally within EdTech or a B2B2C environment",
+                    "evidence_level": 0,
+                }
+            ],
+            not_present_named_tools=[
+                {"skill_key": "edtech", "display_name": "EdTech"},
+                {"skill_key": "b2b2c", "display_name": "B2B2C"},
+            ],
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["not_present_required_tool:EdTech"],
+            },
+        )
+        _write(self.folder, "stage0_fit_gate.json", gate)
+        from workflow.invalidate import sha256_file
+
+        digest = sha256_file(str(self.folder / "stage0_fit_gate.json"))
+        state = init_state(str(self.folder), mode="production")
+        receipt = build_receipt(
+            stage="stage0",
+            status="COMPLETE",
+            mode="production",
+            input_hashes={},
+            output_hashes={"stage0_fit_gate.json": digest},
+            result={
+                "decision": "PASS",
+                "tier": "Tier 2",
+                "pause_kind": "conversion_risk",
+                "conversion_feasibility": gate["conversion_feasibility"],
+            },
+        )
+        state = commit_stage(
+            str(self.folder),
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        state["metadata"] = {"pause_kind": "conversion_risk"}
+        write_state(str(self.folder), state)
+        packet = {
+            "schema_version": "1.0",
+            "company": "Amplify",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 2",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Amplify", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as rebuild:
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt", side_effect=fake_prompt
+                ):
+                    with mock.patch("workflow.runner.require_stage_ready"):
+                        with mock.patch(
+                            "workflow.runner.hashes_match", return_value=(True, [])
+                        ):
+                            resumed = run_until_stage1_complete(
+                                str(self.folder),
+                                mode="production",
+                                adopt=False,
+                                no_hook=True,
+                            )
+        rebuild.assert_not_called()
+        self.assertEqual(resumed["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "authoring_prompt.md").exists())
+
+    def test_already_handled_does_not_lock_as_skip_or_start_stage1(self):
+        """FR-365 / AC-474: orchestrator stops; not SKIPPED; no Stage 1 prompt."""
+        gate = _valid_stage0(
+            decision="ALREADY_HANDLED",
+            tier="Skip",
+            notes="Same posting already handled",
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.require_stage_ready"):
+                with mock.patch("workflow.runner.build_packet") as build_packet:
+                    with mock.patch("stage0_skip_ledger.record_skip") as record:
+                        state = run_until_waiting_for_llm(
+                            str(self.folder),
+                            mode="production",
+                            adopt=False,
+                            no_hook=True,
+                        )
+        self.assertEqual(state["status"], "ALREADY_HANDLED")
+        self.assertNotEqual(state["status"], "SKIPPED")
+        self.assertIsNone(state.get("active_stage"))
+        self.assertFalse((self.folder / "authoring_prompt.md").exists())
+        self.assertFalse((self.folder / "authoring_packet.json").exists())
+        build_packet.assert_not_called()
+        record.assert_not_called()
+
+    def test_conversion_risk_apply_anyway_builds_prompt(self):
+        gate = _valid_stage0(
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["required_unproven_named_tool:Microsoft Dynamics 365"],
+            }
+        )
+        packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+        (self.folder / "conversion_risk_apply_anyway.json").write_text(
+            '{"reason": "apply_anyway"}\n', encoding="utf-8"
+        )
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt", side_effect=fake_prompt
+                ):
+                    with mock.patch("workflow.runner.require_stage_ready"):
+                        with mock.patch(
+                            "workflow.runner.hashes_match", return_value=(True, [])
+                        ):
+                            state = run_until_waiting_for_llm(
+                                str(self.folder),
+                                mode="production",
+                                adopt=False,
+                                no_hook=True,
+                            )
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "authoring_prompt.md").exists())
         self.assertTrue((self.folder / "stage_receipts" / "stage1.json").exists())
         ok, _ = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)
+
+    def test_conversion_risk_resume_after_apply_anyway_builds_prompt(self):
+        gate = _valid_stage0(
+            conversion_feasibility={
+                "verdict": "risk",
+                "reasons": ["required_unproven_named_tool:Microsoft Dynamics 365"],
+            }
+        )
+        packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.require_stage_ready"):
+                with mock.patch("workflow.runner.build_packet") as build_packet:
+                    paused = run_until_waiting_for_llm(
+                        str(self.folder),
+                        mode="production",
+                        adopt=False,
+                        no_hook=True,
+                    )
+        self.assertEqual(paused["status"], "WAITING_FOR_INPUT")
+        build_packet.assert_not_called()
+        (self.folder / "conversion_risk_apply_anyway.json").write_text(
+            '{"reason": "apply_anyway"}\n', encoding="utf-8"
+        )
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt", side_effect=fake_prompt
+                ):
+                    with mock.patch("workflow.runner.require_stage_ready"):
+                        with mock.patch(
+                            "workflow.runner.hashes_match", return_value=(True, [])
+                        ):
+                            state = run_until_waiting_for_llm(
+                                str(self.folder),
+                                mode="production",
+                                adopt=False,
+                                no_hook=True,
+                            )
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "authoring_prompt.md").exists())
+
+    def test_over_budget_packet_persists_failed_instead_of_stale_in_progress(self):
+        """Found live on clarion_events_inc_north_address, 2026-09-20: an
+        over-token-budget packet (packet_status != 'ready') raised straight
+        through run_stage1_prompt with no state write, leaving
+        workflow_state.json at whatever it was mid-run (IN_PROGRESS).
+        map_run_result() only recognizes a terminal status, so the queue
+        worker had nothing to map and the row sat `in_progress` on an active
+        lease until it expired. This must persist FAILED before raising."""
+        gate = _valid_stage0()
+        packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "incomplete",
+            "incomplete_reasons": ["Over token budget: 8565 > 8000"],
+            "jd_buckets": {"required": [], "preferred": [], "responsibilities": [], "culture": []},
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 8565,
+        }
+
+        def fake_build_packet(folder, no_hook=True):
+            return packet
+
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=gate):
+            with mock.patch("workflow.runner.build_packet", side_effect=fake_build_packet):
+                with mock.patch("workflow.runner.require_stage_ready"):
+                    with self.assertRaises(WorkflowError):
+                        run_until_waiting_for_llm(
+                            str(self.folder),
+                            mode="production",
+                            adopt=False,
+                            no_hook=True,
+                        )
+        persisted = load_state(str(self.folder))
+        self.assertEqual(persisted["status"], "FAILED")
+        self.assertEqual(persisted["stages"]["stage1"]["status"], "FAILED")
+        self.assertIn("over token budget", persisted["metadata"]["stage1_fail_reason"].lower())
+        self.assertFalse((self.folder / "stage1_budget_retry.json").exists())
+
+    def test_failed_over_budget_retry_writes_marker_then_rebuilds(self):
+        """AC-459: one --resume from FAILED over-budget with no Resume.md."""
+        state = init_state(str(self.folder), mode="production")
+        state["status"] = "FAILED"
+        state["active_stage"] = "stage1"
+        state["stages"]["stage0"]["status"] = "COMPLETE"
+        state["stages"]["stage1"]["status"] = "FAILED"
+        write_state(str(self.folder), state)
+        (self.folder / "authoring_packet.json").write_text(
+            json.dumps(
+                {
+                    "packet_status": "incomplete",
+                    "incomplete_reasons": ["Over token budget: 8565 > 8000"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        ready_packet = {
+            "schema_version": "1.0",
+            "company": "Acme",
+            "role_title": "Product Manager",
+            "slug": "acme",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        with mock.patch("workflow.runner.require_stage_ready"):
+            with mock.patch("workflow.runner.hashes_match", return_value=(True, [])):
+                with mock.patch(
+                    "workflow.runner.load_receipt",
+                    return_value={"status": "COMPLETE", "output_hashes": {}},
+                ):
+                    with mock.patch(
+                        "workflow.runner.build_packet", return_value=ready_packet
+                    ):
+                        with mock.patch(
+                            "workflow.runner.build_authoring_prompt",
+                            side_effect=fake_prompt,
+                        ):
+                            out = run_stage1_prompt(
+                                str(self.folder), state, no_hook=True
+                            )
+        self.assertTrue((self.folder / "stage1_budget_retry.json").exists())
+        self.assertEqual(out["status"], "WAITING_FOR_LLM")
+
+    def test_stage0_extract_error_persists_failed_instead_of_stale_in_progress(self):
+        """Found live on nava_benefits, 2026-09-21: Stage0ExtractError from a
+        Groq 429 cascade with no authorized next provider raised WorkflowError
+        after only an observability event. workflow_state.json stayed
+        NOT_STARTED. map_run_result() only recognizes a terminal status, so
+        the queue worker left the row in_progress on an active lease until
+        expiry. Persist FAILED before raising, same as Stage 1 over-budget."""
+        state = init_state(str(self.folder), mode="production")
+        write_state(str(self.folder), state)
+        with mock.patch(
+            "workflow.runner.build_stage0_fit_gate",
+            side_effect=Stage0ExtractError(
+                "missing batch item_ids after all providers: ['required:0:deadbeef']"
+            ),
+        ):
+            with self.assertRaises(WorkflowError):
+                run_stage0(str(self.folder), state)
+        persisted = load_state(str(self.folder))
+        self.assertEqual(persisted["status"], "FAILED")
+        self.assertEqual(persisted["stages"]["stage0"]["status"], "FAILED")
+        self.assertIn(
+            "missing batch item_ids",
+            persisted["metadata"]["stage0_fail_reason"].lower(),
+        )
+
+    def test_subscription_review_pause_does_not_rerun_stage0(self):
+        state = init_state(str(self.folder), mode="production")
+        state["status"] = "WAITING_FOR_INPUT"
+        state["active_stage"] = "stage0"
+        state["stages"]["stage0"]["status"] = "WAITING_FOR_INPUT"
+        write_state(str(self.folder), state)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={"pause_kind": "subscription_review"},
+        )
+        write_receipt(str(self.folder), receipt)
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as build:
+            out = run_until_waiting_for_llm(
+                str(self.folder), mode="production", adopt=False
+            )
+        build.assert_not_called()
+        self.assertEqual(out["status"], "WAITING_FOR_INPUT")
+
+    def test_subscription_review_omitted_item_ids_reruns_stage0(self):
+        """Item 9l/casper fix: a harness-side item-ID omission is transient and
+        retriable without a manual cascade import -- requeuing this pause must
+        actually re-attempt Stage 0, not bounce straight back to the same
+        stale WAITING_FOR_INPUT receipt (found live on casper_studios, which
+        stayed stuck across two explicit requeues after 9k/9l landed)."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "subscription_review",
+                "reason": "subscription_review:harness omitted item_ids",
+                "missing_item_ids": [],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertTrue(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_no_provider_extraction_review_reruns_stage0(self):
+        """outschool-class: adapter-off packs paused requirement extraction
+        with every queue item extraction_reason=no_provider. Requeue must
+        re-attempt Stage 0, not bounce on the missing import file."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "requirement_extraction_review",
+                "queue": [
+                    {"text": "Title: Product Manager", "extraction_reason": "no_provider"},
+                    {"text": "About the company", "extraction_reason": "no_provider"},
+                ],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertTrue(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_real_extraction_review_without_import_does_not_rerun(self):
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "requirement_extraction_review",
+                "queue": [
+                    {"text": "5+ years PM", "extraction_reason": "low_confidence"},
+                ],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertFalse(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_subscription_review_missing_item_ids_field_reruns_stage0(self):
+        """Same as above, via the forward-looking `missing_item_ids` receipt
+        field (item 9k) rather than the reason-string substring match."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "subscription_review",
+                "reason": "subscription_review:some other pause",
+                "missing_item_ids": ["required:0:deadbeef"],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertTrue(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+    def test_subscription_review_genuine_cost_pause_still_needs_manual_import(self):
+        """A subscription_review pause with no omission signal (a real
+        cost-authorization case) must still refuse to rerun without the
+        manual stage0_cascade_import.json -- only the transient omitted-IDs
+        case is auto-retriable."""
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode="production",
+            input_hashes={},
+            output_hashes={},
+            result={
+                "pause_kind": "subscription_review",
+                "reason": "subscription_review:certify_zero_charge required",
+                "missing_item_ids": [],
+            },
+        )
+        write_receipt(str(self.folder), receipt)
+        self.assertFalse(runner._waiting_for_input_has_new_work(str(self.folder)))
+
+
+class Stage0MissingReceiptDoesNotReExtractTests(unittest.TestCase):
+    """CR-108 (2026-08-31, ebanx_95710d65 incident): workflow_state.json can claim
+    stage0 COMPLETE with a receipt_id while stage_receipts/stage0.json is missing
+    on disk (a legacy/partial-migration gap). reconcile_state_against_receipts()
+    correctly marks that STALE -- but the STALE handler used to always call
+    run_stage0(), which unconditionally re-runs build_stage0_fit_gate()'s real
+    extraction and overwrites stage0_fit_gate.json. On the real folder this
+    incident is named for, Original_JD.txt was itself corrupted (undecoded HTML
+    entities, truncated), so the fresh extraction produced a garbled SKIP that
+    silently replaced a real PASS gate and archived a live submission. These
+    tests assert the missing-receipt case adopts the existing valid gate file
+    instead of re-extracting."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.folder = Path(self._tmpdir.name) / "legacy_co"
+        self.folder.mkdir()
+        _write(self.folder, "Original_JD.txt", "Product Manager\n\n## Requirements\n- Own roadmap\n")
+        self.real_gate = _valid_stage0(tier="Tier 1", decision="PASS")
+        _write(self.folder, "stage0_fit_gate.json", self.real_gate)
+
+        # Simulate the incident: workflow_state.json claims stage0 COMPLETE with a
+        # receipt_id, but stage_receipts/stage0.json was never written (or was
+        # lost) -- load_receipt() will return None for it.
+        state = init_state(str(self.folder), mode="production")
+        state["status"] = "IN_PROGRESS"
+        state["active_stage"] = "stage1"
+        state["stages"]["stage0"] = {
+            "status": "COMPLETE",
+            "receipt_id": "stage0:doesnotexistonanyfile",
+            "integrity": "CLEAN",
+        }
+        state["stages"]["stage1"]["status"] = "READY"
+        write_state(str(self.folder), state)
+
+    def _ready_packet(self) -> dict:
+        """Synthetic ready packet so these tests do not read live WE/claims."""
+        return {
+            "schema_version": "1.0",
+            "company": "legacy_co",
+            "role_title": "Product Manager",
+            "slug": "legacy_co",
+            "tier": "Tier 1",
+            "packet_status": "ready",
+            "jd_buckets": {
+                "required": [],
+                "preferred": [],
+                "responsibilities": [],
+                "culture": [],
+            },
+            "evidence_map": [],
+            "excerpts": {},
+            "soft_gaps": [],
+            "hard_constraints": [],
+            "hook_fact": None,
+            "rule_digest_version": "test",
+            "estimated_tokens": 100,
+        }
+
+    def _run_until_waiting_without_live_corpus(self) -> None:
+        """Adopt/mint Stage 0, then stop before a live packet corpus is required."""
+        packet = self._ready_packet()
+        with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+            with mock.patch("workflow.runner.build_packet", return_value=packet):
+                with mock.patch(
+                    "workflow.runner.build_authoring_prompt",
+                    return_value=("# prompt\n", {"company": "legacy_co", "total_estimated_tokens": 10}),
+                ):
+                    run_until_stage1_complete(
+                        str(self.folder),
+                        mode="production",
+                        adopt=False,
+                        no_hook=True,
+                        stop_at_waiting=True,
+                    )
+
+    def test_missing_receipt_adopts_existing_gate_without_reextracting(self):
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as fake_extract:
+            self._run_until_waiting_without_live_corpus()
+        fake_extract.assert_not_called()
+        # The real gate content on disk must be byte-for-byte untouched.
+        on_disk = json.loads((self.folder / "stage0_fit_gate.json").read_text(encoding="utf-8"))
+        self.assertEqual(on_disk, self.real_gate)
+        self.assertNotEqual(on_disk.get("decision"), "SKIP")
+
+    def test_missing_receipt_still_mints_a_real_receipt(self):
+        with mock.patch("workflow.runner.build_stage0_fit_gate") as fake_extract:
+            self._run_until_waiting_without_live_corpus()
+        fake_extract.assert_not_called()
+        r0 = load_receipt(str(self.folder), "stage0")
+        self.assertIsNotNone(r0)
+        self.assertEqual(r0["status"], "COMPLETE")
+        self.assertEqual(r0["result"]["decision"], "PASS")
+
+    def test_genuinely_invalid_gate_still_falls_through_to_reextraction(self):
+        """Adoption must not silently swallow a real problem: if the on-disk gate
+        fails contracts.check_stage0_fit_gate (e.g. corrupted/incomplete file),
+        re-extraction is still the correct fallback."""
+        (self.folder / "stage0_fit_gate.json").write_text("not valid json {{{", encoding="utf-8")
+        skip_gate = _valid_stage0(tier="Skip", decision="SKIP", skip_reason="re-extracted")
+        with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=skip_gate) as fake_extract:
+            with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+                run_until_stage1_complete(
+                    str(self.folder), mode="production", adopt=False, no_hook=True, stop_at_waiting=True
+                )
+        fake_extract.assert_called_once()
 
 
 class Stage1CompleteAndStaleTests(unittest.TestCase):
@@ -372,6 +1172,24 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
         ok, _ = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)  # Stage 2+ not yet complete
 
+    def test_rebuilt_packet_refreshes_waiting_receipt_hashes(self):
+        self._reach_waiting()
+        r1 = load_receipt(str(self.folder), "stage1")
+        self.assertEqual(r1["status"], "WAITING_FOR_LLM")
+        packet_path = self.folder / "authoring_packet.json"
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        packet["hard_constraints"] = ["rebuilt"]
+        packet_path.write_text(json.dumps(packet, indent=2) + "\n", encoding="utf-8")
+        from workflow.runner import _refresh_waiting_stage1_receipt, hashes_match
+
+        state = _refresh_waiting_stage1_receipt(str(self.folder), load_state(str(self.folder)))
+        refreshed = load_receipt(str(self.folder), "stage1")
+        self.assertEqual(refreshed["status"], "WAITING_FOR_LLM")
+        self.assertTrue(refreshed.get("result", {}).get("refreshed_hashes"))
+        ok, errs = hashes_match(str(self.folder), refreshed.get("output_hashes") or {})
+        self.assertTrue(ok, errs)
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+
     def test_edit_resume_marks_stage1_stale_locks_stage2(self):
         self._reach_waiting()
         _write(self.folder, "Resume.md", "# Name\nv1\n")
@@ -441,6 +1259,9 @@ class Stage1CompleteAndStaleTests(unittest.TestCase):
                 run_stage1_validate(str(self.folder), load_state(str(self.folder)))
         r1 = load_receipt(str(self.folder), "stage1")
         self.assertEqual(r1["status"], "WAITING_FOR_LLM")
+        failed = load_state(str(self.folder))
+        self.assertEqual(failed["status"], "FAILED")
+        self.assertEqual(failed["stages"]["stage1"]["status"], "FAILED")
 
 
 class TruthReviewTests(unittest.TestCase):
@@ -617,7 +1438,10 @@ class TruthReviewTests(unittest.TestCase):
                 # Human disposes
                 disp_path = self.folder / "reviews" / "dispositions.json"
                 data = json.loads(disp_path.read_text(encoding="utf-8"))
-                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = "FALSE_POSITIVE"
+                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = {
+                    "disposition": "FALSE_POSITIVE",
+                    "reasoning": "ACC-102 metric is verified in workExperience.md MET-09",
+                }
                 disp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
                 state = run_stage2_truth(str(self.folder), load_state(str(self.folder)))
         self.assertEqual(state["stages"]["stage2"]["subphases"]["truth"]["status"], "COMPLETE")
@@ -668,7 +1492,10 @@ class TruthReviewTests(unittest.TestCase):
                 data = json.loads(disp_path.read_text(encoding="utf-8"))
                 self.assertIn("bound_findings_hashes", data)
                 self.assertIn("truth", data["bound_findings_hashes"])
-                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = "FALSE_POSITIVE"
+                data["by_finding_id"]["truth.coverage.unused.ACC-102"] = {
+                    "disposition": "FALSE_POSITIVE",
+                    "reasoning": "ACC-102 metric is verified in workExperience.md MET-09",
+                }
                 disp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
                 # Same findings content — disposition must still clear the wait
                 state = run_stage2_truth(str(self.folder), load_state(str(self.folder)))
@@ -705,7 +1532,7 @@ class TruthReviewTests(unittest.TestCase):
                     }
                 ]
             },
-            {"by_finding_id": {"truth.provenance.0": "FALSE_POSITIVE"}},
+            {"by_finding_id": {"truth.provenance.0": {"disposition": "FALSE_POSITIVE", "reasoning": "provenance check misfired"}}},
         )
         self.assertEqual(verdict["verdict"], "FAIL")
 
@@ -722,10 +1549,96 @@ class TruthReviewTests(unittest.TestCase):
                     }
                 ]
             },
-            {"by_finding_id": {"truth.provenance.0": "HUMAN_ACCEPTED_RISK"}},
+            {"by_finding_id": {"truth.provenance.0": {"disposition": "HUMAN_ACCEPTED_RISK", "reasoning": "low-risk fabrication in boilerplate section"}}},
         )
         self.assertEqual(verdict["verdict"], "PASS")
         self.assertEqual(verdict["integrity"], "OVERRIDDEN")
+
+    # ── CR-110: reasoning requirement for self-clearing dispositions ──
+
+    def test_false_positive_without_reasoning_needs_disposition(self):
+        """FALSE_POSITIVE as a bare string must not clear — reasoning required."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "FALSE_POSITIVE"}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
+        self.assertIn("f1", verdict["open_finding_ids"])
+        self.assertTrue(
+            any("reasoning" in r for r in verdict["reasons"]),
+            f"expected reasoning mention in reasons: {verdict['reasons']}",
+        )
+
+    def test_false_positive_with_reasoning_passes(self):
+        """FALSE_POSITIVE with substantive reasoning clears the finding."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": {"disposition": "FALSE_POSITIVE", "reasoning": "finding misfired, metric is present in line 3"}}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_accepted_as_correct_without_reasoning_needs_disposition(self):
+        """ACCEPTED_AS_CORRECT as a bare string must not clear — reasoning required."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "ACCEPTED_AS_CORRECT"}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
+
+    def test_accepted_as_correct_with_reasoning_passes(self):
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": {"disposition": "ACCEPTED_AS_CORRECT", "reasoning": "bullet already cites this metric via MET-09"}}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_resolved_edit_without_reasoning_still_passes(self):
+        """RESOLVED_EDIT does not require reasoning — the edit is the evidence."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "RESOLVED_EDIT"}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_not_applicable_without_reasoning_still_passes(self):
+        """NOT_APPLICABLE does not require reasoning — scope claim is self-evident."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": "NOT_APPLICABLE"}},
+        )
+        self.assertEqual(verdict["verdict"], "PASS")
+
+    def test_human_accepted_risk_without_reasoning_needs_disposition(self):
+        """HUMAN_ACCEPTED_RISK requires reasoning — risk acceptance must be justified."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "BLOCK", "message": "fabricated"}]},
+            {"by_finding_id": {"f1": "HUMAN_ACCEPTED_RISK"}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
+
+    def test_short_reasoning_rejected(self):
+        """Reasoning shorter than REASONING_MIN_CHARS is not substantive."""
+        from workflow.policy import evaluate_truth_findings
+
+        verdict = evaluate_truth_findings(
+            {"findings": [{"id": "f1", "severity": "WARN", "message": "gap"}]},
+            {"by_finding_id": {"f1": {"disposition": "FALSE_POSITIVE", "reasoning": "ok"}}},
+        )
+        self.assertEqual(verdict["verdict"], "NEEDS_DISPOSITION")
 
 
 class AtsReviewTests(unittest.TestCase):
@@ -878,8 +1791,8 @@ class Stage2PolicyTests(unittest.TestCase):
                         run_until_waiting_for_llm(
                             str(self.folder), mode="production", adopt=False, no_hook=True
                         )
-        _write(self.folder, "Resume.md", "# Name\nv1\n")
-        _write(self.folder, "CoverLetter.md", "# Name\nletter\n")
+        _write(self.folder, "Resume.md", "# Name\n\n## PROFESSIONAL SUMMARY\nProduct manager with roadmap ownership experience.\n")
+        _write(self.folder, "CoverLetter.md", "# Name\n\nDear Hiring Manager,\n\nBody paragraph here.\n\nBest regards,\n\nName\n")
         _write(
             self.folder,
             "claim_provenance.json",
@@ -944,7 +1857,48 @@ class Stage2PolicyTests(unittest.TestCase):
         ):
             run_stage2_hm(str(self.folder), load_state(str(self.folder)))
         disp = json.loads((self.folder / "reviews" / "dispositions.json").read_text(encoding="utf-8"))
-        disp["by_finding_id"]["hm.critical_read"] = "ACCEPTED_AS_CORRECT"
+        # CR-112 Story 8.3: hm.critical_read requires a structured review artifact
+        # with verifiable document spans, JD spans, valid reviewer role, and ISO-8601 timestamp.
+        resume_hash = hashlib.sha256((self.folder / "Resume.md").read_bytes()).hexdigest()
+        cover_hash = hashlib.sha256((self.folder / "CoverLetter.md").read_bytes()).hexdigest()
+        jd_hash = hashlib.sha256((self.folder / "Original_JD.txt").read_bytes()).hexdigest()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        disp["by_finding_id"]["hm.critical_read"] = {
+            "disposition": "ACCEPTED_AS_CORRECT",
+            "reasoning": "critical read finding is a style preference not a defect",
+            "hm_review": {
+                "reviewed_document_hashes": {
+                    "Resume.md": resume_hash,
+                    "CoverLetter.md": cover_hash,
+                    "Original_JD.txt": jd_hash,
+                },
+                "reviewer_role": "reviewer",
+                "review_timestamp": now,
+                "observations": [
+                    {
+                        "document": "Resume.md",
+                        "location": "PROFESSIONAL SUMMARY section",
+                        "finding": "Three sentences positioning platform PM scope correctly",
+                        "jd_relevance": "JD requires roadmap ownership which is reflected",
+                        "document_span": "Product manager with roadmap ownership experience",
+                        "jd_span": "Own roadmap",
+                        "recommendation": "pass",
+                    },
+                    {
+                        "document": "CoverLetter.md",
+                        "location": "opening paragraph after greeting",
+                        "finding": "Opens with company-specific challenge not generic enthusiasm",
+                        "jd_relevance": "JD emphasizes platform scaling which hook addresses",
+                        "document_span": "Dear Hiring Manager",
+                        "jd_span": "Product Manager",
+                        "recommendation": "pass",
+                    },
+                ],
+                "verdict": "pass",
+                "overall_reasoning": "Both documents engage specifically with the JD requirements.",
+            },
+        }
         (self.folder / "reviews" / "dispositions.json").write_text(
             json.dumps(disp, indent=2), encoding="utf-8"
         )
@@ -960,13 +1914,9 @@ class Stage2PolicyTests(unittest.TestCase):
         _write(
             self.folder,
             "draft_manifest.json",
-            {
-                "rubric_score": {
-                    "resume": {"total": 75, "breakdown": {}},
-                    "cover_letter": {"total": 70, "breakdown": {}},
-                }
-            },
+            {"rubric_score": _rubric_score(self.folder, 75, 70)},
         )
+        _write_rubric_scorecards(self.folder, 75, 70)
         with mock.patch("workflow.runner._compile_pdfs"):
             with mock.patch(
                 "workflow.runner.verify_one",
@@ -988,7 +1938,10 @@ class Stage2PolicyTests(unittest.TestCase):
             )
             for k in list(disp["by_finding_id"]):
                 if disp["by_finding_id"][k] is None:
-                    disp["by_finding_id"][k] = "ACCEPTED_AS_CORRECT"
+                    disp["by_finding_id"][k] = {
+                        "disposition": "ACCEPTED_AS_CORRECT",
+                        "reasoning": "finding reviewed and deemed correct as-is",
+                    }
             (self.folder / "reviews" / "dispositions.json").write_text(
                 json.dumps(disp, indent=2), encoding="utf-8"
             )
@@ -1051,10 +2004,26 @@ class Stage3FinalizeTests(unittest.TestCase):
         _write(self.folder, "verification_receipt.json", {"mechanically_verified": True})
         _write(self.folder, "stage0_fit_gate.json", _valid_stage0(company="Acme", role="Product Manager"))
 
-    def _seed_stage2_complete(self, mode="production"):
+    def _seed_stage2_complete(self, mode="production", rubric=None):
         from workflow.invalidate import sha256_file
         from workflow.receipts import file_hash_map
 
+        raw_score = rubric or {"resume": {"total": 78}, "cover_letter": {"total": 70}}
+        resume_total = raw_score["resume"]["total"]
+        cover_total = raw_score["cover_letter"]["total"]
+        score = _rubric_score(self.folder, resume_total, cover_total)
+        if resume_total >= 70 and cover_total >= 65:
+            _write_rubric_scorecards(self.folder, resume_total, cover_total)
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Acme",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": score,
+            },
+        )
         state = init_state(str(self.folder), mode=mode)
         write_state(str(self.folder), state)
         prior_id = None
@@ -1116,6 +2085,83 @@ class Stage3FinalizeTests(unittest.TestCase):
         ok, errors = contracts.check_workflow_complete(str(self.folder))
         self.assertFalse(ok)
         self.assertTrue(any("PRACTICE_COMPLETE" in e for e in errors))
+
+    def test_practice_finalize_below_resume_floor_raises(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="practice",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(str(self.folder), load_state(str(self.folder)))
+            fin.assert_not_called()
+        self.assertIn("70", str(ctx.exception))
+        self.assertIn("resume", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
+        state = load_state(str(self.folder))
+        self.assertNotEqual(state.get("status"), "PRACTICE_COMPLETE")
+
+    def test_practice_finalize_force_cannot_skip_floor(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="practice",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(
+                    str(self.folder), load_state(str(self.folder)), force=True
+                )
+            fin.assert_not_called()
+        self.assertIn("CONVERT-READY", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
+
+    def test_practice_finalize_exact_floors_complete(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="practice",
+            rubric={"resume": {"total": 70}, "cover_letter": {"total": 65}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            state = run_stage3_finalize(
+                str(self.folder), load_state(str(self.folder))
+            )
+            fin.assert_not_called()
+        self.assertEqual(state["status"], "PRACTICE_COMPLETE")
+
+    def test_production_finalize_below_resume_floor_raises(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="production",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(str(self.folder), load_state(str(self.folder)))
+            fin.assert_not_called()
+        self.assertIn("70", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
+
+    def test_production_finalize_force_cannot_skip_floor(self):
+        from workflow.runner import run_stage3_finalize
+
+        self._seed_stage2_complete(
+            mode="production",
+            rubric={"resume": {"total": 68}, "cover_letter": {"total": 69}},
+        )
+        with mock.patch("workflow.runner.finalize_job") as fin:
+            with self.assertRaises(WorkflowError) as ctx:
+                run_stage3_finalize(
+                    str(self.folder), load_state(str(self.folder)), force=True
+                )
+            fin.assert_not_called()
+        self.assertIn("CONVERT-READY", str(ctx.exception))
+        self.assertFalse((self.folder / "stage_receipts" / "stage3.json").exists())
 
     def test_production_finalize_writes_complete(self):
         from workflow.runner import run_stage3_finalize
@@ -1223,16 +2269,17 @@ class Stage3FinalizeTests(unittest.TestCase):
         # would make a real Groq/Gemini call and write real rows to
         # data/training_data_feedback.csv (CR-105 -- found via a real polluted test run).
         with mock.patch.dict(os.environ, {"STAGE0_SECTION_MODE": "deterministic"}):
-            try:
-                run_until_waiting_for_llm(
-                    str(self.folder),
-                    mode="practice",
-                    adopt=False,
-                    force=True,
-                    no_hook=True,
-                )
-            except WorkflowError:
-                pass
+            with mock.patch("stage0_db_gate.evaluate_db_gate", return_value={"action": "clear"}):
+                try:
+                    run_until_waiting_for_llm(
+                        str(self.folder),
+                        mode="practice",
+                        adopt=False,
+                        force=True,
+                        no_hook=True,
+                    )
+                except WorkflowError:
+                    pass
         reloaded = load_state(str(self.folder))
         self.assertEqual(reloaded.get("mode"), "practice")
 
@@ -1290,6 +2337,40 @@ class EndToEndChainIntegrityTests(unittest.TestCase):
                             no_hook=True,
                         )
 
+    def test_unmanaged_folder_re_resolves_by_slug_without_raising(self):
+        """Regression (2026-09-08): a --mode practice run under an unmanaged
+        folder (data/authored_drafts/) committed Stage 0/1 receipts, then
+        run_until_stage1_complete re-resolved the bare slug against
+        submissions|pending_review and raised WorkflowError after the receipts
+        were written. A folder outside those roots must fall back to its still
+        valid absolute path: _place_after_stage0 never moves unmanaged folders
+        (practice mode early-returns), so the pre-resolve path remains correct.
+        """
+        def fake_build_packet(folder, no_hook=True):
+            return self.packet
+
+        def fake_prompt(folder, force=False):
+            return ("# prompt\n", {"company": "Acme", "total_estimated_tokens": 10})
+
+        # Fresh state (stage0 READY, slug == temp-folder basename that resolves
+        # nowhere under submissions|pending_review) forces the Stage 0 execution
+        # branch, which is the only path that re-resolves by slug.
+        with mock.patch("workflow.runner.reconcile", side_effect=lambda f, s: s):
+            with mock.patch("workflow.runner.build_stage0_fit_gate", return_value=self.gate):
+                with mock.patch("workflow.runner._place_after_stage0", side_effect=lambda f, s: f):
+                    with mock.patch("workflow.runner.build_packet", side_effect=fake_build_packet):
+                        with mock.patch("workflow.runner.build_authoring_prompt", side_effect=fake_prompt):
+                            with mock.patch("workflow.runner.require_stage_ready"):
+                                state = run_until_stage1_complete(
+                                    str(self.folder),
+                                    mode="production",
+                                    adopt=False,
+                                    no_hook=True,
+                                    stop_at_waiting=True,
+                                )
+        self.assertEqual(state["status"], "WAITING_FOR_LLM")
+        self.assertTrue((self.folder / "stage_receipts" / "stage1.json").exists())
+
     def test_check_workflow_complete_passes_after_actual_stage1_validate(self):
         """The full Stage 0 → Stage 1 validate path must produce a receipt
         chain that check_workflow_complete accepts (Stage 1 prior = Stage 0)."""
@@ -1339,6 +2420,17 @@ class EndToEndChainIntegrityTests(unittest.TestCase):
                 sub["status"] = "COMPLETE"
         state["stages"]["stage3"]["status"] = "READY"
         write_state(str(self.folder), state)
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Acme",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": _rubric_score(self.folder, 78, 70),
+            },
+        )
+        _write_rubric_scorecards(self.folder, 78, 70)
 
         # Finalize
         with mock.patch(
@@ -1390,6 +2482,206 @@ class EndToEndChainIntegrityTests(unittest.TestCase):
         self.assertTrue(reasons, f"Expected chain-break reasons, got: {reasons}")
         self.assertEqual(new_state["stages"]["stage1"]["status"], "STALE")
         self.assertEqual(new_state["status"], "STALE")
+
+
+class TestCr112RubricFloorCompletion(unittest.TestCase):
+    """Camunda-shaped 68/69 must not mint PRACTICE_COMPLETE or Mech CLEAN-complete."""
+
+    def setUp(self):
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmpdir.cleanup)
+        self.folder = Path(self._tmpdir.name) / "camunda_floor"
+        self.folder.mkdir()
+        _write(self.folder, "Resume.md", "# Name\n")
+        _write(self.folder, "CoverLetter.md", "# Name\n")
+
+    def test_collect_mech_findings_emits_resume_floor_block(self):
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+                "page_counts": {"Resume.pdf": 1, "CoverLetter.pdf": 1},
+            },
+        ):
+            payload = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        ids = [f["id"] for f in payload["findings"]]
+        self.assertIn("mech.rubric_floor.resume", ids)
+        self.assertNotIn("mech.rubric_floor.cover_letter", ids)
+        self.assertTrue(
+            any(f["id"] == "mech.rubric_floor.resume" and f["severity"] == "BLOCK"
+                for f in payload["findings"])
+        )
+
+    def test_collect_mech_findings_emits_cover_letter_floor_block(self):
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 70}, "cover_letter": {"total": 64}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+            },
+        ):
+            payload = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        ids = [f["id"] for f in payload["findings"]]
+        self.assertIn("mech.rubric_floor.cover_letter", ids)
+        self.assertNotIn("mech.rubric_floor.resume", ids)
+
+    def test_leftover_score_required_disposition_does_not_clear_floor_block(self):
+        from workflow.policy import evaluate_truth_findings
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+            },
+        ):
+            findings_doc = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        leftover = {
+            "by_finding_id": {
+                "mech.rubric_score_required": {
+                    "disposition": "ACCEPTED_AS_CORRECT",
+                    "reasoning": "score object is present so the old WARN is stale",
+                }
+            }
+        }
+        verdict = evaluate_truth_findings(findings_doc, leftover)
+        self.assertNotEqual(verdict["verdict"], "PASS")
+        self.assertIn("mech.rubric_floor.resume", verdict.get("open_finding_ids") or [])
+
+    def test_resolved_edit_can_clean_mech_but_floors_still_block(self):
+        from workflow.policy import evaluate_truth_findings
+        from workflow.runner import collect_mech_findings
+
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        with mock.patch(
+            "workflow.runner.verify_one",
+            return_value={
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "page_counts_ok": True,
+            },
+        ):
+            findings_doc = collect_mech_findings(str(self.folder), compile_pdfs=False)
+        disposed = {
+            "by_finding_id": {
+                "mech.rubric_floor.resume": {"disposition": "RESOLVED_EDIT"},
+            }
+        }
+        verdict = evaluate_truth_findings(findings_doc, disposed)
+        self.assertEqual(verdict["verdict"], "PASS")
+        self.assertEqual(verdict.get("integrity"), "CLEAN")
+        floor_errs = contracts.check_rubric_floors(
+            {"resume": {"total": 68}, "cover_letter": {"total": 69}}
+        )
+        self.assertTrue(any("70" in e for e in floor_errs))
+
+    def test_stage2_policy_below_floor_does_not_mint_complete(self):
+        from workflow.reviews import default_stage2_subphases
+        from workflow.runner import run_stage2_policy
+
+        resume = "resume body"
+        cover = "cover letter body"
+        _write(self.folder, "Resume.md", resume)
+        _write(self.folder, "CoverLetter.md", cover)
+        _write(
+            self.folder,
+            "verification_receipt.json",
+            {
+                "submission": "camunda_floor",
+                "mechanically_verified": True,
+                "lint_all_clean": True,
+                "unapproved_metrics_clean": True,
+                "page_counts_ok": True,
+                "check_resume": {"passed": True},
+                "check_cover_letter": {"passed": True},
+                "lint": [
+                    {"document": "Resume.md", "blocks": [], "warns": []},
+                    {"document": "CoverLetter.md", "blocks": [], "warns": []},
+                ],
+                "content_hashes": {
+                    "algorithm": "sha256",
+                    "Resume.md": hashlib.sha256(resume.encode("utf-8")).hexdigest(),
+                    "CoverLetter.md": hashlib.sha256(cover.encode("utf-8")).hexdigest(),
+                },
+                "rubric_audit": {"ran": True, "clean": True, "findings": []},
+                "claim_provenance": {"ran": True, "ok": True, "findings": []},
+            },
+        )
+        _write(
+            self.folder,
+            "draft_manifest.json",
+            {
+                "company": "Camunda",
+                "title": "Product Manager",
+                "verification_passed": True,
+                "rubric_score": {"resume": {"total": 68}, "cover_letter": {"total": 69}},
+            },
+        )
+        state = init_state(str(self.folder), mode="practice")
+        state["stages"]["stage2"]["subphases"] = default_stage2_subphases()
+        for name in ("truth", "ats", "hm", "mech"):
+            state["stages"]["stage2"]["subphases"][name]["status"] = "COMPLETE"
+        write_state(str(self.folder), state)
+        with mock.patch(
+            "workflow.runner._require_stage1_fresh",
+            return_value={"receipt_id": "stage1:test"},
+        ):
+            with mock.patch("workflow.runner._run_advisory_defect_scan"):
+                out = run_stage2_policy(str(self.folder), load_state(str(self.folder)))
+        self.assertEqual(out["status"], "NEEDS_DISPOSITION")
+        self.assertFalse((self.folder / "stage_receipts" / "stage2.json").exists())
 
 
 if __name__ == "__main__":

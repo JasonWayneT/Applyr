@@ -17,6 +17,9 @@ dist-ssr/
 .vite/
 
 # Database - now lives at data/jobagent.sqlite
+# Review Center answers, skill memory, and answer history all live in this
+# database too (CR-109 / DATA-005) — this wildcard is what keeps a fresh clone
+# free of Jason's personal review answers. Do not narrow it.
 *.sqlite*
 job_hunter.db
 data/jobs.db
@@ -27,10 +30,12 @@ data/jobs.db
 .vscode/
 .cursor/
 .claude/
-# generate-submission/SKILL.md is force-added and tracked despite this rule (git can't re-include
-# a path via !negation once a parent directory is excluded — confirmed, that pattern doesn't work
-# at any nesting depth). It survives via `git add -f`, not via a gitignore exception. Don't remove
-# it from tracking; it's the single authoritative authoring-process definition, not local config.
+# generate-submission/SKILL.md and workflows/generate-submission-batch.js are force-added
+# despite this rule (git can't re-include a path via !negation once a parent directory is
+# excluded). They survive via `git add -f`, not via a gitignore exception. Don't remove them
+# from tracking. Do not un-ignore the rest of `.claude/` (local harness config, worktrees).
+# The batch file is a Claude Code Workflow() runner; portable rewrite is deferred. Default
+# path for every harness is still scripts/run_submission.py.
 
 # Tracked portable skills live in `.agents/skills/` (Cursor + Antigravity).
 # Do not gitignore `.agents/`. Claude Code still needs a force-added pointer under
@@ -55,6 +60,10 @@ career-ops-main/
 data/jobs/
 data/submissions/
 !data/submissions/.gitkeep
+# 2026-09-03: same PII class as data/submissions/ — copies for today's apply pass and the
+# Stage 0 forensic investigation evidence, never commit.
+data/apply_today/
+data/stage0_investigation_evidence/
 data/pending_review/
 !data/pending_review/.gitkeep
 data/archive/
@@ -62,12 +71,19 @@ data/archive/
 # specifically checking for this; was untracked but not yet ignored, one `git add -A` away from
 # committing real candidate data, directly violating CLAUDE.md's own PII rule.
 data/authored_drafts/
+# Practice runs for the unsupervised pipeline loop. Same PII class as authored_drafts.
+data/loop_runs/
+data/loop_holdout/
 # CR-074 local before/after fixtures (Resume/CL headers carry real contact chrome) — keep on disk,
 # never commit. Same PII class as authored_drafts / submissions.
 data/context_pack_validation/
 # Batch/Stage0/packet-eval run dumps. Already-tracked files under data/reports/ stay tracked;
 # new dated dumps stay local (Layer D hygiene, 2026-08-12).
 data/reports/
+# CR-112 Epic 6 runtime eval output (sanitized fixtures live in tests/fixtures/cr112_eval/).
+data/eval/
+# E2 dry-run sandbox (setup_e2_sandbox.py). Shim DB + sidecar snapshots + slug folders stay local.
+data/sandbox/
 pipeline-log.md
 pipeline_log.txt
 
@@ -93,37 +109,66 @@ audit_report.md
 data/scouted_jobs_log.txt
 scripts/regeneration_log.txt
 *.csv
+# CSV drop inbox and per-slug queue lock files (CR-119, FR-340, FR-343, DATA-006, SEC-007).
+# The *.csv rule (line 108) already ignores dropped files in data/inbox/csv/; these
+# explicit entries exist so a future narrowing of that rule cannot silently expose
+# real JD content (e.g. non-CSV files that may land in the inbox tree).
+data/inbox/
+!data/inbox/csv/.gitkeep
+!data/inbox/csv/archive/.gitkeep
+!data/inbox/csv/quarantine/.gitkeep
+data/queue_locks/
+!data/queue_locks/.gitkeep
 
 # BMAD planning artifacts (generated output, not source)
 _bmad-output/
 
 # Data Privacy - ignore all real candidate data; allow only templates + generic guides
 data/thinking/
-data/*.md
+# 2026-09-08: recursive glob (data/**/*.md, not data/*.md) -- the single-level version left
+# any data/ subdirectory unprotected (found live: data/interview_prep/*.md was untracked and
+# NOT ignored, one `git add -A` away from committing real candidate-tied content). Same class
+# of gap this session flagged once already on 2026-08-14 and left unfixed. Negations below stay
+# top-level-only by design; nothing in a subdirectory is meant to be tracked here.
+data/**/*.md
 !data/*.example.md
 !data/ats-pipeline.md
 !data/resume-conversion-best-practices.md
 !data/cover-letter-conversion-best-practices.md
 !data/conversion_rubric.md
 
-data/*.json
+data/**/*.json
 !data/*.example.json
 # CR-093: scoring-engine calibration constants, not personal candidate data --
 # tracked so a recalibration is a real, reviewable git event, same as any other
 # source-of-truth code change. See the file's own _description field.
 !data/fit_rubric_calibration.json
+# 2026-09-01: configurable LLM rate-limit thresholds, not personal data -- tracked
+# so a threshold change is a real, reviewable git event.
+!data/llm_rate_limits.json
 # CR-093 research spec (HTML). data/*.md and data/*.json are ignored; HTML is
 # not, so this file is tracked by adding it, not by a negation exception.
 # Local resume exports in data/ (PII). Keep on disk, never commit.
-data/*.docx
+data/**/*.docx
 # One-off Stage 0 model bake-offs. Keep on disk, not in git.
 scripts/_bakeoff*.py
+data/stage0_classifier.candidate.pkl
+data/stage0_classifier.candidate.report.json
+data/stage0_classifier.previous.pkl
+data/stage0_subscription_cache/
+data/stage0_agy_archive_smoke.json
+data/stage0_agy_archive_smoke_medium.json
+data/stage0_agy_archive_smoke_cache/
+data/stage0_agy_archive_smoke_cache_medium/
+data/stage0_agy_locked30_cache/
+data/stage0_agy_pass5_evidence_cache/
+data/stage0_locked30_replay.json
 # CR-097: curated Stage 1 example bank (empty until Epic 4 seeds it). Not
 # candidate PII — tracked so a promotion is a reviewable git event.
 !data/authoring_example_bank.json
 
-data/*.txt
-data/*.log
+data/**/*.txt
+data/**/*.log
 data/claim_embeddings.json
 data/cover_voice.md
 data/Resume_LinkedIn_Featured.md

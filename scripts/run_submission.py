@@ -22,7 +22,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import sys
+from pathlib import Path
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _SCRIPT_DIR)
@@ -59,7 +61,7 @@ def _print_console_summary(folder: str, before_count: int) -> None:
         kind = e.get("event", "?")
         dur = _fmt_duration(e.get("duration_seconds"))
         bits = []
-        for key in ("tier", "fit_score", "confidence_score", "extraction_source", "verify_attempts", "integrity", "workflow_status"):
+        for key in ("tier", "fit_score", "confidence_score", "extraction_source", "verify_attempts", "integrity", "workflow_status", "pdf_compile_seconds"):
             if e.get(key) is not None:
                 bits.append(f"{key}={e[key]}")
         if e.get("findings_by_severity"):
@@ -69,6 +71,25 @@ def _print_console_summary(folder: str, before_count: int) -> None:
         line = f"Stage {stage:<14} {kind:<17} {dur:>6}  {detail}".rstrip()
         enc = sys.stdout.encoding or "utf-8"
         print(line.encode(enc, errors="replace").decode(enc, errors="replace"))
+
+
+def _queue_mark_done(folder: str, status: str | None) -> None:
+    """Release a ready_to_finalize (or leftover in_progress) queue row after --finalize."""
+    if status not in ("COMPLETE", "COMPLETE_WITH_OVERRIDE", "PRACTICE_COMPLETE"):
+        return
+    slug = os.path.basename(os.path.abspath(folder))
+    try:
+        import pipeline_queue as pq
+    except ImportError:
+        return
+    try:
+        conn = pq.connect()
+        try:
+            pq.mark_done(slug, conn=conn, last_workflow_status=status)
+        finally:
+            conn.close()
+    except (pq.FenceRejected, pq.IllegalTransition, OSError, sqlite3.Error):
+        return
 
 
 def _print_status(folder: str) -> int:
@@ -88,6 +109,7 @@ def _print_status(folder: str) -> int:
         print(f"  - {e}")
     terminal = (
         "WAITING_FOR_LLM",
+        "WAITING_FOR_INPUT",
         "NEEDS_DISPOSITION",
         "SKIPPED",
         "COMPLETE",
@@ -100,6 +122,10 @@ def _print_status(folder: str) -> int:
 
 
 def main() -> None:
+    # Direct CLI runs must use Agy too. Leaving this unset was the Groq/Gemini
+    # leak when someone hand-ran run_submission.py instead of the worker.
+    if not os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", "").strip():
+        os.environ["APPLYR_STAGE0_SUBSCRIPTION_ADAPTER"] = "1"
     parser = argparse.ArgumentParser(
         description="Applyr authoritative submission workflow (CR-076/077/079)."
     )
@@ -210,6 +236,17 @@ def main() -> None:
         # Epic D (observability design): count events already on disk before this invocation
         # advances anything, so the console summary below prints only what *this* run produced.
         _folder_for_events = _resolve_folder(args.folder)
+        if not args.status:
+            from run_stage1_repair import replay_coercible_repair_attempt
+
+            replay_coercible_repair_attempt(Path(_folder_for_events))
+        try:
+            from agy_quota_tracker import RECEIPTS_ENV, bind_active_job
+
+            bind_active_job(_folder_for_events)
+            os.environ[RECEIPTS_ENV] = "1"
+        except Exception:
+            pass
         _before_count = len(read_events(_folder_for_events))
 
         # Stage 3-only path when already Stage 2 COMPLETE
@@ -222,6 +259,7 @@ def main() -> None:
                     "COMPLETE_WITH_OVERRIDE",
                     "PRACTICE_COMPLETE",
                 ):
+                    _queue_mark_done(folder, st.get("status"))
                     print(f"WORKFLOW already terminal status={st.get('status')}")
                     sys.exit(0)
                 reach = True if args.finalize_reach_out else None
@@ -297,6 +335,106 @@ def main() -> None:
                 "(SYSTEM=digest, USER=packet). Do not load agent_context_pack.md."
             )
             sys.exit(0)
+        if status == "WAITING_FOR_INPUT":
+            receipt_path = os.path.join(_folder_for_events, "stage_receipts", "stage0.json")
+            pause_kind = None
+            result = {}
+            try:
+                with open(receipt_path, encoding="utf-8") as handle:
+                    result = json.load(handle).get("result") or {}
+                pause_kind = result.get("pause_kind")
+            except (OSError, json.JSONDecodeError, AttributeError):
+                pause_kind = None
+            if pause_kind == "cost_authorization":
+                print("WAITING_FOR_INPUT — Stage 0 cost authorization")
+                print(
+                    "Why: no eligible Stage 0 classifier is authorized "
+                    f"(mode={result.get('authorization_mode')}, "
+                    f"reason={result.get('reason')})."
+                )
+                print("No model API call occurred.")
+                print("No API cost was incurred. Unknown cost is not recorded as zero.")
+                print("Stage 0 is not complete.")
+                print(
+                    "Resume the same run: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print(
+                    "Resume path, import: put stage0_cascade_import.json in "
+                    f"{_folder_for_events} (start from "
+                    "stage0_cascade_import.template.json in that same folder)."
+                )
+                print(
+                    "Resume path, certify: certify a provider whose adapter can "
+                    "assert zero charge "
+                    "for this account and call."
+                )
+                print(
+                    "Resume path, paid authorization: allowlist the provider, set "
+                    "a positive budget and a known estimate, then --resume."
+                )
+                print("Do not paste authoring_prompt.md.")
+            elif pause_kind == "requirement_extraction_review":
+                print("WAITING_FOR_INPUT — Stage 0 requirement extraction review")
+                print(
+                    "Why: extraction could not confidently bucket one or more "
+                    "bullets, and the independent qualification-risk gate found "
+                    "at least one that is qualification-likely or ambiguous "
+                    "(CR-112). Uncertainty pauses; only bullets positively "
+                    "classified as non-qualification bypass review."
+                )
+                queue = result.get("queue") or []
+                print(f"Queued for review: {len(queue)} item(s).")
+                print(
+                    "Fill in stage0_requirement_extraction_review.json in "
+                    f"{_folder_for_events} (start from "
+                    "stage0_requirement_extraction_review.template.json in that "
+                    "same folder) with an explicit bucket per item -- required, "
+                    "preferred, responsibilities, culture, or exclude. No "
+                    "default is accepted."
+                )
+                print(
+                    "Resume the same run: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
+            elif pause_kind == "subscription_review":
+                print("WAITING_FOR_INPUT — Stage 0 Agy evidence review")
+                print(
+                    "Why: the subscription adapter ran and did not return a "
+                    "complete evidence batch (omitted item IDs or invalid "
+                    "harness output)."
+                )
+                print(f"Reason: {result.get('reason')}")
+                print("Agy already ran. This is not a cost-authorization pause.")
+                print(
+                    "Resume the same run after a complete cascade import or a "
+                    "code fix: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print("Do not paste authoring_prompt.md. Stage 0 is not finished.")
+            elif pause_kind == "conversion_risk":
+                print("WAITING_FOR_INPUT — conversion risk (Stage 0 PASS withheld)")
+                print(
+                    "Why: fit PASS cannot support conversion identity "
+                    "(required named tool is NOT_PRESENT or evidence 0)."
+                )
+                print("Stage 0 is complete. Documents were not authored.")
+                print("Skip ledger was not written. This is not a Skip.")
+                print(
+                    "Only requeue --reason apply_anyway promotes this pause."
+                )
+                print(
+                    "Then: python scripts/run_submission.py "
+                    f"{_folder_for_events} --resume"
+                )
+                print("Do not paste authoring_prompt.md until apply_anyway exists.")
+            else:
+                print(
+                    "WAITING_FOR_INPUT — resolve the pending Review Center confirmation "
+                    "then rerun this opportunity with --resume."
+                )
+            sys.exit(0)
         if status == "NEEDS_DISPOSITION":
             # CR-107: renamed from WAITING_FOR_HUMAN — a WARN finding here is the agent's own
             # call to make and retry in the same session (see AGENTS.md), never an actual stop.
@@ -314,12 +452,15 @@ def main() -> None:
         if status == "FAILED":
             sys.exit(1)
         if status == "COMPLETE":
+            _queue_mark_done(_folder_for_events, status)
             print("WORKFLOW COMPLETE — check_workflow_complete should be YES.")
             sys.exit(0)
         if status == "COMPLETE_WITH_OVERRIDE":
+            _queue_mark_done(_folder_for_events, status)
             print("WORKFLOW COMPLETE_WITH_OVERRIDE — integrity OVERRIDDEN somewhere in the chain.")
             sys.exit(0)
         if status == "PRACTICE_COMPLETE":
+            _queue_mark_done(_folder_for_events, status)
             print("PRACTICE_COMPLETE — no DB write; not production DONE.")
             sys.exit(0)
         s2 = (state.get("stages") or {}).get("stage2") or {}

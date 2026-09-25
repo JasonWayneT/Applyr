@@ -1,0 +1,7 @@
+slug: nisum
+why: DEV slug from the before-fix set, so a job that previously drafted can show current defects. accertify skipped on fit and did not draft.
+mode: practice
+folder: data/loop_runs/i1/nisum
+copied_bytes: 5029
+command: python scripts/run_submission.py data/loop_runs/i1/nisum --mode practice
+job text: not printed

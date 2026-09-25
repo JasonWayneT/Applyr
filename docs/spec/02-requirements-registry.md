@@ -144,7 +144,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-090` | functional | P0 | implemented | Draft Manifest — `draft_manifest.json` records claim IDs, jd_profile, pipeline_version, fallback counts | `AC-092` | `CR-014` |
 | `FR-091` | functional | P0 | implemented | Validated JdProfile — themes/requirements must substring-match JD; fit summary boosts scoring | `AC-093` | `CR-014` |
 | `FR-092` | functional | P0 | implemented | Compiler-stage gates — `verify_content` with internal claim IDs before strip; `DraftingPipelineError` on QA fail | `AC-094` | `CR-014` |
-| `FR-093` | functional | P0 | implemented | `call_llm_stage(stage_id)` — per-stage provider preference list; same prompts for gemini and local | `AC-095` | `CR-014` |
+| `FR-093` | functional | P0 | implemented | `call_llm_stage(stage_id)` — per-stage provider preference list; same prompts for gemini and local | `AC-095b` | `CR-014` |
 | `FR-094` | functional | P0 | implemented | Fit-aware tailoring — `evaluation_result` feeds JdProfile and claim ranking | `AC-096` | `CR-014` |
 | `FR-100` | functional | P0 | implemented | Claim catalog — parse `workExperience.md` ACC/VOC into `claim_catalog.py` | `AC-100` | `CR-017` |
 | `FR-101` | functional | P0 | implemented | Compose-mode bullets — `claim_composer.py` default; `DRAFT_MODE=legacy_llm` escape hatch | `AC-101` | `CR-017` |
@@ -157,7 +157,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `FR-108` | functional | P1 | implemented | Template-first cheat sheet — `CHEAT_SHEET_MODE` default template | `AC-110` | `CR-018` |
 | `FR-109` | functional | P1 | implemented | Years-first seniority gate — `seniority_gate.py` title + years pre-LLM | `AC-115`, `AC-116`, `AC-117` | `CR-019` |
 | `FR-110` | functional | P1 | implemented | AI-tools vs AI-PM rubric - LLM fit must not reject tool mentions alone | `AC-118` | `CR-019` |
-| `FR-111` | functional | P1 | implemented | JD Deduplication via Vector Similarity | `AC-119` | CR-020 |
+| `FR-111` | functional | P1 | implemented | JD Deduplication via Vector Similarity | `AC-119c` | CR-020 |
 | `FR-112` | functional | P1 | implemented | I/O vs GPU Concurrency Splitting | `AC-120` | CR-020 |
 | `FR-113` | functional | P1 | implemented | Local Salary Extraction | `AC-121` | CR-020 |
 | `FR-114` | functional | P1 | implemented | Vector-Based ATS Backlog Re-ranking | `AC-122` | CR-020 |
@@ -243,7 +243,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-073` | `FR-071` | Sampling Override | Local model is primary provider | `_call_local()` is invoked | Ollama payload contains `temperature: 0.0`, `top_k: 40`, `num_predict: 1000`; log line confirms override | verified |
 | `AC-074` | `FR-072` | Two-Phase Generation | Local model is primary and resume draft is requested | `run_drafting_engine()` is called | Log shows Phase 1 JSON selection followed by per-bullet Phase 2 calls; `llm_verify_claims()` is skipped; `preserves_core_facts()` runs on each bullet | verified |
 | `AC-075` | `FR-073` | Numeric Preservation | Source text contains "3,500 accounts"; bullet contains "5,000 accounts" | `preserves_core_facts()` runs | Returns `(False, ["5,000"])` — invented number flagged; bullet discarded and replaced by `_fallback_bullet()` | verified |
-| `AC-076` | `FR-074` | Forbidden Section Strip | Resume contains `## Core Competencies` section with bullets | `style_compliance_guard.py` runs | Section and all its content removed; `## PROFESSIONAL EXPERIENCE` boundary preserved; name header normalized to `# CANDIDATE NAME` | verified |
+| `AC-076` | `FR-074` | Forbidden Section Strip | Resume contains `## Core Competencies` section with bullets | `style_compliance_guard.py` runs | Section and all its content removed; `## PROFESSIONAL EXPERIENCE` boundary preserved; name header normalized to `# CANDIDATE NAME` | superseded by `FR-195` (Core Competencies is the one approved optional section); marked under CR-111 |
 | `AC-077` | `FR-075` | CL Education Skip | Cover letter is passed to `validate_hard_facts()` | `doc_type='cover_letter'` | Education check does not run; no "MISSING FACT: Education" warning produced; placeholder tokens stripped | verified |
 | `AC-078` | `FR-076` | Accordion Expansion | User clicks on a connection card header | Accordion tab is clicked | Toggles current card to expanded mode and automatically closes previously expanded element | accepted |
 | `AC-079` | `FR-077` | Connection Filter | User types search criteria | Text entered into 'Search connections' | Instantly hides non-matching LLM provider or data source elements from active view | accepted |
@@ -262,7 +262,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-092` | `FR-090` | Manifest | Draft completes | Read `draft_manifest.json` | Contains `selected_claim_ids`, `jd_profile`, `pipeline_version` | implemented |
 | `AC-093` | `FR-091` | JdProfile validation | LLM returns invented requirement | `build_jd_profile()` validates | Invented strings dropped; deterministic fallback fills gaps | implemented |
 | `AC-094` | `FR-092` | verify_content | Resume assembled with `[ACC-*]` on bullets | `verify_content()` runs pre-strip | Invalid IDs fail closed or trigger fallback bullets | implemented |
-| `AC-095` | `FR-093` | Stage providers | Stage `bullet` runs | `call_llm_stage('bullet')` | Uses `['gemini','local']` preference, not hardcoded local-only | implemented |
+| `AC-095b` (renamed from a duplicate `AC-095` under CR-111) | `FR-093` | Stage providers | Stage `bullet` runs | `call_llm_stage('bullet')` | Uses `['gemini','local']` preference, not hardcoded local-only | implemented |
 | `AC-096` | `FR-094` | Fit boost | Job passed fit with Summary | Stage 2 selection runs | Claims matching fit summary themes rank higher | implemented |
 | `AC-100` | `FR-100` | No ID tokens in PDFs | Compose draft completes | Read `Resume.md` and `CoverLetter.md` | No `ACC-`, `MET-`, `VOC-`, or pipe-wrapped ID tokens in final text | implemented |
 | `AC-101` | `FR-101` | Manifest compose mode | Draft completes | Read `draft_manifest.json` | Contains `draft_mode`, `selected_claim_ids`, `pipeline_version` CR-017-* | implemented |
@@ -286,7 +286,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-195` | `FR-189` | Squad PM pass | Squad + product org + mentorship | Solo PM gate | Passes zero-token gate | implemented |
 | `AC-196` | `FR-189` | Years lock fit | 4–7 years JD after gates pass | Fit scoring | No years-over-max penalty | implemented |
 | `AC-118` | `FR-110` | AI tools OK | JD mentions ChatGPT as plus | LLM fit | Not sole reject reason | implemented |
-| `AC-119` | `FR-111` | JD Deduplication via Vector Similarity | New JD arrives | Compare vector to existing | JD is deduplicated correctly | implemented |
+| `AC-119c` (renamed from a duplicate `AC-119` under CR-111) | `FR-111` | JD Deduplication via Vector Similarity | New JD arrives | Compare vector to existing | JD is deduplicated correctly | implemented |
 | `AC-120` | `FR-112` | I/O vs GPU Concurrency Splitting | Batch process starts | I/O and GPU tasks | Process concurrency is split safely | implemented |
 | `AC-121` | `FR-113` | Local Salary Extraction | Salary string is passed | Extract salary locally | Correct salary integer extracted | implemented |
 | `AC-122` | `FR-114` | Vector-Based ATS Backlog Re-ranking | Backlog is re-ranked | Compare vectors | Correct order and updated ranks | implemented |
@@ -389,13 +389,13 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 ### CR-027 / CR-028 Collection quality gates (FR-170–FR-173)
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
 |---|---|---|---|---|---|---|
-| `FR-170` | functional | P1 | implemented | Deterministic `blocked_industries` gate at scout + batch zero-token | `AC-175`–`AC-178` | `CR-027` |
+| `FR-170` | functional | P1 | implemented | Deterministic `blocked_industries` gate at scout + batch zero-token | `AC-175b`, `AC-176b`, `AC-177`–`AC-178` | `CR-027` |
 | `FR-171` | functional | P1 | implemented | `must_have_keywords` (AND) + `signal_keywords` (OR) in zero-token gate | `AC-179` | `CR-028` |
 | `FR-172` | functional | P2 | implemented | `required_anchors` preserved in prefs; optional `ANCHOR_GATE_ENABLED` two-anchor gate | `AC-180` | `CR-028` |
 | `FR-173` | functional | P1 | implemented | Levels.fyi skip without title; Remote-only geo bypass tightened | `AC-181`, `AC-182` | `CR-028` |
 
-| `AC-175` | `FR-170` | Industry blocklist | Company Crypto.com, block Crypto | Scout ingest | Rejected `industry_blocked:Crypto` | implemented |
-| `AC-176` | `FR-170` | Industry batch header | DraftKings header, block Sports Betting | Zero-token gate | Rejected before LLM | implemented |
+| `AC-175b` (registry alias for the historical duplicate `AC-175` under CR-027) | `FR-170` | Industry blocklist | Company Crypto.com, block Crypto | Scout ingest | Rejected `industry_blocked:Crypto` | implemented |
+| `AC-176b` (registry alias for the historical duplicate `AC-176` under CR-027) | `FR-170` | Industry batch header | DraftKings header, block Sports Betting | Zero-token gate | Rejected before LLM | implemented |
 | `AC-177` | `FR-170` | Empty blocklist | No blocked industries | Gates run | No-op | implemented |
 | `AC-178` | `FR-170` | B2B pass | Salesforce, no blocked term | Gates run | Passes | implemented |
 | `AC-179` | `FR-171` | Must-have AND | must_have saas+b2b, JD agile only | Keyword gate | Reject `missing_must_have` | implemented |
@@ -491,7 +491,7 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
 |---|---|---|---|---|---|---|
 | `FR-233` | functional | P1 | implemented | Cover voice phrasing module: banned robot/casual phrases; `apply_voice_polish()`; no LLM rewrite | `AC-261` | `CR-043` |
-| `FR-234` | functional | P1 | implemented | Cover word band 300–400 in renderer and audit | `AC-262` | `CR-043` |
+| `FR-234` | functional | P1 | implemented | Cover word band 300–400 in renderer and audit (note: cover-letter authoring target is 250–400 per CR-111 decision; reconciling the `cover_phrasing.py` constants would change compose behavior and is deferred) | `AC-262` | `CR-043` |
 | `FR-235` | functional | P1 | implemented | Proof paragraphs render `cover_story` only without template JD bridge | `AC-261` | `CR-043` |
 | `FR-236` | functional | P2 | implemented | Opener `jd_presence_clause` for audit JD fragment; cover_story uses constraints language not layoffs | `AC-263` | `CR-043` |
 | `FR-210` | functional | P1 | implemented | Outcome-rubric correlation logging: on status change to Closed/Screener/Interview/Offer, reads `draft_manifest.json["rubric_score"]` and appends a `RubricLog` activity_log entry with outcome, rubric_overall, summary_score, experience_score, and threshold_flag in the meta JSON column | `AC-227`: activity_log contains a row with source="RubricLog" and meta.event="outcome_rubric_log" after a job is moved to Closed; `AC-228`: field is absent when no draft_manifest.json exists for the company | `FEAT-015` |
@@ -574,66 +574,66 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 
 | ID | Type | Priority | Status | Statement | Acceptance | Source |
 |----|------|----------|--------|-----------|------------|--------|
-| `FR-257` | functional | P0 | in_progress | Authoritative `run_submission` CLI + `scripts/workflow/` owns workflow_state/stage_receipts; workers never write those files; Stage 0→packet/prompt→WAITING_FOR_LLM vertical slice; `check_workflow_complete` is the DONE oracle (full COMPLETE in later CRs) | `AC-289`–`AC-293` | CR-076 |
-| `AC-289` | acceptance | P0 | in_progress | Stage 0 via existing builder + receipt; Skip → workflow SKIPPED | `FR-257` | CR-076 |
-| `AC-290` | acceptance | P0 | in_progress | Pass builds packet+prompt and stops at WAITING_FOR_LLM | `FR-257` | CR-076 |
-| `AC-291` | acceptance | P0 | in_progress | Only workflow.receipts writes stage_receipts | `FR-257` | CR-076 |
-| `AC-292` | acceptance | P0 | in_progress | check_workflow_complete False for mid-states; reports WAITING_FOR_LLM/SKIPPED | `FR-257` | CR-076 |
-| `AC-293` | acceptance | P0 | in_progress | Adopt existing valid Stage 0/packet/prompt artifacts into receipts | `FR-257` | CR-076 |
+| `FR-257` | functional | P0 | implemented | Authoritative `run_submission` CLI + `scripts/workflow/` owns workflow_state/stage_receipts; workers never write those files; Stage 0→packet/prompt→WAITING_FOR_LLM vertical slice; `check_workflow_complete` is the DONE oracle (full COMPLETE in later CRs) | `AC-289`–`AC-293` | CR-076 |
+| `AC-289` | acceptance | P0 | implemented | Stage 0 via existing builder + receipt; Skip → workflow SKIPPED | `FR-257` | CR-076 |
+| `AC-290` | acceptance | P0 | implemented | Pass builds packet+prompt and stops at WAITING_FOR_LLM | `FR-257` | CR-076 |
+| `AC-291` | acceptance | P0 | implemented | Only workflow.receipts writes stage_receipts | `FR-257` | CR-076 |
+| `AC-292` | acceptance | P0 | implemented | check_workflow_complete False for mid-states; reports WAITING_FOR_LLM/SKIPPED | `FR-257` | CR-076 |
+| `AC-293` | acceptance | P0 | implemented | Adopt existing valid Stage 0/packet/prompt artifacts into receipts | `FR-257` | CR-076 |
 
 ### CR-077 Receipt chaining + hash invalidation (FR-258)
 
 | ID | Type | Priority | Status | Statement | Acceptance | Source |
 |----|------|----------|--------|-----------|------------|--------|
-| `FR-258` | functional | P0 | in_progress | After WAITING_FOR_LLM, docs → verify-only → Stage 1 COMPLETE receipt with prior chain; Stage 2 READY only; hash reconcile marks STALE + locks downstream; `--resume` | `AC-294`–`AC-298` | CR-077 |
-| `AC-294` | acceptance | P0 | in_progress | Docs present after WAITING_FOR_LLM → verify-only + Stage 1 COMPLETE with prior_receipt_id | `FR-258` | CR-077 |
-| `AC-295` | acceptance | P0 | in_progress | Stage 2 READY only when Stage 1 COMPLETE and hashes fresh | `FR-258` | CR-077 |
-| `AC-296` | acceptance | P0 | in_progress | Edit Resume/CL after Stage 1 COMPLETE → Stage 1 STALE, Stage 2 LOCKED | `FR-258` | CR-077 |
-| `AC-297` | acceptance | P0 | in_progress | `--resume` continues WAITING→validate or rebuilds from STALE without inventing COMPLETE | `FR-258` | CR-077 |
-| `AC-298` | acceptance | P0 | in_progress | CR-075 `check_stage1_ready` still enforced (no force for packet_status) | `FR-258` | CR-077 |
+| `FR-258` | functional | P0 | implemented | After WAITING_FOR_LLM, docs → verify-only → Stage 1 COMPLETE receipt with prior chain; Stage 2 READY only; hash reconcile marks STALE + locks downstream; `--resume` | `AC-294`–`AC-298` | CR-077 |
+| `AC-294` | acceptance | P0 | implemented | Docs present after WAITING_FOR_LLM → verify-only + Stage 1 COMPLETE with prior_receipt_id | `FR-258` | CR-077 |
+| `AC-295` | acceptance | P0 | implemented | Stage 2 READY only when Stage 1 COMPLETE and hashes fresh | `FR-258` | CR-077 |
+| `AC-296` | acceptance | P0 | implemented | Edit Resume/CL after Stage 1 COMPLETE → Stage 1 STALE, Stage 2 LOCKED | `FR-258` | CR-077 |
+| `AC-297` | acceptance | P0 | implemented | `--resume` continues WAITING→validate or rebuilds from STALE without inventing COMPLETE | `FR-258` | CR-077 |
+| `AC-298` | acceptance | P0 | implemented | CR-075 `check_stage1_ready` still enforced (no force for packet_status) | `FR-258` | CR-077 |
 
 ### CR-079 Truth / Evidence review (FR-260)
 
 | ID | Type | Priority | Status | Statement | Acceptance | Source |
 |----|------|----------|--------|-----------|------------|--------|
-| `FR-260` | functional | P0 | in_progress | Stage 2A Truth: mechanical collectors → reviews/truth_findings.json; dispositions; WAITING_FOR_HUMAN or truth COMPLETE + ats READY; no stage2 receipt | `AC-307`–`AC-311` | CR-079 |
-| `AC-307` | acceptance | P0 | in_progress | Stage1 COMPLETE → Truth collectors + truth_findings.json | `FR-260` | CR-079 |
-| `AC-308` | acceptance | P0 | in_progress | Open findings → WAITING_FOR_HUMAN + dispositions stub; no Stage 2 COMPLETE receipt | `FR-260` | CR-079 |
-| `AC-309` | acceptance | P0 | in_progress | CLEAN dispositions → truth COMPLETE + ats READY | `FR-260` | CR-079 |
-| `AC-310` | acceptance | P0 | in_progress | HUMAN_ACCEPTED_RISK → PASS with OVERRIDDEN integrity | `FR-260` | CR-079 |
-| `AC-311` | acceptance | P0 | in_progress | BLOCK+FALSE_POSITIVE fails; Stage1 STALE resets truth subphase | `FR-260` | CR-079 |
+| `FR-260` | functional | P0 | implemented | Stage 2A Truth: mechanical collectors → reviews/truth_findings.json; dispositions; NEEDS_DISPOSITION (renamed per CR-107) or truth COMPLETE + ats READY; no stage2 receipt | `AC-307`–`AC-311` | CR-079 |
+| `AC-307` | acceptance | P0 | implemented | Stage1 COMPLETE → Truth collectors + truth_findings.json | `FR-260` | CR-079 |
+| `AC-308` | acceptance | P0 | implemented | Open findings → NEEDS_DISPOSITION (renamed per CR-107) + dispositions stub; no Stage 2 COMPLETE receipt | `FR-260` | CR-079 |
+| `AC-309` | acceptance | P0 | implemented | CLEAN dispositions → truth COMPLETE + ats READY | `FR-260` | CR-079 |
+| `AC-310` | acceptance | P0 | implemented | HUMAN_ACCEPTED_RISK → PASS with OVERRIDDEN integrity | `FR-260` | CR-079 |
+| `AC-311` | acceptance | P0 | implemented | BLOCK+FALSE_POSITIVE fails; Stage1 STALE resets truth subphase | `FR-260` | CR-079 |
 
 ### CR-080 ATS / AI review (FR-261)
 
 | ID | Type | Priority | Status | Statement | Acceptance | Source |
 |----|------|----------|--------|-----------|------------|--------|
-| `FR-261` | functional | P0 | in_progress | Stage 2B ATS: jd_term_extractor → reviews/ats_findings.json; dispositions; WAITING_FOR_HUMAN or ats COMPLETE + hm READY | `AC-312`–`AC-315` | CR-080 |
-| `AC-312` | acceptance | P0 | in_progress | Truth COMPLETE → ATS collectors + ats_findings.json | `FR-261` | CR-080 |
-| `AC-313` | acceptance | P0 | in_progress | Open ATS findings → WAITING_FOR_HUMAN; no Stage 2 receipt | `FR-261` | CR-080 |
-| `AC-314` | acceptance | P0 | in_progress | CLEAN dispositions → ats COMPLETE + hm READY | `FR-261` | CR-080 |
-| `AC-315` | acceptance | P0 | in_progress | ATS blocked until Truth COMPLETE | `FR-261` | CR-080 |
+| `FR-261` | functional | P0 | implemented | Stage 2B ATS: jd_term_extractor → reviews/ats_findings.json; dispositions; NEEDS_DISPOSITION (renamed per CR-107) or ats COMPLETE + hm READY | `AC-312`–`AC-315` | CR-080 |
+| `AC-312` | acceptance | P0 | implemented | Truth COMPLETE → ATS collectors + ats_findings.json | `FR-261` | CR-080 |
+| `AC-313` | acceptance | P0 | implemented | Open ATS findings → NEEDS_DISPOSITION (renamed per CR-107); no Stage 2 receipt | `FR-261` | CR-080 |
+| `AC-314` | acceptance | P0 | implemented | CLEAN dispositions → ats COMPLETE + hm READY | `FR-261` | CR-080 |
+| `AC-315` | acceptance | P0 | implemented | ATS blocked until Truth COMPLETE | `FR-261` | CR-080 |
 
 ### CR-081 HM + mech + Stage 2 receipt (FR-262)
 
 | ID | Type | Priority | Status | Statement | Acceptance | Source |
 |----|------|----------|--------|-----------|------------|--------|
-| `FR-262` | functional | P0 | in_progress | Stage 2C–2E: HM findings, mech compile+verify_one, check_stage2_ready → stage2 COMPLETE receipt + stage3 READY | `AC-316`–`AC-320` | CR-081 |
-| `AC-316` | acceptance | P0 | in_progress | HM critical_read + lint findings; WAITING_FOR_HUMAN until disposed | `FR-262` | CR-081 |
-| `AC-317` | acceptance | P0 | in_progress | Mech wraps compile_single + verify_one | `FR-262` | CR-081 |
-| `AC-318` | acceptance | P0 | in_progress | Policy PASS writes stage2 COMPLETE + stage3 READY | `FR-262` | CR-081 |
-| `AC-319` | acceptance | P0 | in_progress | check_stage2_ready FAIL → policy WAITING_FOR_HUMAN | `FR-262` | CR-081 |
-| `AC-320` | acceptance | P0 | in_progress | Sole receipt writer + OVERRIDDEN integrity carry-forward | `FR-262` | CR-081 |
+| `FR-262` | functional | P0 | implemented | Stage 2C–2E: HM findings, mech compile+verify_one, check_stage2_ready → stage2 COMPLETE receipt + stage3 READY | `AC-316`–`AC-320` | CR-081 |
+| `AC-316` | acceptance | P0 | implemented | HM critical_read + lint findings; NEEDS_DISPOSITION (renamed per CR-107) until disposed | `FR-262` | CR-081 |
+| `AC-317` | acceptance | P0 | implemented | Mech wraps compile_single + verify_one | `FR-262` | CR-081 |
+| `AC-318` | acceptance | P0 | implemented | Policy PASS writes stage2 COMPLETE + stage3 READY | `FR-262` | CR-081 |
+| `AC-319` | acceptance | P0 | implemented | check_stage2_ready FAIL → policy NEEDS_DISPOSITION (renamed per CR-107) | `FR-262` | CR-081 |
+| `AC-320` | acceptance | P0 | implemented | Sole receipt writer + OVERRIDDEN integrity carry-forward | `FR-262` | CR-081 |
 
 ### CR-084 Stage 3 finalize under orchestrator (FR-263)
 
 | ID | Type | Priority | Status | Statement | Acceptance | Source |
 |----|------|----------|--------|-----------|------------|--------|
-| `FR-263` | functional | P0 | in_progress | Stage 3: `--finalize` wraps finalize_submission_job; stage3 COMPLETE receipt; terminal COMPLETE / COMPLETE_WITH_OVERRIDE / PRACTICE_COMPLETE | `AC-321`–`AC-325` | CR-084 |
-| `AC-321` | acceptance | P0 | in_progress | Stage2 COMPLETE + `--finalize` wraps finalize worker | `FR-263` | CR-084 |
-| `AC-322` | acceptance | P0 | in_progress | Production → stage3 receipt + workflow COMPLETE | `FR-263` | CR-084 |
-| `AC-323` | acceptance | P0 | in_progress | Practice → PRACTICE_COMPLETE, no DB | `FR-263` | CR-084 |
-| `AC-324` | acceptance | P0 | in_progress | OVERRIDDEN → COMPLETE_WITH_OVERRIDE; check_workflow_complete True | `FR-263` | CR-084 |
-| `AC-325` | acceptance | P0 | in_progress | Without `--finalize`, stop at Stage 3 READY | `FR-263` | CR-084 |
+| `FR-263` | functional | P0 | implemented | Stage 3: `--finalize` wraps finalize_submission_job; stage3 COMPLETE receipt; terminal COMPLETE / COMPLETE_WITH_OVERRIDE / PRACTICE_COMPLETE | `AC-321`–`AC-325` | CR-084 |
+| `AC-321` | acceptance | P0 | implemented | Stage2 COMPLETE + `--finalize` wraps finalize worker | `FR-263` | CR-084 |
+| `AC-322` | acceptance | P0 | implemented | Production → stage3 receipt + workflow COMPLETE | `FR-263` | CR-084 |
+| `AC-323` | acceptance | P0 | implemented | Practice → PRACTICE_COMPLETE, no DB | `FR-263` | CR-084 |
+| `AC-324` | acceptance | P0 | implemented | OVERRIDDEN → COMPLETE_WITH_OVERRIDE; check_workflow_complete True | `FR-263` | CR-084 |
+| `AC-325` | acceptance | P0 | implemented | Without `--finalize`, stop at Stage 3 READY | `FR-263` | CR-084 |
 
 ### CR-091 Stage 0 skip ledger (FR-264)
 
@@ -646,6 +646,13 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-329` | acceptance | P0 | implemented | Production Skip → archive/skipped + ledger; PASS from pending_review → submissions | `FR-264` | CR-091 |
 | `AC-330` | acceptance | P0 | implemented | `--force` PASS deletes the ledger row | `FR-264` | CR-091 |
 | `AC-331` | acceptance | P0 | implemented | Reconcile sweeps SKIP fit-gate folders out of submissions | `FR-264` | CR-091 |
+
+### CR-098 Generic cover-letter hook guard (FR-295)
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-295` | functional | P1 | implemented | Generic cover-letter hook guard: warn only when the opening body paragraph uses the narrow self-referential “what makes this role/opportunity/position interesting, compelling, or exciting” shape; preserve specific hooks and all non-hook prose | `AC-392` | CR-098 |
+| `AC-392` | acceptance | P1 | implemented | A generic self-referential opening hook emits `LW-038` WARN; a specific opening and the same words outside the hook do not | `FR-295` | CR-098 |
 
 ### CR-102 Stage 1 first-draft quality contract (FR-265)
 
@@ -707,6 +714,153 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `AC-356` | acceptance | P2 | implemented | `AGENTS.md`'s rule section renamed and reframed around "resolve and retry immediately" | `FR-277` | CR-107 |
 | `AC-357` | acceptance | P2 | implemented | Full Python suite, full JS/TS suite, and `tsc --noEmit` pass after the rename | `FR-277` | CR-107 |
 
+### CR-108 Stage 0 evidence cascade and durable confirmations (FR-278–FR-285)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-278` | functional | P0 | draft | Deterministic Stage 0 evidence index resolves only approved high-precision, ground-truth-backed cases before model escalation | `AC-358` | CR-108 |
+| `FR-279` | functional | P1 | draft | Stage 0 evidence provider/model policy is configurable in AI Usage; default chain is Groq then Gemini, with explicit Local option | `AC-359` | CR-108 |
+| `FR-280` | functional | P0 | draft | Ambiguous Stage 0 requirement lines are classified in one validated structured batch per opportunity | `AC-360` | CR-108 |
+| `FR-281` | functional | P0 | draft | Low-confidence, invalid, or ungrounded HARD judgments cannot disqualify an opportunity | `AC-361` | CR-108 |
+| `FR-282` | functional | P0 | draft | Stage 0 persists per-item checkpoints and resumes a paused opportunity without redoing committed work | `AC-362` | CR-108 |
+| `FR-283` | functional | P0 | draft | Unknown named skills and tools use durable canonical skill memory and grouped confirmation occurrences | `AC-363` | CR-108 |
+| `FR-284` | functional | P0 | draft | User skill attestation remains separate from verified authoring evidence and cannot create unsupported claims | `AC-364` | CR-108 |
+| `FR-285` | functional | P1 | draft | Review Center UI and harness adapter resolve shared durable confirmations and show affected opportunities | `AC-365` | CR-108 |
+| `AC-358` | acceptance | P0 | draft | High-precision verified evidence is resolved without a provider call and never emits HARD | `FR-278` | CR-108 |
+| `AC-359` | acceptance | P1 | draft | Settings uses the configured Stage 0 evidence provider/model policy; no Local or cloud fallback is implicit | `FR-279` | CR-108 |
+| `AC-360` | acceptance | P0 | draft | One structured batch response contains exactly one valid result for every ambiguous item ID | `FR-280` | CR-108 |
+| `AC-361` | acceptance | P0 | draft | Low-confidence or ungrounded HARD is escalated or held, never used for automatic disqualification | `FR-281` | CR-108 |
+| `AC-362` | acceptance | P0 | draft | Crash/restart after a committed judgment reuses it and executes only missing work on resume | `FR-282` | CR-108 |
+| `AC-363` | acceptance | P0 | draft | An unknown named tool creates one grouped durable question, pauses only its opportunity, and does not block other jobs | `FR-283` | CR-108 |
+| `AC-364` | acceptance | P0 | draft | A Yes answer without verified evidence cannot enter the authoring evidence map or generated documents | `FR-284` | CR-108 |
+| `AC-365` | acceptance | P1 | draft | UI and harness answers update the same confirmation record and make the affected opportunity resumable | `FR-285` | CR-108 |
+| `AC-366` | acceptance | P0 | draft | Hard-gate review actions have explicit semantics: keep eligible, confirm disqualification, or remain waiting for more information | `FR-281` | CR-108 |
+| `AC-367` | acceptance | P0 | draft | The active CR-093 golden entries run through the configured provider adapter with deterministic fixture responses for Groq and Gemini, without logging credentials or candidate contact text | `NFR-009`, `NFR-012` | CR-108 |
+| `AC-368` | acceptance | P0 | draft | Python and TypeScript normalize the same Stage 0 provider policy fixture to the same provider order, local-only behavior, and provider-specific model defaults | `FR-279`, `NFR-012` | CR-108 |
+| `AC-369` | acceptance | P0 | draft | Injected failures before, during, and after each Stage 0 checkpoint leave a retryable run and never duplicate a committed judgment | `FR-282`, `NFR-011` | CR-108 |
+| `AC-370` | acceptance | P1 | draft | Isolated API integration tests cover authenticated list/answer behavior, grouped confirmations, hard-gate actions, idempotent repeats, and database injection without using the production database | `FR-285`, `NFR-011` | CR-108 |
+| `AC-371` | acceptance | P0 | draft | Explicit evidence promotion creates a durable source-update proposal and does not make the attestation authorable until the local source-of-truth update is verified | `FR-284`, `DATA-003` | CR-108 |
+| `AC-372` | acceptance | P1 | draft | CR-108 documentation and traceability identify the rollout gate, provider-backed validation limitation, and any unresolved risks after tests complete | `NFR-009`, `NFR-011`, `NFR-012` | CR-108 |
+| `AC-373` | acceptance | P1 | draft | Test-generated Stage 0 rows are attributable to isolated fixtures or an explicit run key, and cleanup never deletes unverified user data | `DATA-002`, `DATA-004` | CR-108 |
+
+### Data Traceability (DATA-002 to DATA-004)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `DATA-002` | data | P0 | draft | Durable Stage 0 request, response, item judgment, and content-hash checkpoint data | `AC-362` | CR-108 |
+| `DATA-003` | data | P0 | draft | Canonical skill memory stores confirmed, negative, uncertain, and evidence-backed states | `AC-363`, `AC-364` | CR-108 |
+| `DATA-004` | data | P1 | draft | Pending confirmation occurrences retain requirement context and affected opportunity links | `AC-363`, `AC-365` | CR-108 |
+
+### CR-109 Review Center queue UX, extraction precision, and bad-data learning loop (FR-286–FR-289, DATA-005)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `BUG-001` | bug | P0 | implemented | Named-tool extraction queued JD label/trait/qualifier prose ("Spirit", "Preferred", "Thinking", "Workday Ecosystem" despite blocked `workday`) as blocking skill questions | `AC-374` | CR-109 |
+| `FR-286` | functional | P0 | implemented | Named-tool candidate extraction rejects JD label/qualifier shapes (trailing `:`/`)`), trait/qualifier/role-title/generic-tech stopword vocabulary, and any candidate containing a hard-blocked tool as a token run | `AC-374` | CR-109 |
+| `FR-287` | functional | P0 | implemented | `BAD_DATA` is a first-class review answer end to end (UI, API, harness envelope, durable `skill_memory`, answer history) and permanently suppresses the flagged candidate | `AC-375`, `AC-376` | CR-109 |
+| `FR-288` | functional | P1 | implemented | Answering a Review Center card is a single tap that saves immediately and shows the next card with a visible transition; no separate save step | UX verified in-app; behavior covered by `AC-377` correction path | CR-109 |
+| `FR-289` | functional | P1 | implemented | Completed cards display their recorded answer and can be re-answered in place; every change appends to `review_answer_history` | `AC-377`, `AC-378` | CR-109 |
+| `DATA-005` | data | P0 | implemented | Review answers, skill memory, and answer history exist only in the gitignored local SQLite database (`*.sqlite*`); never in tracked files | `git check-ignore data/jobagent.sqlite` matches; no answer-bearing file tracked | CR-109 |
+| `AC-374` | acceptance | P0 | implemented | The live-failure JD lines (Spirit, Thinking, Prioritization, Fluency, Methodologies, Competencies, Preferred) produce zero candidates; the Workday ecosystem line produces only EIB, Extend, Studio | `FR-286` | CR-109 |
+| `AC-375` | acceptance | P0 | implemented | `BAD_DATA` completes the item, writes decision `BAD_DATA` at evidence level 0, creates no enrichment follow-up, records history, and blocks re-queueing | `FR-287` | CR-109 |
+| `AC-376` | acceptance | P0 | implemented | `BAD_DATA` is rejected on hard-gate reviews | `FR-287` | CR-109 |
+| `AC-377` | acceptance | P1 | implemented | A completed item's recorded answer is returned by `listReviewItems`, served by the API, and survives client normalization; unknown answer strings normalize away | `FR-289` | CR-109 |
+| `AC-378` | acceptance | P1 | implemented | Re-answering a completed item updates durable memory and appends a second history row | `FR-289` | CR-109 |
+
+### CR-111 Instruction-authority hygiene (FR-290–FR-294, NFR-013)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-290` | functional | P1 | implemented | Agent and instruction files carry no instruction conflicting with root `AGENTS.md`'s canonical-file, import-stub, or status-authority rules | `AC-379`–`AC-382` | CR-111 |
+| `FR-291` | functional | P1 | implemented | Each shared fact (cover-letter band, fit-threshold location, page-count gate, Core Competencies status, CR-107 state name) has exactly one current value across instruction files and the registry | `AC-383`–`AC-385` | CR-111 |
+| `FR-292` | functional | P1 | implemented | Each skill has exactly one declared canonical copy; every other harness copy is a pointer stub that still loads in its harness | `AC-386`–`AC-388` | CR-111 |
+| `FR-293` | functional | P1 | implemented | `scripts/check_instruction_drift.py` fails on regrown pointer stubs, missing canonical targets, `file:///` links in instruction files, and banned instruction phrases | `AC-389`–`AC-390` | CR-111 |
+| `FR-294` | functional | P2 | implemented | `docs/AGENTS.md` names root `AGENTS.md` as the canonical always-on instruction set and links `SDD_PROCESS.md` repo-relatively | `AC-391` | CR-111 |
+| `AC-379` | acceptance | P1 | implemented | No file under `.claude/agents/` instructs byte-identical edits of `AGENTS.md`/`CLAUDE.md` | `FR-290` | CR-111 |
+| `AC-380` | acceptance | P1 | implemented | `tech-lead.md` and `product-manager.md` contain no hardcoded active-CR enumeration and no reference to uninstalled skills | `FR-290` | CR-111 |
+| `AC-381` | acceptance | P1 | implemented | Registry has no duplicate requirement IDs and no `WAITING_FOR_HUMAN` presented as a current state | `FR-290` | CR-111 |
+| `AC-382` | acceptance | P1 | implemented | All 12 audit "Contradictions And Drift" items are resolved or annotated in place as deferred with a reason | `FR-290` | CR-111 |
+| `AC-383` | acceptance | P1 | implemented | Exactly one cover-letter word band is the stated authoring target; the linter's wider WARN band is reconciled in a code comment | `FR-291` | CR-111 |
+| `AC-384` | acceptance | P1 | implemented | Root `AGENTS.md`'s File Map contains no claim contradicted by `verify_submission.py` or `docs/ACTIVE_WORKFLOW.md` | `FR-291` | CR-111 |
+| `AC-385` | acceptance | P1 | implemented | `AC-076` is marked superseded by `FR-195` | `FR-291` | CR-111 |
+| `AC-386` | acceptance | P1 | implemented | Exactly one canonical declaration exists per skill; every stub is ≤ 20 lines and names its canonical target | `FR-292` | CR-111 |
+| `AC-387` | acceptance | P1 | implemented | Claude Code and Codex sessions each load the four skills through their stubs | `FR-292` | CR-111 |
+| `AC-388` | acceptance | P1 | implemented | No skill body content exists in more than one file | `FR-292` | CR-111 |
+| `AC-389` | acceptance | P1 | implemented | Drift guard exits nonzero on fixtures with a regrown stub, banned phrase, or `file:///` link | `FR-293` | CR-111 |
+| `AC-390` | acceptance | P1 | implemented | Drift guard runs in the same verification path as `check_context_pack_freshness.py` and passes clean on `main` | `FR-293` | CR-111 |
+| `AC-391` | acceptance | P2 | implemented | `docs/AGENTS.md` defers to root `AGENTS.md`; the `SDD_PROCESS.md` link is repo-relative | `FR-294` | CR-111 |
+| `FR-303` | functional | P1 | in_progress | Ranked claims that lose Top-2 store a cheap omitted reason-code (`top2_cutoff` or `project_slot_cap`) on the evidence_map row; the full ranking audit lives in sibling `evidence_selection_trace.json`, never in `authoring_prompt.md` | `AC-400` | CR-112 |
+| `AC-400` | acceptance | P1 | in_progress | Pearl-like fixture where SAVINGS ranks 3rd emits `top2_cutoff` in omitted_reasons and the sibling trace; author prompt does not contain candidate scores; `score_zero` is TRACE-only; Story 3.5 must not `REPLACE` this fixture | `FR-303` | CR-112 |
+| `FR-304` | functional | P2 | in_progress | Read-only swap report labels omitted ranked claims `SWAP_CANDIDATE` / `INTENTIONAL_TRADEOFF` / `PACKET_MISSING` / `INSUFFICIENT_PROOF` from the selection trace; TRACE `filter=boilerplate_filtered` is `INTENTIONAL_TRADEOFF`, not `PACKET_MISSING` | `AC-401` | CR-112 |
+| `AC-401` | acceptance | P2 | in_progress | Isolated synthetic traces: `top2_cutoff` → `SWAP_CANDIDATE`; `project_slot_cap` → `INTENTIONAL_TRADEOFF`; `score_zero` → `INSUFFICIENT_PROOF`; empty item → `PACKET_MISSING`; boilerplate filter → `INTENTIONAL_TRADEOFF`; drafts unchanged; missing/unreadable trace exits nonzero | `FR-304` | CR-112 |
+| `FR-305` | functional | P1 | in_progress | Eligibility-framed background-check / fingerprint and nights-and-weekends required lines skip claim scoring and must not receive product-roadmap claims as Top-2 | `AC-402` | CR-112 |
+| `AC-402` | acceptance | P1 | in_progress | Level II fingerprint fixture has empty `claim_ids` and no `ACC-103-ROADMAP`; product background-check roadmap and years lines still may receive claims | `FR-305` | CR-112 |
+| `FR-306` | functional | P2 | in_progress | Advisory trailing-gerund rate reporter scans `Resume.md` bullet lines for F7's case-insensitive comma / `by` / `while` + `-ing` pattern, reports `slug`, `bullet_count`, `trailing_mechanism_count`, `rate`, and `examples`, always exits 0, and never rewrites or gates submissions | `AC-403` | CR-112 |
+| `AC-403` | acceptance | P2 | in_progress | Temp synthetic resume bullets count `by`, `while`, and comma + `-ing`, ignore end-of-bullet and `after` cases, skip folders without `Resume.md`, preserve file bytes, stay unwired from the linter/workflow path, and record the 2026-09-11 seven-folder live scan counts only | `FR-306` | CR-112 |
+
+### CR-112 Stage 0–3 reliability, Epic 1 (FR-296–FR-298)
+
+Epic 1 allocated 2026-09-10. Stories remain pending independent review (not self-marked done). Epics 2–6 are planned separately and are not allocated in this commit.
+
+| ID | Type | Priority | Status | Statement | Acceptance | Source |
+|----|------|----------|--------|-----------|------------|--------|
+| `FR-296` | functional | P0 | in_progress | Stage 0 batch item IDs that are invented sequential labels (`req-001`, `pref-1`) must not attach a judgment to a requirement by list position; unknown ids fail closed so the batch retries or falls back | `AC-393` | CR-112 |
+| `FR-297` | functional | P0 | in_progress | An authoring packet must not be `ready` after dropping `claim_constraints` to squeeze under token budget; after learned examples, it may compact author-only `omitted_reasons` because the complete ranking audit remains in `evidence_selection_trace.json`; the attribution fence stays or the packet is `incomplete` | `AC-394` | CR-112 |
+| `FR-298` | functional | P0 | in_progress | A read-only detector flags already-shipped `ready` packets with empty/missing `claim_constraints` while evidence remains, without rewriting submissions | `AC-395` | CR-112 |
+| `AC-393` | acceptance | P0 | in_progress | Isolated tests: `req-001`/`req-002`/`pref-1` resolve to `None`; shuffled HARD/NONE reasoning does not assign by position; unknown ids raise even under `partial=True`; simulated Groq sequential-ID response falls back to Gemini real ids; unique hash-suffix and unique ordinal still match | `FR-296` | CR-112 |
+| `AC-394` | acceptance | P0 | in_progress | Isolated `assemble_packet` fixtures prove over-budget `omitted_reasons` are removed before excerpt shrinking with the removal count recorded, while the sibling trace remains the full audit; constraints alone over budget remain `incomplete` with a budget reason and intact `claim_constraints`; never `ready` with `{}` | `FR-297` | CR-112 |
+| `AC-395` | acceptance | P0 | in_progress | `audit_packet_integrity.py` flags the SupplyHouse-shaped packet in temp fixtures, writes nothing, and does not treat a sidecar as authorization; the 2026-09-10 live scan records affected folders in the CR-112 tracker | `FR-298` | CR-112 |
+
+### CR-112 Controlled offline evaluation (FR-310–FR-311)
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-310` | functional | P1 | in_progress | A sanitized offline eval harness materializes five fictional JD fixtures into a gitignored eval output, refuses production `jobagent.sqlite`, keeps packet assembly off by default, and records per-folder observability events without touching live submissions | `AC-407` | CR-112 |
+| `FR-311` | functional | P1 | in_progress | The eval harness reports prompt-meta token estimates, harness spawn counts, `call_llm` invocations, API cents, and subscription minutes as separate columns, with paid LLM usage remaining opt-in and zero-call in this story | `AC-408` | CR-112 |
+| `AC-407` | acceptance | P1 | in_progress | Materializing the frozen eval set yields exactly five fictional fixture folders with sanitized JDs and fit-gate JSON, default CLI execution keeps packet assembly off, refuses production SQLite, writes `observability/run_events.jsonl`, and never copies live submissions | `FR-310` | CR-112 |
+| `AC-408` | acceptance | P1 | in_progress | The eval baseline records `prompt_meta_estimated_tokens`, `call_llm_invocations`, `harness_spawn_count`, `api_cents`, and `subscription_minutes` separately, keeps paid/API/spawn counters at zero by default and under `--paid-llm`, and labels the token method `bytes_div_4_estimate` | `FR-311` | CR-112 |
+| `FR-299` | functional | P1 | in_progress | The `generate-submission` skill's Stage 0 prose directs per-slug orchestrator invocation without WE re-scoring; Stage 1 names forbidden context loads (`agent_context_pack.md`, `workExperience.md`, `master_claims.json`, full `AGENTS.md`); Stage 2 prose scopes `--resume` to mechanical subphases and requires a real qualitative read of the F8-described kind before `hm.critical_read` is disposed | `AC-396` | CR-112 |
+| `AC-396` | acceptance | P1 | in_progress | `.codex/skills/generate-submission/SKILL.md` Stage 0 section invokes `run_submission.py data/pending_review/{slug}` without WE re-scoring; Stage 1 lists forbidden loads explicitly; Stage 2 section distinguishes mechanical `--resume` from qualitative `hm.critical_read` read; `scripts/check_instruction_drift.py` still passes | `FR-299` | CR-112 |
+| `FR-300` | functional | P1 | in_progress | Opt-in batch Author/Review runner does not load `workExperience.md`; ground truth is packet excerpts + constraints + drafts + JD + rubric; never the default spawn | `AC-397` | CR-112 |
+| `AC-397` | acceptance | P1 | in_progress | Tracked `.claude/workflows/generate-submission-batch.js` `reviewPrompt` forbids WE; `whenToUse` says never-default; cap remains 3 unless `allowLargeBatch` | `FR-300` | CR-112 |
+| `FR-301` | functional | P1 | in_progress | The "Processing job descriptions today" trigger phrase in root `AGENTS.md` directs per-slug `run_submission.py` invocation, one author paste per `WAITING_FOR_LLM`, and `--resume`; it explicitly prohibits per-JD Task/Agent spawn and `conversion-ready-pass` invocation on generate-submission drafts | `AC-398` | CR-112 |
+| `AC-398` | acceptance | P1 | in_progress | Root `AGENTS.md` "Processing job descriptions today" section names `run_submission.py` per slug, one paste per `WAITING_FOR_LLM`, `--resume`, and prohibits Task/Agent-spawn per JD and `conversion-ready-pass` on generate-submission output; `CLAUDE.md` is not modified | `FR-301` | CR-112 |
+
+### CR-112 Selection vs closed-world recovery (FR-302 superseded, FR-312–FR-317)
+
+Design: `docs/spec/08-implementation/CR-112-selection-and-closed-world-recovery-design.md`. Status stays draft until Story 3.0 independent review ACCEPT. Do not implement from these rows before that gate.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-302` | functional | P1 | superseded | Stage 1 verify WARNs on provenance IDs outside the packet closed world and does not fail | `AC-399` | CR-112 Story 3.1 WARN (superseded 2026-09-11) |
+| `AC-399` | acceptance | P1 | superseded | Extra-packet findings are WARN (`truth.provenance.extra.<id>`), prefix match does not clear, verify does not FAIL | `FR-302` | CR-112 |
+| `FR-312` | functional | P0 | in_progress | Provenance claim IDs not exactly in packet excerpts ∪ evidence_map ∪ soft_gaps are a recoverable Stage 1 completion block; detection does not rank, recommend, or widen; prefix match does not clear | `AC-409` | CR-112 |
+| `AC-409` | acceptance | P0 | in_progress | Isolated extra-packet fixture FAILs verify while unresolved; healthy exact-ID packet PASSes; prefix SAVINGS-vs-PM still extra; detector does not mutate packet or draft; `ACCEPTED_AS_CORRECT`, `FALSE_POSITIVE`, `NOT_APPLICABLE`, and `HUMAN_ACCEPTED_RISK` cannot clear the finding | `FR-312` | CR-112 |
+| `FR-313` | functional | P0 | in_progress | A deterministic comparator compares an eligible omitted or extra claim to the weakest selected fact on the same JD item using JD-priority, evidence strength, attribution safety, distinctiveness, domain-truth risk, and document capacity, without `call_llm`, and returns REPLACE / KEEP / AMBIGUOUS / INELIGIBLE. Cross-item REPLACE is forbidden. Missing attribution is a tie, not a rank | `AC-410` | CR-112 |
+| `AC-410` | acceptance | P0 | in_progress | Pearl-like SAVINGS vs PM is not REPLACE on Class 1 or Class 2; unmapped extra cannot REPLACE a globally weakest required pick; CONTRIBUTED cannot beat missing or OWNED; sibling-lens extras are not REPLACE; disabled/prohibited is INELIGIBLE; metric size alone is not REPLACE; attribution values are case-folded including INFLUENCED and OBSERVED | `FR-313` | CR-112 |
+| `FR-314` | functional | P1 | in_progress | When the comparator returns REPLACE before authoring, the packet swaps the omitted fact for the weakest selected fact on that item, records the decision in `evidence_selection_trace.json`, and stores `displaced_by_dominance` on the displaced row; AMBIGUOUS preserves the current selection and flags TRACE `selection_review` | `AC-411` | CR-112 |
+| `AC-411` | acceptance | P1 | in_progress | Pre-authoring REPLACE fixture writes TRACE decision and packet omitted reason `displaced_by_dominance`; author prompt contains no scores or axes; AMBIGUOUS fixture keeps original Top-2 | `FR-314` | CR-112 |
+| `FR-315` | functional | P0 | in_progress | After extra-packet detection, recovery is a separate step: unsupported/prohibited → rewrite/remove without widening; KEEP or sibling-lens extra → remove extra and keep authorized evidence; AMBIGUOUS extra pauses for qualitative review with both candidates and comparison evidence; REPLACE only if the extra is a same-item TRACE omitted candidate, then explicit packet widen, invalidate the leaked draft, require a new author pass, and verify the new draft; extras not in TRACE omitted cannot widen; HUMAN_COMPARE only for unreadable packet, missing catalog, or WE/constraint conflict; recovery helpers must not write workflow receipts | `AC-412` | CR-112 |
+| `AC-412` | acceptance | P0 | in_progress | Pearl/SupplyHouse-shaped SAVINGS extra → REMOVE_EXTRA; loot_labs SUPPORT and marlowe SEC extras → REMOVE_EXTRA; true AMBIGUOUS extra → QUALITATIVE_REVIEW pause not auto-remove; synthetic same-item TRACE omitted REPLACE → WIDEN_PACKET invalidates draft and does not provenance-stamp leaked sentences; disabled extra → REWRITE_UNSUPPORTED and packet IDs unchanged; unresolved extras keep verify FAIL; helper does not mint workflow receipts | `FR-315` | CR-112 |
+| `FR-316` | functional | P0 | in_progress | Model calls require explicit cost_class (`offline` / `manual_paste` / `free_only` / `paid_with_budget`); unknown is not callable; groq and gemini default unknown until an adapter can assert the configured call cannot incur a charge; advertised free tier is not enough; paid APIs require allowlist, remaining budget, and a known estimate; fallback must not move free_only to paid_with_budget; no eligible provider pauses onto `WAITING_FOR_INPUT`/`pause_kind=cost_authorization`, never `WAITING_FOR_LLM`; CLI and contract status copy reads `pause_kind` from the Stage 0 receipt while receipts without it retain Review Center copy; authenticated backend commands expose start, resume, status, and finalize by invoking the canonical CLI and returning a private-data-safe projection of workflow state and receipts; the Review Center provides a compact operator panel for those commands and Stage 0/1/2 status without direct client-side Python or filesystem access | `AC-413` | CR-112 |
+| `AC-413` | acceptance | P0 | in_progress | Missing cost_class refuses the call; default groq→gemini with no zero-charge assertion does not call; a free_only provider with paid next-in-chain does not call the paid provider; budget 0 or unknown estimate blocks paid; empty eligible list pauses at `WAITING_FOR_INPUT` and does not call; cost-pause status says no model API call occurred, no API cost was incurred, Stage 0 is incomplete, import/certify/paid authorization is required before resume, and `authoring_prompt.md` must not be pasted; legacy receipts without `pause_kind` retain Review Center copy; eval `--paid-llm` still does not import `call_llm`; authenticated backend operator routes use `processRunner.ts`, reject overlapping mutating runs for the same folder with 409, and return only allowlisted workflow/receipt status fields; UI tests cover response normalization, exact cost-pause guidance, and authenticated route calls for status/start/resume/finalize, with provider configuration and cascade import UI excluded | `FR-316`, `FR-164`, `FR-167` | CR-112 |
+| `FR-317` | functional | P0 | in_progress | Telemetry records model calls, provider, estimated tokens, cost_class, cost_known, known api_cents, and subscription minutes separately; unknown cost must not be represented as zero dollars | `AC-414` | CR-112 |
+| `AC-414` | acceptance | P0 | in_progress | An unknown-class refused call stores `cost_class=unknown` and `cost_known=false` with `api_cents` omitted or null, never `0`; known free calls may record 0 with `cost_known=true`; columns are never summed | `FR-317` | CR-112 |
+| `FR-326` | functional | P0 | in_progress | A structured, expiring, per-provider operator attestation in the `llm_settings` blob (`freeTierAssertions`, keys limited to `groq`/`gemini`, exact canonical statement, strict `acknowledged: true`, ISO-8601 timezone-aware `asserted_at`, 30-day expiry) is the only settings-based form of the `certify_zero_charge` resume path; it certifies `free_only` only together with a `costClasses[provider]="free_only"` declaration; missing, malformed, statement-mismatched, expired, or non-certifiable attestations fail closed to `unknown`; a checkbox, a provider-name list, network verification, or billing-API proof is not this mechanism | `AC-424` | CR-112 Story 7.3 |
+| `AC-424` | acceptance | P0 | in_progress | A valid attestation plus declared `free_only` makes groq/gemini eligible with receipt `cost_confidence=zero`, `api_cents=0`, `zero_charge_basis=operator_assertion`, and `assertion_asserted_at` echoed; declaration without attestation and attestation without declaration stay `unknown`; one-character statement drift, non-boolean `acknowledged`, naive or unparseable `asserted_at`, and attestations keyed to `claude`/`perplexity`/`local` are refused with specific reasons (`free_only_assertion_missing`/`invalid`/`expired`/`not_certifiable`); an expired attestation pauses Stage 0 at `pause_kind=cost_authorization` with `model_call_occurred=false` and `api_cents` omitted; an attested free provider plus an allowlisted paid provider in one chain still strips paid (`free_to_paid_forbidden`); the Settings profile route preserves `freeTierAssertions` verbatim and masking does not touch it; all paid-guard regression tests pass unchanged; no model/API/network call | `FR-326` | CR-112 Story 7.3 |
+| `FR-318` | functional | P0 | draft | Completion predicates enforce CONVERT-READY floors (Resume 70, Cover Letter 65) after rubric shape is valid. Missing or non-numeric totals remain shape errors. Practice Stage 3 and `--force` cannot mint a below-floor receipt. Mech emits BLOCK `mech.rubric_floor.resume` / `mech.rubric_floor.cover_letter`. Leftover `ACCEPTED_AS_CORRECT` on `mech.rubric_score_required` cannot clear a floor BLOCK. No agent-writable exception in this story | `AC-415` | CR-112 |
+| `AC-415` | acceptance | P0 | draft | Resume 68 / Cover Letter 69 fails `check_stage2_ready`, `check_finalize_ready`, practice Stage 3 (including `force=True`), and `check_submission_status` DONE. Resume 70 / Cover Letter 65 passes those predicates when other contracts are valid. Resume 69.9 fails. Cover 64 fails. Missing score fails on shape, not floor | `FR-318` | CR-112 |
+| `AC-416` | acceptance | P0 | implemented | Clean worktree with WE present and no SQLite identity row: `run_verify_only` passes and documents carry WE identity, not John Doe. Clean worktree with neither WE nor SQLite: `run_stage1_prompt` and `run_verify_only` fail with `identity_source=missing`. `APPLYR_SYNTHETIC_IDENTITY=1`: `load_identity_profile` returns synthetic identity without reading SQLite or WE. No PII in tracked test fixtures, logs, or commits | `SEC-006` | CR-112 |
+| `FR-319` | functional | P1 | implemented | Lean authoring digest and generated Stage 1 prompt instruct that the same strongest packet fact may appear in both documents; the author must not drop it or swap to a weaker claim for variety; resume owns metric/outcome wording; the letter adds interpretation, decision logic, or narrative rather than near-identical resume phrasing. Instruction does not load the defect ledger, Work Experience, context pack, or no-ai-slop skill. `LW-009-PAIR` detector and Stage 1 pair FAIL are unchanged | `AC-417` | CR-112 |
+| `AC-417` | acceptance | P1 | implemented | `generate_digest()` and `build_authoring_prompt` SYSTEM BLOCK contain both locked clauses. A digest or prompt that only mentions resume and cover letter fails the instruction checker. Digest stays under the 10000-char hard limit. Detector tests still treat `LW-009-PAIR` as existing WARN/Stage-1-block behavior | `FR-319` | CR-112 |
+| `FR-320` | functional | P0 | implemented | A valid consumed Stage 0 requirement-extraction-review is durable and idempotent. `--resume` with unchanged JD and unchanged qualification-risk queue reuses the consumed buckets and must not request the same review again or require restoring the live import file. A new live import may correct a prior bucket. Stale JD hash or changed queued item text/count cannot apply old buckets. Unreadable consumed JSON fails closed | `AC-418` | CR-112 |
+| `AC-418` | acceptance | P0 | implemented | After consume, a third `build_stage0_fit_gate` with no live import applies consumed buckets and does not raise `Stage0RequirementExtractionReviewNeeded`. `consume_review_import` is a no-op when only the consumed file exists. Live override can change the bucket. Stale `jd_sha256` or changed queue text re-pauses without applying. Corrupt consumed JSON raises `RequirementExtractionReviewValidationError` with `fail_closed=True`. Cascade and extraction-review imports require `created_at` to be a non-empty string | `FR-320` | CR-112 |
+| `FR-321` | functional | P1 | implemented | Ranking characterization corpus encodes Camunda distributed-systems, Pearl/SupplyHouse REPLACE controls, cost-reduction, ARR/reliability, and near-tie cases against live `_score_claims_for_item` without changing the formula. Camunda SAVINGS-over-messaging is a known-defect report, not a desired-rank assertion | `AC-419` | CR-112 |
+| `AC-419` | acceptance | P1 | implemented | Isolated fixtures reproduce Camunda SAVINGS > RabbitMQ/Kafka via weak overlap plus `jd_score`; cost-reduction and ARR items assert the metric-bearing claim; Pearl ranking does not nominate SAVINGS; SupplyHouse REPLACE keeps SAVINGS out of Top-2; near-tie does not REPLACE; source does not `assertEqual` SAVINGS as desired slot 1 | `FR-321` | CR-112 |
+| `FR-322` | functional | P1 | verified | Rubric completion scores are hash-bound, role-tagged, rubric-version-bound, timestamped, reviewer-run traceable, and fail-closed on disagreement. Independent blind scoring is required only inside a 3-point band around CONVERT-READY floors. Clear-margin scores stay one qualitative read. No majority vote and no picking the higher score | `AC-420` | CR-112, CR-113 |
+| `AC-420` | acceptance | P1 | verified | Stale document hash blocks floors; current-hash 70 vs 68 blocks; 70 implementer plus 71 blind on the same hash completes; resume 78 needs no blind row; missing schema_version/current rubric hash/timezone scored_at/reviewer-run metadata/complete criterion breakdown blocks; boolean, over-maximum, extra-key, and mismatched-total breakdowns block; helpers call no LLM | `FR-322` | CR-112, CR-113 |
+| `FR-323` | functional | P1 | verified | Ranking corrects the characterized Camunda savings-vs-messaging defect without making metrics lose when the JD item is actually about cost reduction or ARR/reliability. Full-JD relevance cannot overpower stronger item-specific technical semantics on distributed/event-driven architecture requirements | `AC-421` | CR-112 |
+| `AC-421` | acceptance | P1 | verified | Camunda-like distributed-systems item ranks RabbitMQ/Kafka or equivalent messaging/architecture evidence above broad savings evidence; direct cost-reduction item still ranks `ACC-101-SAVINGS` first; ARR/reliability item still ranks the metric-bearing platform claim first; Pearl/SupplyHouse REPLACE controls remain non-REPLACE; no model/API call | `FR-323` | CR-112 |
+| `FR-324` | functional | P1 | verified | Catalog validation reflects the CR-094 claims-index contract: active claims may omit legacy prose `text` only when they retain retrieval tags and explicit allowed/prohibited claim constraints; catalog metrics must be grounded in approved metrics, workExperience text, or a metric_ref anchor | `AC-422` | CR-112 |
+| `AC-422` | acceptance | P1 | verified | `python scripts/verify_master_claims.py` passes with private `data/workExperience.md` and `data/master_claims.json`; empty unconstrained claim records still fail; `$800,000`/`38`-class catalog metrics pass only when anchored to workExperience or metric_ref; no model/API call | `FR-324` | CR-112 |
+| `FR-325` | functional | P1 | verified | Deterministic header repair recognizes unbracketed identity placeholders before cover-letter H-001 repair, and removes stacked real-plus-placeholder headers so real identity and placeholder labels cannot coexist in finalized drafts | `AC-423` | CR-112 |
+| `AC-423` | acceptance | P1 | verified | Unbracketed `Location \| Email \| Phone \| LinkedIn` header placeholders are replaced from the approved identity source; a real header stacked above the same placeholder is stripped to one real header; missing identity still fails closed; synthetic-mode tests do not read live PII; no model/API call | `FR-325` | CR-112 |
+
 ## Non-Functional Requirements
 
 | ID | Type | Priority | Status | Requirement |
@@ -719,6 +873,244 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `NFR-006` | infrastructure | P1 | implemented | Zero-Trust Remote Binding — Vite client and Express server bind to `0.0.0.0` to permit authorized access across overlay networks (Tailscale) |
 | `NFR-007` | cost | P0 | implemented | Cloud authoring input context per company must use a lean packet + rule digest; default path must not reload full `agent_context_pack.md` + full skill into a second independent cloud review agent per company (CR-074) |
 | `NFR-008` | reliability | P1 | implemented | ATS retrieval and PDF parser checks are local, deterministic, and WARN-only |
+| `NFR-009` | accuracy | P0 | draft | Stage 0 cascade must preserve or exceed CR-093's 21/21 active gate-and-source golden-set result and prevent unsafe HARD decisions |
+| `NFR-010` | cost/performance | P1 | draft | Stage 0 records deterministic resolution rate, batch calls, fallback calls, provider/model, tokens when available, and duration |
+| `NFR-011` | reliability | P0 | draft | Stage 0 survives interruption and provider failure by reusing committed judgments and resuming per opportunity |
+| `NFR-012` | security/privacy | P0 | draft | Cloud requests use configured credentials, existing PII redaction, and only the intended JD/evidence context |
+| `NFR-013` | maintainability | P0 | implemented | CR-111 changes no submission behavior, linter rule, threshold, or pipeline code — doc/agent-file edits plus the drift-guard script only (CR-111) |
+| `NFR-015` | cost | P0 | draft | Deterministic/offline is the default; groq/gemini stay unknown until a zero-charge adapter assertion; paid APIs are opt-in with configured provider, budget, and known estimate; unknown cost eligibility fails closed; `api_cents` is omitted or null when `cost_known=false` (CR-112 Epic 7) |
+| `NFR-016` | performance / correctness | P0 | accepted | Claim size is bounded at runtime: default 8, maximum 10. The claim API rejects a size below 1 or above 10. The SQLite DB lock is held only for the claim transaction and is released before any Stage 0 subprocess begins. A single ingest run over a 30-row CSV must not block the UI thread or hold an unbounded DB lock (CR-119) |
+
+## CR-114 Stage 0 local learning and bounded fallback
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-327` | functional | P0 | in_progress | Unreviewed Stage 0 fallback labels never enter retraining; retraining uses human-reviewed provenance, company-held-out evaluation, candidate artifact, and explicit promotion only | `AC-425` | CR-114 |
+| `AC-425` | acceptance | P0 | in_progress | Fallback extraction writes no training CSV; legacy feedback is ignored; reviewed rows require human identity and timestamp; company and exact-text overlap do not cross holdout; training does not overwrite the live model | `FR-327` | CR-114 |
+| `FR-328` | functional | P0 | in_progress | Separate extraction and evidence subscription-harness adapters are bounded, validated, cached, and fail to explicit review without metered API spillover | `AC-426` | CR-114 |
+| `AC-426` | acceptance | P0 | in_progress | Actual schemas pass replay; exhausted, invalid, or unavailable harness never silently buckets or skips; per-batch call/time limits and subscription minutes are reported separately from API cents | `FR-328` | CR-114 |
+| `FR-329` | functional | P0 | in_progress | Reviewed evidence matcher abstains on uncertain cases and cannot emit terminal HARD or Skip from ungrounded evidence | `AC-427` | CR-114 |
+| `AC-427` | acceptance | P0 | in_progress | Locked 30-JD replay has no unreviewed false skips, preserves every uncertain item in resumable review, and records coverage, error, and calls against baseline. The 30 is skip-dense on purpose and is not a representative pipeline sample | `FR-329` | CR-114 |
+
+## CR-115 Scored-path heading and fragment leak
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-330` | functional | P0 | in_progress | Required/preferred evidence scoring must drop JD section headings, job-board metadata, and truncated fragments of the same chrome class leftover already junks | `AC-428` | CR-115 |
+| `AC-428` | acceptance | P0 | in_progress | Accuity "Education and Credentials" is not scored as a requirement; the degree line remains the scored credential; 1uphealth "Mid and Senior level" and truncated fragments do not move fit; leftover junk semantics stay unchanged | `FR-330` | CR-115 |
+
+## CR-116 Retrieval coverage is not AI-token-gated
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-331` | functional | P0 | in_progress | Evidence retrieval must put corpus-backed distinctive requirement tokens into the excerpt; coverage is not gated on AI/LLM/agentic tokens | `AC-429` | CR-116 |
+| `AC-429` | acceptance | P0 | in_progress | Acquia Jira/Confluence excerpt contains Jira and Confluence; executive-briefing excerpt contains the 200-300 / presented-roadmap evidence; `coverage_ok` is False when those WE tokens never reach the excerpt | `FR-331` | CR-116 |
+
+## CR-117 Years range low end
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-332` | functional | P0 | in_progress | Years range gates on the low end; age, company history, and tenure are not experience floors | `AC-430`, `AC-431` | CR-117 |
+| `AC-430` | acceptance | P0 | in_progress | 3-7 years parses as 3 and passes; 7-10 parses as 7 and skips; eighteen years of age is not a hit | `FR-332` | CR-117 |
+| `AC-431` | acceptance | P0 | in_progress | Remaining archived years_ceiling skips are not won by a range top, an age, or company history | `FR-332` | CR-117 |
+
+## CR-118 False skips, skip-reason agreement, preferred-header harvest
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-337` | functional | P0 | in_progress | Blocked-company match is exact on the normalized name; a blank company never matches | `AC-435` | CR-118 |
+| `AC-435` | acceptance | P0 | in_progress | `"Remote"` does not match `"RemoteHunter"`; blank matches nothing; exact `"Unity"` still blocks | `FR-337` | CR-118 |
+| `FR-338` | functional | P0 | in_progress | People-management skip only when this role has reports; `network_page` is a flag | `AC-436` | CR-118 |
+| `AC-436` | acceptance | P0 | in_progress | Negated-reports and other-managers'-reports sentences do not skip; talent-network pages flag | `FR-338` | CR-118 |
+| `FR-339` | functional | P0 | in_progress | Preferred lead-in headers, inline `"is required"`, reason-agreed 30-JD replay, and `claude_opus_jason_approved` export | `AC-437` | CR-118 |
+| `AC-437` | acceptance | P0 | in_progress | `"Also great to have:"` is preferred; `"is required"` under Preferred is required; replay records reason agreement; filled Claude marks rewrite | `FR-339` | CR-118 |
+
+## CR-119 CSV Drop Queue, Harness Lease, and Pipeline Visibility
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-340` | functional | P0 | accepted | An explicit CLI command and/or API call scans `data/inbox/csv/` for `*.csv` files, waits for stable file size before parsing, checks each file against a durable ledger keyed on sha256 only (filename stored for display), archives processed files, and quarantines structurally broken files with a file-level record (filename, reason). No background file-watcher daemon is introduced. | `AC-438` | CR-119 |
+| `AC-438` | acceptance | P0 | accepted | A file whose SHA-256 matches a previously ingested file produces zero new rows even if the filename differs. A structurally broken CSV produces a file-level quarantine record without blocking other valid files. Ingest does not parse a file that is still being written (stable-size guard fires first). | `FR-340` | CR-119 |
+| `FR-341` | functional | P0 | accepted | For each CSV row, the normalizer checks: company is non-empty; Job Description text trimmed is at least 200 characters; the row has a URL or a Position. Failing company/JD rows are quarantined with source file name, 1-based line number, raw row payload, and error code. A row with neither URL nor Position is quarantined with `NO_DEDUP_KEY`. Good rows proceed. No row is silently dropped. | `AC-439`, `AC-446` | CR-119 |
+| `AC-439` | acceptance | P0 | accepted | A row with empty company or JD text under 200 chars is quarantined with file name, line number, raw payload, and error code. Good rows in the same file continue to persist. No quarantined row appears as `queued` in SQLite and no `pending_review/` folder is created for it. | `FR-341` | CR-119 |
+| `AC-446` | acceptance | P0 | accepted | A row with company and a usable JD, but neither URL nor Position, is quarantined with error code `NO_DEDUP_KEY`. It is not queued and no `pending_review/` folder is created for it. | `FR-341` | CR-119 |
+| `FR-342` | functional | P0 | accepted | Each validated row is upserted into SQLite as `queued` with nullable `networking_contacts_raw` stored verbatim. Skip-ledger lookup runs before any write. `Original_JD.txt` uses `write_jd()` format. URL match reuses existing slug. When URL is absent, company+title is checked against pending_review, submissions, queue rows, and skip ledger. No CR-071 contacts records. No parse of the raw cell. | `AC-440`, `AC-445` | CR-119 |
+| `AC-440` | acceptance | P0 | accepted | After ingest of a valid row: SQLite has a `queued` opportunity; `pending_review/{slug}/Original_JD.txt` exists in CSV-import format; `networking_contacts_raw` matches the cell verbatim; no CR-071 `contacts` row is created. Second ingest of the same file produces no additional rows or folders. Skip-ledger URL match produces no folder. Existing URL match reuses the slug. | `FR-342` | CR-119 |
+| `AC-445` | acceptance | P0 | accepted | Ingest two different files (different sha256) that contain the same URL-less row (same Company and Position, JD ≥ 200 chars). Result is one queue row and one `pending_review/` folder. | `FR-342` | CR-119 |
+| `FR-343` | functional | P0 | accepted | Claim accepts `--size` (default 8, maximum 10) and `--worker`. Short SQLite transaction leases rows with `locked_by`, `lease_expires_at`, and fencing token. Heartbeat, release, expiry, stale-token reject. Before `run_submission.py`, re-check fencing token and acquire exclusive per-slug OS lock at `data/queue_locks/{slug}.lock` for that slug's runner invocation. A worker that cannot get the lock does not run the slug. | `AC-441`, `AC-444`, `AC-447` | CR-119 |
+| `AC-441` | acceptance | P0 | accepted | `claim --size 8 --worker harness-1` returns at most 8 rows with `leased` status, `locked_by`, `lease_expires_at`, and incremented fencing token. `claim --size 11` is rejected. Heartbeat extends `lease_expires_at`. Release returns rows to `queued`. After expiry a second worker may lease those rows if it can take the per-slug lock. First worker's old fencing token write is rejected. DB lock is not held during Stage 0 subprocess. | `FR-343` | CR-119 |
+| `FR-344` | functional | P0 | accepted | On abort or token exhaustion, unstarted pack jobs return to `queued`; in-flight job stays at last finished receipt. Queue status follows the CR-119 transition table including `paused` → `queued` via `contracts.check_stage1_ready`. Worker invokes `python scripts/run_submission.py {slug} --resume`. Runner child is in a Windows Job Object (`KILL_ON_JOB_CLOSE`) or POSIX process group. | `AC-442`, `AC-444`, `AC-447`, `AC-448` | CR-119 |
+| `AC-442` | acceptance | P0 | accepted | On SIGINT or token exhaustion: unstarted pack jobs return to `queued`; in-flight job stays at last finished receipt even if the subprocess was killed mid-stage; `python scripts/run_submission.py {slug} --resume` advances without re-running completed stages; no duplicate skip-ledger row; no duplicate `pending_review/` folder. | `FR-344` | CR-119 |
+| `AC-444` | acceptance | P0 | accepted | Two workers, expired lease, same slug: only one runner process executes `run_submission.py`. The worker that cannot re-check a matching fencing token, or cannot acquire `data/queue_locks/{slug}.lock`, does not invoke the runner. Hard-terminate (`TerminateProcess`) of the worker mid-run leaves no orphaned child; the runner is gone before another worker can take the lock. | `FR-343`, `FR-344` | CR-119 |
+| `AC-447` | acceptance | P0 | accepted | Queue status follows the CR-119 transition table (`queued`→`leased`→`in_progress`→`paused`/`done`; paused clears the lease; `paused`→`queued` when `check_stage1_ready` is True or workflow has moved past `WAITING_FOR_LLM`). `workflow_state.json` remains the authority for stage progress; queue status is a mirror. | `FR-343`, `FR-344`, `FR-345` | CR-119 |
+| `AC-448` | acceptance | P0 | accepted | A paused job with a ready packet and only 2 of 3 Stage 1 files stays `paused`. The next claim does not promote it. | `FR-344` | CR-119 |
+| `FR-345` | functional | P0 | accepted | Review Center gains a pipeline panel (not a new app shell) showing live counts for the six queue states, current leases, stuck items, and quarantine detail. Counts come from the queue mirror; stage labels come from `workflow_state.json`. Panel does not replace the existing job list. | `AC-443`, `AC-447` | CR-119 |
+| `AC-443` | acceptance | P0 | accepted | Review Center shows live counts for all six states. Current leases show worker ID and lease age in minutes. Stuck items (expired lease, or last stage receipt older than `STUCK_STALE_MINUTES` = 120) appear in a distinct list. Each item links to the existing job detail view. Quarantine count is visible; navigating to it shows source file, line, and error code per row. Existing job list is not replaced or hidden. No claim/release/reclaim. CSV upload into the inbox is in scope. | `FR-345` | CR-119 |
+| `FR-346` | functional | P0 | accepted | `paused` → `queued` for `WAITING_FOR_LLM` still uses `check_stage1_ready`. For `NEEDS_DISPOSITION`, promote only when `reviews/dispositions.json` mtime is later than `paused_at`. | `AC-449` | CR-119 |
+| `AC-449` | acceptance | P0 | accepted | A `NEEDS_DISPOSITION` job with Stage 1 files present and no newer `dispositions.json` stays `paused` across claims. | `FR-346` | CR-119 |
+| `FR-347` | functional | P0 | accepted | `POST /api/pipeline-queue/upload` writes a `.csv` (10 MiB cap, server-chosen name) only under `data/inbox/csv/`, runs the same ingest as `ingest_csv_queue.py`, and returns queued/duplicate/quarantined counts. Pipeline panel hosts the control. | `AC-450` | CR-119 |
+| `AC-450` | acceptance | P0 | accepted | A valid CSV upload lands in `data/inbox/csv/` under a server-chosen filename, is ingested, and the response counts match ingest. A non-CSV or oversized body is rejected and writes nothing. The client path is never used as the on-disk name. | `FR-347` | CR-119 |
+
+## CR-120 Evidence-first Stage 1 authoring
+
+Draft IDs. Production Stage 1 stays on the current single-pass author until the candidate wins on frozen cases under `data/eval/cr117/`. Years-range remains CR-117.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-348` | functional | P1 | draft | Frozen, privacy-safe JD/packet cases and a blind scorecard compare the current Stage 1 path with evidence-first authoring | `AC-451` | CR-120 |
+| `AC-451` | acceptance | P1 | draft | Comparison uses the same packet, model capability tier, shared rules, and repair limit. First-draft and final outcomes are recorded separately. The runner does not write production submissions, receipts, or SQLite | `FR-348` | CR-120 |
+| `FR-349` | functional | P1 | draft | A small evidence plan names source-backed resume slots and a distinct cover-letter argument from the packet only | `AC-452` | CR-120 |
+| `AC-452` | acceptance | P1 | draft | Deterministic plan gate rejects unknown IDs, missing source text, employer mismatch, prohibited/disabled evidence, unaddressed required items without an honest bridge, and over-budget role slots. The plan never widens the packet | `FR-349` | CR-120 |
+| `FR-350` | functional | P1 | draft | One subscription author writes both documents from the checked plan, then a separate editorial read of the pair | `AC-453` | CR-120 |
+| `AC-453` | acceptance | P1 | draft | Provenance covers factual resume units and factual cover-letter sentences. Existing Stage 1 checks and Stage 2 qualitative review still run | `FR-350` | CR-120 |
+| `FR-351` | functional | P1 | draft | Targeted repair uses the same packet and checked plan, within the existing fix-round limit | `AC-454` | CR-120 |
+| `AC-454` | acceptance | P1 | draft | Repair preserves unaffected valid content and re-verifies both documents and provenance. Unresolved objective blocks remain blocks | `FR-351` | CR-120 |
+| `FR-352` | functional | P1 | draft | Evidence-first path is behind a switch. One sandboxed Agy session per job. Production default changes only after quality review | `AC-455` | CR-120 |
+| `AC-455` | acceptance | P1 | draft | Switch default is off. `gemini-3.8-flash-medium` is the pilot model. No silent paid API fallback. Old path remains for rollback | `FR-352` | CR-120 |
+
+## CR-123 Already-applied and archived postings close the CSV queue
+
+Extends CR-119 `FR-342` / `AC-440`. Those IDs stay as written; this CR completes the lookup set.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-361` | functional | P0 | implemented | CSV ingest treats a same-posting `jobs` row in Applied / Recruiter Screen / Core Interviews / Offer and Negotiation as already-handled: no new `pipeline_queue` row, no `pending_review/` folder, no `stage0_skips` write. URL first (including `jobs.url`); company+title when URL is absent. Backlog / Drafted / Needs Retry reuse the slug and are not already-applied | `AC-470`, `AC-476` | CR-123 |
+| `AC-470` | acceptance | P0 | implemented | Ingest of a row matching an Applied+ `jobs` posting (URL or URL-less company+title) creates zero queue rows, zero `pending_review/` folders, and zero skip-ledger rows. Second ingest of the same file stays idempotent | `FR-361` | CR-123 |
+| `AC-476` | acceptance | P0 | implemented | Ingest of a row matching a Backlog / Drafted / Needs Retry `jobs` posting reuses the existing slug and does not treat the row as already-applied | `FR-361` | CR-123 |
+| `FR-362` | functional | P0 | implemented | A CSV row whose posting already exists under `data/archive/submissions/` or `data/archive/skipped/` does not recreate `pending_review/` and does not insert a new `queued` row. Live folder reuse stays CR-119 | `AC-471` | CR-123 |
+| `AC-471` | acceptance | P0 | implemented | Archive-tree posting match produces no new `pending_review/` folder and no new queued row. Live `pending_review/` or `submissions/` still reuse the slug | `FR-362` | CR-123 |
+| `FR-363` | functional | P0 | implemented | A `pipeline_queue` row whose posting matches `jobs` Applied+ is `done` and must not be leased or authored. Closable from `queued`, `paused`, `leased`, or `in_progress`. No new runner-kill | `AC-472` | CR-123 |
+| `AC-472` | acceptance | P0 | implemented | A paused or queued row for an Applied `jobs` posting becomes `done`. The next claim does not return it. The worker does not invoke `run_submission.py` for that slug | `FR-363` | CR-123 |
+| `FR-364` | functional | P0 | implemented | `applyJobStatusUpdate` to Applied / Recruiter Screen / Core Interviews / Offer and Negotiation closes matching `pipeline_queue` rows to `done` by posting identity. Pre-apply statuses do not. Folder archive behavior unchanged | `AC-473` | CR-123 |
+| `AC-473` | acceptance | P0 | implemented | Status update to Applied+ marks the matching queue row `done`. Status update to Backlog or Drafted does not | `FR-364` | CR-123 |
+| `FR-365` | functional | P0 | implemented | Stage 0 same-posting Applied+ is terminal already-handled: not PASS, not PASS-with-flag, not Skip. No author. No skip-ledger write. Queue `done`. Different-role `active_application` flag unchanged. Cooldown / Self-Rejected unchanged | `AC-474` | CR-123 |
+| `AC-474` | acceptance | P0 | implemented | Same-posting Applied Stage 0 (worker or hand) does not PASS, does not author, does not write `stage0_skips`, and sets the queue `done`. Different-role same-company still flags. Self-Rejected / cooldown still follow the existing DB gate | `FR-365` | CR-123 |
+| `FR-366` | functional | P0 | implemented | Reconcile marks `done` existing non-`done` queue rows that match Applied+, `archive/submissions/`, or a recorded Skip already in `archive/skipped/`. Must run without a new CSV. Ingest of a matching row also closes the existing row | `AC-475` | CR-123 |
+| `AC-475` | acceptance | P0 | implemented | Reconcile without a new CSV closes Applied+ paused rows, archive/submissions paused rows, and archive/skipped stale mirrors. Those rows are not claimable. Tests use synthetic fixtures | `FR-366` | CR-123 |
+
+## CR-124 Conversion-risk chrome is not a product gap
+
+Narrows CR-121 `FR-355` inputs. Chrome stays out. CR-125 supersedes the withhold: a named product can remain in the reason list and is not claimed.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-367` | functional | P0 | implemented | Employer names, section-header fragments, and methodology nouns (OKR, OKRs, MVP) are chrome. They do not enter `not_present_named_tools` and do not make `conversion_feasibility` `risk`, even if an older extract listed them | `AC-477` | CR-124 |
+| `AC-477` | acceptance | P0 | implemented | Businessolver-shaped, "And Experience"-shaped, and OKRs-shaped required evidence 0 stay `ok`. Those surfaces are not named-skill candidates | `FR-367` | CR-124 |
+| `FR-368` | functional | P0 | superseded | A required evidence-0 product line still withholds. Dynamics (full name and short "Dynamics 365") and Delta Lake stay `risk`. Skip floor, skip ledger, and `apply_anyway` are unchanged. Superseded by CR-125: the name can stay in the reason list, authoring continues, and the draft does not claim it | `AC-478` | CR-124 |
+| `AC-478` | acceptance | P0 | superseded | Dynamics-shaped and Delta Lake-shaped required evidence 0 stay `risk`. Chrome on the same gate does not add reasons. Superseded by CR-125 / `FR-381` | `FR-368` | CR-124 |
+
+## 40% bypass authorship
+
+The contact-data drop-off is a decision Jason drove after an engineer proposed the bypass. A later check blocks the one bad sentence. It does not rewrite the rest of the document.
+
+| ID | Type | Priority | Status | Requirement | Acceptance criteria | Source |
+|---|---|---|---|---|---|---|
+| `FR-369` | functional | P0 | implemented | A resume bullet or cover-letter sentence that carries the 40% drop-off and claims Jason connected or bypassed that path himself, says he owned that integration, says he conceived or invented it, names it an ingestion path or pipeline or loss, or adds frontend screens, is a hard block. Decision wording and the approved "initiative that bypassed" sentence stay allowed | `AC-479` | 2026-09-22 |
+| `AC-479` | acceptance | P0 | implemented | The three Stage 2 overclaim sentences from 2026-09-22 fail `LR-038`, as does "owned the integration" on that same 40% story. The repaired sentences, the engineer's-proposal sentence, and the approved story sentence do not | `FR-369` | 2026-09-22 |
+| `FR-370` | functional | P0 | implemented | Unbracketed career-file "do not claim" and attribution notes attach to the story above them and stop at the next story or section header. A resume line or a first-person cover-letter sentence that claims customer discovery already happened is a hard block. A denial, and a sentence that only names the job's ask, stay allowed | `AC-480` | 2026-09-22 |
+| `AC-480` | acceptance | P0 | implemented | An unbracketed ACC-102-style ban attaches, and a later section header's hiring ban does not. "customer discovery" in a skills row or an "I used customer discovery" sentence fails `LR-039`. "I did not" and a job-only mention do not | `FR-370` | 2026-09-22 |
+| `FR-371` | functional | P0 | implemented | When Stage 2 is complete and Stage 3 is ready, the queue worker saves the packet into the app in the same run. The job lands as Backlog so it can be reviewed and edited there. A save that does not complete pauses once and is not claimed again | `AC-481` | 2026-09-22 |
+| `AC-481` | acceptance | P0 | implemented | A finished packet is claimed, `--finalize` runs, and a completed save marks the queue row done. If the packet is still ready after that attempt, the row pauses as `finalize_failed` and the next claim leaves it | `FR-371` | 2026-09-22 |
+| `FR-372` | functional | P0 | implemented | Each pipeline row has one plain sentence. The 2026-09-22 labels (Picked up, Running, Waiting, Finished) are replaced by Continuing, Skipped, Running, and Failed (`FR-382`) | `AC-482` | 2026-09-22 |
+| `AC-482` | acceptance | P0 | superseded | A paused `ready_to_finalize` row reads as a finished packet the next run will save. A `conversion_risk` row reads as a required tool missing from history. The panel labels are Picked up, Running, Waiting, and Finished. Label set superseded by `AC-492` | `FR-372` | 2026-09-22 |
+| `FR-373` | functional | P0 | implemented | The queue worker keeps claiming the next batch until nothing left can move. A job already run in that process is not claimed again. A Review Center pause is resumed once, and again only after a card changes | `AC-483` | 2026-09-22 |
+| `AC-483` | acceptance | P0 | implemented | Two waiting jobs and a batch size of 1 are both run by one drain. `--once` leaves the second job queued. A Review Center resume marker blocks another claim until a card is newer than that marker | `FR-373` | 2026-09-22 |
+| `FR-374` | functional | P0 | implemented | A required line that introduces tools with "for example", "such as", "including", or "or similar" does not record the other names when a different tool in that same span is already in the skills catalog. `Google Analytics` does not count as `Google Cloud`. An all-caps catalog token such as AWS inside a longer catalog phrase does count. A product outside that span can stay in the reason list and does not withhold (CR-125) | `AC-484` | 2026-09-22 |
+| `AC-484` | acceptance | P0 | implemented | A Claude-anchored "for example, Magic Patterns" line stays `ok`. An AWS-anchored "including Azure, Google Cloud, and IBM Cloud" line stays `ok`. Google Cloud with only Google Analytics in the catalog stays `risk`. Dynamics beside a later including-clause stays `risk`. A parked gate of the anchored shape is claimed without `apply_anyway` | `FR-374` | 2026-09-22 |
+| `FR-375` | functional | P0 | implemented | A shared resume and cover-letter phrase that the linter marks as a warning does not fail Stage 1. A repair that leaves the same blocking findings puts the previous draft back. A repair that changes those findings is kept | `AC-485` | 2026-09-23 |
+| `AC-485` | acceptance | P0 | implemented | Pair overlap is recorded and does not by itself set verify to fail. A repair that leaves the same blocking findings restores the pre-repair draft. A repair that changes those findings keeps the new draft | `FR-375` | 2026-09-23 |
+| `FR-376` | functional | P0 | implemented | When `claim_provenance.json` has no company and `stage0_fit_gate.json` does, Truth writes the gate company onto the provenance file before it scores. It does not invent a company when the gate has none | `AC-486` | 2026-09-22 |
+| `AC-486` | acceptance | P0 | implemented | A provenance file with claims and a blank company, next to a gate company, passes the company check and stores that company | `FR-376` | 2026-09-22 |
+| `FR-377` | functional | P0 | implemented | Before a Stage 1 repair rewrite, a JD term that is already in a resume bullet gets one supporting claim id from the packet contract when that id's employer matches a claim already on the bullet. A different employer's id is not added | `AC-487` | 2026-09-22 |
+| `AC-487` | acceptance | P0 | implemented | "User Stories" on a bullet cited to a Cision roadmap claim gains the Cision scope id from the contract, not an unscoped AI id. The worker resumes that draft before it asks for a rewrite | `FR-377` | 2026-09-22 |
+| `FR-378` | functional | P0 | implemented | A required healthcare, health-industry, health-tech, medical, or ceramic years line, or a sentence that says that domain experience is required, skips with no card. Benefits, healthy, and a preferred-only tail do not. Keep eligible does not soften that line. A Stage 1 provider timeout retries up to four times after a wait. Identical findings still park the job | `AC-488` | 2026-09-23 |
+| `AC-488` | acceptance | P0 | implemented | Health-industry years and a split healthcare-required sentence do not open a card and stay HARD after Keep eligible. Medical benefits and a preferred-only healthcare line do not match. A timeout with a future wait is not claimed. A timeout whose wait has passed and whose attempt count is under four is claimed. Four timeouts and an identical-findings streak of 2 are not | `FR-378` | 2026-09-23 |
+| `FR-379` | functional | P0 | implemented | An unknown named tool is unused. Stage 0 does not open a skill card for it. The draft does not claim it. An "or similar" line that already names a catalog tool stays silent | `AC-489` | CR-125 |
+| `AC-489` | acceptance | P0 | implemented | A required unknown tool is recorded as absent and creates no pending skill card. A model-flagged named tool does the same | `FR-379` | CR-125 |
+| `FR-380` | functional | P0 | implemented | Review Center shows one card per tool, and only for jobs that never went out because that tool is not in work experience. "I have used this" writes the tool into work experience. Each listed job can be redone alone. Already-applied jobs stay off the card. Nothing on the card starts a worker or stores a No | `AC-490` | CR-125 |
+| `AC-490` | acceptance | P0 | implemented | A paused conversion_risk job whose gate names the tool is listed. The same job once queued is not. Confirming the tool appends it under Confirmed tools in work experience | `FR-380` | CR-125 |
+| `FR-381` | functional | P0 | implemented | The queue decides from today's work experience. A missing required line counts as zero and is not dropped from the score. Pass stays 40. A written hard gate skips with no card. Any other required miss only skips when the score is under 40. A question does not hold the queue. `decide-holds` queues a stored score of 40 or more and marks a stored score under 40 as decided_skip. It does not start the worker | `AC-491` | CR-125 |
+| `AC-491` | acceptance | P0 | implemented | A named line with no evidence level lowers the fit score. A payments-infrastructure model HARD opens no card and is evidence 0. An open hard-gate row does not block claim. A stored 38 becomes decided_skip and is not claimed. A stored 55 returns to queued. A failed row stays paused | `FR-381` | CR-125 |
+| `FR-382` | functional | P0 | implemented | The pipeline page shows Continuing, Skipped, Running, or Failed, each with one sentence. There is no Waiting state for a question. A failed run can be tried again without starting the worker. Review Center states how many continued, how many skipped, and that none are waiting, with a link to the pipeline | `AC-492` | CR-125 |
+| `AC-492` | acceptance | P0 | implemented | A decided_skip row reads as Skipped. An expired in-progress lease reads as Failed. A queued row reads as Continuing. Review Center copy includes the stopped-because sentence | `FR-382` | CR-125 |
+
+## CR-126 Cited spans stay whole
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `FR-383` | functional | P0 | implemented | An excerpt card that cannot keep the unit attached to a number, or an engineering-built clause, is omitted from the packet. The claim id is removed from the evidence map and the omission is recorded. A card that already contains the full unit is unchanged | `AC-493` | CR-126 |
+| `AC-493` | acceptance | P0 | implemented | A card cut between $8,500 and "per quarter" is omitted. A card cut before "engineering built the funnel" is omitted. A card that already says "per quarter" stays. Shrink drops only the sliced claim | `FR-383` | CR-126 |
+| `FR-384` | functional | P0 | implemented | A drafted currency figure must use the unit on that figure in the career spans. A percent absent from those spans is a hard block. A percent whose group misses every career-span group for that figure is a hard block. A line that takes an object the spans assign to engineering is a hard block. A process note in Core Competencies is a hard block. "Confidential is" in the letter is a hard block. $8,500 quarterly and $22,100 annually still pass | `AC-494` | CR-126 |
+| `AC-494` | acceptance | P0 | implemented | "$8,500 annually", a bare "$8,500", "93%", "25% of platform usage" against a 25% customer share, "25% core data usage profile", "created a funnel" against an engineering-built funnel, "did not happen" in Core Competencies, and "Confidential is" fail. "$8,500 quarterly", "$22,100 annually", "25% of customers", "95% of active accounts", "40% of records" against a drop-off with no of-head, and a sentence that credits engineering with the funnel pass | `FR-384` | CR-126 |
+| `FR-385` | functional | P0 | implemented | The empty-required fit waiver does not apply when a classified required row is explicitly evidence 0 and the score is under the skip floor. A logistics-only extract with no evidence-0 required row still passes under the floor. A finished queue row is not a send decision | `AC-495` | CR-126 |
+| `AC-495` | acceptance | P0 | implemented | Score 25 with qual_required_n 0 and one evidence-0 required row is Skip. Score 0 with qual_required_n 0 and zero such rows stays Tier 2 PASS | `FR-385` | CR-126 |
+| `FR-390` | functional | P0 | implemented | A sentence that cites a fact id and contradicts that fact is a hard block at Stage 1 and Stage 2. The same words cited to a different fact, or with no provenance file, do not block. A high conversion score does not clear the block | `AC-500` | CR-130 |
+| `AC-500` | acceptance | P0 | implemented | "profile portability over custom tagging" cited to ACC-155 blocks. "25 percent of active usage" cited to ACC-115 blocks. The same inversion cited to ACC-104 does not. A sentence with no provenance file does not. "Custom tagging took priority" cited to ACC-155 does not | `FR-390` | CR-130 |
+| `FR-391` | functional | P0 | implemented | The sentence that puts profile portability over custom tagging is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. The sentence that says custom tagging took priority does not block | `AC-501` | CR-131 |
+| `AC-501` | acceptance | P0 | implemented | "profile portability over custom tagging" cited to ACC-115 blocks. The same sentence with no provenance blocks. "Custom tagging took priority over making profiles portable" cited to ACC-155 does not | `FR-391` | CR-131 |
+| `FR-392` | functional | P0 | implemented | A sentence that calls him a QA lead is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. A test-suite sentence that does not use that title does not block | `AC-502` | CR-132 |
+| `AC-502` | acceptance | P0 | implemented | "Served as first-pass QA lead" cited to ACC-204 blocks. The same bullet with no provenance blocks. "Walked manual test suites and routed defects to engineering" does not | `FR-392` | CR-132 |
+| `FR-393` | functional | P0 | implemented | A sentence that says hundreds of client databases is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. Roughly 200 SQL databases does not block | `AC-503` | CR-133 |
+| `AC-503` | acceptance | P0 | implemented | "hundreds of client databases" cited to ACC-102 and ACC-121 blocks. The same sentence with no provenance blocks. "roughly 200 SQL databases" does not | `FR-393` | CR-133 |
+| `FR-394` | functional | P0 | implemented | A specialty he does not hold skips when the line says highly preferred or ideally, or when it is physician-facing clinical work or a design-control certification. A tool marked highly preferred does not. SaaS or consulting as an alternative does not. The Skipped row shows the gate sentence. Write this job queues that posting once and does not pause the queue. The same posting with a resume still in the app stays that application. A later copy with no resume skips again | `AC-504` | CR-134 |
+| `AC-504` | acceptance | P0 | implemented | Endovascular ideally, clinical acumen, ISO 13485 highly preferred, and healthcare highly preferred skip. SQL highly preferred, healthcare as a plus, and ideally SaaS or healthcare tech do not. A refute clears that slug's skip row, arms one Stage 0 pass, and queues the row | `FR-394` | CR-134 |
+| `FR-395` | functional | P0 | implemented | A sentence that says support escalations were reduced is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. A Jira formula that says streamline, and a stale-data complaint sentence, do not block | `AC-505` | CR-135 |
+| `AC-505` | acceptance | P0 | implemented | "significantly reduced customer support escalations" cited to ACC-102 blocks. The same sentence with no provenance blocks. "streamline Customer Support escalations" does not. "reduced stale-data complaints to zero" does not | `FR-395` | CR-135 |
+| `FR-399` | functional | P0 | implemented | A sentence that says release cadence is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. A deletion cadence does not block | `AC-509` | CR-137 |
+| `AC-509` | acceptance | P0 | implemented | "Guided release cadence" cited to ACC-204 blocks. The same bullet with no provenance blocks. Defect triage with QA engineering does not. A rolling deletion cadence does not | `FR-399` | CR-137 |
+| `FR-400` | functional | P0 | implemented | A sentence that says testing analytics is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. Pendo product analytics does not block | `AC-510` | CR-138 |
+| `AC-510` | acceptance | P0 | implemented | "applying product analytics and testing analytics" cited to ACC-214 blocks. The same bullet with no provenance blocks. "Pendo product analytics" does not | `FR-400` | CR-138 |
+| `FR-401` | functional | P0 | implemented | A capitalized Visible after a space is a hard block at Stage 1 and Stage 2, including when the cite is a different fact or there is no provenance file. Lowercase visible does not block | `AC-511` | CR-139 |
+| `AC-511` | acceptance | P0 | implemented | "tradeoffs Visible to enable" blocks with a cite and with no provenance. "visible in the usage data" does not | `FR-401` | CR-139 |
+| `FR-402` | functional | P0 | implemented | Stage 1 removes a cited experience bullet or cover-letter sentence that is itself a hard block. The removal is refused when it creates a new fidelity hard block. A line whose only blocked-tool hit is the word epic is left in place. No hedge is inserted to clear the block | `AC-512` | CR-140 |
+| `AC-512` | acceptance | P0 | implemented | A cited data-model bullet is removed and a neighboring cited bullet stays. A cited blocked tool sentence is removed and the past-employer sentence stays. The only past-employer sentence is kept when it is also a hard block. A cited drafting line that says epic keeps the inserted estimate | `FR-402` | CR-140 |
+| `AC-513` | acceptance | P0 | implemented | A cover sentence that states no personal fact is removed when it contains a forbidden buzzword. A neighboring sentence that names a past employer stays | `FR-402` | CR-140 |
+| `FR-403` | functional | P0 | implemented | A sentence that already hedges `$100,000` is rewritten to `$100K` before the metric check. A sentence with no hedge word is left unchanged. The precise number is not added to the approved list | `AC-514` | CR-141 |
+| `AC-514` | acceptance | P0 | implemented | "roughly $100,000" and "About $100,000" become `$100K`. A bullet that says `$100,000` with no hedge stays | `FR-403` | CR-141 |
+| `FR-404` | functional | P0 | implemented | When every past-employer sentence in the letter is uncited, Stage 1 adds one cited resume sentence that names that employer and then removes the uncited sentence | `AC-515` | CR-141 |
+| `AC-515` | acceptance | P0 | implemented | An uncited "At Cision" sentence is removed. A cited Cision bullet from the resume is added in its place | `FR-404` | CR-141 |
+| `FR-405` | functional | P0 | implemented | Before the hiring-manager pass, a clause that names a partner group outside the verified list is removed. A clause that names a verified partner stays. The warning still fires on the original wording | `AC-516` | CR-142 |
+| `AC-516` | acceptance | P0 | implemented | "partnering with operational stakeholders" is removed and the rest of the bullet stays. "Partnered with engineering" stays. The cite follows the shortened bullet | `FR-405` | CR-142 |
+| `FR-406` | functional | P0 | implemented | A 40% contact-data drop-off sentence that says ingestion pipeline, ingestion path, or ingestion loss is rewritten before the hiring-manager pass. The 40% outcome stays. The same block fails Stage 1. A sentence that is not that story is unchanged | `AC-517` | CR-143 |
+| `AC-517` | acceptance | P0 | implemented | "40% drop-off" plus "ingestion pipeline" becomes "ETL path" and the block clears. "ingestion pipeline" with no 40% drop-off story stays | `FR-406` | CR-143 |
+| `FR-407` | functional | P0 | implemented | Before the hiring-manager pass, a contributed claim that says designed or built is reworded to contributed to. An owned claim that says built stays. The warning still fires on the original wording | `AC-518` | CR-144 |
+| `AC-518` | acceptance | P0 | implemented | "I designed and built the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-407` | CR-144 |
+| `FR-408` | functional | P0 | implemented | A resume bullet that cites a fact and says something that fact does not say is removed. A neighboring bullet stays. The check still fires on the original wording | `AC-519` | CR-145 |
+| `AC-519` | acceptance | P0 | implemented | A bullet cited as ACC-103 that says the security backlog was resolved is removed. A neighboring bullet stays | `FR-408` | CR-145 |
+| `FR-409` | functional | P0 | implemented | A required line that shares only the word ownership with a mapped claim does not fail Stage 1 when that claim is unused. A line that shares a real term still requires the cite | `AC-520` | CR-146 |
+| `AC-520` | acceptance | P0 | implemented | Overlap of only ownership is empty. A Google Analytics migration line still requires its cite | `FR-409` | CR-146 |
+| `FR-410` | functional | P0 | implemented | A cover letter over 2800 characters loses an uncited sentence until it fits one page. The only past-employer sentence stays. The character limit stays 2800 | `AC-521` | CR-147 |
+| `AC-521` | acceptance | P0 | implemented | An overlong letter that has an uncited sentence ends at or under 2800 characters and still names the past employer | `FR-410` | CR-147 |
+| `FR-411` | functional | P0 | implemented | A cover letter under 220 words gains a cited resume sentence until it reaches that floor. It does not pass 450 words or 2800 characters | `AC-522` | CR-148 |
+| `AC-522` | acceptance | P0 | implemented | A letter under 220 words that has an unused cited resume bullet ends between 220 and 450 words | `FR-411` | CR-148 |
+| `FR-412` | functional | P0 | implemented | A resume line about distributed data systems does not fail the geography check. A line that says a team was distributed across offices still fails when the job description never asked for that | `AC-523` | CR-149 |
+| `AC-523` | acceptance | P0 | implemented | "distributed data systems" does not fire. "distributed across offices" still fires | `FR-412` | CR-149 |
+| `FR-413` | functional | P0 | implemented | A required line that shares only the word knowledge with a mapped claim does not fail Stage 1 when that claim is unused. A line that shares a real term still requires the cite | `AC-524` | CR-150 |
+| `AC-524` | acceptance | P0 | implemented | Overlap of only knowledge is empty. A Google Analytics migration line still requires its cite | `FR-413` | CR-150 |
+| `FR-414` | functional | P0 | implemented | A competencies row that names a tool outside the career history loses that token. The other tools stay. The agile noun epic stays | `AC-525` | CR-151 |
+| `AC-525` | acceptance | P0 | implemented | "Data Extraction, Python, QA, SQL" becomes a row without Python. A roadmap epics bullet stays | `FR-414` | CR-151 |
+| `FR-415` | functional | P0 | implemented | A summary that says high-leverage loses that compound. Standalone leverage becomes use. data-driven stays | `AC-526` | CR-152 |
+| `AC-526` | acceptance | P0 | implemented | "structured, high-leverage product solutions" becomes "structured product solutions". "data-driven" stays. "leverage the support tickets" becomes "use the support tickets" | `FR-415` | CR-152 |
+| `FR-416` | functional | P0 | implemented | A contributed claim that says design is reworded to contributed to. An owned claim that says built stays. The warning still fires on the original wording | `AC-527` | CR-153 |
+| `AC-527` | acceptance | P0 | implemented | "I design the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-416` | CR-153 |
+| `FR-417` | functional | P0 | implemented | A hiring-manager read bound to the previous file bytes is rebuilt after this pass rewrites the documents. The hash check stays. An open warning other than the read is not closed here | `AC-528` | CR-154 |
+| `AC-528` | acceptance | P0 | implemented | A read whose resume hash no longer matches is replaced by a read that validates. A valid read is left as it is. An open pair warning blocks the rebuild | `FR-417` | CR-154 |
+| `FR-418` | functional | P0 | implemented | A country list and a geography use of distributed are removed when the posting never asks. A line about distributed data systems stays. A posting that asks for distributed work keeps the line. The warning still fires on the original wording | `AC-529` | CR-155 |
+| `AC-529` | acceptance | P0 | implemented | Engineering teams across the U.S., Israel, and India becomes engineering teams on the delivery expectations. Distributed stakeholders becomes stakeholders. Distributed data systems stays | `FR-418` | CR-155 |
+| `FR-419` | functional | P0 | implemented | An opening sentence that repeats six or more words from the posting is dropped when another opening sentence stays. A one-sentence hook is left alone. The warning still fires on the original wording | `AC-530` | CR-156 |
+| `AC-530` | acceptance | P0 | implemented | A two-sentence opening loses the sentence that repeats the posting. The other sentence stays. A one-sentence opening is unchanged | `FR-419` | CR-156 |
+| `FR-420` | functional | P0 | implemented | A contributed claim that says build is reworded to contributed to. An owned claim that says built stays. The warning still fires on the original wording | `AC-531` | CR-157 |
+| `AC-531` | acceptance | P0 | implemented | "I build the prompt orchestration" becomes "I contributed to the prompt orchestration". "Built the landing page" stays | `FR-420` | CR-157 |
+| `FR-421` | functional | P0 | implemented | A tilde in front of a number is rewritten to about. The digits stay. The warning still fires on the tilde | `AC-532` | CR-158 |
+| `AC-532` | acceptance | P0 | implemented | ~200 becomes about 200. ~25,000 becomes about 25,000 | `FR-421` | CR-158 |
+| `FR-422` | functional | P0 | implemented | A required line that shares only the word communication with a mapped claim does not fail Stage 1. A line that shares a real term still requires the cite | `AC-533` | CR-159 |
+| `AC-533` | acceptance | P0 | implemented | A required line whose only shared word is communication passes. A line that shares a real term still fails when that claim is unused | `FR-422` | CR-159 |
+
+### Data Traceability (DATA-006)
+
+| ID | Type | Priority | Status | Requirement | Acceptance | Source |
+|---|---|---|---|---|---|---|
+| `DATA-006` | data | P0 | accepted | Queue state (status, locked_by, lease_expires_at, fencing_token, queued_at, claimed_at, paused_at, nullable `networking_contacts_raw`), file-ingest ledger (sha256 uniqueness key, filename for display, ingested_at, row_count, quarantine_count), and quarantine records live in the gitignored `jobagent.sqlite` (ADR-001). `data/inbox/csv/` and per-slug lock files at `data/queue_locks/{slug}.lock` are gitignored / inside the data tree. No queue state, lease data, quarantine detail, `networking_contacts_raw`, or JD/PII from CSV rows enters tracked files, git commits, test fixtures, or log files. | — | CR-119 |
 
 ## Security Requirements
 
@@ -729,4 +1121,6 @@ This is the canonical list of project requirements. Feature specs, tasks, tests,
 | `SEC-003` | security | P0 | implemented | No `.env` for secrets — all API keys configured via Settings UI and read from SQLite at runtime (`CR-015`) |
 | `SEC-004` | security | P0 | implemented | LLM and data-source keys stored in `profiles` (`llm_settings`, `api_connections`); read in-process from `jobagent.sqlite`; never logged or written to tracked files |
 | `SEC-005` | security | P0 | implemented | Secret Portable Management — Supports injecting API keys directly from environment variables (Doppler) decoupling sensitive strings from local database |
-| `NFR-004` | maintainability | P0 | implemented | All pipeline behavior variables (search terms, blocklists, score threshold, freshness window) must trace to `candidate_preferences.json`; no hardcoded overrides permitted in scout or pipeline scripts |
+| `SEC-006` | security | P0 | implemented | Practice and clean-worktree identity must come from gitignored `workExperience.md` §1.0 or an explicit synthetic mode. Silent John Doe fallback must not enter a real or practice document. Production SQLite must not be copied into worktrees for identity. PII must not enter tracked fixtures, logs, commits, prompts, or reports (CR-112) |
+| `NFR-014` (renamed from a duplicate `NFR-004` under CR-111) | maintainability | P0 | implemented | All pipeline behavior variables (search terms, blocklists, score threshold, freshness window) must trace to `candidate_preferences.json`; no hardcoded overrides permitted in scout or pipeline scripts |
+| `SEC-007` | security | P0 | accepted | Ingest file writes are restricted to paths inside the repo data tree: `data/inbox/csv/` (inbox, archive, quarantine), `data/pending_review/`, and `jobagent.sqlite`. HTTP upload (`POST /api/pipeline-queue/upload`) writes only under `data/inbox/csv/` with a server-chosen filename. No write occurs outside these expected paths. JD text and Networking Contacts values from CSV rows do not enter tracked fixtures, git commits, test reports, or log files. (CR-119) |

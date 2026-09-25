@@ -78,6 +78,15 @@ Do not invent any metric, tool, company, team name, or date not present in the p
 Do not load any external file. Do not call any tool (tools are not needed for v1).
 Obey claim_constraints: never round CONTRIBUTED into OWNED; never use a Prohibited line as a story.
 
+FIXED CHROME: Do not invent name, contact, education, role titles, dates,
+locations, the greeting, or the sign-off. Write the Professional Summary,
+optional Core Competencies, experience bullets, and cover-letter body.
+Keep `## PROFESSIONAL SUMMARY`, optional `## CORE COMPETENCIES`,
+`## PROFESSIONAL EXPERIENCE`, `## EDUCATION`, and three `###` role markers
+in order (Cision, Sterkly, Zero To Sixty). A later injector overwrites
+header, role headings, location lines, education, greeting, and sign-off
+from workExperience.md.
+
 The packet field `packet_status` MUST be "ready" before you proceed.
 If it is not "ready", stop and print the incomplete_reasons — do not draft.
 
@@ -85,11 +94,40 @@ If it is not "ready", stop and print the incomplete_reasons — do not draft.
 Required, preferred, and responsibility JD items appear in `evidence_map` together with
 their claim_ids — there is no separate list of them elsewhere in this packet.
 
+BULLET PRIORITIZATION: The resume must fit on exactly one page. Prioritize the
+strongest, most JD-relevant evidence over completeness. Within each role section,
+order bullets by JD-relevance: claims mapping to `required` evidence_map items come
+before `preferred` or `responsibilities`. When a bullet carries a hard metric, put
+the number near the verb, not trailing at the end of a long clause. Bullet counts:
+most recent role (Cision) 5-6 bullets; earlier roles (Sterkly, Zero To Sixty) 2-3
+bullets each. If there are more high-priority claims than available bullet slots,
+prefer claims mapping to `required` items over `preferred` items. When a JD item
+has two mapped claim_ids, use the stronger one (higher attribution tier: OWNED
+beats CONTRIBUTED) in the resume bullet; the second can support a cover-letter
+proof point for the same JD item if the letter benefits from it. Some excerpt cards
+may be present to satisfy the 3-role resume rule but may not map to any JD item.
+Use these only if a role section needs a bullet and no JD-mapped claim is available
+for that employer. Do not force a low-relevance claim into a bullet over a
+higher-relevance claim from the same employer.
+
+COVER LETTER SHAPE: Build the letter around 1-2 strongest stories. Choose each
+because it covers several of the role's top requirements at once, not one story
+per requirement. Tell them with context the resume bullets cannot carry. Never
+restate resume bullets. Optionally one plain sentence bridging a soft gap.
+Never list requirements. No T-letter format. A forwarded unused high-priority
+claim goes in only if it is one of those strongest stories.
+
 COVER LETTER VOICE: end the letter on the last concrete fact. Do not add a recap
 kicker that labels the paragraph ("That's genuine...", "That's how I treated...",
 "lives or dies on"). Do not use negative listing ("Not X. A Y.").
 Never print "closed-lost". Say lost subscriptions or lost subscription opportunities.
 Never claim a design team. Jason has not worked with design.
+Never open by calling the role interesting, compelling, or exciting; name the
+concrete company action, product, or operating problem instead.
+GEOGRAPHY: mention countries, team locations, time zones, or "global/distributed"
+only when Original_JD.txt asks for global, international, distributed,
+cross-timezone, or multi-region work. Otherwise describe the collaboration
+itself (who, what was aligned, what shipped).
 
 Output exactly three fenced code blocks in this order:
   1. A block labeled "Resume.md" containing the full resume Markdown.
@@ -240,11 +278,14 @@ def build_authoring_prompt(
     priority_instruction = ""
     if priority_claims:
         priority_instruction = (
-            "\n\nEVIDENCE PRIORITY: The following packet claims each support multiple "
-            "important JD items. Use every one in a resume bullet or cover-letter proof "
-            "point, and cite it in claim_provenance.json: "
+            "\n\nEVIDENCE PRIORITY: These packet claims each support multiple "
+            "important JD items: "
             + ", ".join(priority_claims)
-            + ". Do not add unsupported content simply to make room."
+            + ". Do not force every one into the resume. For each required JD item, "
+            "use the strongest mapped claim as the lead bullet in the matching role. "
+            "Unused high-priority claims are forwarded for the letter and Stage 2. "
+            "A forwarded claim belongs in the letter only if it is one of the 1-2 "
+            "strongest stories."
         )
     ats_terms = [
         row["term"]
@@ -305,16 +346,30 @@ def _apply_resume_header_if_available(folder: Path) -> str:
     Packet intentionally omits name/contact/location/education/dates so cloud
     authoring never receives real PII. Placeholders left by closed-world compose
     are substituted from workExperience.md via apply_resume_header.py before lint.
+    Synthetic mode skips this patch so tests never ingest live WE.
     """
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        return "SKIP [apply_resume_header] — synthetic identity mode"
+
     try:
         from apply_resume_header import load_real_header, patch_file  # type: ignore
     except Exception as exc:
-        return f"SKIP [apply_resume_header] — import failed: {exc}"
+        return (
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            f"(identity_source=missing); import failed: {exc}"
+        )
 
     try:
         header = load_real_header()
-    except Exception as exc:
-        return f"SKIP [apply_resume_header] — {exc}"
+    except Exception:
+        return (
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            "(identity_source=missing)"
+        )
 
     parts: list[str] = []
     for fname in ("Resume.md", "CoverLetter.md"):
@@ -377,6 +432,30 @@ def _example_bank_version() -> str:
         return ""
 
 
+def _offending_excerpt(text: str, line: int | None) -> str:
+    if not line:
+        return ""
+    rows = text.splitlines()
+    if 1 <= int(line) <= len(rows):
+        return rows[int(line) - 1].strip()[:240]
+    return ""
+
+
+def _format_lint_item(kind: str, filename: str, item: object, text: str) -> str:
+    line = getattr(item, "line", None)
+    rule_id = str(getattr(item, "rule_id", "") or "")
+    message = str(getattr(item, "message", "") or "")
+    suggestion = str(getattr(item, "suggestion", "") or "").strip()
+    excerpt = _offending_excerpt(text, line)
+    line_bit = f" line {line}" if line else ""
+    out = f"{kind} [lint/{filename}] [{rule_id}]{line_bit}: {message}"
+    if suggestion:
+        out += f" (suggestion: {suggestion})"
+    if excerpt:
+        out += f" offending: {excerpt}"
+    return out
+
+
 def _violation_row(violation: object, doc: str) -> dict:
     """Project a lint violation into the verify_history schema (CR-097 Story 1.2)."""
     rule_id = str(getattr(violation, "rule_id", "") or "")
@@ -395,7 +474,7 @@ def _record_verify_attempt(
     passed: bool,
     violations: list[dict],
 ) -> None:
-    """Append one verify_history.json entry and snapshot the first draft (CR-097 1.2/1.4)."""
+    """Append one verify_history.json entry (CR-097 1.2/1.4)."""
     dest_dir = folder / "stage1_first_draft"
     dest_dir.mkdir(parents=True, exist_ok=True)
     history_path = dest_dir / "verify_history.json"
@@ -421,13 +500,6 @@ def _record_verify_attempt(
         ):
             return
 
-    snap_resume = dest_dir / "Resume.md"
-    snap_letter = dest_dir / "CoverLetter.md"
-    if resume.exists() and not snap_resume.exists():
-        shutil.copy2(resume, snap_resume)
-    if letter.exists() and not snap_letter.exists():
-        shutil.copy2(letter, snap_letter)
-
     existing.append(
         {
             "attempt": len(existing) + 1,
@@ -444,6 +516,26 @@ def _record_verify_attempt(
         json.dumps(existing, indent=2, ensure_ascii=False) + "\n",
         encoding="utf-8",
     )
+
+
+def _snapshot_author_output(folder: Path) -> None:
+    """Copy author artifacts before verifier mutation so repair can read them."""
+    dest = folder / "stage1_author_output"
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ("Resume.md", "CoverLetter.md", "claim_provenance.json"):
+        src = folder / name
+        if src.exists():
+            shutil.copy2(src, dest / name)
+
+
+def _snapshot_first_draft(source: Path, record_to: Path) -> None:
+    """Keep the untouched author output before verification edits it."""
+    dest = record_to / "stage1_first_draft"
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ("Resume.md", "CoverLetter.md"):
+        snapshot = dest / name
+        if not snapshot.exists():
+            shutil.copy2(source / name, snapshot)
 
 
 def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
@@ -463,11 +555,17 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
     ``{record_to}/stage1_first_draft/verify_history.json``. Existing callers
     keep today's signature and bool return. Append is idempotent on the
     (resume_sha256, cover_sha256) pair. On the first recorded attempt only,
-    copy Resume.md and CoverLetter.md into that directory (write-once).
+    copy the untouched Resume.md and CoverLetter.md into that directory
+    before deterministic verification edits (write-once).
 
-    Fix-loop protocol: if FAIL, re-edit Resume.md / CoverLetter.md using
-    the authoring_prompt.md (packet + digest) only — no additional context files.
-    Maximum 2 fix rounds before escalating to Jason.
+    Always copies Resume.md / CoverLetter.md / claim_provenance.json into
+    ``{folder}/stage1_author_output/`` before header injection or quality
+    repair, so a Stage 1 repair pass can consume the author's bytes.
+
+    Fix-loop protocol: if FAIL, run build_stage1_repair_prompt.py and paste
+    that prompt into a fresh Agy session. Loop until verify passes or a round
+    makes no progress. Do not load workExperience.md, claims, AGENTS.md, or
+    the context pack.
     """
     passed = True
     lines: list[str] = []
@@ -488,8 +586,25 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             print("\nVERIFY RESULT: FAIL")
             return False
 
+        # A repair map of bullet text to claim id is the same cites. Store them
+        # as resume_claims before the snapshot, or every bullet looks uncited.
+        # Implements FR-265.
+        from run_stage1_repair import heal_provenance_file
+
+        heal_provenance_file(folder)
+
+        if record_to is not None:
+            _snapshot_first_draft(folder, record_to)
+        _snapshot_author_output(folder)
+
         # 1b. Deterministic header/education/title/date substitution (PII stays out of packet).
-        lines.append(_apply_resume_header_if_available(folder))
+        header_line = _apply_resume_header_if_available(folder)
+        lines.append(header_line)
+        if header_line.startswith("FAIL"):
+            passed = False
+            print("\n".join(lines))
+            print("\nVERIFY RESULT: FAIL")
+            return False
 
         # Implements FR-265: Stage 1 owns deterministic document quality.
         # These checks used to
@@ -522,7 +637,9 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             sys.path.insert(0, str(_SCRIPT_DIR))
             from submission_linter import (  # type: ignore
                 check_cross_document_repetition,
+                check_customer_discovery,
                 check_jd_specificity_floor,
+                check_unsolicited_geography,
                 lint_document,
             )
 
@@ -541,8 +658,26 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                         f"FAIL [lint/{path.name}]: {len(result.blocks)} hard block(s), "
                         f"{len(result.warns)} warn(s)"
                     )
-                    for b in result.blocks[:5]:
-                        lines.append(f"  [{b.rule_id}] {b.message}")
+                    for b in result.blocks:
+                        lines.append(_format_lint_item("FAIL", path.name, b, text))
+                    for w in result.warns[:8]:
+                        lines.append(_format_lint_item("WARN", path.name, w, text))
+
+            discovery_blocks = check_customer_discovery(
+                texts.get("resume", ""),
+                texts.get("cover_letter", ""),
+            )
+            if discovery_blocks:
+                # LR-039 is a false experience claim. Stage 2 used to be the
+                # first place it blocked, which parked the queue. Repair it
+                # here. Implements FR-370.
+                passed = False
+                lines.append(
+                    "FAIL [lint/customer discovery]: "
+                    f"{len(discovery_blocks)} hard block(s)"
+                )
+                for block in discovery_blocks:
+                    lines.append(f"  FAIL LR-039: {block.message}")
 
             if "resume" in texts and "cover_letter" in texts:
                 pair_warns = check_cross_document_repetition(
@@ -551,9 +686,11 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                 for item in pair_warns:
                     violations.append(_violation_row(item, "resume+cover_letter"))
                 if pair_warns:
-                    passed = False
+                    # LW-009-PAIR is a WARN. Failing Stage 1 here sends the
+                    # draft into repair, which can drop citations. Stage 2
+                    # still sees the finding. Implements FR-375.
                     lines.append(
-                        "FAIL [lint/resume+cover_letter (pair)]: "
+                        "WARN [lint/resume+cover_letter (pair)]: "
                         f"{len(pair_warns)} substantive repeated phrase(s)"
                     )
                 else:
@@ -584,6 +721,52 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
                     )
                 else:
                     lines.append("PASS [lint/LW-026 specificity]")
+
+                geo_any = False
+                for path, doc_type in ((resume, "resume"), (letter, "cover_letter")):
+                    geo_warns = check_unsolicited_geography(
+                        texts[doc_type], jd_text, doc_type
+                    )
+                    for item in geo_warns:
+                        violations.append(_violation_row(item, doc_type))
+                    if geo_warns:
+                        geo_any = True
+                        passed = False
+                        lines.append(
+                            f"FAIL [lint/LW-039 geography]: {path.name} names "
+                            "geography the JD never asked for"
+                        )
+                        for w in geo_warns:
+                            lines.append(
+                                _format_lint_item("WARN", path.name, w, texts[doc_type])
+                            )
+                if not geo_any:
+                    lines.append("PASS [lint/LW-039 geography]")
+
+                from submission_linter import (
+                    _load_folder_provenance,
+                    collect_fidelity_hard_blocks,
+                )
+
+                # These hard blocks used to appear first in the hiring-manager
+                # pass. That pass cannot repair, so an unsupervised run stops.
+                # Stage 1 repair is the retry. Implements FR-386.
+                fidelity_blocks = collect_fidelity_hard_blocks(
+                    texts.get("resume", ""),
+                    texts.get("cover_letter", ""),
+                    _load_folder_provenance(folder),
+                )
+                if fidelity_blocks:
+                    passed = False
+                    lines.append(
+                        "FAIL [lint/span fidelity]: "
+                        f"{len(fidelity_blocks)} hard block(s)"
+                    )
+                    for block in fidelity_blocks:
+                        lines.append(f"FAIL [{block.rule_id}]: {block.message}")
+                        violations.append(_violation_row(block, "submission"))
+                else:
+                    lines.append("PASS [lint/span fidelity]")
         except ImportError:
             lines.append("SKIP [lint] — submission_linter not importable; run manually")
         except Exception as exc:
@@ -621,6 +804,11 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
         if not sentence_ok:
             passed = False
 
+        extra_ok, extra_lines = _check_extra_packet_provenance(folder)
+        lines.extend(extra_lines)
+        if not extra_ok:
+            passed = False
+
         # Summary
         print("\n".join(lines))
         verdict = "PASS" if passed else "FAIL"
@@ -633,9 +821,81 @@ def run_verify_only(folder: Path, *, record_to: Path | None = None) -> bool:
             )
 
 
+def _check_extra_packet_provenance(folder: Path) -> tuple[bool, list[str]]:
+    """CR-112 Story 3.1: FAIL when provenance cites IDs the packet never offered.
+
+    Exact ID match only. Prefix overlap (ACC-101-SAVINGS vs ACC-101-PM) does
+    not clear. Detection only: does not rank, recover, or rewrite.
+    Implements FR-312. Recovery is Story 3.6.
+    """
+    from packet_closed_world import extra_packet_findings
+
+    packet_path = folder / "authoring_packet.json"
+    prov_path = folder / "claim_provenance.json"
+    unreadable = (
+        "FAIL [extra_packet]: packet or provenance missing or unreadable. "
+        "recovery_state=CLOSED_WORLD_UNREADABLE extra_ids=unknown. "
+        "Stage 1 incomplete until a readable authoring_packet.json and "
+        "claim_provenance.json exist. Detection only. Story 3.6 recovery "
+        "cannot run yet. Do not dispose as ACCEPTED_AS_CORRECT, "
+        "FALSE_POSITIVE, NOT_APPLICABLE, or HUMAN_ACCEPTED_RISK."
+    )
+    if not packet_path.exists() or not prov_path.exists():
+        return False, [unreadable]
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        provenance = json.loads(prov_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False, [unreadable]
+    if not isinstance(packet, dict) or not isinstance(provenance, dict):
+        return False, [unreadable]
+    findings = extra_packet_findings(packet, provenance)
+    if not findings:
+        return True, ["PASS [extra_packet]: no extra-packet provenance IDs"]
+    extra_ids = ",".join(row["claim_id"] for row in findings)
+    lines = [
+        f"FAIL [{row['id']}]: provenance cites {row['claim_id']} which is not "
+        "in packet excerpts/evidence_map/soft_gaps (exact match; prefix, sibling "
+        "lens, ordinal, substring, and distinctive-tag similarity do not count). "
+        f"extra_ids={extra_ids} recovery_state={row['recovery_state']} "
+        "next=story36_recovery (remove/rewrite, remove-extra, widen+reauthor, "
+        "or qualitative compare). Detection only: no rank, swap, widen, or "
+        "rewrite. Do not dispose as ACCEPTED_AS_CORRECT, FALSE_POSITIVE, "
+        "NOT_APPLICABLE, or HUMAN_ACCEPTED_RISK."
+        for row in findings
+    ]
+    return False, lines
+
+
 def _normalize_provenance_unit(text: str) -> str:
     text = re.sub(r"^\s*[*-]\s+", "", text or "")
     return re.sub(r"\s+", " ", text).strip().rstrip(".!?").lower()
+
+
+def _professional_experience_bullets(resume_text: str) -> list[str]:
+    """Return only PROFESSIONAL EXPERIENCE bullet lines.
+
+    Found 2026-09-19 on a fresh healthstream draft: `## CORE COMPETENCIES`
+    rendered as a bulleted list ("* Product Strategy & Roadmap Planning")
+    rather than the comma-separated inline form other drafts happened to use.
+    Nothing in the digest requires either format. The old blanket "any line
+    starting with '* '/'- ' in the whole document" extraction treated those
+    skill/category labels as factual accomplishment bullets needing a
+    citation, which they are not -- they are not claims, the same way an ATS
+    skills row isn't. Only PROFESSIONAL EXPERIENCE bullets need sentence-level
+    provenance; EDUCATION and PROFESSIONAL SUMMARY use no bullets at all.
+    """
+    lines = resume_text.splitlines()
+    in_experience = False
+    bullets: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_experience = stripped[3:].strip().casefold() == "professional experience"
+            continue
+        if in_experience and stripped.startswith(("* ", "- ")):
+            bullets.append(stripped[2:].strip())
+    return bullets
 
 
 def _cover_factual_sentences(text: str) -> list[str]:
@@ -708,11 +968,7 @@ def _check_sentence_level_provenance(folder: Path) -> tuple[bool, list[str]]:
                 covered.add(_normalize_provenance_unit(value))
         return covered
 
-    resume_units = [
-        line.strip()[2:].strip()
-        for line in resume_text.splitlines()
-        if line.strip().startswith(("* ", "- "))
-    ]
+    resume_units = _professional_experience_bullets(resume_text)
     cover_units = _cover_factual_sentences(letter_text)
     covered_resume = _covered("resume_claims", "bullet")
     covered_cover = _covered("cover_letter_claims", "sentence")
@@ -739,8 +995,41 @@ def _check_sentence_level_provenance(folder: Path) -> tuple[bool, list[str]]:
     return False, lines
 
 
+def _mapping_can_prove(item: str, claim_ids: list[str], excerpts: dict) -> bool:
+    """True when a mapped claim shares real wording with the JD line.
+
+    A remote or travel posting term, a limitation claim, and a mapping with
+    no distinctive overlap are not proof obligations. Stage 1 must not park a
+    draft for leaving those out. Implements FR-381 / FR-375.
+    """
+    from build_authoring_packet import (  # local: packet builder is heavy
+        _distinctive_overlap,
+        _force_empty_claim_scoring,
+    )
+
+    if _force_empty_claim_scoring(item) is not None:
+        return False
+    item_words = set(re.findall(r"[a-z]{4,}", (item or "").lower()))
+    saw_excerpt = False
+    for claim_id in claim_ids:
+        if "LIMITATION" in claim_id.upper():
+            continue
+        excerpt = excerpts.get(claim_id) if isinstance(excerpts, dict) else ""
+        if not isinstance(excerpt, str) or not excerpt.strip():
+            continue
+        saw_excerpt = True
+        overlap = _distinctive_overlap(
+            item_words,
+            set(re.findall(r"[a-z]{4,}", excerpt.lower())),
+        )
+        if overlap:
+            return True
+    # No excerpt text means we cannot show the mapping is noise. Keep the cite.
+    return not saw_excerpt
+
+
 def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
-    """Fail-closed: packet soft_gap / required claim_ids must be cited in provenance."""
+    """Fail when a mapped claim that can prove the line is unused."""
     lines: list[str] = []
     packet_path = folder / "authoring_packet.json"
     prov_path = folder / "claim_provenance.json"
@@ -787,13 +1076,15 @@ def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
                 return True
         return any(c.startswith(cid) or cid.startswith(c) for c in cited)
 
+    excerpts = packet.get("excerpts") if isinstance(packet.get("excerpts"), dict) else {}
     ok = True
     for sg in packet.get("soft_gaps") or []:
         if not isinstance(sg, dict):
             continue
         if (sg.get("class") or "SOFT") == "HARD":
             continue
-        item = (sg.get("item") or "")[:80]
+        full_item = sg.get("item") or ""
+        item = full_item[:80]
         ids = [c for c in (sg.get("claim_ids") or []) if isinstance(c, str) and c.strip()]
         if not ids:
             # extraction_empty / incomplete packet — surface but don't double-fail here
@@ -819,8 +1110,9 @@ def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
             ok = False
             continue
         unused = [c for c in ids if not _id_used(c)]
-        # Soft gap passes if at least one mapped claim_id is cited
-        if len(unused) == len(ids):
+        # Soft gap passes if at least one mapped claim_id is cited.
+        # A mapping that cannot prove the line is left out. FR-381.
+        if len(unused) == len(ids) and _mapping_can_prove(full_item, ids, excerpts):
             lines.append(
                 f"FAIL [optimization_bar]: soft_gap bridge unused — {item} "
                 f"(need one of: {', '.join(ids)})"
@@ -835,8 +1127,11 @@ def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
         ids = [c for c in (row.get("claim_ids") or []) if isinstance(c, str) and c.strip()]
         if not ids:
             continue
-        if all(not _id_used(c) for c in ids):
-            item = (row.get("jd_item") or "")[:80]
+        full_item = row.get("jd_item") or ""
+        if all(not _id_used(c) for c in ids) and _mapping_can_prove(
+            full_item, ids, excerpts
+        ):
+            item = full_item[:80]
             lines.append(
                 f"FAIL [optimization_bar]: required evidence unused — {item} "
                 f"(need one of: {', '.join(ids)})"
@@ -849,9 +1144,10 @@ def _check_optimization_bar_provenance(folder: Path) -> tuple[bool, list[str]]:
 
 
 def _check_packet_evidence_utilization(folder: Path) -> tuple[bool, list[str]]:
-    """Fail closed when a repeatedly mapped, high-priority packet claim is unused."""
+    """Forward unused high-priority claims; do not block Stage 1 or pad the resume."""
     packet_path = folder / "authoring_packet.json"
     prov_path = folder / "claim_provenance.json"
+    notes_path = folder / "stage1_forwarded_findings.json"
     if not packet_path.exists() or not prov_path.exists():
         return True, ["SKIP [evidence_utilization]: packet or provenance missing"]
     try:
@@ -863,9 +1159,20 @@ def _check_packet_evidence_utilization(folder: Path) -> tuple[bool, list[str]]:
         return False, [f"FAIL [evidence_utilization]: could not parse input: {exc}"]
 
     unused = report["high_priority_unused"]
+    payload = {
+        "schema": "stage1_forwarded_findings/v1",
+        "source": "evidence_utilization",
+        "unused_high_priority_claims": unused,
+        "high_priority_score": report["high_priority_score"],
+        "note": (
+            "Do not force these into the resume. The cover letter may use one "
+            "only if it is among the 1-2 strongest stories."
+        ),
+    }
+    notes_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     if unused:
-        return False, [
-            "FAIL [evidence_utilization]: high-priority packet evidence unused "
+        return True, [
+            "WARN [evidence_utilization]: unused high-priority claims forwarded "
             f"(score >= {report['high_priority_score']}): {', '.join(unused)}"
         ]
     return True, [
@@ -873,8 +1180,41 @@ def _check_packet_evidence_utilization(folder: Path) -> tuple[bool, list[str]]:
     ]
 
 
+def _resume_proof_text(resume_text: str) -> str:
+    """Experience bullets. The summary and Core Competencies are not claim rows."""
+    parts = re.split(r"(?im)^## professional experience\s*$", resume_text, maxsplit=1)
+    if len(parts) == 1:
+        return resume_text
+    tail = re.split(r"(?im)^## education\s*$", parts[1], maxsplit=1)
+    return tail[0]
+
+
+def _provenance_row_supports_term(provenance: dict, term: str) -> bool:
+    """True when a cited resume or letter row already contains the term."""
+    from jd_term_extractor import _term_present_stemmed
+
+    needle = term.lower()
+    for section, field in (("resume_claims", "bullet"), ("cover_letter_claims", "sentence")):
+        for row in provenance.get(section) or []:
+            if not isinstance(row, dict):
+                continue
+            text = str(row.get(field) or "")
+            claim_ids = [
+                claim_id for claim_id in row.get("claim_ids") or []
+                if isinstance(claim_id, str) and claim_id.strip()
+            ]
+            if text and claim_ids and _term_present_stemmed(needle, text.lower()):
+                return True
+    return False
+
+
 def _check_packet_ats_term_contract(folder: Path) -> tuple[bool, list[str]]:
-    """Fail closed when a packet-supported ATS term is absent from Resume.md."""
+    """Fail when a packet term is in the proof text without a cited row.
+
+    A term only in the summary or Core Competencies is not a proof sentence.
+    A term missing from the resume fails only when the contract names no claim.
+    A named claim that was left out stays left out. Implements FR-377 / FR-381.
+    """
     packet_path = folder / "authoring_packet.json"
     resume_path = folder / "Resume.md"
     provenance_path = folder / "claim_provenance.json"
@@ -897,50 +1237,165 @@ def _check_packet_ats_term_contract(folder: Path) -> tuple[bool, list[str]]:
     except (OSError, json.JSONDecodeError) as exc:
         return False, [f"FAIL [ats_term_contract]: could not read inputs: {exc}"]
 
-    missing = [
-        row["term"] for row in contract
-        if isinstance(row, dict)
-        and isinstance(row.get("term"), str)
-        and row["term"].strip()
-        and not _term_present_stemmed(row["term"].lower(), resume_text)
-    ]
-    if missing:
-        return False, [
-            "FAIL [ats_term_contract]: packet-supported JD terms missing from Resume.md: "
-            + ", ".join(missing)
-        ]
-    cited_resume_ids = {
-        claim_id
-        for row in provenance.get("resume_claims") or []
-        if isinstance(row, dict)
-        for claim_id in row.get("claim_ids") or []
-        if isinstance(claim_id, str) and claim_id.strip()
-    }
+    from submission_linter import ats_term_conflicts_with_hard_block
+
+    proof_text = _resume_proof_text(resume_text)
+    missing: list[str] = []
     unsupported: list[str] = []
     for row in contract:
         if not isinstance(row, dict) or not isinstance(row.get("term"), str):
+            continue
+        term = row["term"].strip()
+        if not term or ats_term_conflicts_with_hard_block(term):
             continue
         support_ids = [
             claim_id for claim_id in row.get("claim_ids") or []
             if isinstance(claim_id, str) and claim_id.strip()
         ]
-        if support_ids and not any(
-            any(
-                cited == support
-                or cited.startswith(support)
-                or support.startswith(cited)
-                or "-".join(cited.split("-")[:2]) == "-".join(support.split("-")[:2])
-                for cited in cited_resume_ids
-            )
-            for support in support_ids
-        ):
-            unsupported.append(row["term"])
+        present = _term_present_stemmed(term.lower(), resume_text)
+        if not present:
+            # No named claim means the contract required the word itself.
+            # A named claim that was left out of the draft stays left out.
+            if not support_ids:
+                missing.append(term)
+            continue
+        if not _term_present_stemmed(term.lower(), proof_text):
+            continue
+        if not _provenance_row_supports_term(provenance, term):
+            unsupported.append(term)
+    if missing:
+        return False, [
+            "FAIL [ats_term_contract]: packet-supported JD terms missing from Resume.md: "
+            + ", ".join(missing)
+        ]
     if unsupported:
         return False, [
             "FAIL [ats_term_contract]: terms lack a supporting resume provenance claim: "
             + ", ".join(unsupported)
         ]
     return True, ["PASS [ats_term_contract]: all packet-supported JD terms are in Resume.md"]
+
+
+def _claim_employers() -> dict[str, str]:
+    """Map claim id to employer slug. Empty when the catalog is absent."""
+    path = _REPO_ROOT / "data" / "master_claims.json"
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    employers: dict[str, str] = {}
+    for claim_id, row in payload.items():
+        if isinstance(row, dict):
+            employers[str(claim_id)] = str(row.get("employer") or "").strip().lower()
+    return employers
+
+
+def attach_unsupported_ats_cites(
+    folder: Path,
+    employers: dict[str, str] | None = None,
+) -> list[str]:
+    """Cite a packet claim on the bullet that already contains an unsupported term.
+
+    Only adds an id whose employer matches a claim already on that bullet.
+    Does not add a sentence and does not call a model. Returns the terms it
+    attached. Implements FR-377.
+    """
+    from jd_term_extractor import _term_present_stemmed
+
+    packet_path = folder / "authoring_packet.json"
+    provenance_path = folder / "claim_provenance.json"
+    if not packet_path.is_file() or not provenance_path.is_file():
+        return []
+    try:
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    contract = packet.get("ats_term_contract") if isinstance(packet, dict) else None
+    claims = provenance.get("resume_claims") if isinstance(provenance, dict) else None
+    if not isinstance(contract, list) or not isinstance(claims, list):
+        return []
+    if employers is None:
+        employers = _claim_employers()
+    attached: list[str] = []
+    changed = False
+    for row in contract:
+        if not isinstance(row, dict) or not isinstance(row.get("term"), str):
+            continue
+        term = row["term"].strip()
+        support_ids = [
+            claim_id
+            for claim_id in row.get("claim_ids") or []
+            if isinstance(claim_id, str) and claim_id.strip()
+        ]
+        if not term or not support_ids:
+            continue
+        for entry in claims:
+            if not isinstance(entry, dict):
+                continue
+            bullet = str(entry.get("bullet") or "")
+            if not bullet or not _term_present_stemmed(term.lower(), bullet.lower()):
+                continue
+            current = [
+                claim_id
+                for claim_id in entry.get("claim_ids") or []
+                if isinstance(claim_id, str) and claim_id.strip()
+            ]
+            current_employers = {
+                employers.get(claim_id, "")
+                for claim_id in current
+                if employers.get(claim_id, "")
+            }
+            if not current_employers:
+                continue
+            already = any(
+                cited == support
+                or cited.startswith(support)
+                or support.startswith(cited)
+                or "-".join(cited.split("-")[:2]) == "-".join(support.split("-")[:2])
+                for support in support_ids
+                for cited in current
+            )
+            if already:
+                break
+            matches = [
+                support
+                for support in support_ids
+                if employers.get(support, "") in current_employers
+            ]
+            term_tokens = [
+                token
+                for token in re.findall(r"[a-z0-9]+", term.lower())
+                if len(token) > 3
+            ]
+
+            def _overlap(support: str) -> int:
+                lowered = support.lower()
+                return sum(1 for token in term_tokens if token in lowered)
+
+            overlapped = [support for support in matches if _overlap(support) > 0]
+            if overlapped:
+                chosen = max(overlapped, key=_overlap)
+            elif len(matches) == 1:
+                chosen = matches[0]
+            else:
+                chosen = ""
+            if not chosen:
+                continue
+            entry["claim_ids"] = [*current, chosen]
+            attached.append(term)
+            changed = True
+            break
+    if changed:
+        provenance_path.write_text(
+            json.dumps(provenance, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    return attached
 
 
 # ---------------------------------------------------------------------------

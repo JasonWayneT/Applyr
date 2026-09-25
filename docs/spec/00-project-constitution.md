@@ -29,8 +29,8 @@ Use this file to preserve project intent across agents, sessions, rebuilds, and 
 - Frontend: React / Vite / Tailwind CSS
 - Backend: Node.js / Express
 - Database: SQLite (via better-sqlite3)
-- Automation: Python (batch pipeline)
-- LLM Providers: Gemini (Google), Perplexity (Search)
+- Automation: Python scripts (`scripts/`); submissions run through `scripts/run_submission.py` per `docs/ACTIVE_WORKFLOW.md`
+- LLM Providers: CSV/queue Stage 0 and Stage 1 use Agy (`APPLYR_STAGE0_SUBSCRIPTION_ADAPTER=1`). Groq and Gemini API keys in Settings are leftover cascade / scout-research surfaces; free-tier keys do not serve production pipeline calls (CR-121). Paid Settings keys are a separate future if needed. Local (Ollama) remains available for offline tasks.
 - Package manager: npm
 - Style system: Applyr Design System (Nature-rooted, soft minimalism)
 

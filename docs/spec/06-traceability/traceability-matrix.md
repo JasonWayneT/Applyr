@@ -248,6 +248,29 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `FR-248` | CR-053/055 | Gate prefs preserved on UI materialize | `server/domain/jobSearchPrefs.ts`, `scripts/prefs_rollout.py` | implemented |
 | `IMP-CR-053-055` | CR-053/054/055 | FEAT-002, FEAT-004, FEAT-009 | `docs/spec/08-implementation/IMP-CR-053-055-fit-gate-overhaul.md` | in_progress |
 | `FR-252` | CR-074 | Deterministic Stage 0 builder | `scripts/build_stage0_fit_gate.py`, `scripts/stage0_db_gate.py`, `scripts/stage0_prefs_gate.py` | implemented |
+| `FR-278` | CR-108 | Deterministic Stage 0 evidence index | `scripts/stage0_evidence_cascade.py`, `scripts/build_stage0_fit_gate.py`, `scripts/stage0_confirmations.py` | in_progress |
+| `FR-279` | CR-108 | Stage 0 provider/model policy | `scripts/stage0_evidence_cascade.py`, `server/services/stage0Policy.ts`, `src/components/SettingsView.tsx` | in_progress |
+| `FR-280` | CR-108 | Batched structured Stage 0 classification | `scripts/stage0_evidence_cascade.py`, `scripts/build_stage0_fit_gate.py` | in_progress |
+| `FR-281` | CR-108 | Asymmetric HARD safety policy | `scripts/stage0_evidence_cascade.py`, `scripts/stage0_confirmations.py`, `server/routes/reviewCenter.ts` | in_progress |
+| `FR-282` | CR-108 | Durable checkpoint and resume behavior | `scripts/stage0_checkpoint.py`, `scripts/build_stage0_fit_gate.py` | in_progress |
+| `FR-283` | CR-108 | Canonical skill memory and grouped confirmations | `scripts/stage0_confirmations.py`, `server/repository/reviewCenterRepository.ts` | in_progress |
+| `FR-284` | CR-108 | Attestation and verified-evidence boundary | `scripts/stage0_confirmations.py`, `server/repository/reviewCenterRepository.ts`, `server/migrations/021_add_evidence_promotion_proposals.sql` | implemented |
+| `FR-285` | CR-108 | Review Center and harness resolver parity | `server/routes/reviewCenter.ts`, `src/pages/ReviewCenterView.tsx`, `scripts/stage0_harness.py` | in_progress |
+| `NFR-009` | CR-108 | Stage 0 golden accuracy and unsafe-HARD release gate | `scripts/check_fit_rubric_golden_set.py`, `scripts/test_stage0_provider_golden.py` | in_progress |
+| `NFR-010` | CR-108 | Stage 0 aggregate provider telemetry | `scripts/build_stage0_fit_gate.py`, `server/routes/llmUsage.ts` | implemented |
+| `NFR-011` | CR-108 | Stage 0 interruption and provider-failure recovery | `scripts/stage0_checkpoint.py`, `scripts/test_stage0_checkpoint_failures.py` | implemented |
+| `NFR-012` | CR-108 | Stage 0 cloud payload privacy boundary | `scripts/stage0_evidence_cascade.py`, `scripts/test_stage0_evidence_cascade.py` | implemented |
+| `DATA-002` | CR-108 | Stage 0 request, response, judgment, and hash checkpoints | `server/migrations/019_add_stage0_checkpoints.sql`, `scripts/stage0_checkpoint.py` | implemented |
+| `DATA-003` | CR-108 | Canonical skill memory and promotion proposals | `server/migrations/018_add_review_center.sql`, `server/migrations/021_add_evidence_promotion_proposals.sql` | implemented |
+| `DATA-004` | CR-108 | Pending confirmation opportunity context | `server/migrations/018_add_review_center.sql`, `server/repository/reviewCenterRepository.ts` | implemented |
+| `AC-358`–`AC-366` | CR-108 | Cascade, safety, checkpoint, confirmation, hard-gate action, and shared-resolution acceptance cases | `scripts/test_stage0_evidence_cascade.py`, `scripts/test_stage0_confirmations.py`, `scripts/test_stage0_checkpoint_failures.py`, `tests/unit/reviewCenterRepository.test.ts` | implemented |
+| `AC-367`–`AC-373` | CR-108 | Provider fixtures, policy parity, crash recovery, isolated API, promotion safety, documentation, and attributable cleanup | `scripts/test_stage0_provider_golden.py`, `scripts/test_stage0_provider_policy.py`, `scripts/test_stage0_checkpoint_failures.py`, `tests/unit/reviewCenterRoute.test.ts`, read-only SQLite audit | implemented |
+| `FR-286` | CR-109 | Named-tool extraction precision (label/qualifier guards, stopwords, blocked-tool token containment) | `scripts/blocked_tools.py`, `scripts/stage0_confirmations.py` | implemented |
+| `FR-287` | CR-109 | `BAD_DATA` first-class review answer and durable suppression | `scripts/stage0_confirmations.py`, `scripts/stage0_harness.py`, `server/repository/reviewCenterRepository.ts`, `server/routes/reviewCenter.ts`, `server/migrations/022_add_bad_data_answer.sql`, `src/pages/ReviewCenterView.tsx` | implemented |
+| `FR-288` | CR-109 | Single-tap answers with auto-advance transition | `src/pages/ReviewCenterView.tsx`, `src/index.css` | implemented |
+| `FR-289` | CR-109 | Completed-card answer visibility and in-place correction | `server/repository/reviewCenterRepository.ts`, `src/lib/reviewCenter.ts`, `src/types/reviewCenter.ts`, `src/pages/ReviewCenterView.tsx` | implemented |
+| `DATA-005` | CR-109 | Review answers only in gitignored local SQLite | `.gitignore` (`*.sqlite*`), `server/migrations/022_add_bad_data_answer.sql` | implemented |
+| `AC-374`–`AC-378` | CR-109 | Extraction precision, BAD_DATA durability, per-type vocabulary, answer surfacing, and correction-trail acceptance cases | `scripts/test_stage0_confirmations.py`, `tests/unit/reviewCenterRepository.test.ts`, `tests/unit/reviewCenterRoute.test.ts`, `src/lib/reviewCenter.test.ts` | implemented |
 | `FR-253` | CR-074 | Authoring packet builder (fail-closed) | `scripts/build_authoring_packet.py`, `scripts/contracts/authoring_packet_schema.json` | implemented |
 | `FR-254` | CR-074 | Single cloud author from packet | `scripts/author_from_packet.py`, `data/authoring_rule_digest.md`, `.claude/skills/generate-submission/SKILL.md` v2.1.0 | implemented |
 | `FR-255` | CR-074 | Scripts-first Stage 2 default (superseded as *entry sequencing* by CR-076–084 / `run_submission.py`; workers still run under Mech 2D) | `scripts/run_submission.py --resume` → Mech → `verify_submission.py`; debug: `author_from_packet.py --verify-only` | implemented (workers); sequencing superseded by FR-257+ |
@@ -294,7 +317,156 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 | `AC-343`–`AC-352` | CR-106 | Interview parse, cascade notify, task-override defaults | `tests/unit/interviewDateExtractor.test.ts`, `scripts/test_llm_provider_cascade.py`, `scripts/test_resolve_task_providers.py` | implemented |
 | `FR-276`–`FR-277` | CR-107 | Renamed WAITING_FOR_HUMAN to NEEDS_DISPOSITION; AGENTS.md rule reframed as retry behavior | `scripts/workflow/runner.py`, `scripts/workflow/policy.py`, `scripts/run_submission.py`, `scripts/contracts.py`, `scripts/stabilization_orchestrator_corpus.py`, `AGENTS.md` | implemented |
 | `AC-353`–`AC-357` | CR-107 | Rename verified in live code, WAITING_FOR_LLM untouched, full suite green | `scripts/test_workflow_authority.py` | implemented |
+| `FR-290`–`FR-291` | CR-111 | Instruction authority contradictions and stale shared facts resolved | `AGENTS.md`, `docs/AGENTS.md`, `docs/ACTIVE_WORKFLOW.md`, `docs/spec/02-requirements-registry.md`, `docs/spec/05-change-requests/README.md`, `docs/spec/00-project-constitution.md`, `.claude/agents/` | implemented |
+| `FR-292` | CR-111 | One canonical skill copy with pointer stubs across harness directories | `.codex/skills/`, `.claude/skills/`, `.agents/skills/submission-no-ai-slop/SKILL.md` | implemented |
+| `FR-293` | CR-111 | Instruction drift guard and verification-path integration | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py`, `scripts/check_context_pack_freshness.py` | implemented |
+| `FR-294` | CR-111 | `docs/AGENTS.md` defers to root authority and uses a repo-relative SDD link | `docs/AGENTS.md` | implemented |
+| `FR-295` | CR-098 | Generic self-referential opening-hook WARN | `FEAT-013`, `scripts/submission_linter.py`, `scripts/test_submission_linter.py`, `.agents/skills/submission-no-ai-slop/SKILL.md`, `scripts/author_from_packet.py` preamble | implemented |
+| `NFR-013` | CR-111 | No submission behavior change; guard and tests are isolated | `scripts/check_instruction_drift.py`, `scripts/test_check_instruction_drift.py` | implemented |
+| `AC-379`–`AC-386`, `AC-388`–`AC-391` | CR-111 | Authority, canonicalization, drift, and docs acceptance checks | focused drift tests, real-tree drift check, pointer inspection | implemented |
+| `AC-387` | CR-111 | Live Claude Code and Codex skill-loading verification | harness-bridge session 009 R52 (Claude PASS), R53 (Codex PASS) | implemented |
+| `FR-296` | CR-112 | Reject invented sequential Stage 0 batch item IDs | `scripts/stage0_evidence_cascade.py`, `scripts/test_stage0_evidence_cascade.py` | in_progress |
+| `FR-297` | CR-112 | Compact author-only omitted-candidate summaries before excerpts; do not ready a packet after dropping `claim_constraints` | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py` | in_progress |
+| `FR-298` | CR-112 | Read-only detector for wiped-constraint ready packets | `scripts/audit_packet_integrity.py`, `scripts/test_audit_packet_integrity.py` | in_progress |
+| `AC-393`–`AC-395` | CR-112 | Sequential-ID reject/shuffle/fallback, budget fail-closed, live packet audit | focused Python tests + 2026-09-10 `data/submissions/` scan | in_progress |
+| `FR-299` | CR-112 | generate-submission skill Stage 0/2 prose: per-slug orchestrator, forbidden Stage 1 loads, qualitative read before hm.critical_read | `.codex/skills/generate-submission/SKILL.md`, `scripts/check_instruction_drift.py` | in_progress |
+| `AC-396` | CR-112 | Skill Stage 0 invokes run_submission.py per slug; Stage 1 forbidden loads listed; Stage 2 qualitative read gate explicit; drift check passes | `.codex/skills/generate-submission/SKILL.md`, `scripts/check_instruction_drift.py` | in_progress |
+| `FR-300` | CR-112 | Batch review without WE; never-default; 3-company cap | `.claude/workflows/generate-submission-batch.js`, `scripts/test_cr112_story22.py` | in_progress |
+| `AC-397` | CR-112 | reviewPrompt forbids WE; whenToUse never-default; allowLargeBatch cap | `scripts/test_cr112_story22.py` | in_progress |
+| `FR-301` | CR-112 | AGENTS.md "Processing job descriptions today" trigger: per-slug orchestrator, no per-JD spawn, no conversion-ready-pass on generate-submission | `AGENTS.md` | in_progress |
+| `AC-398` | CR-112 | Trigger phrase verified in root AGENTS.md only; CLAUDE.md unchanged; prohibited behaviors explicit | `AGENTS.md` | in_progress |
+| `FR-303` | CR-112 | Omitted reason-codes in packet; full ranking in sibling trace | `scripts/build_authoring_packet.py`, `scripts/test_cr112_story32.py` | in_progress |
+| `AC-400` | CR-112 | Pearl-like top2_cutoff, prompt has no scores, score_zero TRACE-only | `scripts/test_cr112_story32.py` | in_progress |
+| `FR-304` | CR-112 | Advisory evidence-swap report from selection trace | `scripts/report_evidence_swaps.py`, `scripts/test_cr112_story33.py` | in_progress |
+| `AC-401` | CR-112 | Label map + boilerplate filter + no draft rewrite | `scripts/test_cr112_story33.py` | in_progress |
+| `FR-305` | CR-112 | Admin-line skip (eligibility-framed fingerprint / nights-and-weekends) | `scripts/build_stage0_fit_gate.py`, `scripts/build_authoring_packet.py`, `scripts/test_cr112_story34.py` | in_progress |
+| `AC-402` | CR-112 | Fingerprint fixture empty claim_ids; product/years negatives | `scripts/test_cr112_story34.py` | in_progress |
+| `FR-306` | CR-112 | Advisory trailing-gerund rate | `scripts/report_resume_gerund_rate.py`, `scripts/test_cr112_story51.py` | in_progress |
+| `AC-403` | CR-112 | Story 5.1 advisory trailing-gerund acceptance | `scripts/test_cr112_story51.py`, `python scripts/report_resume_gerund_rate.py --json --root data/submissions` | in_progress |
+| `FR-310` | CR-112 | Frozen sanitized offline eval set | `scripts/run_cr112_eval.py`, `scripts/test_cr112_story61.py`, `tests/fixtures/cr112_eval/` | in_progress |
+| `FR-311` | CR-112 | Separate harness/API token-cost columns | `scripts/run_cr112_eval.py`, `scripts/test_cr112_story61.py` | in_progress |
+| `AC-407` | CR-112 | Five-folder sanitized materialization, default assemble-off, production SQLite refusal | `scripts/test_cr112_story61.py` | in_progress |
+| `AC-408` | CR-112 | Zero-call paid opt-in, separate totals, bytes_div_4_estimate | `scripts/test_cr112_story61.py` | in_progress |
+| `FR-302` / `AC-399` | CR-112 | Extra-packet WARN (superseded 2026-09-11) | `scripts/packet_closed_world.py`, `scripts/test_cr112_story31.py` | superseded |
+| `FR-312` / `AC-409` | CR-112 | Extra-packet detection as Stage 1 completion block; detection-only | `scripts/author_from_packet.py` (`run_verify_only`), `scripts/packet_closed_world.py`, `scripts/test_cr112_story31.py` | in_progress |
+| `FR-313` / `AC-410` | CR-112 | Deterministic six-axis comparator | `scripts/evidence_dominance.py`, `scripts/build_authoring_packet.py`, `scripts/test_cr112_story35.py` | in_progress |
+| `FR-314` / `AC-411` | CR-112 | Pre-authoring REPLACE into packet + TRACE | `scripts/build_authoring_packet.py`, `scripts/test_cr112_story35.py` | in_progress |
+| `FR-315` / `AC-412` | CR-112 | Closed-world recovery: remove / rewrite / widen / human | `scripts/closed_world_recovery.py`, `scripts/workflow/runner.py` (`run_stage1_validate`), `scripts/test_cr112_story36.py` | in_progress |
+| `FR-316` / `AC-413` | CR-112 | Cost eligibility, no free→paid fallback, receipt-aware cost-pause status, and authenticated backend plus compact Review Center start/resume/status/finalize operator | `scripts/cost_eligibility.py`, `scripts/build_stage0_fit_gate.py`, `scripts/stage0_evidence_cascade.py`, `scripts/contracts.py`, `scripts/run_submission.py`, `server/services/runSubmissionRunner.ts`, `server/routes/runSubmission.ts`, `src/lib/workflowOperator.ts`, `src/components/WorkflowOperator.tsx`, `src/pages/ReviewCenterView.tsx`, `scripts/test_cr112_story71.py`, `tests/unit/runSubmissionRunner.test.ts`, `tests/unit/runSubmissionRoute.test.ts`, `src/lib/workflowOperator.test.ts` | in_progress |
+| `FR-317` / `AC-414` | CR-112 | Cost telemetry; unknown is not zero | `scripts/utils.py`, `scripts/contracts.py`, `scripts/test_cr112_story71.py` | in_progress |
+| `FR-326` / `AC-424` | CR-112 | Operator free-tier attestation (groq/gemini) as the concrete `certify_zero_charge` path | `scripts/cost_eligibility.py`, `scripts/utils.py`, `scripts/test_cr112_story73.py`, `tests/unit/profileFreeTierAssertions.test.ts`; design addendum `CR-112-cost-pause-state-design.md` | in_progress |
+| `FR-318` / `AC-415` | CR-112 | CONVERT-READY floors on Stage 2/3 completion | `scripts/contracts.py`, `scripts/workflow/runner.py`, `scripts/check_submission_status.py`, `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`, `scripts/test_check_submission_status.py`; design `CR-112-completion-contract-quality-floor-defect.md` | draft |
+| `SEC-006` / `AC-416` | CR-112 | Privacy-safe practice identity; no silent placeholder | `scripts/utils.py`, `scripts/author_from_packet.py`, `scripts/quality_checker.py`, `scripts/workflow/runner.py`, `scripts/test_practice_identity.py`; design `CR-112-practice-identity-portability-defect.md` | implemented |
+| `FR-319` / `AC-417` | CR-112 | Lean digest pair-restatement instruction; keep strongest fact, change language | `scripts/generate_authoring_rule_digest.py`, `scripts/test_generate_authoring_rule_digest.py`, `scripts/test_author_from_packet.py`; design `CR-112-lean-digest-pair-restatement-design.md` | implemented |
+| `FR-320` / `AC-418` | CR-112 | Consumed extraction-review durable on Stage 0 restart; cascade/extraction-review `created_at` non-empty string validation | `scripts/stage0_requirement_extraction_review.py`, `scripts/stage0_evidence_cascade.py`, `scripts/build_stage0_fit_gate.py`, `scripts/test_cr112_stage0_extraction_review.py`, `scripts/test_cr112_story71.py`; design `CR-112-extraction-review-consumed-restart-design.md` | implemented |
+| `FR-321` / `AC-419` | CR-112 | Ranking characterization corpus; Camunda known-defect, not desired rank | `scripts/test_cr112_ranking_characterization.py`, `scripts/run_all_tests.py`; investigation `CR-112-ranking-investigation-savings-vs-messaging.md` | implemented |
+| `FR-322` / `AC-420` | CR-112, CR-113 | Hash-bound rubric score provenance; current-rubric metadata; timezone score timestamp; reviewer-run metadata; complete criterion breakdown; band-gated blind read; fail-closed disagreement | `scripts/contracts.py`, `scripts/workflow/runner.py`, `scripts/test_contracts.py`, `scripts/test_workflow_authority.py`; designs `CR-112-score-provenance-design.md`, `CR-113-rubric-scorecard-metadata-gate.md` | verified |
+| `FR-323` / `AC-421` | CR-112 | Ranking formula correction for Camunda savings-vs-messaging defect with metric-positive controls preserved | `scripts/build_authoring_packet.py`, `scripts/test_cr112_ranking_characterization.py`; investigation `CR-112-ranking-investigation-savings-vs-messaging.md` | verified |
+| `FR-324` / `AC-422` | CR-112 | Catalog validator alignment with CR-094 claims-index contract and private catalog smoke | `scripts/catalog_validator.py`, `scripts/verify_master_claims.py`, `scripts/test_catalog_validator.py` | verified |
+| `FR-325` / `AC-423` | CR-112 | Unbracketed placeholder header repair before H-001 and stacked-header cleanup | `scripts/apply_resume_header.py`, `scripts/test_practice_identity.py`; design `CR-112-unbracketed-placeholder-header-stack-defect.md` | verified |
+| `NFR-015` | CR-112 | Offline default; groq/gemini unknown until declared; `api_cents` null when unknown | same implementation path as FR-316/FR-317 | in_progress |
 
+
+## CR-114 Stage 0 learning traceability
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-327` / `AC-425` | CR-114 | `scripts/build_stage0_fit_gate.py`, `scripts/retrain_stage0.py` | `scripts/test_retrain_stage0.py`, `scripts/test_cr112_stage0_extraction_review.py` | in_progress |
+| `FR-328` / `AC-426` | CR-114 | Applyr classifier contract v2: leftover buckets include visible `junk` (never culture hook); trait-without-duty → required; AI leftover retrieval includes `aiProjects.md`; default transport native Agy print+schema; extraction and evidence call sites behind `APPLYR_STAGE0_SUBSCRIPTION_ADAPTER` (default off) | `scripts/test_stage0_classifier_contract.py`, `scripts/test_stage0_subscription_adapter.py`, `scripts/test_stage0_subscription_extraction.py`, `scripts/test_evidence_context.py`; 8-JD archived Agy schema smoke 2026-09-17 (switch off, no silent line loss; timeouts/exhaustion fail-closed); 30-JD replay not run | in_progress |
+| `FR-329` / `AC-427` | CR-114 | `scripts/stage0_evidence_matcher.py` (shadow); Review Center `decision_basis`/`uncertainty`; cascade adapter behind off switch | `scripts/test_stage0_evidence_matcher.py`, `scripts/test_stage0_subscription_evidence.py`, `scripts/test_stage0_confirmations.py`, `src/lib/reviewCenter.test.ts`; sitting-1 8 PASS; sittings 2–3 harvested, skip-dense 30 not representative; 30-JD replay not run | in_progress |
+
+## CR-117 Years range low end
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-332` / `AC-430` / `AC-431` | CR-117 | `scripts/seniority_gate.py` range low-end; age/tenure rejection; `scripts/audit_years_ceiling.py` flags wrong numbers | `scripts/test_seniority_years_gate.py`, `scripts/test_audit_years_ceiling.py` | in_progress |
+
+## CR-115 Scored-path heading leak
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-330` / `AC-428` | CR-115 | `_divert_scored_chrome` drops heading/fragment/board chrome from required/preferred before scoring. Leftover junk semantics unchanged. Independent QA has not checked stories. | `scripts/test_build_stage0_fit_gate.py::TestCR115ScoredChrome`; sitting-1 Accuity/1uphealth fixtures | in_progress |
+
+## CR-116 Retrieval coverage
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-331` / `AC-429` | CR-116 | `build_evidence_context` force-includes corpus-backed distinctive tokens and windows huge inventory chunks; `retrieval_coverage` is not AI-token-gated. Independent QA has not checked stories. Replay is not a promotion gate while Acquia Jira/exec can starve. | `scripts/test_evidence_context.py::RetrievalCoverageTests` | in_progress |
+
+## CR-118 False skips and heading harvest
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-337` / `AC-435` | CR-118 | Exact normalized company match in `stage0_prefs_gate._check_blocked_company` and `batch_pipeline.passes_jd_keyword_gate`; blank never matches | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_blocked_companies.py` | in_progress |
+| `FR-338` / `AC-436` | CR-118 | People-gate filters negated-role and other-managers' reports; `network_page` goes to flags | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_industry_semantic.py` | in_progress |
+| `FR-339` / `AC-437` | CR-118 | Preferred `"also great to have"` header; inline `"is required"`; harvest heading_changed; replay reason agreement; `claude_opus_jason_approved` | `scripts/test_cr118_gate_false_skips.py`, `scripts/test_export_stage0_adjudication.py`, `scripts/stage0_cr118_report.py` | in_progress |
+
+## CR-119 CSV drop queue
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-340` / `AC-438` | CR-119 | `scripts/ingest_csv_queue.py`, `scripts/csv_ingest.py`, `csv_ingest_ledger` | `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-341` / `AC-439` / `AC-446` | CR-119 | `validate_row`, `record_quarantine`, closed error codes | `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-342` / `AC-440` / `AC-445` | CR-119 | `write_jd`, `resolve_opportunity`, skip ledger + folder + queue dedup | `scripts/test_csv_ingest.py`, `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-343` / `AC-441` / `NFR-016` | CR-119 | `claim_pack`, heartbeat, release, fencing, `queue_claim.py` | `scripts/test_pipeline_queue.py` | implemented |
+| `FR-344` / `AC-442` / `AC-444` / `AC-447` / `AC-448` | CR-119 | `queue_lock.py`, `run_queue_worker.py`, Job Object / process group, status mirror | `scripts/test_queue_lock.py`, `scripts/test_run_queue_worker.py` | implemented |
+| `FR-345` / `AC-443` | CR-119 | `pipelineQueueRepository.ts`, `/api/pipeline-queue/*`, `PipelineQueuePanel` | `tests/unit/pipelineQueueRepository.test.ts`, `tests/unit/pipelineQueueRoute.test.ts`, `src/lib/pipelineQueue.test.ts` | implemented |
+| `FR-346` / `AC-449` | CR-119 | `paused_at`, `_paused_should_promote`, migration `026` | `scripts/test_pipeline_queue.py` | implemented |
+| `FR-347` / `AC-450` | CR-119 | `POST /api/pipeline-queue/upload`, `pipelineQueueUpload.ts`, panel upload | `tests/unit/pipelineQueueRoute.test.ts` | implemented |
+| `DATA-006` / `SEC-007` | CR-119 | migration `025`/`026`, `data/inbox/`, `data/queue_locks/`, no PII in API or logs | `tests/unit/pipelineQueueMigration.test.ts`, `scripts/test_pipeline_queue.py` | implemented |
+
+## CR-123 Already-applied queue dedup
+
+Extends CR-119 `FR-342` / `AC-440`. Those IDs stay as written.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-361` / `AC-470` / `AC-476` | CR-123 | Ingest Applied+ = no queue row / folder / skip ledger; pre-apply reuses slug | `scripts/test_csv_ingest.py`, `scripts/test_ingest_csv_queue.py` | implemented |
+| `FR-362` / `AC-471` | CR-123 | Archive/submissions and archive/skipped block new pending_review and new queued rows | `scripts/test_csv_ingest.py` | implemented |
+| `FR-363` / `AC-472` | CR-123 | Existing Applied+ queue row → `done`; claim/worker refuse | `scripts/test_pipeline_queue.py`, `scripts/test_run_queue_worker.py` | implemented |
+| `FR-364` / `AC-473` | CR-123 | `applyJobStatusUpdate` Applied+ closes matching queue; Backlog/Drafted do not | `tests/unit/jobStatusService.test.ts` | implemented |
+| `FR-365` / `AC-474` | CR-123 | Stage 0 same-posting Applied+ already-handled; different-role flag stays; cooldown/Self-Rejected stay | `scripts/test_stage0_db_gate.py`, `scripts/test_build_stage0_fit_gate.py`, `scripts/test_workflow_authority.py`, `scripts/test_run_queue_worker.py`, `scripts/test_stage0_skip_ledger.py` | implemented |
+| `FR-366` / `AC-475` | CR-123 | Reconcile Applied+ / archive / SKIPPED ghosts without a new CSV | `scripts/test_pipeline_queue.py`, `scripts/test_ingest_csv_queue.py` | implemented |
+
+## CR-124 Conversion-risk chrome
+
+Narrows which nouns CR-121 `FR-355` treats as a required product. CR-125 supersedes the withhold.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-367` / `AC-477` | CR-124 | Employer, section header, and OKR/MVP are not named tools and do not `risk` | `scripts/test_stage0_confirmations.py`, `scripts/test_build_stage0_fit_gate.py` | implemented |
+| `FR-368` / `AC-478` | CR-124 | Dynamics and Delta Lake stay in the reason list. The withhold is superseded by CR-125 | `scripts/test_build_stage0_fit_gate.py` | superseded |
+| `FR-369` / `AC-479` | 2026-09-22 | 40% bypass line blocks only the overclaim sentence | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+| `FR-370` / `AC-480` | 2026-09-22 | Story bans attach, customer discovery claim blocks | `scripts/we_acc_index.py`, `scripts/submission_linter.py`, `scripts/test_we_acc_index.py`, `scripts/test_submission_linter.py` | implemented |
+| `FR-371` / `AC-481` | 2026-09-22 | Finished packet saves itself into the app | `scripts/run_queue_worker.py`, `scripts/pipeline_queue.py`, `scripts/test_run_queue_worker.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-372` / `AC-482` | 2026-09-22 | One sentence per row. Waiting labels superseded by FR-382 | `server/repository/pipelineQueueRepository.ts`, `src/components/PipelineQueuePanel.tsx` | superseded |
+| `FR-373` / `AC-483` | 2026-09-22 | Worker keeps going until nothing can move | `scripts/run_queue_worker.py`, `scripts/pipeline_queue.py`, `scripts/test_run_queue_worker.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-374` / `AC-484` | 2026-09-22 | Example lists anchored by a catalog tool do not withhold | `scripts/build_stage0_fit_gate.py`, `scripts/pipeline_queue.py`, `scripts/workflow/runner.py`, `scripts/test_build_stage0_fit_gate.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-375` / `AC-485` | 2026-09-23 | Same blocking findings restore the previous draft. Changed findings keep the new draft | `scripts/author_from_packet.py`, `scripts/run_queue_worker.py`, `scripts/test_run_queue_worker.py` | implemented |
+| `FR-376` / `AC-486` | 2026-09-22 | Blank provenance company is copied from the Stage 0 gate | `scripts/claim_provenance.py`, `scripts/test_claim_provenance.py` | implemented |
+| `FR-377` / `AC-487` | 2026-09-22 | Present ATS term gets its packet cite before a repair rewrite | `scripts/author_from_packet.py`, `scripts/run_queue_worker.py`, `scripts/test_author_from_packet.py` | implemented |
+| `FR-378` / `AC-488` | 2026-09-23 | Domain-years skips without a card. A timeout retries four times after a wait. Identical findings park | `scripts/build_stage0_fit_gate.py`, `scripts/run_stage1_repair.py`, `scripts/run_queue_worker.py`, `scripts/build_stage1_repair_prompt.py`, `scripts/test_build_stage0_fit_gate.py`, `scripts/test_pipeline_queue.py`, `scripts/test_run_stage1_repair.py` | implemented |
+
+## CR-125 Decide now, correct later
+
+The queue decides from today's work experience. Review Center does not hold it.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-379` / `AC-489` | CR-125 | Unknown tools stay unused and do not open a card | `scripts/build_stage0_fit_gate.py`, `scripts/test_stage0_confirmations.py` | implemented |
+| `FR-380` / `AC-490` | CR-125 | One card per tool that stopped jobs. I have used this writes work experience | `server/repository/reviewCenterRepository.ts`, `src/pages/ReviewCenterView.tsx`, `tests/unit/reviewCenterRepository.test.ts` | implemented |
+| `FR-381` / `AC-491` | CR-125 | Missing lines count as zero. Written gates skip. Questions do not hold the queue | `scripts/evidence_scale.py`, `scripts/build_stage0_fit_gate.py`, `scripts/pipeline_queue.py`, `scripts/test_pipeline_queue.py` | implemented |
+| `FR-382` / `AC-492` | CR-125 | Pipeline shows Continuing, Skipped, Running, or Failed | `server/repository/pipelineQueueRepository.ts`, `src/components/PipelineQueuePanel.tsx`, `src/pages/ReviewCenterView.tsx` | implemented |
+
+## CR-126 Cited spans stay whole
+
+A shortened career card no longer ships a number without its unit or a landing page without the engineering-built clause. The draft is checked against those spans. Evidence 0 on a required line counts under the fit floor.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-383` / `AC-493` | CR-126 | Omit an excerpt that would drop a unit or an engineering-built clause | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py` | implemented |
+| `FR-384` / `AC-494` | CR-126 | Hard-block a wrong unit, an unseen percent, a taken funnel, a competencies note, and a placeholder company | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+| `FR-385` / `AC-495` | CR-126 | Evidence 0 on a classified required row skips below the floor. Logistics-only still passes | `scripts/build_stage0_fit_gate.py`, `scripts/test_build_stage0_fit_gate.py` | implemented |
 
 ## Coverage checklist
 
@@ -304,3 +476,104 @@ Use this matrix to prove that each requirement has a spec, task, implementation,
 - [x] Every accepted requirement maps to tests or an explicit manual verification method.
 - [x] Every bug fix has a regression test or documented exception.
 - [x] Every ADR maps to affected requirements or constraints.
+
+## CR-130 Cited sentence must match the fact
+
+A conversion score cannot offset a sentence that cites a real fact and says something that fact does not say. Stage 1 verify and Stage 2 both block it.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-390` / `AC-500` | CR-130 | Hard-block a cited contradiction. A different fact id, or no provenance, does not block | `scripts/submission_linter.py`, `scripts/author_from_packet.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-131 Portability inversion
+
+The sentence that puts profile portability ahead of custom tagging is false on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-391` / `AC-501` | CR-131 | Hard-block that inversion even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-132 QA lead
+
+He walked test suites. He was not a QA lead. The title is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-392` / `AC-502` | CR-132 | Hard-block a QA-lead claim even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-133 Hundreds of client databases
+
+The career entry is roughly 200 SQL databases. "Hundreds" is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-393` / `AC-503` | CR-133 | Hard-block that scale even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-134 Soft specialty skip
+
+A specialty line skips when it says ideally or highly preferred, or when it is clinical work or a design-control certification. Write this job queues that posting once.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-394` / `AC-504` | CR-134 | Skip those lines. Show the sentence. Refute queues one write | `scripts/build_stage0_fit_gate.py`, `scripts/refute_once.py`, `scripts/pipeline_queue.py`, `src/components/PipelineQueuePanel.tsx` | implemented |
+
+## CR-135 Support escalation reduction
+
+Work experience does not say support escalations were reduced. That claim is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-395` / `AC-505` | CR-135 | Hard-block that reduction even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-137 Release cadence
+
+Work experience does not say release cadence. That phrase is a hard block on any cite.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-399` / `AC-509` | CR-137 | Hard-block that phrase even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-138 Testing analytics
+
+Work experience does not say testing analytics. That phrase is a hard block on any cite. Pendo product analytics stays.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-400` / `AC-510` | CR-138 | Hard-block that phrase even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-139 Visible codename
+
+A capitalized Visible after a space is the codename. That is a hard block on any cite. Lowercase visible stays.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-401` / `AC-511` | CR-139 | Hard-block that codename even when the cite is a different fact | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+
+## CR-140 Drop a blocked sentence
+
+A cited bullet or cover sentence that is itself a hard block is removed before repair. The removal is refused when it would create a new hard block. The word epic in a drafting line stays. No hedge is invented.
+
+| Requirement / AC | Change | Implementation | Verification | Status |
+|---|---|---|---|---|
+| `FR-402` / `AC-512` | CR-140 | Remove the blocked unit. Keep the unit when removal creates a new hard block | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `AC-513` | CR-140 | Remove a non-factual cover sentence that is itself a hard block | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-403` / `AC-514` | CR-141 | Rewrite a hedged $100,000 to $100K before the metric check | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-404` / `AC-515` | CR-141 | Replace an uncited sole employer sentence with a cited resume sentence | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-405` / `AC-516` | CR-142 | Remove an unverified partner clause before the hiring-manager pass | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-406` / `AC-517` | CR-143 | Rewrite the 40% drop-off ingestion phrase and fail Stage 1 on that block | `scripts/stage1_prerepair.py`, `scripts/submission_linter.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-407` / `AC-518` | CR-144 | Reword designed or built on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-408` / `AC-519` | CR-145 | Remove a cited contradiction the drop could not see | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-409` / `AC-520` | CR-146 | Treat ownership alone as generic overlap | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py`, `scripts/test_author_from_packet.py` | implemented |
+| `FR-410` / `AC-521` | CR-147 | Drop an uncited cover sentence when the letter exceeds 2800 characters | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-411` / `AC-522` | CR-148 | Add a cited resume sentence when the letter is under 220 words | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-412` / `AC-523` | CR-149 | Keep distributed data systems out of the geography check | `scripts/submission_linter.py`, `scripts/test_submission_linter.py` | implemented |
+| `FR-413` / `AC-524` | CR-150 | Treat knowledge alone as generic overlap | `scripts/build_authoring_packet.py`, `scripts/test_build_authoring_packet.py`, `scripts/test_author_from_packet.py` | implemented |
+| `FR-414` / `AC-525` | CR-151 | Remove an unverified tool from a competencies row | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-415` / `AC-526` | CR-152 | Remove high-leverage and rewrite standalone leverage to use | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-416` / `AC-527` | CR-153 | Reword design on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-417` / `AC-528` | CR-154 | Rebuild a hiring-manager read after this pass rewrites the files | `scripts/workflow/runner.py`, `scripts/test_hm_critical_read_contract.py` | implemented |
+| `FR-418` / `AC-529` | CR-155 | Remove unasked geography before Stage 1 verify | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-419` / `AC-530` | CR-156 | Drop an opening sentence that repeats the posting | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-420` / `AC-531` | CR-157 | Reword build on a contributed claim to contributed to | `scripts/stage1_prerepair.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-421` / `AC-532` | CR-158 | Rewrite a tilde in front of a number to about | `scripts/stage1_prerepair.py`, `scripts/workflow/runner.py`, `scripts/test_stage1_prerepair.py` | implemented |
+| `FR-422` / `AC-533` | CR-159 | Treat communication alone as generic overlap | `scripts/build_authoring_packet.py`, `scripts/test_author_from_packet.py` | implemented |

@@ -1,0 +1,5 @@
+The before-fix Classlink resume says he guided release cadence and cites ACC-204. Work experience does not use the phrase release cadence. The four cadence lines in the career file are a deletion cadence, a six-month metrics cadence, a refresh cadence, and a line that says the work was not on a set cadence.
+
+The new test failed, then passed. The phrase blocks with that cite and with no provenance. Defect triage does not block. A rolling deletion cadence does not block.
+
+On the before-fix copies the check fires on bak_classlink_Resume.md and bak_keyfactor_CoverLetter.md. Both say release cadence. 107 linter tests ran. The only error is the pre-existing rentana geography test.

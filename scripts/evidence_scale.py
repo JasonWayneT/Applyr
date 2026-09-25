@@ -101,6 +101,43 @@ _HEADING_SPLIT_RE = re.compile(r"(?m)^(#{1,4}\s+.*)$")
 # from the retrieval candidate pool outright rather than ever being sent to
 # the model, even a local one. See workExperience.md Section 1.0/1.0a.
 _EXCLUDED_HEADING_SUBSTRINGS = ("contact information", "professional references")
+_AI_PROJECTS_PATH = os.path.join(_ROOT, "data", "aiProjects.md")
+# CR-114 / FR-328: ACC-401 and related AI tooling live in aiProjects.md, not
+# workExperience.md. Stage 0 used to retrieve WE chunks only, so an AI-agent
+# leftover could score 0 because the excerpt window never contained that corpus.
+_AI_QUERY_RE = re.compile(
+    r"\b(?:ai|a\.i\.|llm|gpt|agentic|mcp|langgraph|langchain|"
+    r"copilot|claude\b|cursor\b|openai|generative)\b",
+    re.I,
+)
+# Retrieval-only expansions. JD "brief an executive" is WE "presenting" /
+# "presented" (ACC-109, §2.2). Do not treat this as authoring language.
+_QUERY_SYNONYMS: dict[str, frozenset[str]] = {
+    "brief": frozenset({"present", "presented", "presenting", "briefing"}),
+    "briefing": frozenset({"present", "presented", "presenting", "brief"}),
+}
+# Too common to force-include. Distinctive tools / ACC tokens stay eligible.
+_COVERAGE_GENERIC = frozenset({
+    "product", "management", "tools", "data", "experience", "years", "work",
+    "team", "role", "including", "such", "ability", "strong", "using", "plus",
+    "must", "have", "your", "our", "you", "will", "can", "from", "into",
+    "about", "their", "them", "this", "that", "with", "and", "the", "for",
+    "operational", "delivery", "generally", "proficiency", "room", "move",
+    "decision", "verbal", "communication", "communicate", "upward",
+    "preferred", "required", "proven", "position", "platforms", "tooling",
+    "builder", "building", "only", "makes", "hands", "technology",
+    "analytics", "business", "verification", "consumer", "digital",
+    "products", "ideally", "related", "field", "bachelor", "sponsorship",
+    "employment", "eligibility", "unable", "visa", "sponsor", "full",
+    "time", "remote", "marketplace", "commerce", "direct", "regulated",
+    "industries", "identity", "enrichment", "providers", "email", "phone",
+    "device", "address", "validation", "cloud", "computing", "enterprise",
+    "content", "developer", "applications", "observer", "shipping",
+    "understanding", "authentication", "protocols", "developer",
+    "ecosystem", "what", "restful",
+})
+_MAX_COVERAGE_DF = 8
+_MAX_FOCUSED_BODY = 4000
 
 
 def _tokenize(text: str) -> set[str]:
@@ -108,6 +145,101 @@ def _tokenize(text: str) -> set[str]:
         t for t in _TOKEN_RE.findall((text or "").lower())
         if t not in _STOPWORDS and len(t) > 2
     }
+
+
+def _expanded_query_tokens(item: str) -> set[str]:
+    """Query tokens plus retrieval synonyms. Implements FR-331."""
+    tokens = _tokenize(item)
+    extra: set[str] = set()
+    for token in tokens:
+        extra |= _QUERY_SYNONYMS.get(token, frozenset())
+    return tokens | extra
+
+
+def _chunk_df(chunks: list[tuple[str, str]]) -> dict[str, int]:
+    """Document frequency of tokens across heading chunks."""
+    df: dict[str, int] = {}
+    for heading, body in chunks:
+        for token in _tokenize(heading) | _tokenize(body):
+            df[token] = df.get(token, 0) + 1
+    return df
+
+
+def _coverage_tokens(query_tokens: set[str], df: dict[str, int]) -> list[str]:
+    """Corpus-backed distinctive query tokens. Not AI-token-gated. FR-331."""
+    ranked: list[tuple[int, str]] = []
+    for token in query_tokens:
+        if token in _COVERAGE_GENERIC or token in _STOPWORDS:
+            continue
+        count = df.get(token, 0)
+        if count <= 0 or count > _MAX_COVERAGE_DF:
+            continue
+        if len(token) < 4:
+            continue
+        ranked.append((count, token))
+    ranked.sort()
+    return [token for _count, token in ranked]
+
+
+def _window_around_token(heading: str, body: str, token: str, max_chars: int) -> str:
+    """Keep a window around token so a 70k inventory chunk cannot starve ACC ids."""
+    body = (body or "").strip()
+    piece_budget = max(800, max_chars)
+    if len(body) <= _MAX_FOCUSED_BODY:
+        piece = f"{heading}\n{body}"
+        return piece[:piece_budget]
+    hay = body.lower()
+    idx = hay.find(token)
+    if idx < 0:
+        piece = f"{heading}\n{body}"
+        return piece[:piece_budget]
+    radius = max(400, (piece_budget - len(heading) - 2) // 2)
+    start = max(0, idx - radius)
+    end = min(len(body), idx + len(token) + radius)
+    return f"{heading}\n{body[start:end].strip()}"[:piece_budget]
+
+
+def _focus_chunk(heading: str, body: str, query_tokens: set[str], max_chars: int) -> str:
+    """Trim huge chunks to the distinctive overlap, not the heading prefix."""
+    body = (body or "").strip()
+    overlap = sorted(
+        (_tokenize(heading) | _tokenize(body)) & query_tokens,
+        key=len,
+        reverse=True,
+    )
+    token = overlap[0] if overlap else ""
+    return _window_around_token(heading, body, token, max_chars)
+
+
+def _token_in_text(token: str, text: str) -> bool:
+    """True when token is a WE/excerpt hit, including plural stems (executives)."""
+    if not token:
+        return False
+    if token in _tokenize(text):
+        return True
+    return token in (text or "").lower()
+
+
+def retrieval_coverage(
+    item: str,
+    excerpt: str,
+    full_work_exp: str,
+    extra_corpus: str = "",
+) -> tuple[bool, tuple[str, ...]]:
+    """True when every corpus-backed distinctive query token is in excerpt.
+
+    window_ok only fires on AI/LLM/agentic tokens, so Jira/Confluence and
+    executive-briefing starvation were invisible. Implements FR-331 / AC-429.
+    """
+    chunks = _chunk_work_exp(full_work_exp) + _chunk_work_exp(extra_corpus or "")
+    if not chunks:
+        corpus_tokens = _tokenize(full_work_exp) | _tokenize(extra_corpus or "")
+        df = {token: 1 for token in corpus_tokens}
+    else:
+        df = _chunk_df(chunks)
+    needed = _coverage_tokens(_expanded_query_tokens(item), df)
+    missing = tuple(token for token in needed if not _token_in_text(token, excerpt))
+    return (not missing, missing)
 
 
 def _chunk_work_exp(full_text: str) -> list[tuple[str, str]]:
@@ -130,41 +262,147 @@ def _chunk_work_exp(full_text: str) -> list[tuple[str, str]]:
     return chunks
 
 
-def build_evidence_context(item: str, full_work_exp: str, k: int = 6, max_chars: int = 12000) -> str:
+def _load_ai_projects_corpus() -> str:
+    """Return data/aiProjects.md when present, else empty. Implements FR-328."""
+    try:
+        with open(_AI_PROJECTS_PATH, encoding="utf-8") as handle:
+            return handle.read()
+    except OSError:
+        return ""
+
+
+def _should_include_ai_corpus(item: str) -> bool:
+    """True when the requirement line is about AI/agent/LLM tooling. Implements FR-328."""
+    return bool(_AI_QUERY_RE.search(item or ""))
+
+
+def build_evidence_context(
+    item: str,
+    full_work_exp: str,
+    k: int = 6,
+    max_chars: int = 12000,
+    extra_corpus: str | None = None,
+) -> str:
     """Top-k most relevant workExperience.md chunks for *item*, ranked by
     token-overlap (Jaccard) with the requirement line -- same retrieval
     pattern as fit_rubric_examples.retrieve_examples(). Falls back to a
     12000-char prefix (unchanged behavior, just a bigger window) when the
     document has no heading structure to chunk on, so this never returns
-    less context than the old blind-truncation approach did."""
-    chunks = _chunk_work_exp(full_work_exp)
-    if not chunks:
-        return (full_work_exp or "")[:max_chars]
+    less context than the old blind-truncation approach did.
 
-    query_tokens = _tokenize(item)
+    2026-09-01 Improvement #6: now applies TF-IDF (rarity) weighting to each
+    overlapping token before computing similarity, so a chunk mentioning
+    "roadmap" and "Jira" ranks higher for a "roadmap prioritization" requirement
+    than one mentioning "roadmap" and "cooking". Uses _rarity_weight() from
+    jd_tailoring.py (same fix as Stage 1 improvement #1). Also increases k
+    from 6 to 8 for larger WE documents (>50K chars) so more relevant chunks
+    are surfaced when the document is large.
+
+    2026-09-17 CR-114: AI-agent leftover lines also retrieve `data/aiProjects.md`
+    (ACC-401). Pass extra_corpus="" in tests to isolate WE-only ranking.
+
+    2026-09-17 CR-116: Jaccard on a 70k+ inventory chunk dilutes Jira/Confluence
+    and ACC-109. Force-include the smallest chunk that holds each corpus-backed
+    distinctive query token, and window huge bodies around that token so the
+    excerpt prefix cannot starve the scorer. Implements FR-331 / AC-429.
+    """
+    extra = extra_corpus
+    if extra is None:
+        extra = _load_ai_projects_corpus() if _should_include_ai_corpus(item) else ""
+    chunks = _chunk_work_exp(full_work_exp) + _chunk_work_exp(extra)
+    if not chunks:
+        combined = full_work_exp or ""
+        if extra:
+            combined = f"{combined}\n\n{extra}" if combined else extra
+        return combined[:max_chars]
+
+    # Improvement #6: increase k for larger WE documents.
+    if k == 6 and len(full_work_exp) > 50000:
+        k = 8
+
+    query_tokens = _expanded_query_tokens(item)
+    df = _chunk_df(chunks)
+    needed = _coverage_tokens(query_tokens, df)
+
+    # Improvement #6: load rarity weights for TF-IDF scoring.
+    rarity_weight = _get_rarity_weight_fn()
+
     scored: list[tuple[float, str, str]] = []
     for heading, body in chunks:
         chunk_tokens = _tokenize(heading) | _tokenize(body)
         if not chunk_tokens:
             continue
         overlap = query_tokens & chunk_tokens
-        union = query_tokens | chunk_tokens
-        jaccard = len(overlap) / len(union) if union else 0.0
-        scored.append((jaccard, heading, body))
+        if not overlap:
+            scored.append((0.0, heading, body))
+            continue
+        # TF-IDF weighted Jaccard: weight each overlapping token by its rarity
+        # (IDF-like) so rare, specific terms contribute more than common ones.
+        if rarity_weight is not None:
+            weighted_overlap = sum(rarity_weight(tok) for tok in overlap)
+            weighted_union = sum(rarity_weight(tok) for tok in (query_tokens | chunk_tokens))
+            similarity = weighted_overlap / weighted_union if weighted_union else 0.0
+        else:
+            # Fallback to unweighted Jaccard if rarity table unavailable.
+            union = query_tokens | chunk_tokens
+            similarity = len(overlap) / len(union) if union else 0.0
+        scored.append((similarity, heading, body))
 
     scored.sort(key=lambda row: row[0], reverse=True)
 
     selected: list[str] = []
-    budget = max_chars
+    used_headings: set[str] = set()
+    per_token = max(1000, max_chars // max(len(needed), 1)) if needed else max_chars
+    for token in needed:
+        if _token_in_text(token, "\n\n".join(selected)):
+            continue
+        candidates = [
+            (len(body), heading, body)
+            for heading, body in chunks
+            if token in (_tokenize(heading) | _tokenize(body))
+        ]
+        if not candidates:
+            continue
+        _size, heading, body = min(candidates)
+        used = sum(len(block) for block in selected) + 2 * max(0, len(selected) - 1)
+        remain = max_chars - used
+        if remain < 400:
+            break
+        piece = _window_around_token(
+            heading, body, token, min(per_token, remain, _MAX_FOCUSED_BODY)
+        )
+        selected.append(piece)
+        used_headings.add(heading)
+
+    used = sum(len(block) for block in selected) + 2 * max(0, len(selected) - 1)
+    budget = max_chars - used
     for _, heading, body in scored[:k]:
-        piece = f"{heading}\n{body.strip()}"
+        if budget <= 0:
+            break
+        if heading in used_headings:
+            continue
+        piece = _focus_chunk(heading, body, query_tokens, min(budget, max_chars))
         if len(piece) > budget:
             piece = piece[:budget]
         selected.append(piece)
+        used_headings.add(heading)
         budget -= len(piece)
         if budget <= 0:
             break
     return "\n\n".join(selected)
+
+
+def _get_rarity_weight_fn():
+    """Import _rarity_weight from jd_tailoring.py lazily. Returns None if the
+    function or its dependency (master_claims_tags_only.json) is unavailable,
+    so build_evidence_context falls back to unweighted Jaccard."""
+    try:
+        from jd_tailoring import _rarity_weight
+        # Call once to trigger table loading and verify it works.
+        _rarity_weight("test")
+        return _rarity_weight
+    except Exception:
+        return None
 
 Gate = Literal["HARD", "NONE"]
 Confidence = Literal["high", "medium", "low"]
@@ -400,7 +638,7 @@ product-management-experience alternative offered anywhere in the line and no he
 candidate's real background (see candidate profile) -- e.g. people management/direct \
 reports (including "mentor/guide/lead other product managers or product owners" -- managing \
 or mentoring PEERS in the same discipline is people management even without the word \
-"manager" in the title), AI/ML model ownership, revenue/billing ownership, a title above \
+"manager" in the title), AI/ML model training, fine-tuning, or ML engineering, revenue/billing ownership, a title above \
 Senior IC, or building a product area from nothing -- solo/founding 0-to-1 ownership with no \
 existing foundation, roadmap, or process to build on (e.g. "own the zero to one build of...", \
 "shaping or maturing an early-stage product area... where none previously existed").
@@ -550,9 +788,14 @@ def _reasoning_grounded_in_item(item: str, reasoning: str) -> bool:
     return bool(item_tokens & reasoning_tokens)
 
 
-def _call_once(prompt: str, model: str) -> dict:
+def _call_once(prompt: str, model: str | None = None) -> dict:
     """One evidence_scale LLM call, parsed to a raw dict. Raises
-    EvidenceClassificationError on any failure -- see module docstring."""
+    EvidenceClassificationError on any failure -- see module docstring.
+
+    2026-09-01: model param is now ignored for provider selection — evidence_scale
+    uses Groq/Gemini (cloud), and each provider uses its own default model via
+    call_llm_stage → stage_model → None → call_llm provider defaults. The param
+    is kept for backward compatibility with callers that still pass it."""
     from llm_stages import call_llm_stage
     from pipeline_env import fit_llm_timeout_sec, fit_num_predict
 
@@ -563,7 +806,6 @@ def _call_once(prompt: str, model: str) -> dict:
         temperature=0.0,
         response_mime_type="application/json",
         response_schema=_SCHEMA,
-        model=model,
         options_override={"num_predict": fit_num_predict()},
         request_timeout=fit_llm_timeout_sec(),
     )
@@ -602,17 +844,18 @@ def classify_requirement(
     evidence_context = build_evidence_context(item, work_exp)
     prompt = _build_prompt(item, evidence_context, is_required, company, internal_terms, few_shot_block)
 
-    model = _score_model()
-    _ensure_score_model_ready(model)
-
-    data = _call_once(prompt, model)
+    # 2026-09-01: evidence_scale now uses Groq/Gemini (cloud). No local model
+    # preparation needed — _ensure_score_model_ready was for local Ollama.
+    # _call_once no longer passes model to call_llm_stage; each cloud provider
+    # uses its own default model.
+    data = _call_once(prompt)
     reasoning_mismatch = False
     if str(data.get("gate", "")).strip().upper() == "HARD" and not _reasoning_grounded_in_item(
         item, str(data.get("reasoning", ""))
     ):
         # Retry once -- a single-call attention slip shouldn't finalize a
         # disqualifying rejection on its first, ungrounded answer.
-        retry_data = _call_once(prompt, model)
+        retry_data = _call_once(prompt)
         if str(retry_data.get("gate", "")).strip().upper() == "HARD" and not _reasoning_grounded_in_item(
             item, str(retry_data.get("reasoning", ""))
         ):
@@ -720,7 +963,7 @@ def classify_requirement(
 # ---------------------------------------------------------------------------
 
 # Spec Sec. 12 confidence multipliers.
-_CONFIDENCE_MULTIPLIER = {"high": 1.00, "medium": 0.85, "low": 0.65}
+_CONFIDENCE_MULTIPLIER = {"high": 1.00, "medium": 0.85, "low": 0.50}
 
 # Spec Sec. 10 base weights. Required Core Duty/Domain and Required Tool/
 # Knowledge both weight 3 -- there's no formula reason to distinguish them
@@ -729,11 +972,120 @@ _CONFIDENCE_MULTIPLIER = {"high": 1.00, "medium": 0.85, "low": 0.65}
 _REQUIRED_WEIGHT = 3.0
 _PREFERRED_WEIGHT = 1.0
 
-# NOT IMPLEMENTED: spec Sec. 10's repetition (+1, capped) and hedge-language
-# (-1) weight modifiers. Both are explicitly flagged in the spec as design
-# inference awaiting real calibration, not settled numbers -- deferred
-# rather than guessed at. Every item currently gets its bucket's base
-# weight only. Tracked as a CR-093 Epic 2 follow-up, not silently dropped.
+# 2026-09-01 Improvement #7: repetition and hedge modifier defaults.
+# Loaded from data/fit_rubric_calibration.json at runtime; these are the
+# fallbacks when the file is absent or keys are missing.
+_REPETITION_MODIFIER = {"enabled": True, "threshold": 3, "bonus": 1, "cap": 4}
+_HEDGE_MODIFIER = {
+    "enabled": True,
+    "penalty": 1,
+    "floor": 0,
+    "patterns": ["contributed to", "partnered on", "assisted with", "supported", "helped with"],
+}
+_HEDGE_PATTERN_RE: re.Pattern | None = None
+
+
+def _load_weighting_model() -> None:
+    """Load weighting model from data/fit_rubric_calibration.json into the
+    module-level constants. Called once at import time. Never raises -- a
+    missing or malformed file silently falls back to the hardcoded defaults."""
+    global _REQUIRED_WEIGHT, _PREFERRED_WEIGHT, _CONFIDENCE_MULTIPLIER
+    global _REPETITION_MODIFIER, _HEDGE_MODIFIER, _HEDGE_PATTERN_RE
+    try:
+        with open(_CALIBRATION_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        wm = data.get("weighting_model", {})
+        if "required_weight" in wm:
+            _REQUIRED_WEIGHT = float(wm["required_weight"])
+        if "preferred_weight" in wm:
+            _PREFERRED_WEIGHT = float(wm["preferred_weight"])
+        cm = wm.get("confidence_multiplier")
+        if isinstance(cm, dict):
+            _CONFIDENCE_MULTIPLIER = {
+                "high": float(cm.get("high", 1.0)),
+                "medium": float(cm.get("medium", 0.85)),
+                "low": float(cm.get("low", 0.50)),
+            }
+        rm = wm.get("repetition_modifier")
+        if isinstance(rm, dict):
+            _REPETITION_MODIFIER = {
+                "enabled": bool(rm.get("enabled", True)),
+                "threshold": int(rm.get("threshold", 3)),
+                "bonus": int(rm.get("bonus", 1)),
+                "cap": int(rm.get("cap", 4)),
+            }
+        hm = wm.get("hedge_modifier")
+        if isinstance(hm, dict):
+            _HEDGE_MODIFIER = {
+                "enabled": bool(hm.get("enabled", True)),
+                "penalty": int(hm.get("penalty", 1)),
+                "floor": int(hm.get("floor", 0)),
+                "patterns": hm.get("patterns", _HEDGE_MODIFIER["patterns"]),
+            }
+        _HEDGE_PATTERN_RE = None  # force recompile
+    except Exception:
+        pass
+
+
+_load_weighting_model()
+
+
+def _get_hedge_pattern() -> re.Pattern:
+    """Compile the hedge-language regex lazily from the current patterns."""
+    global _HEDGE_PATTERN_RE
+    if _HEDGE_PATTERN_RE is None:
+        patterns = _HEDGE_MODIFIER.get("patterns", [])
+        if patterns:
+            _HEDGE_PATTERN_RE = re.compile(
+                "|".join(re.escape(p) for p in patterns), re.I
+            )
+        else:
+            _HEDGE_PATTERN_RE = re.compile(r"(?!x)x")  # never-match
+    return _HEDGE_PATTERN_RE
+
+
+def _apply_repetition_modifier(classified_required: list[dict]) -> None:
+    """Spec Sec. 10 repetition modifier: if the same evidence_level appears
+    3+ times across required items, +1 to each (capped at 4). Mutates items
+    in place. Only applies when the modifier is enabled."""
+    if not _REPETITION_MODIFIER.get("enabled"):
+        return
+    threshold = _REPETITION_MODIFIER.get("threshold", 3)
+    bonus = _REPETITION_MODIFIER.get("bonus", 1)
+    cap = _REPETITION_MODIFIER.get("cap", 4)
+
+    # Count evidence_level occurrences across required items.
+    level_counts: dict[int, int] = {}
+    for it in classified_required:
+        level = it.get("evidence_level")
+        if level is not None:
+            level_counts[level] = level_counts.get(level, 0) + 1
+
+    # Apply bonus to items whose level appears threshold+ times.
+    for it in classified_required:
+        level = it.get("evidence_level")
+        if level is not None and level_counts.get(level, 0) >= threshold:
+            it["evidence_level"] = min(level + bonus, cap)
+
+
+def _apply_hedge_modifier(classified_required: list[dict], classified_preferred: list[dict]) -> None:
+    """Spec Sec. 10 hedge-language modifier: if reasoning contains hedge
+    language ("contributed to", "partnered on"), -1 to evidence_level (floored
+    at 0). Mutates items in place. Only applies when the modifier is enabled."""
+    if not _HEDGE_MODIFIER.get("enabled"):
+        return
+    penalty = _HEDGE_MODIFIER.get("penalty", 1)
+    floor = _HEDGE_MODIFIER.get("floor", 0)
+    hedge_re = _get_hedge_pattern()
+
+    for it in classified_required + classified_preferred:
+        level = it.get("evidence_level")
+        if level is None:
+            continue
+        # Check the anchor/reasoning field for hedge language.
+        reasoning = str(it.get("anchor", "") or "").lower()
+        if hedge_re.search(reasoning):
+            it["evidence_level"] = max(level - penalty, floor)
 
 
 def compute_fit_score(classified_required: list[dict], classified_preferred: list[dict]) -> dict:
@@ -742,6 +1094,12 @@ def compute_fit_score(classified_required: list[dict], classified_preferred: lis
     pass. Hard gates run first and are entirely outside the formula (spec
     Sec. 11): any classified_required item with gap_class=="HARD" makes the
     whole result DISQUALIFIED regardless of every other item's score.
+
+    2026-09-01 Improvement #7: now applies the repetition modifier (+1, capped
+    at 4) when the same evidence_level appears 3+ times across required items,
+    and the hedge modifier (-1, floored at 0) when reasoning contains hedge
+    language. Weights and confidence multipliers are now loaded from
+    data/fit_rubric_calibration.json instead of hardcoded.
 
     Returns:
         {
@@ -764,12 +1122,25 @@ def compute_fit_score(classified_required: list[dict], classified_preferred: lis
                 "preferred_match": 0,
             }
 
+    # Improvement #7: apply modifiers before scoring.
+    # Work on copies so the caller's dicts are not mutated before the score
+    # is returned (the caller may re-read evidence_level for display).
+    req_copy = [dict(it) for it in classified_required]
+    pref_copy = [dict(it) for it in classified_preferred]
+    _apply_repetition_modifier(req_copy)
+    _apply_hedge_modifier(req_copy, pref_copy)
+
     def _weighted_sums(items: list[dict], weight: float) -> tuple[float, float, float]:
         num = den = conf_num = 0.0
         for it in items:
             level = it.get("evidence_level")
             if level is None:
-                continue  # item never reached evidence scoring (e.g. a synthetic flagged_gaps-only row)
+                # A named line with no score is a zero. Dropping it would
+                # raise the average. A blank synthetic row still stays out.
+                # Implements FR-381.
+                if not str(it.get("item") or "").strip():
+                    continue
+                level = 0
             conf = _CONFIDENCE_MULTIPLIER.get(it.get("confidence"), 0.85)
             s = level / 4.0
             num += weight * s * conf
@@ -777,8 +1148,8 @@ def compute_fit_score(classified_required: list[dict], classified_preferred: lis
             conf_num += weight * conf
         return num, den, conf_num
 
-    req_num, req_den, req_conf = _weighted_sums(classified_required, _REQUIRED_WEIGHT)
-    pref_num, pref_den, pref_conf = _weighted_sums(classified_preferred, _PREFERRED_WEIGHT)
+    req_num, req_den, req_conf = _weighted_sums(req_copy, _REQUIRED_WEIGHT)
+    pref_num, pref_den, pref_conf = _weighted_sums(pref_copy, _PREFERRED_WEIGHT)
 
     total_num, total_den, total_conf = req_num + pref_num, req_den + pref_den, req_conf + pref_conf
 

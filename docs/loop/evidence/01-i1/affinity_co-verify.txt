@@ -1,0 +1,9 @@
+command: python -u scripts/run_submission.py data/loop_runs/i1/affinity_co --mode practice --resume
+exit: 1
+workflow_status: FAILED
+verify: FAIL
+blocks:
+- LR-047 drafting-time line missing the estimate hedge (resume)
+- LR-047 drafting-time line missing the estimate hedge (cover letter)
+other checks named in the log: header, structure, lint warns, specificity, geography, optimization bar, evidence utilization, ats terms, sentence provenance, extra packet all PASS
+judgment: the hedge gate caught the drop. Repair has not run yet.

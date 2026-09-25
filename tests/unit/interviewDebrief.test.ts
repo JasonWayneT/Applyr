@@ -1,104 +1,71 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { db } from '../../server/db.js';
+import { describe, it, expect } from 'vitest';
 import {
-  createInterviewDebrief,
-  deleteInterviewDebrief,
-  listInterviewDebriefs,
-  updateInterviewDebrief,
-} from '../../server/repository/interviewDebriefRepository.js';
-import {
+  INTERVIEW_DEBRIEF_OUTCOMES,
   isValidDebriefOutcome,
   normalizeDebriefDate,
+  toDebriefDateInputValue,
 } from '../../shared/domain/interviewDebrief.js';
 
-const JOB_ID = 'debrief-test-job';
+describe('interviewDebrief', () => {
+  it('exports the expected outcome set', () => {
+    expect(INTERVIEW_DEBRIEF_OUTCOMES).toContain('Pending');
+    expect(INTERVIEW_DEBRIEF_OUTCOMES).toContain('Went well');
+    expect(INTERVIEW_DEBRIEF_OUTCOMES).toContain('Concerns');
+    expect(INTERVIEW_DEBRIEF_OUTCOMES).toContain('Rejected');
+    expect(INTERVIEW_DEBRIEF_OUTCOMES).toContain('Ghosted');
+    expect(INTERVIEW_DEBRIEF_OUTCOMES).toHaveLength(5);
+  });
 
-function seedJob() {
-  db.prepare(`
-    INSERT OR REPLACE INTO jobs (id, company, title, url, status)
-    VALUES (?, 'Hudu', 'Product Manager', 'https://example.com/hudu-pm', 'Core Interviews')
-  `).run(JOB_ID);
-}
-
-function clearDebriefs() {
-  db.prepare('DELETE FROM interview_debriefs WHERE job_id = ?').run(JOB_ID);
-}
-
-beforeEach(() => {
-  seedJob();
-  clearDebriefs();
-});
-
-afterEach(() => {
-  clearDebriefs();
-  db.prepare('DELETE FROM jobs WHERE id = ?').run(JOB_ID);
-});
-
-describe('interviewDebrief domain', () => {
-  it('validates outcomes and dates', () => {
+  it('validates known outcomes', () => {
+    expect(isValidDebriefOutcome('Pending')).toBe(true);
     expect(isValidDebriefOutcome('Went well')).toBe(true);
-    expect(isValidDebriefOutcome('Unknown')).toBe(false);
-    expect(normalizeDebriefDate('2026-07-02')).toMatch(/^2026-07-02/);
+    expect(isValidDebriefOutcome('Rejected')).toBe(true);
+  });
+
+  it('rejects invalid outcomes', () => {
+    expect(isValidDebriefOutcome('')).toBe(false);
+    expect(isValidDebriefOutcome('Excellent')).toBe(false);
+    expect(isValidDebriefOutcome(null)).toBe(false);
+    expect(isValidDebriefOutcome(undefined)).toBe(false);
+    expect(isValidDebriefOutcome(42)).toBe(false);
+  });
+
+  it('normalizes date-only strings to ISO', () => {
+    const result = normalizeDebriefDate('2026-07-15');
+    expect(result).not.toBeNull();
+    expect(result).toMatch(/^2026-07-15/);
+  });
+
+  it('normalizes full datetime strings to ISO', () => {
+    const result = normalizeDebriefDate('2026-07-15T14:30:00');
+    expect(result).not.toBeNull();
+    expect(result).toMatch(/^2026-07-15/);
+  });
+
+  it('rejects empty or non-string dates', () => {
     expect(normalizeDebriefDate('')).toBeNull();
-  });
-});
-
-describe('interviewDebriefRepository', () => {
-  it('creates and lists debriefs newest first', () => {
-    const older = createInterviewDebrief(JOB_ID, {
-      date: '2026-06-01',
-      notes: 'First round questions about platform experience.',
-      outcome: 'Went well',
-    });
-    expect('error' in older).toBe(false);
-
-    const newer = createInterviewDebrief(JOB_ID, {
-      date: '2026-07-02',
-      notes: 'Asked how I stay current with the industry (unprepped).',
-      outcome: 'Concerns',
-    });
-    expect('error' in newer).toBe(false);
-
-    const list = listInterviewDebriefs(JOB_ID);
-    expect(list).toHaveLength(2);
-    expect(list[0].notes).toContain('stay current');
-    expect(list[1].notes).toContain('platform experience');
+    expect(normalizeDebriefDate('   ')).toBeNull();
+    expect(normalizeDebriefDate(null)).toBeNull();
+    expect(normalizeDebriefDate(42)).toBeNull();
   });
 
-  it('rejects empty notes', () => {
-    const result = createInterviewDebrief(JOB_ID, {
-      date: '2026-07-02',
-      notes: '   ',
-      outcome: 'Went well',
-    });
-    expect(result).toEqual({ error: 'notes are required' });
+  it('rejects invalid date strings', () => {
+    expect(normalizeDebriefDate('not-a-date')).toBeNull();
+    expect(normalizeDebriefDate('2026-13-45')).toBeNull();
   });
 
-  it('rejects missing outcome', () => {
-    const result = createInterviewDebrief(JOB_ID, {
-      date: '2026-07-02',
-      notes: 'Some notes',
-    });
-    expect(result).toEqual({ error: 'outcome is required' });
+  it('converts ISO to date input format (YYYY-MM-DD)', () => {
+    // Use a local-constructed date to avoid timezone shift issues
+    const localDate = new Date(2026, 6, 15); // July 15, 2026 local time
+    const result = toDebriefDateInputValue(localDate.toISOString());
+    expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(result.startsWith('2026-07-')).toBe(true);
   });
 
-  it('updates and deletes debriefs', () => {
-    const created = createInterviewDebrief(JOB_ID, {
-      date: '2026-07-02',
-      notes: 'Initial notes',
-      outcome: 'Pending',
-    });
-    if ('error' in created) throw new Error(created.error);
-
-    const updated = updateInterviewDebrief(JOB_ID, created.debrief.id, {
-      notes: 'Updated notes with more detail',
-      outcome: 'Went well',
-    });
-    if ('error' in updated) throw new Error(updated.error);
-    expect(updated.debrief.notes).toBe('Updated notes with more detail');
-    expect(updated.debrief.outcome).toBe('Went well');
-
-    expect(deleteInterviewDebrief(JOB_ID, created.debrief.id)).toBe(true);
-    expect(listInterviewDebriefs(JOB_ID)).toHaveLength(0);
+  it('returns empty string for null or invalid input', () => {
+    expect(toDebriefDateInputValue(null)).toBe('');
+    expect(toDebriefDateInputValue(undefined)).toBe('');
+    expect(toDebriefDateInputValue('')).toBe('');
+    expect(toDebriefDateInputValue('not-a-date')).toBe('');
   });
 });

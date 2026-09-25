@@ -33,8 +33,8 @@ This is a **precision** bug, not a missing ontology / synonym problem.
 
 ## Decision
 1. **Generic-token denylist** for item↔claim overlap. Tokens like `team`, `work`, `product`,
-   `experience`, `years`, `ability`, `skills`, … do not count toward `overlap`. Distinctive
-   tokens (`epics`, `agile`, `migration`, `privacy`, …) still do.
+   `experience`, `exposure`, `years`, `ability`, `skills`, … do not count toward `overlap`. Distinctive
+   tokens (`epics`, `agile`, `migration`, `privacy`, `kafka`, …) still do.
 2. **No JD-score-only nomination.** If distinctive overlap is 0 **and** `capability_boost` is 0
    (AI/compliance soft-gap boosts unchanged), force `total = 0` so the claim cannot enter
    Top-2. `jd_score` remains a tiebreaker among claims that already have item signal or a

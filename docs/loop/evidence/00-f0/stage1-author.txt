@@ -1,0 +1,6 @@
+command: python -u scripts/run_stage1_author.py data/loop_runs/f0/1uphealth --wall-seconds 500
+pid: 32696
+result: ok events=1 wall=55.891s wrote_files=True
+transport: Agy sandboxed stream-json, model default gemini-3.8-flash-medium, effort medium
+human_paste: not used
+artifacts: Resume.md, CoverLetter.md, claim_provenance.json, stage1_author_attempts/1.txt

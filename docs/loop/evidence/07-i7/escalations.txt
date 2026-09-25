@@ -1,0 +1,5 @@
+The before-fix Classlink letter says the data-remediation work significantly reduced customer support escalations. The cite is ACC-102. Work experience does not use the word escalation. ACC-102 is the 40 percent drop-off.
+
+The new test failed, then passed. The reduction blocks with that cite and with no provenance. "Streamline Customer Support escalations" does not block. "Reduced stale-data complaints to zero" does not block.
+
+On the before-fix copies the check fires on bak_classlink_CoverLetter.md only. 106 linter tests ran. The only error is the pre-existing rentana geography test.

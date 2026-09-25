@@ -62,6 +62,7 @@ _NONCLAIMABLE_RE = re.compile(
     r"|Considered,\s*Not Implemented"
     r"|personal only,\s*not professional"
     r"|Role context,\s*not a resume (?:bullet|story)"
+    r"|acknowledged gap"
     r")",
     re.IGNORECASE,
 )
@@ -200,23 +201,53 @@ def hedges_for_project(we_text: str, project_id: str) -> dict[str, Any]:
 
     attribution = ""
     prohibited: list[str] = []
-    for acc, _idx, line in brackets[start_at + 1 :]:
+    end_idx = len(we_text)
+    for acc, idx, _line in brackets[start_at + 1 :]:
         kind = classes.get(acc)
         # Substories keep walking; stop at next story / tools / not-implemented sibling.
         if kind in (CLASS_STORY, CLASS_TOOLS, CLASS_NONCLAIMABLE):
+            end_idx = idx
             break
         if kind == CLASS_ATTRIBUTION:
-            found = _ATTRIBUTION_TIER_RE.search(line)
-            if found:
+            found = _ATTRIBUTION_TIER_RE.search(_line)
+            if found and not attribution:
                 attribution = found.group(1).upper()
         elif kind == CLASS_DO_NOT_CLAIM:
-            clipped = re.split(r"DO NOT CLAIM:\s*", line, maxsplit=1, flags=re.I)
-            body = clipped[1].strip() if len(clipped) > 1 else line.strip()
-            body = re.sub(r"\*+", "", body).strip()
+            body = _do_not_claim_body(_line)
             if body:
                 prohibited.append(body)
 
+    # Most live bans are italic notes, not [ACC-N] lines. Read those too,
+    # and stop at the next section header so the global anti-claim list
+    # does not attach to the story above it.
+    span = we_text[brackets[start_at][1] : end_idx]
+    header_at = span.find("\n#### ")
+    if header_at != -1:
+        span = span[:header_at]
+    for line in span.splitlines()[1:]:
+        if "[ACC-" in line:
+            continue
+        if re.search(r"DO NOT CLAIM", line, re.I):
+            body = _do_not_claim_body(line)
+            if body and body not in prohibited:
+                prohibited.append(body)
+        elif not attribution and re.search(r"Attribution\s*:", line, re.I):
+            found = _ATTRIBUTION_TIER_RE.search(line)
+            if found:
+                attribution = found.group(1).upper()
+
     return {"attribution": attribution, "prohibited_claims": prohibited}
+
+
+def _do_not_claim_body(line: str) -> str:
+    """Return the ban text after a DO NOT CLAIM label. Empty if there is none."""
+    cleaned = re.sub(r"\*+", "", line or "")
+    parts = re.split(r"DO NOT CLAIM(?:\s*\([^)]*\))?\s*:\s*", cleaned, maxsplit=1, flags=re.I)
+    if len(parts) < 2:
+        parts = re.split(r"DO NOT claim\s+", cleaned, maxsplit=1, flags=re.I)
+        if len(parts) < 2:
+            return ""
+    return parts[1].strip()
 
 
 def non_story_acc_ids(we_text: str) -> set[str]:

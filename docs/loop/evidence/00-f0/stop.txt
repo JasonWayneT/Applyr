@@ -1,0 +1,28 @@
+F0 slug: 1uphealth
+practice folder: data/loop_runs/f0/1uphealth
+terminal workflow status: FAILED at stage1
+Stage 3: not reached
+names_past_employer: false after repair attempt 3
+
+LLM calls: 11
+- stage0: 7 (1 extraction, 6 evidence), Agy gemini-3.8-flash-medium
+- stage1 author: 1, scripts/run_stage1_author.py, ok, 56s
+- stage1 repair: 3, scripts/run_stage1_repair.py, each ok
+
+What ran unattended
+- Stage 0 completed with no human paste and no requirement-review pause.
+- Stage 1 author wrote Resume.md, CoverLetter.md, and claim_provenance.json with no hand paste.
+- The CLI text still says to paste authoring_prompt.md. The queue worker does not paste. It calls run_stage1_author.py. F0 used that script.
+
+Where it stopped
+- First resume reached Stage 2 HM NEEDS_DISPOSITION with BLOCK LR-045 and LR-047. needs_stage1_repair is false unless status is FAILED, so the worker would pause.
+- Commit 702d2e6 makes Stage 1 verify fail on those blocks. Re-verify of this folder then FAILED, which is a repairable state.
+- Repair 1 added an uncited Cision sentence and an estimated hedge. apply_mechanical_fixes deleted the uncited sentence. The second verify failed LR-045 again.
+- Commit 330115b refuses a drop that creates a new fidelity hard block. Resume after repair 2 kept the Cision sentence and failed sentence provenance instead. The guard held.
+- Repair 3 deleted that sentence itself. Resume failed LR-045 again. The letter no longer names Cision, Sterkly, or Zero To Sixty.
+
+Red line
+LR-045 came back after two code fixes and three repair calls. No further repair on this folder.
+
+Database
+jobs has an older 1upHealth row with status Applied. pipeline_queue has no 1up slug. Practice files are under data/loop_runs/f0 only.

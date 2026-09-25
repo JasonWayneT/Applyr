@@ -20,8 +20,9 @@ const JDInputForm: React.FC<JDInputFormProps> = ({ onRun, isLoading }) => {
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="space-y-2">
-        <label className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Company Name</label>
+        <label htmlFor="company-name-input" className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Company Name</label>
         <input
+          id="company-name-input"
           type="text"
           value={company}
           onChange={(e) => setCompany(e.target.value)}
@@ -32,8 +33,9 @@ const JDInputForm: React.FC<JDInputFormProps> = ({ onRun, isLoading }) => {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Job URL (Optional)</label>
+        <label htmlFor="job-url-input" className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Job URL (Optional)</label>
         <input
+          id="job-url-input"
           type="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
@@ -44,8 +46,9 @@ const JDInputForm: React.FC<JDInputFormProps> = ({ onRun, isLoading }) => {
       </div>
 
       <div className="space-y-2">
-        <label className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Job Description</label>
+        <label htmlFor="job-description-input" className="text-xs font-bold text-on-surface-variant uppercase tracking-widest">Job Description</label>
         <textarea
+          id="job-description-input"
           value={jd}
           onChange={(e) => setJd(e.target.value)}
           placeholder="Paste the full job description here..."

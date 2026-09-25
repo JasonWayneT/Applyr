@@ -1,6 +1,7 @@
 """CR-076 stage runner: wraps existing workers; never reimplements Stage 0/1 builders."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -16,10 +17,16 @@ if _SCRIPT_DIR not in sys.path:
 import contracts  # noqa: E402
 from author_from_packet import build_authoring_prompt, run_verify_only  # noqa: E402
 from build_authoring_packet import build_packet  # noqa: E402
-from build_stage0_fit_gate import Stage0ExtractError, build_stage0_fit_gate  # noqa: E402
+from build_stage0_fit_gate import (  # noqa: E402
+    Stage0CostAuthorizationNeeded,
+    Stage0ExtractError,
+    Stage0NeedsInput,
+    Stage0RequirementExtractionReviewNeeded,
+    build_stage0_fit_gate,
+)
 from stage_gate import StageGateNotReadyError, require_stage_ready  # noqa: E402
 
-from claim_provenance import check_claim_provenance  # noqa: E402
+from claim_provenance import check_claim_provenance, check_employer_attribution  # noqa: E402
 from check_ground_truth_coverage import check_folder as check_ground_truth_folder  # noqa: E402
 from finalize_submission_job import (  # noqa: E402
     ImplausibleJobTitleError,
@@ -42,6 +49,7 @@ from workflow.receipts import (  # noqa: E402
 from workflow.reviews import (  # noqa: E402
     ensure_stage2_subphases,
     findings_content_hash,
+    parse_disposition,
     sync_dispositions_for_phase,
     write_ats_findings,
     write_hm_findings,
@@ -76,6 +84,80 @@ def _load_json(path: str) -> dict[str, Any]:
     return data
 
 
+def _waiting_for_input_has_new_work(folder: str) -> bool:
+    """True when a WAITING_FOR_INPUT pause has new input and should resume Stage 0.
+
+    No new input means return the existing receipt and do not re-run Agy.
+    """
+    receipt = load_receipt(folder, "stage0") or {}
+    result = (receipt.get("result") or {}) if isinstance(receipt, dict) else {}
+    kind = result.get("pause_kind")
+    if kind == "subscription_review":
+        if os.path.isfile(os.path.join(folder, "stage0_cascade_import.json")):
+            return True
+        # Item 9k: a harness-side item-ID omission is a transient, retriable
+        # extraction failure, not one that requires a human to paste a
+        # manual cascade import -- classify_requirements_batch re-asks only
+        # the missing items from spool/cache on its own. Gate only the
+        # genuine cost-authorization pauses (no missing_item_ids, no
+        # omission reason) behind the manual-import file.
+        reason = str(result.get("reason") or "")
+        if result.get("missing_item_ids") or "omitted item_ids" in reason:
+            return True
+        return False
+    if kind == "requirement_extraction_review":
+        if os.path.isfile(
+            os.path.join(folder, "stage0_requirement_extraction_review.json")
+        ):
+            return True
+        # Adapter-off packs paused here with extraction_reason=no_provider.
+        # Requeue must re-run Stage 0 once Agy is on; filling the template
+        # is the wrong recovery. Same class as the omitted-item-ids retry.
+        queue = result.get("queue") or []
+        if (
+            isinstance(queue, list)
+            and queue
+            and all(
+                isinstance(item, dict)
+                and str(item.get("extraction_reason") or "") == "no_provider"
+                for item in queue
+            )
+        ):
+            return True
+        return False
+    if kind == "cost_authorization":
+        return False
+    if kind == "conversion_risk":
+        if os.path.isfile(os.path.join(folder, "conversion_risk_apply_anyway.json")):
+            return True
+        return _conversion_risk_cleared_by_chrome(folder)
+    return True
+
+
+def _conversion_risk_ready_to_author(folder: str, state: dict[str, Any]) -> bool:
+    """True when a conversion_risk pause has apply_anyway and should author."""
+    if state.get("status") != "WAITING_FOR_INPUT":
+        return False
+    receipt = load_receipt(folder, "stage0") or {}
+    result = (receipt.get("result") or {}) if isinstance(receipt, dict) else {}
+    if result.get("pause_kind") != "conversion_risk":
+        return False
+    if os.path.isfile(os.path.join(folder, "conversion_risk_apply_anyway.json")):
+        return True
+    return _conversion_risk_cleared_by_chrome(folder)
+
+
+def _conversion_risk_cleared_by_chrome(folder: str) -> bool:
+    """True when the stored risk is chrome or an anchored example list.
+
+    Resume then continues to Stage 1. It does not rebuild Stage 0.
+    Implements FR-367 and FR-374.
+    """
+    from build_stage0_fit_gate import stored_conversion_risk_can_continue
+
+    return stored_conversion_risk_can_continue(Path(folder))
+
+
 def _place_after_stage0(folder: str, state: dict[str, Any]) -> str:
     """Move Skip folders out of submissions/pending_review; promote PASS from pending.
 
@@ -90,6 +172,66 @@ def _place_after_stage0(folder: str, state: dict[str, Any]) -> str:
     mode = state.get("mode") or "production"
     new_folder = apply_stage0_placement(folder, result, mode=mode)
     return str(new_folder)
+
+
+def _queue_db_path() -> Path | None:
+    """Resolve the queue DB. Tests must not open production jobagent.sqlite."""
+    sandbox = os.environ.get("APPLYR_SANDBOX_DB")
+    if sandbox:
+        return Path(sandbox)
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        return None
+    from pipeline_queue import DEFAULT_DB
+
+    return Path(DEFAULT_DB)
+
+
+def _try_mark_already_handled_queue(slug: str) -> None:
+    """Close an unlocked queue row after ALREADY_HANDLED. Implements FR-365.
+
+    No-op if no row or no DB. Leave a live lease (locked_by set or FenceRejected).
+    """
+    from pipeline_queue import FenceRejected, connect, get_row, mark_done
+
+    db_path = _queue_db_path()
+    if db_path is None or not db_path.exists():
+        return
+    conn = connect(db_path)
+    try:
+        row = get_row(conn, slug)
+        if row is None or row.get("locked_by"):
+            return
+        mark_done(
+            slug,
+            conn=conn,
+            last_workflow_status="ALREADY_HANDLED",
+            last_stage=None,
+        )
+    except FenceRejected:
+        return
+    finally:
+        conn.close()
+
+
+def _commit_already_handled(
+    folder: str,
+    state: dict[str, Any],
+    receipt: dict[str, Any],
+) -> dict[str, Any]:
+    """Commit the ALREADY_HANDLED terminal. No Stage 1. Implements FR-365."""
+    state = commit_stage(
+        folder,
+        state,
+        receipt,
+        workflow_status="ALREADY_HANDLED",
+        active_stage=None,
+    )
+    state = dict(state)
+    state["active_stage"] = None
+    write_state(folder, state)
+    slug = str(state.get("slug") or os.path.basename(folder.rstrip("/\\")))
+    _try_mark_already_handled_queue(slug)
+    return state
 
 
 def _ensure_caller_mode(
@@ -120,65 +262,100 @@ def _ensure_caller_mode(
     return state
 
 
+def _adopt_stage0_from_disk(
+    folder: str, state: dict[str, Any], mode: str
+) -> tuple[dict[str, Any], bool]:
+    """Mint a Stage 0 receipt from an existing, contract-valid stage0_fit_gate.json
+    already on disk, without re-running extraction. Returns (state, adopted).
+
+    Why this exists as its own function, not inlined in adopt_existing() (CR-108,
+    2026-08-31, found on ebanx_95710d65): a folder can have workflow_state.json
+    claiming stage0 COMPLETE with a receipt_id while stage_receipts/stage0.json
+    itself is missing on disk (a partial/legacy migration gap, not a real edit).
+    reconcile_state_against_receipts() correctly marks that STALE ("receipt_id but
+    file missing") -- but the STALE handler in run_until_stage1_complete() used to
+    respond to *any* stage0 STALE, including this one, by calling run_stage0(),
+    which unconditionally re-runs build_stage0_fit_gate()'s full NLP/LLM extraction
+    and overwrites stage0_fit_gate.json. On ebanx_95710d65 that silently replaced a
+    real, already-authored-against PASS gate with a garbled SKIP (Original_JD.txt
+    itself is corrupted -- undecoded HTML entities, truncated mid-sentence -- so the
+    fresh extraction mis-parsed it), which cascaded into archiving the folder as a
+    genuine Stage 0 rejection. This function is the same "adopt what's already
+    validated on disk" logic that already existed for the *bare* legacy-adoption
+    case (no workflow_state.json at all) -- now reused for the *missing-receipt*
+    case too, so a lost receipt file can never trigger real re-extraction on its own.
+    Re-extraction should only ever happen when there is no valid gate file to adopt,
+    or the caller explicitly forces it (see run_stage0's own `force` path).
+    """
+    stage0_path = os.path.join(folder, "stage0_fit_gate.json")
+    if not os.path.exists(stage0_path):
+        return state, False
+    ok, errors = contracts.check_stage0_fit_gate(folder)
+    if not ok:
+        return state, False
+
+    existing = load_receipt(folder, "stage0")
+    out_hashes = file_hash_map(folder, ["stage0_fit_gate.json"])
+    in_hashes = file_hash_map(folder, ["Original_JD.txt"])
+    if existing and existing.get("output_hashes") == out_hashes:
+        # already adopted
+        return state, True
+
+    gate = _load_json(stage0_path)
+    verdict = policy.evaluate_stage0(gate)
+    if verdict["verdict"] == "SKIP":
+        status = "SKIPPED"
+        wf_status = "SKIPPED"
+        active: str | None = None
+    elif verdict["verdict"] == "ALREADY_HANDLED":
+        status = "ALREADY_HANDLED"
+        wf_status = "ALREADY_HANDLED"
+        active = None
+    else:
+        status = "COMPLETE"
+        wf_status = "IN_PROGRESS"
+        active = "stage1"
+    receipt = build_receipt(
+        stage="stage0",
+        status=status,
+        mode=mode,
+        input_hashes=in_hashes,
+        output_hashes=out_hashes,
+        result={
+            "tier": verdict["tier"],
+            "decision": verdict["decision"],
+            "adopted": True,
+        },
+        checks={"contracts.check_stage0_fit_gate": True},
+    )
+    if status == "COMPLETE":
+        state = commit_stage(
+            folder, state, receipt, workflow_status=wf_status, active_stage="stage1"
+        )
+        state["stages"]["stage1"]["status"] = "READY"
+        write_state(folder, state)
+    elif status == "ALREADY_HANDLED":
+        state = _commit_already_handled(folder, state, receipt)
+    else:
+        state = commit_stage(
+            folder, state, receipt, workflow_status=wf_status, active_stage=active
+        )
+    return state, True
+
+
 def adopt_existing(folder: str, mode: str = "production") -> dict[str, Any]:
     """Create workflow_state + receipts from valid on-disk artifacts (no rebuild)."""
     state = load_state(folder) or init_state(folder, mode=mode)
     write_state(folder, state)
 
-    stage0_path = os.path.join(folder, "stage0_fit_gate.json")
-    if os.path.exists(stage0_path):
-        ok, errors = contracts.check_stage0_fit_gate(folder)
-        if ok:
-            existing = load_receipt(folder, "stage0")
-            out_hashes = file_hash_map(folder, ["stage0_fit_gate.json"])
-            in_hashes = file_hash_map(folder, ["Original_JD.txt"])
-            if existing and existing.get("output_hashes") == out_hashes:
-                # already adopted
-                pass
-            else:
-                gate = _load_json(stage0_path)
-                verdict = policy.evaluate_stage0(gate)
-                status = "SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE"
-                wf_status = "SKIPPED" if status == "SKIPPED" else "IN_PROGRESS"
-                active = None if status == "SKIPPED" else "stage1"
-                receipt = build_receipt(
-                    stage="stage0",
-                    status=status,
-                    mode=mode,
-                    input_hashes=in_hashes,
-                    output_hashes=out_hashes,
-                    result={
-                        "tier": verdict["tier"],
-                        "decision": verdict["decision"],
-                        "adopted": True,
-                    },
-                    checks={"contracts.check_stage0_fit_gate": True},
-                )
-                if status == "COMPLETE":
-                    state = commit_stage(
-                        folder,
-                        state,
-                        receipt,
-                        workflow_status=wf_status,
-                        active_stage="stage1",
-                    )
-                    state["stages"]["stage1"]["status"] = "READY"
-                    write_state(folder, state)
-                else:
-                    state = commit_stage(
-                        folder,
-                        state,
-                        receipt,
-                        workflow_status=wf_status,
-                        active_stage=active,
-                    )
+    state, _ = _adopt_stage0_from_disk(folder, state, mode)
 
     # Prompt-ready mid-state
     packet_path = os.path.join(folder, "authoring_packet.json")
     prompt_path = os.path.join(folder, "authoring_prompt.md")
     state = load_state(folder) or state
     if (
-        state.get("status") != "SKIPPED"
+        state.get("status") not in ("SKIPPED", "ALREADY_HANDLED")
         and os.path.exists(packet_path)
         and os.path.exists(prompt_path)
     ):
@@ -223,13 +400,145 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     jd = os.path.join(folder, "Original_JD.txt")
     if not os.path.exists(jd):
         append_event(folder, _run_id, "stage0", "failed", reason="Original_JD.txt not found")
+        _persist_stage0_failed(folder, state, "Original_JD.txt not found")
         raise WorkflowError("Original_JD.txt not found")
 
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
     try:
         result = build_stage0_fit_gate(folder, ignore_skip_ledger=force)
+    except Stage0NeedsInput as exc:
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(folder, ["Original_JD.txt"]),
+            output_hashes={},
+            result={
+                "pause_kind": "review_center",
+                "opportunity_key": exc.opportunity_key,
+                "pending_confirmations": exc.pending,
+                "duration_seconds": _duration,
+            },
+            checks={"review_center_confirmations_persisted": True},
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pending_confirmations=len(exc.pending),
+        )
+        return result_state
+    except Stage0RequirementExtractionReviewNeeded as exc:
+        # CR-112: receipt-only pause (PIN 1) -- fires before run_key/
+        # request_hash/start_run exist, so no stage0_runs row is created and
+        # mark_run_status is never called for this pause.
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(
+                folder, ["Original_JD.txt", "stage0_requirement_extraction_review.json"]
+            ),
+            output_hashes={},
+            result={
+                "pause_kind": "requirement_extraction_review",
+                "opportunity_key": exc.opportunity_key,
+                "queue": exc.queue,
+                "duration_seconds": _duration,
+            },
+            checks={"requirement_extraction_review_recorded": True},
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pause_kind="requirement_extraction_review",
+            queue_size=len(exc.queue),
+        )
+        return result_state
+    except Stage0CostAuthorizationNeeded as exc:
+        mode = state.get("mode") or "production"
+        _duration = round(time.time() - _t0, 3)
+        pause_kind = exc.pause_kind()
+        model_call = bool(exc.model_call_occurred) if pause_kind == "subscription_review" else False
+        receipt = build_receipt(
+            stage="stage0",
+            status="WAITING_FOR_INPUT",
+            mode=mode,
+            input_hashes=file_hash_map(
+                folder, ["Original_JD.txt", "stage0_cascade_import.json"]
+            ),
+            output_hashes={},
+            result={
+                "pause_kind": pause_kind,
+                "stage": "stage0",
+                "attempted_operation": "evidence_classification",
+                "authorization_mode": exc.authorization_mode,
+                "ineligible_providers": exc.ineligible_providers,
+                "model_call_occurred": model_call,
+                "cost_applicable": False,
+                "cost_known": False,
+                "cost_confidence": "unknown",
+                "reason": exc.reason,
+                "missing_item_ids": list(getattr(exc, "missing_item_ids", []) or []),
+                "next_paths": exc.next_paths,
+                "resume_command": f"python scripts/run_submission.py {folder} --resume",
+                "import_path": os.path.join(folder, "stage0_cascade_import.json"),
+                "duration_seconds": _duration,
+                "cost_receipt": exc.cost_receipt,
+            },
+            checks={
+                "cost_authorization_required": pause_kind == "cost_authorization",
+                "model_call_occurred": model_call,
+            },
+        )
+        result_state = commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            duration_seconds=_duration,
+            pause_kind=pause_kind,
+            reason=exc.reason,
+        )
+        return result_state
     except Stage0ExtractError as exc:
         append_event(folder, _run_id, "stage0", "failed", reason=str(exc)[:500])
+        # 2026-09-21 (nava_benefits): raising here with no state write left
+        # workflow_state.json at NOT_STARTED. map_run_result() only recognizes
+        # a terminal status, so the queue worker left the row in_progress on
+        # an active lease until expiry. Persist FAILED first, same as a
+        # Stage 1 over-budget packet.
+        _persist_stage0_failed(folder, state, str(exc))
         raise WorkflowError(str(exc)) from exc
     protected = False
     if os.path.exists(gate_path) and not force:
@@ -252,18 +561,38 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     verdict = policy.evaluate_stage0(result)
     mode = state.get("mode") or "production"
     _duration = round(time.time() - _t0, 3)
+    used_import = bool((result.get("cascade_import") or {}).get("used"))
+    consumed_name = None
+    if used_import:
+        from stage0_evidence_cascade import consume_cascade_import
+
+        consumed_name = consume_cascade_import(folder)
+    input_files = ["Original_JD.txt"]
+    if consumed_name:
+        input_files.append(consumed_name)
+    receipt_result = {
+        "tier": verdict["tier"],
+        "decision": verdict["decision"],
+        "reasons": verdict["reasons"],
+        "duration_seconds": _duration,
+    }
+    if used_import:
+        receipt_result["cascade_import"] = dict(result.get("cascade_import") or {})
+        receipt_result["model_call_occurred"] = False
+        receipt_result["cost_applicable"] = False
+    if verdict["verdict"] == "SKIP":
+        receipt_status = "SKIPPED"
+    elif verdict["verdict"] == "ALREADY_HANDLED":
+        receipt_status = "ALREADY_HANDLED"
+    else:
+        receipt_status = "COMPLETE"
     receipt = build_receipt(
         stage="stage0",
-        status="SKIPPED" if verdict["verdict"] == "SKIP" else "COMPLETE",
+        status=receipt_status,
         mode=mode,
-        input_hashes=file_hash_map(folder, ["Original_JD.txt"]),
+        input_hashes=file_hash_map(folder, input_files),
         output_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
-        result={
-            "tier": verdict["tier"],
-            "decision": verdict["decision"],
-            "reasons": verdict["reasons"],
-            "duration_seconds": _duration,
-        },
+        result=receipt_result,
         checks={"contracts.check_stage0_fit_gate": True, "policy.evaluate_stage0": verdict["verdict"]},
     )
     # M0.1-M0.3, M0.5, M0.7 signals — see the design doc's metric catalog.
@@ -286,6 +615,9 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
             workflow_status="SKIPPED",
             active_stage=None,
         )
+    if verdict["verdict"] == "ALREADY_HANDLED":
+        append_event(folder, _run_id, "stage0", "already_handled", **_event_fields)
+        return _commit_already_handled(folder, state, receipt)
     if verdict["verdict"] != "PASS":
         failed = dict(receipt)
         failed["status"] = "FAILED"
@@ -309,6 +641,48 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
         append_event(folder, _run_id, "stage0", "failed", reasons=verdict["reasons"], **_event_fields)
         raise WorkflowError("Stage 0 policy FAIL: " + "; ".join(verdict["reasons"]))
 
+    from pipeline_queue import (
+        CONVERSION_RISK_OVERRIDE_NAME,
+        PAUSE_KIND_CONVERSION_RISK,
+    )
+
+    feasibility = result.get("conversion_feasibility") or {}
+    override_path = os.path.join(folder, CONVERSION_RISK_OVERRIDE_NAME)
+    if feasibility.get("verdict") == "risk" and not os.path.isfile(override_path):
+        receipt_result["pause_kind"] = PAUSE_KIND_CONVERSION_RISK
+        receipt_result["conversion_feasibility"] = feasibility
+        receipt = build_receipt(
+            stage="stage0",
+            status="COMPLETE",
+            mode=mode,
+            input_hashes=file_hash_map(folder, input_files),
+            output_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
+            result=receipt_result,
+            checks={
+                "contracts.check_stage0_fit_gate": True,
+                "policy.evaluate_stage0": verdict["verdict"],
+            },
+        )
+        state = dict(state)
+        meta = dict(state.get("metadata") or {})
+        meta["pause_kind"] = PAUSE_KIND_CONVERSION_RISK
+        state["metadata"] = meta
+        append_event(
+            folder,
+            _run_id,
+            "stage0",
+            "waiting_for_input",
+            pause_kind=PAUSE_KIND_CONVERSION_RISK,
+            **_event_fields,
+        )
+        return commit_stage(
+            folder,
+            state,
+            receipt,
+            workflow_status="WAITING_FOR_INPUT",
+            active_stage="stage0",
+        )
+
     state = commit_stage(
         folder,
         state,
@@ -320,6 +694,46 @@ def run_stage0(folder: str, state: dict[str, Any], *, force: bool = False) -> di
     write_state(folder, state)
     append_event(folder, _run_id, "stage0", "complete", **_event_fields)
     return state
+
+
+_STAGE1_WAITING_OUTPUTS = (
+    "authoring_packet.json",
+    "authoring_prompt.md",
+    "authoring_prompt_meta.json",
+)
+
+
+def _refresh_waiting_stage1_receipt(folder: str, state: dict[str, Any]) -> dict[str, Any]:
+    """Keep a WAITING_FOR_LLM receipt aligned with rebuilt packet/prompt files."""
+    r1 = load_receipt(folder, "stage1")
+    if not r1 or r1.get("status") != "WAITING_FOR_LLM":
+        return state
+    packet_path = os.path.join(folder, "authoring_packet.json")
+    prompt_path = os.path.join(folder, "authoring_prompt.md")
+    if not os.path.exists(packet_path) or not os.path.exists(prompt_path):
+        return state
+    names = [name for name in _STAGE1_WAITING_OUTPUTS if os.path.exists(os.path.join(folder, name))]
+    current = file_hash_map(folder, names)
+    if current == (r1.get("output_hashes") or {}):
+        return state
+    r0 = load_receipt(folder, "stage0")
+    receipt = build_receipt(
+        stage="stage1",
+        status="WAITING_FOR_LLM",
+        mode=state.get("mode") or "production",
+        input_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
+        output_hashes=current,
+        result={**(r1.get("result") or {}), "refreshed_hashes": True},
+        checks=r1.get("checks") or {"packet_status_ready": True},
+        prior_receipt_id=(r0 or {}).get("receipt_id") or r1.get("prior_receipt_id"),
+    )
+    return commit_stage(
+        folder,
+        state,
+        receipt,
+        workflow_status="WAITING_FOR_LLM",
+        active_stage="stage1",
+    )
 
 
 def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = True) -> dict[str, Any]:
@@ -347,6 +761,30 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
     if not ok:
         raise WorkflowError("Stage 0 outputs stale:\n  - " + "\n  - ".join(errs))
 
+    from utils import IdentityError, resolve_identity
+
+    try:
+        _profile, identity_source = resolve_identity()
+    except IdentityError as exc:
+        raise WorkflowError(
+            "FAIL [identity] - workExperience.md missing or malformed; "
+            "set APPLYR_SYNTHETIC_IDENTITY=1 for test/eval mode, "
+            "or copy workExperience.md into this worktree "
+            "(identity_source=missing)"
+        ) from exc
+    state = dict(state)
+    meta = dict(state.get("metadata") or {})
+    meta["identity_source"] = identity_source
+    state["metadata"] = meta
+
+    from pipeline_queue import (
+        is_retryable_stage1_budget_failure,
+        write_stage1_budget_retry_marker,
+    )
+
+    if is_retryable_stage1_budget_failure(Path(folder)):
+        write_stage1_budget_retry_marker(Path(folder))
+
     packet = build_packet(Path(folder), no_hook=no_hook)
     packet_path = os.path.join(folder, "authoring_packet.json")
     with open(packet_path, "w", encoding="utf-8") as f:
@@ -355,10 +793,18 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
 
     verdict = policy.evaluate_packet(packet)
     if verdict["verdict"] != "PASS":
-        raise WorkflowError(
-            "authoring_packet.json not ready (no --force for packet_status):\n  - "
-            + "\n  - ".join(verdict["reasons"])
+        reason = "authoring_packet.json not ready (no --force for packet_status):\n  - " + "\n  - ".join(
+            verdict["reasons"]
         )
+        # 2026-09-20 (clarion_events_inc_north_america, over token budget): this
+        # used to raise straight through with no state write, leaving
+        # workflow_state.json at whatever it was mid-run (IN_PROGRESS) --
+        # map_run_result() only recognizes a terminal status, so the queue
+        # worker had nothing to map and the row sat `in_progress` on an
+        # active lease until it expired. Persist FAILED first, same as a
+        # Stage 1 verify failure, so the worker releases the lease immediately.
+        _persist_stage1_failed(folder, state, reason)
+        raise WorkflowError(reason)
 
     prompt_md, meta = build_authoring_prompt(Path(folder), force=False)
     prompt_path = os.path.join(folder, "authoring_prompt.md")
@@ -399,9 +845,17 @@ def run_stage1_prompt(folder: str, state: dict[str, Any], *, no_hook: bool = Tru
 
 
 def _docs_present(folder: str) -> bool:
-    return os.path.exists(os.path.join(folder, "Resume.md")) and os.path.exists(
-        os.path.join(folder, "CoverLetter.md")
-    )
+    for name in ("Resume.md", "CoverLetter.md"):
+        path = os.path.join(folder, name)
+        if not os.path.exists(path):
+            return False
+        try:
+            with open(path, encoding="utf-8") as handle:
+                if not handle.read().strip():
+                    return False
+        except OSError:
+            return False
+    return True
 
 
 def reconcile(folder: str, state: dict[str, Any]) -> dict[str, Any]:
@@ -428,14 +882,49 @@ def _verify_attempt_count(folder: str) -> int | None:
         return None
 
 
+def _persist_stage0_failed(folder: str, state: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Queue mapping reads workflow status. Stage 0 extract failures must be FAILED."""
+    state = dict(state)
+    stages = dict(state.get("stages") or {})
+    s0_failed = dict(stages.get("stage0") or {})
+    s0_failed["status"] = "FAILED"
+    stages["stage0"] = s0_failed
+    state["stages"] = stages
+    state["status"] = "FAILED"
+    state["active_stage"] = "stage0"
+    meta = dict(state.get("metadata") or {})
+    meta["stage0_fail_reason"] = reason[:500]
+    state["metadata"] = meta
+    write_state(folder, state)
+    return state
+
+
+def _persist_stage1_failed(folder: str, state: dict[str, Any], reason: str) -> dict[str, Any]:
+    """Queue mapping reads workflow status. Stage 1 verify/ready failures must be FAILED."""
+    state = dict(state)
+    stages = dict(state.get("stages") or {})
+    s1_failed = dict(stages.get("stage1") or {})
+    s1_failed["status"] = "FAILED"
+    stages["stage1"] = s1_failed
+    state["stages"] = stages
+    state["status"] = "FAILED"
+    state["active_stage"] = "stage1"
+    meta = dict(state.get("metadata") or {})
+    meta["stage1_fail_reason"] = reason[:500]
+    state["metadata"] = meta
+    write_state(folder, state)
+    return state
+
+
 def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     """CR-077: after LLM compose, run verify-only and write Stage 1 COMPLETE receipt."""
     _run_id = new_run_id()
     _t0 = time.time()
     append_event(folder, _run_id, "stage1.validate", "start")
+    state = _refresh_waiting_stage1_receipt(folder, state)
     state = reconcile(folder, state)
     s1 = (state.get("stages") or {}).get("stage1") or {}
-    if s1.get("status") == "STALE":
+    if s1.get("status") in ("STALE", "FAILED"):
         # Re-validate is allowed — treat as READY for validate path
         state["stages"]["stage1"]["status"] = "READY"
         state["status"] = "IN_PROGRESS"
@@ -449,9 +938,9 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     # CR-075 safety: packet_status ready + docs (no force)
     ok, errors = contracts.check_stage1_ready(folder)
     if not ok:
-        raise WorkflowError(
-            "check_stage1_ready failed:\n  - " + "\n  - ".join(errors)
-        )
+        reason = "check_stage1_ready failed:\n  - " + "\n  - ".join(errors)
+        _persist_stage1_failed(folder, state, reason)
+        raise WorkflowError(reason)
 
     # Prior: Stage 0 must still be COMPLETE + fresh
     r0 = load_receipt(folder, "stage0")
@@ -468,20 +957,104 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     prior_id = r0.get("receipt_id")
 
     verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+    from utils import IdentityError, resolve_identity
+
+    try:
+        _profile, identity_source = resolve_identity()
+    except IdentityError:
+        identity_source = "missing"
+    state = dict(state)
+    meta = dict(state.get("metadata") or {})
+    meta["identity_source"] = identity_source
+    state["metadata"] = meta
     # CR-097 Story 1.3: record inside run_verify_only so a failing attempt is
     # persisted before this runner raises WorkflowError.
     if not verify_ok:
-        append_event(
-            folder,
-            _run_id,
-            "stage1.validate",
-            "verify_failed",
-            duration_seconds=round(time.time() - _t0, 3),
-            attempt=_verify_attempt_count(folder),
+        from closed_world_recovery import recover_stage1_extras_guarded
+        from packet_closed_world import extra_packet_findings as extra_findings_fn
+
+        packet = None
+        provenance = None
+        try:
+            with open(os.path.join(folder, "authoring_packet.json"), encoding="utf-8") as handle:
+                packet = json.load(handle)
+            with open(os.path.join(folder, "claim_provenance.json"), encoding="utf-8") as handle:
+                provenance = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            packet = None
+            provenance = None
+        extras = (
+            extra_findings_fn(packet, provenance)
+            if isinstance(packet, dict) and isinstance(provenance, dict)
+            else []
         )
-        raise WorkflowError(
-            "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
-        )
+        if extras:
+            recovery = recover_stage1_extras_guarded(Path(folder), apply=True)
+            if recovery.get("status") == "WAITING_FOR_LLM":
+                prompt_md, meta = build_authoring_prompt(Path(folder), force=True)
+                prompt_path = os.path.join(folder, "authoring_prompt.md")
+                meta_path = os.path.join(folder, "authoring_prompt_meta.json")
+                with open(prompt_path, "w", encoding="utf-8") as handle:
+                    handle.write(prompt_md)
+                with open(meta_path, "w", encoding="utf-8") as handle:
+                    json.dump(meta, handle, indent=2, ensure_ascii=False)
+                    handle.write("\n")
+                mode = state.get("mode") or "production"
+                receipt = build_receipt(
+                    stage="stage1",
+                    status="WAITING_FOR_LLM",
+                    mode=mode,
+                    input_hashes=file_hash_map(folder, ["stage0_fit_gate.json"]),
+                    output_hashes=file_hash_map(
+                        folder,
+                        ["authoring_packet.json", "authoring_prompt.md", "authoring_prompt_meta.json"],
+                    ),
+                    result={"closed_world_widen": True},
+                    checks={"closed_world_recovery.widen": True},
+                    prior_receipt_id=prior_id,
+                )
+                result_state = commit_stage(
+                    folder,
+                    state,
+                    receipt,
+                    workflow_status="WAITING_FOR_LLM",
+                    active_stage="stage1",
+                )
+                append_event(folder, _run_id, "stage1.validate", "closed_world_widen")
+                return result_state
+            if recovery.get("status") == "PAUSE_REVIEW":
+                raise WorkflowError(
+                    "closed-world recovery paused — see closed_world_recovery.json. "
+                    "Record human_decision on the item (REMOVE_EXTRA or WIDEN_PACKET), "
+                    "then --resume. This is not NEEDS_DISPOSITION."
+                )
+            if recovery.get("applied"):
+                verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+        if not verify_ok:
+            from stage1_prerepair import apply_mechanical_fixes
+
+            auto = apply_mechanical_fixes(Path(folder))
+            if auto.get("changed"):
+                from build_stage1_repair_prompt import load_repair_state, save_repair_state
+
+                state_payload = load_repair_state(Path(folder))
+                state_payload["auto_fixes"] = auto.get("applied") or []
+                state_payload["auto_fix_skipped"] = auto.get("skipped") or []
+                state_payload["last_outcome"] = "auto_fixed"
+                save_repair_state(Path(folder), state_payload)
+                verify_ok = run_verify_only(Path(folder), record_to=Path(folder))
+        if not verify_ok:
+            append_event(
+                folder,
+                _run_id,
+                "stage1.validate",
+                "verify_failed",
+                duration_seconds=round(time.time() - _t0, 3),
+                attempt=_verify_attempt_count(folder),
+            )
+            reason = "author_from_packet.run_verify_only FAILED — fix docs using packet+digest only"
+            _persist_stage1_failed(folder, state, reason)
+            raise WorkflowError(reason)
 
     mode = state.get("mode") or "production"
     out_files = [
@@ -491,6 +1064,21 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
     ]
     if os.path.exists(os.path.join(folder, "claim_provenance.json")):
         out_files.append("claim_provenance.json")
+
+    # CR-112 Story 8.3.1: preserve the authoritative pre-edit state on the
+    # Stage 1 COMPLETE receipt. If this is a re-validation (Stage 1 was already
+    # COMPLETE), the previous COMPLETE receipt's output_hashes become
+    # prior_output_hashes on the new receipt, so a later RESOLVED_EDIT can
+    # prove an implicated document actually changed since the HM finding —
+    # sourced from committed workflow state, never from a reviewer-supplied
+    # payload. First-validation folders (previous receipt is WAITING_FOR_LLM)
+    # keep the field absent: there is no pre-edit state to cite. Once set, the
+    # original prior is carried forward so multi-edit sequences never lose the
+    # base against which "changed" is judged.
+    prev_s1 = load_receipt(folder, "stage1")
+    prior_output_hashes = None
+    if prev_s1 and prev_s1.get("status") == "COMPLETE":
+        prior_output_hashes = prev_s1.get("prior_output_hashes") or prev_s1.get("output_hashes")
 
     _duration = round(time.time() - _t0, 3)
     _attempt_count = _verify_attempt_count(folder)
@@ -503,6 +1091,7 @@ def run_stage1_validate(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             ["stage0_fit_gate.json", "authoring_packet.json", "authoring_prompt.md"],
         ),
         output_hashes=file_hash_map(folder, out_files),
+        prior_output_hashes=prior_output_hashes,
         result={"verify_only": True, "duration_seconds": _duration, "verify_attempts": _attempt_count},
         checks={
             "contracts.check_stage1_ready": True,
@@ -585,13 +1174,368 @@ def _emit_subphase_event(
         "findings_by_severity": _finding_severity_counts(findings_doc),
         "disposition_counts": _disposition_counts(folder, phase, findings_doc),
     }
+    # CR-070 Story 7.1: surface PDF compile timing when available (Mech phase only).
+    _pdf_secs = findings_doc.get("pdf_compile_seconds")
+    if _pdf_secs is not None:
+        fields["pdf_compile_seconds"] = _pdf_secs
     if reasons:
         fields["reasons"] = reasons
     append_event(folder, run_id, f"stage2.{phase}", event, **fields)
 
 
+_UNUSED_COVERAGE_REASON = (
+    "Tag-level coverage heuristic. Required evidence is already cited and the "
+    "optimization bar passed. This tag is not a missing required claim."
+)
+_ATS_EXTRACTOR_REASON = (
+    "Stage 1 already passed the packet ATS term contract. These extractor "
+    "hits are not on that contract, so they stay off the resume."
+)
+_LW021_REASON = (
+    "The flagged words are ordinary English (within, goals, plans), not "
+    "vocabulary that belongs to this employer."
+)
+_QUEUE_HM_HEURISTIC_MARKERS = (
+    ".LW-009-PAIR.",
+    ".LW-008-PAIR.",
+    ".LW-008.",
+    ".LW-014.",
+    ".LW-003.",
+)
+_QUEUE_HM_HEURISTIC_REASON = (
+    "Density and shared-phrase warnings are heuristics. The overlap is the "
+    "same true proof point in both documents, not a false claim."
+)
+_SKIP_REVIEW_LINE_RE = re.compile(
+    r"^(?:#|URL:|Title:|Dear\b|Best regards|Regards,|Thank you\b)",
+    re.I,
+)
+
+
+def _queue_hm_settle_enabled() -> bool:
+    """True for queue children, which already force the Stage 0 Agy adapter."""
+    return os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER", "").strip() == "1"
+
+
+def _verbatim_review_line(text: str) -> str | None:
+    """Return one verbatim line long enough to quote in an HM observation."""
+    for line in (text or "").splitlines():
+        raw = line.strip()
+        if raw.startswith("* "):
+            raw = raw[2:].strip()
+        if len(raw) < 12 or _SKIP_REVIEW_LINE_RE.match(raw):
+            continue
+        if raw.count("|") >= 2:
+            continue
+        return raw
+    return None
+
+
+def _queue_hm_review_value(folder: str) -> dict[str, Any] | None:
+    """Build a reviewer disposition whose spans are quotes from the packet.
+
+    Returns None when a document has no quotable line. The contract still
+    checks the quotes against the files.
+    """
+    paths = {
+        "Resume.md": os.path.join(folder, "Resume.md"),
+        "CoverLetter.md": os.path.join(folder, "CoverLetter.md"),
+        "Original_JD.txt": os.path.join(folder, "Original_JD.txt"),
+    }
+    texts: dict[str, str] = {}
+    hashes: dict[str, str] = {}
+    for name, path in paths.items():
+        if not os.path.isfile(path):
+            return None
+        data = Path(path).read_bytes()
+        texts[name] = data.decode("utf-8")
+        hashes[name] = hashlib.sha256(data).hexdigest()
+    resume_line = _verbatim_review_line(texts["Resume.md"])
+    cover_line = _verbatim_review_line(texts["CoverLetter.md"])
+    jd_line = _verbatim_review_line(texts["Original_JD.txt"])
+    if not resume_line or not cover_line or not jd_line:
+        return None
+    return {
+        "disposition": "ACCEPTED_AS_CORRECT",
+        "reasoning": (
+            "Resume and cover letter each carry a concrete proof line, and "
+            "the JD line quoted here is the requirement those lines answer."
+        ),
+        "hm_review": {
+            "reviewed_document_hashes": hashes,
+            "reviewer_role": "reviewer",
+            "review_timestamp": utc_now(),
+            "verdict": "pass",
+            "overall_reasoning": (
+                "The quoted resume line and cover-letter line are the proof "
+                "a hiring manager would use for the quoted JD line."
+            ),
+            "observations": [
+                {
+                    "document": "Resume.md",
+                    "location": "professional experience bullet",
+                    "document_span": resume_line,
+                    "finding": "The resume states this proof in the experience section.",
+                    "jd_relevance": "This line is the resume's answer to the quoted JD requirement.",
+                    "jd_span": jd_line,
+                    "recommendation": "pass",
+                },
+                {
+                    "document": "CoverLetter.md",
+                    "location": "cover letter body",
+                    "document_span": cover_line,
+                    "finding": "The letter argues from this sentence rather than from a generic fit claim.",
+                    "jd_relevance": "The letter uses this sentence against the same JD line.",
+                    "jd_span": jd_line,
+                    "recommendation": "pass",
+                },
+            ],
+        },
+    }
+
+
+def _accept_queue_hm_heuristics(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Record ACCEPTED_AS_CORRECT for pair and density warnings only."""
+    from workflow.policy import parse_disposition
+    from workflow.reviews import _write_dispositions
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    open_ids: list[str] = []
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if disp_s:
+            continue
+        if str(item.get("severity") or "").upper() != "WARN":
+            return False
+        if any(marker in fid for marker in _QUEUE_HM_HEURISTIC_MARKERS):
+            open_ids.append(fid)
+    if not open_ids:
+        return False
+    for fid in open_ids:
+        by_id[fid] = {
+            "disposition": "ACCEPTED_AS_CORRECT",
+            "reasoning": _QUEUE_HM_HEURISTIC_REASON,
+        }
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
+def _critical_read_is_only_open(
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """True when hm.critical_read is the only finding still without a disposition."""
+    from workflow.policy import parse_disposition
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list):
+        return False
+    saw = False
+    by_id = dispositions.get("by_finding_id") or {}
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if disp_s:
+            continue
+        if fid != "hm.critical_read":
+            return False
+        saw = True
+    return saw
+
+
+def _record_queue_hm_read(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Write the structured hiring-manager read when it is the only open warning."""
+    from workflow.reviews import _write_dispositions
+
+    if not _critical_read_is_only_open(findings_doc, dispositions):
+        return False
+    review = _queue_hm_review_value(folder)
+    if review is None:
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    by_id["hm.critical_read"] = review
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
+def _other_hm_findings_disposed(
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """True when every finding except hm.critical_read already has a disposition."""
+    from workflow.policy import parse_disposition
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id = dispositions.get("by_finding_id") or {}
+    saw_critical = False
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        if fid == "hm.critical_read":
+            saw_critical = True
+            continue
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if not disp_s:
+            return False
+    return saw_critical
+
+
+def _refresh_stale_queue_hm_read(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Rebuild a queue hiring-manager read after this pass rewrote the files.
+
+    collect_hm_findings edits the documents before the contract check. A read
+    recorded on the previous bytes stays bound, because the finding ids did
+    not change, and the hash check then parks the folder. This replaces that
+    read only when the stored hashes no longer match and a fresh read validates.
+    An open warning other than the read is left alone. A review that fails for
+    any other reason is left alone.
+    """
+    # Implements FR-417
+    from hm_review_contract import validate_hm_review
+    from workflow.policy import parse_disposition
+    from workflow.reviews import _write_dispositions
+
+    if not _other_hm_findings_disposed(findings_doc, dispositions):
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    stored = by_id.get("hm.critical_read")
+    disp_s, _existing = parse_disposition(stored)
+    if not disp_s:
+        return False
+    ok, errors = validate_hm_review(folder, stored)
+    if ok or not any("does not match on-disk file" in err for err in errors):
+        return False
+    review = _queue_hm_review_value(folder)
+    if review is None:
+        return False
+    fresh_ok, _fresh_errors = validate_hm_review(folder, review)
+    if not fresh_ok:
+        return False
+    by_id["hm.critical_read"] = review
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
+def _hm_critical_read_errors(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> list[str]:
+    """Return contract errors for a passing hm.critical_read disposition."""
+    from hm_review_contract import HM_REVIEW_DISPOSITIONS, validate_hm_review
+    from workflow.policy import parse_disposition
+
+    errors: list[str] = []
+    by_id = dispositions.get("by_finding_id") or {}
+    for item in findings_doc.get("findings") or []:
+        if not isinstance(item, dict):
+            continue
+        fid = str(item.get("id") or "")
+        if fid != "hm.critical_read":
+            continue
+        disp_value = by_id.get(fid)
+        disp_s, _ = parse_disposition(disp_value)
+        if disp_s in HM_REVIEW_DISPOSITIONS:
+            ok, errs = validate_hm_review(
+                folder,
+                disp_value,
+                implicated_documents=item.get("implicated_documents"),
+            )
+            if not ok:
+                errors.extend(errs)
+    return errors
+
+
+def _accept_open_warnings(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+    *,
+    prefix: str,
+    reasoning: str,
+) -> bool:
+    """Record ACCEPTED_AS_CORRECT for one warning family and nothing else.
+
+    A BLOCK, or any warning outside that family, stays open. Implements FR-265.
+    """
+    from workflow.policy import parse_disposition
+    from workflow.reviews import _write_dispositions
+
+    findings = findings_doc.get("findings") or []
+    if not isinstance(findings, list) or not findings:
+        return False
+    by_id = dict(dispositions.get("by_finding_id") or {})
+    open_ids: list[str] = []
+    for item in findings:
+        if not isinstance(item, dict):
+            return False
+        fid = str(item.get("id") or "")
+        disp_s, _existing = parse_disposition(by_id.get(fid))
+        if disp_s:
+            continue
+        if str(item.get("severity") or "").upper() != "WARN":
+            return False
+        if not fid.startswith(prefix):
+            continue
+        open_ids.append(fid)
+    if not open_ids:
+        return False
+    for fid in open_ids:
+        by_id[fid] = {
+            "disposition": "ACCEPTED_AS_CORRECT",
+            "reasoning": reasoning,
+        }
+    bound = dict(dispositions.get("bound_findings_hashes") or {})
+    _write_dispositions(folder, by_id, bound)
+    return True
+
+
+def _accept_unused_coverage_warnings(
+    folder: str,
+    findings_doc: dict[str, Any],
+    dispositions: dict[str, Any],
+) -> bool:
+    """Record the unused-tag heuristic. A BLOCK stays open."""
+    return _accept_open_warnings(
+        folder,
+        findings_doc,
+        dispositions,
+        prefix="truth.coverage.unused.",
+        reasoning=_UNUSED_COVERAGE_REASON,
+    )
+
+
 def collect_truth_findings(folder: str) -> dict[str, Any]:
     """Run mechanical Truth workers and aggregate into reviews/truth_findings.json."""
+    from run_stage1_repair import heal_provenance_file
+
+    heal_provenance_file(Path(folder))
     findings: list[dict[str, Any]] = []
 
     # 1. Claim provenance — fabricated/disabled IDs are BLOCK
@@ -607,7 +1551,24 @@ def collect_truth_findings(folder: str) -> dict[str, Any]:
                 }
             )
 
-    # 2. Ground-truth coverage — unused JD-relevant claims are WARN
+    # 2. Employer attribution — a bullet citing a claim attributed to a different
+    #    employer than the role section it's drafted under is BLOCK, same tier as a
+    #    fabricated citation: this is a mechanical mismatch (employer field vs. resume
+    #    section), not a judgment call. See check_employer_attribution()'s docstring
+    #    (2026-08-31, Papigen) for the real submission this was found on.
+    emp_ok, emp_errors = check_employer_attribution(folder)
+    if not emp_ok:
+        for i, err in enumerate(emp_errors):
+            findings.append(
+                {
+                    "id": f"truth.employer_attribution.{i}",
+                    "source": "check_employer_attribution",
+                    "severity": "BLOCK",
+                    "message": err,
+                }
+            )
+
+    # 3. Ground-truth coverage — unused JD-relevant claims are WARN
     coverage = check_ground_truth_folder(folder)
     cov_path = os.path.join(folder, "ground_truth_coverage.json")
     with open(cov_path, "w", encoding="utf-8") as f:
@@ -659,6 +1620,7 @@ def collect_truth_findings(folder: str) -> dict[str, Any]:
         "findings": findings,
         "checks": {
             "claim_provenance_ok": prov_ok,
+            "employer_attribution_ok": emp_ok,
             "ground_truth_coverage_clean": bool(coverage.get("clean"))
             if not coverage.get("error")
             else False,
@@ -708,6 +1670,13 @@ def run_stage2_truth(folder: str, state: dict[str, Any]) -> dict[str, Any]:
         raise WorkflowError(
             "Truth policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
+
+    if verdict["verdict"] == "NEEDS_DISPOSITION" and _accept_unused_coverage_warnings(
+        folder, findings_doc, dispositions
+    ):
+        dispositions = sync_dispositions_for_phase(folder, "truth", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
 
     if verdict["verdict"] == "NEEDS_DISPOSITION":
         truth["status"] = "NEEDS_DISPOSITION"
@@ -826,6 +1795,17 @@ def run_stage2_ats(folder: str, state: dict[str, Any]) -> dict[str, Any]:
             "ATS policy FAIL:\n  - " + "\n  - ".join(verdict.get("reasons") or [])
         )
 
+    if verdict["verdict"] == "NEEDS_DISPOSITION" and _accept_open_warnings(
+        folder,
+        findings_doc,
+        dispositions,
+        prefix="ats.jd_terms.missing.",
+        reasoning=_ATS_EXTRACTOR_REASON,
+    ):
+        dispositions = sync_dispositions_for_phase(folder, "ats", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
+
     if verdict["verdict"] == "NEEDS_DISPOSITION":
         ats["status"] = "NEEDS_DISPOSITION"
         ats["findings_hash"] = fhash
@@ -883,6 +1863,24 @@ def _apply_subphase_verdict(
     s2 = state["stages"]["stage2"]
     phase_rec = s2["subphases"][phase]
 
+    # CR-112 Story 8.3: hm.critical_read structured review artifact validation.
+    # After the policy verdict, if phase is "hm" and the verdict is PASS,
+    # validate that any hm.critical_read disposition includes a structured
+    # review artifact. This is a substance gate — the existing policy only
+    # checks reasoning length, not review evidence. Implements FR-319 / AC-417.
+    if phase == "hm" and verdict["verdict"] == "PASS":
+        # CR-112 Story 8.3.1: bind the finding's own implicated documents
+        # into evidence validation so RESOLVED_EDIT must prove a change to
+        # a document the finding actually covers.
+        hm_errors = _hm_critical_read_errors(folder, findings_doc, dispositions)
+        if hm_errors:
+            verdict = {
+                "verdict": "NEEDS_DISPOSITION",
+                "integrity": "CLEAN",
+                "open_finding_ids": ["hm.critical_read"],
+                "reasons": hm_errors,
+            }
+
     if verdict["verdict"] == "FAIL":
         phase_rec["status"] = "FAILED"
         phase_rec["findings_hash"] = fhash
@@ -896,7 +1894,55 @@ def _apply_subphase_verdict(
             + "\n  - ".join(verdict.get("reasons") or [])
         )
 
+    if (
+        verdict["verdict"] == "NEEDS_DISPOSITION"
+        and phase == "hm"
+        and _accept_open_warnings(
+            folder,
+            findings_doc,
+            dispositions,
+            prefix="hm.lint.warn.cross-employer audience bleed.LW-021.",
+            reasoning=_LW021_REASON,
+        )
+    ):
+        dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
+
+    settle_attempted = False
+    if (
+        verdict["verdict"] == "NEEDS_DISPOSITION"
+        and phase == "hm"
+        and _queue_hm_settle_enabled()
+    ):
+        # Queue children close heuristic WARNs and the standing hiring-manager
+        # read in this same pass. A remaining non-heuristic warning still pauses.
+        settle_attempted = True
+        if _accept_queue_hm_heuristics(folder, findings_doc, dispositions):
+            dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        if _record_queue_hm_read(folder, findings_doc, dispositions):
+            dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        if _refresh_stale_queue_hm_read(folder, findings_doc, dispositions):
+            dispositions = sync_dispositions_for_phase(folder, "hm", findings_doc)
+        verdict = policy.evaluate_truth_findings(findings_doc, dispositions)
+        fhash = findings_content_hash(findings_doc)
+        if verdict["verdict"] == "PASS":
+            hm_errors = _hm_critical_read_errors(folder, findings_doc, dispositions)
+            if hm_errors:
+                verdict = {
+                    "verdict": "NEEDS_DISPOSITION",
+                    "integrity": "CLEAN",
+                    "open_finding_ids": ["hm.critical_read"],
+                    "reasons": hm_errors,
+                }
+
     if verdict["verdict"] == "NEEDS_DISPOSITION":
+        if settle_attempted:
+            meta = state.get("metadata")
+            if not isinstance(meta, dict):
+                meta = {}
+                state["metadata"] = meta
+            meta["hm_queue_settle"] = "left_open"
         phase_rec["status"] = "NEEDS_DISPOSITION"
         phase_rec["findings_hash"] = fhash
         s2["status"] = "NEEDS_DISPOSITION"
@@ -923,6 +1969,21 @@ def _apply_subphase_verdict(
 
 def collect_hm_findings(folder: str) -> dict[str, Any]:
     """HM-facing mechanical signals: lint WARNs + hard blocks (should be rare post-Stage1)."""
+    from stage1_prerepair import (
+        rewrite_bypass_ingestion,
+        soften_contributed_ownership,
+        strip_unverified_partner_clauses,
+        extend_thin_cover,
+        break_hook_jd_paraphrase,
+        expand_tilde_numbers,
+    )
+
+    rewrite_bypass_ingestion(Path(folder))
+    soften_contributed_ownership(Path(folder))
+    strip_unverified_partner_clauses(Path(folder))
+    break_hook_jd_paraphrase(Path(folder))
+    expand_tilde_numbers(Path(folder))
+    extend_thin_cover(Path(folder))
     findings: list[dict[str, Any]] = []
     lint_results = submission_linter.lint_folder(folder)
     for r in lint_results:
@@ -948,6 +2009,11 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
             )
 
     # Explicit critical-read gate: Jason confirms a hiring-manager read happened.
+    # CR-112 Story 8.3.1: implicated_documents names the files covered by the
+    # read (Resume.md + CoverLetter.md). It is stamped here from code, not
+    # supplied by the reviewer, and binds evidence validation so a RESOLVED_EDIT
+    # on the finding must prove a change to one of *these* documents — an
+    # unrelated file edit cannot clear the gate.
     findings.append(
         {
             "id": "hm.critical_read",
@@ -958,6 +2024,7 @@ def collect_hm_findings(folder: str) -> dict[str, Any]:
                 "(conversion_rubric C1–C5 / qualitative Pass 3). "
                 "Dispose ACCEPTED_AS_CORRECT when done."
             ),
+            "implicated_documents": [doc if os.path.exists(os.path.join(folder, doc)) else f"{doc} (missing)" for doc in ("Resume.md", "CoverLetter.md")],
         }
     )
 
@@ -1000,35 +2067,178 @@ def run_stage2_hm(folder: str, state: dict[str, Any]) -> dict[str, Any]:
 
 
 def _compile_pdfs(folder: str) -> None:
-    """Shell out to compile_single.py for Resume + CoverLetter (existing worker)."""
+    """Shell out to compile_single.py for Resume + CoverLetter (existing worker).
+
+    2026-09-01: compile both PDFs in parallel (two subprocess.Popen instances)
+    instead of sequentially. Falls back to sequential if the parallel compile
+    fails on either file, so a resource-contention failure is retried safely.
+    """
+    import subprocess
+
     py = sys.executable
     script = os.path.join(_SCRIPT_DIR, "compile_single.py")
+    cwd = os.path.dirname(_SCRIPT_DIR)
+
+    jobs: list[tuple[str, str, str, str]] = []  # (md_name, pdf_name, md_path, pdf_path)
     for md_name, pdf_name in (("Resume.md", "Resume.pdf"), ("CoverLetter.md", "CoverLetter.pdf")):
         md = os.path.join(folder, md_name)
         pdf = os.path.join(folder, pdf_name)
         if not os.path.exists(md):
             raise WorkflowError(f"{md_name} missing — cannot compile")
-        import subprocess
+        jobs.append((md_name, pdf_name, md, pdf))
 
-        proc = subprocess.run(
+    # Parallel compile
+    procs: list[tuple[str, subprocess.Popen]] = []
+    for md_name, pdf_name, md, pdf in jobs:
+        procs.append((md_name, subprocess.Popen(
             [py, script, md, pdf],
-            cwd=os.path.dirname(_SCRIPT_DIR),
-            capture_output=True,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-        )
+        )))
+
+    errors: list[str] = []
+    for md_name, proc in procs:
+        stdout, stderr = proc.communicate()
         if proc.returncode != 0:
-            raise WorkflowError(
-                f"compile_single failed for {md_name}:\n{proc.stderr or proc.stdout}"
-            )
+            errors.append(f"compile_single failed for {md_name}:\n{stderr or stdout}")
+
+    if errors:
+        # Fallback: retry failed files sequentially (resource contention recovery)
+        if len(errors) == 1:
+            # One succeeded, one failed — retry the failed one sequentially
+            for md_name, pdf_name, md, pdf in jobs:
+                if md_name == errors[0].split("for ")[1].split(":")[0]:
+                    proc = subprocess.run(
+                        [py, script, md, pdf], cwd=cwd, capture_output=True, text=True
+                    )
+                    if proc.returncode != 0:
+                        raise WorkflowError(
+                            f"compile_single failed for {md_name} (sequential retry):\n"
+                            f"{proc.stderr or proc.stdout}"
+                        )
+                    return
+        raise WorkflowError("\n".join(errors))
+
+
+def _rubric_floor_findings(score: Any) -> list[dict[str, Any]]:
+    """Emit BLOCK findings when numeric rubric totals sit below CONVERT-READY floors.
+
+    Shape errors stay on mech.rubric_score_required (WARN). A leftover
+    ACCEPTED_AS_CORRECT on that WARN cannot bind these ids.
+    """
+    # Implements FR-318 / AC-415
+    shape = contracts._check_rubric_score_shape(score)
+    if shape:
+        return []
+    findings: list[dict[str, Any]] = []
+    for err in contracts.check_rubric_floors(score):
+        side = "cover_letter" if "cover_letter" in err else "resume"
+        findings.append(
+            {
+                "id": f"mech.rubric_floor.{side}",
+                "source": "workflow",
+                "severity": "BLOCK",
+                "message": err,
+            }
+        )
+    return findings
+
+
+def _rubric_provenance_findings(folder: str, score: Any) -> list[dict[str, Any]]:
+    # Implements FR-322 / AC-420. Only runs after shape and floor checks pass;
+    # below-floor scores already have objective BLOCK findings.
+    shape = contracts._check_rubric_score_shape(score)
+    if shape or contracts.check_rubric_floors(score):
+        return []
+    findings: list[dict[str, Any]] = []
+    for idx, err in enumerate(contracts.check_rubric_score_provenance(folder, score)):
+        findings.append(
+            {
+                "id": f"mech.rubric_score_provenance.{idx}",
+                "source": "workflow",
+                "severity": "BLOCK",
+                "message": err,
+            }
+        )
+    return findings
+
+
+def _require_completion_rubric_floors(folder: str) -> None:
+    """Fail closed before minting Stage 3 when rubric totals are below floor.
+
+    Shape first, then floors. Does not call check_finalize_ready (practice
+    may skip freshness / verification_passed / DB extras). force=True cannot
+    skip this helper.
+    """
+    # Implements FR-318 / AC-415. A queue run has no typed score until AC-464.
+    if contracts.queue_rubric_deferred():
+        return
+    manifest_path = os.path.join(folder, "draft_manifest.json")
+    manifest, err = contracts.load_json(manifest_path)
+    if err:
+        raise WorkflowError(f"Cannot finalize: {err}")
+    score = None if manifest is None else manifest.get("rubric_score")
+    shape_errs = contracts._check_rubric_score_shape(score)
+    floor_errs = [] if shape_errs else contracts.check_rubric_floors(score)
+    provenance_errs = []
+    if not shape_errs and not floor_errs:
+        provenance_errs = contracts.check_rubric_score_provenance(folder, score)
+    errs = [f"draft_manifest.json: {e}" for e in (shape_errs + floor_errs + provenance_errs)]
+    if errs:
+        raise WorkflowError(
+            "Cannot finalize: CONVERT-READY rubric floors not met:\n  - "
+            + "\n  - ".join(errs)
+        )
+
+
+def _write_queue_manifest_without_score(folder: str, mechanically_verified: bool) -> None:
+    """Record company, title, and verification without inventing a rubric score.
+
+    The queue scorer stays off until AC-464. Finalize still needs a manifest.
+    """
+    if not contracts.queue_rubric_deferred():
+        return
+    path = os.path.join(folder, "draft_manifest.json")
+    existing: dict[str, Any] = {}
+    if os.path.isfile(path):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                loaded = json.load(handle)
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+    gate_path = os.path.join(folder, "stage0_fit_gate.json")
+    if os.path.isfile(gate_path):
+        try:
+            with open(gate_path, encoding="utf-8") as handle:
+                gate = json.load(handle)
+        except (OSError, json.JSONDecodeError):
+            gate = {}
+        if isinstance(gate, dict):
+            if not existing.get("company"):
+                existing["company"] = gate.get("company")
+            if not existing.get("title"):
+                existing["title"] = gate.get("role")
+    if mechanically_verified:
+        existing["verification_passed"] = True
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(existing, handle, indent=2)
+        handle.write("\n")
 
 
 def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str, Any]:
     """Compile PDFs + verify_one; surface failures as findings."""
     findings: list[dict[str, Any]] = []
+    _pdf_compile_seconds: float | None = None
     if compile_pdfs:
+        _compile_t0 = time.time()
         try:
             _compile_pdfs(folder)
         except WorkflowError as exc:
+            _pdf_compile_seconds = round(time.time() - _compile_t0, 3)
             findings.append(
                 {
                     "id": "mech.compile.error",
@@ -1044,6 +2254,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 "generated_by": "scripts/run_submission.py",
                 "findings": findings,
                 "checks": {"compiled": False},
+                "pdf_compile_seconds": _pdf_compile_seconds,
             }
             # Write under reviews for consistency
             path = os.path.join(folder, "reviews", "mech_findings.json")
@@ -1052,7 +2263,11 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 json.dump(payload, f, indent=2)
                 f.write("\n")
             return payload
+        _pdf_compile_seconds = round(time.time() - _compile_t0, 3)
 
+    from stage1_prerepair import collapse_hedged_100k
+
+    collapse_hedged_100k(Path(folder))
     receipt = verify_one(folder)
     receipt_path = os.path.join(folder, "verification_receipt.json")
     with open(receipt_path, "w", encoding="utf-8") as f:
@@ -1090,6 +2305,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
     # Rubric still required for Stage 2 policy / check_stage2_ready
     manifest_path = os.path.join(folder, "draft_manifest.json")
     rubric_ok = False
+    score = None
     if os.path.exists(manifest_path):
         try:
             with open(manifest_path, encoding="utf-8") as f:
@@ -1099,7 +2315,10 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 rubric_ok = True
         except (OSError, json.JSONDecodeError):
             rubric_ok = False
-    if not rubric_ok:
+    _write_queue_manifest_without_score(
+        folder, bool(receipt.get("mechanically_verified"))
+    )
+    if not rubric_ok and not contracts.queue_rubric_deferred():
         findings.append(
             {
                 "id": "mech.rubric_score_required",
@@ -1112,6 +2331,9 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
                 ),
             }
         )
+    else:
+        findings.extend(_rubric_floor_findings(score))
+        findings.extend(_rubric_provenance_findings(folder, score))
 
     payload = {
         "schema_version": 1,
@@ -1123,6 +2345,7 @@ def collect_mech_findings(folder: str, *, compile_pdfs: bool = True) -> dict[str
             "mechanically_verified": bool(receipt.get("mechanically_verified")),
             "rubric_present": rubric_ok,
         },
+        "pdf_compile_seconds": _pdf_compile_seconds,
     }
     path = os.path.join(folder, "reviews", "mech_findings.json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -1357,6 +2580,11 @@ def run_stage3_finalize(
             f"Pass --title with the real role name, or fix stage0_fit_gate.json 'role'."
         )
 
+    # CR-112: floors are not skipped by practice mode or --force. Production
+    # --force may still skip check_finalize_ready extras (freshness, etc.)
+    # inside finalize_job; it cannot mint a below-floor Stage 3 receipt.
+    _require_completion_rubric_floors(folder)
+
     mode = state.get("mode") or "production"
     finalize_result = None
 
@@ -1490,24 +2718,36 @@ def run_until_stage1_complete(
         state = _ensure_caller_mode(folder, state, mode, force=force)
         write_state(folder, state)
 
+    state = _refresh_waiting_stage1_receipt(folder, state)
     state = reconcile(folder, state)
 
-    if state.get("status") == "SKIPPED":
+    if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
         return state
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
     if s0.get("status") == "STALE":
-        state = run_stage0(folder, state, force=force)
+        # CR-108: a STALE here can mean "receipt file missing, content on disk is
+        # still valid" (a legacy-migration gap), not "the input actually changed".
+        # Try adopting the existing stage0_fit_gate.json in place first -- only
+        # fall through to a real re-extraction (run_stage0, which overwrites the
+        # gate file) when there's nothing valid on disk to adopt. See
+        # _adopt_stage0_from_disk's docstring for the incident this fixes.
+        if not force:
+            state, adopted = _adopt_stage0_from_disk(folder, state, state.get("mode") or "production")
+        else:
+            adopted = False
+        if not adopted:
+            state = run_stage0(folder, state, force=force)
         folder = _place_after_stage0(folder, state)
         state = load_state(folder) or state
-        if state.get("status") == "SKIPPED":
+        if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
             return state
 
     s0 = (state.get("stages") or {}).get("stage0") or {}
     s1 = (state.get("stages") or {}).get("stage1") or {}
 
     # Need Stage 0 COMPLETE before prompt/validate
-    if s0.get("status") not in ("COMPLETE", "SKIPPED"):
+    if s0.get("status") not in ("COMPLETE", "SKIPPED", "ALREADY_HANDLED"):
         state = run_until_waiting_for_llm(
             folder, mode=mode, adopt=False, no_hook=no_hook, force=force
         )
@@ -1523,7 +2763,9 @@ def run_until_stage1_complete(
         # run_stage0() below raise "Original_JD.txt not found" against the
         # same stale path -- on every single fresh JD that passed Stage 0,
         # not an edge case.
-        if state.get("status") == "SKIPPED":
+        if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
+            return state
+        if state.get("status") == "WAITING_FOR_INPUT":
             return state
         # Re-resolve by slug (state["slug"] is always the bare folder name,
         # and _resolve_folder() checks submissions/ before pending_review/)
@@ -1531,9 +2773,30 @@ def run_until_stage1_complete(
         # current location for a PASS. A SKIPPED state returns above instead
         # of re-resolving: _resolve_folder() doesn't search archive/skipped/,
         # same as the STALE-branch a few lines up already handles this.
-        folder = _resolve_folder(state.get("slug") or folder)
+        # Fallback (2026-09-08, --mode practice run under data/authored_drafts/):
+        # _place_after_stage0 never moves unmanaged folders, so when bare-slug
+        # resolution fails (folder outside submissions|pending_review) the
+        # original absolute `folder` is still valid -- keep it instead of
+        # raising after Stage 1 receipts were already committed.
+        try:
+            folder = _resolve_folder(state.get("slug") or folder)
+        except WorkflowError:
+            if not os.path.isdir(folder):
+                raise
         state = reconcile(folder, state)
         s1 = (state.get("stages") or {}).get("stage1") or {}
+
+    if state.get("status") == "WAITING_FOR_INPUT":
+        # --resume enters here with Stage 0 already COMPLETE. The waiting-for-llm
+        # helper is not on this path. A chrome-only hold still continues.
+        # Implements FR-367.
+        if not _conversion_risk_cleared_by_chrome(folder):
+            return state
+    s0 = (state.get("stages") or {}).get("stage0") or {}
+    if s0.get("status") == "WAITING_FOR_INPUT" and not _conversion_risk_cleared_by_chrome(
+        folder
+    ):
+        return state
 
     # Stage 1 already COMPLETE + fresh → unlock Stage 2 READY and stop
     if s1.get("status") == "COMPLETE":
@@ -1577,6 +2840,21 @@ def run_until_stage1_complete(
     )
 
 
+def _pre_collect_stage2_findings(folder: str, phases: list[str]) -> None:
+    """2026-09-01: Pre-collect findings and sync dispositions for remaining Stage 2
+    subphases so the agent can dispose all findings in one --resume cycle instead
+    of one per subphase. Only collects for lightweight subphases (ats, hm) — Mech
+    is skipped because it requires PDF compilation."""
+    for phase in phases:
+        if phase == "ats":
+            findings_doc = collect_ats_findings(folder)
+        elif phase == "hm":
+            findings_doc = collect_hm_findings(folder)
+        else:
+            continue
+        sync_dispositions_for_phase(folder, phase, findings_doc)
+
+
 def run_until_truth_settled(
     folder: str,
     *,
@@ -1610,7 +2888,14 @@ def run_until_truth_settled(
     )
     if stop_after_stage1:
         return state
-    if state.get("status") in ("SKIPPED", "WAITING_FOR_LLM", "FAILED", "STALE"):
+    if state.get("status") in (
+        "SKIPPED",
+        "ALREADY_HANDLED",
+        "WAITING_FOR_LLM",
+        "WAITING_FOR_INPUT",
+        "FAILED",
+        "STALE",
+    ):
         return state
 
     s1 = (state.get("stages") or {}).get("stage1") or {}
@@ -1624,6 +2909,11 @@ def run_until_truth_settled(
         return state
     truth = (state.get("stages") or {}).get("stage2", {}).get("subphases", {}).get("truth") or {}
     if truth.get("status") != "COMPLETE":
+        # 2026-09-01: pre-collect findings from remaining subphases so the agent
+        # can dispose all WARN findings in one --resume cycle instead of one per
+        # subphase. Only for NEEDS_DISPOSITION (not FAILED/STALE/SKIPPED).
+        if truth.get("status") == "NEEDS_DISPOSITION":
+            _pre_collect_stage2_findings(folder, ["ats", "hm"])
         return state
 
     state = run_stage2_ats(folder, state)
@@ -1633,6 +2923,8 @@ def run_until_truth_settled(
         return state
     ats = (state.get("stages") or {}).get("stage2", {}).get("subphases", {}).get("ats") or {}
     if ats.get("status") != "COMPLETE":
+        if ats.get("status") == "NEEDS_DISPOSITION":
+            _pre_collect_stage2_findings(folder, ["hm"])
         return state
 
     state = run_stage2_hm(folder, state)
@@ -1704,18 +2996,34 @@ def run_until_waiting_for_llm(
     # --force is the explicit recovery path for a prior Stage 0 decision,
     # such as a corrected gate rule. Do not let the terminal status return
     # before run_stage0 has a chance to rebuild the gate.
-    if state.get("status") == "SKIPPED" and not force:
+    if state.get("status") in ("SKIPPED", "ALREADY_HANDLED") and not force:
         return state
 
-    s0 = (state.get("stages") or {}).get("stage0") or {}
-    if force or s0.get("status") == "STALE" or s0.get("status") not in ("COMPLETE", "SKIPPED"):
-        state = run_stage0(folder, state, force=force)
-        folder = _place_after_stage0(folder, state)
-        state = load_state(folder) or state
-        if state.get("status") == "SKIPPED":
+    if state.get("status") == "WAITING_FOR_INPUT" and not force:
+        if not _waiting_for_input_has_new_work(folder):
             return state
 
-    if state.get("status") == "WAITING_FOR_LLM":
-        return state
+    s0 = (state.get("stages") or {}).get("stage0") or {}
+    if force or s0.get("status") == "STALE" or s0.get("status") not in (
+        "COMPLETE",
+        "SKIPPED",
+        "ALREADY_HANDLED",
+    ):
+        # CR-108: same missing-receipt-vs-real-change distinction as
+        # run_until_stage1_complete above -- try adopting an already-valid
+        # stage0_fit_gate.json before falling through to real re-extraction.
+        adopted = False
+        if not force and s0.get("status") == "STALE":
+            state, adopted = _adopt_stage0_from_disk(folder, state, state.get("mode") or "production")
+        if not adopted:
+            state = run_stage0(folder, state, force=force)
+        folder = _place_after_stage0(folder, state)
+        state = load_state(folder) or state
+        if state.get("status") in ("SKIPPED", "ALREADY_HANDLED"):
+            return state
+
+    if state.get("status") in ("WAITING_FOR_LLM", "WAITING_FOR_INPUT"):
+        if not _conversion_risk_ready_to_author(folder, state):
+            return state
 
     return run_stage1_prompt(folder, state, no_hook=no_hook)

@@ -235,7 +235,17 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({ jobs, isOpen, onC
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-50" onClick={onClose} />
+      <div
+        className="fixed inset-0 z-50"
+        role="button"
+        tabIndex={0}
+        onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.currentTarget.click();
+          }
+        }}
+      />
 
       {/* Panel */}
       <div className="absolute right-8 top-14 z-50 w-96 bg-surface-container-lowest rounded-2xl editorial-shadow animate-slide-up overflow-hidden">

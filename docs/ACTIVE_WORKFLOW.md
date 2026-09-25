@@ -13,11 +13,21 @@
 | 2 | **Job Search** — criteria + **Run Scout** | `data/candidate_preferences.json` |
 | 3 | Scout pipeline (automatic) | New rows in `jobagent.sqlite`; activity logs |
 | 4 | Review **Sync / Opportunities** | Scores, gate rejects, backlog |
+| 4b | **CSV drop-folder ingest (CR-119 / CR-123)** — put `applyr_jobs*.csv` in `data/inbox/csv/` (or use the Pipeline page **Upload CSV**, which writes to the same inbox and runs ingest). Then `python scripts/ingest_csv_queue.py` if you dropped the file by hand. Same-posting Applied+ or an already-archived pack is already-handled: no new queued row, no new `pending_review/` folder, no skip-ledger write; existing unlocked queue rows go `done`. Pre-apply still reuses. Close stale Applied+ / archive / SKIPPED mirrors without a new CSV: `python scripts/ingest_csv_queue.py --reconcile-already-handled`. Run the pack with `python scripts/run_queue_worker.py --worker <id>` (the worker claims; do not pre-claim). Each job still uses `python scripts/run_submission.py {slug} --resume` (bare slug). `--resume` and `run_submission.py` are unchanged. | queued rows in `pipeline_queue`; Pipeline page |
 | 5 | **Stage 0 triage** — run `python scripts/run_submission.py data/pending_review/{slug}` | Skip, or a ready authoring packet |
-| 6 | **Stage 1 authoring** — paste `authoring_prompt.md` into a fresh agent; verification blocks deterministic quality, evidence, specificity, repetition, and provenance-contract defects | `Resume.md`, `CoverLetter.md`, `claim_provenance.json` |
+| 6 | **Stage 1 authoring** — paste `authoring_prompt.md` into a fresh agent; verification blocks deterministic quality, evidence, specificity, repetition, and provenance-contract defects. If the packet is over budget, author-only omitted-candidate summaries are compacted first because the complete ranking audit remains in `evidence_selection_trace.json`; excerpts and `claim_constraints` stay authoritative. | `Resume.md`, `CoverLetter.md`, `claim_provenance.json` |
 | 7 | **Stage 2 review + Stage 3 finalize** — resume with `--resume`, finalize explicitly with `--finalize` | Verified PDFs and workflow completion |
 | 8 | **Status** transitions | `data/submissions/` or `data/archive/submissions/` |
 | 7b | **Stage 0 triage** | Incoming JDs: `data/pending_review/`. Skip: `data/archive/skipped/` + `stage0_skips` ledger. PASS: `data/submissions/`. |
+
+The backend exposes authenticated operator commands for the same canonical
+workflow through `/api/run-submission/:scope/:slug/{start,resume,status,finalize}`.
+These routes only invoke `scripts/run_submission.py` and read its
+`workflow_state.json` / `stage_receipts/` output. They do not write workflow
+authority files themselves. The Pipeline page's folder form calls
+these routes to show Stage 0/1/2 status and issue explicit Start, Resume, and
+Finalize commands. Provider configuration and cascade JSON import remain
+outside that form.
 
 ### Scout pipeline (code order)
 
@@ -45,6 +55,7 @@
 | Jobs DB | `data/jobagent.sqlite` |
 | Submissions | `data/submissions/`, `data/archive/submissions/` |
 | Stage 0 inbox / skips | `data/pending_review/`, `data/archive/skipped/`, `stage0_skips` in `jobagent.sqlite` |
+| CSV drop queue (CR-119) | `data/inbox/csv/`, `data/queue_locks/`, `pipeline_queue` / `csv_ingest_ledger` / `csv_quarantine` in `jobagent.sqlite` |
 
 ---
 
@@ -76,11 +87,13 @@ Real employer submissions should use **`SUBMISSION_MODE=1`**, which enables the 
 | Cover audit | same manifest → `cover_letter_audit.grade` | `Pass` when `STRICT_COVER_AUDIT=1` |
 | Rubric (advisory) | `rubric_score.overall` | Review if `< 60` or `threshold_flag` |
 
+> **Two rubrics, don't mix them (CR-111):** the `<60` advisory above is the CR-042-era pipeline rubric shape (`rubric_score.overall`). The current submission rubric is `data/conversion_rubric.md` — R1–R8 resume / C1–C5 cover letter, with per-document floors of 70+ (resume) and 65+ (cover letter) per root `AGENTS.md`. Similar numbers, different instruments.
+
 If critique fails after auto-retry (CR-042 Phase 1B), read `conversion_critique.retry_log` and fix root cause (catalog gap, JD/theme mismatch) — **regen**; do not hand-edit around guards.
 
 Fleet health (CR-042 Phase 2B): `python scripts/fleet_conversion_report.py`
 
-Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spec `docs/spec/03-feature-specs/cover_voice.example.md`; target 300–400 words.
+Cover voice (CR-043): deterministic phrasing in `scripts/cover_phrasing.py`; spec `docs/spec/03-feature-specs/cover_voice.example.md`; authoring target 250–400 words (CR-111 decision; `submission_linter.py` LW-001 warns outside the wider 220–450 tolerance). Note: `cover_phrasing.py`'s `WORD_MIN/WORD_MAX` constants still say 300–400 — reconciling them would change compose behavior and is deferred out of CR-111.
 
 ---
 

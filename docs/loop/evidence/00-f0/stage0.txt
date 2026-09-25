@@ -1,0 +1,22 @@
+slug: 1uphealth
+mode: practice
+folder: data/loop_runs/f0/1uphealth
+copied_from: data/archive/submissions/1uphealth/Original_JD.txt (3076 bytes)
+command: python scripts/run_submission.py data/loop_runs/f0/1uphealth --mode practice
+pid: 41012
+exit: process ended after Stage 0
+
+stage0: COMPLETE
+workflow_status: WAITING_FOR_LLM
+active_stage: stage1
+updated_at: 2026-09-24T04:39:15Z
+console: Stage stage0 complete 6m tier=Tier 2 fit_score=60 confidence_score=98 extraction_source=nlp
+console_then: Stage stage1.prompt waiting_for_llm 0.7s
+console_instruction: tells the operator to paste authoring_prompt.md. That string is the CLI message. The unattended path is scripts/run_stage1_author.py, which the queue worker calls. F0 will use that script, not a hand paste.
+
+llm_calls: 7
+transport: Agy subscription adapter, model gemini-3.8-flash-medium, effort medium
+tasks: 1 extraction (52s), 6 evidence (36s to 93s)
+quota_after: five_hour 98, weekly 91
+human_pause: none at Stage 0
+db_write: not requested (no --finalize)

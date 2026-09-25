@@ -1,0 +1,5 @@
+The before-fix Candor resume says he served as first-pass QA lead and cites ACC-204. LR-049 only fires when the cite is ACC-209.
+
+The new test failed, then passed. The phrase now blocks with an ACC-204 cite and with no provenance. A test-suite sentence that does not use the title does not block.
+
+On the before-fix copies the check fires on bak_candor_health_Resume.md only. 104 linter tests ran. The only error is the pre-existing rentana geography test.

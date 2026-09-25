@@ -1,0 +1,10 @@
+{
+  "company": "TestCo",
+  "resume_claims": [
+    {
+      "bullet": "Trained deep learning AI models for automated ingestion.",
+      "claim_ids": ["FAKE-999"]
+    }
+  ],
+  "cover_letter_claims": []
+}

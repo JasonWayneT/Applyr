@@ -17,5 +17,6 @@
 - [ ] **Last Mile Handheld Apply:** Pre-fill or clipboard helpers on Apply click.
 - [ ] **Granular Interview Tracking:** Sub-stages under In Conversation.
 - [ ] **Cloud Migration:** Turso / Railway / auth — conflicts with constitution `NG-001` unless scope changes.
+- [ ] **AI Copywriter rework (`DocumentEditor.tsx`):** currently a free-text rewrite box that sends the whole doc straight to a local Ollama model with no rubric/truth-grounding/claim-provenance checks — bypasses the governed authoring pipeline entirely. Also mislabels itself as gated on a "Gemini API key" when it's actually always-unlocked and always local. Needs a redesign that either routes through the real Stage 1/2 guardrails or is clearly scoped as an unguarded scratch tool.
 
 See [docs/spec/05-change-requests/README.md](docs/spec/05-change-requests/README.md) for formal feature work.

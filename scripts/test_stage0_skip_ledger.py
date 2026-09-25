@@ -24,6 +24,40 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # the same guard test_build_stage0_fit_gate.py and test_stage0_model_handoff.py already set.
 os.environ["STAGE0_SECTION_MODE"] = "deterministic"
 
+# CR-108 Epic 7.7 (2026-09-09): the legacy per-line classifier was removed.
+# Mock the cascade's batch function to avoid real network calls. Returns
+# clean-pass results for all items so classification doesn't crash or
+# produce HARD gates that would change skip-ledger test outcomes.
+from unittest.mock import patch as _patch  # noqa: E402
+
+def _mock_classify_batch(items, **_kwargs):
+    return {
+        item.item_id: {
+            "item": item.requirement, "anchor": "mock", "gap": False,
+            "gap_class": None, "gap_source": None, "domain_soft": False,
+            "evidence_level": 4, "confidence": "high", "gate": "NONE",
+            "needs_user_confirmation": False, "canonical_skill": None,
+            "skill_kind": None,
+        }
+        for item in items
+    }
+
+_CLASSIFY_PATCHER = None
+
+def setUpModule():
+    global _CLASSIFY_PATCHER
+    _CLASSIFY_PATCHER = _patch(
+        "stage0_evidence_cascade.classify_requirements_batch",
+        side_effect=_mock_classify_batch,
+    )
+    _CLASSIFY_PATCHER.start()
+
+def tearDownModule():
+    global _CLASSIFY_PATCHER
+    if _CLASSIFY_PATCHER is not None:
+        _CLASSIFY_PATCHER.stop()
+        _CLASSIFY_PATCHER = None
+
 from stage0_skip_ledger import (  # noqa: E402
     clear_skip,
     connect,
@@ -52,6 +86,15 @@ _PASS_GATE = {
     "decision": "PASS",
     "tier": "Tier 1",
     "skip_reason": None,
+}
+
+_ALREADY_HANDLED_GATE = {
+    "company": "Synth Placement Co",
+    "role": "Product Manager",
+    "url": "https://example.test/jobs/already-handled-1",
+    "decision": "ALREADY_HANDLED",
+    "tier": "Skip",
+    "notes": "Same posting already handled",
 }
 
 
@@ -237,6 +280,29 @@ class PlacementTests(unittest.TestCase):
         self.assertTrue(stray.exists())
         self.assertIsNone(
             lookup_skip(url=_SKIP_GATE["url"], company="Expel", title="Product Manager", db_path=self.db)
+        )
+
+    def test_already_handled_leaves_folder_and_skip_count(self):
+        """FR-365 / AC-474: placement no-op. Folder stays. No stage0_skips write."""
+        folder = self._write_folder(self.pending, "synth_already")
+        conn = connect(self.db)
+        self.addCleanup(conn.close)
+        before = conn.execute("SELECT COUNT(*) FROM stage0_skips").fetchone()[0]
+        with mock.patch.object(placement, "record_skip") as record:
+            dest = apply_stage0_placement(folder, _ALREADY_HANDLED_GATE, db_path=self.db)
+        self.assertEqual(dest, folder)
+        self.assertTrue(folder.exists())
+        self.assertTrue((folder / "Original_JD.txt").exists())
+        after = conn.execute("SELECT COUNT(*) FROM stage0_skips").fetchone()[0]
+        self.assertEqual(after, before)
+        record.assert_not_called()
+        self.assertIsNone(
+            lookup_skip(
+                url=_ALREADY_HANDLED_GATE["url"],
+                company="Synth Placement Co",
+                title="Product Manager",
+                db_path=self.db,
+            )
         )
 
     def test_practice_mode_does_not_write_ledger(self):

@@ -16,7 +16,7 @@ AGENT_DIR = os.path.join(PROJECT_ROOT, ".agent")
 RULES_DIR = os.path.join(AGENT_DIR, "rules")
 SUBMISSIONS_DIR = os.path.join(PROJECT_ROOT, "data", "submissions")
 ARCHIVE_DIR = os.path.join(PROJECT_ROOT, "data", "archive", "submissions")
-DB_PATH = os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
+DB_PATH = os.environ.get("APPLYR_SANDBOX_DB") or os.path.join(PROJECT_ROOT, "data", "jobagent.sqlite")
 
 WORK_EXP_FILE = os.path.join(DATA_DIR, "workExperience.md")
 WORK_EXP_SUMMARY_FILE = os.path.join(DATA_DIR, "workExperience_summary.md")
@@ -157,10 +157,55 @@ def load_candidate_preferences():
 # headers technically do per-call; counting our own calls against the documented cap is
 # the same estimate-not-authoritative approach for both until a real per-response tracker
 # replaces this (see docs/ROADMAP_BEST_PRACTICES.md's free-tier cascade item).
+#
+# 2026-09-01 Improvement #10: thresholds are now loaded from
+# data/llm_rate_limits.json (with Claude and Perplexity entries added). The
+# hardcoded dict below is the fallback when the config file is absent or a
+# provider key is missing -- same behavior as before for existing providers.
 _RATE_LIMIT_THRESHOLDS = {
     'gemini': (1400, 1500, 14, 15),
     'groq': (14000, 14400, 28, 30),
+    'claude': (900, 1000, 45, 50),
+    'perplexity': (900, 1000, 45, 50),
 }
+
+# 2026-09-01 Improvement #3: cooldown window and threshold for skipping a
+# provider after real HTTP 429 responses. Loaded from llm_rate_limits.json.
+_RATE_LIMITED_COOLDOWN_MINUTES = 5
+_RATE_LIMITED_THRESHOLD = 3
+
+
+def _load_rate_limit_config() -> None:
+    """Load rate-limit thresholds from data/llm_rate_limits.json into the
+    module-level _RATE_LIMIT_THRESHOLDS dict. Called once at import time.
+    Never raises -- a missing or malformed file silently falls back to the
+    hardcoded defaults above."""
+    import json
+    config_path = os.path.join(DATA_DIR, 'llm_rate_limits.json')
+    try:
+        if not os.path.exists(config_path):
+            return
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        providers = config.get('providers', {})
+        for provider, vals in providers.items():
+            provider = provider.lower()
+            if not isinstance(vals, dict):
+                continue
+            daily_warn = int(vals.get('daily_warn', 0))
+            daily_real = int(vals.get('daily_real', 0))
+            minute_warn = int(vals.get('minute_warn', 0))
+            minute_real = int(vals.get('minute_real', 0))
+            if daily_warn and daily_real and minute_warn and minute_real:
+                _RATE_LIMIT_THRESHOLDS[provider] = (daily_warn, daily_real, minute_warn, minute_real)
+        global _RATE_LIMITED_COOLDOWN_MINUTES, _RATE_LIMITED_THRESHOLD
+        _RATE_LIMITED_COOLDOWN_MINUTES = int(config.get('rate_limited_cooldown_minutes', _RATE_LIMITED_COOLDOWN_MINUTES))
+        _RATE_LIMITED_THRESHOLD = int(config.get('rate_limited_threshold', _RATE_LIMITED_THRESHOLD))
+    except Exception as e:
+        print(f"    [Rate Limit Config] Error loading llm_rate_limits.json: {e}", file=sys.stderr)
+
+
+_load_rate_limit_config()
 
 
 def _log_provider_notification(provider: str, message: str, reason: str, dedupe: bool = False, extra: dict | None = None) -> None:
@@ -203,11 +248,43 @@ def _log_provider_notification(provider: str, message: str, reason: str, dedupe:
         print(f"    [Notification Error] {e}", file=sys.stderr)
 
 
+def _log_rate_limited(provider: str) -> None:
+    """2026-09-01 Improvement #3: log a real HTTP 429 response to activity_log
+    so check_rate_limits() can count recent RATE_LIMITED entries and skip a
+    provider that's actively throttling, instead of wasting a round-trip
+    before cascading. Writes a lightweight INFO entry (not a notification) --
+    check_rate_limits reads this via message LIKE '%[{provider}] RATE_LIMITED%'."""
+    import sqlite3
+    try:
+        if not os.path.exists(DB_PATH):
+            return
+        conn = sqlite3.connect(DB_PATH, timeout=10.0)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO activity_log (level, source, message) VALUES ('WARN', 'LLM_Call', ?)",
+            (f'[{provider}] RATE_LIMITED',),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 def check_rate_limits(provider: str) -> bool:
     """
     Checks rate limits for a provider via activity_log.
     Returns True if allowed to proceed, False if provider should be skipped/disabled.
-    Sleeps if approaching RPM limit.
+
+    2026-09-01 Improvement #3: now also counts recent RATE_LIMITED entries from
+    real HTTP 429 responses. If a provider has >= _RATE_LIMITED_THRESHOLD
+    RATE_LIMITED entries in the last _RATE_LIMITED_COOLDOWN_MINUTES minutes,
+    returns False (skip this provider, let the caller cascade to the next one)
+    instead of wasting a round-trip on a provider that's actively throttling.
+
+    2026-09-01 Improvement #3: replaced the blocking time.sleep(60) on RPM
+    approach with return False -- let the caller cascade to the next provider
+    instead of blocking the whole pipeline for 60 seconds. The sleep was the
+    primary cause of 2-5 second stalls per call when Groq was rate-limited.
     """
     thresholds = _RATE_LIMIT_THRESHOLDS.get(provider)
     if thresholds is None:
@@ -220,6 +297,34 @@ def check_rate_limits(provider: str) -> bool:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path, timeout=10.0)
             cursor = conn.cursor()
+
+            # Improvement #3: check for recent real HTTP 429 responses.
+            # If the provider has been actively throttling, skip it now
+            # rather than wasting a round-trip before cascading.
+            cursor.execute(
+                "SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' "
+                "AND message LIKE ? AND timestamp >= datetime('now', ?)",
+                (f'%[{provider}] RATE_LIMITED%', f'-{_RATE_LIMITED_COOLDOWN_MINUTES} minutes'),
+            )
+            rate_limited_count = cursor.fetchone()[0]
+            if rate_limited_count >= _RATE_LIMITED_THRESHOLD:
+                print(
+                    f"    [Circuit Breaker] {provider.capitalize()} received {rate_limited_count} "
+                    f"HTTP 429s in the last {_RATE_LIMITED_COOLDOWN_MINUTES}m — skipping, "
+                    "cascading to next provider.",
+                    file=sys.stderr,
+                )
+                conn.close()
+                _log_provider_notification(
+                    provider,
+                    f"{provider.capitalize()} received {rate_limited_count} HTTP 429 responses "
+                    f"in the last {_RATE_LIMITED_COOLDOWN_MINUTES} minutes — skipping this provider, "
+                    "tasks will cascade to their next configured provider.",
+                    reason="rate_limited_skip",
+                    dedupe=True,
+                    extra={"rate_limited_count": rate_limited_count, "cooldown_minutes": _RATE_LIMITED_COOLDOWN_MINUTES},
+                )
+                return False
 
             cursor.execute(
                 "SELECT COUNT(*) FROM activity_log WHERE source = 'LLM_Call' AND message LIKE ? AND timestamp >= datetime('now', '-24 hours')",
@@ -251,9 +356,15 @@ def check_rate_limits(provider: str) -> bool:
             conn.commit()
             conn.close()
 
+            # Improvement #3: replaced blocking time.sleep(60) with return False.
+            # Let the caller cascade to the next provider instead of blocking.
             if minute_calls >= minute_warn:
-                print(f"    [Circuit Breaker] {provider.capitalize()} RPM approaching limit ({minute_calls}/{minute_real}). Sleeping 60s...", file=sys.stderr)
-                time.sleep(60)
+                print(
+                    f"    [Circuit Breaker] {provider.capitalize()} RPM approaching limit "
+                    f"({minute_calls}/{minute_real}) — skipping, cascading to next provider.",
+                    file=sys.stderr,
+                )
+                return False
 
     except Exception as e:
         print(f"    [Circuit Breaker Error] {e}", file=sys.stderr)
@@ -344,7 +455,11 @@ def load_llm_settings():
     return {}
 
 
-_DEFAULT_IDENTITY = {
+class IdentityError(RuntimeError):
+    """Raised when no WE identity and synthetic mode is not active."""
+
+
+_SYNTHETIC_IDENTITY = {
     "name": "John Doe",
     "email": "email@example.com",
     "phone": "555-019-9238",
@@ -355,27 +470,44 @@ _DEFAULT_IDENTITY = {
 }
 
 
-def load_identity_profile() -> dict:
-    """Reads identity contact fields from SQLite profiles table."""
-    import sqlite3
-    import json
+def _log_identity_source(source: str) -> None:
+    print(f"[identity] identity_source={source}", file=sys.stderr)
 
-    profile = dict(_DEFAULT_IDENTITY)
-    db_path = DB_PATH
+
+def resolve_identity() -> tuple[dict, str]:
+    """Return (profile, identity_source). Never logs PII.
+
+    Source order: synthetic env, then workExperience.md Section 1.0.
+    SQLite is not in this chain. Raises IdentityError when missing.
+    """
+    if os.environ.get("APPLYR_SYNTHETIC_IDENTITY") == "1":
+        _log_identity_source("synthetic")
+        return dict(_SYNTHETIC_IDENTITY), "synthetic"
     try:
-        if os.path.exists(db_path):
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT value FROM profiles WHERE key = 'identity'")
-            row = cursor.fetchone()
-            conn.close()
-            if row:
-                data = json.loads(row[0])
-                for key, value in data.items():
-                    if value:
-                        profile[key] = value
-    except Exception as e:
-        print(f"Error loading identity profile from DB: {e}", file=sys.stderr)
+        from apply_resume_header import load_real_header
+
+        header = load_real_header()
+    except Exception:
+        _log_identity_source("missing")
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
+    _log_identity_source("we")
+    return {
+        "name": header.get("name") or "",
+        "email": header.get("email") or "",
+        "phone": header.get("phone") or "",
+        "location": header.get("location") or "",
+        "linkedin": header.get("linkedin") or "",
+        "portfolio": "",
+        "github": "",
+    }, "we"
+
+
+def load_identity_profile() -> dict:
+    """Identity for document headers. WE or explicit synthetic mode. Not SQLite."""
+    profile, _source = resolve_identity()
     return profile
 
 
@@ -405,14 +537,24 @@ def format_contact_header_block(profile: dict | None = None) -> str:
     line, no blank line between them) -- this function was also violating that.
     """
     profile = profile or load_identity_profile()
-    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    name = (profile.get("name") or "").strip()
+    if not name:
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
     return f"# {name}\n{format_contact_line(profile)}\n\n"
 
 
 def contact_placeholder_map(profile: dict | None = None, target_company: str | None = None) -> dict:
     """Template placeholder â†’ profile values for draft post-processing."""
     profile = profile or load_identity_profile()
-    name = (profile.get("name") or _DEFAULT_IDENTITY["name"]).strip()
+    name = (profile.get("name") or "").strip()
+    if not name:
+        raise IdentityError(
+            "No identity source available - workExperience.md missing and "
+            "APPLYR_SYNTHETIC_IDENTITY not set"
+        )
     placeholders = {
         "[Your Name]": name,
         "*[Your Name]*": name,
@@ -529,6 +671,7 @@ def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
             err = str(e).lower()
             if any(k in err for k in ["retrydelay", "429", "quota", "exhausted", "503", "unavailable"]):
                 print(f"    [LLM Notice] Gemini is busy/rate-limited ({err[:100]}). Falling back to local model tier...", file=sys.stderr)
+                _log_rate_limited("gemini")
                 _log_provider_notification(
                     "gemini",
                     "Gemini is rate-limited/unavailable — cascading to the next configured provider for this call.",
@@ -548,7 +691,11 @@ def _call_gemini(settings, system_prompt, user_prompt, model, temperature,
 # a real quota exhaustion. See CR-105's free-tier research: Anthropic exposes the same live
 # rate-limit header shape as Groq; Perplexity only exposes Retry-After on the 429 itself, no
 # proactive headers, but that's still enough to make the same cascade-vs-wait call.
-_CASCADE_WAIT_THRESHOLD_SECONDS = 30
+# 2026-09-01: reduced from 30 to 5 — a 30s threshold meant Groq rate-limit
+# waits of 7-26s would block instead of cascading to Gemini, making Stage 0
+# take 5+ minutes on larger JDs. At 5s, waits of 5+ seconds cascade
+# immediately to the next provider (Gemini), keeping Stage 0 responsive.
+_CASCADE_WAIT_THRESHOLD_SECONDS = 5
 
 
 def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_retries):
@@ -577,6 +724,7 @@ def _call_claude(settings, system_prompt, user_prompt, model, temperature, max_r
             elif res.status_code == 429:
                 retry_after = res.headers.get("retry-after")
                 wait = float(retry_after) if retry_after else 60 * (attempt + 1)
+                _log_rate_limited("claude")
                 if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
                     print(f"    [LLM] Claude rate limit needs {wait:.0f}s -- cascading to next provider.", file=sys.stderr)
                     _log_provider_notification(
@@ -752,6 +900,7 @@ def _call_perplexity(settings, system_prompt, user_prompt, temperature, max_retr
             elif res.status_code == 429:
                 retry_after = res.headers.get("retry-after")
                 wait = float(retry_after) if retry_after else 60 * (attempt + 1)
+                _log_rate_limited("perplexity")
                 if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
                     print(f"    [LLM] Perplexity rate limit needs {wait:.0f}s -- cascading to next provider.", file=sys.stderr)
                     _log_provider_notification(
@@ -795,6 +944,7 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
             payload = {
                 "model": target_model,
                 "temperature": temperature,
+                "max_tokens": 8192,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -808,6 +958,7 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
             elif res.status_code == 429:
                 retry_after = res.headers.get("retry-after")
                 wait = float(retry_after) if retry_after else 5 * (attempt + 1)
+                _log_rate_limited("groq")
                 if wait > _CASCADE_WAIT_THRESHOLD_SECONDS:
                     # A multi-minute-or-longer wait means the daily cap is exhausted, not a
                     # momentary throttle -- cascade to the next provider now rather than block.
@@ -831,7 +982,8 @@ def _call_groq(settings, system_prompt, user_prompt, model, temperature, max_ret
 
 def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
              response_mime_type=None, tools=None, max_retries=8, provider_override=None,
-             options_override=None, response_schema=None, request_timeout=120):
+             options_override=None, response_schema=None, request_timeout=120,
+             cost_settings=None, cost_ledger=None):
     """
     Centralized LLM call with automatic provider fallback chain.
     Implements FR-059 (provider guard), FR-060 (fallback), FR-061 (Perplexity), FR-063 (primaryProvider).
@@ -841,6 +993,7 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
     to cloud models, bypassing the local core.
     """
     settings = load_llm_settings()
+    eligibility_settings = cost_settings if cost_settings is not None else settings
     all_providers = _get_configured_providers(settings)
     
     try:
@@ -881,6 +1034,34 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         )
         return ""
 
+    from cost_eligibility import (
+        authorize_provider_chain,
+        budget_ledger_from_settings,
+        classify_provider,
+        known_call_receipt,
+        raise_if_pause,
+        set_last_receipt,
+        estimate_prompt_tokens,
+        debit_if_paid,
+        unknown_refusal_receipt,
+        exhausted_chain_receipt,
+        operator_asserted_at,
+        CostPauseError,
+    )
+
+    ledger = cost_ledger if cost_ledger is not None else budget_ledger_from_settings(eligibility_settings)
+    tokens_est = estimate_prompt_tokens(system_prompt or "", user_prompt or "")
+    auth = authorize_provider_chain(
+        providers, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+    )
+    try:
+        raise_if_pause(auth, estimated_tokens=tokens_est)
+    except CostPauseError as exc:
+        set_last_receipt(exc.receipt)
+        print(f"    [LLM] {exc}", file=sys.stderr)
+        raise
+    providers = auth.providers
+
     for i, provider in enumerate(providers):
         if not check_rate_limits(provider):
             continue
@@ -905,6 +1086,70 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
             result = _call_groq(settings, system_prompt, user_prompt, model, temperature, max_retries)
 
         if result is not None:
+            info = classify_provider(
+                provider, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+            )
+            if info.cost_class in {"offline", "free_only"}:
+                cents = 0
+                confidence = "zero"
+            elif info.estimated_cents is None:
+                set_last_receipt(
+                    unknown_refusal_receipt(
+                        provider=provider,
+                        estimated_tokens=tokens_est,
+                        reason="paid_estimate_unknown",
+                    )
+                )
+                print(
+                    "    [LLM] Missing pricing data; not recording cost as zero.",
+                    file=sys.stderr,
+                )
+                return result
+            else:
+                cents = info.estimated_cents
+                confidence = "estimated"
+            if (
+                info.cost_class == "paid_with_budget"
+                and cents != info.estimated_cents
+            ):
+                set_last_receipt(
+                    unknown_refusal_receipt(
+                        provider=provider,
+                        estimated_tokens=tokens_est,
+                        reason="ledger_receipt_mismatch",
+                    )
+                )
+                raise CostPauseError(
+                    receipt=unknown_refusal_receipt(
+                        provider=provider,
+                        reason="ledger_receipt_mismatch",
+                    )
+                )
+            # Implements AC-424: an operator-asserted free call records
+            # zero_charge_basis="operator_assertion" plus the asserted_at echo,
+            # so an attested zero stays distinguishable from a measured zero.
+            attested_at = None
+            if info.cost_class == "free_only":
+                attested_at = operator_asserted_at(provider, eligibility_settings)
+            receipt_extra = (
+                {
+                    "zero_charge_basis": "operator_assertion",
+                    "assertion_asserted_at": attested_at,
+                }
+                if attested_at is not None
+                else {}
+            )
+            set_last_receipt(
+                known_call_receipt(
+                    provider=provider,
+                    cost_class=info.cost_class,
+                    estimated_tokens=tokens_est,
+                    api_cents=cents,
+                    cost_confidence=confidence,
+                    **receipt_extra,
+                )
+            )
+            debit_if_paid(ledger, info)
             return result
         if _local_only_env():
             print("    [LLM] Local-only mode: no cloud fallback.", file=sys.stderr)
@@ -912,6 +1157,21 @@ def call_llm(system_prompt, user_prompt, model=None, temperature=0.2,
         if i + 1 < len(providers):
             print(f"    [LLM] Falling back from {provider} to {providers[i + 1]}...", file=sys.stderr)
 
+    last_provider = providers[-1] if providers else None
+    if last_provider:
+        last_info = classify_provider(
+            last_provider, eligibility_settings, ledger=ledger, estimated_tokens=tokens_est
+        )
+        set_last_receipt(
+            exhausted_chain_receipt(last_info, estimated_tokens=tokens_est)
+        )
+    else:
+        set_last_receipt(
+            unknown_refusal_receipt(
+                estimated_tokens=tokens_est,
+                reason="providers_exhausted",
+            )
+        )
     return ""
 
 

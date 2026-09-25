@@ -37,6 +37,8 @@ _WE = textwrap.dedent("""
     * **[ACC-126] DO NOT CLAIM:** owning the ETL platform.
 
     * **[ACC-169] Hands-On AWS S3**: Used S3 for a legacy content ingestion path.
+
+    * **[ACC-185] Direct customer discovery — a real, acknowledged gap, and a stated future approach**: never happened.
 """).strip()
 
 
@@ -55,6 +57,13 @@ class ClassifyWeAccTests(unittest.TestCase):
         self.assertEqual(classes["ACC-124"], wai.CLASS_DO_NOT_CLAIM)
         self.assertEqual(classes["ACC-126"], wai.CLASS_DO_NOT_CLAIM)
         self.assertEqual(classes["ACC-119"], wai.CLASS_TOOLS)
+
+    def test_acknowledged_gap_title_is_nonclaimable(self):
+        """Regression for the ACC-185 bug (2026-09-21): a story titled as an
+        acknowledged gap must not default-classify as a claimable story just
+        because its wording doesn't match an older trigger phrase."""
+        classes = wai.classify_we_acc_ids(_WE)
+        self.assertEqual(classes["ACC-185"], wai.CLASS_NONCLAIMABLE)
 
     def test_indexable_ids_are_stories_only(self):
         self.assertEqual(
@@ -76,6 +85,20 @@ class HedgeExtractionTests(unittest.TestCase):
         self.assertTrue(
             any("etl" in p.lower() for p in h102["prohibited_claims"])
         )
+
+    def test_unbracketed_ban_attaches_and_section_header_stops_the_walk(self):
+        we = textwrap.dedent("""
+            * **[ACC-102] Data Remediation**: Drove the fix.
+                * *DO NOT CLAIM (ACC-102):* conceived or invented the bypass.
+                * *Attribution:* **OWNED** for the decision.
+            #### Factual Anti-Claims & Boundaries (DO NOT CLAIM)
+            * *DO NOT claim direct management or hiring of engineering team members.*
+            * **[ACC-103] Next story**: Something else.
+        """)
+        hedges = wai.hedges_for_project(we, "ACC-102")
+        self.assertEqual(hedges["attribution"], "OWNED")
+        self.assertTrue(any("conceived" in p.lower() for p in hedges["prohibited_claims"]))
+        self.assertFalse(any("hiring" in p.lower() for p in hedges["prohibited_claims"]))
 
     def test_unknown_project_returns_empty_hedges(self):
         empty = wai.hedges_for_project(_WE, "ACC-999")

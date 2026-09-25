@@ -1,0 +1,7 @@
+slug: adly
+why: next DEV slug clear of cooldown and already-handled when the posting URL is passed to the jobs-table gate
+mode: practice
+folder: data/loop_runs/i1/adly
+copied_bytes: 5477
+command: python scripts/run_submission.py data/loop_runs/i1/adly --mode practice
+job text: not printed

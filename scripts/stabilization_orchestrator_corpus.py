@@ -189,7 +189,10 @@ def main() -> int:
             row["snapshot"] = _status_snapshot(folder)
 
             # Multi-cycle dispose: each Stage 2 phase can stop independently, so one
-            # fill+resume is not enough to reach Stage 2 COMPLETE.
+            # fill+resume is not always enough to reach Stage 2 COMPLETE.  With the
+            # 2026-09-01 pre-collect optimization, lightweight subphases (Truth/ATS/HM)
+            # surface their findings in a single pass, but Mech may still need a
+            # separate cycle after HM is disposed.
             dispose_cycles = 0
             while state.get("status") == "NEEDS_DISPOSITION" and dispose_cycles < 6:
                 filled = _auto_dispose_open_findings(folder)

@@ -37,12 +37,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from stage_gate import StageGateNotReadyError, add_force_args, require_stage_ready  # noqa: E402
 from authoring_examples import bank_version, select_examples  # noqa: E402
+from pm_years import years_constraint_from_we  # noqa: E402
+from evidence_dominance import apply_class1_dominance  # noqa: E402
 from build_stage0_fit_gate import (  # noqa: E402
+    _ADMIN_BACKGROUND_RE,
+    _ADMIN_SCHEDULE_RE,
     _BACHELORS_SATISFIED_RE,
     _HIGHER_DEGREE_MANDATORY_RE,
     _get_hard_tool_pattern,
     _is_administratively_satisfied,
 )
+from blocked_tools import epic_match_is_agile_noun  # noqa: E402
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -110,7 +115,12 @@ _MIN_EXCERPTS_PER_CANONICAL_EMPLOYER = 2
 # the whole evidence_map, not per-item — each row still picks from its own ranked
 # candidate list, so a capped-out claim is replaced by that row's own next-best match,
 # never an unrelated claim forced in just to fill a slot.
-_MAX_SLOTS_PER_PROJECT = 3
+# 2026-09-01: raised from 3 to 4 — Cision is Jason's most evidence-rich role
+# and frequently has the strongest claim for 4+ required items. At 3, the
+# 4th required item got a weaker claim from a different employer even when
+# a stronger Cision claim was available. Per-bucket application would be
+# more granular, but raising to 4 is the simpler fix for the common case.
+_MAX_SLOTS_PER_PROJECT = 4
 
 # CR-085: short, explicit, conservative boilerplate phrase list. Generic JD lines that
 # carry no evidence-worthy signal still consumed a full 67-claim scoring pass and an
@@ -328,10 +338,17 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "been",
         "before",
         "between",
+        # Live miss 2026-09-23 nisum_2: a Voice of Customer line matched an ETL
+        # investigation on the single word "cause".
+        "cause",
         "during",
         "equipped",
         "excellent",
         "experience",
+        # Live miss 2026-09-21 omnissa: ACC-189 lens kafka_architecture_exposure
+        # shared the rare word "exposure" with "Exposure to frontline verticals".
+        "exposure",
+        "exposed",
         "from",
         "good",
         "have",
@@ -343,6 +360,12 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "into",
         "keep",
         "kept",
+        # Live miss 2026-09-24: a scaling excerpt matched a software-analysis line
+        # on the single word "knowledge".
+        "knowledge",
+        # Live miss 2026-09-24: an executive excerpt matched a required line
+        # on the single word "communication".
+        "communication",
         "make",
         "made",
         "managed",
@@ -352,6 +375,9 @@ _GENERIC_OVERLAP_TOKENS: frozenset[str] = frozenset(
         "other",
         "others",
         "over",
+        # Live miss 2026-09-24: a scope excerpt matched "driving initiatives from
+        # ambiguity to execution" on the single word "ownership".
+        "ownership",
         "product",
         "products",
         "related",
@@ -436,6 +462,50 @@ _PRODUCTIVITY_SUITE_RE = re.compile(
     re.I,
 )
 
+_NON_CLAIMABLE_BRIDGE_LOGISTICS = (
+    "Not a skill claim (employment/contract logistics) -- no evidence required."
+)
+
+_NON_CLAIMABLE_BRIDGE_TRAVEL = (
+    "Not a skill claim (travel or remote posting term) -- already handled by "
+    "Stage 0's deterministic travel-ceiling gate, no accomplishment evidence required."
+)
+
+# Found 2026-09-19 on healthstream: "Travel of approximately 10-15% may be
+# required to support partner and customer relationships and attend industry
+# events" was scored `required` and matched claim_ids purely because it
+# contains the word "support" as a verb ("to support ... relationships"), not
+# a request for customer-support accomplishment evidence. Travel-percentage
+# disclosure is administratively satisfied by the separate travel-ceiling
+# gate (stage0_prefs_gate._check_travel) the same way education is
+# administratively satisfied by the degree-line check above -- neither is a
+# skill claim needing a resume bridge.
+# Found 2026-09-23 on intech: "fully remote" plus "Quarterly travel may be
+# required for planning sessions" matched product-planning claims on the word
+# "planning". Same class. A remote or travel posting term is not a skill.
+_TRAVEL_LOGISTICS_RE = re.compile(
+    r"travel\s+of\s+approximately\s+\d{1,3}\s*[-–]\s*\d{1,3}\s*%|"
+    r"\b\d{1,3}\s*[-–]\s*\d{1,3}\s*%\s+travel|"
+    r"travel\s+(?:of\s+)?(?:up\s+to\s+)?\d{1,3}\s*%\s+(?:may\s+be\s+)?required|"
+    r"\b(?:fully\s+remote|remote\s+within|quarterly\s+travel|"
+    r"travel\s+may\s+be\s+required)\b",
+    re.I,
+)
+
+# Found 2026-09-19 on binance: a JD line stating contract length/type and location
+# flexibility ("fixed-term (12 months)... may be located anywhere across APAC time
+# zones") was scored as a `required` item and matched ACC-220-CLOUDERAEXIT purely on
+# the shared word "contract" -- a nonsensical bridge that repair/authoring can only
+# satisfy by forcing an unrelated fact into an irrelevant sentence. Same class of
+# problem as education/comp/productivity-suite boilerplate above: these lines
+# describe the job posting's terms, not a skill, and must not receive claim_ids.
+_EMPLOYMENT_LOGISTICS_RE = re.compile(
+    r"\bfixed-term\b|\bcontract\s+(?:position|extension)\b|"
+    r"you\s+do\s+not\s+need\s+to\s+be\s+based|may\s+be\s+located\s+anywhere|"
+    r"\bAPAC\s+time\s+zones?\b",
+    re.I,
+)
+
 
 def _is_degree_non_claimable(item_text: str) -> bool:
     """Bachelor's/undergrad lines map to no ACC — force empty claim_ids."""
@@ -456,11 +526,57 @@ def _is_productivity_suite_non_claimable(item_text: str) -> bool:
     return bool(_PRODUCTIVITY_SUITE_RE.search(item_text or ""))
 
 
+def _is_employment_logistics_non_claimable(item_text: str) -> bool:
+    """Contract length/type and location-flexibility lines are posting terms, not skills."""
+    return bool(_EMPLOYMENT_LOGISTICS_RE.search(item_text or ""))
+
+
+def _is_travel_logistics_non_claimable(item_text: str) -> bool:
+    """A travel-percentage disclosure is administratively satisfied, not a skill claim."""
+    return bool(_TRAVEL_LOGISTICS_RE.search(item_text or ""))
+
+
 def _item_names_hard_blocked_tool(item_text: str) -> bool:
-    """True when the JD line names a Stage-0 hard-blocked tool Jason must not claim."""
+    """True when the JD line names a Stage-0 hard-blocked tool Jason must not claim.
+
+    "epic(s)" needs an extra Python-level pass: _epic_pattern's embedded regex
+    lookahead is forward-only, so a match can still be the ordinary Agile noun
+    when the qualifying word comes BEFORE it in the sentence ("appropriate
+    epics.") or nowhere in the sentence's forward context at all -- confirmed
+    live via test_zero_overlap_jd_score_alone_does_not_fill_evidence_map,
+    which force-emptied a real evidence-map row (ACC-105-EXECUTION) because
+    "epics" ended its sentence with no Agile word after it. blocked_tools.py's
+    own docstring claimed this Stage 0 caller was dead/unreachable code and
+    that submission_linter.py's LR-026 was the only live consumer needing the
+    bidirectional epic_match_is_agile_noun() check -- that assumption was
+    wrong (this function is on the live evidence-map path), which is why the
+    fix never propagated here when LR-026 got it. Every other hard-blocked
+    tool keeps the plain regex-only path, same as LR-026's own dispatch.
+    """
     if not (item_text or "").strip():
         return False
-    return _get_hard_tool_pattern().search(item_text) is not None
+    pattern = _get_hard_tool_pattern()
+    for m in pattern.finditer(item_text):
+        token = m.group(0).lower()
+        if token.rstrip("s") == "epic" and epic_match_is_agile_noun(item_text, m.start(), m.end()):
+            continue
+        return True
+    return False
+
+
+_NOT_PRESENT_NAMED_TOOL_BRIDGE = (
+    "Named tool marked NOT_PRESENT. Do not claim it. Use another packet "
+    "excerpt as a transferable bridge, never the JD's tool name."
+)
+
+
+def _item_mentions_any_named_tool(text: str, names: list[str]) -> bool:
+    """True when *text* contains any Review Center NOT_PRESENT display name."""
+    hay = text or ""
+    for name in names:
+        if name and re.search(re.escape(name), hay, re.IGNORECASE):
+            return True
+    return False
 
 
 def _force_empty_claim_scoring(item_text: str) -> str | None:
@@ -474,6 +590,10 @@ def _force_empty_claim_scoring(item_text: str) -> str | None:
         return _NON_CLAIMABLE_BRIDGE_COMP
     if _is_productivity_suite_non_claimable(item_text):
         return _NON_CLAIMABLE_BRIDGE_PRODUCTIVITY
+    if _is_employment_logistics_non_claimable(item_text):
+        return _NON_CLAIMABLE_BRIDGE_LOGISTICS
+    if _is_travel_logistics_non_claimable(item_text):
+        return _NON_CLAIMABLE_BRIDGE_TRAVEL
     if _item_names_hard_blocked_tool(item_text):
         return _HARD_TOOL_EVIDENCE_BRIDGE
     return None
@@ -482,6 +602,37 @@ def _force_empty_claim_scoring(item_text: str) -> str | None:
 def _distinctive_overlap(item_words: set[str], claim_words: set[str]) -> set[str]:
     """CR-087 — item↔claim token intersection after dropping generic fillers."""
     return {w for w in (item_words & claim_words) if w not in _GENERIC_OVERLAP_TOKENS}
+
+
+def _item_specificity_boost(item_text: str, claim_text: str) -> int:
+    """Prefer direct technical evidence for distributed/event-driven items.
+
+    CR-112 Story 8.8: broad infrastructure savings can share generic words
+    like "systems" and "optimization" with a distributed-systems requirement.
+    When the JD item itself is technical architecture/messaging work, a claim
+    that names messaging/architecture evidence should outrank that broad
+    overlap. This is item-specific; it is not a metric boost or a ban on
+    savings evidence.
+    """
+    item_l = item_text.lower()
+    claim_l = claim_text.lower()
+    technical_item = (
+        re.search(
+            r"\b(distributed|event[-\s]?driven|messaging|message\s+queues?|"
+            r"kafka|rabbitmq|fault\s+tolerance|scalability|architecture)\b",
+            item_l,
+        )
+        is not None
+    )
+    if not technical_item:
+        return 0
+    if re.search(
+        r"\b(kafka|rabbitmq|message\s+queues?|distributed\s+messaging|"
+        r"event[-\s]?driven|data\s+pipeline|product\s+architecture)\b",
+        claim_l,
+    ):
+        return 5000
+    return 0
 
 
 def _score_claims_for_item(
@@ -511,6 +662,16 @@ def _score_claims_for_item(
     except ImportError:
         use_jd_scorer = False
 
+    # 2026-09-01: rarity-weight the primary overlap signal so a claim matching
+    # one distinctive token (e.g. "pendo") outscores a claim matching three
+    # generic-but-non-stoplisted tokens (e.g. "platform", "data", "migration").
+    # Falls back to raw count if jd_tailoring._rarity_weight is unavailable.
+    try:
+        from jd_tailoring import _rarity_weight  # type: ignore
+        use_rarity = True
+    except ImportError:
+        use_rarity = False
+
     # Item-specific word overlap — primary signal
     item_words = set(re.findall(r"[a-z]{4,}", item_text.lower()))
 
@@ -522,8 +683,13 @@ def _score_claims_for_item(
         tag_words = set(re.findall(r"[a-z]{4,}", ct.lower()))
 
         # Primary: distinctive item-specific overlap (weighted heavily)
+        # 2026-09-01: rarity-weighted sum instead of raw count, so rare precise
+        # matches (e.g. "pendo", "gdpr") dominate over multiple generic matches.
         overlap_words = _distinctive_overlap(item_words, tag_words)
-        overlap = len(overlap_words)
+        if use_rarity:
+            overlap = sum(_rarity_weight(w) for w in overlap_words)
+        else:
+            overlap = len(overlap_words)
 
         # Soft-gap capability boost: when the JD item names compliance/privacy/
         # regulatory work, prefer claims whose *primary* theme is that capability
@@ -571,6 +737,8 @@ def _score_claims_for_item(
             ):
                 capability_boost += 12000
 
+        capability_boost += _item_specificity_boost(item_text, ct)
+
         # Secondary: full-JD scorer as tiebreaker
         if use_jd_scorer and jd_profile is not None:
             jd_score = score_claim_for_jd(ct, jd_profile, jd_text)
@@ -578,7 +746,9 @@ def _score_claims_for_item(
             jd_score = overlap
 
         # Combined: capability boost + overlap dominate; jd_score breaks ties
-        total = capability_boost + overlap * 1000 + jd_score
+        # 2026-09-01: overlap is now a rarity-weighted float; round to int for
+        # consistent sorting and comparison.
+        total = capability_boost + int(round(overlap * 1000)) + jd_score
         # CR-087: full-JD score alone must not put a claim into Top-2 when the item
         # shares no distinctive tokens and no soft-gap capability boost fired.
         if overlap == 0 and capability_boost == 0:
@@ -604,6 +774,7 @@ def build_evidence_map(
     claims: dict[str, dict],
     disabled: set[str],
     jd_profile: Any = None,
+    trace_out: list | None = None,
 ) -> list[dict]:
     """Story 3.1 — Map JD items to strongest claim IDs.
 
@@ -618,6 +789,16 @@ def build_evidence_map(
     ranked list, so a capped-out claim is replaced by that row's own next-best match. Also
     filters generic boilerplate lines out of preferred/responsibilities (never required)
     before they consume a scoring pass at all.
+
+    CR-112 Story 3.2 (FR-303 / AC-400): optional *trace_out* receives the full
+    per-item ranking for evidence_selection_trace.json. Packet rows may carry
+    cheap omitted_reasons (`top2_cutoff` | `project_slot_cap`, and after
+    Story 3.5 `displaced_by_dominance`). Scores,
+    score_zero catalog noise, and boilerplate filters stay out of the packet.
+    Pick rules stay the 8bbc497 rules: score <= 0 is not picked; a capped
+    project continues to the next candidate; after two picks further positive
+    scores are top2_cutoff. Story 3.2 recording of losers must not change
+    who wins. Story 3.5 may swap after that pass only on comparator REPLACE.
     """
     # Build a soft-gap bridge lookup from flagged_gaps + required item bridges
     soft_gap_bridges: dict[str, str] = {}
@@ -650,9 +831,33 @@ def build_evidence_map(
             )
         return None
 
+    not_present_names = _not_present_display_names(stage0)
+
     def _enqueue(item: str, bucket: str, *, is_required: bool) -> None:
         forced_bridge = _force_empty_claim_scoring(item)
         soft_raw = (soft_gap_bridges.get(item) or "").strip()
+        # CR-112 Story 3.4 / FR-305: skip scoring for eligibility-framed
+        # fingerprint / background-check and nights-and-weekends lines so a
+        # tag overlap cannot assign ACC-103-ROADMAP. Years and bachelor's
+        # still go through the existing paths. Implements AC-402.
+        if _ADMIN_BACKGROUND_RE.search(item) or _ADMIN_SCHEDULE_RE.search(item):
+            pending.append({
+                "jd_item": item,
+                "bucket": bucket,
+                "bridge": soft_raw or None,
+                "scored": [],
+            })
+            return
+        # AC-456 / FR-283: NOT_PRESENT named tools must not receive claim_ids
+        # at map-build time. Packet assemble_packet strip is a backstop only.
+        if _item_mentions_any_named_tool(item, not_present_names):
+            pending.append({
+                "jd_item": item,
+                "bucket": bucket,
+                "bridge": soft_raw or _NOT_PRESENT_NAMED_TOOL_BRIDGE,
+                "scored": [],
+            })
+            return
         if forced_bridge is not None:
             # No claim_ids: prefer a real Stage-0 soft-gap bridge, else the honesty note.
             # Do not use the generic "Soft gap — transferable…" filler here — that exists for
@@ -684,6 +889,14 @@ def build_evidence_map(
             continue
         if _is_boilerplate_item(item):
             print(f"INFO: filtered boilerplate preferred item: {item[:80]!r}", file=sys.stderr)
+            if trace_out is not None:
+                trace_out.append({
+                    "jd_item": item,
+                    "bucket": "preferred",
+                    "picked": [],
+                    "candidates": [],
+                    "filter": "boilerplate_filtered",
+                })
             continue
         _enqueue(item, "preferred", is_required=False)
 
@@ -693,6 +906,14 @@ def build_evidence_map(
             continue
         if _is_boilerplate_item(item):
             print(f"INFO: filtered boilerplate responsibility item: {item[:80]!r}", file=sys.stderr)
+            if trace_out is not None:
+                trace_out.append({
+                    "jd_item": item,
+                    "bucket": "responsibilities",
+                    "picked": [],
+                    "candidates": [],
+                    "filter": "boilerplate_filtered",
+                })
             continue
         _enqueue(item, "responsibilities", is_required=False)
 
@@ -711,16 +932,31 @@ def build_evidence_map(
 
     project_counts: dict[str, int] = {}
     evidence_map: list[dict] = []
+    row_traces: list[dict] = []
     for row in pending:
         picked: list[str] = []
+        omitted: list[dict] = []
+        candidates_full: list[dict] = []
         for cid, score in row["scored"]:
-            if score <= 0 or len(picked) >= 2:
-                break
             proj = _project_of(cid)
-            if project_counts.get(proj, 0) >= _MAX_SLOTS_PER_PROJECT:
-                continue
-            picked.append(cid)
-            project_counts[proj] = project_counts.get(proj, 0) + 1
+            if score <= 0:
+                reason = "score_zero"
+            elif project_counts.get(proj, 0) >= _MAX_SLOTS_PER_PROJECT:
+                reason = "project_slot_cap"
+            elif len(picked) >= 2:
+                reason = "top2_cutoff"
+            else:
+                reason = "picked"
+                picked.append(cid)
+                project_counts[proj] = project_counts.get(proj, 0) + 1
+            candidates_full.append({
+                "claim_id": cid,
+                "score": score,
+                "reason": reason,
+                "attribution": (claims.get(cid) or {}).get("attribution"),
+            })
+            if reason in ("top2_cutoff", "project_slot_cap"):
+                omitted.append({"claim_id": cid, "reason": reason})
         bridge = row["bridge"]
         # CR-090 follow-up: an administratively-satisfied required item (Bachelor's
         # degree, years-of-experience already gated by seniority_gate.py) correctly
@@ -746,8 +982,27 @@ def build_evidence_map(
             "bucket": row["bucket"],
             "claim_ids": picked,
             "bridge": bridge,
+            "omitted_reasons": omitted,
         })
+        item_trace = {
+            "jd_item": row["jd_item"],
+            "bucket": row["bucket"],
+            "picked": list(picked),
+            "candidates": candidates_full,
+            "filter": None,
+        }
+        row_traces.append(item_trace)
+        if trace_out is not None:
+            trace_out.append(item_trace)
 
+    apply_class1_dominance(
+        evidence_map,
+        row_traces,
+        claims,
+        jd_text=jd_text,
+        max_slots_per_project=_MAX_SLOTS_PER_PROJECT,
+        disabled=disabled,
+    )
     return evidence_map
 
 
@@ -781,6 +1036,77 @@ def _strip_markdown_decoration(text: str) -> str:
 
 _SENTENCE_END_RE = re.compile(r"[.!?][\"')\]]*(?:\s|$)")
 
+# A sliced card that keeps the number and drops its unit, or keeps the first
+# clause and drops "engineering built …", is how $8,500 became "annually" and
+# the landing page became Jason's funnel. Implements FR-383.
+_CURRENCY_RE = re.compile(r"\$\d[\d,]*(?:\.\d+)?(?:\s*[KMB])?")
+_UNIT_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("quarter", ("per quarter", "quarterly", "a quarter", "each quarter")),
+    ("year", ("annually", "per year", "a year", "each year", "annual", "arr")),
+    ("month", ("per month", "monthly", "a month", "each month")),
+)
+_OTHER_ACTOR_RE = re.compile(
+    r"\b(?:engineering|an engineer|the engineer)\s+(?:\w+\s+){0,3}"
+    r"(?:built|created|wrote|deployed|automated)\b",
+    re.IGNORECASE,
+)
+_CONSTRAINT_OMIT_REASON = (
+    "Excerpt omitted because shortening it would drop the unit on a number "
+    "or an engineering-built clause from the career sentence."
+)
+
+
+def _first_unit_group(window: str) -> str | None:
+    """Return the unit group of the earliest unit phrase in *window*."""
+    lowered = (window or "").lower()
+    best_group: str | None = None
+    best_at = 10**9
+    for group, phrases in _UNIT_GROUPS:
+        for phrase in phrases:
+            found = re.search(rf"\b{re.escape(phrase)}\b", lowered)
+            if found and found.start() < best_at:
+                best_at = found.start()
+                best_group = group
+    return best_group
+
+
+def _unit_after_number(text: str, match: re.Match[str]) -> str | None:
+    """Return the unit attached to this currency match, looking after it first."""
+    after = _first_unit_group(text[match.end(): match.end() + 48])
+    if after:
+        return after
+    before = text[max(0, match.start() - 32): match.start()]
+    return _first_unit_group(before)
+
+
+def _constraint_dropped(full: str, kept: str) -> bool:
+    """True when *kept* loses a unit or an other-actor clause that *full* had.
+
+    A later sentence that only adds a second metric can be dropped. A cut that
+    leaves $8,500 in place and removes "per quarter", or that leaves the
+    landing-page sentence and removes "engineering built", cannot.
+    """
+    source = full or ""
+    remain = kept or ""
+    if source.strip() == remain.strip():
+        return False
+    if _OTHER_ACTOR_RE.search(source) and not _OTHER_ACTOR_RE.search(remain):
+        return True
+    for match in _CURRENCY_RE.finditer(source):
+        unit = _unit_after_number(source, match)
+        if not unit:
+            continue
+        kept_match = None
+        for candidate in _CURRENCY_RE.finditer(remain):
+            if candidate.group(0) == match.group(0):
+                kept_match = candidate
+                break
+        if kept_match is None:
+            continue
+        if _unit_after_number(remain, kept_match) != unit:
+            return True
+    return False
+
 
 def _truncate_at_sentence(text: str, max_chars: int) -> str:
     """Truncate *text* to at most max_chars, preferring the nearest sentence
@@ -803,6 +1129,38 @@ def _truncate_at_sentence(text: str, max_chars: int) -> str:
     if best_end > 0:
         return window[:best_end].rstrip()
     return window
+
+
+def _truncate_excerpt_card(text: str, max_chars: int) -> str:
+    """Sentence-truncate an excerpt card without dropping the WE span.
+
+    Cards are ``hedge header\\nWE span``. Header sentences end inside the
+    first ~100 characters. `_truncate_at_sentence` on the whole card with a
+    400-char floor therefore cuts at 'none listed.' and discards the WE
+    sentence still running past that window. Live miss 2026-09-21 velosio
+    ACC-203-TECH: 475-char certificate-workflow card became a 96-char lens
+    header, Stage 1 had no honest Dynamics bridge, and the author wrote
+    Microsoft Dynamics 365 from the jd_item instead. FR-297 / FR-094.
+    """
+    clean = (text or "").strip()
+    if len(clean) <= max_chars:
+        return clean
+    header, sep, body = clean.partition("\n")
+    body = body.strip()
+    if not sep or not body:
+        return _truncate_at_sentence(clean, max_chars)
+    body_budget = max_chars - len(header) - 1
+    if body_budget < 1:
+        return clean
+    kept_body = _truncate_at_sentence(body, body_budget)
+    if not kept_body.strip():
+        return "" if _constraint_dropped(clean, header) else clean
+    out = f"{header}\n{kept_body}"
+    if _constraint_dropped(clean, out):
+        return ""
+    if len(out) > max_chars and kept_body == body:
+        return clean
+    return out
 
 
 def _is_thin_synthetic_excerpt(excerpt: str) -> bool:
@@ -871,11 +1229,19 @@ def _format_excerpt_card(
     """WE span plus hedge header, or a lens pointer for a later lens of the same story.
 
     Implements CR-094: author sees retrieved WE, not catalog `text`.
+
+    CR-108 (2026-08-31, Papigen + a 12-submission sweep): the header must name the
+    claim's employer explicitly. Before this, the header carried no employer signal
+    at all -- only _synthetic_excerpt()'s fallback path did -- so the author had no
+    way to know a "coached an engineer" story belonged to Cision, and repeatedly
+    drafted it under Sterkly instead wherever a role's bullet template needed a
+    coaching-flavored line. Same claim, same bug, in 10 of 18 real submissions.
     """
     from we_acc_index import hedges_for_project
 
     project_id = str(rec.get("project_id") or cid)
     lens = str(rec.get("lens") or "").strip() or "story"
+    employer = str(rec.get("employer") or "").strip() or "unspecified"
     hedges = hedges_for_project(we_text, project_id)
     attr = str(rec.get("attribution") or hedges.get("attribution") or "").strip()
     prohibited = rec.get("prohibited_claims") or hedges.get("prohibited_claims") or []
@@ -883,14 +1249,20 @@ def _format_excerpt_card(
         prohibited = [prohibited]
     attr_s = attr.upper() if attr else "unspecified"
     dnc = "; ".join(str(p) for p in prohibited) if prohibited else "none listed"
-    header = f"Lens {lens} of {project_id}. Attribution: {attr_s}. Prohibited: {dnc}."
+    header = (
+        f"Lens {lens} of {project_id}. Employer: {employer}. "
+        f"Attribution: {attr_s}. Prohibited: {dnc}."
+    )
     if pointer_to:
         body = (
             f"{header} Same WE story as {pointer_to}. Write this JD item through the "
             f"{lens} lens. Do not copy excerpt sentences."
         )
         return _truncate_at_sentence(body, max_chars)
-    return _truncate_at_sentence(f"{header}\n{span}", max_chars)
+    # Card-aware cut. A sliced unit or actor clause comes back empty so the
+    # caller can omit the claim instead of handing the author a half fact.
+    # Implements FR-383.
+    return _truncate_excerpt_card(f"{header}\n{span}", max_chars)
 
 
 def _excerpt_for_claim(
@@ -961,7 +1333,12 @@ def _add_excerpt(
         return excerpts[cid]
     project_id = str(rec.get("project_id") or cid)
     pointer_to = span_holders.get(project_id)
-    excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text, pointer_to=pointer_to)
+    # 2026-09-01: extend max_chars for CONTRIBUTED claims to preserve the
+    # hedge sentence (e.g. "contributed to" / "partnered on") which often
+    # appears in the 2nd or 3rd sentence and gets truncated at 900 chars.
+    attribution = str(rec.get("attribution") or "").upper()
+    excerpt_max = _EXCERPT_MAX_CHARS + 300 if attribution == "CONTRIBUTED" else _EXCERPT_MAX_CHARS
+    excerpt = _excerpt_for_claim(cid, rec, we_text, ai_text, max_chars=excerpt_max, pointer_to=pointer_to)
     if excerpt:
         excerpts[cid] = excerpt
         if pointer_to is None and not _is_thin_synthetic_excerpt(excerpt):
@@ -1102,6 +1479,7 @@ def build_claim_constraints(
         out[cid] = {
             "project_id": project_id,
             "lens": str(rec.get("lens") or "").strip() or "story",
+            "employer": str(rec.get("employer") or "").strip(),
             "attribution": attr.upper() if attr else "",
             "prohibited_claims": [str(p) for p in prohibited],
             "allowed_claims": [str(a) for a in allowed],
@@ -1289,6 +1667,26 @@ def _build_soft_gaps(stage0: dict, evidence_map: list[dict] | None = None) -> li
     return soft_gaps
 
 
+def _stage0_requirement_text(stage0: dict) -> str:
+    """Concatenated text of Stage 0's own required+preferred+responsibilities
+    bucket items, used as the ATS-term-contract fallback path's requirement
+    anchor (see CR-112-ats-term-contract-eligibility-defect.md). Each bucket
+    entry is a dict with an "item" text field (not a plain string), so this
+    extracts "item" rather than stringifying the whole dict -- stringifying
+    the dict would also match on unrelated fields like "anchor"/"gap_source"
+    reasoning text, which is not itself JD text."""
+    texts: list[str] = []
+    for bucket_name in ("required", "preferred", "responsibilities"):
+        for entry in stage0.get(bucket_name) or []:
+            if isinstance(entry, dict):
+                text = entry.get("item")
+            else:
+                text = entry
+            if isinstance(text, str) and text.strip():
+                texts.append(text)
+    return " ".join(texts)
+
+
 def _build_jd_buckets(stage0: dict) -> dict:
     """Extract jd_buckets from stage0 in the packet schema shape.
 
@@ -1298,7 +1696,8 @@ def _build_jd_buckets(stage0: dict) -> dict:
     from evidence_map — populating both duplicated the same JD requirement text twice in
     the serialized prompt (author_from_packet.py dumps the whole packet as JSON), measured
     at ~8% of a real packet. Only `culture` has no evidence_map counterpart (culture items
-    are never scored/mapped), so it's the only bucket still populated. Keys are kept for
+    are never scored/mapped), so it's the only bucket still populated. Stage 0 `junk`
+    (ATS chrome) is never a cover-letter hook and is omitted here. Keys are kept for
     all four so authoring_packet_schema.json's required-keys check still passes.
     """
     culture = [
@@ -1313,7 +1712,11 @@ def _build_jd_buckets(stage0: dict) -> dict:
     }
 
 
-def _shrink_excerpts_to_budget(excerpts: dict[str, str], overage_tokens: int) -> dict[str, str]:
+def _shrink_excerpts_to_budget(
+    excerpts: dict[str, str],
+    overage_tokens: int,
+    required_claim_ids: set[str] | None = None,
+) -> dict[str, str]:
     """Adaptive post-hoc shrink pass (2026-08-21, Schellman fix).
 
     Real measured tradeoff, not hidden: raising _EXCERPT_MAX_CHARS to 900
@@ -1333,11 +1736,41 @@ def _shrink_excerpts_to_budget(excerpts: dict[str, str], overage_tokens: int) ->
     Never truncates mid-word/mid-sentence: re-runs _truncate_at_sentence on
     the already-built excerpt text, so a shrink only ever removes whole
     trailing sentences, same as the original build.
+
+    2026-09-01: when required_claim_ids is provided, shrink non-required
+    excerpts first (preferred/responsibilities), preserving required-item
+    evidence at full length as long as possible.
     """
     if not excerpts or overage_tokens <= 0:
         return excerpts
     # utf-8 bytes / 4 approximation, matching assemble_packet()'s own estimator.
     overage_chars = overage_tokens * 4
+
+    # 2026-09-01: two-phase shrink — non-required first, then required.
+    if required_claim_ids:
+        non_required = {k: v for k, v in excerpts.items() if k not in required_claim_ids}
+        required = {k: v for k, v in excerpts.items() if k in required_claim_ids}
+
+        # Phase 1: shrink non-required excerpts
+        if non_required:
+            total_nr = sum(len(v) for v in non_required.values())
+            if total_nr > 0:
+                shrunk_nr: dict[str, str] = {}
+                for cid, text in non_required.items():
+                    share = len(text) / total_nr
+                    target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
+                    kept = _kept_excerpt(text, target)
+                    if kept:
+                        shrunk_nr[cid] = kept
+                # Recalculate overage after phase 1
+                phase1_savings = sum(len(v) for v in non_required.values()) - sum(len(v) for v in shrunk_nr.values())
+                remaining_overage_chars = max(0, overage_chars - phase1_savings)
+                if remaining_overage_chars <= 0:
+                    return {**shrunk_nr, **required}
+                # Phase 2: shrink required excerpts with remaining overage
+                overage_chars = remaining_overage_chars
+                excerpts = {**shrunk_nr, **required}
+
     total_chars = sum(len(v) for v in excerpts.values())
     if total_chars <= 0:
         return excerpts
@@ -1345,8 +1778,324 @@ def _shrink_excerpts_to_budget(excerpts: dict[str, str], overage_tokens: int) ->
     for cid, text in excerpts.items():
         share = len(text) / total_chars
         target = max(_EXCERPT_MIN_CHARS, len(text) - int(overage_chars * share))
-        shrunk[cid] = _truncate_at_sentence(text, target) if target < len(text) else text
+        kept = _kept_excerpt(text, target)
+        if kept:
+            shrunk[cid] = kept
     return shrunk
+
+
+def _kept_excerpt(text: str, target: int) -> str:
+    """Return *text* shortened to *target*, or "" when that cut drops a constraint.
+
+    Empty means omit the claim. Implements FR-383.
+    """
+    if target >= len(text):
+        return text
+    return _truncate_excerpt_card(text, target)
+
+
+def _drop_trailing_sentence(text: str, min_chars: int) -> str | None:
+    """Return text without the last sentence, or None if that would go below min.
+
+    Used after the proportional shrink pass when a leftover token overage is
+    smaller than one sentence and int(share * overage) cannot take a bite.
+    """
+    clean = (text or "").strip()
+    if len(clean) <= min_chars:
+        return None
+    matches = list(_SENTENCE_END_RE.finditer(clean))
+    if len(matches) < 2:
+        cut = _truncate_at_sentence(clean, min_chars)
+        if not cut or len(cut) >= len(clean):
+            return None
+        if _constraint_dropped(clean, cut):
+            return ""
+        return cut
+    trimmed = clean[: matches[-2].end()].rstrip()
+    if len(trimmed) < min_chars or not trimmed or trimmed == clean:
+        return None
+    # Never collapse a header+WE card into a hedge header. Same live miss as
+    # `_truncate_excerpt_card` (velosio ACC-203-TECH).
+    if "\n" in clean and "\n" not in trimmed:
+        return None
+    if _constraint_dropped(clean, trimmed):
+        return ""
+    return trimmed
+
+
+def _trim_excerpts_until_under_budget(
+    excerpts: dict[str, str],
+    draft: dict,
+    estimated_tokens: int,
+) -> tuple[dict[str, str], int]:
+    """Drop trailing sentences from the longest over-floor excerpts until under budget.
+
+    Live miss 2026-09-21 velosio: 8010 > 8000 after one proportional shrink.
+    33 excerpts made int(overage_chars * share) 0-2 characters; sentence
+    truncation would not take that bite. Five excerpts were still above
+    _EXCERPT_MIN_CHARS. Implements FR-297: do not wipe claim_constraints.
+    """
+    if estimated_tokens <= _TOKEN_BUDGET or not excerpts:
+        return excerpts, estimated_tokens
+    skipped: set[str] = set()
+    for _ in range(len(excerpts) * 8):
+        if estimated_tokens <= _TOKEN_BUDGET:
+            break
+        candidates = [
+            cid
+            for cid, text in excerpts.items()
+            if cid not in skipped and len(text) > _EXCERPT_MIN_CHARS
+        ]
+        if not candidates:
+            break
+        cid = max(candidates, key=lambda key: len(excerpts[key]))
+        trimmed = _drop_trailing_sentence(excerpts[cid], _EXCERPT_MIN_CHARS)
+        if trimmed is None:
+            skipped.add(cid)
+            continue
+        if trimmed == "":
+            excerpts, draft = _omit_constraint_excerpt(excerpts, draft, cid)
+            estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+            continue
+        excerpts = {**excerpts, cid: trimmed}
+        draft["excerpts"] = excerpts
+        estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+    return excerpts, estimated_tokens
+
+
+_CANONICAL_ROLE_PREFIXES = ("ACC-201", "ACC-202", "ACC-203", "ACC-301", "ACC-302")
+
+
+def _is_pointer_or_header_only_card(text: str) -> bool:
+    """True when a card has no WE span after the hedge header."""
+    clean = (text or "").strip()
+    if "Same WE story as" in clean:
+        return True
+    _header, sep, body = clean.partition("\n")
+    return not sep or not body.strip()
+
+
+def _mapped_claim_ids(evidence_map: list[dict]) -> set[str]:
+    """Return every claim_id still cited on an evidence_map row."""
+    mapped: set[str] = set()
+    for row in evidence_map:
+        for cid in row.get("claim_ids") or []:
+            if cid:
+                mapped.add(cid)
+    return mapped
+
+
+def _strip_claim_id_from_rows(rows: list[dict], cid: str) -> list[dict]:
+    """Remove one claim_id from evidence_map or soft_gaps rows."""
+    updated: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        ids = [item_id for item_id in (item.get("claim_ids") or []) if item_id != cid]
+        if ids != list(item.get("claim_ids") or []):
+            item["claim_ids"] = ids
+        updated.append(item)
+    return updated
+
+
+def _drop_excerpt_and_constraint(
+    excerpts: dict[str, str],
+    draft: dict,
+    cid: str,
+) -> tuple[dict[str, str], dict]:
+    """Remove one excerpt and its claim_constraints entry from the draft packet."""
+    excerpts = {key: value for key, value in excerpts.items() if key != cid}
+    draft["excerpts"] = excerpts
+    constraints = draft.get("claim_constraints")
+    if isinstance(constraints, dict) and cid in constraints:
+        draft["claim_constraints"] = {
+            key: value for key, value in constraints.items() if key != cid
+        }
+    return excerpts, draft
+
+
+def _omit_constraint_excerpt(
+    excerpts: dict[str, str],
+    draft: dict,
+    cid: str,
+) -> tuple[dict[str, str], dict]:
+    """Drop one claim whose shortened card would lose a unit or actor clause.
+
+    Strips the id from the evidence map so Rule 4 does not fail the rest of
+    the packet. Implements FR-383.
+    """
+    excerpts, draft = _drop_excerpt_and_constraint(excerpts, draft, cid)
+    draft["evidence_map"] = _strip_claim_id_from_rows(
+        list(draft.get("evidence_map") or []), cid
+    )
+    omissions = list(draft.get("constraint_omissions") or [])
+    if not any(row.get("claim_id") == cid for row in omissions if isinstance(row, dict)):
+        omissions.append({"claim_id": cid, "reason": _CONSTRAINT_OMIT_REASON})
+    draft["constraint_omissions"] = omissions
+    return excerpts, draft
+
+
+def _drop_non_required_excerpts_until_under_budget(
+    excerpts: dict[str, str],
+    draft: dict,
+    estimated_tokens: int,
+    required_cids: set[str],
+) -> tuple[dict[str, str], int]:
+    """Drop non-required floor excerpts when leftover sentence-trim cannot fit.
+
+    Live miss 2026-09-21 omnissa: 29 excerpts already at _EXCERPT_MIN_CHARS,
+    leftover trim no-op, 9210 > 8000, Stage 1 FAILED. A second miss the same
+    hour dropped preferred-mapped ACC-106-GTM without stripping it from
+    evidence_map, so fail-closed Rule 4 fired. Unmapped filler cards drop
+    first. Mapped preferred/responsibility cards drop only after that, and
+    their claim_ids are stripped from evidence_map/soft_gaps. Required
+    mapped cards and canonical-role fillers stay. Pointer/header-only
+    cards drop first within each phase. Implements FR-297.
+    """
+    if estimated_tokens <= _TOKEN_BUDGET or not excerpts:
+        return excerpts, estimated_tokens
+    protected = set(required_cids)
+    for cid in excerpts:
+        if cid.startswith(_CANONICAL_ROLE_PREFIXES):
+            protected.add(cid)
+
+    def _drop_order(candidates: list[str]) -> list[str]:
+        return sorted(
+            candidates,
+            key=lambda cid: (
+                not _is_pointer_or_header_only_card(excerpts.get(cid, "")),
+                -len(excerpts.get(cid, "")),
+                cid,
+            ),
+        )
+
+    dropped: list[str] = []
+    evidence_map = list(draft.get("evidence_map") or [])
+    mapped = _mapped_claim_ids(evidence_map)
+    for cid in _drop_order(
+        [key for key in excerpts if key not in mapped and key not in protected]
+    ):
+        if estimated_tokens <= _TOKEN_BUDGET:
+            break
+        excerpts, draft = _drop_excerpt_and_constraint(excerpts, draft, cid)
+        dropped.append(cid)
+        estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+
+    if estimated_tokens > _TOKEN_BUDGET:
+        for cid in _drop_order([key for key in excerpts if key not in protected]):
+            if estimated_tokens <= _TOKEN_BUDGET:
+                break
+            excerpts, draft = _drop_excerpt_and_constraint(excerpts, draft, cid)
+            evidence_map = _strip_claim_id_from_rows(evidence_map, cid)
+            draft["evidence_map"] = evidence_map
+            soft_gaps = draft.get("soft_gaps")
+            if isinstance(soft_gaps, list):
+                draft["soft_gaps"] = _strip_claim_id_from_rows(soft_gaps, cid)
+            dropped.append(cid)
+            estimated_tokens = (
+                len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+            )
+
+    compaction = dict(draft.get("budget_compaction") or {})
+    compaction["non_required_excerpts_dropped"] = dropped
+    if dropped:
+        compaction["reason"] = "author_prompt_budget_drop_non_required_floor_excerpts"
+        draft["budget_compaction"] = compaction
+    return excerpts, estimated_tokens
+
+
+def _sync_ats_term_contract(draft: dict) -> None:
+    """Keep ats_term_contract claim_ids inside the live packet.
+
+    Live miss 2026-09-21 clarion: leftover-trim dropped ACC-108-SUPPORT/OPS
+    excerpts, but Jira/Workflow stayed on the contract. The author cited
+    those IDs, extra_packet FAIL, REMOVE_EXTRA, then ats_term FAIL.
+    Implements FR-297.
+    """
+    live: set[str] = set(draft.get("excerpts") or {})
+    for row in draft.get("evidence_map") or []:
+        if not isinstance(row, dict):
+            continue
+        for claim_id in row.get("claim_ids") or []:
+            if isinstance(claim_id, str) and claim_id.strip():
+                live.add(claim_id)
+    kept: list[dict] = []
+    for row in draft.get("ats_term_contract") or []:
+        if not isinstance(row, dict):
+            continue
+        ids = [
+            claim_id
+            for claim_id in (row.get("claim_ids") or [])
+            if isinstance(claim_id, str) and claim_id in live
+        ]
+        if not ids:
+            continue
+        kept.append({**row, "claim_ids": ids})
+    draft["ats_term_contract"] = kept
+
+
+def _not_present_display_names(stage0: dict) -> list[str]:
+    """Return Review Center NOT_PRESENT / BAD_DATA tool names from Stage 0."""
+    names: list[str] = []
+    for row in stage0.get("not_present_named_tools") or []:
+        if isinstance(row, dict):
+            name = str(row.get("display_name") or "").strip()
+        else:
+            name = str(row or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _apply_not_present_named_tools(
+    evidence_map: list[dict],
+    soft_gaps: list[dict],
+    hard_constraints: list[str],
+    names: list[str],
+) -> tuple[list[dict], list[dict], list[str]]:
+    """Strip mapped claims from jd_items that name a NOT_PRESENT tool.
+
+    Live miss on velosio (Dynamics) and omnissa (Android / Workspace ONE UEM):
+    answering NOT_PRESENT cleared the Review Center pause, then Stage 0 still
+    mapped SOFT bridges and Stage 1 wrote the JD tool name.
+    """
+    if not names:
+        return evidence_map, soft_gaps, hard_constraints
+    for name in names:
+        constraint = (
+            f"Do not claim {name}. Review Center answer was NOT_PRESENT. "
+            "Do not invent a nearby product or write the JD tool name."
+        )
+        if constraint not in hard_constraints:
+            hard_constraints.append(constraint)
+    note = _NOT_PRESENT_NAMED_TOOL_BRIDGE
+
+    def _mentions(text: str) -> bool:
+        return _item_mentions_any_named_tool(text, names)
+
+    new_map: list[dict] = []
+    for row in evidence_map:
+        item = dict(row)
+        if _mentions(str(item.get("jd_item") or "")) and item.get("claim_ids"):
+            item["claim_ids"] = []
+            item["bridge"] = note
+        new_map.append(item)
+    new_gaps: list[dict] = []
+    for row in soft_gaps:
+        item = dict(row)
+        if _mentions(str(item.get("item") or "")) and item.get("claim_ids"):
+            item["claim_ids"] = []
+            item["note"] = note
+        new_gaps.append(item)
+    return new_map, new_gaps, hard_constraints
+
+
+def _packet_hard_constraints(we_text: str) -> list[str]:
+    items = list(_HARD_CONSTRAINTS)
+    try:
+        items.append(years_constraint_from_we(we_text))
+    except ValueError:
+        pass
+    return items
 
 
 def assemble_packet(
@@ -1362,6 +2111,7 @@ def assemble_packet(
     claim_constraints: dict | None = None,
     jd_text: str = "",
     ats_term_contract: list[dict] | None = None,
+    we_text: str = "",
 ) -> dict:
     """Story 3.3 — Assemble the full authoring_packet dict matching schema v1.0."""
     tier = stage0.get("tier", "Tier 1")
@@ -1370,10 +2120,20 @@ def assemble_packet(
     thin_jd = bool(stage0.get("thin_jd", False))
 
     jd_buckets = _build_jd_buckets(stage0)
-    soft_gaps = _build_soft_gaps(stage0, evidence_map)
+    evidence_map, soft_gaps, hard_constraints = _apply_not_present_named_tools(
+        [dict(row) for row in evidence_map],
+        _build_soft_gaps(stage0, evidence_map),
+        _packet_hard_constraints(we_text),
+        _not_present_display_names(stage0),
+    )
     from jd_term_extractor import build_packet_ats_term_contract
     if ats_term_contract is None:
-        ats_term_contract = build_packet_ats_term_contract(jd_text, evidence_map)
+        ats_term_contract = build_packet_ats_term_contract(
+            jd_text,
+            evidence_map,
+            disabled=disabled,
+            requirement_text=_stage0_requirement_text(stage0),
+        )
 
     # Compute estimated_tokens before status check
     # Build a draft packet without status for size estimation
@@ -1399,7 +2159,7 @@ def assemble_packet(
             "resume_unit": "bullet",
             "cover_letter_unit": "factual_sentence",
         },
-        "hard_constraints": _HARD_CONSTRAINTS,
+        "hard_constraints": hard_constraints,
         "hook_fact": hook_fact,
         "rule_digest_version": _load_rule_digest_version(),  # Story 4.3
         "packet_status": "ready",
@@ -1430,15 +2190,65 @@ def assemble_packet(
                 len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
             )
 
+    # Implements FR-297 / AC-394: omitted-candidate summaries help explain
+    # selection but are not authoring evidence. The complete candidate list,
+    # scores, and reasons already live in evidence_selection_trace.json, which
+    # the Stage 1 author never loads. Compact this duplicated prompt field
+    # before shrinking excerpts or weakening attribution constraints.
+    if estimated_tokens > _TOKEN_BUDGET:
+        omitted_count = sum(
+            len(row.get("omitted_reasons") or [])
+            for row in draft["evidence_map"]
+        )
+        if omitted_count:
+            for row in draft["evidence_map"]:
+                row["omitted_reasons"] = []
+            draft["budget_compaction"] = {
+                "omitted_reasons_removed": omitted_count,
+                "reason": "author_prompt_budget_full_trace_preserved",
+            }
+            estimated_tokens = (
+                len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+            )
+
     # Adaptive shrink (2026-08-21, Schellman fix): only reached when the
     # packet built at the full excerpt cap actually comes in over budget --
     # see _shrink_excerpts_to_budget()'s own docstring.
     if estimated_tokens > _TOKEN_BUDGET:
-        shrunk_excerpts = _shrink_excerpts_to_budget(excerpts, estimated_tokens - _TOKEN_BUDGET)
+        # 2026-09-01: pass required claim_ids so non-required excerpts shrink first
+        required_cids: set[str] = set()
+        for row in evidence_map:
+            if row.get("bucket") == "required":
+                for cid in row.get("claim_ids") or []:
+                    required_cids.add(cid)
+        shrunk_excerpts = _shrink_excerpts_to_budget(
+            excerpts, estimated_tokens - _TOKEN_BUDGET, required_cids
+        )
+        for cid in [key for key in excerpts if key not in shrunk_excerpts]:
+            shrunk_excerpts, draft = _omit_constraint_excerpt(
+                shrunk_excerpts, draft, cid
+            )
+            evidence_map = list(draft.get("evidence_map") or evidence_map)
         if shrunk_excerpts != excerpts:
             excerpts = shrunk_excerpts
             draft["excerpts"] = excerpts
             estimated_tokens = len(json.dumps(draft, ensure_ascii=False).encode("utf-8")) // 4
+        excerpts, estimated_tokens = _trim_excerpts_until_under_budget(
+            excerpts, draft, estimated_tokens
+        )
+        excerpts, estimated_tokens = _drop_non_required_excerpts_until_under_budget(
+            excerpts, draft, estimated_tokens, required_cids
+        )
+        evidence_map = list(draft.get("evidence_map") or evidence_map)
+
+    _sync_ats_term_contract(draft)
+
+    # CR-112 Story 1.2: do not wipe claim_constraints to squeeze under
+    # _TOKEN_BUDGET. That fence is the Stage 1 attribution hedge
+    # (CONTRIBUTED vs OWNED). A packet that is still over budget after
+    # dropping learned_examples and shrinking excerpts to
+    # _EXCERPT_MIN_CHARS is incomplete. Rule 5 records the budget miss.
+    # Implements FR-297
 
     # Run fail-closed checks
     status, reasons = _check_fail_closed(stage0, evidence_map, excerpts, disabled, estimated_tokens)
@@ -1580,7 +2390,10 @@ def build_packet(
         we_text, ai_text = _load_source_texts()
 
     # Story 3.1 — Evidence map
-    evidence_map = build_evidence_map(stage0, jd_text, claims, disabled, jd_profile)
+    selection_trace: list = []
+    evidence_map = build_evidence_map(
+        stage0, jd_text, claims, disabled, jd_profile, trace_out=selection_trace
+    )
 
     # Story 3.2 — Excerpts (evidence map + canonical-role floor + JD skill anchors)
     excerpts = build_excerpts(
@@ -1593,6 +2406,8 @@ def build_packet(
         evidence_map,
         claims=claims,
         excerpt_claim_ids=set(excerpts),
+        disabled=disabled,
+        requirement_text=_stage0_requirement_text(stage0),
     )
 
     # Story 3.4 — Hook fact
@@ -1617,9 +2432,31 @@ def build_packet(
         claim_constraints=claim_constraints,
         jd_text=jd_text,
         ats_term_contract=ats_term_contract,
+        we_text=we_text,
     )
+    _write_selection_trace(folder, packet, selection_trace)
 
     return packet
+
+
+def _write_selection_trace(folder: Path, packet: dict, items: list) -> None:
+    """CR-112 Story 3.2: full ranking audit lives beside the packet, not in it.
+
+    Implements FR-303 / AC-400. Stage 1 author_from_packet dumps
+    authoring_packet.json only; this sibling file is never loaded into
+    authoring_prompt.md. Candidate scores stay here. Packet omitted_reasons
+    may carry top2_cutoff, project_slot_cap, and after Story 3.5
+    displaced_by_dominance. Scores and axes stay out of the prompt.
+    """
+    payload = {
+        "schema_version": "1.0",
+        "slug": packet.get("slug"),
+        "packet_version": packet.get("rule_digest_version"),
+        "estimated_tokens": packet.get("estimated_tokens"),
+        "items": items,
+    }
+    path = folder / "evidence_selection_trace.json"
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def _one_line(packet: dict, folder: Path) -> str:

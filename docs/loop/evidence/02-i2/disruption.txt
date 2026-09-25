@@ -1,0 +1,12 @@
+LR-048 blocks a no-disruption sentence unless it keeps "5 percent".
+
+Test: scripts/test_submission_linter.py test_LR048_blocks_a_clean_cutover_that_drops_the_five_percent
+Failed first (no such rule), then passed.
+python scripts/test_submission_linter.py: 101 tests, 1 pre-existing error (rentana Original_JD.txt is not in this checkout).
+
+Before-fix copies: 5 violations, 5 files, no extra file.
+bak_obie_2_Resume.md
+bak_classlink_CoverLetter.md
+bak_nisum_CoverLetter.md
+bak_securitize_CoverLetter.md
+bak_very_good_security_CoverLetter.md

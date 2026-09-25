@@ -44,11 +44,10 @@ def passes_jd_keyword_gate(jd_text: str, prefs: dict = None, company_name: str =
 
     blocked = [c.strip().lower() for c in (prefs.get("blocked_companies") or []) if c.strip()]
     if blocked and company_name:
-        company_key = company_name.strip().lower()
-        for entry in blocked:
-            if entry in company_key or company_key in entry:
-                print(f"    [ZERO-TOKEN REJECT] company_blocked:{entry}", file=sys.stderr)
-                return False
+        from stage0_prefs_gate import _check_blocked_company
+        if _check_blocked_company(company_name, prefs):
+            print(f"    [ZERO-TOKEN REJECT] company_blocked", file=sys.stderr)
+            return False
 
     ok, reason = passes_title_gate(jd_text, prefs, fallback_title=job_title)
     if not ok:

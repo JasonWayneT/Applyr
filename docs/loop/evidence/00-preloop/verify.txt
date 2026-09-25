@@ -1,0 +1,4 @@
+verify_at: 2026-09-23
+git diff --stat: empty (scripts match branch point 6c68377)
+Test-Path docs/loop/evidence/00-preloop/uncommitted.patch: True
+eligibility recount: 412

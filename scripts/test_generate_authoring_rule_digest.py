@@ -25,6 +25,7 @@ from generate_authoring_rule_digest import (
     _DIGEST_CONTENT,
     _HARD_CHAR_LIMIT,
     _version_from_content,
+    contains_pair_restatement_instruction,
     generate_digest,
     write_digest,
 )
@@ -85,6 +86,13 @@ class TestGenerateDigest(unittest.TestCase):
                 generate_digest()
             self.assertIn("hard limit", str(ctx.exception))
 
+    def test_self_check_uses_we_years_figure(self) -> None:
+        we = "### 1.0 Contact\nA PM with **7 years** of experience in platforms.\n"
+        content, _ = generate_digest(we_text=we)
+        self.assertIn("Total product management experience: 7 years", content)
+        self.assertIn("never 4, 5, or 6", content)
+        self.assertNotIn("see packet hard_constraints", content)
+
     def test_content_contains_required_sections(self) -> None:
         """Digest must include the key sections callers depend on."""
         content, _ = generate_digest()
@@ -98,6 +106,35 @@ class TestGenerateDigest(unittest.TestCase):
             "Attribution Tiers",
         ]:
             self.assertIn(section, content, f"Missing section: {section}")
+
+    def test_digest_contains_pair_restatement_instruction(self) -> None:
+        """CR-112 Story 8.3 / FR-319: generated digest carries the locked pair line."""
+        content, _ = generate_digest()
+        self.assertTrue(
+            contains_pair_restatement_instruction(content),
+            "Digest missing keep-fact / change-language pair-restatement instruction.",
+        )
+
+    def test_digest_contains_geography_rule(self) -> None:
+        content, _ = generate_digest()
+        self.assertIn("only when Original_JD.txt asks", content)
+        self.assertIn("global, international, distributed", content)
+        self.assertIn("No countries, time zones, or global/distributed framing", content)
+
+    def test_negative_control_incidental_resume_cover_letter_is_insufficient(self) -> None:
+        """Negative control: document-type words alone must not satisfy the checker."""
+        incidental = (
+            "## Resume Structure\n"
+            "## Cover Letter Structure\n"
+            "Write a resume and a cover letter from the packet.\n"
+        )
+        self.assertIn("resume", incidental.lower())
+        self.assertIn("cover letter", incidental.lower())
+        self.assertFalse(
+            contains_pair_restatement_instruction(incidental),
+            "Checker matched incidental resume/cover-letter words instead of the "
+            "locked pair-restatement clauses.",
+        )
 
     def test_no_pii_patterns(self) -> None:
         """Digest must not contain email addresses or phone-number patterns."""

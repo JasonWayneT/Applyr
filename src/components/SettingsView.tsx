@@ -27,6 +27,14 @@ interface LlmSettings {
   // scripts/utils.py's resolve_task_providers() / server/services/llmSettings.ts's
   // resolveTaskProviders() — same field, read by both languages.
   taskProviderOverrides?: Record<string, string>;
+  // Implements FR-279: task-scoped Stage 0 provider/model policy.
+  stage0_evidence_classification: Stage0EvidenceSettings;
+}
+
+interface Stage0EvidenceSettings {
+  provider_order: string[];
+  models: { groq: string; gemini: string; local: string };
+  local_only: boolean;
 }
 
 // Implements FR-054, SEC-002
@@ -73,6 +81,17 @@ interface OutcomesStats {
 interface StatsData {
   outcomes: OutcomesStats;
   notes?: { preApplyClosed: number; funnelStages: string[] };
+}
+
+interface Stage0Usage {
+  runs: number;
+  completedRuns: number;
+  waitingRuns: number;
+  failedRuns: number;
+  batches: number;
+  providerCalls: number;
+  fallbacks: number;
+  pendingConfirmations: number;
 }
 
 function SettingsCard({
@@ -151,6 +170,15 @@ const SettingsView: React.FC = () => {
     perplexityApiKey: '',
     groqApiKey: '',
     taskProviderOverrides: {},
+    stage0_evidence_classification: {
+      provider_order: ['groq', 'gemini'],
+      models: {
+        groq: 'openai/gpt-oss-120b',
+        gemini: 'gemini-3.5-flash-lite',
+        local: 'qwen2.5:7b-instruct-q4_K_M',
+      },
+      local_only: false,
+    },
   });
   const [apiConnections, setApiConnections] = useState<ApiConnections>({ adzunaAppId: '', adzunaAppKey: '', theirstackApiKey: '' });
   const [theirstackSettings, setTheirstackSettings] = useState<TheirStackSettings>({ fetchLimitPerRun: 10 });
@@ -158,6 +186,7 @@ const SettingsView: React.FC = () => {
   const [experienceDirty, setExperienceDirty] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [stage0Usage, setStage0Usage] = useState<Stage0Usage | null>(null);
   const [envStatus, setEnvStatus] = useState<EnvStatus>({ gemini: false, claude: false, perplexity: false, groq: false, adzuna: false, localUrl: false });
 
   // Debounce Refs — keyed per settings key so unrelated fields don't cancel each other's pending saves
@@ -167,7 +196,7 @@ const SettingsView: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [profileRes, expRes, statsRes, llmRes, connRes, envRes, tsRes] = await Promise.all([
+        const [profileRes, expRes, statsRes, llmRes, connRes, envRes, tsRes, stage0UsageRes] = await Promise.all([
           fetch(api('/api/profile/identity')),
           fetch(api('/api/experience')),
           fetch(api('/api/jobs/stats')),
@@ -175,9 +204,10 @@ const SettingsView: React.FC = () => {
           fetch(api('/api/profile/api_connections')),
           fetch(api('/api/env_status')),
           fetch(api('/api/profile/theirstack_settings')),
+          fetch(api('/api/llm-usage/stage0-evidence')),
         ]);
 
-        const [profileData, expData, statsData, llmData, connData, envData, tsData] = await Promise.all([
+        const [profileData, expData, statsData, llmData, connData, envData, tsData, stage0UsageData] = await Promise.all([
           profileRes.json(),
           expRes.json(),
           statsRes.json(),
@@ -185,6 +215,7 @@ const SettingsView: React.FC = () => {
           connRes.json(),
           envRes.json(),
           tsRes.json(),
+          stage0UsageRes.json(),
         ]);
 
         if (profileData && typeof profileData === 'object') {
@@ -202,13 +233,15 @@ const SettingsView: React.FC = () => {
             ...prev,
             ...llmData,
             primaryProvider: llmData.primaryProvider || llmData.provider || 'gemini',
+            stage0_evidence_classification: llmData.stage0_evidence_classification || prev.stage0_evidence_classification,
             // Migrate perplexityApiKey from old api_connections location if not yet in llm_settings
             perplexityApiKey: llmData.perplexityApiKey || connData?.perplexityApiKey || '',
           }));
         }
         if (connData && !connData.error) {
           // perplexityApiKey now lives in llm_settings — exclude it from apiConnections state
-          const { perplexityApiKey: _legacy, ...rest } = connData as any;
+          const connectionPayload = connData as ApiConnections & { perplexityApiKey?: string; error?: unknown };
+          const { perplexityApiKey: _legacy, ...rest } = connectionPayload;
           setApiConnections(prev => ({ ...prev, ...rest }));
         }
         if (envData) {
@@ -220,6 +253,9 @@ const SettingsView: React.FC = () => {
             fetchLimitPerRun: Math.min(25, Math.max(1, Number(tsData.fetchLimitPerRun) || 10)),
           }));
         }
+        if (stage0UsageData && typeof stage0UsageData === 'object' && !stage0UsageData.error) {
+          setStage0Usage(stage0UsageData as Stage0Usage);
+        }
       } catch (err) {
         console.error('Failed to load SettingsView configurations:', err);
       }
@@ -229,7 +265,7 @@ const SettingsView: React.FC = () => {
   }, []);
 
   // Debounced auto-saving function
-  const debouncedSave = useCallback((key: string, data: any) => {
+  const debouncedSave = useCallback((key: string, data: unknown) => {
     if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
     setSaveStatus('saving');
     debounceTimers.current[key] = setTimeout(async () => {
@@ -260,6 +296,19 @@ const SettingsView: React.FC = () => {
     const next = { ...llmSettings, taskProviderOverrides: nextOverrides };
     setLlmSettings(next);
     debouncedSave('llm_settings', next);
+  };
+
+  const updateStage0EvidenceSettings = (update: Partial<Stage0EvidenceSettings>) => {
+    const nextStage0 = { ...llmSettings.stage0_evidence_classification, ...update };
+    const next = { ...llmSettings, stage0_evidence_classification: nextStage0 };
+    setLlmSettings(next);
+    debouncedSave('llm_settings', next);
+  };
+
+  const updateStage0Model = (provider: keyof Stage0EvidenceSettings['models'], value: string) => {
+    updateStage0EvidenceSettings({
+      models: { ...llmSettings.stage0_evidence_classification.models, [provider]: value },
+    });
   };
 
   const saveExperience = async () => {
@@ -679,6 +728,82 @@ const SettingsView: React.FC = () => {
             </section>
 
             <SettingsCard
+              label="Stage 0 evidence"
+              title="Evidence classification policy"
+              description="Ambiguous requirement lines use the selected chain. Local is explicit and never becomes an implicit fallback."
+            >
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="block text-xs font-bold text-on-surface mb-1.5">Provider policy</span>
+                    <select
+                      value={llmSettings.stage0_evidence_classification.local_only ? 'local' : 'cloud'}
+                      onChange={(event) => {
+                        const localOnly = event.target.value === 'local';
+                        updateStage0EvidenceSettings({
+                          local_only: localOnly,
+                          provider_order: localOnly ? ['local'] : ['groq', 'gemini'],
+                        });
+                      }}
+                      className="input-applyr w-full text-sm"
+                    >
+                      <option value="cloud">Groq, then Gemini</option>
+                      <option value="local">Local only</option>
+                    </select>
+                  </label>
+                  <div className="rounded-xl bg-surface-container-low p-4 text-xs text-on-surface-variant leading-relaxed">
+                    <p className="font-bold text-on-surface">Your provider account</p>
+                    <p className="mt-1">Configured provider keys and any applicable cloud charges remain yours in V1. Applyr stores the policy locally.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {([
+                    ['groq', 'Groq model', 'openai/gpt-oss-120b'],
+                    ['gemini', 'Gemini model', 'gemini-3.5-flash-lite'],
+                    ['local', 'Local model', 'qwen2.5:7b-instruct-q4_K_M'],
+                  ] as const).map(([provider, label, placeholder]) => (
+                    <label key={provider} className="block">
+                      <span className="block text-xs font-bold text-on-surface mb-1.5">{label}</span>
+                      <input
+                        type="text"
+                        value={llmSettings.stage0_evidence_classification.models[provider]}
+                        onChange={(event) => updateStage0Model(provider, event.target.value)}
+                        className="input-applyr w-full text-sm"
+                        placeholder={placeholder}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-on-surface-variant">
+                  Deterministic evidence checks run first. A valid user confirmation is stored separately from authoring evidence and cannot create a resume claim by itself.
+                </p>
+                {stage0Usage && (
+                  <div className="rounded-xl border border-outline/8 bg-surface-container-low p-4">
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant">Local usage summary</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+                      <div>
+                        <p className="text-lg font-bold text-on-surface">{stage0Usage.providerCalls}</p>
+                        <p className="text-[11px] text-on-surface-variant">provider calls</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-on-surface">{stage0Usage.batches}</p>
+                        <p className="text-[11px] text-on-surface-variant">batches</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-on-surface">{stage0Usage.fallbacks}</p>
+                        <p className="text-[11px] text-on-surface-variant">fallbacks</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-on-surface">{stage0Usage.pendingConfirmations}</p>
+                        <p className="text-[11px] text-on-surface-variant">pending reviews</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SettingsCard>
+
+            <SettingsCard
               label="AI providers"
               title="API keys"
               description="Only providers with a configured key are called. Keys stay in your local database."
@@ -858,9 +983,9 @@ const SettingsView: React.FC = () => {
                 </table>
               </div>
               <p className="text-xs text-on-surface-variant mt-3">
-                Groq isn't a pipeline primary and has no "Set Primary" option. It's the default for
-                Gmail sync classification and interview date extraction because its free tier doesn't
-                train on submitted data and those calls see real email. It's also offered as an
+                Groq isn&apos;t a pipeline primary and has no &quot;Set Primary&quot; option. It&apos;s the default for
+                Gmail sync classification and interview date extraction because its free tier doesn&apos;t
+                train on submitted data and those calls see real email. It&apos;s also offered as an
                 optional first-choice on the scoring-summary and AI-rewrite rows in <strong>AI Usage</strong>
                 below. Gemini can be turned on as a secondary fallback for the two email tasks from
                 that same card — opt-in, and even then Groq is always tried first.
@@ -884,7 +1009,7 @@ const SettingsView: React.FC = () => {
                   <div className="flex items-center justify-between gap-4 mb-1.5">
                     <p className="text-sm font-semibold text-on-surface">Stage 0 ambiguous-bullet fallback</p>
                   </div>
-                  <p className="text-xs text-on-surface-variant mb-2">Classifies job-description bullets the local model isn't confident about.</p>
+                    <p className="text-xs text-on-surface-variant mb-2">Classifies job-description bullets the local model isn&apos;t confident about.</p>
                   <select
                     value={llmSettings.taskProviderOverrides?.stage0_extraction ?? ''}
                     onChange={(e) => setTaskProviderOverride('stage0_extraction', e.target.value)}
@@ -900,7 +1025,7 @@ const SettingsView: React.FC = () => {
                     <p className="text-sm font-semibold text-on-surface">Email classification fallback</p>
                   </div>
                   <p className="text-xs text-on-surface-variant mb-2">
-                    Groq is always tried first here. Off by default: Gemini's free tier trains on submitted
+                    Groq is always tried first here. Off by default: Gemini&apos;s free tier trains on submitted
                     data, and real email content passes through this call, so turning this on is a deliberate
                     choice, not something that happens silently. Enabling it only adds Gemini as a second
                     attempt after Groq comes back empty — it never replaces Groq as the first try.
@@ -920,7 +1045,7 @@ const SettingsView: React.FC = () => {
                     <p className="text-sm font-semibold text-on-surface">Interview date/time extraction</p>
                   </div>
                   <p className="text-xs text-on-surface-variant mb-2">
-                    Reads the date and time out of a detected interview email so the job's status can
+                    Reads the date and time out of a detected interview email so the job&apos;s status can
                     advance automatically. Same real-email-content reasoning as classification above:
                     Groq is always tried first, Gemini is an opt-in second attempt only.
                   </p>
@@ -941,7 +1066,7 @@ const SettingsView: React.FC = () => {
                   <p className="text-xs text-on-surface-variant mb-2">
                     Rebuilds the condensed scoring brief from workExperience.md after you save
                     Experience. Default is Gemini. This file is real personal and career data, and
-                    Gemini's free tier trains on submitted data; Groq's does not. Switching only
+                    Gemini&apos;s free tier trains on submitted data; Groq&apos;s does not. Switching only
                     changes which provider is tried first — Gemini stays in the chain as fallback.
                   </p>
                   <select
@@ -961,7 +1086,7 @@ const SettingsView: React.FC = () => {
                     <p className="text-sm font-semibold text-on-surface">AI rewrite</p>
                   </div>
                   <p className="text-xs text-on-surface-variant mb-2">
-                    The document editor's rewrite pass. Uses your primary provider and its normal
+                    The document editor&apos;s rewrite pass. Uses your primary provider and its normal
                     fallback chain unless you pin a different first-choice here.
                   </p>
                   <select

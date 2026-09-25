@@ -46,8 +46,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
+from datetime import datetime
+from typing import Any
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -103,15 +106,327 @@ def check_stage0_fit_gate(folder: str) -> tuple[bool, list[str]]:
 # draft_manifest.json
 # ---------------------------------------------------------------------------
 
+# CONVERT-READY floors from data/conversion_rubric.md. Shape lives in
+# _check_rubric_score_shape; numeric floors live here. Do not fold floors
+# into the shape helper (CR-112 completion contract).
+RUBRIC_FLOOR_RESUME = 70
+RUBRIC_FLOOR_COVER_LETTER = 65
+RUBRIC_SCORECARD_PATH = os.path.join("reviews", "rubric_scorecard.json")
+RUBRIC_REVIEWER_ROLES = frozenset(
+    {"authoring_session", "correcting_implementer", "independent_blind"}
+)
+RUBRIC_BOUNDARY_BANDS = {
+    "resume": (RUBRIC_FLOOR_RESUME - 3, RUBRIC_FLOOR_RESUME + 3),
+    "cover_letter": (RUBRIC_FLOOR_COVER_LETTER - 3, RUBRIC_FLOOR_COVER_LETTER + 3),
+}
+RUBRIC_BREAKDOWN_KEYS = {
+    "resume": tuple(f"R{i}" for i in range(1, 9)),
+    "cover_letter": tuple(f"C{i}" for i in range(1, 6)),
+}
+RUBRIC_BREAKDOWN_MAX = {
+    "resume": {"R1": 10, "R2": 15, "R3": 15, "R4": 20, "R5": 15, "R6": 10, "R7": 10, "R8": 5},
+    "cover_letter": {"C1": 25, "C2": 25, "C3": 20, "C4": 20, "C5": 10},
+}
+
+
 def _check_rubric_score_shape(score) -> list[str]:
     errors = []
     if not isinstance(score, dict):
         return ["'rubric_score' must be an object with 'resume' and 'cover_letter' sub-scores"]
     for side in ("resume", "cover_letter"):
         sub = score.get(side)
-        if not isinstance(sub, dict) or not isinstance(sub.get("total"), (int, float)):
+        if not isinstance(sub, dict) or not isinstance(sub.get("total"), (int, float)) or not math.isfinite(sub.get("total")):
             errors.append(f"'rubric_score.{side}.total' must be a real number -- a genuinely scored document always has one")
     return errors
+
+
+def check_rubric_floors(score) -> list[str]:
+    """Return CONVERT-READY floor errors for numeric totals.
+
+    Call after shape is valid. Missing or non-numeric totals are shape
+    errors, not floor errors, and are skipped here. Args: score is the
+    draft_manifest rubric_score object. Returns a list of error strings.
+    """
+    # Implements FR-318 / AC-415 (CR-112 completion-floor)
+    if not isinstance(score, dict):
+        return []
+    errors: list[str] = []
+    resume = score.get("resume")
+    cover = score.get("cover_letter")
+    if isinstance(resume, dict) and isinstance(resume.get("total"), (int, float)) and math.isfinite(resume["total"]):
+        total = resume["total"]
+        if total < RUBRIC_FLOOR_RESUME:
+            errors.append(
+                f"'rubric_score.resume.total' {total} is below the "
+                f"{RUBRIC_FLOOR_RESUME} CONVERT-READY floor"
+            )
+    if isinstance(cover, dict) and isinstance(cover.get("total"), (int, float)) and math.isfinite(cover["total"]):
+        total = cover["total"]
+        if total < RUBRIC_FLOOR_COVER_LETTER:
+            errors.append(
+                f"'rubric_score.cover_letter.total' {total} is below the "
+                f"{RUBRIC_FLOOR_COVER_LETTER} CONVERT-READY floor"
+            )
+    return errors
+
+
+def _current_rubric_document_hashes(folder: str) -> tuple[dict[str, str], list[str]]:
+    hashes: dict[str, str] = {}
+    errors: list[str] = []
+    for side, filename in (("resume", "Resume.md"), ("cover_letter", "CoverLetter.md")):
+        path = os.path.join(folder, filename)
+        digest = _sha256_hex(path)
+        if digest is None:
+            errors.append(f"{filename} not found -- cannot bind rubric score provenance")
+        else:
+            hashes[side] = digest
+    return hashes, errors
+
+
+def _score_total(container: Any, side: str) -> float | None:
+    if not isinstance(container, dict):
+        return None
+    sub = container.get(side)
+    if not isinstance(sub, dict):
+        return None
+    total = sub.get("total")
+    if isinstance(total, (int, float)) and math.isfinite(total):
+        return float(total)
+    return None
+
+
+def _row_matches_hashes(row: dict[str, Any], hashes: dict[str, str]) -> bool:
+    row_hashes = row.get("document_sha256")
+    if not isinstance(row_hashes, dict):
+        return False
+    return all(row_hashes.get(side) == digest for side, digest in hashes.items())
+
+
+def _score_hashes_match_current(score: dict[str, Any], hashes: dict[str, str]) -> bool:
+    score_hashes = score.get("document_sha256")
+    if not isinstance(score_hashes, dict):
+        return False
+    return all(score_hashes.get(side) == digest for side, digest in hashes.items())
+
+
+def _current_rubric_sha256() -> str | None:
+    root = os.path.dirname(_SCRIPT_DIR)
+    return _sha256_hex(os.path.join(root, "data", "conversion_rubric.md"))
+
+
+def _valid_timezone_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not value.strip():
+        return False
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def _has_reviewer_run_metadata(row: dict[str, Any]) -> bool:
+    return any(
+        isinstance(row.get(key), str) and bool(row[key].strip())
+        for key in ("reviewer_run_id", "spawned_by")
+    )
+
+
+def _breakdown_errors(row: dict[str, Any], idx: int) -> list[str]:
+    errors: list[str] = []
+    for side, required_keys in RUBRIC_BREAKDOWN_KEYS.items():
+        side_data = row.get(side)
+        if not isinstance(side_data, dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].{side} must be an object")
+            continue
+        breakdown = side_data.get("breakdown")
+        if not isinstance(breakdown, dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown must be an object")
+            continue
+        missing = [key for key in required_keys if key not in breakdown]
+        if missing:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown missing keys: "
+                + ", ".join(missing)
+            )
+        extra = sorted(key for key in breakdown if key not in required_keys)
+        if extra:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown has unknown keys: "
+                + ", ".join(extra)
+            )
+        total = side_data.get("total")
+        if not (isinstance(total, (int, float)) and not isinstance(total, bool) and math.isfinite(total)):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.total must be a finite number")
+            total = None
+        breakdown_sum = 0.0
+        for key in required_keys:
+            value = breakdown.get(key)
+            if key in breakdown and not (
+                isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+            ):
+                errors.append(
+                    f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown.{key} "
+                    "must be a finite number"
+                )
+                continue
+            if key in breakdown:
+                max_value = RUBRIC_BREAKDOWN_MAX[side][key]
+                if value < 0 or value > max_value:
+                    errors.append(
+                        f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown.{key} "
+                        f"must be between 0 and {max_value}"
+                    )
+                breakdown_sum += float(value)
+        if total is not None and not missing and not extra and not math.isclose(
+            breakdown_sum,
+            float(total),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ):
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].{side}.breakdown sum must equal {side}.total"
+            )
+    return errors
+
+
+def _load_rubric_scorecards(folder: str) -> tuple[list[dict[str, Any]], list[str]]:
+    path = os.path.join(folder, RUBRIC_SCORECARD_PATH)
+    if not os.path.exists(path):
+        return [], [f"{RUBRIC_SCORECARD_PATH} not found -- rubric scores must be hash-bound"]
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        return [], [f"{RUBRIC_SCORECARD_PATH} could not be read/parsed: {exc}"]
+    if not isinstance(data, list):
+        return [], [f"{RUBRIC_SCORECARD_PATH} must be an append-only JSON array"]
+    rows: list[dict[str, Any]] = []
+    errors: list[str] = []
+    rubric_sha256 = _current_rubric_sha256()
+    for idx, row in enumerate(data):
+        if not isinstance(row, dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}] is not an object")
+            continue
+        if row.get("schema_version") != 1:
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].schema_version must be 1")
+        if not rubric_sha256:
+            errors.append("data/conversion_rubric.md not found -- cannot bind rubric score provenance")
+        elif row.get("rubric_sha256") != rubric_sha256:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].rubric_sha256 must match data/conversion_rubric.md"
+            )
+        if not _valid_timezone_timestamp(row.get("scored_at")):
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].scored_at must be a timezone-qualified ISO timestamp"
+            )
+        if not _has_reviewer_run_metadata(row):
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}] must include reviewer_run_id or spawned_by"
+            )
+        role = row.get("reviewer_role")
+        if role not in RUBRIC_REVIEWER_ROLES:
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}[{idx}].reviewer_role must be one of "
+                f"{sorted(RUBRIC_REVIEWER_ROLES)}"
+            )
+        if not isinstance(row.get("document_sha256"), dict):
+            errors.append(f"{RUBRIC_SCORECARD_PATH}[{idx}].document_sha256 must be an object")
+        errors.extend(_breakdown_errors(row, idx))
+        rows.append(row)
+    return rows, errors
+
+
+def check_rubric_score_provenance(folder: str, score) -> list[str]:
+    """Validate CR-112 score provenance for completion gates.
+
+    This helper does not call an LLM, spawn a reviewer, or mutate files. It
+    reads the current document hashes plus reviews/rubric_scorecard.json and
+    returns fail-closed errors when the manifest score is stale, unbound, or
+    disputed near the floor.
+    """
+    # Implements FR-322 / AC-420.
+    if _check_rubric_score_shape(score):
+        return []
+    assert isinstance(score, dict)
+
+    hashes, errors = _current_rubric_document_hashes(folder)
+    if errors:
+        return errors
+
+    if not _score_hashes_match_current(score, hashes):
+        errors.append(
+            "rubric_score.document_sha256 is missing or stale for the current "
+            "Resume.md/CoverLetter.md"
+        )
+
+    rows, row_errors = _load_rubric_scorecards(folder)
+    errors.extend(row_errors)
+    if row_errors:
+        return errors
+
+    current_rows = [row for row in rows if _row_matches_hashes(row, hashes)]
+    if not current_rows:
+        errors.append(
+            f"{RUBRIC_SCORECARD_PATH}: no scorecard row matches current document hashes"
+        )
+        return errors
+
+    manifest_matches_row = False
+    for row in current_rows:
+        if all(_score_total(row, side) == _score_total(score, side) for side in ("resume", "cover_letter")):
+            manifest_matches_row = True
+            break
+    if not manifest_matches_row:
+        errors.append(
+            "rubric_score totals do not match any current-hash rubric scorecard row"
+        )
+
+    for side, floor in (("resume", RUBRIC_FLOOR_RESUME), ("cover_letter", RUBRIC_FLOOR_COVER_LETTER)):
+        side_rows = [
+            row for row in current_rows
+            if _score_total(row, side) is not None
+        ]
+        if not side_rows:
+            errors.append(f"{RUBRIC_SCORECARD_PATH}: no current-hash {side} score row")
+            continue
+        below = [row for row in side_rows if (_score_total(row, side) or 0) < floor]
+        if below:
+            totals = ", ".join(str(_score_total(row, side)) for row in below)
+            errors.append(
+                f"{RUBRIC_SCORECARD_PATH}: current-hash {side} score below "
+                f"{floor} CONVERT-READY floor ({totals}); disagreement fails closed"
+            )
+            continue
+
+        lower, upper = RUBRIC_BOUNDARY_BANDS[side]
+        non_blind_band_rows = [
+            row for row in side_rows
+            if row.get("reviewer_role") != "independent_blind"
+            and lower <= (_score_total(row, side) or -1) <= upper
+        ]
+        if non_blind_band_rows:
+            has_blind = any(row.get("reviewer_role") == "independent_blind" for row in side_rows)
+            if not has_blind:
+                totals = ", ".join(str(_score_total(row, side)) for row in non_blind_band_rows)
+                errors.append(
+                    f"{RUBRIC_SCORECARD_PATH}: {side} score in boundary band "
+                    f"{lower}-{upper} ({totals}) requires an independent_blind score "
+                    "for the same document hashes"
+                )
+
+    return errors
+
+
+def queue_rubric_deferred() -> bool:
+    """True when this queue run must not wait on a hand-typed rubric score.
+
+    The Agy rubric stays off until AC-464. A missing score is not a hold on
+    that path. A manual run without the queue adapter still requires the score.
+    """
+    return (
+        os.environ.get("APPLYR_STAGE0_SUBSCRIPTION_ADAPTER") == "1"
+        and os.environ.get("APPLYR_STAGE2_AGY_RUBRIC") != "1"
+    )
 
 
 def check_draft_manifest(folder: str) -> tuple[bool, list[str]]:
@@ -139,7 +454,12 @@ def check_draft_manifest(folder: str) -> tuple[bool, list[str]]:
             pass
     if "verification_passed" not in data or not isinstance(data.get("verification_passed"), bool):
         errors.append("draft_manifest.json: 'verification_passed' must be present and a real boolean")
-    errors.extend(f"draft_manifest.json: {e}" for e in _check_rubric_score_shape(data.get("rubric_score")))
+    if not queue_rubric_deferred():
+        score = data.get("rubric_score")
+        shape_errors = _check_rubric_score_shape(score)
+        errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
+        if not shape_errors:
+            errors.extend(f"draft_manifest.json: {e}" for e in check_rubric_floors(score))
 
     return len(errors) == 0, errors
 
@@ -280,6 +600,13 @@ def check_finalize_ready(folder: str) -> tuple[bool, list[str]]:
     manifest, _ = load_json(manifest_path)
     if manifest is not None and manifest.get("verification_passed") is not True:
         errors.append("draft_manifest.json: verification_passed is not True")
+    if manifest is not None:
+        score = manifest.get("rubric_score")
+        if not _check_rubric_score_shape(score) and not check_rubric_floors(score):
+            errors.extend(
+                f"draft_manifest.json: {e}"
+                for e in check_rubric_score_provenance(folder, score)
+            )
 
     gate_path = os.path.join(folder, "stage0_fit_gate.json")
     if os.path.exists(gate_path):
@@ -352,9 +679,34 @@ def check_stage1_ready(folder: str) -> tuple[bool, list[str]]:
                     "(no incomplete_reasons recorded)"
                 )
 
-    for doc in ("Resume.md", "CoverLetter.md", "claim_provenance.json"):
-        if not os.path.exists(os.path.join(folder, doc)):
+    for doc in ("Resume.md", "CoverLetter.md"):
+        path = os.path.join(folder, doc)
+        if not os.path.exists(path):
             errors.append(f"{doc} not found -- Stage 1 has not produced this document yet")
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                body = handle.read()
+        except OSError as exc:
+            errors.append(f"{doc} unreadable: {exc}")
+            continue
+        if not body.strip():
+            errors.append(
+                f"{doc} is empty — Agy SUCCESS without author artifacts is a failed call"
+            )
+
+    prov_path = os.path.join(folder, "claim_provenance.json")
+    if not os.path.exists(prov_path):
+        errors.append("claim_provenance.json not found -- Stage 1 has not produced this document yet")
+    else:
+        provenance, prov_err = load_json(prov_path)
+        if prov_err:
+            errors.append(prov_err)
+        elif not isinstance(provenance, dict) or not provenance:
+            errors.append(
+                "claim_provenance.json is empty or invalid — Agy SUCCESS without "
+                "author artifacts is a failed call"
+            )
 
     return len(errors) == 0, errors
 
@@ -385,7 +737,8 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
       - check_freshness() passing (hash-aware where the receipt has content_hashes, mtime
         fallback otherwise).
       - draft_manifest.json present with a populated rubric_score (reused _check_rubric_score_shape
-        shape check -- both resume.total and cover_letter.total must be real numbers).
+        shape check -- both resume.total and cover_letter.total must be real numbers -- then
+        check_rubric_floors: Resume >= 70 and Cover Letter >= 65).
       - Zero linter HARD_BLOCKs: the receipt's own lint_all_clean AND an explicit per-document
         'blocks' emptiness check (both, not just the derived boolean -- defensive against a
         future receipt where the two disagree).
@@ -407,14 +760,23 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
     if not ok:
         errors.extend(errs)
 
+    deferred_rubric = queue_rubric_deferred()
     manifest_path = os.path.join(folder, "draft_manifest.json")
     manifest, err = load_json(manifest_path)
     if err:
         errors.append(err)
-    else:
-        errors.extend(
-            f"draft_manifest.json: {e}" for e in _check_rubric_score_shape(manifest.get("rubric_score"))
-        )
+    elif not deferred_rubric:
+        score = manifest.get("rubric_score")
+        shape_errors = _check_rubric_score_shape(score)
+        errors.extend(f"draft_manifest.json: {e}" for e in shape_errors)
+        if not shape_errors:
+            floor_errors = check_rubric_floors(score)
+            errors.extend(f"draft_manifest.json: {e}" for e in floor_errors)
+            if not floor_errors:
+                errors.extend(
+                    f"draft_manifest.json: {e}"
+                    for e in check_rubric_score_provenance(folder, score)
+                )
 
     # Load the receipt directly (rather than relying on check_verification_receipt()'s internal
     # load) for the additional fields below. If the receipt is missing/unparseable,
@@ -448,7 +810,9 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
             )
 
         rubric_audit = receipt.get("rubric_audit")
-        if not isinstance(rubric_audit, dict):
+        if deferred_rubric:
+            pass
+        elif not isinstance(rubric_audit, dict):
             errors.append(
                 "verification_receipt.json: 'rubric_audit' not found -- re-run "
                 "scripts/verify_submission.py (it must run again after rubric_score is entered "
@@ -479,6 +843,61 @@ def check_stage2_ready(folder: str) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------------
 # Workflow authority (CR-076) — single DONE oracle (full COMPLETE in later CRs)
 # ---------------------------------------------------------------------------
+
+def waiting_for_input_message(folder: str) -> str:
+    """Status text for WAITING_FOR_INPUT. Branch on pause_kind when present."""
+    receipt_path = os.path.join(folder, "stage_receipts", "stage0.json")
+    receipt, _ = load_json(receipt_path)
+    kind = ((receipt or {}).get("result") or {}).get("pause_kind")
+    if kind == "cost_authorization":
+        return (
+            "workflow WAITING_FOR_INPUT — Stage 0 cost authorization. "
+            "No model API call occurred. No API cost was incurred. "
+            "Stage 0 is not complete. "
+            "Resume paths: import validated cascade JSON at "
+            f"{os.path.join(folder, 'stage0_cascade_import.json')} "
+            "(copy from stage0_cascade_import.template.json in that folder); "
+            "certify a provider whose adapter can assert zero charge for this "
+            "account and call; or complete paid authorization by allowlisting "
+            "the provider and setting a positive budget and known estimate. "
+            f"Then run: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md."
+        )
+    if kind == "requirement_extraction_review":
+        return (
+            "workflow WAITING_FOR_INPUT — Stage 0 requirement extraction needs "
+            "review. One or more bullets extraction could not confidently bucket "
+            "are qualification-likely or ambiguous and cannot bypass review "
+            "(CR-112). See stage_receipts/stage0.json's result.queue for the "
+            "full list with reason codes. "
+            f"Put stage0_requirement_extraction_review.json in {folder} "
+            "(copy from stage0_requirement_extraction_review.template.json in "
+            "that folder) with an explicit bucket set for every item -- "
+            "required, preferred, responsibilities, culture, or exclude. "
+            f"Then: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md. Stage 0 is not finished."
+        )
+    if kind == "subscription_review":
+        return (
+            "workflow WAITING_FOR_INPUT — Stage 0 Agy evidence review. "
+            "The subscription adapter ran and did not return a complete evidence "
+            "batch. This is not a cost-authorization pause. "
+            f"Then: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md. Stage 0 is not finished."
+        )
+    if kind == "conversion_risk":
+        return (
+            "workflow WAITING_FOR_INPUT — conversion risk. Stage 0 PASS "
+            "withheld authoring because a required named tool is unproven. "
+            "Skip ledger was not written. Only requeue --reason apply_anyway "
+            "promotes. "
+            f"Then: python scripts/run_submission.py {folder} --resume. "
+            "Do not paste authoring_prompt.md until apply_anyway exists."
+        )
+    return (
+        "workflow WAITING_FOR_INPUT — resolve Review Center confirmations then --resume"
+    )
+
 
 def check_workflow_complete(folder: str) -> tuple[bool, list[str]]:
     """Authoritative production-complete predicate (CR-076 foundation).
@@ -512,6 +931,8 @@ def check_workflow_complete(folder: str) -> tuple[bool, list[str]]:
         return False, [
             "workflow WAITING_FOR_LLM — paste authoring_prompt.md; Stage 1 not finished"
         ]
+    if status == "WAITING_FOR_INPUT":
+        return False, [waiting_for_input_message(folder)]
     if status == "NEEDS_DISPOSITION":
         return False, [
             "workflow NEEDS_DISPOSITION — dispose Truth/ATS/HM findings then --resume"

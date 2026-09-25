@@ -1,0 +1,27 @@
+{
+  "company": "Northwind Labs",
+  "role": "Product Manager, Platform",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 1",
+  "reach_out": false,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "5+ years of product management on a multi-tenant B2B SaaS platform", "gap": false},
+    {"item": "Roadmap ownership with engineering, CX, and sales partners", "gap": false},
+    {"item": "Comfort with data quality, release sequencing, and incident follow-through", "gap": false}
+  ],
+  "preferred": [
+    {"item": "SQL for investigation, not warehouse ownership", "gap": false},
+    {"item": "Experience with analytics instrumentation", "gap": false}
+  ],
+  "responsibilities": [
+    "Sequence platform work against customer risk",
+    "Write clear requirements and keep partners aligned"
+  ],
+  "culture": [],
+  "flagged_gaps": [],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-112 sanitized eval fixture. Fictional employer."
+}

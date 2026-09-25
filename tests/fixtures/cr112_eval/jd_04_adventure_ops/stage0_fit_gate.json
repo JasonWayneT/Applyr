@@ -1,0 +1,27 @@
+{
+  "company": "Adventure Works Ops",
+  "role": "Product Manager",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 1",
+  "reach_out": false,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "Own roadmap for an existing B2B operations platform", "gap": false},
+    {"item": "Work with engineering, support, and account management", "gap": false},
+    {"item": "Use metrics to decide what ships next", "gap": false}
+  ],
+  "preferred": [
+    {"item": "Salesforce workflow familiarity", "gap": false},
+    {"item": "Experience in fulfillment or onboarding automation", "gap": false}
+  ],
+  "responsibilities": [
+    "Cut operational waste without claiming revenue ownership",
+    "Keep the backlog honest under resource constraints"
+  ],
+  "culture": [],
+  "flagged_gaps": [],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-112 sanitized eval fixture. Fictional employer."
+}

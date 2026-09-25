@@ -38,6 +38,18 @@ def stage0_section_mode() -> str:
     return _flag("STAGE0_SECTION_MODE", "nlp")
 
 
+def stage0_evidence_cascade_enabled() -> bool:
+    """Return whether the CR-108 batched evidence service is enabled.
+
+    Always True after CR-108 Epic 7.6 cutover (2026-09-09): the cascade passed
+    its release gate (golden validation 7.5, archive replay 7.3, baseline
+    comparison 7.4) and the legacy per-line classifier was removed (7.7).
+    The function is retained for call-site compatibility but the
+    STAGE0_EVIDENCE_CASCADE env var no longer has any effect.
+    """
+    return True
+
+
 # DRAFT_MODE values that keep the compose-path deterministic defaults (JD profile,
 # cover hook). "local_rewrite" (CR-062) is an additive layer on top of "compose" — it
 # changes how already-selected text is phrased, not how the JD gets profiled or which

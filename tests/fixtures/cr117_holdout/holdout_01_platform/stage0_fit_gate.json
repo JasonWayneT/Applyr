@@ -1,0 +1,28 @@
+{
+  "company": "Atlas Lantern",
+  "role": "Product Manager, Platform",
+  "url": null,
+  "decision": "PASS",
+  "tier": "Tier 1",
+  "reach_out": false,
+  "stage_signal": "unknown",
+  "thin_jd": false,
+  "required": [
+    {"item": "Five years of product management on an existing B2B software product", "gap": false},
+    {"item": "Prioritize platform reliability and data quality against customer needs", "gap": false},
+    {"item": "Write requirements and align engineering, support, and account management", "gap": false},
+    {"item": "Use product and operational measures to decide what ships", "gap": false}
+  ],
+  "preferred": [
+    {"item": "SQL for investigation and validation", "gap": false},
+    {"item": "Analytics instrumentation or customer-facing reporting", "gap": false}
+  ],
+  "responsibilities": [
+    "Reduce avoidable customer escalations",
+    "Make platform improvements measurable"
+  ],
+  "culture": [],
+  "flagged_gaps": [],
+  "exclusion_zone_check": "clear",
+  "notes": "CR-117 fictional holdout. No candidate PII."
+}

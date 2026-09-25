@@ -34,6 +34,19 @@ on a path every target harness actually loads.
 | VR-03 | Mechanical check without a skill | LW-033/LW-034/LW-035 fire in `submission_linter.py`. |
 | VR-04 | Portable skill | Tracked SKILL.md under `.agents/skills/`. AGENTS.md File Map names it. |
 | VR-05 | Digest budget unchanged | No digest expansion for this catalog. |
+| VR-06 | Generic self-referential hook warning | `LW-038` warns when the opening hook uses the narrow self-referential shape “what makes this role interesting/compelling/exciting.” The author must name the company action, product, or operating problem directly instead. The rule is WARN-only and applies only to the opening hook. |
+
+## Follow-on: generic hook escape (2026-09-08)
+
+**Observed in:** Form Health production rerun. The hook named a current company fact, then
+weakened it with “shows what makes this role interesting.” It passed `LW-011` because that
+rule correctly checks only for six-word verbatim JD paraphrase. This is a separate failure
+mode: self-referential evaluation of a role adds no employer, product, or candidate signal.
+
+**Decision:** Add the narrow `LW-038` WARN under this CR. Do not build a general-purpose
+"generic prose" classifier, expand the authoring digest, or promote this class to a hard block.
+The regression tests must prove that the exact generic-hook shape warns, a specific hook passes,
+and the same words outside the opening hook do not warn.
 
 ## Scope boundary
 

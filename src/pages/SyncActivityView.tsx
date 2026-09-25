@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useFitThresholds } from '../hooks/useFitThresholds';
 import PipelineTracker, { Stage, StageStatus } from '../components/PipelineTracker';
+import type { Job } from '../types/job';
 
 interface ActivityLog {
   id: number;
@@ -12,15 +14,10 @@ interface ActivityLog {
   meta: string | null;
 }
 
-interface JobMatch {
-  id: string;
-  company: string;
-  title: string;
-  score: number;
-  status: string;
-  created_at: string;
-  has_assets?: boolean;
-}
+// CR-104 Story 5.3 fix: matched jobs used to be fetched independently on a 3s poll,
+// duplicating the shared useJobs() query's own polling. Now derived from the jobs
+// list passed down from App.tsx, so `JobMatch` is just the shape that filter needs.
+type JobMatch = Job;
 
 type PipelineStatus = 'idle' | 'scout_running' | 'evaluate_running' | 'drafting' | 'completed';
 
@@ -209,10 +206,19 @@ interface SourceEntry {
   credits_reset_at?: string | null;
 }
 
-const SyncActivityView: React.FC = () => {
+interface SyncActivityViewProps {
+  jobs: Job[];
+}
+
+const SyncActivityView: React.FC<SyncActivityViewProps> = ({ jobs }) => {
   const { skip_floor: skipFloor } = useFitThresholds();
+  const queryClient = useQueryClient();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [matchedJobs, setMatchedJobs] = useState<JobMatch[]>([]);
+  // CR-104 Story 5.3: derived from the shared jobs list, not its own fetch+poll.
+  const matchedJobs = useMemo(
+    () => jobs.filter((job) => isActionablePipelineJob(job, skipFloor)),
+    [jobs, skipFloor]
+  );
   const [sources, setSources] = useState<SourceEntry[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
     status: 'idle',
@@ -336,16 +342,6 @@ const SyncActivityView: React.FC = () => {
     }
   };
 
-  const fetchMatchedJobs = async () => {
-    try {
-      const res = await fetch(api('/api/jobs'));
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setMatchedJobs(data.filter((job: JobMatch) => isActionablePipelineJob(job, skipFloor)));
-      }
-    } catch { /* ignore */ }
-  };
-
   const fetchSources = async () => {
     try {
       const res = await fetch(api('/api/sources'));
@@ -417,18 +413,16 @@ const SyncActivityView: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (res.ok) fetchMatchedJobs();
+      if (res.ok) queryClient.invalidateQueries({ queryKey: ['jobs'] });
     } catch { /* ignore */ }
   };
 
   useEffect(() => {
     fetchLogs();
-    fetchMatchedJobs();
     fetchSources();
     fetchSystemStatus();
     const interval = setInterval(() => {
       fetchLogs();
-      fetchMatchedJobs();
       fetchSources();
       fetchSystemStatus();
     }, 3000);
@@ -469,7 +463,7 @@ const SyncActivityView: React.FC = () => {
           current_item: currentItem || prev.current_item,
         }));
         fetchLogs();
-        fetchMatchedJobs();
+        queryClient.invalidateQueries({ queryKey: ['jobs'] });
       } catch (err) {
         console.error('Failed to parse stage_handoff SSE event:', err);
       }
@@ -556,7 +550,7 @@ const SyncActivityView: React.FC = () => {
       }
     });
 
-    es.addEventListener('run_complete', (e: MessageEvent) => {
+    es.addEventListener('run_complete', () => {
       try {
         setAssetStages((prev) => prev.map((s) => ({ ...s, status: s.status === 'error' ? 'error' : 'done' })));
         setSystemStatus({
@@ -565,7 +559,7 @@ const SyncActivityView: React.FC = () => {
         });
         setIsSyncing(false);
         fetchLogs();
-        fetchMatchedJobs();
+        queryClient.invalidateQueries({ queryKey: ['jobs'] });
         fetchSources();
       } catch (err) {
         console.error('Failed to parse run_complete SSE event:', err);
@@ -574,8 +568,15 @@ const SyncActivityView: React.FC = () => {
 
     es.onerror = () => {
       console.warn('SSE connection encountered an error.');
+      // Native EventSource auto-reconnects for transient drops, but if the
+      // connection enters CLOSED state (e.g. server returns 4xx), it won't
+      // retry. Clear the ref and attempt reconnection with a short delay.
+      if (es.readyState === EventSource.CLOSED) {
+        eventSourceRef.current = null;
+        setTimeout(() => connectSSE(), 3000);
+      }
     };
-  }, [handleAssetProgress, resetAssetStages]);
+  }, [handleAssetProgress, resetAssetStages, queryClient]);
 
   const disconnectSSE = useCallback(() => {
     if (eventSourceRef.current) {
@@ -681,8 +682,9 @@ const SyncActivityView: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
           {/* Target Role */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Target Role</label>
+            <label htmlFor="target-role-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Target Role</label>
             <input
+              id="target-role-input"
               type="text"
               value={settings.targetRole}
               onChange={e => update('targetRole', e.target.value)}
@@ -694,8 +696,9 @@ const SyncActivityView: React.FC = () => {
 
           {/* Additional search titles */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Additional Search Titles</label>
+            <label htmlFor="additional-search-titles-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Additional Search Titles</label>
             <input
+              id="additional-search-titles-input"
               type="text"
               value={settings.additionalSearchTerms}
               onChange={e => update('additionalSearchTerms', e.target.value)}
@@ -709,7 +712,7 @@ const SyncActivityView: React.FC = () => {
 
           {/* Work Setting */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Work Setting</label>
+            <span className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Work Setting</span>
             <div className="flex gap-1.5 p-1 bg-surface-container-low rounded-xl border border-outline-variant/10">
               {['Remote', 'Hybrid', 'On-site'].map(opt => (
                 <button
@@ -729,8 +732,9 @@ const SyncActivityView: React.FC = () => {
 
           {/* Location */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Location</label>
+            <label htmlFor="location-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Location</label>
             <select
+              id="location-input"
               value={settings.location}
               onChange={e => update('location', e.target.value)}
               className="input-applyr w-full rounded-xl text-xs py-2.5 bg-surface-container-low cursor-pointer"
@@ -753,7 +757,7 @@ const SyncActivityView: React.FC = () => {
 
           {/* Date Posted */}
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Date Posted</label>
+            <span className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Date Posted</span>
             <div className="grid grid-cols-2 gap-1.5">
               {DATE_OPTIONS.map(opt => (
                 <button
@@ -774,7 +778,7 @@ const SyncActivityView: React.FC = () => {
 
         {/* Experience Level — full row */}
         <div className="pt-2 border-t border-outline-variant/10">
-          <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Experience Level</label>
+          <span className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Experience Level</span>
           <div className="relative" ref={expRef}>
             <button
               type="button"
@@ -828,8 +832,9 @@ const SyncActivityView: React.FC = () => {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Title Blocklist (auto-reject)</label>
+            <label htmlFor="title-blocklist-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Title Blocklist (auto-reject)</label>
             <textarea
+              id="title-blocklist-input"
               value={settings.titleBlocklist}
               onChange={e => update('titleBlocklist', e.target.value)}
               rows={3}
@@ -839,8 +844,9 @@ const SyncActivityView: React.FC = () => {
             <p className="text-[10px] text-on-surface-variant mt-1 italic">Comma separated. Whole-word match on job title only. Senior is allowed; use years cap below.</p>
           </div>
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Max years required (reject above)</label>
+            <label htmlFor="max-years-required-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Max years required (reject above)</label>
             <input
+              id="max-years-required-input"
               type="number"
               min={3}
               max={15}
@@ -851,8 +857,9 @@ const SyncActivityView: React.FC = () => {
             <p className="text-[10px] text-on-surface-variant mt-1 italic">JD requiring more than this is auto-rejected (your profile: ~6 years).</p>
           </div>
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Industry Blocklist</label>
+            <label htmlFor="industry-blocklist-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Industry Blocklist</label>
             <textarea
+              id="industry-blocklist-input"
               value={settings.industryBlocklist}
               onChange={e => update('industryBlocklist', e.target.value)}
               rows={3}
@@ -862,10 +869,11 @@ const SyncActivityView: React.FC = () => {
             <p className="text-[10px] text-on-surface-variant mt-1 italic">Comma separated. Matched against company descriptions.</p>
           </div>
           <div>
-            <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Minimum Salary</label>
+            <label htmlFor="minimum-salary-input" className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-2">Minimum Salary</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm">$</span>
               <input
+                id="minimum-salary-input"
                 type="number"
                 value={settings.minSalary}
                 onChange={e => update('minSalary', parseInt(e.target.value) || 0)}

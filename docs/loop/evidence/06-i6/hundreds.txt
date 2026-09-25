@@ -1,0 +1,5 @@
+The before-fix Classlink letter says consistency was restored across hundreds of client databases. The cite is ACC-102 and ACC-121. MET-09 is roughly 200 SQL databases.
+
+The new test failed, then passed. The phrase now blocks with that cite and with no provenance. "Roughly 200 SQL databases" does not block.
+
+On the before-fix copies the check fires on bak_classlink_CoverLetter.md only. 105 linter tests ran. The only error is the pre-existing rentana geography test.

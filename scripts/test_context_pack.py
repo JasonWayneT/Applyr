@@ -212,7 +212,7 @@ class TestClaimsTagsOnly(unittest.TestCase):
 class TestManifestKeysResolveToRealFiles(unittest.TestCase):
     """Regression test for a real bug: build_manifest() first wrote bare
     filenames ('SKILL.md') instead of the true path relative to REPO_ROOT
-    ('.claude/skills/generate-submission/SKILL.md'), so
+    ('.codex/skills/generate-submission/SKILL.md'), so
     check_context_pack_freshness.py's `os.path.join(REPO_ROOT, rel_path)`
     resolved to a nonexistent file and reported every fresh pack as STALE.
     Caught by actually running the generator end to end, not by any unit

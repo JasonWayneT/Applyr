@@ -42,12 +42,14 @@ and explicit offline runs only).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import os
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 
 # Measured 2026-08-17 on the real PracticeTek JD: this tag beat llama3.1:8b
 # and every 14B local model on responsibilities completeness. Do not swap
@@ -59,6 +61,89 @@ class Stage0ExtractError(RuntimeError):
     """Requirement extraction cannot proceed. Do not substitute another path."""
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+class Stage0NeedsInput(RuntimeError):
+    """Stage 0 has durable confirmation questions and cannot finalize yet."""
+
+    def __init__(self, opportunity_key: str, pending: list[dict[str, str]]) -> None:
+        super().__init__("Stage 0 is waiting for Review Center input")
+        self.opportunity_key = opportunity_key
+        self.pending = pending
+
+
+class Stage0RequirementExtractionReviewNeeded(RuntimeError):
+    """Extraction's own unresolved bullets include a qualification-risk item.
+
+    Raised by build_stage0_fit_gate (never from inside _extract_sections_nlp,
+    PIN 3) when the independent three-way qualification-risk gate
+    (stage0_qualification_risk_gate.classify_qualification_risk) finds at
+    least one QUALIFICATION_LIKELY or AMBIGUOUS bullet among the items the
+    NLP extractor could not confidently bucket. This is a receipt-only pause
+    (PIN 1): it fires before run_key/request_hash/start_run exist, so no
+    stage0_runs row is created and mark_run_status is never called for it.
+    The orchestrator writes WAITING_FOR_INPUT with
+    pause_kind=requirement_extraction_review.
+    """
+
+    def __init__(self, opportunity_key: str, queue: list[dict]) -> None:
+        super().__init__(
+            "Stage 0 requirement extraction produced qualification-risk "
+            "bullets that need review before a terminal PASS or SKIP."
+        )
+        self.opportunity_key = opportunity_key
+        self.queue = queue
+
+
+class Stage0CostAuthorizationNeeded(RuntimeError):
+    """Stage 0 cannot classify remaining lines without an authorized provider.
+
+    This is a resumable pause, not a terminal extract failure. The orchestrator
+    writes WAITING_FOR_INPUT with pause_kind=cost_authorization.
+    """
+
+    def __init__(
+        self,
+        *,
+        authorization_mode: str = "unknown",
+        ineligible_providers: list[dict] | None = None,
+        model_call_occurred: bool = False,
+        reason: str = "no_eligible_provider",
+        cost_receipt: dict | None = None,
+        next_paths: list[str] | None = None,
+        missing_item_ids: list[str] | None = None,
+    ) -> None:
+        super().__init__(
+            "Stage 0 paused: no eligible classifier. No model API call occurred."
+        )
+        self.authorization_mode = authorization_mode
+        self.ineligible_providers = ineligible_providers or []
+        self.model_call_occurred = model_call_occurred
+        self.reason = reason
+        self.cost_receipt = cost_receipt or {}
+        self.missing_item_ids = list(missing_item_ids or [])
+        self.next_paths = next_paths or [
+            "import_cascade_json",
+            "certify_zero_charge",
+            "paid_allowlist_budget",
+        ]
+
+    def pause_kind(self) -> str:
+        if str(self.reason or "").startswith("subscription_review"):
+            return "subscription_review"
+        return "cost_authorization"
+
+
+def stage0_cost_pause_from_error(exc: BaseException) -> Stage0CostAuthorizationNeeded:
+    """Map a helper CostPauseError onto the Stage 0 pause type. No receipts."""
+    receipt = getattr(exc, "receipt", None) or {}
+    return Stage0CostAuthorizationNeeded(
+        authorization_mode=str(receipt.get("authorization_mode") or "unknown"),
+        ineligible_providers=list(receipt.get("ineligible_providers") or []),
+        model_call_occurred=False,
+        reason=str(receipt.get("reason") or "no_eligible_provider"),
+        cost_receipt=dict(receipt),
+    )
+
+
 
 _SCRIPT_DIR = Path(__file__).parent
 _REPO_ROOT = _SCRIPT_DIR.parent
@@ -135,7 +220,29 @@ def _load_anchor_vocab() -> set[str]:
 from blocked_tools import HARD_BLOCKED_TOOLS as _HARD_BLOCKED_TOOLS  # noqa: E402
 from blocked_tools import hard_blocked_tool_pattern as _shared_hard_tool_pattern  # noqa: E402
 from blocked_tools import load_skills_catalog_terms as _load_skills_catalog_terms_shared  # noqa: E402
+from blocked_tools import is_posting_employer_name as _is_posting_employer_name  # noqa: E402
 from blocked_tools import looks_like_named_tool as _looks_like_named_tool  # noqa: E402
+from blocked_tools import (  # noqa: E402
+    named_tool_surface_is_chrome as _named_tool_surface_is_chrome,
+)
+from stage0_confirmations import (  # noqa: E402
+    canonical_skill_key,
+    get_skill_memory,
+    model_flagged_named_skill,
+    named_skill_candidates,
+)
+from stage0_checkpoint import (  # noqa: E402
+    checkpoint_boundary,
+    clean_spool,
+    complete_judgment,
+    get_completed_judgment,
+    make_item_key,
+    make_run_key,
+    mark_run_status,
+    start_run,
+    update_run_metadata,
+    write_spool,
+)
 
 # Regex pattern to detect hard-blocked tool names in a requirement string.
 # Compiled lazily.
@@ -197,7 +304,8 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
     ("preferred", re.compile(
         r"^(?:#+\s*)?"
         r"(?:preferred\s+(?:qualifications?|skills?|experience|requirements?)|"
-        r"nice\s+to\s+have|bonus\s+(?:points?|if|qualifications?)|"
+        r"nice\s+to\s+haves?|also\s+great\s+to\s+have|great\s+to\s+have|"
+        r"bonus\s+(?:points?|if|qualifications?)|"
         r"additional\s+qualifications?|plus(?:es?)?|"
         r"preferred|ideally\s+you|you\s+may\s+also\s+have|"
         # CR-086: Thermo-class preferred lead-in headers ("Key Capabilities for Success:")
@@ -257,6 +365,10 @@ _SECTION_HEADERS: list[tuple[str, re.Pattern]] = [
         # "About your role" / "About what you get" on their real buckets.
         r"more\s+about\s+\w+|"
         r"about\s+(?!you\b|your\b|what\b)\w+|"
+        # Nava-class (2026-09-21): "Working at Nava" is a culture/DEI header,
+        # not a preferred qualification. Company token stays Title-Case so
+        # "Working at scale with distributed teams" cannot match as a label.
+        r"working\s+at\s+(?-i:[A-Z][\w'&.-]{1,20})|"
         # CR-086: "Our Core Values" did not match `our values` (intervening "Core").
         r"(?:our\s+)?core\s+values?|"
         r"why\s+(?:us|join|we|this\s+role)|company\s+overview|who\s+we\s+are|"
@@ -533,13 +645,53 @@ _BOILERPLATE_ITEM_RE = re.compile(
     r"sales\s+commission\s+plan|"
     r"offer\s+a\s+competitive\s+salary\s+and\s+comprehensive\s+benefits|"
     r"flexible\s+and\s+balanced\s+environment|"
-    r"opportunity\s+to\s+work\s+remotely"
+    r"opportunity\s+to\s+work\s+remotely|"
+    r"summary\s+generated\s+by\s+built\s+in|"
+    r"generated\s+by\s+built\s+in"
     r")"
 )
 
 # A line that, once trimmed, is nothing but a bare URL is never real hire criteria —
 # belt-and-suspenders for apply-link lines regardless of the lead-in phrasing above.
 _BARE_URL_ITEM_RE = re.compile(r"^https?://\S+$", re.I)
+
+# Used by orphan-header colon fallback and CR-115 chrome drop. A heading with
+# a real requirement verb is not chrome.
+_REQUIREMENT_VERB_RE = re.compile(
+    r"\b(?:own|run|write|develop|lead|partner|build|manage|require|must|"
+    r"need|deliver|ship|define|create|ensure|identify)\b",
+    re.I,
+)
+
+# CR-115: scored-path chrome leftover already junks when confidence is low.
+_JOB_BOARD_CHROME_RE = re.compile(
+    r"(?i)^(?:#+\s*)?(?:"
+    r"mid(?:dle)?\s+and\s+senior\s+level|"
+    r"senior\s+level|"
+    r"job\s+type|"
+    r"employment\s+type|"
+    r"experience\s+level|"
+    r"job\s+category"
+    r")\s*:?\s*$"
+)
+_SECTION_HEADING_CHROME_RE = re.compile(
+    r"(?i)^(?:#+\s*)?(?:"
+    r"education(?:\s+and\s+credentials?)?|"
+    r"credentials?|"
+    r"additional\s+details|"
+    r"company\s+summary|"
+    r"expectations?\s+of\s+the\s+role|"
+    r"working\s+at\s+\S+"
+    r")\s*:?\s*$"
+)
+_TRUNCATED_FRAGMENT_RE = re.compile(
+    r"(?i)^(?:experiences?|skills?|knowledge|background)\s+that\b"
+)
+# Same hire-site logistics as stage0_confirmations.named_skill_candidates.
+# Split fragments still match one side of the original sentence.
+_HIRE_SITE_OFFICE_DAYS_RE = re.compile(
+    r"(?i)\bfor\s+all\s+hires?\s+in\b|\bwork\s+in\s+the\s+office\s+a\s+minimum\b"
+)
 
 
 # Known orphan section labels that sometimes appear as bullets when header routing
@@ -556,9 +708,12 @@ _ORPHAN_HEADER_LABEL_RE = re.compile(
     r"key\s+capabilities?\s+for\s+success|"
     r"about\s+(?:the\s+)?(?:role|company|us)|"
     r"more\s+about\s+\w+|"
+    r"working\s+at\s+\w+|"
     r"what\s+we\s+offer|"
     r"what\s+you\s+can\s+expect(?:\s+from\s+us)?|"
     r"your\s+qualifications?|"
+    r"skills?\s*(?:and|&)\s*qualifications?|"
+    r"core\s+competencies|"
     r"how\s+(?:will\s+you|you(?:'|')ll?\s+)\s*make\s+an?\s+impact|"
     r"ways\s+of\s+working|"
     r"anticipated\s+position\s+close\s+date|"
@@ -594,6 +749,22 @@ def _is_orphan_header_item(text: str) -> bool:
     return False
 
 
+def _empty_extraction_buckets() -> dict[str, list[str]]:
+    """Live leftover buckets, including junk. Implements FR-328 / AC-426."""
+    from stage0_classifier_contract import EXTRACTION_BUCKETS
+
+    return {name: [] for name in EXTRACTION_BUCKETS}
+
+
+def _leftover_bucket(bucket: str, text: str) -> str:
+    """Force disposition lines into culture so they are never scored. Implements FR-328."""
+    from stage0_classifier_contract import is_disposition_culture_line
+
+    if is_disposition_culture_line(text):
+        return "culture"
+    return bucket
+
+
 def _is_boilerplate_item(text: str) -> bool:
     """True when an extracted bullet is ATS/policy boilerplate, not a hire criterion."""
     clean = (text or "").strip()
@@ -613,6 +784,48 @@ def _is_boilerplate_item(text: str) -> bool:
     if _is_orphan_header_item(clean):
         return True
     return False
+
+
+def _is_unscored_chrome_item(text: str) -> bool:
+    """True when a required/preferred line is heading, board, or fragment chrome.
+
+    Implements FR-330 / AC-428. Leftover junk semantics are unchanged.
+    Hire-site / in-office-days lines are posting logistics, not hire criteria
+    (live miss 2026-09-21 optum: a split Minneapolis/Washington office-days
+    sentence became the only required items and fit-scored 0).
+    """
+    clean = (text or "").strip().lstrip("-•*◦▪▸→").strip()
+    if not clean:
+        return False
+    if _is_boilerplate_item(clean):
+        return True
+    if _JOB_BOARD_CHROME_RE.match(clean):
+        return True
+    if _SECTION_HEADING_CHROME_RE.match(clean):
+        return True
+    if _TRUNCATED_FRAGMENT_RE.match(clean):
+        return True
+    if _HIRE_SITE_OFFICE_DAYS_RE.search(clean):
+        return True
+    return False
+
+
+def _divert_scored_chrome(sections: dict) -> dict:
+    """Move heading/fragment chrome out of required/preferred before scoring.
+
+    Implements FR-330 / AC-428. Does not reclassify leftover junk or culture.
+    """
+    junk = list(sections.get("junk") or [])
+    for key in ("required", "preferred"):
+        kept: list[str] = []
+        for item in sections.get(key) or []:
+            if _is_unscored_chrome_item(item):
+                junk.append(item)
+            else:
+                kept.append(item)
+        sections[key] = kept
+    sections["junk"] = junk
+    return sections
 
 
 # 2026-08-28 (Jason-supplied): best-effort salary-range capture from the raw JD
@@ -671,6 +884,7 @@ _INLINE_PREFERRED_RE = re.compile(
     r")",
     re.I,
 )
+_INLINE_REQUIRED_RE = re.compile(r"\bis required\b", re.I)
 
 
 def _normalize_jd_punctuation(text: str) -> str:
@@ -688,23 +902,40 @@ def _normalize_jd_punctuation(text: str) -> str:
     )
 
 
+def _qual_line_items(clean: str) -> list[str]:
+    """Split an overlong paragraph bullet so it is not dropped by the 300-char cap.
+
+    LinkedIn-style Required/Preferred blocks are often one paragraph. Silent drop
+    of those lines is scored-path line loss on the locked 30. Implements FR-330.
+    """
+    if not clean:
+        return []
+    if not (clean[0].isalnum() or clean[0] in "\"'"):
+        return []
+    if 15 <= len(clean) <= 300:
+        return [clean]
+    if len(clean) < 15:
+        return []
+    items: list[str] = []
+    for part in re.split(r"(?<=[.!?])\s+", clean):
+        item = part.strip()
+        if 15 <= len(item) <= 300 and (item[0].isalnum() or item[0] in "\"'"):
+            items.append(item)
+    return items
+
+
 def _extract_sections(jd_text: str) -> dict[str, list[str]]:
     """
     Extract text buckets by section heading.
 
-    Returns dict with keys: required, preferred, responsibilities, culture.
+    Returns dict with keys: required, preferred, responsibilities, culture, junk.
     Each value is a list of bullet-like strings extracted from that section.
 
     Trailing ATS boilerplate (relocation / EEO / salary / #LI-…) is excluded:
     matching ignore headers ends the current quals bucket, and any remaining
     boilerplate strings are stripped via `_is_boilerplate_item`.
     """
-    buckets: dict[str, list[str]] = {
-        "required": [],
-        "preferred": [],
-        "responsibilities": [],
-        "culture": [],
-    }
+    buckets: dict[str, list[str]] = _empty_extraction_buckets()
 
     lines = _normalize_jd_punctuation(jd_text).splitlines()
     current_bucket: str | None = None
@@ -766,16 +997,25 @@ def _extract_sections(jd_text: str) -> dict[str, list[str]]:
         if current_bucket is None:
             continue
 
-        # Extract meaningful bullet items (20–300 chars, starts with letter or digit)
+        # Extract meaningful bullet items (15–300 chars, starts with letter or digit)
         clean = line.lstrip("-•*◦▪▸→").strip()
-        if 15 <= len(clean) <= 300 and (clean[0].isalnum() or clean[0] in '"\''):
-            if _is_list_leadin(clean):
+        for item in _qual_line_items(clean):
+            if _is_list_leadin(item):
+                lead_bucket, _lead_label = classify_jd_header(item)
+                if lead_bucket is not None:
+                    current_bucket = lead_bucket
                 continue
-            if not _is_boilerplate_item(clean):
+            if not _is_boilerplate_item(item):
+                from stage0_classifier_contract import is_disposition_culture_line
+
                 target_bucket = current_bucket
-                if current_bucket == "required" and _INLINE_PREFERRED_RE.search(clean):
+                if is_disposition_culture_line(item):
+                    target_bucket = "culture"
+                elif current_bucket == "required" and _INLINE_PREFERRED_RE.search(item):
                     target_bucket = "preferred"
-                buckets[target_bucket].append(clean)
+                elif current_bucket == "preferred" and _INLINE_REQUIRED_RE.search(item):
+                    target_bucket = "required"
+                buckets[target_bucket].append(item)
 
     # Final safety net for items that never rode a header boundary
     for key in buckets:
@@ -807,6 +1047,19 @@ _SPECIFICITY_GENERIC_SOFT_SKILL_RE = re.compile(
     re.I,
 )
 
+# 2026-09-01 Improvement #8: cached anchor vocabulary for specificity scoring.
+# Loaded lazily so the cost is paid only when _requirement_specificity_score
+# is actually called (i.e. a bucket exceeds the 12-item cap), not on every
+# import or every Stage 0 run.
+_anchor_vocab_cache: set[str] | None = None
+
+
+def _get_cached_anchor_vocab() -> set[str]:
+    global _anchor_vocab_cache
+    if _anchor_vocab_cache is None:
+        _anchor_vocab_cache = _load_anchor_vocab()
+    return _anchor_vocab_cache
+
 
 def _requirement_specificity_score(item: str) -> float:
     """Deterministic proxy for how much one requirement line is worth
@@ -825,6 +1078,14 @@ def _requirement_specificity_score(item: str) -> float:
     read couldn't already assume. Everything else (the common case) scores
     on length alone, as a mild, cheap proxy for "says something specific"
     over "a stray short fragment."
+
+    2026-09-01 Improvement #8: +1.0 for items containing terms from the anchor
+    vocabulary (claims tags + skills catalog). A requirement like "Experience
+    with Salesforce Health Cloud" (no digit, not a generic soft skill) now
+    scores higher than "Experience working in a collaborative environment",
+    prioritizing specific, decision-bearing requirements over generic ones
+    when capping. Only affects which items survive the 12-item cap for very
+    large JDs.
     """
     text = (item or "").strip()
     if _SPECIFICITY_GENERIC_SOFT_SKILL_RE.match(text):
@@ -834,6 +1095,11 @@ def _requirement_specificity_score(item: str) -> float:
     if len(words) < 4:
         score -= 1.0
     score += min(len(words), 30) * 0.01
+    # Anchor-vocabulary boost: +1.0 if any anchor term appears in the item.
+    lower = text.lower()
+    anchor_vocab = _get_cached_anchor_vocab()
+    if any(term in lower for term in anchor_vocab if len(term) >= 4):
+        score += 1.0
     return score
 
 
@@ -874,7 +1140,7 @@ _QUAL_LEADIN_RE = re.compile(
     r"^(?:"
     r"a\s+track\s+record|"
     r"proven\s+(?:ability|experience|track)|"
-    r"strong\s+(?:opinions?|understanding|communication|golf|problem)|"
+    r"strong\s+\w+|"
     r"excellent\s+(?:written|verbal|communication|business)|"
     r"exceptional\s+(?:soft\s+skills|problem|communication)|"
     r"comfortable\b|"
@@ -989,40 +1255,40 @@ def _extract_unavailable_message(reason: str) -> str:
 
 
 
-def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
-    """NLP (TF-IDF + LogReg) section extraction with a Groq/Gemini fallback for anything
-    the classifier isn't confident about. Returns None only when STAGE0_SECTION_MODE=
-    deterministic (caller then uses the regex extractor on purpose, same contract as
-    _extract_sections_llm) or when data/stage0_classifier.pkl doesn't exist yet -- both
-    are "use regex instead" signals, not real failures, so neither raises.
+def _collect_nlp_section_candidates(
+    jd_text: str,
+) -> tuple[dict[str, list[str]], list[tuple[str, str, str]]] | None:
+    """Return confident NLP buckets and leftover lines without calling a hosted tool.
+
+    Used by production extraction and by the CR-114 Agy archive smoke so leftovers
+    can be inspected without Groq/Gemini. Implements FR-328 / AC-426.
     """
     import pipeline_env
     if pipeline_env.stage0_section_mode() == "deterministic":
         return None
 
     import joblib
-    import csv
-    from utils import call_llm, extract_json_from_text, resolve_task_providers
+    import warnings
 
     model_path = _REPO_ROOT / "data" / "stage0_classifier.pkl"
     if not model_path.exists():
         print("NLP Model not found, falling back to deterministic extraction.", file=sys.stderr)
         return None
 
-    pipeline = joblib.load(model_path)
+    # Suppress sklearn InconsistentVersionWarning — the classifier was trained on
+    # sklearn 1.9.0 and is running on 1.8.0. The model is functionally compatible
+    # (TF-IDF + LogReg), the version mismatch is a known-safe pickle format difference.
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="Trying to unpickle estimator")
+        pipeline = joblib.load(model_path)
     classes = list(pipeline.classes_)
 
     lines = _normalize_jd_punctuation(jd_text).splitlines()
 
-    buckets = {
-        "required": [],
-        "preferred": [],
-        "responsibilities": [],
-        "culture": [],
-    }
+    buckets = _empty_extraction_buckets()
 
     current_header = ""
-    fallback_queue = []
+    fallback_queue: list[tuple[str, str, str]] = []
 
     for line in lines:
         clean = line.strip()
@@ -1043,88 +1309,263 @@ def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
             current_header = clean
             if is_label:
                 continue
-                
+
         if _IGNORE_SECTION_HEADERS.match(clean) or _TRACKING_TAG_RE.match(clean):
             current_header = "IGNORE"
             continue
-            
+
         if current_header == "IGNORE":
             continue
-            
+
         bullet_clean = clean.lstrip("-•*◦▪▸→").strip()
-        if 15 <= len(bullet_clean) <= 300 and (bullet_clean[0].isalnum() or bullet_clean[0] in '"\'\''):
-            if _is_list_leadin(bullet_clean):
+        for item in _qual_line_items(bullet_clean):
+            if _is_list_leadin(item):
+                lead_bucket, lead_label = classify_jd_header(item)
+                if lead_bucket is not None:
+                    current_header = item
                 continue
-            if not _is_boilerplate_item(bullet_clean):
-                combo_text = f"[HEADER] {current_header}: {bullet_clean}" if current_header else bullet_clean
-                
-                if current_header == "required" and _INLINE_PREFERRED_RE.search(bullet_clean):
-                    buckets["preferred"].append(bullet_clean)
+            if not _is_boilerplate_item(item):
+                combo_header = current_header or ""
+                preferred_header = (
+                    (classify_jd_header(combo_header)[0] == "preferred")
+                    or "preferred" in combo_header.lower()
+                    or "great to have" in combo_header.lower()
+                    or "nice to have" in combo_header.lower()
+                )
+                if preferred_header and _INLINE_REQUIRED_RE.search(item):
+                    combo_header = "required"
+                combo_text = f"[HEADER] {combo_header}: {item}" if combo_header else item
+
+                if current_header == "required" and _INLINE_PREFERRED_RE.search(item):
+                    buckets["preferred"].append(item)
                     continue
-                    
+
+                from stage0_classifier_contract import is_disposition_culture_line
+
+                if is_disposition_culture_line(item):
+                    buckets["culture"].append(item)
+                    continue
+
+                # Honor the JD's own Preferred header over the classifier.
+                # Live miss 2026-09-21 nava_benefits: "5+ years" / 0-to-1 under
+                # Preferred Experience were predicted required at >=0.65 and
+                # skipped the job below the fit floor. Inline "is required"
+                # already rewrote combo_header above. Implements CR-105 / FR-330.
+                if preferred_header and combo_header != "required":
+                    buckets["preferred"].append(item)
+                    continue
+
                 pred = pipeline.predict([combo_text])[0]
                 proba = pipeline.predict_proba([combo_text])[0]
                 conf = proba[classes.index(pred)]
-                
+
                 if conf < 0.65:
-                    fallback_queue.append((combo_text, bullet_clean, current_header))
+                    fallback_queue.append((combo_text, item, combo_header))
                 else:
-                    buckets[pred].append(bullet_clean)
-                    
-    # Active Learning Fallback Loop
-    if fallback_queue:
-        print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
-        prompt = "Classify these job description bullet points into one of four buckets: 'required', 'preferred', 'responsibilities', or 'culture'. Return ONLY valid JSON as a mapping from the index to the bucket string.\n\n"
-        for i, (combo_text, _, _) in enumerate(fallback_queue):
-            prompt += f"[{i}] {combo_text}\n"
-            
-        result = call_llm(
-            system_prompt="You are an expert NLP data labeler. Output only JSON format: { \"0\": \"required\", \"1\": \"preferred\" }",
-            user_prompt=prompt,
-            # CR-105 (Jason-supplied, 2026-08-30): Groq first (generous free tier, no
-            # training on submitted data), Gemini as the fallback if Groq is unavailable
-            # or rate-limited. User-overridable per Settings > API or Connections > AI
-            # Usage > "Stage 0 fallback" (llm_settings.taskProviderOverrides.stage0_extraction).
-            provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
-        )
-        
-        if result:
-            json_str = extract_json_from_text(result)
-            try:
-                import json
-                mapping = json.loads(json_str)
-                feedback_csv = _REPO_ROOT / "data" / "training_data_feedback.csv"
-                write_header = not feedback_csv.exists()
-                
-                with open(feedback_csv, "a", encoding="utf-8", newline="") as f:
-                    writer = csv.DictWriter(f, fieldnames=["text", "label", "company", "source_file"])
-                    if write_header:
-                        writer.writeheader()
-                        
-                    for i_str, bucket in mapping.items():
-                        idx = int(i_str)
-                        if bucket not in buckets:
-                            continue
-                        combo_text, bullet_clean, _ = fallback_queue[idx]
-                        buckets[bucket].append(bullet_clean)
-                        
-                        writer.writerow({
-                            "text": bullet_clean,
-                            "label": bucket,
-                            "company": "FeedbackLoop",
-                            "source_file": "fallback_api"
-                        })
-            except Exception as e:
-                print(f"    [NLP Error] Failed to parse LLM fallback: {e}", file=sys.stderr)
-                # default to responsibilities
-                for _, bullet_clean, _ in fallback_queue:
-                    buckets["responsibilities"].append(bullet_clean)
-        else:
-            for _, bullet_clean, _ in fallback_queue:
-                buckets["responsibilities"].append(bullet_clean)
-    
+                    buckets[pred].append(item)
+
+    return buckets, fallback_queue
+
+
+def _extract_sections_nlp(jd_text: str) -> dict[str, list[str]] | None:
+    """NLP (TF-IDF + LogReg) section extraction with a bounded fallback.
+
+    Confident lines stay on the local classifier. Uncertain lines go to Agy
+    when APPLYR_STAGE0_SUBSCRIPTION_ADAPTER is on. Groq/Gemini are off unless
+    APPLYR_STAGE0_CLOUD_LLM is explicitly enabled. Otherwise those lines pause
+    for Review Center instead of a metered API.
+    """
+    collected = _collect_nlp_section_candidates(jd_text)
+    if collected is None:
+        return None
+    buckets, fallback_queue = collected
+    unresolved_for_review = _resolve_uncertain_extraction(fallback_queue, buckets)  # Implements FR-328 / AC-426
     _recover_mixed_responsibilities(buckets)
+    if unresolved_for_review:
+        buckets["unresolved_for_review"] = unresolved_for_review
     return buckets
+
+
+def _subscription_extraction_enabled() -> bool:
+    """Return True only when the CR-114 adapter switch is on. Implements FR-328."""
+    from stage0_subscription_adapter import AdapterConfig, adapter_enabled
+    return adapter_enabled(AdapterConfig())
+
+
+def _record_unresolved(
+    fallback_queue: list[tuple[str, str, str]],
+    reason: str,
+    *,
+    model_call_occurred: bool,
+    indexes: list[int] | None = None,
+) -> list[dict]:
+    """Record unresolved extraction lines without silently bucketing them."""
+    selected = range(len(fallback_queue)) if indexes is None else indexes
+    return [
+        {
+            "text": fallback_queue[idx][1],
+            "header": fallback_queue[idx][2],
+            "reason": reason,
+            "model_call_occurred": model_call_occurred,
+        }
+        for idx in selected
+    ]
+
+
+def _resolve_uncertain_extraction(
+    fallback_queue: list[tuple[str, str, str]],
+    buckets: dict[str, list[str]],
+) -> list[dict]:
+    """Classify low-confidence lines or keep them in CR-112 review. Implements FR-328 / AC-426.
+
+    The subscription adapter, when enabled, replaces Groq/Gemini for this batch only.
+    It never writes training labels and never silently drops a queued line.
+    Groq/Gemini stay off unless APPLYR_STAGE0_CLOUD_LLM is explicitly on.
+    """
+    if not fallback_queue:
+        return []
+    if _subscription_extraction_enabled():
+        return _resolve_uncertain_extraction_subscription(fallback_queue, buckets)
+    from stage0_subscription_adapter import cloud_llm_fallback_enabled
+    if cloud_llm_fallback_enabled():
+        return _resolve_uncertain_extraction_llm(fallback_queue, buckets)
+    return _record_unresolved(
+        fallback_queue,
+        "subscription_adapter_required",
+        model_call_occurred=False,
+    )
+
+
+def _resolve_uncertain_extraction_subscription(
+    fallback_queue: list[tuple[str, str, str]],
+    buckets: dict[str, list[str]],
+) -> list[dict]:
+    """Use the bounded Stage 0 adapter. Never fall through to Groq or Gemini."""
+    from stage0_subscription_adapter import (
+        AdapterConfig,
+        AdapterBudget,
+        Stage0Item,
+        run_stage0_subscription,
+    )
+
+    print(
+        f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to subscription adapter...",
+        file=sys.stderr,
+    )
+    items = [
+        Stage0Item(f"e{idx}", combo_text)
+        for idx, (combo_text, _bullet, _header) in enumerate(fallback_queue)
+    ]
+    config = AdapterConfig(enabled=True)
+    result = run_stage0_subscription(
+        "extraction", items, config=config, budget=AdapterBudget(config)
+    )
+    print(
+        f"    [NLP] subscription adapter outcome={result.outcome} "
+        f"calls={result.calls} minutes={result.subscription_minutes:.4f} "
+        f"api_cents={result.api_cents} reason={result.reason}",
+        file=sys.stderr,
+    )
+    called = result.outcome != "exhausted" or result.calls > 0
+    resolved: set[int] = set()
+    for row in result.results:
+        item_id = str(row.get("item_id") or "")
+        if not item_id.startswith("e"):
+            continue
+        try:
+            idx = int(item_id[1:])
+        except ValueError:
+            continue
+        bucket = row.get("bucket")
+        if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
+            continue
+        resolved.add(idx)
+        line = fallback_queue[idx][1]
+        buckets[_leftover_bucket(str(bucket), line)].append(line)
+    missing = [
+        idx for idx, _item in enumerate(fallback_queue) if idx not in resolved
+    ]
+    if result.outcome in {"ok", "cache_hit"} and not missing:
+        return []
+    if missing and resolved:
+        return _record_unresolved(
+            fallback_queue,
+            "partial_mapping_unresolved",
+            model_call_occurred=True,
+            indexes=missing,
+        )
+    if result.outcome == "exhausted":
+        return _record_unresolved(
+            fallback_queue, "no_provider", model_call_occurred=bool(result.calls)
+        )
+    if result.outcome == "disabled":
+        return _record_unresolved(
+            fallback_queue, "no_provider", model_call_occurred=False
+        )
+    reason = "parse_failure" if called else "no_provider"
+    return _record_unresolved(fallback_queue, reason, model_call_occurred=called)
+
+
+def _resolve_uncertain_extraction_llm(
+    fallback_queue: list[tuple[str, str, str]],
+    buckets: dict[str, list[str]],
+) -> list[dict]:
+    """Hosted-tool uncertainty path for leftover JD lines. Implements CR-112 dump-site rules."""
+    from stage0_classifier_contract import (
+        EXTRACTION_SYSTEM,
+        extraction_user_prompt,
+        parse_extraction_mapping,
+    )
+    from utils import call_llm, extract_json_from_text, resolve_task_providers
+
+    print(f"    [NLP] Sending {len(fallback_queue)} ambiguous lines to LLM fallback...", file=sys.stderr)
+    ids = [str(i) for i in range(len(fallback_queue))]
+    user_prompt = extraction_user_prompt(
+        [(item_id, combo_text) for item_id, (combo_text, _, _) in zip(ids, fallback_queue)]
+    )
+
+    result = call_llm(
+        system_prompt=EXTRACTION_SYSTEM,
+        user_prompt=user_prompt,
+        # Tool order is user-configurable. Default list is not Applyr behavior.
+        provider_override=resolve_task_providers("stage0_extraction", ["groq", "gemini"]),
+    )
+
+    if result:
+        json_str = extract_json_from_text(result)
+        try:
+            import json
+            payload = json.loads(json_str)
+            mapping = parse_extraction_mapping(payload, ids)
+            resolved_indices: set[int] = set()
+            # Implements FR-327 / AC-425: runtime fallback answers are not training labels.
+            for item_id, bucket in mapping.items():
+                try:
+                    idx = int(item_id)
+                except (TypeError, ValueError):
+                    continue
+                if idx < 0 or idx >= len(fallback_queue) or bucket not in buckets:
+                    continue
+                resolved_indices.add(idx)
+                _, bullet_clean, _ = fallback_queue[idx]
+                buckets[_leftover_bucket(bucket, bullet_clean)].append(bullet_clean)
+            unresolved_for_review: list[dict] = []
+            for idx, (_combo_text, bullet_clean, header) in enumerate(fallback_queue):
+                if idx in resolved_indices:
+                    continue
+                unresolved_for_review.append({
+                    "text": bullet_clean,
+                    "header": header,
+                    "reason": "partial_mapping_unresolved",
+                    "model_call_occurred": True,
+                })
+            return unresolved_for_review
+        except Exception as e:
+            print(f"    [NLP Error] Failed to parse LLM fallback: {e}", file=sys.stderr)
+            return _record_unresolved(
+                fallback_queue, "parse_failure", model_call_occurred=True
+            )
+    return _record_unresolved(fallback_queue, "no_provider", model_call_occurred=False)
 
 def _extract_sections_llm(jd_text: str) -> dict[str, list[str]] | None:
     """LLM section extraction pinned to STAGE0_EXTRACT_MODEL.
@@ -1288,9 +1729,14 @@ def _recover_mixed_responsibilities(buckets: dict[str, list[str]]) -> None:
         return
 
     kept_resp: list[str] = []
+    from stage0_classifier_contract import is_disposition_culture_line
+
     for item in buckets["responsibilities"]:
         if _INLINE_PREFERRED_RE.search(item):
             buckets["preferred"].append(item)
+            continue
+        if is_disposition_culture_line(item):
+            buckets["culture"].append(item)
             continue
         if _looks_like_qualification(item) and not _looks_like_duty(item):
             buckets["required"].append(item)
@@ -1340,19 +1786,46 @@ def _detect_thin_jd(jd_text: str, required_items: list) -> bool:
     return False
 
 
+# 2026-09-01 Improvement #9: reordered by priority (enterprise > public >
+# PE-backed > VC-backed > startup > unknown) so a JD mentioning both
+# "Fortune 500" and "startup" reports the more specific, higher-priority
+# signal. Added patterns for bootstrapped, profitable, hypergrowth,
+# scale-up, post-Series-B, and employee-count ranges.
 _STAGE_SIGNALS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"\bseries\s+[abcde]\b", re.I), "VC-backed (Series found)"),
-    (re.compile(r"\bseed\s+(?:stage|funded|round)\b", re.I), "seed-stage startup"),
+    # Priority 1: enterprise / large company
+    (re.compile(r"\b(?:fortune\s+\d{3}|enterprise\s+saas|global\s+enterprise|large\s+enterprise)\b", re.I), "enterprise/large company"),
+    # Priority 2: public company
+    (re.compile(r"\b(?:ipo|publicly\s+traded|nasdaq|nyse|stock\s+exchange\s+listed)\b", re.I), "public company"),
+    # Priority 3: pre-IPO
     (re.compile(r"\bpre.ipo\b", re.I), "pre-IPO"),
-    (re.compile(r"\b(?:ipo|publicly\s+traded|nasdaq|nyse)\b", re.I), "public company"),
-    (re.compile(r"\b(?:fortune\s+\d{3}|enterprise\s+saas|global\s+enterprise)\b", re.I), "enterprise/large company"),
-    (re.compile(r"\b(?:startup|early.stage|growth.stage)\b", re.I), "startup / growth-stage"),
+    # Priority 4: PE-backed
     (re.compile(r"\b(?:private\s+equity|pe.backed)\b", re.I), "PE-backed"),
+    # Priority 5: VC-backed (specific series)
+    (re.compile(r"\bseries\s+[abcde]\b", re.I), "VC-backed (Series found)"),
+    (re.compile(r"\bpost.series.b\b", re.I), "VC-backed (post-Series B)"),
+    # Priority 6: bootstrapped / profitable
+    (re.compile(r"\bbootstrapped\b", re.I), "bootstrapped"),
+    (re.compile(r"\bprofitable\s+(?:company|business|startup)\b", re.I), "profitable company"),
+    # Priority 7: hypergrowth / scale-up
+    (re.compile(r"\bhypergrowth\b", re.I), "hypergrowth company"),
+    (re.compile(r"\bscale.?up\b", re.I), "scale-up"),
+    # Priority 8: seed-stage startup
+    (re.compile(r"\bseed\s+(?:stage|funded|round)\b", re.I), "seed-stage startup"),
+    # Priority 9: generic startup / growth-stage
+    (re.compile(r"\b(?:startup|early.stage|growth.stage)\b", re.I), "startup / growth-stage"),
+    # Priority 10: employee-count ranges (weaker signal)
+    (re.compile(r"\b(?:50|100|200|500|1000|2000|5000|10000)\+?\s+(?:employees|people|team\s+members)\b", re.I), "mid-to-large company (by employee count)"),
 ]
 
 
 def _detect_stage_signal(jd_text: str) -> str:
-    """Return a human-readable stage signal or the standard unknown string."""
+    """Return a human-readable stage signal or the standard unknown string.
+
+    2026-09-01 Improvement #9: patterns are now priority-ordered (enterprise
+    > public > PE-backed > VC-backed > startup > unknown) so a JD mentioning
+    multiple signals reports the most specific one. First-match wins, so the
+    list order above IS the priority order.
+    """
     for pat, label in _STAGE_SIGNALS:
         if pat.search(jd_text):
             return label
@@ -1528,6 +2001,23 @@ _HIGHER_DEGREE_MANDATORY_RE = re.compile(
     r"\brequires?\s+an?\s+(?:master'?s?|mba|ph\.?d\.?)\b",
     re.I,
 )
+# CR-112 Story 3.4: eligibility-framed screening / nights-and-weekends lines
+# are not product-roadmap claims. Framing is required so "Own the background
+# check product roadmap" stays scorable. No drug-test or on-call matchers.
+_ADMIN_BACKGROUND_RE = re.compile(
+    r"(?:must\s+pass|subject\s+to|(?:is|are)\s+required|(?:^|\b)required\b).{0,80}"
+    r"(?:background\s+check|fingerprints?|fingerprinting|"
+    r"level\s*(?:ii|2)\s+fingerprint)"
+    r"|"
+    r"(?:background\s+check|fingerprints?|fingerprinting|"
+    r"level\s*(?:ii|2)\s+fingerprint).{0,80}"
+    r"(?:must\s+pass|subject\s+to|(?:is|are)\s+required|(?:^|\b)required\b)",
+    re.I,
+)
+_ADMIN_SCHEDULE_RE = re.compile(
+    r"\b(?:nights and weekends|weekend availability)\b",
+    re.I,
+)
 
 
 def _is_administratively_satisfied(item_lower: str) -> bool:
@@ -1538,10 +2028,16 @@ def _is_administratively_satisfied(item_lower: str) -> bool:
     citizenship/work-authorization/security-clearance/travel/supervisory-
     responsibility statements are NOT covered here (left for a separate,
     more careful pass -- some are legally sensitive and shouldn't be
-    silently resolved without confirming Jason's actual status)."""
+    silently resolved without confirming Jason's actual status).
+    CR-112 Story 3.4: eligibility-framed fingerprint / background-check and
+    nights-and-weekends lines also count so an empty score gets the admin
+    bridge instead of the Stage-0-anchored filler. Implements FR-305 / AC-402.
+    """
     if _YEARS_EXPERIENCE_LEADIN_RE.match(item_lower.strip()):
         return True
     if _BACHELORS_SATISFIED_RE.search(item_lower) and not _HIGHER_DEGREE_MANDATORY_RE.search(item_lower):
+        return True
+    if _ADMIN_BACKGROUND_RE.search(item_lower) or _ADMIN_SCHEDULE_RE.search(item_lower):
         return True
     return False
 
@@ -1585,6 +2081,240 @@ def _classify_one_item(
     return judgment.to_legacy_dict()
 
 
+def _prepare_skill_confirmations(
+    items: list[str],
+    *,
+    folder: Path,
+    company: str,
+    role: str,
+    internal_terms: list[str] | None,
+    db_path: Path | str | None = None,
+    work_exp: str = "",
+) -> tuple[list[dict[str, str]], dict[str, str], dict[str, str]]:
+    """Create advisory unknown-tool cards and return confirmed and absent terms.
+
+    CR-122: unknown tools are undocumented for this JD without a Review Center
+    tap. WE mention wins leftover NOT_PRESENT. Cards do not pause Stage 0.
+    Implements FR-357 / FR-358 / AC-465 / AC-466.
+    """
+    candidates = named_skill_candidates(
+        items,
+        known_terms=set(_load_skills_catalog_terms_shared()),
+        internal_terms=internal_terms,
+        employer=company,
+    )
+    pending: list[dict[str, str]] = []
+    confirmed_terms: dict[str, str] = {}
+    absent_terms: dict[str, str] = {}
+    for candidate in candidates:
+        # WE is closed-world truth. A leftover forever-No cannot veto a tool
+        # the candidate later wrote down.
+        if work_exp and _item_mentions_skill_term(work_exp, candidate.display_name):
+            continue
+        memory = get_skill_memory(candidate.skill_key, db_path)
+        if memory:
+            decision = str(memory.get("decision") or "")
+            if decision == "CONFIRMED_USE":
+                confirmed_terms[candidate.skill_key] = candidate.display_name
+            elif decision in {"NOT_PRESENT", "BAD_DATA"}:
+                # Live miss on velosio/omnissa: memory existed so Stage 0 did
+                # not pause, then scoring still mapped SOFT bridges onto the
+                # named tool. Persist absence so the packet can refuse it.
+                absent_terms[candidate.skill_key] = candidate.display_name
+            continue
+        # Absence is the closed world. A card is not created here. A card
+        # exists only later, for a tool that is why a job never went out.
+        # Implements FR-379.
+        absent_terms[candidate.skill_key] = candidate.display_name
+    return pending, confirmed_terms, absent_terms
+
+
+def _item_mentions_skill_term(item: str, display_name: str) -> bool:
+    """True when *item* contains the Review Center skill display name."""
+    name = (display_name or "").strip()
+    if not name:
+        return False
+    return re.search(re.escape(name), item or "", re.IGNORECASE) is not None
+
+
+def _cap_confirmed_presence(
+    result: dict,
+    item: str,
+    confirmed_terms: dict[str, str],
+) -> dict:
+    """Keep a bare skill attestation at evidence level one during scoring."""
+    for display_name in confirmed_terms.values():
+        if not _item_mentions_skill_term(item, display_name):
+            continue
+        result["evidence_level"] = min(int(result.get("evidence_level") or 0), 1)
+        result["gap"] = True
+        result["gap_class"] = "SOFT"
+        result["domain_soft"] = False
+        result["anchor"] = (
+            f"User-confirmed use of {display_name}; presence only, with no "
+            "source-backed duration, proficiency, scope, ownership, or outcome."
+        )
+        break
+    return result
+
+
+def _cap_absent_named_tools(
+    result: dict,
+    item: str,
+    absent_terms: dict[str, str],
+) -> dict:
+    """Score a Review Center NOT_PRESENT named tool as undocumented, not owned.
+
+    CR-108: known absent is scored as not documented. Tools stay SOFT (never a
+    HARD skip). Live miss on velosio/omnissa: answering NOT_PRESENT unpaused
+    Stage 0, then cascade still treated the JD product line as a mapped SOFT
+    bridge. Implements AC-456 / FR-283.
+    """
+    for display_name in absent_terms.values():
+        if not _item_mentions_skill_term(item, display_name):
+            continue
+        result["evidence_level"] = 0
+        result["gap"] = True
+        result["gap_class"] = "SOFT"
+        result["domain_soft"] = True
+        result["gate"] = "NONE"
+        result["gap_source"] = "tool"
+        result["anchor"] = (
+            f"Named tool {display_name} is not in verified work experience. "
+            "Do not treat this named tool as owned. Transferable bridge only; "
+            "do not write the JD tool name."
+        )
+        break
+    return result
+
+
+def _apply_skill_memory_caps(
+    result: dict,
+    item: str,
+    attested_skill_terms: dict[str, str],
+    absent_skill_terms: dict[str, str],
+) -> dict:
+    """Copy a cascade result, then apply CONFIRMED_USE then NOT_PRESENT caps."""
+    capped = dict(result)
+    capped = _cap_confirmed_presence(capped, item, attested_skill_terms)
+    return _cap_absent_named_tools(capped, item, absent_skill_terms)
+
+
+_YEARS_RE = re.compile(r"\d+\s*(?:\+|[-–]\s*\d+)?\s*years?", re.I)
+_DOMAIN_RE = re.compile(
+    r"\b(?:healthcare|health\s+care|health[\s-]industry|health[\s-]*tech|ceramic|medical)\b",
+    re.I,
+)
+_DOMAIN_NOISE_RE = re.compile(
+    r"\b(?:healthcare|health|medical)\s+(?:benefits?|insurance|coverage|leave|plans?)\b",
+    re.I,
+)
+_REQUIRED_MARK_RE = re.compile(r"\b(?:required|must(?:\s*[- ]have)?|minimum)\b", re.I)
+_PREFERRED_MARK_RE = re.compile(
+    r"\b(?:preferred|nice to have|nice-to-have|a plus|bonus)\b",
+    re.I,
+)
+
+
+def _required_span(sentence: str) -> str:
+    """Drop a preferred tail so it cannot create or cancel a domain skip."""
+    match = _PREFERRED_MARK_RE.search(sentence or "")
+    if match is None:
+        return sentence or ""
+    return sentence[: match.start()]
+
+
+def requirement_is_domain_years(text: str) -> bool:
+    """True when a required line demands a specialized domain Jason does not have.
+
+    Years plus healthcare, health industry, health tech, medical, or ceramic.
+    A sentence that says that domain experience is required also matches, so
+    the years number can sit in the next sentence. Benefits, "healthy," and a
+    preferred-only tail do not. Implements FR-378.
+    """
+    parts = re.split(r"(?<=[.!?])\s+", text or "")
+    for part in parts:
+        sentence = part.strip()
+        if not sentence:
+            continue
+        span = _required_span(sentence)
+        cleaned = _DOMAIN_NOISE_RE.sub(" ", span)
+        if not _DOMAIN_RE.search(cleaned):
+            continue
+        if _YEARS_RE.search(span) or _REQUIRED_MARK_RE.search(span):
+            return True
+    return False
+
+
+def _prepare_hard_gate_reviews(
+    classified_required: list[dict],
+    classified_preferred: list[dict],
+    flagged_gaps: list[dict],
+    *,
+    folder: Path,
+    company: str,
+    role: str,
+    db_path: Path | str | None,
+) -> list[dict[str, str]]:
+    """Apply written hard rules and turn every other HARD label into a zero.
+
+    Degree, certification, and domain-years stay HARD and do not open a card.
+    Any other model HARD counts as evidence 0. It does not open a card.
+    Implements FR-378 / FR-381.
+    """
+    candidates: list[tuple[str, str, dict]] = []
+    for bucket, results in (
+        ("required", classified_required),
+        ("preferred", classified_preferred),
+    ):
+        for ordinal, result in enumerate(results):
+            if result.get("gap_class") == "HARD":
+                candidates.append(
+                    (bucket, make_item_key(bucket, str(result.get("item") or ""), ordinal), result)
+                )
+    # The signature stays so callers can pass the folder. This pass does not
+    # write a card. Implements FR-381.
+    del folder, company, role, db_path
+    pending: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for bucket, _item_key, result in candidates:
+        item = str(result.get("item") or "").strip()
+        if not item or (bucket, item) in seen:
+            continue
+        seen.add((bucket, item))
+        # Degree, certification, and domain-years stay HARD with no card.
+        # Keep eligible cannot soften that class. Implements FR-378.
+        gap_source = str(result.get("gap_source") or "")
+        written_hard = gap_source in {"degree", "certification"} or (
+            bucket == "required" and requirement_is_domain_years(item)
+        )
+        if written_hard:
+            continue
+        # A model HARD that is not a written rule is a zero in the score.
+        # People management, payments ownership, and the other written
+        # exclusions already skipped before this function. Implements FR-381.
+        result["gap"] = True
+        result["gap_class"] = "SOFT"
+        result["evidence_level"] = 0
+        result["gate"] = "NONE"
+        result["domain_soft"] = False
+        result["anchor"] = (
+            "This required line is not in work experience. It counts as zero. "
+            "It does not disqualify the job on its own."
+        )
+        for flagged in flagged_gaps:
+            if flagged.get("item") == item and flagged.get("gap_class") == "HARD":
+                flagged["gap_class"] = "SOFT"
+                flagged["evidence_level"] = 0
+                flagged["anchor"] = result["anchor"]
+    return pending
+
+
+def _sha256_text(value: str) -> str:
+    """Return a content hash for a checkpoint input or item."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def classify_gaps(
     required_items: list[str],
     preferred_items: list[str],
@@ -1592,6 +2322,10 @@ def classify_gaps(
     vocab: set[str] | None = None,
     company: str = "",
     internal_terms: list[str] | None = None,
+    attested_skill_terms: dict[str, str] | None = None,
+    absent_skill_terms: dict[str, str] | None = None,
+    cached_results: dict[str, dict] | None = None,
+    judgment_callback: Callable[[str, int, str, dict], None] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Classify required and preferred items for gaps via the evidence-scale
@@ -1611,19 +2345,51 @@ def classify_gaps(
     company / internal_terms: same meaning as before — excludes the
     employer's own name/product names from being misread as an external
     tool requirement.
+    attested_skill_terms: user-confirmed skill names that remain capped at
+    evidence level 1 until separately promoted.
+    absent_skill_terms: Review Center NOT_PRESENT / BAD_DATA display names.
+    Named-tool JD items that mention them score as undocumented SOFT gaps
+    (evidence_level 0) and must not be treated as owned. Tools never HARD-skip.
+    cached_results: completed checkpoint results keyed by bucket/item ordinal,
+    produced by the CR-108 evidence cascade. Items missing from cached_results
+    are a real error (the cascade should have covered them) — raises
+    Stage0ExtractError rather than silently falling back.
+    judgment_callback: called after each newly computed judgment.
     """
     del vocab  # deprecated, unused — see docstring
 
     classified_required: list[dict] = []
-    for item in required_items:
+    for ordinal, item in enumerate(required_items):
+        cache_key = make_item_key("required", item, ordinal)
+        result = (cached_results or {}).get(cache_key)
+        if result is None:
+            raise Stage0ExtractError(
+                f"Required item {ordinal} missing from cascade cached_results "
+                f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini."
+            )
         classified_required.append(
-            _classify_one_item(item, work_exp, company=company, internal_terms=internal_terms)
+            _apply_skill_memory_caps(
+                result,
+                item,
+                attested_skill_terms or {},
+                absent_skill_terms or {},
+            )
         )
 
     classified_preferred: list[dict] = []
-    for item in preferred_items:
-        result = _classify_one_item(
-            item, work_exp, is_required=False, company=company, internal_terms=internal_terms
+    for ordinal, item in enumerate(preferred_items):
+        cache_key = make_item_key("preferred", item, ordinal)
+        result = (cached_results or {}).get(cache_key)
+        if result is None:
+            raise Stage0ExtractError(
+                f"Preferred item {ordinal} missing from cascade cached_results "
+                f"({item[:60]!r}) — cascade should have classified it via Groq/Gemini."
+            )
+        result = _apply_skill_memory_caps(
+            result,
+            item,
+            attested_skill_terms or {},
+            absent_skill_terms or {},
         )
         if result.get("domain_soft"):
             handling = "soft gap -- transferable-skill bridge required"
@@ -1701,7 +2467,18 @@ def classify_gaps(
 _DETERMINISTIC_0TO1_BUILD_RE = re.compile(
     r"(?:own|lead|drive|responsible\s+for)\w*\s+(?:the\s+|a\s+|this\s+)?"
     r"(?:zero.to.one|0.to.1)\s+(?:build|launch|creation)|"
-    r"(?:zero.to.one|0.to.1)\s+(?:build|launch)\s+of",
+    r"(?:zero.to.one|0.to.1)\s+(?:build|launch)\s+of|"
+    # 2026-09-01 Improvement #5: common exclusion-zone phrasing that the
+    # original regex missed. Each alternative is narrowly anchored to
+    # unambiguous 0-to-1 / founding framing, not to any generic mention of
+    # "first" or "build" — "first product manager" alone is NOT a match
+    # (could be a legitimate non-founding role), but "founding PM" or
+    # "first product manager to build from scratch" is.
+    r"(?:founding|first)\s+(?:pm|product\s+manager)\b(?=.*(?:build|launch|scratch|ground|nothing|greenfield|zero))|"
+    r"(?:build|create|launch)\s+(?:from\s+scratch|from\s+the\s+ground\s+up|from\s+nothing)\b|"
+    r"\bgreenfield\s+(?:product|build|launch)\b|"
+    r"(?:shaping|maturing)\s+an?\s+early.stage\s+product\s+area\b|"
+    r"(?:where|when)\s+none\s+(?:previously\s+)?existed\b",
     re.I,
 )
 
@@ -1710,6 +2487,8 @@ def screen_responsibilities_for_exclusion(
     work_exp: str,
     company: str = "",
     internal_terms: list[str] | None = None,
+    *,
+    settings: dict | None = None,
 ) -> list[dict]:
     """Responsibilities-bucket exclusion screen. Returns classify-shaped dicts
     (same shape _classify_one_item() returns for a HARD gap) for confirmed
@@ -1727,14 +2506,24 @@ def screen_responsibilities_for_exclusion(
     The free deterministic 0-to-1 regex stays as a zero-cost fast path ahead
     of it; only lines it doesn't already resolve pay for a real judgment call.
 
+    2026-09-01 Improvement #2: all non-deterministic responsibility lines
+    are batched into a single classify_requirements_batch() call instead of
+    one sequential classify_requirement() call per line. CR-108 Epic 7.7
+    (2026-09-09): the legacy per-line sequential classifier was removed --
+    a batch failure no longer falls back to it.
+
     Fails open per-line on a classification error: this is a bonus
     screening pass on top of the required/preferred judgments classify_gaps()
     already did, not a fail-closed gate -- one line's LLM error should never
-    abort a Stage 0 run that would otherwise have completed correctly.
+    abort a Stage 0 run that would otherwise have completed correctly. A
+    batch failure (both providers exhausted, validation error, etc.) is
+    caught and this pass returns only whatever Phase 1 already found rather
+    than raising -- unlike classify_gaps()'s cached_results miss, which is a
+    real error, this bonus pass failing just means one extra check didn't run.
     """
-    from evidence_scale import classify_requirement, EvidenceClassificationError
-
     hits: list[dict] = []
+    # Phase 1: deterministic 0-to-1 regex fast path (zero-cost, no LLM call).
+    unclassified_lines: list[str] = []
     for line in responsibilities or []:
         if _DETERMINISTIC_0TO1_BUILD_RE.search(line):
             hits.append({
@@ -1745,15 +2534,50 @@ def screen_responsibilities_for_exclusion(
                 "domain_soft": False,
                 "gap_source": "role_exclusion",
             })
-            continue
-        try:
-            judgment = classify_requirement(
-                line, work_exp, is_required=True, company=company, internal_terms=internal_terms,
-            )
-        except EvidenceClassificationError:
-            continue
-        if judgment.gate == "HARD":
-            hits.append(judgment.to_legacy_dict())
+        else:
+            unclassified_lines.append(line)
+
+    if not unclassified_lines:
+        return hits
+
+    # Phase 2: batch all remaining lines through the evidence cascade.
+    # CR-108 Epic 7.7 (2026-09-09): the legacy per-line sequential classifier
+    # (the old Phase 3 fallback) was removed after the cascade passed its
+    # release gate -- a batch failure no longer degrades to it. But this
+    # function's own fail-open contract (see docstring) still holds: a batch
+    # failure here means this bonus screening pass contributes nothing this
+    # run, not that the whole Stage 0 run for this opportunity should abort.
+    # Bug found on review (2026-09-09): an earlier version of this cutover
+    # let a batch failure propagate uncaught -- worse, as whatever raw
+    # exception type the cascade raises (CascadeValidationError, a transport
+    # error, ...), not even the Stage0ExtractError the workflow runner knows
+    # how to handle, so it also broke that error-type contract on the way out.
+    from stage0_evidence_cascade import BatchItem, classify_requirements_batch
+    from evidence_scale import build_evidence_context
+    from stage0_checkpoint import make_item_key
+
+    batch_items = [
+        BatchItem(
+            make_item_key("responsibility", line, ordinal),
+            "required",  # bucket="required" so HARD gates are allowed
+            line,
+            evidence_excerpt=build_evidence_context(
+                line, work_exp, k=4, max_chars=3000,
+            ),
+        )
+        for ordinal, line in enumerate(unclassified_lines)
+    ]
+    try:
+        batch_results = classify_requirements_batch(
+            batch_items,
+            settings=settings,
+        )
+    except Exception:
+        return hits
+    for batch_item in batch_items:
+        result = batch_results.get(batch_item.item_id)
+        if result and result.get("gate") == "HARD":
+            hits.append(result)
     return hits
 
 
@@ -1823,6 +2647,380 @@ def _determine_tier(
     return "Tier 1", "PASS"
 
 
+def _count_zero_evidence_required(rows: list) -> int:
+    """Count classified required rows explicitly scored evidence 0.
+
+    A missing evidence_level is not zero. Hire-site lines that were diverted
+    out of required are not in this list. Implements FR-385.
+    """
+    count = 0
+    for row in rows or []:
+        if not isinstance(row, dict) or "evidence_level" not in row:
+            continue
+        try:
+            level = int(row.get("evidence_level"))
+        except (TypeError, ValueError):
+            continue
+        if level == 0:
+            count += 1
+    return count
+
+
+def _apply_fit_score_to_tier(
+    *,
+    decision: str,
+    disqualified: bool,
+    fit_score: int,
+    skip_floor: int,
+    tier1_floor: int,
+    qual_required_n: int,
+    zero_evidence_required: int = 0,
+) -> tuple[str, str]:
+    """Apply CR-093 score bands without washing out an empty-required extract.
+
+    Step 5 already forced Tier 2 for required_empty. Step 5.5 used to overwrite
+    that to Skip when hire-site logistics scored evidence 0 (optum 2026-09-21,
+    fit 0 below the 40 floor). Empty required stays Tier 2 PASS. A real
+    qualification-shaped required list may still Skip below the floor.
+    A classified required row that is explicitly evidence 0 is a real miss
+    even when the qualification regex did not count it (Lumira, score 25).
+    Implements FR-385.
+    """
+    if disqualified:
+        return "Skip", "SKIP"
+    if decision != "PASS":
+        return "Skip", "SKIP"
+    if fit_score >= tier1_floor:
+        tier = "Tier 1"
+    elif fit_score >= skip_floor:
+        tier = "Tier 2"
+    elif qual_required_n == 0 and zero_evidence_required == 0:
+        return "Tier 2", "PASS"
+    else:
+        return "Skip", "SKIP"
+    if qual_required_n == 0 and tier == "Tier 1":
+        tier = "Tier 2"
+    return tier, "PASS"
+
+
+def _conversion_tool_is_chrome(name: str, company: str | None) -> bool:
+    """True when *name* must not withhold authoring (CR-124 / FR-367)."""
+    if _named_tool_surface_is_chrome(name):
+        return True
+    return _is_posting_employer_name(name, company)
+
+
+_ILLUSTRATIVE_MARKER_RE = re.compile(
+    r"\b(?:for example|such as|e\.g\.|including|or similar)\b",
+    re.IGNORECASE,
+)
+
+
+def _enclosing_paren(text: str, index: int) -> str | None:
+    """Return the parenthetical that contains *index*, without the parentheses."""
+    depth = 0
+    start: int | None = None
+    for i, ch in enumerate(text):
+        if ch == "(":
+            if depth == 0:
+                start = i + 1
+            depth += 1
+        elif ch == ")" and depth:
+            depth -= 1
+            if depth == 0 and start is not None and start <= index < i:
+                return text[start:i]
+            start = None
+    return None
+
+
+def illustrative_spans(item: str) -> list[str]:
+    """Return example-list spans. The requirement outside the span stays in force.
+
+    Implements FR-374. A product named on its own, outside these spans, is unchanged.
+    """
+    spans: list[str] = []
+    for match in _ILLUSTRATIVE_MARKER_RE.finditer(item or ""):
+        paren = _enclosing_paren(item, match.start())
+        if paren:
+            spans.append(paren)
+            continue
+        end = len(item)
+        for i in range(match.end(), len(item)):
+            if item[i] in ".!?":
+                end = i
+                break
+        spans.append(item[match.start() : end])
+    return spans
+
+
+def _term_in_text(term: str, text: str) -> bool:
+    """True when *term* appears as its own word or phrase in *text*."""
+    phrase = (term or "").strip()
+    if len(phrase) < 3 or not text:
+        return False
+    return (
+        re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", text, re.IGNORECASE) is not None
+    )
+
+
+def catalog_anchors_in_span(span: str, known_terms: object) -> list[str]:
+    """Catalog tools actually written in *span*.
+
+    A longer catalog phrase matches as a phrase. A short first token of a
+    longer phrase (aws inside ``aws s3``) matches that token. ``google
+    analytics`` does not match ``Google Cloud``. Implements FR-374.
+    """
+    found: list[str] = []
+    for term in known_terms or []:
+        raw = str(term or "").strip()
+        if not raw:
+            continue
+        phrase = re.split(r"\s*\(", raw, maxsplit=1)[0].strip()
+        if _term_in_text(phrase, span):
+            found.append(phrase.lower())
+            continue
+        # Catalog terms are stored lowercased, so caps are gone. A short
+        # first token of a longer phrase (aws inside "aws s3") is still
+        # the product. "google" inside "google analytics" is too long to
+        # count as that token, so it does not match Google Cloud.
+        head, _, rest = phrase.partition(" ")
+        if (
+            rest
+            and head.isalpha()
+            and 2 <= len(head) <= 5
+            and _term_in_text(head, span)
+        ):
+            found.append(head.lower())
+    return found
+
+
+def missing_tool_is_anchored_example(
+    item: str,
+    name: str,
+    known_terms: object,
+) -> bool:
+    """True when *name* is only an example beside a different catalog tool.
+
+    Implements FR-374. Dynamics on its own line stays a real withhold.
+    """
+    if not _term_in_text(name, item):
+        return False
+    missing_tokens = set(re.findall(r"[a-z0-9]+", name.lower()))
+    if not missing_tokens:
+        return False
+    for span in illustrative_spans(item):
+        if not _term_in_text(name, span):
+            continue
+        for anchor in catalog_anchors_in_span(span, known_terms):
+            anchor_tokens = set(re.findall(r"[a-z0-9]+", anchor))
+            if anchor_tokens and not anchor_tokens <= missing_tokens:
+                return True
+    return False
+
+
+def evaluate_conversion_feasibility(
+    *,
+    decision: str,
+    required: list,
+    not_present_named_tools: list | None = None,
+    company: str | None = None,
+    known_terms: object | None = None,
+) -> dict:
+    """CR-121: whether a Stage 0 PASS can support conversion R2/R3 identity.
+
+    Replay 2026-09-21 of parked velosio/certara/omnissa/outschool/goodrx gates
+    killed 'zero distinctive WE overlap'. All five already have required PM
+    items at evidence 3-4. The identity misses that parked honest 70 floors
+    with a named tool were required evidence-0 product lines (Dynamics,
+    Workspace ONE, Android, Delta Lake). Clinical/pharmacy identity sat in
+    preferred or at evidence 1 and is out of this band. Skip floor is
+    unchanged. This never changes decision/tier.
+
+    CR-124: employer names, section-header fragments, and methodology nouns
+    are chrome. They do not count as the required product this band withholds
+    for, even if an older extract listed them in not_present_named_tools.
+    """
+    if decision != "PASS":
+        return {"verdict": "n/a", "reasons": []}
+    if known_terms is None:
+        known_terms = _load_skills_catalog_terms_shared()
+    reasons: list[str] = []
+    seen: set[str] = set()
+    tools = not_present_named_tools or []
+    names = []
+    for row in tools:
+        if isinstance(row, dict):
+            name = str(row.get("display_name") or "").strip()
+        else:
+            name = str(row or "").strip()
+        if name and not _conversion_tool_is_chrome(name, company):
+            names.append(name)
+    for row in required or []:
+        if isinstance(row, dict):
+            item = str(row.get("item") or "")
+            evidence = row.get("evidence_level")
+        else:
+            item = str(row or "")
+            evidence = None
+        if not item:
+            continue
+        lower = item.lower()
+        for name in names:
+            if missing_tool_is_anchored_example(item, name, known_terms):
+                continue  # Implements FR-374
+            key = f"not_present_required_tool:{name}"
+            if name.lower() in lower and key not in seen:
+                seen.add(key)
+                reasons.append(key)
+        if evidence == 0:
+            present_names = {n.lower() for n in names}
+            for hit in _looks_like_named_tool(item):
+                if _conversion_tool_is_chrome(hit, company):
+                    continue
+                if missing_tool_is_anchored_example(item, hit, known_terms):
+                    continue  # Implements FR-374
+                if " " not in hit.strip() and hit.lower() not in present_names:
+                    continue
+                key = f"required_unproven_named_tool:{hit}"
+                if key not in seen:
+                    seen.add(key)
+                    reasons.append(key)
+    if reasons:
+        # A named tool missing from work experience is a Review Center card,
+        # not a pause. Employer names, time zones, and regions are already
+        # chrome above. Dynamics and Delta Lake stay in the reason list so
+        # the card path can see them, and authoring continues without
+        # claiming them. Jason, 2026-09-22.
+        return {"verdict": "ok", "reasons": reasons}
+    return {"verdict": "ok", "reasons": []}
+
+
+def stored_conversion_risk_is_chrome(folder: Path) -> bool:
+    """True when every stored risk reason names market or industry chrome.
+
+    Reads the reason strings already on the gate. Does not rewrite the gate
+    and does not call a model. A missing gate, or any real product such as
+    Dynamics, stays risk. Implements FR-367.
+    """
+    gate_path = Path(folder) / "stage0_fit_gate.json"
+    if not gate_path.is_file():
+        return False
+    try:
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(gate, dict):
+        return False
+    stored = gate.get("conversion_feasibility") or {}
+    if not isinstance(stored, dict) or stored.get("verdict") != "risk":
+        return False
+    reasons = stored.get("reasons") or []
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    company = gate.get("company") if isinstance(gate.get("company"), str) else None
+    names: list[str] = []
+    for reason in reasons:
+        if not isinstance(reason, str) or ":" not in reason:
+            return False
+        name = reason.split(":", 1)[1].strip()
+        if not name:
+            return False
+        names.append(name)
+    return all(_conversion_tool_is_chrome(name, company) for name in names)
+
+
+def stored_conversion_risk_is_anchored_example(
+    folder: Path,
+    known_terms: object | None = None,
+) -> bool:
+    """True when every stored risk name is an example beside a catalog tool.
+
+    Reads the gate already on disk. Does not rebuild Stage 0. A missing gate,
+    or any reason that is a real product, stays risk. Implements FR-374.
+    """
+    gate_path = Path(folder) / "stage0_fit_gate.json"
+    if not gate_path.is_file():
+        return False
+    try:
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(gate, dict):
+        return False
+    stored = gate.get("conversion_feasibility") or {}
+    if not isinstance(stored, dict) or stored.get("verdict") != "risk":
+        return False
+    reasons = stored.get("reasons") or []
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    if known_terms is None:
+        known_terms = _load_skills_catalog_terms_shared()
+    required = gate.get("required") or []
+    if not isinstance(required, list):
+        return False
+    for reason in reasons:
+        if not isinstance(reason, str) or ":" not in reason:
+            return False
+        name = reason.split(":", 1)[1].strip()
+        if not name:
+            return False
+        if not any(
+            missing_tool_is_anchored_example(
+                str(row.get("item") or "") if isinstance(row, dict) else str(row or ""),
+                name,
+                known_terms,
+            )
+            for row in required
+        ):
+            return False
+    return True
+
+
+def stored_conversion_risk_is_tool_absence(folder: Path) -> bool:
+    """True when every stored risk reason is a named tool missing from work experience.
+
+    Those reasons stay on the gate for the Review Center card. They do not
+    withhold authoring. A missing gate, or a reason that is not a tool
+    absence, stays paused. Jason, 2026-09-22.
+    """
+    gate_path = Path(folder) / "stage0_fit_gate.json"
+    if not gate_path.is_file():
+        return False
+    try:
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(gate, dict):
+        return False
+    stored = gate.get("conversion_feasibility") or {}
+    if not isinstance(stored, dict) or stored.get("verdict") != "risk":
+        return False
+    reasons = stored.get("reasons") or []
+    if not isinstance(reasons, list) or not reasons:
+        return False
+    prefixes = ("not_present_required_tool:", "required_unproven_named_tool:")
+    for reason in reasons:
+        if not isinstance(reason, str) or not reason.startswith(prefixes):
+            return False
+        if not reason.split(":", 1)[1].strip():
+            return False
+    return True
+
+
+def stored_conversion_risk_can_continue(folder: Path) -> bool:
+    """True when a parked risk should author without apply_anyway.
+
+    Chrome, an anchored example list, or a named tool missing from work
+    experience all continue. A missing gate stays paused. Implements
+    FR-367 and FR-374. Tool absence no longer withholds as of 2026-09-22.
+    """
+    return (
+        stored_conversion_risk_is_chrome(folder)
+        or stored_conversion_risk_is_anchored_example(folder)
+        or stored_conversion_risk_is_tool_absence(folder)
+    )
+
+
 def _build_exclusion_zone_summary(prefs_result: dict) -> str:
     """Compose a human-readable exclusion zone summary line."""
     exclusion_codes = {
@@ -1851,6 +3049,7 @@ def build_stage0_fit_gate(
     *,
     ignore_skip_ledger: bool = False,
     skip_ledger_db: Path | str | None = None,
+    confirmation_db_path: Path | str | None = None,
 ) -> dict:
     """
     Full Stage 0 fit-gate for the submission folder at *folder_path*.
@@ -1882,6 +3081,10 @@ def build_stage0_fit_gate(
 
     if not jd_file.exists():
         raise FileNotFoundError(f"Original_JD.txt not found in {folder}")
+
+    # 2026-09-01: clean up any stale spool files from a previous failed run
+    # before starting a new Stage 0 evaluation.
+    clean_spool(folder)
 
     raw_text = jd_file.read_text(encoding="utf-8", errors="replace")
     url, jd_text = _parse_url_and_jd(raw_text)
@@ -1965,7 +3168,13 @@ def build_stage0_fit_gate(
         # between the CSV company and the JD's own self-identified employer
         # (e.g. "AdaMarie" carrying a Pinterest posting) gets checked under
         # both names, not just whatever the CSV happened to say.
-        db_gate_result = evaluate_db_gate(company_display, role=role, db_path=_DEFAULT_DB, jd_text=jd_text)
+        db_gate_result = evaluate_db_gate(
+            company_display,
+            role=role,
+            db_path=_DEFAULT_DB,
+            jd_text=jd_text,
+            url=url or None,
+        )
 
     db_action = db_gate_result.get("action", "clear")
 
@@ -1991,6 +3200,28 @@ def build_stage0_fit_gate(
             "notes": db_gate_result.get("reason", "DB gate reject"),
         }
         return output
+
+    # Same-posting Applied+ is a terminal, not Skip and not PASS-with-flag.
+    # Implements FR-365 / AC-474. No skip_reason_code so placement cannot
+    # treat this as a Skip. Do not attach active_application.
+    if db_action == "already_handled":
+        return {
+            "company": company_display,
+            "role": role,
+            "url": url or None,
+            "decision": "ALREADY_HANDLED",
+            "tier": "Skip",
+            "reach_out": False,
+            "stage_signal": _detect_stage_signal(jd_text),
+            "thin_jd": _detect_thin_jd(jd_text, []),
+            "required": [],
+            "preferred": [],
+            "responsibilities": [],
+            "culture": [],
+            "flagged_gaps": [],
+            "exclusion_zone_check": "n/a (already handled at DB gate)",
+            "notes": db_gate_result.get("reason", "Same posting already handled"),
+        }
 
     # --- Step 2: Prefs / exclusion gate ---
     prefs_result = run_prefs_gate_safe(company_display, jd_text, prefs)
@@ -2041,10 +3272,101 @@ def build_stage0_fit_gate(
     if sections is None:
         sections = _extract_sections(jd_text)
         extraction_source = "deterministic"
+    for name in _empty_extraction_buckets():
+        sections.setdefault(name, [])
+
+    # --- Step 3.5: three-way qualification-risk gate (CR-112) ---
+    # PIN 4: spliced in right after sections = ..., before
+    # _count_qualification_required / _detect_thin_jd / _cap_requirement_bucket
+    # read required_raw below. PIN 1: everything in this block runs before
+    # run_key/request_hash/start_run exist (built further below) -- a pause
+    # raised here is receipt-only: no stage0_runs row, no mark_run_status
+    # call. Only the NLP extractor's own unresolved queue is in scope here
+    # (_extract_sections_llm already fails closed with no fallback queue; the
+    # deterministic regex path has no such concept) -- see the CR-112 design
+    # doc's Scope section.
+    requirement_extraction_review: dict = {"bypassed_non_qualification": []}
+    unresolved_queue = list(sections.get("unresolved_for_review") or []) if extraction_source == "nlp" else []
+    if unresolved_queue:
+        from stage0_qualification_risk_gate import classify_qualification_risk, NON_QUALIFICATION
+        from stage0_requirement_extraction_review import (
+            RequirementExtractionReviewValidationError,
+            consume_review_import,
+            try_load_review_import,
+            write_review_template,
+        )
+
+        gate_items: list[dict] = []
+        for entry in unresolved_queue:
+            item_text = entry.get("text", "")
+            item_header = entry.get("header", "")
+            label, reason_code = classify_qualification_risk(
+                item_text, header=item_header, role_title=role
+            )
+            gate_items.append(
+                {
+                    "text": item_text,
+                    "header": item_header,
+                    "label": label,
+                    "reason_code": reason_code,
+                    "extraction_reason": entry.get("reason"),
+                    "model_call_occurred": bool(entry.get("model_call_occurred", False)),
+                }
+            )
+        needs_review = any(item["label"] != NON_QUALIFICATION for item in gate_items)
+
+        if needs_review:
+            _review_jd_hash = _sha256_text(jd_text)
+            try:
+                resolved_buckets = try_load_review_import(
+                    folder,
+                    gate_items,
+                    submission_slug=folder.name,
+                    jd_sha256=_review_jd_hash,
+                )
+            except RequirementExtractionReviewValidationError as exc:
+                # Unreadable consumed review fails closed. Invalid live, or a
+                # consumed file bound to a different JD/queue, re-pauses so a
+                # new review can be answered. Print the reason so a Vanta-style
+                # restart is not mistaken for a first-time pause.
+                if getattr(exc, "fail_closed", False):
+                    raise
+                print(f"[Stage 0] requirement-extraction-review rejected: {exc}")
+                resolved_buckets = None
+            if resolved_buckets is None:
+                write_review_template(
+                    folder,
+                    submission_slug=folder.name,
+                    jd_sha256=_review_jd_hash,
+                    queue=gate_items,
+                )
+                raise Stage0RequirementExtractionReviewNeeded(folder.name, gate_items)
+            # A human (or a harness answering on a human's behalf) supplied an
+            # explicit, exact-text-bound bucket for every queued item --
+            # apply it. "exclude" means confirmed non-requirement content,
+            # same disposition a NON_QUALIFICATION bypass gets automatically.
+            consume_review_import(folder)
+            for idx, item in enumerate(gate_items):
+                bucket = resolved_buckets[idx]
+                item["resolved_bucket"] = bucket
+                if bucket == "exclude":
+                    continue
+                sections.setdefault(bucket, []).append(item["text"])
+
+        requirement_extraction_review["bypassed_non_qualification"] = [
+            item for item in gate_items if item["label"] == NON_QUALIFICATION
+        ]
+        requirement_extraction_review["queue"] = gate_items
+
+    sections = _divert_scored_chrome(sections)
     required_raw = sections["required"]
     preferred_raw = sections["preferred"]
     responsibilities = sections["responsibilities"]
-    culture = sections["culture"]
+    culture = [
+        line for line in sections.get("culture", [])
+        if line and not _is_boilerplate_item(line)
+    ]
+    junk = [line for line in sections.get("junk", []) if line]
     # Only present when extraction_source == "llm" -- the regex fallback
     # path (_extract_sections) has no model reading the whole JD to notice
     # a company's own product/platform names, so it never populates this.
@@ -2059,6 +3381,96 @@ def build_stage0_fit_gate(
     # this cap exists to bound) -- see _cap_requirement_bucket() above.
     required_raw, required_dropped_n = _cap_requirement_bucket(required_raw)
     preferred_raw, preferred_dropped_n = _cap_requirement_bucket(preferred_raw)
+
+    # Resolved once, up front, so every Review Center write in this function --
+    # skill confirmations included -- honors the same override. Previously this
+    # was computed after _prepare_skill_confirmations() already ran with the
+    # raw (unresolved) confirmation_db_path param, so APPLYR_STAGE0_REVIEW_DB
+    # silently never reached skill confirmations and they always landed in the
+    # real production DB regardless of the override (found 2026-09-01, testing
+    # archived opportunities against an isolated review DB: 12 skill-confirmation
+    # rows landed in data/jobagent.sqlite instead of the intended test DB).
+    checkpoint_db_path = confirmation_db_path or os.environ.get("APPLYR_STAGE0_REVIEW_DB")
+    checkpoint_db_path = checkpoint_db_path or _DEFAULT_DB
+
+    # work_exp is the exact source text used to build the evidence context.
+    # Its hash participates in the run key so a changed source invalidates reuse.
+    from utils import load_file, WORK_EXP_FILE
+    work_exp = load_file(WORK_EXP_FILE) or ""
+    # CR-122: create Review Center cards and auto-absent unknown tools before
+    # scoring. Do not raise Stage0NeedsInput for skill_presence.
+    pending_confirmations, attested_skill_terms, absent_skill_terms = (
+        _prepare_skill_confirmations(
+            required_raw + preferred_raw,
+            folder=folder,
+            company=company_display,
+            role=role,
+            internal_terms=internal_terms,
+            db_path=checkpoint_db_path,
+            work_exp=work_exp,
+        )
+    )
+    jd_hash = _sha256_text(jd_text)
+    evidence_index_hash = _sha256_text(work_exp)
+    prompt_version = "evidence-scale-v1"
+    from utils import load_llm_settings
+    stage0_settings: dict = load_llm_settings()
+    # CR-108 Epic 7.2: model-flagged named tools (needs_user_confirmation +
+    # canonical_skill from the batch response) accumulate here so the fit gate
+    # can create the same durable pending items the deterministic extractor
+    # path creates, after the provider call that flagged them.
+    model_flagged_skills: list[dict[str, str]] = []
+    provider_policy_hash = _sha256_text(
+        json.dumps(
+            (stage0_settings.get("stage0_evidence_classification") or {}),
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+    )
+    run_key = make_run_key(
+        folder.name,
+        jd_hash,
+        prompt_version,
+        provider_policy_hash,
+        evidence_index_hash,
+    )
+    request_hash = _sha256_text(
+        json.dumps(
+            {
+                "run_key": run_key,
+                "required": required_raw,
+                "preferred": preferred_raw,
+            },
+            sort_keys=True,
+            ensure_ascii=False,
+        )
+    )
+    request_spool_path: str | None = None
+    checkpoint_boundary("before_request_spool")
+    request_spool_path, request_hash = write_spool(
+        folder,
+        "request",
+        run_key,
+        {
+            "run_key": run_key,
+            "required": required_raw,
+            "preferred": preferred_raw,
+        },
+    )
+    checkpoint_boundary("after_request_spool")
+    start_run(
+        checkpoint_db_path,
+        run_key=run_key,
+        opportunity_key=folder.name,
+        jd_hash=jd_hash,
+        prompt_version=prompt_version,
+        provider_policy_hash=provider_policy_hash,
+        evidence_index_hash=evidence_index_hash,
+        request_hash=request_hash,
+        request_spool_path=request_spool_path,
+    )
+    checkpoint_boundary("after_run_requested")
+    mark_run_status(checkpoint_db_path, run_key, "RUNNING")
 
     # --- Step 4: Gap classification (CR-093 evidence-scale engine) ---
     # Extract and score now use the same model (qwen2.5:7b-instruct-q4_K_M).
@@ -2083,11 +3495,280 @@ def build_stage0_fit_gate(
     # Epic 2 Story 2.1) rather than this caller blind-truncating up front;
     # a blind 8000-char prefix was confirmed live to miss real evidence
     # (Pendo/Amplitude, ~char 27800 of the real document).
-    from utils import load_file, WORK_EXP_FILE
-    work_exp = load_file(WORK_EXP_FILE) or ""
+    # The evidence index hash above is computed from the exact source text
+    # supplied to the classifier.
+    cached_results: dict[str, dict] = {}
+    for bucket, items in (("required", required_raw), ("preferred", preferred_raw)):
+        for ordinal, item in enumerate(items):
+            item_key = make_item_key(bucket, item, ordinal)
+            cached = get_completed_judgment(
+                checkpoint_db_path,
+                run_key=run_key,
+                item_key=item_key,
+                request_hash=request_hash,
+                content_hash=_sha256_text(item),
+                evidence_index_hash=evidence_index_hash,
+            )
+            if cached and isinstance(cached.get("judgment"), dict):
+                cached_results[item_key] = cached["judgment"]
+
+    def _persist_judgment(bucket: str, ordinal: int, item: str, judgment: dict) -> None:
+        """Persist a newly computed Stage 0 item judgment for safe resume."""
+        item_key = make_item_key(bucket, item, ordinal)
+        complete_judgment(
+            checkpoint_db_path,
+            judgment_key=f"{run_key}:{item_key}",
+            run_key=run_key,
+            opportunity_key=folder.name,
+            item_key=item_key,
+            item_text=item,
+            bucket=bucket,
+            request_hash=request_hash,
+            content_hash=_sha256_text(item),
+            evidence_index_hash=evidence_index_hash,
+            judgment=judgment,
+            provider="local",
+            model="evidence_scale",
+        )
+        checkpoint_boundary("after_judgment_commit")
+
+    import pipeline_env
+    cascade_import_meta: dict | None = None
+    uncached_items = [
+        (bucket, ordinal, item)
+        for bucket, items in (("required", required_raw), ("preferred", preferred_raw))
+        for ordinal, item in enumerate(items)
+        if make_item_key(bucket, item, ordinal) not in cached_results
+    ]
+    if uncached_items:
+        from stage0_evidence_cascade import (
+            BatchItem,
+            CascadeReviewNeeded,
+            CascadeValidationError,
+            CASCADE_IMPORT_NAME,
+            CASCADE_IMPORT_TEMPLATE_NAME,
+            classify_requirements_batch,
+            try_load_cascade_import,
+            write_cascade_import_template,
+        )
+        from evidence_scale import build_evidence_context
+        from cost_eligibility import (
+            CostPauseError,
+            budget_ledger_from_settings,
+            overlay_persisted_budget,
+        )
+        from stage0_checkpoint import get_run_metadata
+
+        batch_items = [
+            BatchItem(
+                make_item_key(bucket, item, ordinal),
+                bucket,
+                item,
+                # 2026-09-01: reduced from 6000 to 3000 to stay under Groq's
+                # 8000 TPM free-tier limit. With 9 items (a large JD), 6000 chars
+                # per item produced ~13500 tokens — well over the limit. At 3000
+                # chars per item, 9 items produce ~6750 tokens, safely under 8000.
+                evidence_excerpt=build_evidence_context(
+                    item,
+                    work_exp,
+                    k=4,
+                    max_chars=3000,
+                ),
+            )
+            for bucket, ordinal, item in uncached_items
+        ]
+        cascade_telemetry = {
+            "stage0_cascade_batches": 1,
+            "stage0_cascade_provider_calls": 0,
+            "stage0_cascade_fallbacks": 0,
+            "stage0_cascade_items": len(batch_items),
+        }
+
+        def _record_provider_event(provider: str, event: str) -> None:
+            """Record provider names and aggregate cascade events without payload text."""
+            del provider
+            if event == "call":
+                cascade_telemetry["stage0_cascade_provider_calls"] += 1
+            elif event == "fallback":
+                cascade_telemetry["stage0_cascade_fallbacks"] += 1
+
+        try:
+            checkpoint_boundary("before_provider_call")
+
+            def _spool_response(raw_response: str) -> None:
+                """Persist the provider response before validation or judgment writes."""
+                response_path, response_hash = write_spool(
+                    folder,
+                    "response",
+                    run_key,
+                    {"raw_response": raw_response},
+                )
+                mark_run_status(
+                    checkpoint_db_path,
+                    run_key,
+                    "RUNNING",
+                    response_spool_path=response_path,
+                    response_hash=response_hash,
+                )
+                checkpoint_boundary("after_response_spool")
+
+            ledger = budget_ledger_from_settings(stage0_settings)
+            overlay_persisted_budget(ledger, get_run_metadata(checkpoint_db_path, run_key))
+
+            def _persist_ledger(current) -> None:
+                update_run_metadata(
+                    checkpoint_db_path,
+                    run_key,
+                    {
+                        "paid_remaining_cents": current.remaining_cents,
+                        "paid_batch_remaining_cents": current.batch_remaining_cents,
+                    },
+                )
+
+            ledger.persist = _persist_ledger
+
+            def _pause_for_cost(exc: BaseException) -> Stage0CostAuthorizationNeeded:
+                write_cascade_import_template(
+                    folder,
+                    submission_slug=folder.name,
+                    jd_sha256=jd_hash,
+                    items=batch_items,
+                )
+                mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
+                pause = (
+                    stage0_cost_pause_from_error(exc)
+                    if isinstance(exc, CostPauseError)
+                    else Stage0CostAuthorizationNeeded(
+                        reason=getattr(exc, "args", ("invalid_cascade_import",))[0]
+                        if not isinstance(exc, Stage0CostAuthorizationNeeded)
+                        else exc.reason,
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                        next_paths=["import_cascade_json"],
+                    )
+                )
+                if isinstance(exc, Stage0CostAuthorizationNeeded):
+                    pause = exc
+                pause.next_paths = [
+                    f"write {CASCADE_IMPORT_NAME} in this folder (template: {CASCADE_IMPORT_TEMPLATE_NAME})",
+                    "certify_zero_charge",
+                    "paid_allowlist_budget",
+                ]
+                return pause
+
+            imported = try_load_cascade_import(
+                folder,
+                batch_items,
+                submission_slug=folder.name,
+                jd_sha256=jd_hash,
+            )
+            if imported is not None:
+                batch_results = imported["results"]
+                cascade_import_meta = {
+                    "used": True,
+                    "import_source": "manual",
+                    "import_sha256": imported["import_sha256"],
+                    "schema_version": imported["schema_version"],
+                    "validation": imported["validation"],
+                    "model_call_occurred": False,
+                    "cost_applicable": False,
+                }
+            else:
+                batch_results = classify_requirements_batch(
+                    batch_items,
+                    settings=stage0_settings,
+                    raw_response_callback=_spool_response,
+                    provider_event_callback=_record_provider_event,
+                    folder=folder,
+                    cost_ledger=ledger,
+                    allow_import=False,
+                )
+            cascade_telemetry["paid_remaining_cents"] = ledger.remaining_cents
+            if ledger.batch_remaining_cents is not None:
+                cascade_telemetry["paid_batch_remaining_cents"] = ledger.batch_remaining_cents
+        except CostPauseError as exc:
+            clean_spool(folder)
+            raise _pause_for_cost(exc) from exc
+        except CascadeReviewNeeded as exc:
+            dropped = list(exc.missing_item_ids)
+            cascade_telemetry["missing_item_ids"] = dropped
+            suffix = f" {dropped}" if dropped else ""
+            raise _pause_for_cost(
+                Stage0CostAuthorizationNeeded(
+                    reason=f"subscription_review:{exc}{suffix}",
+                    authorization_mode="manual_paste",
+                    model_call_occurred=True,
+                    missing_item_ids=dropped,
+                )
+            ) from exc
+        except CascadeValidationError as exc:
+            import_path = folder / CASCADE_IMPORT_NAME
+            if import_path.is_file():
+                clean_spool(folder)
+                raise _pause_for_cost(
+                    Stage0CostAuthorizationNeeded(
+                        reason="invalid_cascade_import",
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                    )
+                ) from exc
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        except UnicodeDecodeError as exc:
+            import_path = folder / CASCADE_IMPORT_NAME
+            if import_path.is_file():
+                clean_spool(folder)
+                raise _pause_for_cost(
+                    Stage0CostAuthorizationNeeded(
+                        reason="invalid_cascade_import",
+                        authorization_mode="manual_paste",
+                        model_call_occurred=False,
+                    )
+                ) from exc
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        except Stage0CostAuthorizationNeeded:
+            raise
+        except Exception as exc:
+            mark_run_status(checkpoint_db_path, run_key, "FAILED")
+            clean_spool(folder)
+            raise Stage0ExtractError(
+                f"Stage 0 evidence cascade could not produce a valid batch: {exc}"
+            ) from exc
+        finally:
+            update_run_metadata(checkpoint_db_path, run_key, cascade_telemetry)
+        for batch_item in batch_items:
+            result = batch_results[batch_item.item_id]
+            _persist_judgment(
+                batch_item.bucket,
+                int(batch_item.item_id.split(":", 2)[1]),
+                batch_item.requirement,
+                result,
+            )
+            cached_results[batch_item.item_id] = result
+            if (
+                result.get("needs_user_confirmation")
+                and result.get("skill_kind") == "tool"
+                and result.get("canonical_skill")
+            ):
+                model_flagged_skills.append(
+                    {
+                        "skill_key": str(result["canonical_skill"]),
+                        "requirement": batch_item.requirement,
+                    }
+                )
+
     classified_required, classified_preferred, flagged_gaps = classify_gaps(
         required_raw, preferred_raw, work_exp=work_exp, company=company_display,
-        internal_terms=internal_terms,
+        internal_terms=internal_terms, attested_skill_terms=attested_skill_terms,
+        absent_skill_terms=absent_skill_terms,
+        cached_results=cached_results, judgment_callback=_persist_judgment,
     )
 
     # 2026-08-21 follow-up to Fix 1: the JD's own role-framing prose lives in
@@ -2095,6 +3776,7 @@ def build_stage0_fit_gate(
     # real classifier only on a hit -- see screen_responsibilities_for_exclusion().
     resp_exclusion_hits = screen_responsibilities_for_exclusion(
         responsibilities, work_exp, company=company_display, internal_terms=internal_terms,
+        settings=stage0_settings,
     )
     if resp_exclusion_hits:
         classified_required.extend(resp_exclusion_hits)
@@ -2107,6 +3789,38 @@ def build_stage0_fit_gate(
             }
             for h in resp_exclusion_hits
         )
+
+    # CR-108 Epic 7.7 (2026-09-09): the cascade is now the only classification
+    # path — the legacy per-line local classifier was removed after the cascade
+    # passed its release gate (7.3/7.4/7.5). Model-proposed HARD decisions are
+    # always reviewable, and model-flagged named tools always create durable
+    # pending items.
+    pending_hard_reviews = _prepare_hard_gate_reviews(
+        classified_required,
+        classified_preferred,
+        flagged_gaps,
+        folder=folder,
+        company=company_display,
+        role=role,
+        db_path=checkpoint_db_path,
+    )
+    # A model-flagged tool is absent. It does not open a card. Implements FR-379.
+    for flagged in model_flagged_skills:
+        skill_key = canonical_skill_key(flagged["skill_key"])
+        if not model_flagged_named_skill(flagged["skill_key"], flagged["requirement"]):
+            continue  # Implements CR-114: generic traits are not named-tool cards.
+        display_name = " ".join(
+            word.capitalize() for word in skill_key.split("_")
+        )
+        if _conversion_tool_is_chrome(display_name, company_display):
+            continue  # Implements FR-367: employer, header, and methodology are not tools.
+        if get_skill_memory(skill_key, checkpoint_db_path):
+            continue
+        # Same closed world as the deterministic scan. No card. Implements FR-379.
+        absent_skill_terms[skill_key] = display_name
+    if pending_hard_reviews:
+        mark_run_status(checkpoint_db_path, run_key, "WAITING_FOR_INPUT")
+        raise Stage0NeedsInput(folder.name, pending_hard_reviews)
 
     # Empty buckets on a non-thin JD → fail closed to Tier 2 (never fake clean Tier 1)
     word_count = len(re.findall(r"\w+", jd_text or ""))
@@ -2202,24 +3916,20 @@ def build_stage0_fit_gate(
     # else. See load_score_bands()'s docstring for the full reasoning.
     skip_floor, tier1_floor = load_score_bands()
 
-    if score_result["disqualified"]:
-        tier = "Skip"
-        decision = "SKIP"
-    elif decision == "PASS":
-        if fit_score >= tier1_floor:
-            tier = "Tier 1"
-        elif fit_score >= skip_floor:
-            tier = "Tier 2"
-        else:
+    if score_result["disqualified"] or decision != "PASS":
+        if score_result["disqualified"]:
             tier = "Skip"
             decision = "SKIP"
-        # Score must not wash out an empty-required extract (Beyond-class,
-        # 2026-08-10). Step 5 already forced Tier 2 for required_empty;
-        # Step 5.5 then overwrote it whenever preferred items scored >= 65
-        # (confirmed live 2026-08-20: a Jira/Confluence preferred-only
-        # fixture landed Tier 1). Empty required stays visible as Tier 2.
-        if qual_required_n == 0 and decision == "PASS" and tier == "Tier 1":
-            tier = "Tier 2"
+    elif decision == "PASS":
+        tier, decision = _apply_fit_score_to_tier(
+            decision=decision,
+            disqualified=score_result["disqualified"],
+            fit_score=fit_score,
+            skip_floor=skip_floor,
+            tier1_floor=tier1_floor,
+            qual_required_n=qual_required_n,
+            zero_evidence_required=_count_zero_evidence_required(classified_required),
+        )
 
     # --- Step 6: Build skip_reason if needed ---
     skip_reason: str | None = None
@@ -2334,11 +4044,28 @@ def build_stage0_fit_gate(
         "preferred": classified_preferred,
         "responsibilities": responsibilities[:8],
         "culture": culture[:4],
+        "junk": junk[:20],
         "flagged_gaps": flagged_gaps,
         "zero_anchor_required_items": zero_anchor_required,
         "exclusion_zone_check": exclusion_check,
+        "prefs_gate_rejects": [r["code"] for r in prefs_result.get("rejects", [])],
+        "prefs_gate_flags": [f["code"] for f in prefs_result.get("flags", [])],
         "notes": " ".join(notes_parts) or tier,
+        # CR-112 test 10: NON_QUALIFICATION bypasses from the three-way gate
+        # are always visible here with their reason code, never silent, even
+        # when nothing paused (every item bypassed).
+        "requirement_extraction_review": requirement_extraction_review,
+        "not_present_named_tools": [
+            {"skill_key": key, "display_name": name}
+            for key, name in sorted(absent_skill_terms.items())
+        ],
     }
+    output["conversion_feasibility"] = evaluate_conversion_feasibility(
+        decision=decision,
+        required=classified_required,
+        not_present_named_tools=output["not_present_named_tools"],
+        company=company_display,
+    )
 
     if skip_reason:
         output["skip_reason"] = skip_reason
@@ -2369,6 +4096,12 @@ def build_stage0_fit_gate(
         output["active_application"] = active_application
         flag_note = f"DB shows an active (non-terminal) application already on file: {active_application[0].get('status')} -- verify this isn't a duplicate before sending."
         output["notes"] = (output.get("notes") or "") + " " + flag_note
+
+    if cascade_import_meta:
+        output["cascade_import"] = cascade_import_meta
+
+    mark_run_status(checkpoint_db_path, run_key, "COMPLETE")
+    checkpoint_boundary("after_run_complete")
 
     # Free VRAM once Stage 0 is done. Targeted /api/ps unload, not a sweep
     # of every installed tag. In a batch, the next role's before-extract
@@ -2444,15 +4177,32 @@ def _prepare_stage0_score_model() -> None:
 
 
 def run_prefs_gate_safe(company: str, jd_text: str, prefs: dict) -> dict:
-    """Thin wrapper that catches import errors during tests."""
+    """Fail-loud wrapper: runs the prefs gate and surfaces errors visibly.
+
+    Previously this caught ALL exceptions and returned ``passed: True``
+    silently, which meant every deterministic gate (industry, title, years,
+    exclusion zones, solo PM) was skipped with no trace in the output.
+    Found 2026-09-03: this was not the direct cause of the gate escapes
+    (the gates ran without exceptions but had logic bugs), but it is the
+    highest-risk pattern for future drift — if any import inside
+    ``run_prefs_gate`` fails, all gates silently pass.
+
+    Now: logs the error to stderr and includes it in the result flags, but
+    still passes (fail-open with compensating controls) because the
+    evidence-scale fit scoring still runs and can catch bad fits. The error
+    is also stored in the stage0 output via ``prefs_gate_error`` so it is
+    visible in the JSON artifact, not just stderr.
+    """
     try:
         from stage0_prefs_gate import run_prefs_gate
         return run_prefs_gate(company, jd_text, prefs)
     except Exception as exc:
+        print(f"WARNING: prefs gate failed to run: {exc}", file=sys.stderr)
         return {
             "passed": True,
             "rejects": [],
             "flags": [{"code": "prefs_gate_error", "note": str(exc)}],
+            "_gate_failed": True,
         }
 
 

@@ -1,0 +1,7 @@
+slug: accertify
+why: first sorted DEV slug that is not in the reserved already-read set
+mode: practice
+folder: data/loop_runs/i1/accertify
+copied_bytes: 5258
+command: python scripts/run_submission.py data/loop_runs/i1/accertify --mode practice
+job text: not printed

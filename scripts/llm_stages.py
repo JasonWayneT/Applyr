@@ -11,7 +11,7 @@ archive until the server batch_pipeline wire is intentionally retired.
 """
 import os
 
-from utils import call_llm, load_llm_settings, _get_configured_providers
+from utils import call_llm, load_llm_settings, _get_configured_providers, _is_configured
 
 # CR-106: intentionally not unified onto taskProviderOverrides. This is a separate, older
 # per-stage override used only by the legacy/opt-in UI Draft path (batch_pipeline →
@@ -28,7 +28,15 @@ STAGE_PROVIDERS = {
     # cloud provider on local failure would defeat the point. call_llm_stage below enforces
     # this — it raises rather than substituting a cloud provider for a hard-local stage.
     "rewrite": ["local"],
-    "evidence_scale": ["local"],
+    # 2026-09-01: evidence_scale moved from ["local"] to ["groq", "gemini"] — Stage 0
+    # no longer uses local Ollama for any LLM call. The NLP classifier (scikit-learn) is
+    # the primary extractor; Groq/Gemini handle all cloud fallback including per-item
+    # evidence classification and the responsibilities exclusion-zone scanner. Local
+    # Ollama is not in the Stage 0 provider chain at all.
+    "evidence_scale": ["groq", "gemini"],
+    # CR-110 Gap A: LLM-based industry classification — supplementary to the keyword
+    # industry gate. Uses the same cloud providers as evidence_scale.
+    "industry_semantic": ["groq", "gemini"],
 }
 
 STAGE_MODEL_KEYS = {
@@ -41,7 +49,9 @@ STAGE_MODEL_KEYS = {
 
 # Stages in this set must never silently substitute a different provider than the ones
 # listed in STAGE_PROVIDERS, even if none of them are "configured" — see call_llm_stage.
-_HARD_PROVIDER_STAGES = {"rewrite", "evidence_scale"}
+# 2026-09-01: evidence_scale removed from _HARD_PROVIDER_STAGES — it now uses
+# Groq/Gemini (cloud), not local, so the "refuse to substitute" guard no longer applies.
+_HARD_PROVIDER_STAGES = {"rewrite"}
 
 
 def local_only_mode() -> bool:
@@ -61,7 +71,10 @@ def stage_model(stage_id: str) -> str | None:
         "fit": settings.get("localModelFit") or "qwen2.5:7b-instruct-q4_K_M",
         "jd_profile": settings.get("localModel") or "llama3.1:8b-instruct-q5_K_M",
         "rewrite": settings.get("localModelRewrite") or "qwen2.5:7b-instruct-q4_K_M",
-        "evidence_scale": "qwen2.5:7b-instruct-q4_K_M",
+        # 2026-09-01: evidence_scale now uses cloud providers (Groq/Gemini). Return
+        # None so call_llm uses each provider's own default model (openai/gpt-oss-120b
+        # for Groq, gemini-3.5-flash-lite for Gemini) instead of a local model name.
+        "evidence_scale": None,
     }
     return defaults.get(stage_id)
 
@@ -73,7 +86,10 @@ def call_llm_stage(stage_id: str, system_prompt: str, user_prompt: str, **kwargs
         preferred = ["local"]
     else:
         preferred = STAGE_PROVIDERS.get(stage_id, ["local", "gemini"])
-    providers = [p for p in preferred if p in configured]
+    # 2026-09-01: use _is_configured directly instead of membership in configured,
+    # so that Groq (deliberately excluded from _get_configured_providers' fixed_order
+    # because it's task-scoped) still works when a stage explicitly lists it.
+    providers = [p for p in preferred if _is_configured(p, settings)]
     if not providers:
         if stage_id in _HARD_PROVIDER_STAGES:
             raise RuntimeError(

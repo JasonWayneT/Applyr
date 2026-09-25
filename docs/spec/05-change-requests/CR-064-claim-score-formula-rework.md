@@ -2,7 +2,10 @@
 
 ## Metadata
 - **Epic**: Local-LLM Drafting Pipeline (see `docs/reports/local-llm-builder-architecture-options.md`)
-- **Status**: Not started — this CR is the handoff brief for the session that starts it
+- **Status**: Superseded (2026-09-09) — target function `score_claim_for_jd` is on the retired
+  deterministic drafting path; CR-074's packet-authoring flow replaced it with its own evidence
+  ranking. The diagnosis was correct but the fix was never implemented and the target was retired.
+  See tracker terminal disposition for full evidence.
 - **Date**: 2026-07-13
 - **Source**: Direct follow-up to CR-063 (`docs/spec/08-implementation/CR-063-jd-theme-claim-selection-loop-tracker.md`),
   which ran a 16-JD human-verified eval loop against the deterministic claim-selection path and tested

@@ -47,6 +47,7 @@ Do not re-litigate these as novel findings if `verify_submission.py` already pas
 | "Lives or dies on" cliche | LW-033 |
 | Recap-kicker labels ("That's genuine...", "That's how I treated...") | LW-034 |
 | Paragraph-start negative listing ("Not a ...") | LW-035 |
+| Generic self-referential hook ("what makes this role interesting") | LW-038 |
 | Contrast-frame density | LW-008 / LW-008-PAIR |
 | Cross-doc 6+ word restatement | LW-009-PAIR |
 | Ownership-verb vs. claim's own `attribution` tag | LW-028 |

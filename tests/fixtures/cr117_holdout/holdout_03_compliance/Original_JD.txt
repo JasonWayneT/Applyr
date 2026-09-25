@@ -1,0 +1,17 @@
+Product Manager, Public Sector Compliance
+
+Cedar Meridian is a fictional company whose established software helps public agencies coordinate records requests and policy reviews. We are looking for a Product Manager to improve existing compliance workflows while making the product easier for administrators and frontline users to operate. The role has meaningful domain depth, but the team will consider candidates who bring strong transferable platform and workflow experience.
+
+You will work with engineering, legal, customer experience, and customer support to prioritize audit findings, clarify requirements, and release changes safely. You will need to distinguish what the product actually supports from what customers assume it supports. The strongest candidate can turn ambiguous operational problems into a clear order of work without overpromising domain expertise or claiming ownership of work done by partners.
+
+Required qualifications:
+- Experience owning a customer-facing software roadmap and writing requirements.
+- Experience with privacy or compliance-related product workflows, or a credible transferable bridge from adjacent work.
+- Ability to align legal, engineering, and customer-facing teams on priorities.
+- Evidence of careful attribution and clear communication when product scope is uncertain.
+
+Preferred qualifications:
+- Direct public-sector software experience.
+- Direct ownership of a GDPR or CCPA program.
+
+This role does not manage people. We expect the resume and cover letter to be candid about transferable skills. Adjacent experience is welcome; unsupported claims of public-sector or regulatory-program ownership are not.

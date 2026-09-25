@@ -1089,6 +1089,8 @@ The contact-data drop-off is a decision Jason drove after an engineer proposed t
 | `AC-524` | acceptance | P0 | implemented | Overlap of only knowledge is empty. A Google Analytics migration line still requires its cite | `FR-413` | CR-150 |
 | `FR-414` | functional | P0 | implemented | A competencies row that names a tool outside the career history loses that token. The other tools stay. The agile noun epic stays | `AC-525` | CR-151 |
 | `AC-525` | acceptance | P0 | implemented | "Data Extraction, Python, QA, SQL" becomes a row without Python. A roadmap epics bullet stays | `FR-414` | CR-151 |
+| `FR-415` | functional | P0 | implemented | A summary that says high-leverage loses that compound. Standalone leverage becomes use. data-driven stays | `AC-526` | CR-152 |
+| `AC-526` | acceptance | P0 | implemented | "structured, high-leverage product solutions" becomes "structured product solutions". "data-driven" stays. "leverage the support tickets" becomes "use the support tickets" | `FR-415` | CR-152 |
 
 ### Data Traceability (DATA-006)
 

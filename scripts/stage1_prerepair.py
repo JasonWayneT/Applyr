@@ -305,6 +305,35 @@ def drop_uncited_units(folder: Path) -> list[dict[str, str]]:
     return applied
 
 
+def replace_leverage_buzzwords(folder: Path) -> list[dict[str, str]]:
+    """Remove leverage, including a hyphenated compound such as high-leverage.
+
+    Standalone leverage becomes use. data-driven stays. Implements FR-415.
+    """
+    compound = re.compile(r"\b[\w]+-leverage\b", re.IGNORECASE)
+    applied: list[dict[str, str]] = []
+    for name in ("Resume.md", "CoverLetter.md"):
+        path = folder / name
+        if not path.is_file():
+            continue
+        original = path.read_text(encoding="utf-8")
+        text = re.sub(r",\s+[\w]+-leverage\b", "", original, flags=re.IGNORECASE)
+        text = compound.sub("", text)
+        text = re.sub(r",\s*,", ",", text)
+        text = re.sub(r",\s+(?=[,.])", "", text)
+        text = re.sub(r"\s+,", ",", text)
+        text = re.sub(r"\bleveraging\b", "using", text, flags=re.IGNORECASE)
+        text = re.sub(r"\bleveraged\b", "used", text, flags=re.IGNORECASE)
+        text = re.sub(r"(?<!-)\bleverage\b", "use", text, flags=re.IGNORECASE)
+        text = re.sub(r"[ \t]{2,}", " ", text)
+        text = re.sub(r" +([,.])", r"\1", text)
+        if text == original:
+            continue
+        path.write_text(text, encoding="utf-8")
+        applied.append({"rule_id": "LR-009", "file": name, "from": "leverage", "to": ""})
+    return applied
+
+
 def collapse_hedged_100k(folder: Path) -> list[dict[str, str]]:
     """Rewrite a hedged $100,000 to $100K.
 
@@ -1245,6 +1274,8 @@ def apply_mechanical_fixes(
         years = None
     applied: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    for change in replace_leverage_buzzwords(folder):
+        applied.append(change)
     for change in collapse_hedged_100k(folder):
         applied.append(change)
     for change in anchor_uncited_employer(folder):

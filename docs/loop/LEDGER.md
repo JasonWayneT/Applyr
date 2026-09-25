@@ -2,7 +2,17 @@
 
 ## HANDOFF
 
-Iteration 25 removes an unverified tool from a competencies row (FR-414). The other tools stay. The agile noun epic stays. Holdout 13 does not qualify. It failed Stage 1 because a competencies row named Python. The same draft also had a geography warning and a specificity warning. Those are not fixed here. Queue restore count was 0. Start holdout 14 after this commit, then holdout 15 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+Iteration 26 removes high-leverage and rewrites standalone leverage to use (FR-415). data-driven stays. Holdout 14 does not qualify. It failed Stage 1 because a summary said high-leverage. Queue restore count was 0. Start holdout 15 after this commit, then holdout 16 with no further pipeline change. Definition of done is not met. Do not loosen a gate. Do not stage the parallel edits. Stop if Agy quota actually exhausts.
+
+## Iteration 26 — leverage
+
+1. OBSERVE: holdout 14 failed Stage 1 at the 3rd folder. The block was LR-009. The token was leverage, inside high-leverage.
+2. ROOT CAUSE: CONFIRMED. The hyphen still leaves the banned word. The summary is one sentence, so deleting the sentence would break the three-sentence shape.
+3. EXPLORE: allow the compound, or remove it.
+4. CHOOSE: remove the compound. Standalone leverage becomes use. data-driven stays.
+5. IMPLEMENT: `replace_leverage_buzzwords` in `scripts/stage1_prerepair.py`.
+6. EVALUATE: `python -m unittest scripts.test_stage1_prerepair` passed, 21 tests. A copy of the failed summary lost the compound and kept the sentence.
+7. CONFIRM: holdout 15 has not run. This is not definition of done.
 
 ## Iteration 25 — unverified tool
 

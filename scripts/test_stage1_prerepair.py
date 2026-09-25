@@ -594,6 +594,27 @@ class TestStage1Prerepair(unittest.TestCase):
         self.assertIn("SQL", updated)
         self.assertIn("roadmap epics", updated)
 
+    def test_high_leverage_compound_is_removed(self) -> None:
+        """high-leverage leaves the summary. data-driven stays. Implements FR-415."""
+        resume = (
+            "## PROFESSIONAL SUMMARY\n"
+            "Turns complex problems into structured, high-leverage product solutions.\n"
+            "He is data-driven about the roadmap.\n"
+            "He will leverage the support tickets.\n"
+        )
+        (self.folder / "Resume.md").write_text(resume, encoding="utf-8")
+        (self.folder / "CoverLetter.md").write_text(
+            "Dear Hiring Manager,\n\nAt Cision, the work stayed.\n\nBest regards,\n\nName\n",
+            encoding="utf-8",
+        )
+        applied = prerepair.replace_leverage_buzzwords(self.folder)
+        self.assertTrue(any(row["rule_id"] == "LR-009" for row in applied))
+        updated = (self.folder / "Resume.md").read_text(encoding="utf-8")
+        self.assertNotIn("leverage", updated.lower())
+        self.assertIn("structured product solutions", updated)
+        self.assertIn("data-driven", updated)
+        self.assertIn("use the support tickets", updated)
+
 
 if __name__ == "__main__":
     unittest.main()
